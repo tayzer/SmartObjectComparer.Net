@@ -2,6 +2,7 @@
 using System.Xml.Serialization;
 using ComparisonTool.Core;
 using System.Text;
+using System.Reflection;
 
 /// <summary>
 /// Core service for comparing XML file content
@@ -10,6 +11,7 @@ public class XmlComparisonService
 {
     private readonly CompareLogic compareLogic;
     private readonly Dictionary<string, Type> registeredDomainModels = new Dictionary<string, Type>();
+    private List<IgnoreRule> ignoreRules = new List<IgnoreRule>();
 
     public XmlComparisonService()
     {
@@ -71,25 +73,213 @@ public class XmlComparisonService
         newXmlStream.Position = 0;
         var newResponse = (SoapEnvelope)xmlSerializer.Deserialize(newXmlStream);
 
-        //// Create serializer for the domain model
-        //var serializer = new XmlSerializer(modelType);
+        // Create clones of the responses that we can modify without affecting the original objects
+        var oldResponseCopy = CloneObject(oldResponse);
+        var newResponseCopy = CloneObject(newResponse);
 
-        //// Deserialize old XML
-        //oldXmlStream.Position = 0;
-        //var oldObj = serializer.Deserialize(oldXmlStream);
+        // Process objects to normalize any properties that should be ignored
+        var propertiesToIgnore = ignoreRules
+            .Where(r => r.IgnoreCompletely)
+            .Select(r => GetPropertyNameFromPath(r.PropertyPath))
+            .Where(p => !string.IsNullOrEmpty(p))
+            .Distinct()
+            .ToList();
 
-        //// Deserialize new XML
-        //newXmlStream.Position = 0;
-        //var newObj = serializer.Deserialize(newXmlStream);
+        // Normalize property values in both object graphs
+        if (propertiesToIgnore.Any())
+        {
+            NormalizePropertyValues(oldResponseCopy, propertiesToIgnore);
+            NormalizePropertyValues(newResponseCopy, propertiesToIgnore);
+        }
 
-        compareLogic.Config.ComparePrivateFields = false;
-        compareLogic.Config.CompareReadOnly = true;
+        // Apply other configured settings
+        ApplyConfiguredSettings();
 
-        // Compare the objects
-        var result2 = compareLogic.Compare(oldResponse, newResponse);
+        // Compare the normalized objects
+        var result = compareLogic.Compare(oldResponseCopy, newResponseCopy);
 
-        var compareXmlFilesAsync = FilterDuplicateDifferences(result2);
-        return compareXmlFilesAsync;
+        var filteredResult = FilterDuplicateDifferences(result);
+        return filteredResult;
+    }
+
+    /// <summary>
+    /// Creates a deep clone of an object using serialization
+    /// </summary>
+    private T CloneObject<T>(T source)
+    {
+        if (source == null)
+            return default;
+
+        // Serialize to XML and deserialize back to create a clone
+        var serializer = new XmlSerializer(typeof(T));
+        using var stream = new MemoryStream();
+        serializer.Serialize(stream, source);
+        stream.Position = 0;
+        return (T)serializer.Deserialize(stream);
+    }
+
+    /// <summary>
+    /// Extract the property name from a path
+    /// </summary>
+    private string GetPropertyNameFromPath(string propertyPath)
+    {
+        if (string.IsNullOrEmpty(propertyPath))
+            return string.Empty;
+
+        // If it's already a simple property name, return it
+        if (!propertyPath.Contains(".") && !propertyPath.Contains("["))
+            return propertyPath;
+
+        // Handle paths with array indices
+        if (propertyPath.Contains("["))
+        {
+            // If it's something like Results[0].Score, extract Score
+            var lastDotIndex = propertyPath.LastIndexOf('.');
+            if (lastDotIndex >= 0 && lastDotIndex < propertyPath.Length - 1)
+                return propertyPath.Substring(lastDotIndex + 1);
+
+            // If it's something like [0].Score, extract Score
+            var lastBracketIndex = propertyPath.LastIndexOf(']');
+            if (lastBracketIndex >= 0 && lastBracketIndex < propertyPath.Length - 2 &&
+                propertyPath[lastBracketIndex + 1] == '.')
+                return propertyPath.Substring(lastBracketIndex + 2);
+        }
+
+        // For paths like Body.Response.Results.Score, extract Score
+        var parts = propertyPath.Split('.');
+        return parts.Length > 0 ? parts[parts.Length - 1] : string.Empty;
+    }
+
+    /// <summary>
+    /// Normalize values of specified properties throughout an object graph
+    /// </summary>
+    private void NormalizePropertyValues(object obj, List<string> propertyNames)
+    {
+        if (obj == null || propertyNames == null || !propertyNames.Any())
+            return;
+
+        // Use reflection to process the object graph
+        ProcessObject(obj, propertyNames, new HashSet<object>());
+    }
+
+    /// <summary>
+    /// Process an object to normalize specified properties
+    /// </summary>
+    private void ProcessObject(object obj, List<string> propertyNames, HashSet<object> processedObjects)
+    {
+        // Avoid cycles in the object graph
+        if (obj == null || !obj.GetType().IsClass || obj is string || processedObjects.Contains(obj))
+            return;
+
+        processedObjects.Add(obj);
+
+        var type = obj.GetType();
+
+        // Process all properties of the object
+        foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
+            // Check if this property should be normalized
+            if (propertyNames.Contains(property.Name) && property.CanWrite)
+            {
+                // Set to default value based on property type
+                SetDefaultValue(obj, property);
+            }
+            else if (property.CanRead)
+            {
+                var value = property.GetValue(obj);
+
+                // If it's a collection, process each item
+                if (value is System.Collections.IEnumerable enumerable && !(value is string))
+                {
+                    foreach (var item in enumerable)
+                    {
+                        ProcessObject(item, propertyNames, processedObjects);
+                    }
+                }
+                // If it's a complex object, process it recursively
+                else if (value != null && value.GetType().IsClass && !(value is string))
+                {
+                    ProcessObject(value, propertyNames, processedObjects);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Set a property to its default/normalized value
+    /// </summary>
+    private void SetDefaultValue(object obj, PropertyInfo property)
+    {
+        if (!property.CanWrite)
+            return;
+
+        object defaultValue = null;
+
+        var propertyType = property.PropertyType;
+
+        // Handle different property types
+        if (propertyType == typeof(string))
+        {
+            defaultValue = string.Empty;
+        }
+        else if (propertyType == typeof(int) || propertyType == typeof(int?))
+        {
+            defaultValue = 0;
+        }
+        else if (propertyType == typeof(double) || propertyType == typeof(double?))
+        {
+            defaultValue = 0.0;
+        }
+        else if (propertyType == typeof(decimal) || propertyType == typeof(decimal?))
+        {
+            defaultValue = 0m;
+        }
+        else if (propertyType == typeof(bool) || propertyType == typeof(bool?))
+        {
+            defaultValue = false;
+        }
+        else if (propertyType == typeof(DateTime) || propertyType == typeof(DateTime?))
+        {
+            defaultValue = DateTime.MinValue;
+        }
+        else if (propertyType == typeof(Guid) || propertyType == typeof(Guid?))
+        {
+            defaultValue = Guid.Empty;
+        }
+        else if (propertyType.IsEnum)
+        {
+            // Use the first enum value
+            defaultValue = Enum.GetValues(propertyType).Cast<object>().FirstOrDefault();
+        }
+
+        // Set the property to its default value
+        try
+        {
+            property.SetValue(obj, defaultValue);
+        }
+        catch (Exception)
+        {
+            // If setting fails, just continue
+        }
+    }
+
+    /// <summary>
+    /// Apply all configured settings from ignore rules
+    /// </summary>
+    private void ApplyConfiguredSettings()
+    {
+        // Clear existing config
+        compareLogic.Config.MembersToIgnore.Clear();
+
+        // Apply standard ignore rules
+        foreach (var rule in ignoreRules)
+        {
+            if (!rule.IgnoreCompletely)
+            {
+                // Only apply other aspects of rules like IgnoreCase or IgnoreCollectionOrder
+                rule.ApplyTo(compareLogic.Config);
+            }
+        }
     }
 
     public async Task<MultiFolderComparisonResult> CompareFoldersAsync(
@@ -182,7 +372,14 @@ public class XmlComparisonService
     /// </summary>
     public void IgnoreProperty(string propertyPath)
     {
-        compareLogic.Config.MembersToIgnore.Add(propertyPath);
+        // Add to our ignore rules
+        var rule = new IgnoreRule
+        {
+            PropertyPath = propertyPath,
+            IgnoreCompletely = true
+        };
+
+        ignoreRules.Add(rule);
     }
 
     /// <summary>
@@ -190,7 +387,15 @@ public class XmlComparisonService
     /// </summary>
     public void RemoveIgnoredProperty(string propertyPath)
     {
-        compareLogic.Config.MembersToIgnore.Remove(propertyPath);
+        // Remove from our rules
+        var rulesToRemove = ignoreRules
+            .Where(r => r.PropertyPath == propertyPath)
+            .ToList();
+
+        foreach (var rule in rulesToRemove)
+        {
+            ignoreRules.Remove(rule);
+        }
     }
 
     /// <summary>
@@ -198,7 +403,10 @@ public class XmlComparisonService
     /// </summary>
     public IReadOnlyList<string> GetIgnoredProperties()
     {
-        return compareLogic.Config.MembersToIgnore;
+        return ignoreRules
+            .Where(r => r.IgnoreCompletely)
+            .Select(r => r.PropertyPath)
+            .ToList();
     }
 
     /// <summary>

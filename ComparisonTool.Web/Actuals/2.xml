@@ -16,7 +16,7 @@
           <Score>95.5</Score>
           <Details>
             <Description>This is the first result description.</Description>
-            <Status>Success</Status>
+            <Status>Bad</Status>
           </Details>
           <Tags>
             <Tag>Important</Tag>
