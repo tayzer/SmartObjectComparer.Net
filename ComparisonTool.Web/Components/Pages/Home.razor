@@ -162,6 +162,17 @@
                         </div>
                     }
                 </div>
+                
+                <div class="form-group form-check mt-2">
+                    <input type="checkbox" class="form-check-input" id="enablePatternAnalysis"
+                           @bind="EnablePatternAnalysis" />
+                    <label class="form-check-label" for="enablePatternAnalysis">
+                        Enable Cross-File Pattern Analysis
+                    </label>
+                    <small class="form-text text-muted d-block">
+                        Analyzes common patterns and changes across multiple files. May take longer for large sets of files.
+                    </small>
+                </div>
 
                 <button class="btn btn-primary mt-3" @onclick="RunFolderComparison"
                         disabled="@(!CanRunFolderComparison)">
@@ -246,6 +257,50 @@
                 }
             </div>
         </div>
+    </div>
+}
+
+@if (FolderComparisonResult != null && !FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 1)
+{
+    <div class="mt-3 mb-4">
+        @if (!EnablePatternAnalysis)
+        {
+            <button class="btn btn-outline-secondary" @onclick="GeneratePatternAnalysis" disabled="@(PatternAnalysis != null)">
+                <i class="bi bi-graph-up me-1"></i> Generate Pattern Analysis
+            </button>
+
+            @if (PatternAnalysis != null)
+            {
+                <span class="text-success ms-2">
+                    <i class="bi bi-check-circle"></i> Analysis generated
+                </span>
+            }
+        }
+
+        @if (PatternAnalysis != null)
+        {
+            <div class="d-inline-block ms-2">
+                <button class="btn btn-outline-primary btn-sm" @onclick="() => ShowPatternSummary = !ShowPatternSummary">
+                    @if (ShowPatternSummary)
+                    {
+                        <span><i class="bi bi-chevron-up me-1"></i> Hide Pattern Summary</span>
+                    }
+                    else
+                    {
+                        <span><i class="bi bi-chevron-down me-1"></i> Show Pattern Summary</span>
+                    }
+                </button>
+            </div>
+        }
+    </div>
+}
+
+@* Update the existing pattern analysis section to work with this new approach *@
+@if (PatternAnalysis != null && ShowPatternSummary)
+{
+    <div class="mt-3 mb-4">
+        <h5>Cross-File Pattern Analysis</h5>
+        <PatternSummaryComponent Analysis="PatternAnalysis" OnExportAnalysis="ExportPatternAnalysisReport" />
     </div>
 }
 
@@ -337,7 +392,9 @@
     private List<(MemoryStream Stream, string FileName)> Folder2Files { get; set; } = new List<(MemoryStream, string)>();
     private MultiFolderComparisonResult FolderComparisonResult { get; set; }
     private int SelectedPairIndex { get; set; } = -1;
-
+    private ComparisonPatternAnalysis PatternAnalysis { get; set; }
+    private bool ShowPatternSummary { get; set; } = false;
+    private bool EnablePatternAnalysis { get; set; } = true; // Default to enabled
 
     // Property selector
     private HierarchicalPropertySelector propertySelector;
@@ -367,8 +424,8 @@
                 });
         }
 
-        OldFileContent = LoadFileToMemorySteam("OldFile.xml");
-        NewFileContent = LoadFileToMemorySteam("NewFile.xml");
+        // OldFileContent = LoadFileToMemorySteam("OldFile.xml");
+        // NewFileContent = LoadFileToMemorySteam("NewFile.xml");
 
         StateHasChanged();
     }
@@ -673,7 +730,7 @@
             ComparisonService.SetIgnoreCollectionOrder(IgnoreCollectionOrder);
             ComparisonService.SetIgnoreStringCase(IgnoreStringCase);
 
-    // Apply all ignore rules
+            // Apply all ignore rules
             foreach (var rule in IgnoreRules)
             {
                 rule.ApplyTo(ComparisonService.GetCurrentConfig());
@@ -701,6 +758,18 @@
                 var selectedPair = FolderComparisonResult.FilePairResults[0];
                 ComparisonResult = selectedPair.Result;
                 DifferenceSummary = selectedPair.Summary;
+            }
+
+            if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 1 && EnablePatternAnalysis)
+            {
+                // Auto-generate pattern analysis if we have multiple files with differences
+                GeneratePatternAnalysis();
+            }
+            else
+            {
+                // Reset pattern analysis if no differences or only one file
+                PatternAnalysis = null;
+                ShowPatternSummary = false;
             }
         }
         catch (Exception ex)
@@ -852,6 +921,111 @@
             sb.ToString());
     }
 
+    public string GeneratePatternAnalysisReport(ComparisonPatternAnalysis analysis)
+    {
+        var sb = new StringBuilder();
+
+        sb.AppendLine("# XML Comparison Pattern Analysis");
+        sb.AppendLine();
+        sb.AppendLine("## Summary");
+        sb.AppendLine();
+        sb.AppendLine($"- **Total Files Compared:** {analysis.TotalFilesPaired} pairs");
+        sb.AppendLine($"- **Files With Differences:** {analysis.FilesWithDifferences} pairs");
+        sb.AppendLine($"- **Total Differences Found:** {analysis.TotalDifferences}");
+        sb.AppendLine();
+
+        // Category breakdown
+        sb.AppendLine("## Differences by Category");
+        sb.AppendLine();
+        sb.AppendLine("| Category | Count | Percentage |");
+        sb.AppendLine("|----------|-------|------------|");
+
+        foreach (var category in analysis.TotalByCategory.OrderByDescending(c => c.Value))
+        {
+            if (category.Value > 0)
+            {
+                double percentage = (double)category.Value / analysis.TotalDifferences * 100;
+                sb.AppendLine($"| {FormatCategoryName(category.Key)} | {category.Value} | {percentage:F1}% |");
+            }
+        }
+        sb.AppendLine();
+
+        // Common patterns across files
+        sb.AppendLine("## Common Difference Patterns");
+        sb.AppendLine();
+        sb.AppendLine("The following property paths showed differences in multiple files:");
+        sb.AppendLine();
+        sb.AppendLine("| Property Path | Files Affected | Total Occurrences |");
+        sb.AppendLine("|--------------|----------------|-------------------|");
+
+        foreach (var pattern in analysis.CommonPathPatterns)
+        {
+            sb.AppendLine($"| `{pattern.PatternPath}` | {pattern.FileCount} | {pattern.OccurrenceCount} |");
+        }
+        sb.AppendLine();
+
+        // Common value changes
+        sb.AppendLine("## Common Property Value Changes");
+        sb.AppendLine();
+        sb.AppendLine("The following specific property value changes appeared in multiple files:");
+        sb.AppendLine();
+
+        foreach (var change in analysis.CommonPropertyChanges.Take(10))
+        {
+            sb.AppendLine($"### `{change.PropertyName}`");
+            sb.AppendLine();
+            sb.AppendLine($"Changed in {change.AffectedFiles.Count} files, {change.OccurrenceCount} total occurrences");
+            sb.AppendLine();
+
+            foreach (var valueChange in change.CommonChanges)
+            {
+                sb.AppendLine($"- From: `{TruncateValue(valueChange.Key, 50)}` → To: `{TruncateValue(valueChange.Value, 50)}`");
+            }
+            sb.AppendLine();
+            sb.AppendLine("Affected files:");
+            sb.AppendLine();
+            foreach (var file in change.AffectedFiles.Take(5))
+            {
+                sb.AppendLine($"- {file}");
+            }
+
+            if (change.AffectedFiles.Count > 5)
+            {
+                sb.AppendLine($"- ...and {change.AffectedFiles.Count - 5} more");
+            }
+
+            sb.AppendLine();
+        }
+
+        // File groups
+        if (analysis.SimilarFileGroups.Count > 0)
+        {
+            sb.AppendLine("## File Similarity Groups");
+            sb.AppendLine();
+            sb.AppendLine("Files with similar difference patterns have been grouped:");
+            sb.AppendLine();
+
+            foreach (var group in analysis.SimilarFileGroups.OrderByDescending(g => g.FileCount))
+            {
+                sb.AppendLine($"### {group.GroupName} ({group.FileCount} files)");
+                sb.AppendLine();
+                sb.AppendLine($"**Pattern:** {group.CommonPattern}");
+                sb.AppendLine();
+                sb.AppendLine("Files in this group:");
+                sb.AppendLine();
+
+                foreach (var file in group.FilePairs)
+                {
+                    sb.AppendLine($"- {file}");
+                }
+
+                sb.AppendLine();
+            }
+        }
+
+        return sb.ToString();
+    }
+
     private string FormatCategoryName(DifferenceCategory category)
     {
         switch (category)
@@ -875,5 +1049,318 @@
             default:
                 return "Other";
         }
+    }
+
+    private string TruncateValue(string value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value)) return "null";
+        return value.Length <= maxLength ? value : value.Substring(0, maxLength - 3) + "...";
+    }
+
+    public ComparisonPatternAnalysis AnalyzePatterns(MultiFolderComparisonResult folderResult)
+    {
+        var analysis = new ComparisonPatternAnalysis
+            {
+                TotalFilesPaired = folderResult.TotalPairsCompared,
+                FilesWithDifferences = folderResult.FilePairResults.Count(r => !r.AreEqual),
+                TotalDifferences = folderResult.FilePairResults.Sum(r => r.Summary?.TotalDifferenceCount ?? 0)
+            };
+
+        // Initialize category counts
+        foreach (DifferenceCategory category in Enum.GetValues(typeof(DifferenceCategory)))
+        {
+            analysis.TotalByCategory[category] = 0;
+        }
+
+        // Process all differences to find common patterns
+        var allPathPatterns = new Dictionary<string, GlobalPatternInfo>();
+        var allPropertyChanges = new Dictionary<string, GlobalPropertyChangeInfo>();
+
+        foreach (var filePair in folderResult.FilePairResults)
+        {
+            if (filePair.AreEqual) continue;
+
+            var pairIdentifier = $"{filePair.File1Name} vs {filePair.File2Name}";
+
+            // Add to category counts
+            foreach (var category in filePair.Summary.DifferencesByChangeType)
+            {
+                if (analysis.TotalByCategory.ContainsKey(category.Key))
+                {
+                    analysis.TotalByCategory[category.Key] += category.Value.Count;
+                }
+            }
+
+            // Process each difference
+            foreach (var diff in filePair.Result.Differences)
+            {
+                // Normalize the property path (remove indices, backing fields)
+                string normalizedPath = NormalizePropertyPath(diff.PropertyName);
+
+                // Create pattern info if not exists
+                if (!allPathPatterns.ContainsKey(normalizedPath))
+                {
+                    allPathPatterns[normalizedPath] = new GlobalPatternInfo
+                        {
+                            PatternPath = normalizedPath,
+                            OccurrenceCount = 0,
+                            FileCount = 0
+                        };
+                }
+
+                // Update pattern info
+                var patternInfo = allPathPatterns[normalizedPath];
+                patternInfo.OccurrenceCount++;
+                if (!patternInfo.AffectedFiles.Contains(pairIdentifier))
+                {
+                    patternInfo.AffectedFiles.Add(pairIdentifier);
+                    patternInfo.FileCount++;
+                }
+
+                // Add example if we don't have many
+                if (patternInfo.Examples.Count < 3)
+                {
+                    patternInfo.Examples.Add(diff);
+                }
+
+                // Track property change info (create key from property + old value + new value)
+                var oldValue = diff.Object1Value?.ToString() ?? "null";
+                var newValue = diff.Object2Value?.ToString() ?? "null";
+                var changeKey = $"{normalizedPath}|{oldValue}|{newValue}";
+
+                if (!allPropertyChanges.ContainsKey(changeKey))
+                {
+                    allPropertyChanges[changeKey] = new GlobalPropertyChangeInfo
+                        {
+                            PropertyName = normalizedPath,
+                            OccurrenceCount = 0,
+                            CommonChanges = new Dictionary<string, string>
+                    {
+                        { oldValue, newValue }
+                    }
+                        };
+                }
+
+                // Update property change info
+                var changeInfo = allPropertyChanges[changeKey];
+                changeInfo.OccurrenceCount++;
+                if (!changeInfo.AffectedFiles.Contains(pairIdentifier))
+                {
+                    changeInfo.AffectedFiles.Add(pairIdentifier);
+                }
+            }
+        }
+
+        // Sort and select most common patterns
+        analysis.CommonPathPatterns = allPathPatterns.Values
+            .Where(p => p.FileCount > 1) // Only patterns that appear in multiple files
+            .OrderByDescending(p => p.FileCount)
+            .ThenByDescending(p => p.OccurrenceCount)
+            .Take(20) // Limit to top 20 patterns
+            .ToList();
+
+        // Sort and select most common property changes
+        analysis.CommonPropertyChanges = allPropertyChanges.Values
+            .Where(c => c.AffectedFiles.Count > 1) // Only changes that appear in multiple files
+            .OrderByDescending(c => c.AffectedFiles.Count)
+            .ThenByDescending(c => c.OccurrenceCount)
+            .Take(20) // Limit to top 20 common changes
+            .ToList();
+
+        // Group similar files based on their difference patterns
+        GroupSimilarFiles(folderResult, analysis);
+
+        return analysis;
+    }
+
+    private string NormalizePropertyPath(string propertyPath)
+    {
+        // Replace array indices with [*]
+        var normalized = System.Text.RegularExpressions.Regex.Replace(propertyPath, @"\[\d+\]", "[*]");
+
+        // Remove backing fields
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"<(\w+)>k__BackingField", "$1");
+
+        return normalized;
+    }
+
+    // Group similar files based on their difference patterns
+    private void GroupSimilarFiles(MultiFolderComparisonResult folderResult, ComparisonPatternAnalysis analysis)
+    {
+        // Skip if not enough files with differences
+        if (analysis.FilesWithDifferences <= 1)
+            return;
+
+        // Create fingerprints of each file's differences
+        var fileFingerprints = new Dictionary<string, HashSet<string>>();
+
+        foreach (var filePair in folderResult.FilePairResults)
+        {
+            if (filePair.AreEqual) continue;
+
+            var pairIdentifier = $"{filePair.File1Name} vs {filePair.File2Name}";
+            var fingerprint = new HashSet<string>();
+
+            foreach (var diff in filePair.Result.Differences)
+            {
+                fingerprint.Add(NormalizePropertyPath(diff.PropertyName));
+            }
+
+            fileFingerprints[pairIdentifier] = fingerprint;
+        }
+
+        // Build similarity matrix
+        var similarities = new Dictionary<(string, string), double>();
+        var fileIds = fileFingerprints.Keys.ToList();
+
+        for (int i = 0; i < fileIds.Count; i++)
+        {
+            for (int j = i + 1; j < fileIds.Count; j++)
+            {
+                var file1 = fileIds[i];
+                var file2 = fileIds[j];
+                var set1 = fileFingerprints[file1];
+                var set2 = fileFingerprints[file2];
+
+                // Calculate Jaccard similarity
+                var intersection = set1.Intersect(set2).Count();
+                var union = set1.Count + set2.Count - intersection;
+                var similarity = (double)intersection / (union == 0 ? 1 : union);
+
+                similarities[(file1, file2)] = similarity;
+            }
+        }
+
+        // Group files using a simple threshold-based approach
+        var grouped = new HashSet<string>();
+        var similarityThreshold = 0.6; // 60% similarity to be considered in the same group
+
+        foreach (var similarity in similarities.OrderByDescending(s => s.Value))
+        {
+            if (similarity.Value < similarityThreshold)
+                continue;
+
+            var file1 = similarity.Key.Item1;
+            var file2 = similarity.Key.Item2;
+
+            // Find or create a group
+            var existingGroup = analysis.SimilarFileGroups.FirstOrDefault(g =>
+                g.FilePairs.Contains(file1) || g.FilePairs.Contains(file2));
+
+            if (existingGroup != null)
+            {
+                // Add to existing group
+                if (!existingGroup.FilePairs.Contains(file1))
+                {
+                    existingGroup.FilePairs.Add(file1);
+                    existingGroup.FileCount++;
+                    grouped.Add(file1);
+                }
+
+                if (!existingGroup.FilePairs.Contains(file2))
+                {
+                    existingGroup.FilePairs.Add(file2);
+                    existingGroup.FileCount++;
+                    grouped.Add(file2);
+                }
+            }
+            else
+            {
+                // Create new group
+                var newGroup = new SimilarFileGroup
+                    {
+                        GroupName = $"Group {analysis.SimilarFileGroups.Count + 1}",
+                        FileCount = 0,
+                        FilePairs = new List<string>(),
+                        CommonPattern = "Files with similar difference patterns"
+                    };
+
+                if (!grouped.Contains(file1))
+                {
+                    newGroup.FilePairs.Add(file1);
+                    newGroup.FileCount++;
+                    grouped.Add(file1);
+                }
+
+                if (!grouped.Contains(file2))
+                {
+                    newGroup.FilePairs.Add(file2);
+                    newGroup.FileCount++;
+                    grouped.Add(file2);
+                }
+
+                if (newGroup.FileCount > 0)
+                {
+                    analysis.SimilarFileGroups.Add(newGroup);
+                }
+            }
+        }
+
+        // For each group, identify common patterns
+        foreach (var group in analysis.SimilarFileGroups)
+        {
+            // Find patterns common to all files in the group
+            HashSet<string> commonPatterns = null;
+
+            foreach (var file in group.FilePairs)
+            {
+                var filePatterns = fileFingerprints[file];
+
+                if (commonPatterns == null)
+                {
+                    commonPatterns = new HashSet<string>(filePatterns);
+                }
+                else
+                {
+                    commonPatterns.IntersectWith(filePatterns);
+                }
+            }
+
+            if (commonPatterns != null && commonPatterns.Count > 0)
+            {
+                group.CommonPattern = $"{commonPatterns.Count} common difference pattern(s) including: " +
+                    string.Join(", ", commonPatterns.Take(3).Select(p => $"'{p}'"));
+            }
+        }
+
+        // Add singleton groups for any files not grouped
+        foreach (var file in fileFingerprints.Keys)
+        {
+            if (!grouped.Contains(file))
+            {
+                analysis.SimilarFileGroups.Add(new SimilarFileGroup
+                    {
+                        GroupName = $"Group {analysis.SimilarFileGroups.Count + 1}",
+                        FileCount = 1,
+                        FilePairs = new List<string> { file },
+                        CommonPattern = "Unique difference pattern"
+                    });
+            }
+        }
+    }
+
+    private void GeneratePatternAnalysis()
+    {
+        if (FolderComparisonResult == null || FolderComparisonResult.FilePairResults.Count <= 1)
+            return;
+
+        // Create a new pattern analyzer
+        PatternAnalysis = AnalyzePatterns(FolderComparisonResult);
+        ShowPatternSummary = true;
+    }
+
+    // Export pattern analysis report
+    private async Task ExportPatternAnalysisReport(string filename)
+    {
+        if (PatternAnalysis == null)
+            return;
+
+        var report = GeneratePatternAnalysisReport(PatternAnalysis);
+
+        await JSRuntime.InvokeVoidAsync(
+            "saveAsFile",
+            filename,
+            "text/markdown",
+            report);
     }
 }
