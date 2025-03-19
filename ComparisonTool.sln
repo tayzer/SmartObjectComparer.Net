@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.9.34728.123
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ComparisonTool.Web", "ComparisonTool.Web\ComparisonTool.Web.csproj", "{A51503B6-4A31-4B11-BCE8-FDABFC345522}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ComparisonTool.Core", "ComparisonTool.Core\ComparisonTool.Core.csproj", "{D761EDFF-6F6F-4C97-B8A0-0E91B71BC9A7}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A51503B6-4A31-4B11-BCE8-FDABFC345522}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A51503B6-4A31-4B11-BCE8-FDABFC345522}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A51503B6-4A31-4B11-BCE8-FDABFC345522}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A51503B6-4A31-4B11-BCE8-FDABFC345522}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D761EDFF-6F6F-4C97-B8A0-0E91B71BC9A7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D761EDFF-6F6F-4C97-B8A0-0E91B71BC9A7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D761EDFF-6F6F-4C97-B8A0-0E91B71BC9A7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D761EDFF-6F6F-4C97-B8A0-0E91B71BC9A7}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {43E7BDE5-D5F4-4CEB-B1F3-21182FC5B3D8}
+	EndGlobalSection
+EndGlobal
