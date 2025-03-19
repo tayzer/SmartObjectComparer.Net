@@ -2,10 +2,6 @@
 using System.Xml.Serialization;
 using ComparisonTool.Core;
 
-namespace ComparisonTool.Core
-{
-}
-
 /// <summary>
 /// Core service for comparing XML file content
 /// </summary>
