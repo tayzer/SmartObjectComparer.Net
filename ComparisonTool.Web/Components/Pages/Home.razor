@@ -1,8 +1,8 @@
 ﻿@rendermode InteractiveServer
 @page "/"
 @using System.IO
-@using ComparisonTool.Core
 @using KellermanSoftware.CompareNetObjects
+@using ComparisonTool.Core
 @inject XmlComparisonService ComparisonService
 @inject IJSRuntime JSRuntime
 
@@ -27,8 +27,8 @@
 
                 <div class="form-group mt-3">
                     <label>Old XML File:</label>
-                    <InputFile OnChange="OnOldFileSelected" class="form-control" />
-                    @if (OldFileName != null)
+                    <InputFile class="form-control" OnChange="HandleOldFileUpload" />
+                    @if (!string.IsNullOrEmpty(OldFileName))
                     {
                         <span class="text-success">File loaded: @OldFileName</span>
                     }
@@ -36,8 +36,8 @@
 
                 <div class="form-group mt-3">
                     <label>New XML File:</label>
-                    <InputFile OnChange="OnNewFileSelected" class="form-control" />
-                    @if (NewFileName != null)
+                    <InputFile class="form-control" OnChange="HandleNewFileUpload" />
+                    @if (!string.IsNullOrEmpty(NewFileName))
                     {
                         <span class="text-success">File loaded: @NewFileName</span>
                     }
@@ -75,21 +75,39 @@
 
                 <div class="form-group mt-3">
                     <label>Properties to Ignore:</label>
-                    <button class="btn btn-sm btn-primary ml-2" @onclick="OpenPropertySelector">
-                        Add Property
+                    <button class="btn btn-sm btn-primary ms-2" @onclick="OpenPropertySelector">
+                        Configure Properties
                     </button>
 
-                    <ul class="list-group mt-2">
-                        @foreach (var prop in IgnoredProperties)
-                        {
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                @prop
-                                <button class="btn btn-sm btn-danger" @onclick="() => RemoveIgnoredProperty(prop)">
-                                    Remove
-                                </button>
-                            </li>
-                        }
-                    </ul>
+                    @if (IgnoreRules.Any())
+                    {
+                        <div class="mt-2">
+                            <div class="card">
+                                <div class="card-header bg-light">
+                                    Currently Ignored Properties (@IgnoreRules.Count)
+                                </div>
+                                <ul class="list-group list-group-flush">
+                                    @foreach (var rule in IgnoreRules)
+                                    {
+                                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <span class="me-2">@GetIgnoreRuleDescription(rule)</span>
+                                            </div>
+                                            <button class="btn btn-sm btn-danger" @onclick="() => RemoveIgnoreRule(rule)">
+                                                <i class="bi bi-x"></i>
+                                            </button>
+                                        </li>
+                                    }
+                                </ul>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-info mt-2">
+                            No properties are currently being ignored. Click the button to configure.
+                        </div>
+                    }
                 </div>
 
                 <button class="btn btn-primary mt-3" @onclick="RunComparison"
@@ -100,46 +118,6 @@
         </div>
     </div>
 </div>
-
-@if (showPropertySelector)
-{
-    <div class="modal fade show" style="display:block" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Select Property to Ignore</h5>
-                    <button type="button" class="btn-close" @onclick="ClosePropertySelector"></button>
-                </div>
-                <div class="modal-body">
-                    @if (AvailableProperties.Any())
-                    {
-                        <div class="list-group" style="max-height: 400px; overflow-y: auto;">
-                            @foreach (var prop in AvailableProperties)
-                            {
-                                <button class="list-group-item list-group-item-action @(prop == selectedProperty ? "active" : "")"
-                                        @onclick="() => SelectProperty(prop)">
-                                    @prop
-                                </button>
-                            }
-                        </div>
-                    }
-                    else
-                    {
-                        <p>No properties available. Please select a domain model first.</p>
-                    }
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" @onclick="ClosePropertySelector">Cancel</button>
-                    <button type="button" class="btn btn-primary" @onclick="AddSelectedProperty"
-                            disabled="@(string.IsNullOrEmpty(selectedProperty))">
-                        Add Property
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="modal-backdrop fade show"></div>
-}
 
 @if (IsComparing)
 {
@@ -153,25 +131,22 @@
 
 @if (ComparisonResult != null)
 {
-    <div class="row mt-4">
-        <div class="col-12">
+    <div class="mt-4">
+        <EnhancedDifferenceSummary Summary="DifferenceSummary" />
+    </div>
+
+    @if (!DifferenceSummary.AreEqual)
+    {
+        <div class="mt-4">
             <div class="card">
-                <div class="card-header">
-                    <h5>Comparison Results</h5>
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Detailed Differences</h5>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleShowAllDifferences">
+                        @(ShowAllDifferences ? "Show Top 100" : "Show All")
+                    </button>
                 </div>
                 <div class="card-body">
-                    @if (ComparisonResult.AreEqual)
-                    {
-                        <div class="alert alert-success">
-                            The XML files are identical according to the current comparison settings.
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="alert alert-warning">
-                            Found @ComparisonResult.Differences.Count differences between the XML files.
-                        </div>
-
+                    <div class="table-responsive">
                         <table class="table table-striped">
                             <thead>
                                 <tr>
@@ -181,22 +156,42 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach (var diff in ComparisonResult.Differences)
+                                @foreach (var diff in GetFilteredDifferences())
                                 {
                                     <tr>
                                         <td>@diff.PropertyName</td>
-                                        <td>@diff.Object1Value</td>
-                                        <td>@diff.Object2Value</td>
+                                        <td class="text-danger">@FormatValue(diff.Object1Value)</td>
+                                        <td class="text-success">@FormatValue(diff.Object2Value)</td>
+                                    </tr>
+                                }
+                                @if (ComparisonResult.Differences.Count > 100 && !ShowAllDifferences)
+                                {
+                                    <tr>
+                                        <td colspan="3" class="text-center">
+                                            <em>And @(ComparisonResult.Differences.Count - 100) more differences...</em>
+                                        </td>
                                     </tr>
                                 }
                             </tbody>
                         </table>
-                    }
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
+
+        <div class="mt-4 mb-5">
+            <button class="btn btn-outline-primary" @onclick="ExportResults">
+                <i class="bi bi-download me-2"></i> Export Results
+            </button>
+        </div>
+    }
 }
+
+<HierarchicalPropertySelector @ref="propertySelector"
+                              ModelType="ComparisonService.GetModelType(SelectedModelName)"
+                              IgnoredProperties="IgnoreRules"
+                              OnPropertyAdded="AddIgnoreRule"
+                              OnPropertyRemoved="propertyPath => RemoveIgnoreRule(IgnoreRules.FirstOrDefault(r => r.PropertyPath == propertyPath))" />
 
 @code {
     // State variables
@@ -208,145 +203,197 @@
     private bool IgnoreCollectionOrder { get; set; } = true;
     private bool IgnoreStringCase { get; set; } = true;
     private double DecimalTolerance { get; set; } = 0.001;
-    private List<string> IgnoredProperties { get; set; } = new List<string>();
+    private List<IgnoreRule> IgnoreRules { get; set; } = new List<IgnoreRule>();
     private bool IsComparing { get; set; } = false;
     private ComparisonResult ComparisonResult { get; set; }
-
-    // Property selector modal
-    private bool showPropertySelector = false;
-    private List<string> AvailableProperties { get; set; } = new List<string>();
-    private string selectedProperty;
-
+    private DifferenceSummary DifferenceSummary { get; set; }
+    private bool ShowAllDifferences { get; set; } = false;
+    
+    // Property selector
+    private HierarchicalPropertySelector propertySelector;
+    
     // Enable the comparison button if both files are loaded
-    private bool CanRunComparison =>
-        !string.IsNullOrEmpty(SelectedModelName) &&
-        OldFileContent != null &&
+    private bool CanRunComparison => 
+        !string.IsNullOrEmpty(SelectedModelName) && 
+        OldFileContent != null && 
         NewFileContent != null;
-
+    
     protected override void OnInitialized()
     {
         // Set initial selection
         SelectedModelName = ComparisonService.GetRegisteredModelNames().FirstOrDefault();
-
-        // Get current configuration
-        var config = ComparisonService.GetCurrentConfig();
-        IgnoreCollectionOrder = config.IgnoreCollectionOrder;
-        IgnoreStringCase = !config.CaseSensitive;
-        DecimalTolerance = config.DoublePrecision;
-        IgnoredProperties = config.MembersToIgnore.ToList();
-
-        // Load available properties if a model is selected
-        LoadAvailableProperties();
-
-        OldFileContent = LoadFileToMemoryStream("OldFile.xml");
-        NewFileContent = LoadFileToMemoryStream("NewFile.xml");
-
-        StateHasChanged();
-    }
-
-    private MemoryStream LoadFileToMemoryStream(string filePatth)
-    {
-        using var fileStream = new FileStream(filePatth, FileMode.Open, FileAccess.Read);
-        var memoryStream = new MemoryStream();
-        fileStream.CopyTo(memoryStream);
-        memoryStream.Position = 0;
-        return memoryStream;
-    }
-
-    private void LoadAvailableProperties()
-    {
-        if (string.IsNullOrEmpty(SelectedModelName))
+        
+        // Get current configuration settings from the service directly
+        IgnoreCollectionOrder = ComparisonService.GetIgnoreCollectionOrder();
+        IgnoreStringCase = ComparisonService.GetIgnoreStringCase();
+        DecimalTolerance = ComparisonService.GetDecimalTolerance();
+        
+        // Convert simple ignored properties to rules
+        foreach (var prop in ComparisonService.GetIgnoredProperties())
         {
-            AvailableProperties.Clear();
-            return;
+            IgnoreRules.Add(new IgnoreRule 
+            { 
+                PropertyPath = prop,
+                IgnoreCompletely = true
+            });
         }
-
-        var modelType = ComparisonService.GetModelType(SelectedModelName);
-        AvailableProperties = ModelReflectionService.GetPropertyPaths(modelType);
     }
-
-    private async Task OnOldFileSelected(InputFileChangeEventArgs e)
+    
+    // File handling
+    private async Task HandleOldFileUpload(InputFileChangeEventArgs e)
     {
-        OldFileName = e.File.Name;
-
-        // Read file content
-        OldFileContent = new MemoryStream();
-        await e.File.OpenReadStream().CopyToAsync(OldFileContent);
-        OldFileContent.Position = 0;
-    }
-
-    private async Task OnNewFileSelected(InputFileChangeEventArgs e)
-    {
-        NewFileName = e.File.Name;
-
-        // Read file content
-        NewFileContent = new MemoryStream();
-        await e.File.OpenReadStream().CopyToAsync(NewFileContent);
-        NewFileContent.Position = 0;
-    }
-
-    private void OpenPropertySelector()
-    {
-        LoadAvailableProperties();
-        showPropertySelector = true;
-    }
-
-    private void ClosePropertySelector()
-    {
-        showPropertySelector = false;
-        selectedProperty = null;
-    }
-
-    private void SelectProperty(string property)
-    {
-        selectedProperty = property;
-    }
-
-    private void AddSelectedProperty()
-    {
-        if (!string.IsNullOrEmpty(selectedProperty) && !IgnoredProperties.Contains(selectedProperty))
+        try 
         {
-            IgnoredProperties.Add(selectedProperty);
-            ComparisonService.IgnoreProperty(selectedProperty);
+            var file = e.File;
+            OldFileName = file.Name;
+            
+            // Create a stream to store the file content
+            OldFileContent = new MemoryStream();
+            
+            // Copy the file data to the stream
+            await file.OpenReadStream(maxAllowedSize: 10485760).CopyToAsync(OldFileContent);
+            OldFileContent.Position = 0;
+            
+            // Force UI refresh
+            StateHasChanged();
         }
-
-        ClosePropertySelector();
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading old file: {ex.Message}");
+            OldFileName = $"Error: {ex.Message}";
+            StateHasChanged();
+        }
     }
-
-    private void RemoveIgnoredProperty(string property)
+    
+    private async Task HandleNewFileUpload(InputFileChangeEventArgs e)
     {
-        IgnoredProperties.Remove(property);
-        ComparisonService.RemoveIgnoredProperty(property);
+        try 
+        {
+            var file = e.File;
+            NewFileName = file.Name;
+            
+            // Create a stream to store the file content
+            NewFileContent = new MemoryStream();
+            
+            // Copy the file data to the stream
+            await file.OpenReadStream(maxAllowedSize: 10485760).CopyToAsync(NewFileContent);
+            NewFileContent.Position = 0;
+            
+            // Force UI refresh
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading new file: {ex.Message}");
+            NewFileName = $"Error: {ex.Message}";
+            StateHasChanged();
+        }
     }
-
+    
+    private async Task OpenPropertySelector()
+    {
+        await propertySelector.ShowAsync();
+    }
+    
+    private void AddIgnoreRule(IgnoreRule rule)
+    {
+        // Remove any existing rule for this property
+        var existingRule = IgnoreRules.FirstOrDefault(r => r.PropertyPath == rule.PropertyPath);
+        if (existingRule != null)
+        {
+            IgnoreRules.Remove(existingRule);
+        }
+        
+        // Add the new rule
+        IgnoreRules.Add(rule);
+        
+        // If complete ignore, also add to the service
+        if (rule.IgnoreCompletely)
+        {
+            ComparisonService.IgnoreProperty(rule.PropertyPath);
+        }
+    }
+    
+    private void RemoveIgnoreRule(IgnoreRule rule)
+    {
+        IgnoreRules.Remove(rule);
+        
+        // Also remove from the service
+        if (rule.IgnoreCompletely)
+        {
+            ComparisonService.RemoveIgnoredProperty(rule.PropertyPath);
+        }
+    }
+    
+    private string GetIgnoreRuleDescription(IgnoreRule rule)
+    {
+        var description = rule.PropertyPath;
+        
+        if (rule.IgnoreCompletely)
+        {
+            description += " (Ignored completely)";
+        }
+        else
+        {
+            var options = new List<string>();
+            
+            if (rule.IgnoreCollectionOrder)
+                options.Add("ignore order");
+                
+            if (rule.IgnoreCase)
+                options.Add("ignore case");
+                
+            if (rule.NumericTolerance > 0)
+                options.Add($"tolerance: {rule.NumericTolerance}");
+                
+            if (options.Any())
+            {
+                description += $" ({string.Join(", ", options)})";
+            }
+        }
+        
+        return description;
+    }
+    
     private async Task RunComparison()
     {
         if (!CanRunComparison)
             return;
-
+            
         IsComparing = true;
         ComparisonResult = null;
-
+        DifferenceSummary = null;
+        ShowAllDifferences = false;
+        
         try
         {
             // Update configuration
             ComparisonService.SetIgnoreCollectionOrder(IgnoreCollectionOrder);
             ComparisonService.SetIgnoreStringCase(IgnoreStringCase);
-
+            ComparisonService.SetDecimalTolerance(DecimalTolerance);
+            
+            // Apply all ignore rules
+            foreach (var rule in IgnoreRules)
+            {
+                rule.ApplyTo(ComparisonService.GetCurrentConfig());
+            }
+            
             // Run comparison
             OldFileContent.Position = 0;
             NewFileContent.Position = 0;
             ComparisonResult = await ComparisonService.CompareXmlFilesAsync(
-                OldFileContent,
-                NewFileContent,
+                OldFileContent, 
+                NewFileContent, 
                 SelectedModelName);
+                
+            // Generate enhanced summary
+            var categorizer = new DifferenceCategorizer();
+            DifferenceSummary = categorizer.CategorizeAndSummarize(ComparisonResult);
         }
         catch (Exception ex)
         {
-            // In a real app, handle this more gracefully
-            Console.WriteLine($"Error running comparison: {ex.Message}");
-            // Display error to user
             await JSRuntime.InvokeVoidAsync("alert", $"Error comparing files: {ex.Message}");
+            Console.WriteLine($"Error running comparison: {ex.Message}");
         }
         finally
         {
@@ -354,6 +401,48 @@
             StateHasChanged();
         }
     }
-
+    
+    private IEnumerable<Difference> GetFilteredDifferences()
+    {
+        if (ComparisonResult == null || ComparisonResult.Differences.Count == 0)
+            return Enumerable.Empty<Difference>();
+            
+        return ShowAllDifferences 
+            ? ComparisonResult.Differences 
+            : ComparisonResult.Differences.Take(100);
+    }
+    
+    private void ToggleShowAllDifferences()
+    {
+        ShowAllDifferences = !ShowAllDifferences;
+    }
+    
+    private string FormatValue(object value)
+    {
+        if (value == null)
+            return "null";
+            
+        if (value is DateTime dt)
+            return dt.ToString("yyyy-MM-dd HH:mm:ss");
+            
+        if (value is string str && str.Length > 100)
+            return str.Substring(0, 97) + "...";
+            
+        return value.ToString();
+    }
+    
+    private async Task ExportResults()
+    {
+        if (DifferenceSummary == null)
+            return;
+            
+        var report = DifferenceSummary.GenerateReport();
+        
+        // In a real app, you would use JSInterop to download the file
+        await JSRuntime.InvokeVoidAsync(
+            "saveAsFile", 
+            "comparison-report.md", 
+            "text/markdown", 
+            report);
+    }
 }
-

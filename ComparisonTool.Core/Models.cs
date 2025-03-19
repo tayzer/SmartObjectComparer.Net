@@ -2,7 +2,7 @@
 
 namespace ComparisonTool.Core;
 
-[XmlRoot(ElementName = "Envelope", Namespace = "http://schemax.xmlsoap.org/soap/envelope/")]
+[XmlRoot(ElementName = "Envelope", Namespace = "http://schemas.xmlsoap.org/soap/envelope/")]
 public class SoapEnvelope
 {
     [XmlElement(ElementName = "Body", Namespace = "http://schemas.xmlsoap.org/soap/envelope/")]

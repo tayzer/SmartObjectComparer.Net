@@ -1,0 +1,31 @@
+﻿@using System.Reflection
+
+<div class="property-tree">
+    @if (ModelType != null)
+    {
+        <PropertyTreeNode Type="ModelType"
+                          Path=""
+                          DisplayName="Root"
+                          Expanded="true"
+                          Level="0"
+                          OnPropertySelected="OnPropertySelected"
+                          SelectedPath="SelectedPath" />
+    }
+    else
+    {
+        <div class="alert alert-warning">
+            No model type specified.
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public Type ModelType { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnPropertySelected { get; set; }
+
+    [Parameter]
+    public string SelectedPath { get; set; }
+}

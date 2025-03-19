@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<soap:Envelope xmlns:soap="http://schemax.xmlsoap.org/soap/envelope/">
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
   <soap:Body>
     <SearchResponse xmlns="urn:soap.co.uk/soap:search1">
       <ReportId>123e4567-e89b-12d3-a456-426614174000</ReportId>

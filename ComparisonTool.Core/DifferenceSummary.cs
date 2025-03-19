@@ -1,0 +1,134 @@
+﻿using System.Text;
+using KellermanSoftware.CompareNetObjects;
+
+namespace ComparisonTool.Core;
+
+/// <summary>
+/// Summary of the comparison differences
+/// </summary>
+public class DifferenceSummary
+{
+    public bool AreEqual { get; set; }
+    public int TotalDifferenceCount { get; set; }
+
+    public Dictionary<DifferenceCategory, List<Difference>> DifferencesByChangeType { get; set; } =
+        new Dictionary<DifferenceCategory, List<Difference>>();
+
+    public Dictionary<string, List<Difference>> DifferencesByRootObject { get; set; } =
+        new Dictionary<string, List<Difference>>();
+
+    public Dictionary<DifferenceCategory, double> CategoryPercentages { get; set; } =
+        new Dictionary<DifferenceCategory, double>();
+
+    public Dictionary<string, double> RootObjectPercentages { get; set; } =
+        new Dictionary<string, double>();
+
+    public List<DifferencePattern> CommonPatterns { get; set; } = new List<DifferencePattern>();
+
+    /// <summary>
+    /// Generate a human-friendly summary report
+    /// </summary>
+    public string GenerateReport()
+    {
+        var sb = new StringBuilder();
+
+        sb.AppendLine("# Comparison Summary Report");
+        sb.AppendLine();
+
+        if (AreEqual)
+        {
+            sb.AppendLine("**No differences found.** The objects are identical according to current comparison rules.");
+            return sb.ToString();
+        }
+
+        sb.AppendLine($"**Total Differences: {TotalDifferenceCount}**");
+        sb.AppendLine();
+
+        // Summary by category
+        sb.AppendLine("## Differences by Category");
+        sb.AppendLine();
+        sb.AppendLine("| Category | Count | Percentage |");
+        sb.AppendLine("|----------|-------|------------|");
+
+        foreach (var category in DifferencesByChangeType.OrderByDescending(c => c.Value.Count))
+        {
+            sb.AppendLine($"| {FormatCategoryName(category.Key)} | {category.Value.Count} | {CategoryPercentages[category.Key]}% |");
+        }
+
+        sb.AppendLine();
+
+        // Summary by root object
+        sb.AppendLine("## Differences by Root Object");
+        sb.AppendLine();
+        sb.AppendLine("| Object | Count | Percentage |");
+        sb.AppendLine("|--------|-------|------------|");
+
+        foreach (var obj in DifferencesByRootObject.OrderByDescending(o => o.Value.Count))
+        {
+            sb.AppendLine($"| {obj.Key} | {obj.Value.Count} | {RootObjectPercentages[obj.Key]}% |");
+        }
+
+        sb.AppendLine();
+
+        // Common patterns
+        sb.AppendLine("## Common Difference Patterns");
+        sb.AppendLine();
+
+        foreach (var pattern in CommonPatterns.Take(10)) // Top 10 patterns
+        {
+            sb.AppendLine($"### Pattern: {pattern.Pattern} ({pattern.OccurrenceCount} occurrences)");
+            sb.AppendLine();
+            sb.AppendLine("Example differences:");
+            sb.AppendLine();
+
+            foreach (var example in pattern.Examples)
+            {
+                sb.AppendLine($"- Property: `{example.PropertyName}`");
+                sb.AppendLine($"  - Old: `{FormatValue(example.Object1Value)}`");
+                sb.AppendLine($"  - New: `{FormatValue(example.Object2Value)}`");
+                sb.AppendLine();
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    private string FormatCategoryName(DifferenceCategory category)
+    {
+        switch (category)
+        {
+            case DifferenceCategory.TextContentChanged:
+                return "Text Content Changed";
+            case DifferenceCategory.NumericValueChanged:
+                return "Numeric Value Changed";
+            case DifferenceCategory.DateTimeChanged:
+                return "Date/Time Changed";
+            case DifferenceCategory.BooleanValueChanged:
+                return "Boolean Value Changed";
+            case DifferenceCategory.CollectionItemChanged:
+                return "Collection Item Changed";
+            case DifferenceCategory.ItemAdded:
+                return "Item Added";
+            case DifferenceCategory.ItemRemoved:
+                return "Item Removed";
+            case DifferenceCategory.NullValueChange:
+                return "Null Value Change";
+            default:
+                return "Other";
+        }
+    }
+
+    private string FormatValue(object value)
+    {
+        if (value == null)
+            return "null";
+
+        if (value is DateTime dt)
+            return dt.ToString("yyyy-MM-dd HH:mm:ss");
+
+        if (value is string str && str.Length > 50)
+            return str.Substring(0, 47) + "...";
+
+        return value.ToString();
+    }
+}
