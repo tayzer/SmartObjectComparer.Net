@@ -22,9 +22,10 @@ public class XmlComparisonService
             {
                 MaxDifferences = 100,
                 IgnoreObjectTypes = false,
-                ComparePrivateFields = true,
+                ComparePrivateFields = false,
                 ComparePrivateProperties = true,
-            }
+                CompareReadOnly = true
+    }
         };
     }
 
@@ -84,8 +85,43 @@ public class XmlComparisonService
         //newXmlStream.Position = 0;
         //var newObj = serializer.Deserialize(newXmlStream);
 
+        compareLogic.Config.ComparePrivateFields = false;
+        compareLogic.Config.CompareReadOnly = true;
+
         // Compare the objects
-        var result = compareLogic.Compare(oldResponse, newResponse);
+        var result2 = compareLogic.Compare(oldResponse.Body.Response.Results, newResponse.Body.Response.Results);
+
+        return FilterDuplicateDifferences(result2);
+
+        return result2;
+    }
+
+    public ComparisonResult FilterDuplicateDifferences(ComparisonResult result)
+    {
+        if (result.Differences.Count <= 1)
+            return result;
+
+        // Group differences by their actual values that changed
+        var uniqueDiffs = result.Differences
+            .GroupBy(d => new {
+                OldValue = d.Object1Value?.ToString() ?? "null",
+                NewValue = d.Object2Value?.ToString() ?? "null"
+            })
+            .Select(group => {
+                // From each group, pick the simplest property path (one without backing fields)
+                var bestMatch = group
+                    .OrderBy(d => d.PropertyName.Contains("k__BackingField") ? 1 : 0)
+                    .ThenBy(d => d.PropertyName.Length)
+                    .First();
+
+                return bestMatch;
+            })
+            .ToList();
+
+        // Clear and replace the differences
+        result.Differences.Clear();
+        result.Differences.AddRange(uniqueDiffs);
+
         return result;
     }
 

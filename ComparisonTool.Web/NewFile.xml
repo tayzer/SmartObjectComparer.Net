@@ -11,19 +11,6 @@
       </Summary>
       <Results>
         <Result>
-          <Id>1</Id>
-          <Name>First Result</Name>
-          <Score>95.5</Score>
-          <Details>
-            <Description>This is the first result description.</Description>
-            <Status>Fail</Status>
-          </Details>
-          <Tags>
-            <Tag>Important</Tag>
-            <Tag>Featured</Tag>
-          </Tags>
-        </Result>
-        <Result>
           <Id>2</Id>
           <Name>Second Result</Name>
           <Score>75.3</Score>
@@ -34,6 +21,19 @@
           <Tags>
             <Tag>Review</Tag>
             <Tag>Test</Tag>
+          </Tags>
+        </Result>
+        <Result>
+          <Id>1</Id>
+          <Name>First Result</Name>
+          <Score>95.5</Score>
+          <Details>
+            <Description>This is the first result description.</Description>
+            <Status>Success</Status>
+          </Details>
+          <Tags>
+            <Tag>Important</Tag>
+            <Tag>Featured</Tag>
           </Tags>
         </Result>
       </Results>
