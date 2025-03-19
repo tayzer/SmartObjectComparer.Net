@@ -7,11 +7,33 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="Actuals\1.xml" />
+    <None Remove="Expecteds\1.xml" />
+    <None Remove="Expecteds\2.xml" />
+    <None Remove="Expecteds\3.xml" />
     <None Remove="NewFile.xml" />
     <None Remove="OldFile.xml" />
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="Actuals\1.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Expecteds\1.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Actuals\2.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Actuals\3.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Expecteds\2.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Expecteds\3.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="NewFile.xml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

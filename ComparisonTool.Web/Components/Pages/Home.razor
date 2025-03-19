@@ -1,8 +1,10 @@
 ﻿@rendermode InteractiveServer
 @page "/"
 @using System.IO
+@using System.Text
 @using KellermanSoftware.CompareNetObjects
 @using ComparisonTool.Core
+@using Microsoft.AspNetCore.Components
 @inject XmlComparisonService ComparisonService
 @inject IJSRuntime JSRuntime
 
@@ -25,23 +27,79 @@
                     </select>
                 </div>
 
-                <div class="form-group mt-3">
-                    <label>Old XML File:</label>
-                    <InputFile class="form-control" OnChange="HandleOldFileUpload" />
-                    @if (!string.IsNullOrEmpty(OldFileName))
-                    {
-                        <span class="text-success">File loaded: @OldFileName</span>
-                    }
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group mt-3">
+                            <label>V1 Files (select multiple):</label>
+                            <InputFile class="form-control" OnChange="HandleFolder1Upload" multiple />
+
+                            @if (Folder1Files.Any())
+                            {
+                                <div class="mt-2">
+                                    <div class="card">
+                                        <div class="card-header bg-light">
+                                            V1 Files (@Folder1Files.Count)
+                                        </div>
+                                        <ul class="list-group list-group-flush" style="max-height: 200px; overflow-y: auto;">
+                                            @for (int i = 0; i < Folder1Files.Count; i++)
+                                            {
+                                                var index = i;
+                                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                    <div>
+                                                        <small>@Folder1Files[i].FileName</small>
+                                                    </div>
+                                                    <button class="btn btn-sm btn-danger" @onclick="() => RemoveFolder1File(index)">
+                                                        <i class="bi bi-x"></i>
+                                                    </button>
+                                                </li>
+                                            }
+                                        </ul>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="form-group mt-3">
+                            <label>V2 Files (select multiple):</label>
+                            <InputFile class="form-control" OnChange="HandleFolder2Upload" multiple />
+
+                            @if (Folder2Files.Any())
+                            {
+                                <div class="mt-2">
+                                    <div class="card">
+                                        <div class="card-header bg-light">
+                                            V2 Files (@Folder2Files.Count)
+                                        </div>
+                                        <ul class="list-group list-group-flush" style="max-height: 200px; overflow-y: auto;">
+                                            @for (int i = 0; i < Folder2Files.Count; i++)
+                                            {
+                                                var index = i;
+                                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                    <div>
+                                                        <small>@Folder2Files[i].FileName</small>
+                                                    </div>
+                                                    <button class="btn btn-sm btn-danger" @onclick="() => RemoveFolder2File(index)">
+                                                        <i class="bi bi-x"></i>
+                                                    </button>
+                                                </li>
+                                            }
+                                        </ul>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
                 </div>
 
-                <div class="form-group mt-3">
-                    <label>New XML File:</label>
-                    <InputFile class="form-control" OnChange="HandleNewFileUpload" />
-                    @if (!string.IsNullOrEmpty(NewFileName))
-                    {
-                        <span class="text-success">File loaded: @NewFileName</span>
-                    }
-                </div>
+                @if (Folder1Files.Any() && Folder2Files.Any())
+                {
+                    <div class="alert alert-info mt-3">
+                        <strong>Files will be paired for comparison in order.</strong><br />
+                        V1 files are sorted by filename, and V2 files are sorted by filename. Each V1 file will be compared with the corresponding V2 file.
+                    </div>
+                }
             </div>
         </div>
     </div>
@@ -105,8 +163,8 @@
                     }
                 </div>
 
-                <button class="btn btn-primary mt-3" @onclick="RunComparison"
-                        disabled="@(!CanRunComparison)">
+                <button class="btn btn-primary mt-3" @onclick="RunFolderComparison"
+                        disabled="@(!CanRunFolderComparison)">
                     Run Comparison
                 </button>
             </div>
@@ -124,10 +182,90 @@
     </div>
 }
 
-@if (ComparisonResult != null)
+@if (FolderComparisonResult != null)
 {
     <div class="mt-4">
-        <EnhancedDifferenceSummary Summary="DifferenceSummary" />
+        <div class="card">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">V1 vs V2 Comparison Results</h5>
+                <button class="btn btn-sm btn-outline-primary" @onclick="ExportAllFolderResults">
+                    <i class="bi bi-download me-1"></i> Export All Results
+                </button>
+            </div>
+            <div class="card-body">
+                @if (FolderComparisonResult.AllEqual)
+                {
+                    <div class="alert alert-success">
+                        <i class="bi bi-check-circle-fill me-2"></i>
+                        All file pairs are identical according to the current comparison rules.
+                    </div>
+                }
+                else
+                {
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        Found differences in compared file pairs.
+                    </div>
+
+                    <h6>Select a file pair to view detailed comparison:</h6>
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>V1 File</th>
+                                    <th>V2 File</th>
+                                    <th>Status</th>
+                                    <th>Differences</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @for (int i = 0; i < FolderComparisonResult.FilePairResults.Count; i++)
+                                {
+                                    var index = i;
+                                    var result = FolderComparisonResult.FilePairResults[i];
+                                    <tr class="@(index == SelectedPairIndex ? "table-primary" : "")" style="cursor: pointer;" @onclick="() => SelectPairResult(index)">
+                                        <td>@result.File1Name</td>
+                                        <td>@result.File2Name</td>
+                                        <td>
+                                            <span class="badge @(result.AreEqual ? "bg-success" : "bg-danger")">
+                                                @(result.AreEqual ? "Equal" : "Different")
+                                            </span>
+                                        </td>
+                                        <td>@(result.AreEqual ? "0" : result.Summary.TotalDifferenceCount.ToString())</td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-secondary" @onclick:stopPropagation="true" @onclick="() => SelectPairResult(index)">
+                                                View
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@if (FolderComparisonResult != null && SelectedPairIndex >= 0 && DifferenceSummary != null)
+{
+    <div class="mt-4">
+        <div class="card">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    Comparison: @FolderComparisonResult.FilePairResults[SelectedPairIndex].File1Name
+                    vs @FolderComparisonResult.FilePairResults[SelectedPairIndex].File2Name
+                </h5>
+                <button class="btn btn-sm btn-outline-primary" @onclick="ExportFolderResults">
+                    <i class="bi bi-download me-1"></i> Export This Result
+                </button>
+            </div>
+            <div class="card-body">
+                <EnhancedDifferenceSummary Summary="DifferenceSummary" />
+            </div>
+        </div>
     </div>
 
     @if (!DifferenceSummary.AreEqual)
@@ -146,8 +284,8 @@
                             <thead>
                                 <tr>
                                     <th>Property</th>
-                                    <th>Old Value</th>
-                                    <th>New Value</th>
+                                    <th>V1 Value (@FolderComparisonResult.FilePairResults[SelectedPairIndex].File1Name)</th>
+                                    <th>V2 Value (@FolderComparisonResult.FilePairResults[SelectedPairIndex].File2Name)</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -173,12 +311,6 @@
                 </div>
             </div>
         </div>
-
-        <div class="mt-4 mb-5">
-            <button class="btn btn-outline-primary" @onclick="ExportResults">
-                <i class="bi bi-download me-2"></i> Export Results
-            </button>
-        </div>
     }
 }
 
@@ -187,7 +319,6 @@
                               IgnoredProperties="IgnoreRules"
                               OnPropertyAdded="AddIgnoreRule"
                               OnPropertyRemoved="propertyPath => RemoveIgnoreRule(IgnoreRules.FirstOrDefault(r => r.PropertyPath == propertyPath))" />
-
 @code {
     // State variables
     private string SelectedModelName { get; set; }
@@ -202,6 +333,11 @@
     private ComparisonResult ComparisonResult { get; set; }
     private DifferenceSummary DifferenceSummary { get; set; }
     private bool ShowAllDifferences { get; set; } = false;
+    private List<(MemoryStream Stream, string FileName)> Folder1Files { get; set; } = new List<(MemoryStream, string)>();
+    private List<(MemoryStream Stream, string FileName)> Folder2Files { get; set; } = new List<(MemoryStream, string)>();
+    private MultiFolderComparisonResult FolderComparisonResult { get; set; }
+    private int SelectedPairIndex { get; set; } = -1;
+
 
     // Property selector
     private HierarchicalPropertySelector propertySelector;
@@ -448,5 +584,296 @@
             "comparison-report.md",
             "text/markdown",
             report);
+    }
+
+    private async Task HandleFolder1Upload(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            foreach (var file in e.GetMultipleFiles(20)) // Allow up to 20 files
+            {
+                var stream = new MemoryStream();
+                await file.OpenReadStream(maxAllowedSize: 10485760).CopyToAsync(stream);
+                stream.Position = 0;
+
+                Folder1Files.Add((stream, file.Name));
+            }
+
+            // Sort files by name to help with matching
+            Folder1Files = Folder1Files.OrderBy(f => f.FileName).ToList();
+
+            // Force UI refresh
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading Folder 1 files: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading files: {ex.Message}");
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleFolder2Upload(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            foreach (var file in e.GetMultipleFiles(20)) // Allow up to 20 files
+            {
+                var stream = new MemoryStream();
+                await file.OpenReadStream(maxAllowedSize: 10485760).CopyToAsync(stream);
+                stream.Position = 0;
+
+                Folder2Files.Add((stream, file.Name));
+            }
+
+            // Sort files by name to help with matching
+            Folder2Files = Folder2Files.OrderBy(f => f.FileName).ToList();
+
+            // Force UI refresh
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading Folder 2 files: {ex.Message}");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading files: {ex.Message}");
+            StateHasChanged();
+        }
+    }
+
+    // Methods to remove files from folders
+    private void RemoveFolder1File(int index)
+    {
+        if (index >= 0 && index < Folder1Files.Count)
+        {
+            Folder1Files.RemoveAt(index);
+        }
+    }
+
+    private void RemoveFolder2File(int index)
+    {
+        if (index >= 0 && index < Folder2Files.Count)
+        {
+            Folder2Files.RemoveAt(index);
+        }
+    }
+
+    // Run comparison between the two folders
+    private async Task RunFolderComparison()
+    {
+        if (Folder1Files.Count == 0 || Folder2Files.Count == 0)
+            return;
+
+        IsComparing = true;
+        FolderComparisonResult = null;
+        SelectedPairIndex = -1;
+
+        try
+        {
+            // Update configuration
+            ComparisonService.SetIgnoreCollectionOrder(IgnoreCollectionOrder);
+            ComparisonService.SetIgnoreStringCase(IgnoreStringCase);
+
+    // Apply all ignore rules
+            foreach (var rule in IgnoreRules)
+            {
+                rule.ApplyTo(ComparisonService.GetCurrentConfig());
+            }
+
+            // Convert our in-memory lists to the format needed by the service
+            var folder1FilesList = Folder1Files
+                .Select(f => ((Stream)f.Stream, f.FileName))
+                .ToList();
+
+            var folder2FilesList = Folder2Files
+                .Select(f => ((Stream)f.Stream, f.FileName))
+                .ToList();
+
+            // Run folder comparison
+            FolderComparisonResult = await ComparisonService.CompareFoldersAsync(
+                folder1FilesList,
+                folder2FilesList,
+                SelectedModelName);
+
+            // Select the first file pair by default if there are differences
+            if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 0)
+            {
+                SelectedPairIndex = 0;
+                var selectedPair = FolderComparisonResult.FilePairResults[0];
+                ComparisonResult = selectedPair.Result;
+                DifferenceSummary = selectedPair.Summary;
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error comparing files: {ex.Message}");
+            Console.WriteLine($"Error running comparison: {ex.Message}");
+        }
+        finally
+        {
+            IsComparing = false;
+            StateHasChanged();
+        }
+    }
+
+    // Method to select a specific comparison result to view
+    private void SelectPairResult(int index)
+    {
+        if (index >= 0 && index < FolderComparisonResult?.FilePairResults.Count)
+        {
+            SelectedPairIndex = index;
+
+            // Set the current ComparisonResult and DifferenceSummary for display
+            var selectedPair = FolderComparisonResult.FilePairResults[index];
+            ComparisonResult = selectedPair.Result;
+            DifferenceSummary = selectedPair.Summary;
+        }
+    }
+
+    // Define a helper property for the UI
+    private bool CanRunFolderComparison =>
+        !string.IsNullOrEmpty(SelectedModelName) &&
+        Folder1Files.Count > 0 &&
+        Folder2Files.Count > 0;
+
+    // Export methods for folder comparison
+    private async Task ExportFolderResults()
+    {
+        if (FolderComparisonResult == null || SelectedPairIndex < 0)
+            return;
+
+        var selectedPair = FolderComparisonResult.FilePairResults[SelectedPairIndex];
+        var file1Name = Path.GetFileNameWithoutExtension(selectedPair.File1Name);
+        var file2Name = Path.GetFileNameWithoutExtension(selectedPair.File2Name);
+
+        var report = selectedPair.Summary.GenerateReport();
+
+        // Add a header to clarify which files were compared
+        var headerReport = $"# Comparison Report\n\n" +
+                          $"V1 file: **{selectedPair.File1Name}**\n\n" +
+                          $"V2 file: **{selectedPair.File2Name}**\n\n" +
+                          $"---\n\n" +
+                          report;
+
+        // In a real app, you would use JSInterop to download the file
+        await JSRuntime.InvokeVoidAsync(
+            "saveAsFile",
+            $"comparison-{file1Name}-vs-{file2Name}.md",
+            "text/markdown",
+            headerReport);
+    }
+
+    // Export a summary of all folder comparisons
+    private async Task ExportAllFolderResults()
+    {
+        if (FolderComparisonResult == null || FolderComparisonResult.FilePairResults.Count == 0)
+            return;
+
+        var sb = new StringBuilder();
+
+        sb.AppendLine("# V1 vs V2 Folder Comparison Report");
+        sb.AppendLine();
+        sb.AppendLine($"Date: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        sb.AppendLine();
+
+        sb.AppendLine("## Summary");
+        sb.AppendLine();
+        sb.AppendLine("| V1 File | V2 File | Status | Differences |");
+        sb.AppendLine("|---------|---------|--------|------------|");
+
+        foreach (var result in FolderComparisonResult.FilePairResults)
+        {
+            var status = result.AreEqual ? "✓ Equal" : "❌ Different";
+            var diffCount = result.AreEqual ? "0" : result.Summary.TotalDifferenceCount.ToString();
+
+            sb.AppendLine($"| {result.File1Name} | {result.File2Name} | {status} | {diffCount} |");
+        }
+
+        sb.AppendLine();
+
+        // Add detailed comparison for each file pair
+        for (int i = 0; i < FolderComparisonResult.FilePairResults.Count; i++)
+        {
+            var result = FolderComparisonResult.FilePairResults[i];
+
+            sb.AppendLine($"## Pair {i + 1}: {result.File1Name} vs {result.File2Name}");
+            sb.AppendLine();
+
+            if (result.AreEqual)
+            {
+                sb.AppendLine("**No differences found.** The objects are identical according to current comparison rules.");
+            }
+            else
+            {
+                // Include only the most important parts of the report for each file
+                sb.AppendLine($"**Total Differences: {result.Summary.TotalDifferenceCount}**");
+                sb.AppendLine();
+
+                // Add top differences by category
+                sb.AppendLine("### Differences by Category");
+                sb.AppendLine();
+                sb.AppendLine("| Category | Count | Percentage |");
+                sb.AppendLine("|----------|-------|------------|");
+
+                foreach (var category in result.Summary.DifferencesByChangeType.OrderByDescending(c => c.Value.Count).Take(5))
+                {
+                    sb.AppendLine($"| {FormatCategoryName(category.Key)} | {category.Value.Count} | {result.Summary.CategoryPercentages[category.Key]}% |");
+                }
+
+                sb.AppendLine();
+
+                // Add a sample of actual differences
+                sb.AppendLine("### Sample Differences");
+                sb.AppendLine();
+
+                var sampleDiffs = result.Result.Differences.Take(10).ToList();
+                foreach (var diff in sampleDiffs)
+                {
+                    sb.AppendLine($"- Property: `{diff.PropertyName}`");
+                    sb.AppendLine($"  - V1: `{FormatValue(diff.Object1Value)}`");
+                    sb.AppendLine($"  - V2: `{FormatValue(diff.Object2Value)}`");
+                    sb.AppendLine();
+                }
+
+                if (result.Result.Differences.Count > 10)
+                {
+                    sb.AppendLine($"*...and {result.Result.Differences.Count - 10} more differences*");
+                    sb.AppendLine();
+                }
+            }
+
+            sb.AppendLine("---");
+            sb.AppendLine();
+        }
+
+        await JSRuntime.InvokeVoidAsync(
+            "saveAsFile",
+            "folder-comparison-report.md",
+            "text/markdown",
+            sb.ToString());
+    }
+
+    private string FormatCategoryName(DifferenceCategory category)
+    {
+        switch (category)
+        {
+            case DifferenceCategory.TextContentChanged:
+                return "Text Content Changed";
+            case DifferenceCategory.NumericValueChanged:
+                return "Numeric Value Changed";
+            case DifferenceCategory.DateTimeChanged:
+                return "Date/Time Changed";
+            case DifferenceCategory.BooleanValueChanged:
+                return "Boolean Value Changed";
+            case DifferenceCategory.CollectionItemChanged:
+                return "Collection Item Changed";
+            case DifferenceCategory.ItemAdded:
+                return "Item Added";
+            case DifferenceCategory.ItemRemoved:
+                return "Item Removed";
+            case DifferenceCategory.NullValueChange:
+                return "Null Value Change";
+            default:
+                return "Other";
+        }
     }
 }

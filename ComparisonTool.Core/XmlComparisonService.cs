@@ -92,7 +92,61 @@ public class XmlComparisonService
         return result2;
     }
 
-    public ComparisonResult FilterDuplicateDifferences(ComparisonResult result)
+    public async Task<MultiFolderComparisonResult> CompareFoldersAsync(
+        List<(Stream Stream, string FileName)> folder1Files,
+        List<(Stream Stream, string FileName)> folder2Files,
+        string modelName)
+    {
+        var result = new MultiFolderComparisonResult();
+
+        // Determine how many pairs we can make
+        int pairCount = Math.Min(folder1Files.Count, folder2Files.Count);
+        result.TotalPairsCompared = pairCount;
+
+        if (pairCount == 0)
+        {
+            return result;
+        }
+
+        // For each pair of files, compare them
+        for (int i = 0; i < pairCount; i++)
+        {
+            var (file1Stream, file1Name) = folder1Files[i];
+            var (file2Stream, file2Name) = folder2Files[i];
+
+            // Reset streams to beginning
+            file1Stream.Position = 0;
+            file2Stream.Position = 0;
+
+            // Do the comparison
+            var pairResult = await CompareXmlFilesAsync(file1Stream, file2Stream, modelName);
+
+            // Generate summary
+            var categorizer = new DifferenceCategorizer();
+            var summary = categorizer.CategorizeAndSummarize(pairResult);
+
+            // Add to results
+            var filePairResult = new FilePairComparisonResult
+            {
+                File1Name = file1Name,
+                File2Name = file2Name,
+                Result = pairResult,
+                Summary = summary
+            };
+
+            result.FilePairResults.Add(filePairResult);
+
+            // Update overall equality status
+            if (!summary.AreEqual)
+            {
+                result.AllEqual = false;
+            }
+        }
+
+        return result;
+    }
+
+    private ComparisonResult FilterDuplicateDifferences(ComparisonResult result)
     {
         if (result.Differences.Count <= 1)
             return result;
