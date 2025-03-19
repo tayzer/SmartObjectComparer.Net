@@ -86,11 +86,10 @@ public class XmlComparisonService
         compareLogic.Config.CompareReadOnly = true;
 
         // Compare the objects
-        var result2 = compareLogic.Compare(oldResponse.Body.Response.Results, newResponse.Body.Response.Results);
+        var result2 = compareLogic.Compare(oldResponse, newResponse);
 
-        return FilterDuplicateDifferences(result2);
-
-        return result2;
+        var compareXmlFilesAsync = FilterDuplicateDifferences(result2);
+        return compareXmlFilesAsync;
     }
 
     public async Task<MultiFolderComparisonResult> CompareFoldersAsync(

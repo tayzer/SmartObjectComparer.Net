@@ -295,7 +295,6 @@
     </div>
 }
 
-@* Update the existing pattern analysis section to work with this new approach *@
 @if (PatternAnalysis != null && ShowPatternSummary)
 {
     <div class="mt-3 mb-4">
@@ -381,8 +380,8 @@
     private string NewFileName { get; set; }
     private MemoryStream OldFileContent { get; set; }
     private MemoryStream NewFileContent { get; set; }
-    private bool IgnoreCollectionOrder { get; set; } = true;
-    private bool IgnoreStringCase { get; set; } = true;
+    private bool IgnoreCollectionOrder { get; set; } = false;
+    private bool IgnoreStringCase { get; set; } = false;
     private List<IgnoreRule> IgnoreRules { get; set; } = new List<IgnoreRule>();
     private bool IsComparing { get; set; } = false;
     private ComparisonResult ComparisonResult { get; set; }

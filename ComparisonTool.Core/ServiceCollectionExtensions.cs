@@ -21,7 +21,7 @@ public static class ServiceCollectionExtensions
             service.RegisterDomainModel<SoapEnvelope>("SoapEnvelope");
 
             // Configure default settings
-            service.SetIgnoreCollectionOrder(true);
+            service.SetIgnoreCollectionOrder(false);
 
             return service;
         });
