@@ -3,9 +3,9 @@
 <div class="property-tree">
     @if (ModelType != null)
     {
-        <PropertyTreeNode Type="ModelType" 
-                          Path="" 
-                          DisplayName="Root" 
+        <PropertyTreeNode Type="ModelType"
+                          Path=""
+                          DisplayName="Root"
                           Expanded="true"
                           Level="0"
                           OnPropertySelected="OnPropertySelected"
@@ -22,10 +22,10 @@
 @code {
     [Parameter]
     public Type ModelType { get; set; }
-    
+
     [Parameter]
     public EventCallback<string> OnPropertySelected { get; set; }
-    
+
     [Parameter]
     public string SelectedPath { get; set; }
 }

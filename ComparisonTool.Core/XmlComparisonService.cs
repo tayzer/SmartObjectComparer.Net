@@ -21,7 +21,7 @@ public class XmlComparisonService
             Config = new ComparisonConfig
             {
                 MaxDifferences = 100,
-                IgnoreObjectTypes = true,
+                IgnoreObjectTypes = false,
                 ComparePrivateFields = true,
                 ComparePrivateProperties = true,
             }

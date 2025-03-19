@@ -24,7 +24,7 @@
                         }
                     </select>
                 </div>
-                
+
                 <div class="form-group mt-3">
                     <label>Old XML File:</label>
                     <InputFile class="form-control" OnChange="HandleOldFileUpload" />
@@ -33,7 +33,7 @@
                         <span class="text-success">File loaded: @OldFileName</span>
                     }
                 </div>
-                
+
                 <div class="form-group mt-3">
                     <label>New XML File:</label>
                     <InputFile class="form-control" OnChange="HandleNewFileUpload" />
@@ -45,7 +45,7 @@
             </div>
         </div>
     </div>
-    
+
     <div class="col-md-6">
         <div class="card">
             <div class="card-header">
@@ -53,32 +53,32 @@
             </div>
             <div class="card-body">
                 <div class="form-group form-check">
-                    <input type="checkbox" class="form-check-input" id="ignoreOrder" 
+                    <input type="checkbox" class="form-check-input" id="ignoreOrder"
                            @bind="IgnoreCollectionOrder" />
                     <label class="form-check-label" for="ignoreOrder">
                         Ignore Collection Ordering
                     </label>
                 </div>
-                
+
                 <div class="form-group form-check mt-2">
-                    <input type="checkbox" class="form-check-input" id="ignoreCase" 
+                    <input type="checkbox" class="form-check-input" id="ignoreCase"
                            @bind="IgnoreStringCase" />
                     <label class="form-check-label" for="ignoreCase">
                         Ignore String Case
                     </label>
                 </div>
-                
+
                 <div class="form-group mt-3">
                     <label>Decimal Tolerance:</label>
                     <input type="number" class="form-control" @bind="DecimalTolerance" step="0.001" min="0" />
                 </div>
-                
+
                 <div class="form-group mt-3">
                     <label>Properties to Ignore:</label>
                     <button class="btn btn-sm btn-primary ms-2" @onclick="OpenPropertySelector">
                         Configure Properties
                     </button>
-                    
+
                     @if (IgnoreRules.Any())
                     {
                         <div class="mt-2">
@@ -109,8 +109,8 @@
                         </div>
                     }
                 </div>
-                
-                <button class="btn btn-primary mt-3" @onclick="RunComparison" 
+
+                <button class="btn btn-primary mt-3" @onclick="RunComparison"
                         disabled="@(!CanRunComparison)">
                     Run Comparison
                 </button>
@@ -134,7 +134,7 @@
     <div class="mt-4">
         <EnhancedDifferenceSummary Summary="DifferenceSummary" />
     </div>
-    
+
     @if (!DifferenceSummary.AreEqual)
     {
         <div class="mt-4">
@@ -178,7 +178,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="mt-4 mb-5">
             <button class="btn btn-outline-primary" @onclick="ExportResults">
                 <i class="bi bi-download me-2"></i> Export Results
@@ -187,12 +187,11 @@
     }
 }
 
-<!-- Property Selector Modal -->
 <HierarchicalPropertySelector @ref="propertySelector"
-                             ModelType="ComparisonService.GetModelType(SelectedModelName)"
-                             IgnoredProperties="IgnoreRules"
-                             OnPropertyAdded="AddIgnoreRule"
-                             OnPropertyRemoved="propertyPath => RemoveIgnoreRule(IgnoreRules.FirstOrDefault(r => r.PropertyPath == propertyPath))" />
+                              ModelType="ComparisonService.GetModelType(SelectedModelName)"
+                              IgnoredProperties="IgnoreRules"
+                              OnPropertyAdded="AddIgnoreRule"
+                              OnPropertyRemoved="propertyPath => RemoveIgnoreRule(IgnoreRules.FirstOrDefault(r => r.PropertyPath == propertyPath))" />
 
 @code {
     // State variables

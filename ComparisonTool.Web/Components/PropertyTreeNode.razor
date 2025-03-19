@@ -12,7 +12,7 @@
                 <small class="text-muted">@GetTypeDescription()</small>
             </div>
         </div>
-        
+
         @if (Expanded)
         {
             <div class="child-nodes mt-1">
@@ -20,9 +20,9 @@
                 {
                     var childPath = BuildChildPath(property);
                     var childType = GetPropertyType(property);
-                    
-                    <PropertyTreeNode Type="childType"
-                                      Path="childPath"
+
+                    <PropertyTreeNode Type="@childType"
+                                      Path="@childPath"
                                       DisplayName="@property.Name"
                                       Level="Level + 1"
                                       OnPropertySelected="OnPropertySelected"
@@ -48,33 +48,33 @@
 @code {
     [Parameter]
     public Type Type { get; set; }
-    
+
     [Parameter]
     public string Path { get; set; }
-    
+
     [Parameter]
     public string DisplayName { get; set; }
-    
+
     [Parameter]
     public bool Expanded { get; set; }
-    
+
     [Parameter]
     public int Level { get; set; }
-    
+
     [Parameter]
     public EventCallback<string> OnPropertySelected { get; set; }
-    
+
     [Parameter]
     public string SelectedPath { get; set; }
-    
-    private bool HasChildProperties => Type != null && 
-                                      !Type.IsPrimitive && 
+
+    private bool HasChildProperties => Type != null &&
+                                      !Type.IsPrimitive &&
                                       Type != typeof(string) &&
                                       Type != typeof(DateTime) &&
                                       Type != typeof(Guid) &&
                                       !Type.IsEnum &&
                                       GetChildProperties().Any();
-                                      
+
     private async Task SelectThisProperty()
     {
         Console.WriteLine($"Selecting property: {Path}");
@@ -83,53 +83,53 @@
             await OnPropertySelected.InvokeAsync(Path);
         }
     }
-    
+
     private void ToggleExpanded()
     {
         Expanded = !Expanded;
     }
-    
+
     private IEnumerable<PropertyInfo> GetChildProperties()
     {
         if (Type == null) return Enumerable.Empty<PropertyInfo>();
-        
+
         // Skip primitive types, strings, etc.
-        if (Type.IsPrimitive || 
-            Type == typeof(string) || 
+        if (Type.IsPrimitive ||
+            Type == typeof(string) ||
             Type == typeof(DateTime) ||
             Type == typeof(Guid) ||
             Type.IsEnum)
         {
             return Enumerable.Empty<PropertyInfo>();
         }
-        
+
         // For collections, show the collection property itself, not its items
-        if (typeof(System.Collections.IEnumerable).IsAssignableFrom(Type) && 
+        if (typeof(System.Collections.IEnumerable).IsAssignableFrom(Type) &&
             Type != typeof(string))
         {
             // This is a collection
             return Enumerable.Empty<PropertyInfo>();
         }
-        
+
         // Return all public properties for complex types
         return Type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
                   .Where(p => p.CanRead);
     }
-    
+
     private string BuildChildPath(PropertyInfo property)
     {
         if (string.IsNullOrEmpty(Path))
             return property.Name;
-            
+
         return $"{Path}.{property.Name}";
     }
-    
+
     private Type GetPropertyType(PropertyInfo property)
     {
         var type = property.PropertyType;
-        
+
         // For collections, return the element type
-        if (typeof(System.Collections.IEnumerable).IsAssignableFrom(type) && 
+        if (typeof(System.Collections.IEnumerable).IsAssignableFrom(type) &&
             type != typeof(string))
         {
             if (type.IsGenericType)
@@ -143,66 +143,66 @@
                 return type.GetElementType();
             }
         }
-        
+
         return type;
     }
-    
+
     private string GetNodeClass()
     {
         var classes = new List<string> { "property-name" };
-        
+
         if (Path == SelectedPath)
         {
             classes.Add("text-primary fw-bold");
         }
-        
+
         if (IsCollectionType())
         {
             classes.Add("collection-property");
         }
-        
+
         return string.Join(" ", classes);
     }
-    
+
     private bool IsCollectionType()
     {
         return Type != null &&
                typeof(System.Collections.IEnumerable).IsAssignableFrom(Type) &&
                Type != typeof(string);
     }
-    
+
     private string GetTypeDescription()
     {
         if (Type == null) return "";
-        
+
         if (Type.IsPrimitive)
             return GetFriendlyTypeName(Type);
-            
+
         if (Type == typeof(string))
             return "string";
-            
+
         if (Type == typeof(DateTime))
             return "datetime";
-            
+
         if (Type == typeof(decimal))
             return "decimal";
-            
+
         if (Type.IsEnum)
             return "enum";
-            
+
         if (IsCollectionType())
         {
             var elementType = GetCollectionElementType();
             return $"List<{GetFriendlyTypeName(elementType)}>";
         }
-        
+
         return "";
     }
-    
+
     private Type GetCollectionElementType()
     {
         if (!IsCollectionType()) return Type;
-        
+
         if (Type.IsGenericType)
         {
             var genericArgs = Type.GetGenericArguments();
@@ -213,10 +213,10 @@
         {
             return Type.GetElementType();
         }
-        
+
         return typeof(object);
     }
-    
+
     private string GetFriendlyTypeName(Type type)
     {
         if (type == typeof(int)) return "int";
@@ -227,7 +227,7 @@
         if (type == typeof(float)) return "float";
         if (type == typeof(DateTime)) return "datetime";
         if (type == typeof(Guid)) return "guid";
-        
+
         return type.Name;
     }
 }
