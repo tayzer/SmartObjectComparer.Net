@@ -162,6 +162,17 @@
                         </div>
                     }
                 </div>
+                
+                <div class="form-group form-check mt-2">
+                    <input type="checkbox" class="form-check-input" id="enablePatternAnalysis"
+                           @bind="EnablePatternAnalysis" />
+                    <label class="form-check-label" for="enablePatternAnalysis">
+                        Enable Cross-File Pattern Analysis
+                    </label>
+                    <small class="form-text text-muted d-block">
+                        Analyzes common patterns and changes across multiple files. May take longer for large sets of files.
+                    </small>
+                </div>
 
                 <button class="btn btn-primary mt-3" @onclick="RunFolderComparison"
                         disabled="@(!CanRunFolderComparison)">
@@ -251,30 +262,46 @@
 
 @if (FolderComparisonResult != null && !FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 1)
 {
-    <div class="mt-4 mb-3">
-        <div class="d-flex justify-content-between align-items-center">
-            <h4>Cross-File Pattern Analysis</h4>
-            <button class="btn btn-outline-primary btn-sm" @onclick="() => ShowPatternSummary = !ShowPatternSummary">
-                @if (ShowPatternSummary)
-                {
-                    <span><i class="bi bi-chevron-up me-1"></i> Hide Summary</span>
-                }
-                else
-                {
-                    <span><i class="bi bi-chevron-down me-1"></i> Show Summary</span>
-                }
+    <div class="mt-3 mb-4">
+        @if (!EnablePatternAnalysis)
+        {
+            <button class="btn btn-outline-secondary" @onclick="GeneratePatternAnalysis" disabled="@(PatternAnalysis != null)">
+                <i class="bi bi-graph-up me-1"></i> Generate Pattern Analysis
             </button>
-        </div>
 
-        <p class="text-muted">
-            Analyzing common patterns and changes across all file pairs.
-        </p>
+            @if (PatternAnalysis != null)
+            {
+                <span class="text-success ms-2">
+                    <i class="bi bi-check-circle"></i> Analysis generated
+                </span>
+            }
+        }
+
+        @if (PatternAnalysis != null)
+        {
+            <div class="d-inline-block ms-2">
+                <button class="btn btn-outline-primary btn-sm" @onclick="() => ShowPatternSummary = !ShowPatternSummary">
+                    @if (ShowPatternSummary)
+                    {
+                        <span><i class="bi bi-chevron-up me-1"></i> Hide Pattern Summary</span>
+                    }
+                    else
+                    {
+                        <span><i class="bi bi-chevron-down me-1"></i> Show Pattern Summary</span>
+                    }
+                </button>
+            </div>
+        }
     </div>
+}
 
-    @if (ShowPatternSummary && PatternAnalysis != null)
-    {
+@* Update the existing pattern analysis section to work with this new approach *@
+@if (PatternAnalysis != null && ShowPatternSummary)
+{
+    <div class="mt-3 mb-4">
+        <h5>Cross-File Pattern Analysis</h5>
         <PatternSummaryComponent Analysis="PatternAnalysis" OnExportAnalysis="ExportPatternAnalysisReport" />
-    }
+    </div>
 }
 
 @if (FolderComparisonResult != null && SelectedPairIndex >= 0 && DifferenceSummary != null)
@@ -367,7 +394,7 @@
     private int SelectedPairIndex { get; set; } = -1;
     private ComparisonPatternAnalysis PatternAnalysis { get; set; }
     private bool ShowPatternSummary { get; set; } = false;
-
+    private bool EnablePatternAnalysis { get; set; } = true; // Default to enabled
 
     // Property selector
     private HierarchicalPropertySelector propertySelector;
@@ -733,7 +760,7 @@
                 DifferenceSummary = selectedPair.Summary;
             }
 
-            if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 1)
+            if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 1 && EnablePatternAnalysis)
             {
                 // Auto-generate pattern analysis if we have multiple files with differences
                 GeneratePatternAnalysis();
