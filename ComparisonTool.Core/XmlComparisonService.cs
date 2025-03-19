@@ -1,6 +1,7 @@
 ﻿using KellermanSoftware.CompareNetObjects;
 using System.Xml.Serialization;
 using ComparisonTool.Core;
+using System.Text;
 
 /// <summary>
 /// Core service for comparing XML file content
