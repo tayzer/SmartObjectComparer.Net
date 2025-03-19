@@ -1,0 +1,368 @@
+﻿@using KellermanSoftware.CompareNetObjects
+
+<div class="card">
+    <div class="card-header">
+        <h4>Comparison Summary</h4>
+    </div>
+    <div class="card-body">
+        @if (Summary.AreEqual)
+        {
+            <div class="alert alert-success">
+                <i class="bi bi-check-circle-fill me-2"></i>
+                No differences found. The objects are identical according to current comparison rules.
+            </div>
+        }
+        else
+        {
+            <div class="alert @(GetAlertClass())">
+                <i class="@(GetAlertIcon()) me-2"></i>
+                Found @Summary.TotalDifferenceCount differences between the objects.
+            </div>
+
+            <!-- Tab Navigation -->
+            <ul class="nav nav-tabs mb-3" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="overview-tab" data-bs-toggle="tab"
+                            data-bs-target="#overview" type="button" role="tab">
+                        Overview
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="patterns-tab" data-bs-toggle="tab"
+                            data-bs-target="#patterns" type="button" role="tab">
+                        Common Patterns
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="categories-tab" data-bs-toggle="tab"
+                            data-bs-target="#categories" type="button" role="tab">
+                        By Category
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="objects-tab" data-bs-toggle="tab"
+                            data-bs-target="#objects" type="button" role="tab">
+                        By Object
+                    </button>
+                </li>
+            </ul>
+
+            <!-- Tab Content -->
+            <div class="tab-content">
+                <!-- Overview Tab -->
+                <div class="tab-pane fade show active" id="overview" role="tabpanel">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="card mb-3">
+                                <div class="card-header">Difference Categories</div>
+                                <div class="card-body">
+                                    <div style="height: 250px;">
+                                        <canvas id="categoriesChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card mb-3">
+                                <div class="card-header">Affected Objects</div>
+                                <div class="card-body">
+                                    <div style="height: 250px;">
+                                        <canvas id="objectsChart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card mb-3">
+                                <div class="card-header">Common Patterns</div>
+                                <div class="card-body">
+                                    <table class="table table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>Pattern</th>
+                                                <th>Count</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var pattern in Summary.CommonPatterns.Take(5))
+                                            {
+                                                <tr>
+                                                    <td title="@pattern.Pattern">@TruncateText(pattern.Pattern, 30)</td>
+                                                    <td>@pattern.OccurrenceCount</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info mt-3">
+                        <i class="bi bi-info-circle-fill me-2"></i>
+                        <strong>Testing Guidance:</strong> Based on the differences found, focus testing on
+                        @if (Summary.DifferencesByChangeType.Count > 0)
+                        {
+                            var topCategory = Summary.DifferencesByChangeType
+                            .OrderByDescending(c => c.Value.Count)
+                            .First();
+
+                            <span><strong>@FormatCategoryName(topCategory.Key)</strong> changes</span>
+                        }
+                        @if (Summary.DifferencesByRootObject.Count > 0)
+                        {
+                            var topObject = Summary.DifferencesByRootObject
+                            .OrderByDescending(o => o.Value.Count)
+                            .First();
+
+                            <span> in the <strong>@topObject.Key</strong> objects</span>
+                        }.
+                    </div>
+                </div>
+
+                <!-- Common Patterns Tab -->
+                <div class="tab-pane fade" id="patterns" role="tabpanel">
+                    <div class="accordion" id="patternAccordion">
+                        @for (int i = 0; i < Summary.CommonPatterns.Count; i++)
+                        {
+                            var pattern = Summary.CommonPatterns[i];
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="pattern-heading-@i">
+                                    <button class="accordion-button @(i > 0 ? "collapsed" : "")" type="button"
+                                            data-bs-toggle="collapse" data-bs-target="#pattern-collapse-@i">
+                                        @pattern.Pattern (@pattern.OccurrenceCount occurrences)
+                                    </button>
+                                </h2>
+                                <div id="pattern-collapse-@i" class="accordion-collapse collapse @(i == 0 ? "show" : "")"
+                                     data-bs-parent="#patternAccordion">
+                                    <div class="accordion-body">
+                                        <h6>Example Differences:</h6>
+                                        <table class="table table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th>Property</th>
+                                                    <th>Old Value</th>
+                                                    <th>New Value</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var example in pattern.Examples)
+                                                {
+                                                    <tr>
+                                                        <td>@example.PropertyName</td>
+                                                        <td class="text-danger">@FormatValue(example.Object1Value)</td>
+                                                        <td class="text-success">@FormatValue(example.Object2Value)</td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                        <p class="mb-0">
+                                            <em>These differences follow the same pattern and are likely related.</em>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Categories Tab -->
+                <div class="tab-pane fade" id="categories" role="tabpanel">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Category</th>
+                                    <th>Count</th>
+                                    <th>Percentage</th>
+                                    <th>Example</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var category in Summary.DifferencesByChangeType.OrderByDescending(c => c.Value.Count))
+                                {
+                                    <tr>
+                                        <td>@FormatCategoryName(category.Key)</td>
+                                        <td>@category.Value.Count</td>
+                                        <td>@Summary.CategoryPercentages[category.Key]%</td>
+                                        <td>
+                                            @if (category.Value.Any())
+                                            {
+                                                var example = category.Value.First();
+                                                <span title="@example.PropertyName">
+                                                    @TruncateText(example.PropertyName, 30)
+                                                </span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Objects Tab -->
+                <div class="tab-pane fade" id="objects" role="tabpanel">
+                    <div class="accordion" id="objectAccordion">
+                        @foreach (var (rootObject, differences) in Summary.DifferencesByRootObject
+                       .OrderByDescending(x => x.Value.Count))
+                        {
+                            var objId = rootObject.Replace(".", "-").Replace("[", "-").Replace("]", "-");
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="object-heading-@objId">
+                                    <button class="accordion-button collapsed" type="button"
+                                            data-bs-toggle="collapse" data-bs-target="#object-collapse-@objId">
+                                        @rootObject (@differences.Count differences)
+                                    </button>
+                                </h2>
+                                <div id="object-collapse-@objId" class="accordion-collapse collapse"
+                                     data-bs-parent="#objectAccordion">
+                                    <div class="accordion-body">
+                                        <div class="table-responsive">
+                                            <table class="table table-sm">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Property</th>
+                                                        <th>Old Value</th>
+                                                        <th>New Value</th>
+                                                        <th>Category</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach (var diff in differences.Take(10)) // Show first 10
+                                                    {
+                                                        <tr>
+                                                            <td>@diff.PropertyName</td>
+                                                            <td class="text-danger">@FormatValue(diff.Object1Value)</td>
+                                                            <td class="text-success">@FormatValue(diff.Object2Value)</td>
+                                                            <td>@GetDifferenceCategory(diff)</td>
+                                                        </tr>
+                                                    }
+                                                    @if (differences.Count > 10)
+                                                    {
+                                                        <tr>
+                                                            <td colspan="4" class="text-center">
+                                                                <em>And @(differences.Count - 10) more differences...</em>
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public DifferenceSummary Summary { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !Summary.AreEqual)
+        {
+            await RenderChartsAsync();
+        }
+    }
+
+    private async Task RenderChartsAsync()
+    {
+        // Using JS interop to render charts
+        // In a real implementation, you would use a JS library like Chart.js
+
+        // Example implementation would look like:
+        // await JSRuntime.InvokeVoidAsync("renderPieChart", "categoriesChart",
+        //     Summary.CategoryPercentages.Keys.Select(k => FormatCategoryName(k)),
+        //     Summary.CategoryPercentages.Values);
+
+        // await JSRuntime.InvokeVoidAsync("renderPieChart", "objectsChart",
+        //     Summary.RootObjectPercentages.Keys,
+        //     Summary.RootObjectPercentages.Values);
+    }
+
+    private string FormatValue(object value)
+    {
+        if (value == null)
+            return "null";
+
+        if (value is DateTime dt)
+            return dt.ToString("yyyy-MM-dd HH:mm:ss");
+
+        if (value is string str && str.Length > 50)
+            return str.Substring(0, 47) + "...";
+
+        return value.ToString();
+    }
+
+    private string TruncateText(string text, int maxLength)
+    {
+        if (string.IsNullOrEmpty(text) || text.Length <= maxLength)
+            return text;
+
+        return text.Substring(0, maxLength - 3) + "...";
+    }
+
+    private string FormatCategoryName(DifferenceCategory category)
+    {
+        switch (category)
+        {
+            case DifferenceCategory.TextContentChanged:
+                return "Text Content";
+            case DifferenceCategory.NumericValueChanged:
+                return "Numeric Value";
+            case DifferenceCategory.DateTimeChanged:
+                return "Date/Time";
+            case DifferenceCategory.BooleanValueChanged:
+                return "Boolean Value";
+            case DifferenceCategory.CollectionItemChanged:
+                return "Collection Item";
+            case DifferenceCategory.ItemAdded:
+                return "Item Added";
+            case DifferenceCategory.ItemRemoved:
+                return "Item Removed";
+            case DifferenceCategory.NullValueChange:
+                return "Null Value";
+            default:
+                return "Other";
+        }
+    }
+
+    private string GetAlertClass()
+    {
+        return Summary.TotalDifferenceCount switch
+        {
+            <= 5 => "alert-warning",
+            <= 20 => "alert-warning",
+            _ => "alert-danger"
+        };
+    }
+
+    private string GetAlertIcon()
+    {
+        return Summary.TotalDifferenceCount switch
+        {
+            <= 5 => "bi bi-exclamation-triangle",
+            _ => "bi bi-exclamation-circle-fill"
+        };
+    }
+
+    private string GetDifferenceCategory(Difference diff)
+    {
+        foreach (var category in Summary.DifferencesByChangeType)
+        {
+            if (category.Value.Contains(diff))
+            {
+                return FormatCategoryName(category.Key);
+            }
+        }
+
+        return "Unknown";
+    }
+}

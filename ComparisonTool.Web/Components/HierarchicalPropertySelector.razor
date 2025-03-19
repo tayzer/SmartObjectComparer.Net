@@ -1,0 +1,369 @@
+﻿@using System.Reflection
+@using System.Collections.Generic
+@using BlazorBootstrap
+@using Icon = BlazorBootstrap.Icon
+
+<Modal @ref="propertyModal" Title="Select Properties to Ignore" Size="ModalSize.Large">
+    <BodyTemplate>
+        <div class="row">
+            <div class="col-md-5 border-end">
+                <!-- Property tree navigation -->
+                <div class="mb-2">
+                    <strong>Object Hierarchy</strong>
+                </div>
+                <div style="height: 400px; overflow-y: auto;" class="pe-2">
+                    <PropertyTreeView ModelType="@ModelType" 
+                                     OnPropertySelected="SelectProperty" 
+                                     SelectedPath="@selectedProperty" />
+                </div>
+            </div>
+            <div class="col-md-7">
+                <!-- Current selection and configuration -->
+                <div class="mb-3">
+                    <strong>Selected Property</strong>
+                    @if (!string.IsNullOrEmpty(selectedProperty))
+                    {
+                        <div class="alert alert-info mt-2">
+                            @selectedProperty
+                        </div>
+                        
+                        <div class="mt-3">
+                            <strong>Ignore Options</strong>
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" id="ignoreProperty" 
+                                       @bind="IgnoreProperty">
+                                <label class="form-check-label" for="ignoreProperty">
+                                    Ignore this property completely
+                                </label>
+                            </div>
+                            
+                            @if (IsCollectionProperty(selectedProperty))
+                            {
+                                <div class="form-check mt-2">
+                                    <input class="form-check-input" type="checkbox" id="ignoreOrdering" 
+                                           @bind="IgnoreCollectionOrder">
+                                    <label class="form-check-label" for="ignoreOrdering">
+                                        Ignore collection ordering
+                                    </label>
+                                </div>
+                            }
+                            
+                            @if (IsStringProperty(selectedProperty))
+                            {
+                                <div class="form-check mt-2">
+                                    <input class="form-check-input" type="checkbox" id="ignoreCase" 
+                                           @bind="IgnoreCase">
+                                    <label class="form-check-label" for="ignoreCase">
+                                        Ignore case sensitivity
+                                    </label>
+                                </div>
+                            }
+                            
+                            @if (IsNumericProperty(selectedProperty))
+                            {
+                                <div class="form-group mt-3">
+                                    <label for="tolerance">Decimal tolerance:</label>
+                                    <input type="number" class="form-control" id="tolerance" 
+                                           step="0.001" min="0" @bind="NumericTolerance">
+                                    <small class="form-text text-muted">
+                                        Values differing by less than this will be considered equal
+                                    </small>
+                                </div>
+                            }
+                        </div>
+                        
+                        <div class="mt-3">
+                            <Button Color="ButtonColor.Success" @onclick="AddCurrentProperty">
+                                <Icon Name="IconName.Check" /> Add to Ignore List
+                            </Button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-secondary mt-2">
+                            No property selected. Click an item in the tree to select it.
+                        </div>
+                    }
+                </div>
+                
+                <div class="mt-4">
+                    <strong>Currently Ignored Properties</strong>
+                    @if (IgnoredProperties.Any())
+                    {
+                        <ListGroup class="mt-2">
+                            @foreach (var prop in IgnoredProperties)
+                            {
+                                <ListGroupItem>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <span class="me-2">@GetIgnoreRuleDescription(prop)</span>
+                                        </div>
+                                        <Button Color="ButtonColor.Danger" 
+                                                @onclick="() => RemoveIgnoredProperty(prop.PropertyPath)">
+                                            <Icon Name="IconName.X" />
+                                        </Button>
+                                    </div>
+                                </ListGroupItem>
+                            }
+                        </ListGroup>
+                    }
+                    else
+                    {
+                        <div class="alert alert-secondary mt-2">
+                            No properties are currently being ignored.
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Secondary" @onclick="ClosePropertySelector">Close</Button>
+    </FooterTemplate>
+</Modal>
+
+@code {
+    [Parameter]
+    public Type ModelType { get; set; }
+    
+    [Parameter]
+    public List<IgnoreRule> IgnoredProperties { get; set; } = new List<IgnoreRule>();
+    
+    [Parameter]
+    public EventCallback<IgnoreRule> OnPropertyAdded { get; set; }
+    
+    [Parameter]
+    public EventCallback<string> OnPropertyRemoved { get; set; }
+    
+    private Modal propertyModal;
+    private string selectedProperty;
+    private bool IgnoreProperty { get; set; }
+    private bool IgnoreCollectionOrder { get; set; }
+    private bool IgnoreCase { get; set; }
+    private double NumericTolerance { get; set; } = 0.001;
+    
+    public async Task ShowAsync()
+    {
+        ResetSelectionState();
+        await propertyModal.ShowAsync();
+    }
+    
+    private void SelectProperty(string propertyPath)
+    {
+        selectedProperty = propertyPath;
+        
+        // Check if this property is already being ignored
+        var existingRule = IgnoredProperties.FirstOrDefault(p => p.PropertyPath == propertyPath);
+        if (existingRule != null)
+        {
+            IgnoreProperty = true;
+            IgnoreCollectionOrder = existingRule.IgnoreCollectionOrder;
+            IgnoreCase = existingRule.IgnoreCase;
+            NumericTolerance = existingRule.NumericTolerance;
+        }
+        else
+        {
+            IgnoreProperty = false;
+            IgnoreCollectionOrder = IsCollectionProperty(propertyPath);
+            IgnoreCase = IsStringProperty(propertyPath);
+            NumericTolerance = 0.001;
+        }
+    }
+    
+    private void ResetSelectionState()
+    {
+        selectedProperty = null;
+        IgnoreProperty = false;
+        IgnoreCollectionOrder = false;
+        IgnoreCase = false;
+        NumericTolerance = 0.001;
+    }
+    
+    private async Task AddCurrentProperty()
+    {
+        if (string.IsNullOrEmpty(selectedProperty))
+            return;
+            
+        var rule = new IgnoreRule
+        {
+            PropertyPath = selectedProperty,
+            IgnoreCompletely = IgnoreProperty,
+            IgnoreCollectionOrder = IgnoreCollectionOrder,
+            IgnoreCase = IgnoreCase,
+            NumericTolerance = NumericTolerance
+        };
+        
+        // Remove existing rule for this property if it exists
+        var existingRule = IgnoredProperties.FirstOrDefault(p => p.PropertyPath == selectedProperty);
+        if (existingRule != null)
+        {
+            IgnoredProperties.Remove(existingRule);
+        }
+        
+        // Add the new rule
+        IgnoredProperties.Add(rule);
+        
+        // Notify parent
+        await OnPropertyAdded.InvokeAsync(rule);
+        
+        // Reset selection
+        ResetSelectionState();
+    }
+    
+    private async Task RemoveIgnoredProperty(string propertyPath)
+    {
+        var rule = IgnoredProperties.FirstOrDefault(p => p.PropertyPath == propertyPath);
+        if (rule != null)
+        {
+            IgnoredProperties.Remove(rule);
+            await OnPropertyRemoved.InvokeAsync(propertyPath);
+        }
+    }
+    
+    private void ClosePropertySelector()
+    {
+        propertyModal.HideAsync();
+    }
+    
+    private bool IsCollectionProperty(string propertyPath)
+    {
+        // Check if property path suggests a collection (contains [] or ends with 'List' or similar)
+        return propertyPath.Contains("[") || 
+               propertyPath.EndsWith("List") || 
+               propertyPath.EndsWith("Collection") ||
+               propertyPath.EndsWith("Array") ||
+               IsActuallyCollectionProperty(propertyPath);
+    }
+    
+    private bool IsActuallyCollectionProperty(string propertyPath)
+    {
+        try
+        {
+            var property = GetPropertyInfo(propertyPath);
+            if (property == null) return false;
+            
+            var type = property.PropertyType;
+            return typeof(System.Collections.IEnumerable).IsAssignableFrom(type) && 
+                   type != typeof(string);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+    
+    private bool IsStringProperty(string propertyPath)
+    {
+        try
+        {
+            var property = GetPropertyInfo(propertyPath);
+            if (property == null) return false;
+            
+            return property.PropertyType == typeof(string);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+    
+    private bool IsNumericProperty(string propertyPath)
+    {
+        try
+        {
+            var property = GetPropertyInfo(propertyPath);
+            if (property == null) return false;
+            
+            var type = property.PropertyType;
+            return type == typeof(int) || 
+                   type == typeof(double) || 
+                   type == typeof(decimal) || 
+                   type == typeof(float) ||
+                   type == typeof(long);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+    
+    private PropertyInfo GetPropertyInfo(string propertyPath)
+    {
+        if (string.IsNullOrEmpty(propertyPath) || ModelType == null)
+            return null;
+            
+        var parts = propertyPath.Split('.');
+        Type currentType = ModelType;
+        PropertyInfo property = null;
+        
+        foreach (var part in parts)
+        {
+            // Handle array indexers
+            string propName = part;
+            if (part.Contains("["))
+            {
+                propName = part.Substring(0, part.IndexOf('['));
+            }
+            
+            property = currentType.GetProperty(propName);
+            if (property == null)
+                return null;
+                
+            // For collections, get the element type
+            if (part.Contains("[") && 
+                typeof(System.Collections.IEnumerable).IsAssignableFrom(property.PropertyType) &&
+                property.PropertyType != typeof(string))
+            {
+                if (property.PropertyType.IsGenericType)
+                {
+                    var genericArgs = property.PropertyType.GetGenericArguments();
+                    currentType = genericArgs[0];
+                }
+                else if (property.PropertyType.IsArray)
+                {
+                    currentType = property.PropertyType.GetElementType();
+                }
+                else
+                {
+                    return property; // Can't determine element type
+                }
+            }
+            else
+            {
+                currentType = property.PropertyType;
+            }
+        }
+        
+        return property;
+    }
+    
+    private string GetIgnoreRuleDescription(IgnoreRule rule)
+    {
+        var description = rule.PropertyPath;
+        
+        if (rule.IgnoreCompletely)
+        {
+            description += " (Ignored completely)";
+        }
+        else
+        {
+            var options = new List<string>();
+            
+            if (rule.IgnoreCollectionOrder)
+                options.Add("ignore order");
+                
+            if (rule.IgnoreCase)
+                options.Add("ignore case");
+                
+            if (rule.NumericTolerance > 0)
+                options.Add($"tolerance: {rule.NumericTolerance}");
+                
+            if (options.Any())
+            {
+                description += $" ({string.Join(", ", options)})";
+            }
+        }
+        
+        return description;
+    }
+}
