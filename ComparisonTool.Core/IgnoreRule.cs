@@ -28,11 +28,6 @@ namespace ComparisonTool.Core
         public bool IgnoreCase { get; set; }
 
         /// <summary>
-        /// For numeric values, the tolerance for differences
-        /// </summary>
-        public double NumericTolerance { get; set; }
-
-        /// <summary>
         /// Applies this rule to the comparison configuration
         /// </summary>
         public void ApplyTo(ComparisonConfig config)
@@ -54,12 +49,6 @@ namespace ComparisonTool.Core
             if (IgnoreCase)
             {
                 config.CaseSensitive = false;
-            }
-
-            // Numeric tolerance
-            if (NumericTolerance > 0)
-            {
-                config.DoublePrecision = NumericTolerance;
             }
         }
     }

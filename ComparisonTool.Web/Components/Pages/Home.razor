@@ -69,11 +69,6 @@
                 </div>
 
                 <div class="form-group mt-3">
-                    <label>Decimal Tolerance:</label>
-                    <input type="number" class="form-control" @bind="DecimalTolerance" step="0.001" min="0" />
-                </div>
-
-                <div class="form-group mt-3">
                     <label>Properties to Ignore:</label>
                     <button class="btn btn-sm btn-primary ms-2" @onclick="OpenPropertySelector">
                         Configure Properties
@@ -202,58 +197,71 @@
     private MemoryStream NewFileContent { get; set; }
     private bool IgnoreCollectionOrder { get; set; } = true;
     private bool IgnoreStringCase { get; set; } = true;
-    private double DecimalTolerance { get; set; } = 0.001;
     private List<IgnoreRule> IgnoreRules { get; set; } = new List<IgnoreRule>();
     private bool IsComparing { get; set; } = false;
     private ComparisonResult ComparisonResult { get; set; }
     private DifferenceSummary DifferenceSummary { get; set; }
     private bool ShowAllDifferences { get; set; } = false;
-    
+
     // Property selector
     private HierarchicalPropertySelector propertySelector;
-    
+
     // Enable the comparison button if both files are loaded
-    private bool CanRunComparison => 
-        !string.IsNullOrEmpty(SelectedModelName) && 
-        OldFileContent != null && 
+    private bool CanRunComparison =>
+        !string.IsNullOrEmpty(SelectedModelName) &&
+        OldFileContent != null &&
         NewFileContent != null;
-    
+
     protected override void OnInitialized()
     {
         // Set initial selection
         SelectedModelName = ComparisonService.GetRegisteredModelNames().FirstOrDefault();
-        
+
         // Get current configuration settings from the service directly
         IgnoreCollectionOrder = ComparisonService.GetIgnoreCollectionOrder();
         IgnoreStringCase = ComparisonService.GetIgnoreStringCase();
-        DecimalTolerance = ComparisonService.GetDecimalTolerance();
-        
+
         // Convert simple ignored properties to rules
         foreach (var prop in ComparisonService.GetIgnoredProperties())
         {
-            IgnoreRules.Add(new IgnoreRule 
-            { 
-                PropertyPath = prop,
-                IgnoreCompletely = true
-            });
+            IgnoreRules.Add(new IgnoreRule
+                {
+                    PropertyPath = prop,
+                    IgnoreCompletely = true
+                });
         }
+
+        OldFileContent = LoadFileToMemorySteam("OldFile.xml");
+        NewFileContent = LoadFileToMemorySteam("NewFile.xml");
+
+        StateHasChanged();
     }
-    
+
+    private MemoryStream LoadFileToMemorySteam(string filePath)
+    {
+        using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
+        var memoryStream = new MemoryStream();
+        fileStream.CopyTo(memoryStream);
+        memoryStream.Position = 0;
+
+        return memoryStream;
+    }
+
     // File handling
     private async Task HandleOldFileUpload(InputFileChangeEventArgs e)
     {
-        try 
+        try
         {
             var file = e.File;
             OldFileName = file.Name;
-            
+
             // Create a stream to store the file content
             OldFileContent = new MemoryStream();
-            
+
             // Copy the file data to the stream
             await file.OpenReadStream(maxAllowedSize: 10485760).CopyToAsync(OldFileContent);
             OldFileContent.Position = 0;
-            
+
             // Force UI refresh
             StateHasChanged();
         }
@@ -264,21 +272,21 @@
             StateHasChanged();
         }
     }
-    
+
     private async Task HandleNewFileUpload(InputFileChangeEventArgs e)
     {
-        try 
+        try
         {
             var file = e.File;
             NewFileName = file.Name;
-            
+
             // Create a stream to store the file content
             NewFileContent = new MemoryStream();
-            
+
             // Copy the file data to the stream
             await file.OpenReadStream(maxAllowedSize: 10485760).CopyToAsync(NewFileContent);
             NewFileContent.Position = 0;
-            
+
             // Force UI refresh
             StateHasChanged();
         }
@@ -289,12 +297,12 @@
             StateHasChanged();
         }
     }
-    
+
     private async Task OpenPropertySelector()
     {
         await propertySelector.ShowAsync();
     }
-    
+
     private void AddIgnoreRule(IgnoreRule rule)
     {
         // Remove any existing rule for this property
@@ -303,32 +311,32 @@
         {
             IgnoreRules.Remove(existingRule);
         }
-        
+
         // Add the new rule
         IgnoreRules.Add(rule);
-        
+
         // If complete ignore, also add to the service
         if (rule.IgnoreCompletely)
         {
             ComparisonService.IgnoreProperty(rule.PropertyPath);
         }
     }
-    
+
     private void RemoveIgnoreRule(IgnoreRule rule)
     {
         IgnoreRules.Remove(rule);
-        
+
         // Also remove from the service
         if (rule.IgnoreCompletely)
         {
             ComparisonService.RemoveIgnoredProperty(rule.PropertyPath);
         }
     }
-    
+
     private string GetIgnoreRuleDescription(IgnoreRule rule)
     {
         var description = rule.PropertyPath;
-        
+
         if (rule.IgnoreCompletely)
         {
             description += " (Ignored completely)";
@@ -336,56 +344,52 @@
         else
         {
             var options = new List<string>();
-            
+
             if (rule.IgnoreCollectionOrder)
                 options.Add("ignore order");
-                
+
             if (rule.IgnoreCase)
                 options.Add("ignore case");
-                
-            if (rule.NumericTolerance > 0)
-                options.Add($"tolerance: {rule.NumericTolerance}");
-                
+
             if (options.Any())
             {
                 description += $" ({string.Join(", ", options)})";
             }
         }
-        
+
         return description;
     }
-    
+
     private async Task RunComparison()
     {
         if (!CanRunComparison)
             return;
-            
+
         IsComparing = true;
         ComparisonResult = null;
         DifferenceSummary = null;
         ShowAllDifferences = false;
-        
+
         try
         {
             // Update configuration
             ComparisonService.SetIgnoreCollectionOrder(IgnoreCollectionOrder);
             ComparisonService.SetIgnoreStringCase(IgnoreStringCase);
-            ComparisonService.SetDecimalTolerance(DecimalTolerance);
-            
+
             // Apply all ignore rules
             foreach (var rule in IgnoreRules)
             {
                 rule.ApplyTo(ComparisonService.GetCurrentConfig());
             }
-            
+
             // Run comparison
             OldFileContent.Position = 0;
             NewFileContent.Position = 0;
             ComparisonResult = await ComparisonService.CompareXmlFilesAsync(
-                OldFileContent, 
-                NewFileContent, 
+                OldFileContent,
+                NewFileContent,
                 SelectedModelName);
-                
+
             // Generate enhanced summary
             var categorizer = new DifferenceCategorizer();
             DifferenceSummary = categorizer.CategorizeAndSummarize(ComparisonResult);
@@ -401,48 +405,48 @@
             StateHasChanged();
         }
     }
-    
+
     private IEnumerable<Difference> GetFilteredDifferences()
     {
         if (ComparisonResult == null || ComparisonResult.Differences.Count == 0)
             return Enumerable.Empty<Difference>();
-            
-        return ShowAllDifferences 
-            ? ComparisonResult.Differences 
+
+        return ShowAllDifferences
+            ? ComparisonResult.Differences
             : ComparisonResult.Differences.Take(100);
     }
-    
+
     private void ToggleShowAllDifferences()
     {
         ShowAllDifferences = !ShowAllDifferences;
     }
-    
+
     private string FormatValue(object value)
     {
         if (value == null)
             return "null";
-            
+
         if (value is DateTime dt)
             return dt.ToString("yyyy-MM-dd HH:mm:ss");
-            
+
         if (value is string str && str.Length > 100)
             return str.Substring(0, 97) + "...";
-            
+
         return value.ToString();
     }
-    
+
     private async Task ExportResults()
     {
         if (DifferenceSummary == null)
             return;
-            
+
         var report = DifferenceSummary.GenerateReport();
-        
+
         // In a real app, you would use JSInterop to download the file
         await JSRuntime.InvokeVoidAsync(
-            "saveAsFile", 
-            "comparison-report.md", 
-            "text/markdown", 
+            "saveAsFile",
+            "comparison-report.md",
+            "text/markdown",
             report);
     }
 }

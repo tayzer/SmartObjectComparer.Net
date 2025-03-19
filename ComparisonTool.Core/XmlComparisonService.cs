@@ -21,7 +21,7 @@ public class XmlComparisonService
                 ComparePrivateFields = false,
                 ComparePrivateProperties = true,
                 CompareReadOnly = true
-    }
+            }
         };
     }
 
@@ -99,11 +99,13 @@ public class XmlComparisonService
 
         // Group differences by their actual values that changed
         var uniqueDiffs = result.Differences
-            .GroupBy(d => new {
+            .GroupBy(d => new
+            {
                 OldValue = d.Object1Value?.ToString() ?? "null",
                 NewValue = d.Object2Value?.ToString() ?? "null"
             })
-            .Select(group => {
+            .Select(group =>
+            {
                 // From each group, pick the simplest property path (one without backing fields)
                 var bestMatch = group
                     .OrderBy(d => d.PropertyName.Contains("k__BackingField") ? 1 : 0)
@@ -159,22 +161,6 @@ public class XmlComparisonService
     public bool GetIgnoreCollectionOrder()
     {
         return compareLogic.Config.IgnoreCollectionOrder;
-    }
-
-    /// <summary>
-    /// Configure decimal tolerance
-    /// </summary>
-    public void SetDecimalTolerance(double tolerance)
-    {
-        compareLogic.Config.DoublePrecision = tolerance;
-    }
-
-    /// <summary>
-    /// Get current decimal tolerance
-    /// </summary>
-    public double GetDecimalTolerance()
-    {
-        return compareLogic.Config.DoublePrecision;
     }
 
     /// <summary>

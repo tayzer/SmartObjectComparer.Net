@@ -85,18 +85,6 @@
                                     </div>
                                 }
 
-                                @if (IsNumericProperty(selectedProperty))
-                                {
-                                    <div class="form-group mb-2">
-                                        <label for="tolerance">Decimal tolerance:</label>
-                                        <input type="number" class="form-control" id="tolerance"
-                                               step="0.001" min="0" @bind="NumericTolerance">
-                                        <small class="form-text text-muted">
-                                            Values differing by less than this will be considered equal
-                                        </small>
-                                    </div>
-                                }
-
                                 <button class="btn btn-success mt-3" @onclick="AddCurrentProperty">
                                     <i class="bi bi-plus-circle"></i> Add to Ignore List
                                 </button>
@@ -174,7 +162,6 @@
     private bool IgnoreProperty { get; set; }
     private bool IgnoreCollectionOrder { get; set; }
     private bool IgnoreCase { get; set; }
-    private double NumericTolerance { get; set; } = 0.001;
 
     private List<PropertyInfo> AllProperties { get; set; } = new List<PropertyInfo>();
     private List<PropertyViewModel> FilteredProperties { get; set; } = new List<PropertyViewModel>();
@@ -305,14 +292,12 @@
             IgnoreProperty = existingRule.IgnoreCompletely;
             IgnoreCollectionOrder = existingRule.IgnoreCollectionOrder;
             IgnoreCase = existingRule.IgnoreCase;
-            NumericTolerance = existingRule.NumericTolerance;
         }
         else
         {
             IgnoreProperty = false;
             IgnoreCollectionOrder = IsCollectionProperty(propertyPath);
             IgnoreCase = IsStringProperty(propertyPath);
-            NumericTolerance = 0.001;
         }
 
         StateHasChanged();
@@ -324,7 +309,6 @@
         IgnoreProperty = false;
         IgnoreCollectionOrder = false;
         IgnoreCase = false;
-        NumericTolerance = 0.001;
     }
 
     private async Task AddCurrentProperty()
@@ -337,8 +321,7 @@
                 PropertyPath = selectedProperty,
                 IgnoreCompletely = IgnoreProperty,
                 IgnoreCollectionOrder = IgnoreCollectionOrder,
-                IgnoreCase = IgnoreCase,
-                NumericTolerance = NumericTolerance
+                IgnoreCase = IgnoreCase
             };
 
         // Remove existing rule for this property if it exists
@@ -446,9 +429,6 @@
 
         if (rule.IgnoreCase)
             options.Add("ignore case");
-
-        if (rule.NumericTolerance > 0)
-            options.Add($"tolerance: {rule.NumericTolerance}");
 
         return string.Join(", ", options);
     }
