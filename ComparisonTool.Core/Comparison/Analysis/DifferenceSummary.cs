@@ -1,7 +1,7 @@
 ﻿using System.Text;
 using KellermanSoftware.CompareNetObjects;
 
-namespace ComparisonTool.Core;
+namespace ComparisonTool.Core.Comparison.Analysis;
 
 /// <summary>
 /// Summary of the comparison differences
@@ -11,19 +11,15 @@ public class DifferenceSummary
     public bool AreEqual { get; set; }
     public int TotalDifferenceCount { get; set; }
 
-    public Dictionary<DifferenceCategory, List<Difference>> DifferencesByChangeType { get; set; } =
-        new Dictionary<DifferenceCategory, List<Difference>>();
+    public Dictionary<DifferenceCategory, List<Difference>> DifferencesByChangeType { get; set; } = new();
 
-    public Dictionary<string, List<Difference>> DifferencesByRootObject { get; set; } =
-        new Dictionary<string, List<Difference>>();
+    public Dictionary<string, List<Difference>> DifferencesByRootObject { get; set; } = new();
 
-    public Dictionary<DifferenceCategory, double> CategoryPercentages { get; set; } =
-        new Dictionary<DifferenceCategory, double>();
+    public Dictionary<DifferenceCategory, double> CategoryPercentages { get; set; } = new();
 
-    public Dictionary<string, double> RootObjectPercentages { get; set; } =
-        new Dictionary<string, double>();
+    public Dictionary<string, double> RootObjectPercentages { get; set; } = new();
 
-    public List<DifferencePattern> CommonPatterns { get; set; } = new List<DifferencePattern>();
+    public List<DifferencePattern> CommonPatterns { get; set; } = new();
 
     /// <summary>
     /// Generate a human-friendly summary report

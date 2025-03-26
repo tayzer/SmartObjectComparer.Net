@@ -1,6 +1,6 @@
 ﻿using KellermanSoftware.CompareNetObjects;
 
-namespace ComparisonTool.Core.V2;
+namespace ComparisonTool.Core.Comparison.Configuration;
 
 /// <summary>
 /// Interface for comparison configuration management

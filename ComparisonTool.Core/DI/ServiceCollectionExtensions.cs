@@ -1,10 +1,14 @@
 ﻿using System.Configuration;
-using ComparisonTool.Core.V2;
+using ComparisonTool.Core.Comparison;
+using ComparisonTool.Core.Comparison.Configuration;
+using ComparisonTool.Core.Models;
+using ComparisonTool.Core.Serialization;
+using ComparisonTool.Core.Utilities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace ComparisonTool.Core;
+namespace ComparisonTool.Core.DI;
 
 /// <summary>
 /// Extension methods for registering services
@@ -20,13 +24,14 @@ public static class ServiceCollectionExtensions
         if (configuration != null)
         {
             services.AddOptions();
-            services.Configure<ComparisonConfigOptions>(configuration.GetSection("ComparisonSettings"));
+            services.Configure<ComparisonConfigurationOptions>(configuration.GetSection("ComparisonSettings"));
         }
 
         services.AddSingleton<XmlSerializerFactory>();
 
         // Register the XML deserialization service with the factory dependency
-        services.AddSingleton<IXmlDeserializationService>(provider => {
+        services.AddSingleton<IXmlDeserializationService>(provider =>
+        {
             var logger = provider.GetRequiredService<ILogger<XmlDeserializationService>>();
             var serializerFactory = provider.GetRequiredService<XmlSerializerFactory>();
 
@@ -45,10 +50,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IComparisonService, ComparisonService>();
 
         // Register utilities
-        services.AddScoped<IFileUtils, FileUtils>();
-
-        // Register the legacy service for backward compatibility during transition
-        services.AddSingleton<XmlComparisonService>();
+        services.AddScoped<IFileUtilities, FileUtilities>();
 
         return services;
     }

@@ -1,10 +1,11 @@
 ﻿using System.Xml.Serialization;
+using ComparisonTool.Core.Models;
 
-namespace ComparisonTool.Core.V2;
+namespace ComparisonTool.Core.Serialization;
 
 public class XmlSerializerFactory
 {
-    private readonly Dictionary<Type, Func<XmlSerializer>> _serializerFactories = new();
+    private readonly Dictionary<Type, Func<XmlSerializer>> serializerFactories = new();
 
     public XmlSerializerFactory()
     {
@@ -20,28 +21,26 @@ public class XmlSerializerFactory
 
     public void RegisterType<T>(Func<XmlSerializer> factory)
     {
-        _serializerFactories[typeof(T)] = factory;
+        serializerFactories[typeof(T)] = factory;
     }
 
     public XmlSerializer GetSerializer<T>()
     {
-        if (_serializerFactories.TryGetValue(typeof(T), out var factory))
+        if (serializerFactories.TryGetValue(typeof(T), out var factory))
         {
             return factory();
         }
 
-        // Default serializer for types without special requirements
         return new XmlSerializer(typeof(T));
     }
 
     public XmlSerializer GetSerializer(Type type)
     {
-        if (_serializerFactories.TryGetValue(type, out var factory))
+        if (serializerFactories.TryGetValue(type, out var factory))
         {
             return factory();
         }
 
-        // Default serializer
         return new XmlSerializer(type);
     }
 }

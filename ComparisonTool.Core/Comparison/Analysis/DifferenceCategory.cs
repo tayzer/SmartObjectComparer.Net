@@ -1,4 +1,4 @@
-﻿namespace ComparisonTool.Core;
+﻿namespace ComparisonTool.Core.Comparison.Analysis;
 
 /// <summary>
 /// Categories of differences for better organization

@@ -1,7 +1,7 @@
 ﻿using System.Text.RegularExpressions;
 using KellermanSoftware.CompareNetObjects;
 
-namespace ComparisonTool.Core;
+namespace ComparisonTool.Core.Comparison.Analysis;
 
 /// <summary>
 /// Categorizes and summarizes differences from CompareNETObjects
@@ -82,7 +82,6 @@ public class DifferenceCategorizer
                 category = DifferenceCategory.Other;
             }
 
-            // Add to summary
             if (!summary.DifferencesByChangeType.ContainsKey(category))
             {
                 summary.DifferencesByChangeType[category] = new List<Difference>();
@@ -94,7 +93,6 @@ public class DifferenceCategorizer
 
     private void CategorizeByPathPattern(List<Difference> differences, DifferenceSummary summary)
     {
-        // Group by pattern to find common difference patterns
         var patternGroups = new Dictionary<string, List<Difference>>();
 
         foreach (var diff in differences)
@@ -117,11 +115,10 @@ public class DifferenceCategorizer
                 Pattern = group.Key,
                 PropertyPath = group.Key,
                 OccurrenceCount = group.Value.Count,
-                Examples = group.Value.Take(3).ToList() // Take just a few examples
+                Examples = group.Value.Take(3).ToList()
             });
         }
 
-        // Sort by occurrence count
         summary.CommonPatterns = summary.CommonPatterns
             .OrderByDescending(p => p.OccurrenceCount)
             .ToList();
@@ -129,7 +126,6 @@ public class DifferenceCategorizer
 
     private void CategorizeByRootObject(List<Difference> differences, DifferenceSummary summary)
     {
-        // Group by root object name
         foreach (var diff in differences)
         {
             string rootObject = GetRootObjectName(diff.PropertyName);
@@ -159,8 +155,6 @@ public class DifferenceCategorizer
             summary.RootObjectPercentages[rootObj.Key] = Math.Round(percentage, 1);
         }
     }
-
-    #region Helper Methods
 
     private bool IsNumericDifference(object value1, object value2)
     {
@@ -206,6 +200,4 @@ public class DifferenceCategorizer
 
         return propertyPath.Substring(0, Math.Min(dotIndex, bracketIndex));
     }
-
-    #endregion
 }

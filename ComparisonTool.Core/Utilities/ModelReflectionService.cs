@@ -1,6 +1,6 @@
 ﻿using System.Reflection;
 
-namespace ComparisonTool.Core;
+namespace ComparisonTool.Core.Utilities;
 
 /// <summary>
 /// Service to discover properties in domain models using reflection
@@ -24,7 +24,6 @@ public static class ModelReflectionService
         int currentDepth,
         int maxDepth)
     {
-        // Stop if we've reached maximum depth
         if (currentDepth >= maxDepth)
             return;
 
@@ -33,24 +32,19 @@ public static class ModelReflectionService
             type == typeof(DateTime) || type == typeof(Guid))
             return;
 
-        // Get all properties
         var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
 
         foreach (var property in properties)
         {
-            // Build the current property path
             var propertyPath = string.IsNullOrEmpty(currentPath)
                 ? property.Name
                 : $"{currentPath}.{property.Name}";
 
-            // Add this property to the list
             paths.Add(propertyPath);
 
-            // For collection properties
             if (typeof(System.Collections.IEnumerable).IsAssignableFrom(property.PropertyType) &&
                 property.PropertyType != typeof(string))
             {
-                // Get the collection element type
                 Type elementType = null;
                 if (property.PropertyType.IsGenericType)
                 {
@@ -65,10 +59,8 @@ public static class ModelReflectionService
 
                 if (elementType != null && !elementType.IsPrimitive && elementType != typeof(string))
                 {
-                    // Mark collection ordering
                     paths.Add($"{propertyPath}:Order"); // Special marker for collection ordering
 
-                    // Recurse into collection elements
                     GetPropertyPathsRecursive(
                         elementType,
                         $"{propertyPath}[*]", // [*] indicates collection element

@@ -1,26 +1,30 @@
 ﻿using System.Text.RegularExpressions;
+using ComparisonTool.Core.Comparison.Analysis;
+using ComparisonTool.Core.Comparison.Configuration;
+using ComparisonTool.Core.Comparison.Results;
+using ComparisonTool.Core.Serialization;
 using KellermanSoftware.CompareNetObjects;
 using Microsoft.Extensions.Logging;
 
-namespace ComparisonTool.Core.V2;
+namespace ComparisonTool.Core.Comparison;
 
 /// <summary>
 /// Service responsible for executing comparisons between objects and handling comparison results
 /// </summary>
 public class ComparisonService : IComparisonService
 {
-    private readonly ILogger<ComparisonService> _logger;
-    private readonly IXmlDeserializationService _deserializationService;
-    private readonly IComparisonConfigurationService _configService;
+    private readonly ILogger<ComparisonService> logger;
+    private readonly IXmlDeserializationService deserializationService;
+    private readonly IComparisonConfigurationService configService;
 
     public ComparisonService(
         ILogger<ComparisonService> logger,
         IXmlDeserializationService deserializationService,
         IComparisonConfigurationService configService)
     {
-        _logger = logger;
-        _deserializationService = deserializationService;
-        _configService = configService;
+        this.logger = logger;
+        this.deserializationService = deserializationService;
+        this.configService = configService;
     }
 
     /// <summary>
@@ -39,10 +43,10 @@ public class ComparisonService : IComparisonService
     {
         try
         {
-            _logger.LogInformation("Starting comparison of XML files using model {ModelName}", modelName);
+            logger.LogInformation("Starting comparison of XML files using model {ModelName}", modelName);
 
             // Check if model exists (will throw if not found)
-            var modelType = _deserializationService.GetModelType(modelName);
+            var modelType = deserializationService.GetModelType(modelName);
 
             var deserializeMethod = typeof(IXmlDeserializationService)
                 .GetMethod(nameof(IXmlDeserializationService.DeserializeXml))
@@ -53,14 +57,14 @@ public class ComparisonService : IComparisonService
                 .MakeGenericMethod(modelType);
 
             // Call the methods via reflection
-            var oldResponse = deserializeMethod.Invoke(_deserializationService, new object[] { oldXmlStream });
-            var newResponse = deserializeMethod.Invoke(_deserializationService, new object[] { newXmlStream });
+            var oldResponse = deserializeMethod.Invoke(deserializationService, new object[] { oldXmlStream });
+            var newResponse = deserializeMethod.Invoke(deserializationService, new object[] { newXmlStream });
 
-            var oldResponseCopy = cloneMethod.Invoke(_deserializationService, new object[] { oldResponse });
-            var newResponseCopy = cloneMethod.Invoke(_deserializationService, new object[] { newResponse });
+            var oldResponseCopy = cloneMethod.Invoke(deserializationService, new object[] { oldResponse });
+            var newResponseCopy = cloneMethod.Invoke(deserializationService, new object[] { newResponse });
 
             // Get properties to ignore for normalization
-            var propertiesToIgnore = _configService.GetIgnoreRules()
+            var propertiesToIgnore = configService.GetIgnoreRules()
                 .Where(r => r.IgnoreCompletely)
                 .Select(r => GetPropertyNameFromPath(r.PropertyPath))
                 .Where(p => !string.IsNullOrEmpty(p))
@@ -72,31 +76,31 @@ public class ComparisonService : IComparisonService
             {
                 await Task.Run(() =>
                 {
-                    _configService.NormalizePropertyValues(oldResponseCopy, propertiesToIgnore);
-                    _configService.NormalizePropertyValues(newResponseCopy, propertiesToIgnore);
+                    configService.NormalizePropertyValues(oldResponseCopy, propertiesToIgnore);
+                    configService.NormalizePropertyValues(newResponseCopy, propertiesToIgnore);
                 }, cancellationToken);
             }
 
             // Apply configured settings
-            _configService.ApplyConfiguredSettings();
+            configService.ApplyConfiguredSettings();
 
             // Compare the normalized objects
             var result = await Task.Run(() =>
             {
-                var compareLogic = _configService.GetCompareLogic();
+                var compareLogic = configService.GetCompareLogic();
                 return compareLogic.Compare(oldResponseCopy, newResponseCopy);
             }, cancellationToken);
 
-            _logger.LogInformation("Comparison completed. Found {DifferenceCount} differences",
+            logger.LogInformation("Comparison completed. Found {DifferenceCount} differences",
                 result.Differences.Count);
 
-            // Filter duplicate differences
             var filteredResult = FilterDuplicateDifferences(result);
+
             return filteredResult;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error occurred while comparing XML files");
+            logger.LogError(ex, "Error occurred while comparing XML files");
             throw;
         }
     }
@@ -123,11 +127,11 @@ public class ComparisonService : IComparisonService
 
         if (pairCount == 0)
         {
-            _logger.LogWarning("No file pairs to compare");
+            logger.LogWarning("No file pairs to compare");
             return result;
         }
 
-        _logger.LogInformation("Starting comparison of {PairCount} file pairs using model {ModelName}",
+        logger.LogInformation("Starting comparison of {PairCount} file pairs using model {ModelName}",
             pairCount, modelName);
 
         // For each pair of files, compare them
@@ -140,7 +144,7 @@ public class ComparisonService : IComparisonService
 
             try
             {
-                _logger.LogInformation("Comparing pair {PairNumber}/{TotalPairs}: {File1} vs {File2}",
+                logger.LogInformation("Comparing pair {PairNumber}/{TotalPairs}: {File1} vs {File2}",
                     i + 1, pairCount, file1Name, file2Name);
 
                 // Reset streams to beginning
@@ -177,12 +181,12 @@ public class ComparisonService : IComparisonService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error comparing files {File1} and {File2}", file1Name, file2Name);
+                logger.LogError(ex, "Error comparing files {File1} and {File2}", file1Name, file2Name);
                 throw;
             }
         }
 
-        _logger.LogInformation("Folder comparison completed. {EqualCount} equal, {DifferentCount} different",
+        logger.LogInformation("Folder comparison completed. {EqualCount} equal, {DifferentCount} different",
             result.FilePairResults.Count(r => r.AreEqual),
             result.FilePairResults.Count(r => !r.AreEqual));
 
@@ -201,7 +205,7 @@ public class ComparisonService : IComparisonService
     {
         return await Task.Run(() =>
         {
-            _logger.LogInformation("Starting pattern analysis of {FileCount} comparison results",
+            logger.LogInformation("Starting pattern analysis of {FileCount} comparison results",
                 folderResult.FilePairResults.Count);
 
             var analysis = new ComparisonPatternAnalysis
@@ -317,7 +321,7 @@ public class ComparisonService : IComparisonService
             // Group similar files based on their difference patterns
             GroupSimilarFiles(folderResult, analysis);
 
-            _logger.LogInformation("Pattern analysis completed. Found {PatternCount} common patterns across files",
+            logger.LogInformation("Pattern analysis completed. Found {PatternCount} common patterns across files",
                 analysis.CommonPathPatterns.Count);
 
             return analysis;

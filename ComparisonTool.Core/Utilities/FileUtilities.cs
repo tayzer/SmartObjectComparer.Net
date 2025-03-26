@@ -1,18 +1,20 @@
 ﻿using System.Text;
+using ComparisonTool.Core.Comparison.Analysis;
+using ComparisonTool.Core.Comparison.Results;
 using Microsoft.Extensions.Logging;
 
-namespace ComparisonTool.Core.V2;
+namespace ComparisonTool.Core.Utilities;
 
 /// <summary>
 /// Utility methods for file operations used in the comparison tool
 /// </summary>
-public class FileUtils : IFileUtils
+public class FileUtilities : IFileUtilities
 {
-    private readonly ILogger<FileUtils> _logger;
+    private readonly ILogger<FileUtilities> logger;
 
-    public FileUtils(ILogger<FileUtils> logger)
+    public FileUtilities(ILogger<FileUtilities> logger)
     {
-        _logger = logger;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -32,7 +34,7 @@ public class FileUtils : IFileUtils
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating memory stream from file");
+            logger.LogError(ex, "Error creating memory stream from file");
             throw;
         }
     }

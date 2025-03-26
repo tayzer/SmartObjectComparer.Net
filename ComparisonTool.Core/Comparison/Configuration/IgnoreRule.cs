@@ -1,7 +1,7 @@
 ﻿using KellermanSoftware.CompareNetObjects;
 using System.Text.RegularExpressions;
 
-namespace ComparisonTool.Core
+namespace ComparisonTool.Core.Comparison.Configuration
 {
     /// <summary>
     /// Represents a rule for ignoring or configuring comparison for a specific property

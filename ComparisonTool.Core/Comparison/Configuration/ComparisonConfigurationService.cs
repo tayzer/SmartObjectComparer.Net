@@ -3,26 +3,26 @@ using KellermanSoftware.CompareNetObjects;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace ComparisonTool.Core.V2;
+namespace ComparisonTool.Core.Comparison.Configuration;
 
 /// <summary>
 /// Service responsible for managing configuration settings for object comparison
 /// </summary>
 public class ComparisonConfigurationService : IComparisonConfigurationService
 {
-    private readonly ILogger<ComparisonConfigurationService> _logger;
-    private readonly CompareLogic _compareLogic;
-    private readonly List<IgnoreRule> _ignoreRules = new();
+    private readonly ILogger<ComparisonConfigurationService> logger;
+    private readonly CompareLogic compareLogic;
+    private readonly List<IgnoreRule> ignoreRules = new();
 
     public ComparisonConfigurationService(
         ILogger<ComparisonConfigurationService> logger,
-        IOptions<ComparisonConfigOptions> options = null)
+        IOptions<ComparisonConfigurationOptions> options = null)
     {
-        _logger = logger;
+        this.logger = logger;
 
-        var configOptions = options?.Value ?? new ComparisonConfigOptions();
+        var configOptions = options?.Value ?? new ComparisonConfigurationOptions();
 
-        _compareLogic = new CompareLogic
+        compareLogic = new CompareLogic
         {
             Config = new ComparisonConfig
             {
@@ -36,8 +36,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             }
         };
 
-        _logger.LogInformation("Initialized ComparisonConfigurationService with MaxDifferences={MaxDiffs}, " +
-                               "IgnoreCollectionOrder={IgnoreOrder}, IgnoreCase={IgnoreCase}",
+        this.logger.LogInformation("Initialized ComparisonConfigurationService with MaxDifferences={MaxDiffs}, " +
+                                   "IgnoreCollectionOrder={IgnoreOrder}, IgnoreCase={IgnoreCase}",
             configOptions.MaxDifferences,
             configOptions.DefaultIgnoreCollectionOrder,
             configOptions.DefaultIgnoreStringCase);
@@ -48,7 +48,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// </summary>
     public ComparisonConfig GetCurrentConfig()
     {
-        return _compareLogic.Config;
+        return compareLogic.Config;
     }
 
     /// <summary>
@@ -56,7 +56,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// </summary>
     public CompareLogic GetCompareLogic()
     {
-        return _compareLogic;
+        return compareLogic;
     }
 
     /// <summary>
@@ -64,8 +64,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// </summary>
     public void SetIgnoreCollectionOrder(bool ignoreOrder)
     {
-        _compareLogic.Config.IgnoreCollectionOrder = ignoreOrder;
-        _logger.LogDebug("Set IgnoreCollectionOrder to {Value}", ignoreOrder);
+        compareLogic.Config.IgnoreCollectionOrder = ignoreOrder;
+        logger.LogDebug("Set IgnoreCollectionOrder to {Value}", ignoreOrder);
     }
 
     /// <summary>
@@ -73,7 +73,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// </summary>
     public bool GetIgnoreCollectionOrder()
     {
-        return _compareLogic.Config.IgnoreCollectionOrder;
+        return compareLogic.Config.IgnoreCollectionOrder;
     }
 
     /// <summary>
@@ -81,8 +81,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// </summary>
     public void SetIgnoreStringCase(bool ignoreCase)
     {
-        _compareLogic.Config.CaseSensitive = !ignoreCase;
-        _logger.LogDebug("Set CaseSensitive to {Value} (IgnoreCase={IgnoreCase})", !ignoreCase, ignoreCase);
+        compareLogic.Config.CaseSensitive = !ignoreCase;
+        logger.LogDebug("Set CaseSensitive to {Value} (IgnoreCase={IgnoreCase})", !ignoreCase, ignoreCase);
     }
 
     /// <summary>
@@ -90,7 +90,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// </summary>
     public bool GetIgnoreStringCase()
     {
-        return !_compareLogic.Config.CaseSensitive;
+        return !compareLogic.Config.CaseSensitive;
     }
 
     /// <summary>
@@ -98,15 +98,14 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// </summary>
     public void IgnoreProperty(string propertyPath)
     {
-        // Add to our ignore rules
         var rule = new IgnoreRule
         {
             PropertyPath = propertyPath,
             IgnoreCompletely = true
         };
 
-        _ignoreRules.Add(rule);
-        _logger.LogDebug("Added property {PropertyPath} to ignore list", propertyPath);
+        ignoreRules.Add(rule);
+        logger.LogDebug("Added property {PropertyPath} to ignore list", propertyPath);
     }
 
     /// <summary>
@@ -114,17 +113,16 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// </summary>
     public void RemoveIgnoredProperty(string propertyPath)
     {
-        // Remove from our rules
-        var rulesToRemove = _ignoreRules
+        var rulesToRemove = ignoreRules
             .Where(r => r.PropertyPath == propertyPath)
             .ToList();
 
         foreach (var rule in rulesToRemove)
         {
-            _ignoreRules.Remove(rule);
+            ignoreRules.Remove(rule);
         }
 
-        _logger.LogDebug("Removed property {PropertyPath} from ignore list", propertyPath);
+        logger.LogDebug("Removed property {PropertyPath} from ignore list", propertyPath);
     }
 
     /// <summary>
@@ -134,12 +132,10 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     {
         if (rule == null) return;
 
-        // Remove any existing rule for this property
         RemoveIgnoredProperty(rule.PropertyPath);
 
-        // Add the new rule
-        _ignoreRules.Add(rule);
-        _logger.LogDebug("Added rule for {PropertyPath} with settings: {Settings}",
+        ignoreRules.Add(rule);
+        logger.LogDebug("Added rule for {PropertyPath} with settings: {Settings}",
             rule.PropertyPath,
             GetRuleSettingsDescription(rule));
     }
@@ -158,7 +154,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// </summary>
     public IReadOnlyList<string> GetIgnoredProperties()
     {
-        return _ignoreRules
+        return ignoreRules
             .Where(r => r.IgnoreCompletely)
             .Select(r => r.PropertyPath)
             .ToList();
@@ -169,7 +165,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// </summary>
     public IReadOnlyList<IgnoreRule> GetIgnoreRules()
     {
-        return _ignoreRules.ToList();
+        return ignoreRules.ToList();
     }
 
     /// <summary>
@@ -177,16 +173,14 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// </summary>
     public void ApplyConfiguredSettings()
     {
-        // Clear existing config
-        _compareLogic.Config.MembersToIgnore.Clear();
+        compareLogic.Config.MembersToIgnore.Clear();
 
-        // Apply all ignore rules
-        foreach (var rule in _ignoreRules)
+        foreach (var rule in ignoreRules)
         {
-            rule.ApplyTo(_compareLogic.Config);
+            rule.ApplyTo(compareLogic.Config);
         }
 
-        _logger.LogInformation("Applied configuration settings with {RuleCount} rules", _ignoreRules.Count);
+        logger.LogInformation("Applied configuration settings with {RuleCount} rules", ignoreRules.Count);
     }
 
     /// <summary>
@@ -201,11 +195,11 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         {
             // Use reflection to process the object graph
             ProcessObject(obj, propertyNames, new HashSet<object>());
-            _logger.LogDebug("Normalized {PropertyCount} properties in object", propertyNames.Count);
+            logger.LogDebug("Normalized {PropertyCount} properties in object", propertyNames.Count);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error normalizing property values");
+            logger.LogError(ex, "Error normalizing property values");
         }
     }
 
@@ -222,13 +216,11 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
 
         var type = obj.GetType();
 
-        // Process all properties of the object
         foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
             // Check if this property should be normalized
             if (propertyNames.Contains(property.Name) && property.CanWrite)
             {
-                // Set to default value based on property type
                 SetDefaultValue(obj, property);
             }
             else if (property.CanRead)
@@ -264,7 +256,6 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
 
         var propertyType = property.PropertyType;
 
-        // Handle different property types
         if (propertyType == typeof(string))
         {
             defaultValue = string.Empty;
@@ -299,14 +290,13 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             defaultValue = Enum.GetValues(propertyType).Cast<object>().FirstOrDefault();
         }
 
-        // Set the property to its default value
         try
         {
             property.SetValue(obj, defaultValue);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to set default value for property {PropertyName} of type {PropertyType}",
+            logger.LogWarning(ex, "Failed to set default value for property {PropertyName} of type {PropertyType}",
                 property.Name, propertyType.Name);
         }
     }

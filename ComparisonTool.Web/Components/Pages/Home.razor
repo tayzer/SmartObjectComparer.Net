@@ -2,11 +2,18 @@
 @page "/"
 @using System.IO
 @using KellermanSoftware.CompareNetObjects
+@using ComparisonTool.Core.Serialization
+@using ComparisonTool.Core.Utilities
+@using ComparisonTool.Core.Comparison.Configuration
+@using ComparisonTool.Core.Comparison.Results
+@using ComparisonTool.Core.Comparison
+@using ComparisonTool.Core.Comparison.Analysis
+@using KellermanSoftware.CompareNetObjects
 @implements IDisposable
 @inject IXmlDeserializationService DeserializationService
 @inject IComparisonConfigurationService ConfigService
 @inject IComparisonService ComparisonService
-@inject IFileUtils FileUtils
+@inject IFileUtilities FileUtilities
 @inject IJSRuntime JSRuntime
 @inject ILogger<Home> Logger
 
@@ -749,7 +756,7 @@
                           $"V2 file: **{selectedPair.File2Name}**\n\n" +
                           $"---\n\n";
 
-            var report = FileUtils.GenerateReportMarkdown(selectedPair.Summary, headerInfo);
+            var report = FileUtilities.GenerateReportMarkdown(selectedPair.Summary, headerInfo);
 
             // In a real app, you would use JSInterop to download the file
             await JSRuntime.InvokeVoidAsync(
@@ -773,7 +780,7 @@
 
         try
         {
-            string report = FileUtils.GenerateFolderComparisonReport(FolderComparisonResult);
+            string report = FileUtilities.GenerateFolderComparisonReport(FolderComparisonResult);
 
             await JSRuntime.InvokeVoidAsync(
                 "saveAsFile",
@@ -796,7 +803,7 @@
 
         try
         {
-            var report = FileUtils.GeneratePatternAnalysisReport(PatternAnalysis);
+            var report = FileUtilities.GeneratePatternAnalysisReport(PatternAnalysis);
 
             await JSRuntime.InvokeVoidAsync(
                 "saveAsFile",

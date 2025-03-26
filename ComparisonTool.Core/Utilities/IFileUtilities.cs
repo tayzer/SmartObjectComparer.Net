@@ -1,9 +1,12 @@
-﻿namespace ComparisonTool.Core.V2;
+﻿using ComparisonTool.Core.Comparison.Analysis;
+using ComparisonTool.Core.Comparison.Results;
+
+namespace ComparisonTool.Core.Utilities;
 
 /// <summary>
 /// Interface for file utilities
 /// </summary>
-public interface IFileUtils
+public interface IFileUtilities
 {
     /// <summary>
     /// Creates a memory stream from a file stream

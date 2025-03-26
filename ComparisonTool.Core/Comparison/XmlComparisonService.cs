@@ -1,17 +1,20 @@
-﻿using KellermanSoftware.CompareNetObjects;
+﻿using ComparisonTool.Core.Comparison.Configuration;
+using ComparisonTool.Core.Comparison.Results;
+using ComparisonTool.Core.Serialization;
+using KellermanSoftware.CompareNetObjects;
 using Microsoft.Extensions.Logging;
 
-namespace ComparisonTool.Core.V2;
+namespace ComparisonTool.Core.Comparison;
 
 /// <summary>
 /// Legacy XML comparison service that delegates to the new services for backward compatibility
 /// </summary>
 public class XmlComparisonService
 {
-    private readonly ILogger<XmlComparisonService> _logger;
-    private readonly IXmlDeserializationService _deserializationService;
-    private readonly IComparisonConfigurationService _configService;
-    private readonly IComparisonService _comparisonService;
+    private readonly ILogger<XmlComparisonService> logger;
+    private readonly IXmlDeserializationService deserializationService;
+    private readonly IComparisonConfigurationService configService;
+    private readonly IComparisonService comparisonService;
 
     public XmlComparisonService(
         ILogger<XmlComparisonService> logger,
@@ -19,12 +22,12 @@ public class XmlComparisonService
         IComparisonConfigurationService configService,
         IComparisonService comparisonService)
     {
-        _logger = logger;
-        _deserializationService = deserializationService;
-        _configService = configService;
-        _comparisonService = comparisonService;
+        this.logger = logger;
+        this.deserializationService = deserializationService;
+        this.configService = configService;
+        this.comparisonService = comparisonService;
 
-        _logger.LogInformation("XmlComparisonService initialized (Legacy facade)");
+        this.logger.LogInformation("XmlComparisonService initialized (Legacy facade)");
     }
 
     /// <summary>
@@ -32,7 +35,7 @@ public class XmlComparisonService
     /// </summary>
     public void RegisterDomainModel<T>(string modelName) where T : class
     {
-        _deserializationService.RegisterDomainModel<T>(modelName);
+        deserializationService.RegisterDomainModel<T>(modelName);
     }
 
     /// <summary>
@@ -40,7 +43,7 @@ public class XmlComparisonService
     /// </summary>
     public IEnumerable<string> GetRegisteredModelNames()
     {
-        return _deserializationService.GetRegisteredModelNames();
+        return deserializationService.GetRegisteredModelNames();
     }
 
     /// <summary>
@@ -48,7 +51,7 @@ public class XmlComparisonService
     /// </summary>
     public Type GetModelType(string modelName)
     {
-        return _deserializationService.GetModelType(modelName);
+        return deserializationService.GetModelType(modelName);
     }
 
     /// <summary>
@@ -69,14 +72,14 @@ public class XmlComparisonService
             }
 
             // Delegate to the new comparison service
-            return await _comparisonService.CompareXmlFilesAsync(
+            return await comparisonService.CompareXmlFilesAsync(
                 oldXmlStream,
                 newXmlStream,
                 modelName);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error comparing XML files in legacy service");
+            logger.LogError(ex, "Error comparing XML files in legacy service");
             throw;
         }
     }
@@ -92,14 +95,14 @@ public class XmlComparisonService
         try
         {
             // Delegate to the new comparison service
-            return await _comparisonService.CompareFoldersAsync(
+            return await comparisonService.CompareFoldersAsync(
                 folder1Files,
                 folder2Files,
                 modelName);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error comparing folders in legacy service");
+            logger.LogError(ex, "Error comparing folders in legacy service");
             throw;
         }
     }
@@ -109,7 +112,7 @@ public class XmlComparisonService
     /// </summary>
     public void IgnoreProperty(string propertyPath)
     {
-        _configService.IgnoreProperty(propertyPath);
+        configService.IgnoreProperty(propertyPath);
     }
 
     /// <summary>
@@ -117,7 +120,7 @@ public class XmlComparisonService
     /// </summary>
     public void RemoveIgnoredProperty(string propertyPath)
     {
-        _configService.RemoveIgnoredProperty(propertyPath);
+        configService.RemoveIgnoredProperty(propertyPath);
     }
 
     /// <summary>
@@ -125,7 +128,7 @@ public class XmlComparisonService
     /// </summary>
     public IReadOnlyList<string> GetIgnoredProperties()
     {
-        return _configService.GetIgnoredProperties();
+        return configService.GetIgnoredProperties();
     }
 
     /// <summary>
@@ -133,7 +136,7 @@ public class XmlComparisonService
     /// </summary>
     public void SetIgnoreCollectionOrder(bool ignoreOrder)
     {
-        _configService.SetIgnoreCollectionOrder(ignoreOrder);
+        configService.SetIgnoreCollectionOrder(ignoreOrder);
     }
 
     /// <summary>
@@ -141,7 +144,7 @@ public class XmlComparisonService
     /// </summary>
     public bool GetIgnoreCollectionOrder()
     {
-        return _configService.GetIgnoreCollectionOrder();
+        return configService.GetIgnoreCollectionOrder();
     }
 
     /// <summary>
@@ -149,7 +152,7 @@ public class XmlComparisonService
     /// </summary>
     public void SetIgnoreStringCase(bool ignoreCase)
     {
-        _configService.SetIgnoreStringCase(ignoreCase);
+        configService.SetIgnoreStringCase(ignoreCase);
     }
 
     /// <summary>
@@ -157,7 +160,7 @@ public class XmlComparisonService
     /// </summary>
     public bool GetIgnoreStringCase()
     {
-        return _configService.GetIgnoreStringCase();
+        return configService.GetIgnoreStringCase();
     }
 
     /// <summary>
@@ -165,6 +168,6 @@ public class XmlComparisonService
     /// </summary>
     public ComparisonConfig GetCurrentConfig()
     {
-        return _configService.GetCurrentConfig();
+        return configService.GetCurrentConfig();
     }
 }

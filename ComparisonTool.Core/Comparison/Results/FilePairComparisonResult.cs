@@ -1,6 +1,7 @@
-﻿using KellermanSoftware.CompareNetObjects;
+﻿using ComparisonTool.Core.Comparison.Analysis;
+using KellermanSoftware.CompareNetObjects;
 
-namespace ComparisonTool.Core;
+namespace ComparisonTool.Core.Comparison.Results;
 
 public class FilePairComparisonResult
 {

@@ -1,6 +1,6 @@
 ﻿using System.Xml.Serialization;
 
-namespace ComparisonTool.Core;
+namespace ComparisonTool.Core.Models;
 
 [XmlRoot(ElementName = "Envelope", Namespace = "http://schemas.xmlsoap.org/soap/envelope/")]
 public class SoapEnvelope
@@ -25,12 +25,12 @@ public class SearchResponse
 
     // A summary object with aggregated data.
     [XmlElement(ElementName = "Summary")]
-    public Summary Summary { get; set; } = new Summary();
+    public Summary Summary { get; set; } = new();
 
     // A collection of detailed result items.
     [XmlArray(ElementName = "Results")]
     [XmlArrayItem(ElementName = "Result")]
-    public List<ResultItem> Results { get; set; } = new List<ResultItem>();
+    public List<ResultItem> Results { get; set; } = new();
 }
 
 public class Summary
@@ -58,12 +58,12 @@ public class ResultItem
 
     // A nested object with further details.
     [XmlElement(ElementName = "Details")]
-    public Details Details { get; set; } = new Details();
+    public Details Details { get; set; } = new();
 
     // A list to represent tags or categories associated with this result.
     [XmlArray(ElementName = "Tags")]
     [XmlArrayItem(ElementName = "Tag")]
-    public List<string> Tags { get; set; } = new List<string>();
+    public List<string> Tags { get; set; } = new();
 }
 
 public class Details

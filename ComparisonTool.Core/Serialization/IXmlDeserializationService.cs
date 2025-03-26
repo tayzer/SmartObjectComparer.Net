@@ -1,4 +1,4 @@
-﻿namespace ComparisonTool.Core.V2;
+﻿namespace ComparisonTool.Core.Serialization;
 
 /// <summary>
 /// Interface for XML deserialization operations

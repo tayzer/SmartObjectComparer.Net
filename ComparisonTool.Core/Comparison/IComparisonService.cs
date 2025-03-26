@@ -1,6 +1,8 @@
-﻿using KellermanSoftware.CompareNetObjects;
+﻿using ComparisonTool.Core.Comparison.Analysis;
+using ComparisonTool.Core.Comparison.Results;
+using KellermanSoftware.CompareNetObjects;
 
-namespace ComparisonTool.Core.V2;
+namespace ComparisonTool.Core.Comparison;
 
 /// <summary>
 /// Interface for comparison execution
