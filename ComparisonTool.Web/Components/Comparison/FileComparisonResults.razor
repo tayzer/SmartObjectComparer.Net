@@ -1,0 +1,89 @@
+﻿@namespace ComparisonTool.Web.Components.Comparison
+@using ComparisonTool.Core
+@using ComparisonTool.Core.Comparison.Results
+
+<div class="card">
+    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">V1 vs V2 Comparison Results</h5>
+        <button class="btn btn-sm btn-outline-primary" @onclick="ExportAll">
+            <i class="bi bi-download me-1"></i> Export All Results
+        </button>
+    </div>
+    <div class="card-body">
+        @if (Result.AllEqual)
+        {
+            <div class="alert alert-success">
+                <i class="bi bi-check-circle-fill me-2"></i>
+                All file pairs are identical according to the current comparison rules.
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-warning">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                Found differences in compared file pairs.
+            </div>
+
+            <h6>Select a file pair to view detailed comparison:</h6>
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>V1 File</th>
+                            <th>V2 File</th>
+                            <th>Status</th>
+                            <th>Differences</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (int i = 0; i < Result.FilePairResults.Count; i++)
+                        {
+                            var index = i;
+                            var result = Result.FilePairResults[i];
+                            <tr class="@(index == SelectedPairIndex ? "table-primary" : "")" style="cursor: pointer;" @onclick="() => SelectPair(index)">
+                                <td>@result.File1Name</td>
+                                <td>@result.File2Name</td>
+                                <td>
+                                    <span class="badge @(result.AreEqual ? "bg-success" : "bg-danger")">
+                                        @(result.AreEqual ? "Equal" : "Different")
+                                    </span>
+                                </td>
+                                <td>@(result.AreEqual ? "0" : result.Summary.TotalDifferenceCount.ToString())</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-secondary" @onclick:stopPropagation="true" @onclick="() => SelectPair(index)">
+                                        View
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public MultiFolderComparisonResult Result { get; set; }
+
+    [Parameter]
+    public int SelectedPairIndex { get; set; } = -1;
+
+    [Parameter]
+    public EventCallback<int> OnPairSelected { get; set; }
+
+    [Parameter]
+    public EventCallback OnExportAll { get; set; }
+
+    private async Task SelectPair(int index)
+    {
+        await OnPairSelected.InvokeAsync(index);
+    }
+
+    private async Task ExportAll()
+    {
+        await OnExportAll.InvokeAsync();
+    }
+}

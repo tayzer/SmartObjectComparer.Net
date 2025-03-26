@@ -1,5 +1,4 @@
-﻿using System.Configuration;
-using ComparisonTool.Core.Comparison;
+﻿using ComparisonTool.Core.Comparison;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Models;
 using ComparisonTool.Core.Serialization;
@@ -20,7 +19,6 @@ public static class ServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddXmlComparisonServices(this IServiceCollection services, IConfiguration configuration = null)
     {
-        // Add configuration if provided
         if (configuration != null)
         {
             services.AddOptions();
@@ -29,7 +27,6 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<XmlSerializerFactory>();
 
-        // Register the XML deserialization service with the factory dependency
         services.AddSingleton<IXmlDeserializationService>(provider =>
         {
             var logger = provider.GetRequiredService<ILogger<XmlDeserializationService>>();
@@ -43,13 +40,10 @@ public static class ServiceCollectionExtensions
             return service;
         });
 
-        // Register the comparison configuration service
         services.AddSingleton<IComparisonConfigurationService, ComparisonConfigurationService>();
 
-        // Register the comparison service
         services.AddScoped<IComparisonService, ComparisonService>();
 
-        // Register utilities
         services.AddScoped<IFileUtilities, FileUtilities>();
 
         return services;

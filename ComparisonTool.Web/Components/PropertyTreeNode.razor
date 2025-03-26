@@ -107,7 +107,6 @@
         if (typeof(System.Collections.IEnumerable).IsAssignableFrom(Type) &&
             Type != typeof(string))
         {
-            // This is a collection
             return Enumerable.Empty<PropertyInfo>();
         }
 
