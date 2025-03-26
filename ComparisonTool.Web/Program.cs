@@ -1,15 +1,29 @@
 using ComparisonTool.Core;
 using ComparisonTool.Web.Components;
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
+// Configure Serilog
+Log.Logger = new LoggerConfiguration()
+    .ReadFrom.Configuration(builder.Configuration)
+    .Enrich.FromLogContext()
+    .CreateLogger();
+
+// Use Serilog for logging
+builder.Host.UseSerilog();
+
+// Add services to the container with proper configuration
 builder.Services
-    .AddXmlComparisonServices()
+    .AddXmlComparisonServices(builder.Configuration)
     .AddRazorComponents()
     .AddInteractiveServerComponents();
 
 builder.Services.AddBlazorBootstrap();
+
+// Register logging - make sure it's properly configured
+builder.Logging.ClearProviders();
+builder.Logging.AddSerilog(Log.Logger);
 
 var app = builder.Build();
 
@@ -17,12 +31,14 @@ var app = builder.Build();
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
+}
+else
+{
+    app.UseDeveloperExceptionPage();
 }
 
 app.UseHttpsRedirection();
-
 app.UseStaticFiles();
 app.UseAntiforgery();
 

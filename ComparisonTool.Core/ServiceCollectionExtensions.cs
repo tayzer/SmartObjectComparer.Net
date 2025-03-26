@@ -1,4 +1,8 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using System.Configuration;
+using ComparisonTool.Core.V2;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace ComparisonTool.Core;
 
@@ -8,23 +12,43 @@ namespace ComparisonTool.Core;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Add XML comparison services
+    /// Add XML comparison services with proper dependency injection
     /// </summary>
-    public static IServiceCollection AddXmlComparisonServices(this IServiceCollection services)
+    public static IServiceCollection AddXmlComparisonServices(this IServiceCollection services, IConfiguration configuration = null)
     {
-        // Register the comparison service as a singleton
-        services.AddSingleton<XmlComparisonService>(provider =>
+        // Add configuration if provided
+        if (configuration != null)
         {
-            var service = new XmlComparisonService();
+            services.AddOptions();
+            services.Configure<ComparisonConfigOptions>(configuration.GetSection("ComparisonSettings"));
+        }
 
-            // Register domain models
+        services.AddSingleton<XmlSerializerFactory>();
+
+        // Register the XML deserialization service with the factory dependency
+        services.AddSingleton<IXmlDeserializationService>(provider => {
+            var logger = provider.GetRequiredService<ILogger<XmlDeserializationService>>();
+            var serializerFactory = provider.GetRequiredService<XmlSerializerFactory>();
+
+            var service = new XmlDeserializationService(logger, serializerFactory);
+
+            // todo: shouldnt be done here
             service.RegisterDomainModel<SoapEnvelope>("SoapEnvelope");
-
-            // Configure default settings
-            service.SetIgnoreCollectionOrder(false);
 
             return service;
         });
+
+        // Register the comparison configuration service
+        services.AddSingleton<IComparisonConfigurationService, ComparisonConfigurationService>();
+
+        // Register the comparison service
+        services.AddScoped<IComparisonService, ComparisonService>();
+
+        // Register utilities
+        services.AddScoped<IFileUtils, FileUtils>();
+
+        // Register the legacy service for backward compatibility during transition
+        services.AddSingleton<XmlComparisonService>();
 
         return services;
     }
