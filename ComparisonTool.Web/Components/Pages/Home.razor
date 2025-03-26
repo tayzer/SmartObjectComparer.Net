@@ -1,12 +1,14 @@
 ﻿@rendermode InteractiveServer
 @page "/"
 @using System.IO
-@using System.Text
 @using KellermanSoftware.CompareNetObjects
-@using ComparisonTool.Core
-@using Microsoft.AspNetCore.Components
-@inject XmlComparisonService ComparisonService
+@implements IDisposable
+@inject IXmlDeserializationService DeserializationService
+@inject IComparisonConfigurationService ConfigService
+@inject IComparisonService ComparisonService
+@inject IFileUtils FileUtils
 @inject IJSRuntime JSRuntime
+@inject ILogger<Home> Logger
 
 <h1>XML Comparison Tool</h1>
 
@@ -20,7 +22,7 @@
                 <div class="form-group">
                     <label>Select Domain Model:</label>
                     <select class="form-control" @bind="SelectedModelName">
-                        @foreach (var modelName in ComparisonService.GetRegisteredModelNames())
+                        @foreach (var modelName in DeserializationService.GetRegisteredModelNames())
                         {
                             <option value="@modelName">@modelName</option>
                         }
@@ -369,17 +371,13 @@
 }
 
 <HierarchicalPropertySelector @ref="propertySelector"
-                              ModelType="ComparisonService.GetModelType(SelectedModelName)"
-                              IgnoredProperties="IgnoreRules"
-                              OnPropertyAdded="AddIgnoreRule"
-                              OnPropertyRemoved="propertyPath => RemoveIgnoreRule(IgnoreRules.FirstOrDefault(r => r.PropertyPath == propertyPath))" />
+                          ModelType="@GetSelectedModelType()"
+                          IgnoredProperties="IgnoreRules"
+                          OnPropertyAdded="AddIgnoreRule"
+                          OnPropertyRemoved="propertyPath => RemoveIgnoreRule(IgnoreRules.FirstOrDefault(r => r.PropertyPath == propertyPath))" />
 @code {
     // State variables
     private string SelectedModelName { get; set; }
-    private string OldFileName { get; set; }
-    private string NewFileName { get; set; }
-    private MemoryStream OldFileContent { get; set; }
-    private MemoryStream NewFileContent { get; set; }
     private bool IgnoreCollectionOrder { get; set; } = false;
     private bool IgnoreStringCase { get; set; } = false;
     private List<IgnoreRule> IgnoreRules { get; set; } = new List<IgnoreRule>();
@@ -394,99 +392,133 @@
     private ComparisonPatternAnalysis PatternAnalysis { get; set; }
     private bool ShowPatternSummary { get; set; } = false;
     private bool EnablePatternAnalysis { get; set; } = true; // Default to enabled
+    private CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
 
     // Property selector
     private HierarchicalPropertySelector propertySelector;
 
     // Enable the comparison button if both files are loaded
-    private bool CanRunComparison =>
+    private bool CanRunFolderComparison =>
         !string.IsNullOrEmpty(SelectedModelName) &&
-        OldFileContent != null &&
-        NewFileContent != null;
+        Folder1Files.Count > 0 &&
+        Folder2Files.Count > 0;
 
     protected override void OnInitialized()
     {
-        // Set initial selection
-        SelectedModelName = ComparisonService.GetRegisteredModelNames().FirstOrDefault();
-
-        // Get current configuration settings from the service directly
-        IgnoreCollectionOrder = ComparisonService.GetIgnoreCollectionOrder();
-        IgnoreStringCase = ComparisonService.GetIgnoreStringCase();
-
-        // Convert simple ignored properties to rules
-        foreach (var prop in ComparisonService.GetIgnoredProperties())
+        try
         {
-            IgnoreRules.Add(new IgnoreRule
-                {
-                    PropertyPath = prop,
-                    IgnoreCompletely = true
-                });
+            // Set initial selection
+            SelectedModelName = DeserializationService.GetRegisteredModelNames().FirstOrDefault();
+
+            // Get current configuration settings from the service
+            IgnoreCollectionOrder = ConfigService.GetIgnoreCollectionOrder();
+            IgnoreStringCase = ConfigService.GetIgnoreStringCase();
+
+            // Convert simple ignored properties to rules
+            foreach (var prop in ConfigService.GetIgnoredProperties())
+            {
+                IgnoreRules.Add(new IgnoreRule
+                    {
+                        PropertyPath = prop,
+                        IgnoreCompletely = true
+                    });
+            }
         }
-
-        // OldFileContent = LoadFileToMemorySteam("OldFile.xml");
-        // NewFileContent = LoadFileToMemorySteam("NewFile.xml");
-
-        StateHasChanged();
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error initializing component");
+        }
     }
 
-    private MemoryStream LoadFileToMemorySteam(string filePath)
+    public void Dispose()
     {
-        using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
-        var memoryStream = new MemoryStream();
-        fileStream.CopyTo(memoryStream);
-        memoryStream.Position = 0;
+        // Clean up cancellation token source
+        _cancellationTokenSource?.Cancel();
+        _cancellationTokenSource?.Dispose();
+    }
 
-        return memoryStream;
+    private Type GetSelectedModelType()
+    {
+        if (string.IsNullOrEmpty(SelectedModelName))
+            return null;
+            
+        try
+        {
+            return DeserializationService.GetModelType(SelectedModelName);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     // File handling
-    private async Task HandleOldFileUpload(InputFileChangeEventArgs e)
+    private async Task HandleFolder1Upload(InputFileChangeEventArgs e)
     {
         try
         {
-            var file = e.File;
-            OldFileName = file.Name;
+            foreach (var file in e.GetMultipleFiles(20)) // Allow up to 20 files
+            {
+                var stream = new MemoryStream();
+                await file.OpenReadStream(maxAllowedSize: 10485760).CopyToAsync(stream);
+                stream.Position = 0;
 
-            // Create a stream to store the file content
-            OldFileContent = new MemoryStream();
+                Folder1Files.Add((stream, file.Name));
+            }
 
-            // Copy the file data to the stream
-            await file.OpenReadStream(maxAllowedSize: 10485760).CopyToAsync(OldFileContent);
-            OldFileContent.Position = 0;
+            // Sort files by name to help with matching
+            Folder1Files = Folder1Files.OrderBy(f => f.FileName).ToList();
 
             // Force UI refresh
             StateHasChanged();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading old file: {ex.Message}");
-            OldFileName = $"Error: {ex.Message}";
-            StateHasChanged();
+            Logger.LogError(ex, "Error loading Folder 1 files");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading files: {ex.Message}");
         }
     }
 
-    private async Task HandleNewFileUpload(InputFileChangeEventArgs e)
+    private async Task HandleFolder2Upload(InputFileChangeEventArgs e)
     {
         try
         {
-            var file = e.File;
-            NewFileName = file.Name;
+            foreach (var file in e.GetMultipleFiles(20)) // Allow up to 20 files
+            {
+                var stream = new MemoryStream();
+                await file.OpenReadStream(maxAllowedSize: 10485760).CopyToAsync(stream);
+                stream.Position = 0;
 
-            // Create a stream to store the file content
-            NewFileContent = new MemoryStream();
+                Folder2Files.Add((stream, file.Name));
+            }
 
-            // Copy the file data to the stream
-            await file.OpenReadStream(maxAllowedSize: 10485760).CopyToAsync(NewFileContent);
-            NewFileContent.Position = 0;
+            // Sort files by name to help with matching
+            Folder2Files = Folder2Files.OrderBy(f => f.FileName).ToList();
 
             // Force UI refresh
             StateHasChanged();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading new file: {ex.Message}");
-            NewFileName = $"Error: {ex.Message}";
-            StateHasChanged();
+            Logger.LogError(ex, "Error loading Folder 2 files");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading files: {ex.Message}");
+        }
+    }
+
+    // Methods to remove files from folders
+    private void RemoveFolder1File(int index)
+    {
+        if (index >= 0 && index < Folder1Files.Count)
+        {
+            Folder1Files.RemoveAt(index);
+        }
+    }
+
+    private void RemoveFolder2File(int index)
+    {
+        if (index >= 0 && index < Folder2Files.Count)
+        {
+            Folder2Files.RemoveAt(index);
         }
     }
 
@@ -510,18 +542,25 @@
         // If complete ignore, also add to the service
         if (rule.IgnoreCompletely)
         {
-            ComparisonService.IgnoreProperty(rule.PropertyPath);
+            ConfigService.IgnoreProperty(rule.PropertyPath);
+        }
+        else
+        {
+            // Add rule to configuration service
+            ConfigService.AddIgnoreRule(rule);
         }
     }
 
     private void RemoveIgnoreRule(IgnoreRule rule)
     {
+        if (rule == null) return;
+        
         IgnoreRules.Remove(rule);
 
         // Also remove from the service
         if (rule.IgnoreCompletely)
         {
-            ComparisonService.RemoveIgnoredProperty(rule.PropertyPath);
+            ConfigService.RemoveIgnoredProperty(rule.PropertyPath);
         }
     }
 
@@ -552,188 +591,37 @@
         return description;
     }
 
-    private async Task RunComparison()
-    {
-        if (!CanRunComparison)
-            return;
-
-        IsComparing = true;
-        ComparisonResult = null;
-        DifferenceSummary = null;
-        ShowAllDifferences = false;
-
-        try
-        {
-            // Update configuration
-            ComparisonService.SetIgnoreCollectionOrder(IgnoreCollectionOrder);
-            ComparisonService.SetIgnoreStringCase(IgnoreStringCase);
-
-            // Apply all ignore rules
-            foreach (var rule in IgnoreRules)
-            {
-                rule.ApplyTo(ComparisonService.GetCurrentConfig());
-            }
-
-            // Run comparison
-            OldFileContent.Position = 0;
-            NewFileContent.Position = 0;
-            ComparisonResult = await ComparisonService.CompareXmlFilesAsync(
-                OldFileContent,
-                NewFileContent,
-                SelectedModelName);
-
-            // Generate enhanced summary
-            var categorizer = new DifferenceCategorizer();
-            DifferenceSummary = categorizer.CategorizeAndSummarize(ComparisonResult);
-        }
-        catch (Exception ex)
-        {
-            await JSRuntime.InvokeVoidAsync("alert", $"Error comparing files: {ex.Message}");
-            Console.WriteLine($"Error running comparison: {ex.Message}");
-        }
-        finally
-        {
-            IsComparing = false;
-            StateHasChanged();
-        }
-    }
-
-    private IEnumerable<Difference> GetFilteredDifferences()
-    {
-        if (ComparisonResult == null || ComparisonResult.Differences.Count == 0)
-            return Enumerable.Empty<Difference>();
-
-        return ShowAllDifferences
-            ? ComparisonResult.Differences
-            : ComparisonResult.Differences.Take(100);
-    }
-
-    private void ToggleShowAllDifferences()
-    {
-        ShowAllDifferences = !ShowAllDifferences;
-    }
-
-    private string FormatValue(object value)
-    {
-        if (value == null)
-            return "null";
-
-        if (value is DateTime dt)
-            return dt.ToString("yyyy-MM-dd HH:mm:ss");
-
-        if (value is string str && str.Length > 100)
-            return str.Substring(0, 97) + "...";
-
-        return value.ToString();
-    }
-
-    private async Task ExportResults()
-    {
-        if (DifferenceSummary == null)
-            return;
-
-        var report = DifferenceSummary.GenerateReport();
-
-        // In a real app, you would use JSInterop to download the file
-        await JSRuntime.InvokeVoidAsync(
-            "saveAsFile",
-            "comparison-report.md",
-            "text/markdown",
-            report);
-    }
-
-    private async Task HandleFolder1Upload(InputFileChangeEventArgs e)
-    {
-        try
-        {
-            foreach (var file in e.GetMultipleFiles(20)) // Allow up to 20 files
-            {
-                var stream = new MemoryStream();
-                await file.OpenReadStream(maxAllowedSize: 10485760).CopyToAsync(stream);
-                stream.Position = 0;
-
-                Folder1Files.Add((stream, file.Name));
-            }
-
-            // Sort files by name to help with matching
-            Folder1Files = Folder1Files.OrderBy(f => f.FileName).ToList();
-
-            // Force UI refresh
-            StateHasChanged();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error loading Folder 1 files: {ex.Message}");
-            await JSRuntime.InvokeVoidAsync("alert", $"Error loading files: {ex.Message}");
-            StateHasChanged();
-        }
-    }
-
-    private async Task HandleFolder2Upload(InputFileChangeEventArgs e)
-    {
-        try
-        {
-            foreach (var file in e.GetMultipleFiles(20)) // Allow up to 20 files
-            {
-                var stream = new MemoryStream();
-                await file.OpenReadStream(maxAllowedSize: 10485760).CopyToAsync(stream);
-                stream.Position = 0;
-
-                Folder2Files.Add((stream, file.Name));
-            }
-
-            // Sort files by name to help with matching
-            Folder2Files = Folder2Files.OrderBy(f => f.FileName).ToList();
-
-            // Force UI refresh
-            StateHasChanged();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error loading Folder 2 files: {ex.Message}");
-            await JSRuntime.InvokeVoidAsync("alert", $"Error loading files: {ex.Message}");
-            StateHasChanged();
-        }
-    }
-
-    // Methods to remove files from folders
-    private void RemoveFolder1File(int index)
-    {
-        if (index >= 0 && index < Folder1Files.Count)
-        {
-            Folder1Files.RemoveAt(index);
-        }
-    }
-
-    private void RemoveFolder2File(int index)
-    {
-        if (index >= 0 && index < Folder2Files.Count)
-        {
-            Folder2Files.RemoveAt(index);
-        }
-    }
-
     // Run comparison between the two folders
     private async Task RunFolderComparison()
     {
-        if (Folder1Files.Count == 0 || Folder2Files.Count == 0)
+        if (!CanRunFolderComparison)
             return;
-
-        IsComparing = true;
-        FolderComparisonResult = null;
-        SelectedPairIndex = -1;
 
         try
         {
+            IsComparing = true;
+            FolderComparisonResult = null;
+            SelectedPairIndex = -1;
+            PatternAnalysis = null;
+            ShowPatternSummary = false;
+            
+            // Cancel any existing operations
+            _cancellationTokenSource.Cancel();
+            _cancellationTokenSource.Dispose();
+            _cancellationTokenSource = new CancellationTokenSource();
+            var cancellationToken = _cancellationTokenSource.Token;
+
             // Update configuration
-            ComparisonService.SetIgnoreCollectionOrder(IgnoreCollectionOrder);
-            ComparisonService.SetIgnoreStringCase(IgnoreStringCase);
+            ConfigService.SetIgnoreCollectionOrder(IgnoreCollectionOrder);
+            ConfigService.SetIgnoreStringCase(IgnoreStringCase);
 
             // Apply all ignore rules
             foreach (var rule in IgnoreRules)
             {
-                rule.ApplyTo(ComparisonService.GetCurrentConfig());
+                ConfigService.AddIgnoreRule(rule);
             }
+            
+            ConfigService.ApplyConfiguredSettings();
 
             // Convert our in-memory lists to the format needed by the service
             var folder1FilesList = Folder1Files
@@ -748,33 +636,29 @@
             FolderComparisonResult = await ComparisonService.CompareFoldersAsync(
                 folder1FilesList,
                 folder2FilesList,
-                SelectedModelName);
+                SelectedModelName,
+                cancellationToken);
 
             // Select the first file pair by default if there are differences
             if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 0)
             {
-                SelectedPairIndex = 0;
-                var selectedPair = FolderComparisonResult.FilePairResults[0];
-                ComparisonResult = selectedPair.Result;
-                DifferenceSummary = selectedPair.Summary;
+                SelectPairResult(0);
             }
 
             if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 1 && EnablePatternAnalysis)
             {
                 // Auto-generate pattern analysis if we have multiple files with differences
-                GeneratePatternAnalysis();
+                await GeneratePatternAnalysis();
             }
-            else
-            {
-                // Reset pattern analysis if no differences or only one file
-                PatternAnalysis = null;
-                ShowPatternSummary = false;
-            }
+        }
+        catch (OperationCanceledException)
+        {
+            Logger.LogInformation("Comparison operation was canceled");
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Error comparing files: {Message}", ex.Message);
             await JSRuntime.InvokeVoidAsync("alert", $"Error comparing files: {ex.Message}");
-            Console.WriteLine($"Error running comparison: {ex.Message}");
         }
         finally
         {
@@ -797,37 +681,88 @@
         }
     }
 
-    // Define a helper property for the UI
-    private bool CanRunFolderComparison =>
-        !string.IsNullOrEmpty(SelectedModelName) &&
-        Folder1Files.Count > 0 &&
-        Folder2Files.Count > 0;
+    private void ToggleShowAllDifferences()
+    {
+        ShowAllDifferences = !ShowAllDifferences;
+    }
 
-    // Export methods for folder comparison
+    private IEnumerable<Difference> GetFilteredDifferences()
+    {
+        if (ComparisonResult == null || ComparisonResult.Differences.Count == 0)
+            return Enumerable.Empty<Difference>();
+
+        return ShowAllDifferences
+            ? ComparisonResult.Differences
+            : ComparisonResult.Differences.Take(100);
+    }
+
+    private async Task GeneratePatternAnalysis()
+    {
+        if (FolderComparisonResult == null || FolderComparisonResult.FilePairResults.Count <= 1)
+            return;
+
+        try
+        {
+            IsComparing = true;
+            
+            // Create a new cancellation token
+            var cancellationToken = _cancellationTokenSource.Token;
+
+            // Generate pattern analysis
+            PatternAnalysis = await ComparisonService.AnalyzePatternsAsync(
+                FolderComparisonResult, 
+                cancellationToken);
+                
+            ShowPatternSummary = true;
+        }
+        catch (OperationCanceledException)
+        {
+            Logger.LogInformation("Pattern analysis operation was canceled");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error generating pattern analysis: {Message}", ex.Message);
+            await JSRuntime.InvokeVoidAsync("alert", $"Error generating pattern analysis: {ex.Message}");
+        }
+        finally
+        {
+            IsComparing = false;
+            StateHasChanged();
+        }
+    }
+
+    // Export methods
     private async Task ExportFolderResults()
     {
         if (FolderComparisonResult == null || SelectedPairIndex < 0)
             return;
 
-        var selectedPair = FolderComparisonResult.FilePairResults[SelectedPairIndex];
-        var file1Name = Path.GetFileNameWithoutExtension(selectedPair.File1Name);
-        var file2Name = Path.GetFileNameWithoutExtension(selectedPair.File2Name);
+        try
+        {
+            var selectedPair = FolderComparisonResult.FilePairResults[SelectedPairIndex];
+            var file1Name = Path.GetFileNameWithoutExtension(selectedPair.File1Name);
+            var file2Name = Path.GetFileNameWithoutExtension(selectedPair.File2Name);
 
-        var report = selectedPair.Summary.GenerateReport();
-
-        // Add a header to clarify which files were compared
-        var headerReport = $"# Comparison Report\n\n" +
+            // Add a header to clarify which files were compared
+            var headerInfo = $"# Comparison Report\n\n" +
                           $"V1 file: **{selectedPair.File1Name}**\n\n" +
                           $"V2 file: **{selectedPair.File2Name}**\n\n" +
-                          $"---\n\n" +
-                          report;
+                          $"---\n\n";
 
-        // In a real app, you would use JSInterop to download the file
-        await JSRuntime.InvokeVoidAsync(
-            "saveAsFile",
-            $"comparison-{file1Name}-vs-{file2Name}.md",
-            "text/markdown",
-            headerReport);
+            var report = FileUtils.GenerateReportMarkdown(selectedPair.Summary, headerInfo);
+
+            // In a real app, you would use JSInterop to download the file
+            await JSRuntime.InvokeVoidAsync(
+                "saveAsFile",
+                $"comparison-{file1Name}-vs-{file2Name}.md",
+                "text/markdown",
+                report);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error exporting folder results: {Message}", ex.Message);
+            await JSRuntime.InvokeVoidAsync("alert", $"Error exporting results: {ex.Message}");
+        }
     }
 
     // Export a summary of all folder comparisons
@@ -836,516 +771,21 @@
         if (FolderComparisonResult == null || FolderComparisonResult.FilePairResults.Count == 0)
             return;
 
-        var sb = new StringBuilder();
-
-        sb.AppendLine("# V1 vs V2 Folder Comparison Report");
-        sb.AppendLine();
-        sb.AppendLine($"Date: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
-        sb.AppendLine();
-
-        sb.AppendLine("## Summary");
-        sb.AppendLine();
-        sb.AppendLine("| V1 File | V2 File | Status | Differences |");
-        sb.AppendLine("|---------|---------|--------|------------|");
-
-        foreach (var result in FolderComparisonResult.FilePairResults)
+        try
         {
-            var status = result.AreEqual ? "✓ Equal" : "❌ Different";
-            var diffCount = result.AreEqual ? "0" : result.Summary.TotalDifferenceCount.ToString();
+            string report = FileUtils.GenerateFolderComparisonReport(FolderComparisonResult);
 
-            sb.AppendLine($"| {result.File1Name} | {result.File2Name} | {status} | {diffCount} |");
+            await JSRuntime.InvokeVoidAsync(
+                "saveAsFile",
+                "folder-comparison-report.md",
+                "text/markdown",
+                report);
         }
-
-        sb.AppendLine();
-
-        // Add detailed comparison for each file pair
-        for (int i = 0; i < FolderComparisonResult.FilePairResults.Count; i++)
+        catch (Exception ex)
         {
-            var result = FolderComparisonResult.FilePairResults[i];
-
-            sb.AppendLine($"## Pair {i + 1}: {result.File1Name} vs {result.File2Name}");
-            sb.AppendLine();
-
-            if (result.AreEqual)
-            {
-                sb.AppendLine("**No differences found.** The objects are identical according to current comparison rules.");
-            }
-            else
-            {
-                // Include only the most important parts of the report for each file
-                sb.AppendLine($"**Total Differences: {result.Summary.TotalDifferenceCount}**");
-                sb.AppendLine();
-
-                // Add top differences by category
-                sb.AppendLine("### Differences by Category");
-                sb.AppendLine();
-                sb.AppendLine("| Category | Count | Percentage |");
-                sb.AppendLine("|----------|-------|------------|");
-
-                foreach (var category in result.Summary.DifferencesByChangeType.OrderByDescending(c => c.Value.Count).Take(5))
-                {
-                    sb.AppendLine($"| {FormatCategoryName(category.Key)} | {category.Value.Count} | {result.Summary.CategoryPercentages[category.Key]}% |");
-                }
-
-                sb.AppendLine();
-
-                // Add a sample of actual differences
-                sb.AppendLine("### Sample Differences");
-                sb.AppendLine();
-
-                var sampleDiffs = result.Result.Differences.Take(10).ToList();
-                foreach (var diff in sampleDiffs)
-                {
-                    sb.AppendLine($"- Property: `{diff.PropertyName}`");
-                    sb.AppendLine($"  - V1: `{FormatValue(diff.Object1Value)}`");
-                    sb.AppendLine($"  - V2: `{FormatValue(diff.Object2Value)}`");
-                    sb.AppendLine();
-                }
-
-                if (result.Result.Differences.Count > 10)
-                {
-                    sb.AppendLine($"*...and {result.Result.Differences.Count - 10} more differences*");
-                    sb.AppendLine();
-                }
-            }
-
-            sb.AppendLine("---");
-            sb.AppendLine();
+            Logger.LogError(ex, "Error exporting all folder results: {Message}", ex.Message);
+            await JSRuntime.InvokeVoidAsync("alert", $"Error exporting results: {ex.Message}");
         }
-
-        await JSRuntime.InvokeVoidAsync(
-            "saveAsFile",
-            "folder-comparison-report.md",
-            "text/markdown",
-            sb.ToString());
-    }
-
-    public string GeneratePatternAnalysisReport(ComparisonPatternAnalysis analysis)
-    {
-        var sb = new StringBuilder();
-
-        sb.AppendLine("# XML Comparison Pattern Analysis");
-        sb.AppendLine();
-        sb.AppendLine("## Summary");
-        sb.AppendLine();
-        sb.AppendLine($"- **Total Files Compared:** {analysis.TotalFilesPaired} pairs");
-        sb.AppendLine($"- **Files With Differences:** {analysis.FilesWithDifferences} pairs");
-        sb.AppendLine($"- **Total Differences Found:** {analysis.TotalDifferences}");
-        sb.AppendLine();
-
-        // Category breakdown
-        sb.AppendLine("## Differences by Category");
-        sb.AppendLine();
-        sb.AppendLine("| Category | Count | Percentage |");
-        sb.AppendLine("|----------|-------|------------|");
-
-        foreach (var category in analysis.TotalByCategory.OrderByDescending(c => c.Value))
-        {
-            if (category.Value > 0)
-            {
-                double percentage = (double)category.Value / analysis.TotalDifferences * 100;
-                sb.AppendLine($"| {FormatCategoryName(category.Key)} | {category.Value} | {percentage:F1}% |");
-            }
-        }
-        sb.AppendLine();
-
-        // Common patterns across files
-        sb.AppendLine("## Common Difference Patterns");
-        sb.AppendLine();
-        sb.AppendLine("The following property paths showed differences in multiple files:");
-        sb.AppendLine();
-        sb.AppendLine("| Property Path | Files Affected | Total Occurrences |");
-        sb.AppendLine("|--------------|----------------|-------------------|");
-
-        foreach (var pattern in analysis.CommonPathPatterns)
-        {
-            sb.AppendLine($"| `{pattern.PatternPath}` | {pattern.FileCount} | {pattern.OccurrenceCount} |");
-        }
-        sb.AppendLine();
-
-        // Common value changes
-        sb.AppendLine("## Common Property Value Changes");
-        sb.AppendLine();
-        sb.AppendLine("The following specific property value changes appeared in multiple files:");
-        sb.AppendLine();
-
-        foreach (var change in analysis.CommonPropertyChanges.Take(10))
-        {
-            sb.AppendLine($"### `{change.PropertyName}`");
-            sb.AppendLine();
-            sb.AppendLine($"Changed in {change.AffectedFiles.Count} files, {change.OccurrenceCount} total occurrences");
-            sb.AppendLine();
-
-            foreach (var valueChange in change.CommonChanges)
-            {
-                sb.AppendLine($"- From: `{TruncateValue(valueChange.Key, 50)}` → To: `{TruncateValue(valueChange.Value, 50)}`");
-            }
-            sb.AppendLine();
-            sb.AppendLine("Affected files:");
-            sb.AppendLine();
-            foreach (var file in change.AffectedFiles.Take(5))
-            {
-                sb.AppendLine($"- {file}");
-            }
-
-            if (change.AffectedFiles.Count > 5)
-            {
-                sb.AppendLine($"- ...and {change.AffectedFiles.Count - 5} more");
-            }
-
-            sb.AppendLine();
-        }
-
-        // File groups
-        if (analysis.SimilarFileGroups.Count > 0)
-        {
-            sb.AppendLine("## File Similarity Groups");
-            sb.AppendLine();
-            sb.AppendLine("Files with similar difference patterns have been grouped:");
-            sb.AppendLine();
-
-            foreach (var group in analysis.SimilarFileGroups.OrderByDescending(g => g.FileCount))
-            {
-                sb.AppendLine($"### {group.GroupName} ({group.FileCount} files)");
-                sb.AppendLine();
-                sb.AppendLine($"**Pattern:** {group.CommonPattern}");
-                sb.AppendLine();
-                sb.AppendLine("Files in this group:");
-                sb.AppendLine();
-
-                foreach (var file in group.FilePairs)
-                {
-                    sb.AppendLine($"- {file}");
-                }
-
-                sb.AppendLine();
-            }
-        }
-
-        return sb.ToString();
-    }
-
-    private string FormatCategoryName(DifferenceCategory category)
-    {
-        switch (category)
-        {
-            case DifferenceCategory.TextContentChanged:
-                return "Text Content Changed";
-            case DifferenceCategory.NumericValueChanged:
-                return "Numeric Value Changed";
-            case DifferenceCategory.DateTimeChanged:
-                return "Date/Time Changed";
-            case DifferenceCategory.BooleanValueChanged:
-                return "Boolean Value Changed";
-            case DifferenceCategory.CollectionItemChanged:
-                return "Collection Item Changed";
-            case DifferenceCategory.ItemAdded:
-                return "Item Added";
-            case DifferenceCategory.ItemRemoved:
-                return "Item Removed";
-            case DifferenceCategory.NullValueChange:
-                return "Null Value Change";
-            default:
-                return "Other";
-        }
-    }
-
-    private string TruncateValue(string value, int maxLength)
-    {
-        if (string.IsNullOrEmpty(value)) return "null";
-        return value.Length <= maxLength ? value : value.Substring(0, maxLength - 3) + "...";
-    }
-
-    public ComparisonPatternAnalysis AnalyzePatterns(MultiFolderComparisonResult folderResult)
-    {
-        var analysis = new ComparisonPatternAnalysis
-            {
-                TotalFilesPaired = folderResult.TotalPairsCompared,
-                FilesWithDifferences = folderResult.FilePairResults.Count(r => !r.AreEqual),
-                TotalDifferences = folderResult.FilePairResults.Sum(r => r.Summary?.TotalDifferenceCount ?? 0)
-            };
-
-        // Initialize category counts
-        foreach (DifferenceCategory category in Enum.GetValues(typeof(DifferenceCategory)))
-        {
-            analysis.TotalByCategory[category] = 0;
-        }
-
-        // Process all differences to find common patterns
-        var allPathPatterns = new Dictionary<string, GlobalPatternInfo>();
-        var allPropertyChanges = new Dictionary<string, GlobalPropertyChangeInfo>();
-
-        foreach (var filePair in folderResult.FilePairResults)
-        {
-            if (filePair.AreEqual) continue;
-
-            var pairIdentifier = $"{filePair.File1Name} vs {filePair.File2Name}";
-
-            // Add to category counts
-            foreach (var category in filePair.Summary.DifferencesByChangeType)
-            {
-                if (analysis.TotalByCategory.ContainsKey(category.Key))
-                {
-                    analysis.TotalByCategory[category.Key] += category.Value.Count;
-                }
-            }
-
-            // Process each difference
-            foreach (var diff in filePair.Result.Differences)
-            {
-                // Normalize the property path (remove indices, backing fields)
-                string normalizedPath = NormalizePropertyPath(diff.PropertyName);
-
-                // Create pattern info if not exists
-                if (!allPathPatterns.ContainsKey(normalizedPath))
-                {
-                    allPathPatterns[normalizedPath] = new GlobalPatternInfo
-                        {
-                            PatternPath = normalizedPath,
-                            OccurrenceCount = 0,
-                            FileCount = 0
-                        };
-                }
-
-                // Update pattern info
-                var patternInfo = allPathPatterns[normalizedPath];
-                patternInfo.OccurrenceCount++;
-                if (!patternInfo.AffectedFiles.Contains(pairIdentifier))
-                {
-                    patternInfo.AffectedFiles.Add(pairIdentifier);
-                    patternInfo.FileCount++;
-                }
-
-                // Add example if we don't have many
-                if (patternInfo.Examples.Count < 3)
-                {
-                    patternInfo.Examples.Add(diff);
-                }
-
-                // Track property change info (create key from property + old value + new value)
-                var oldValue = diff.Object1Value?.ToString() ?? "null";
-                var newValue = diff.Object2Value?.ToString() ?? "null";
-                var changeKey = $"{normalizedPath}|{oldValue}|{newValue}";
-
-                if (!allPropertyChanges.ContainsKey(changeKey))
-                {
-                    allPropertyChanges[changeKey] = new GlobalPropertyChangeInfo
-                        {
-                            PropertyName = normalizedPath,
-                            OccurrenceCount = 0,
-                            CommonChanges = new Dictionary<string, string>
-                    {
-                        { oldValue, newValue }
-                    }
-                        };
-                }
-
-                // Update property change info
-                var changeInfo = allPropertyChanges[changeKey];
-                changeInfo.OccurrenceCount++;
-                if (!changeInfo.AffectedFiles.Contains(pairIdentifier))
-                {
-                    changeInfo.AffectedFiles.Add(pairIdentifier);
-                }
-            }
-        }
-
-        // Sort and select most common patterns
-        analysis.CommonPathPatterns = allPathPatterns.Values
-            .Where(p => p.FileCount > 1) // Only patterns that appear in multiple files
-            .OrderByDescending(p => p.FileCount)
-            .ThenByDescending(p => p.OccurrenceCount)
-            .Take(20) // Limit to top 20 patterns
-            .ToList();
-
-        // Sort and select most common property changes
-        analysis.CommonPropertyChanges = allPropertyChanges.Values
-            .Where(c => c.AffectedFiles.Count > 1) // Only changes that appear in multiple files
-            .OrderByDescending(c => c.AffectedFiles.Count)
-            .ThenByDescending(c => c.OccurrenceCount)
-            .Take(20) // Limit to top 20 common changes
-            .ToList();
-
-        // Group similar files based on their difference patterns
-        GroupSimilarFiles(folderResult, analysis);
-
-        return analysis;
-    }
-
-    private string NormalizePropertyPath(string propertyPath)
-    {
-        // Replace array indices with [*]
-        var normalized = System.Text.RegularExpressions.Regex.Replace(propertyPath, @"\[\d+\]", "[*]");
-
-        // Remove backing fields
-        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, @"<(\w+)>k__BackingField", "$1");
-
-        return normalized;
-    }
-
-    // Group similar files based on their difference patterns
-    private void GroupSimilarFiles(MultiFolderComparisonResult folderResult, ComparisonPatternAnalysis analysis)
-    {
-        // Skip if not enough files with differences
-        if (analysis.FilesWithDifferences <= 1)
-            return;
-
-        // Create fingerprints of each file's differences
-        var fileFingerprints = new Dictionary<string, HashSet<string>>();
-
-        foreach (var filePair in folderResult.FilePairResults)
-        {
-            if (filePair.AreEqual) continue;
-
-            var pairIdentifier = $"{filePair.File1Name} vs {filePair.File2Name}";
-            var fingerprint = new HashSet<string>();
-
-            foreach (var diff in filePair.Result.Differences)
-            {
-                fingerprint.Add(NormalizePropertyPath(diff.PropertyName));
-            }
-
-            fileFingerprints[pairIdentifier] = fingerprint;
-        }
-
-        // Build similarity matrix
-        var similarities = new Dictionary<(string, string), double>();
-        var fileIds = fileFingerprints.Keys.ToList();
-
-        for (int i = 0; i < fileIds.Count; i++)
-        {
-            for (int j = i + 1; j < fileIds.Count; j++)
-            {
-                var file1 = fileIds[i];
-                var file2 = fileIds[j];
-                var set1 = fileFingerprints[file1];
-                var set2 = fileFingerprints[file2];
-
-                // Calculate Jaccard similarity
-                var intersection = set1.Intersect(set2).Count();
-                var union = set1.Count + set2.Count - intersection;
-                var similarity = (double)intersection / (union == 0 ? 1 : union);
-
-                similarities[(file1, file2)] = similarity;
-            }
-        }
-
-        // Group files using a simple threshold-based approach
-        var grouped = new HashSet<string>();
-        var similarityThreshold = 0.6; // 60% similarity to be considered in the same group
-
-        foreach (var similarity in similarities.OrderByDescending(s => s.Value))
-        {
-            if (similarity.Value < similarityThreshold)
-                continue;
-
-            var file1 = similarity.Key.Item1;
-            var file2 = similarity.Key.Item2;
-
-            // Find or create a group
-            var existingGroup = analysis.SimilarFileGroups.FirstOrDefault(g =>
-                g.FilePairs.Contains(file1) || g.FilePairs.Contains(file2));
-
-            if (existingGroup != null)
-            {
-                // Add to existing group
-                if (!existingGroup.FilePairs.Contains(file1))
-                {
-                    existingGroup.FilePairs.Add(file1);
-                    existingGroup.FileCount++;
-                    grouped.Add(file1);
-                }
-
-                if (!existingGroup.FilePairs.Contains(file2))
-                {
-                    existingGroup.FilePairs.Add(file2);
-                    existingGroup.FileCount++;
-                    grouped.Add(file2);
-                }
-            }
-            else
-            {
-                // Create new group
-                var newGroup = new SimilarFileGroup
-                    {
-                        GroupName = $"Group {analysis.SimilarFileGroups.Count + 1}",
-                        FileCount = 0,
-                        FilePairs = new List<string>(),
-                        CommonPattern = "Files with similar difference patterns"
-                    };
-
-                if (!grouped.Contains(file1))
-                {
-                    newGroup.FilePairs.Add(file1);
-                    newGroup.FileCount++;
-                    grouped.Add(file1);
-                }
-
-                if (!grouped.Contains(file2))
-                {
-                    newGroup.FilePairs.Add(file2);
-                    newGroup.FileCount++;
-                    grouped.Add(file2);
-                }
-
-                if (newGroup.FileCount > 0)
-                {
-                    analysis.SimilarFileGroups.Add(newGroup);
-                }
-            }
-        }
-
-        // For each group, identify common patterns
-        foreach (var group in analysis.SimilarFileGroups)
-        {
-            // Find patterns common to all files in the group
-            HashSet<string> commonPatterns = null;
-
-            foreach (var file in group.FilePairs)
-            {
-                var filePatterns = fileFingerprints[file];
-
-                if (commonPatterns == null)
-                {
-                    commonPatterns = new HashSet<string>(filePatterns);
-                }
-                else
-                {
-                    commonPatterns.IntersectWith(filePatterns);
-                }
-            }
-
-            if (commonPatterns != null && commonPatterns.Count > 0)
-            {
-                group.CommonPattern = $"{commonPatterns.Count} common difference pattern(s) including: " +
-                    string.Join(", ", commonPatterns.Take(3).Select(p => $"'{p}'"));
-            }
-        }
-
-        // Add singleton groups for any files not grouped
-        foreach (var file in fileFingerprints.Keys)
-        {
-            if (!grouped.Contains(file))
-            {
-                analysis.SimilarFileGroups.Add(new SimilarFileGroup
-                    {
-                        GroupName = $"Group {analysis.SimilarFileGroups.Count + 1}",
-                        FileCount = 1,
-                        FilePairs = new List<string> { file },
-                        CommonPattern = "Unique difference pattern"
-                    });
-            }
-        }
-    }
-
-    private void GeneratePatternAnalysis()
-    {
-        if (FolderComparisonResult == null || FolderComparisonResult.FilePairResults.Count <= 1)
-            return;
-
-        // Create a new pattern analyzer
-        PatternAnalysis = AnalyzePatterns(FolderComparisonResult);
-        ShowPatternSummary = true;
     }
 
     // Export pattern analysis report
@@ -1354,12 +794,33 @@
         if (PatternAnalysis == null)
             return;
 
-        var report = GeneratePatternAnalysisReport(PatternAnalysis);
+        try
+        {
+            var report = FileUtils.GeneratePatternAnalysisReport(PatternAnalysis);
 
-        await JSRuntime.InvokeVoidAsync(
-            "saveAsFile",
-            filename,
-            "text/markdown",
-            report);
+            await JSRuntime.InvokeVoidAsync(
+                "saveAsFile",
+                filename,
+                "text/markdown",
+                report);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error exporting pattern analysis: {Message}", ex.Message);
+            await JSRuntime.InvokeVoidAsync("alert", $"Error exporting pattern analysis: {ex.Message}");
+        }
+    }
+
+    private string FormatValue(object value)
+    {
+        if (value == null) return "null";
+        
+        if (value is DateTime dt)
+            return dt.ToString("yyyy-MM-dd HH:mm:ss");
+            
+        if (value is string str && str.Length > 100)
+            return str.Substring(0, 97) + "...";
+            
+        return value.ToString();
     }
 }
