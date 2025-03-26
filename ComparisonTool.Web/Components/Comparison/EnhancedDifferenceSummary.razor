@@ -1,6 +1,7 @@
 ﻿@using ComparisonTool.Core.Comparison.Analysis
 @using KellermanSoftware.CompareNetObjects
 @using KellermanSoftware.CompareNetObjects
+@inject IJSRuntime JSRuntime
 
 <div class="card">
     <div class="card-header">
@@ -280,13 +281,13 @@
         // In a real implementation, you would use a JS library like Chart.js
 
         // Example implementation would look like:
-        // await JSRuntime.InvokeVoidAsync("renderPieChart", "categoriesChart",
-        //     Summary.CategoryPercentages.Keys.Select(k => FormatCategoryName(k)),
-        //     Summary.CategoryPercentages.Values);
+        await JSRuntime.InvokeVoidAsync("renderPieChart", "categoriesChart",
+            Summary.CategoryPercentages.Keys.Select(k => FormatCategoryName(k)),
+            Summary.CategoryPercentages.Values);
 
-        // await JSRuntime.InvokeVoidAsync("renderPieChart", "objectsChart",
-        //     Summary.RootObjectPercentages.Keys,
-        //     Summary.RootObjectPercentages.Values);
+        await JSRuntime.InvokeVoidAsync("renderPieChart", "objectsChart",
+            Summary.RootObjectPercentages.Keys,
+            Summary.RootObjectPercentages.Values);
     }
 
     private string FormatValue(object value)
