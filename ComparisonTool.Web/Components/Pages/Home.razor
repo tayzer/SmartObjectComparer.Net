@@ -219,17 +219,14 @@
             PatternAnalysis = null;
             ShowPatternSummary = false;
 
-            // Cancel any existing operations
             await _cancellationTokenSource.CancelAsync();
             _cancellationTokenSource.Dispose();
             _cancellationTokenSource = new CancellationTokenSource();
             var cancellationToken = _cancellationTokenSource.Token;
 
-            // Update configuration
             ConfigService.SetIgnoreCollectionOrder(IgnoreCollectionOrder);
             ConfigService.SetIgnoreStringCase(IgnoreStringCase);
 
-            // Apply all ignore rules
             foreach (var rule in IgnoreRules)
             {
                 ConfigService.AddIgnoreRule(rule);
@@ -303,10 +300,8 @@
         {
             IsComparing = true;
 
-            // Create a new cancellation token
             var cancellationToken = _cancellationTokenSource.Token;
 
-            // Generate pattern analysis
             PatternAnalysis = await ComparisonService.AnalyzePatternsAsync(
                 FolderComparisonResult,
                 cancellationToken);
@@ -340,7 +335,6 @@
             var file1Name = Path.GetFileNameWithoutExtension(selectedPair.File1Name);
             var file2Name = Path.GetFileNameWithoutExtension(selectedPair.File2Name);
 
-            // Add a header to clarify which files were compared
             var headerInfo = $"# Comparison Report\n\n" +
                           $"V1 file: **{selectedPair.File1Name}**\n\n" +
                           $"V2 file: **{selectedPair.File2Name}**\n\n" +
@@ -348,7 +342,6 @@
 
             var report = FileUtilities.GenerateReportMarkdown(selectedPair.Summary, headerInfo);
 
-            // In a real app, you would use JSInterop to download the file
             await JSRuntime.InvokeVoidAsync(
                 "saveAsFile",
                 $"comparison-{file1Name}-vs-{file2Name}.md",

@@ -1,36 +1,23 @@
-﻿// This file should be placed in wwwroot/js/app.js
-
-// Save content as a file 
-function saveAsFile(filename, contentType, content) {
-    // Create a blob with the content
+﻿function saveAsFile(filename, contentType, content) {
     const blob = new Blob([content], { type: contentType });
-
-    // Create a URL for the blob
     const url = URL.createObjectURL(blob);
 
-    // Create a temporary link element
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
 
-    // Append the link to the body
     document.body.appendChild(a);
 
-    // Trigger a click on the link
     a.click();
 
-    // Clean up
     setTimeout(() => {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     }, 0);
 }
 
-// Render a pie chart (using Chart.js)
 function renderPieChart(canvasId, labels, data) {
     const ctx = document.getElementById(canvasId).getContext('2d');
-
-    // Generate colors
     const colors = generateColors(labels.length);
 
     new Chart(ctx, {
@@ -55,7 +42,6 @@ function renderPieChart(canvasId, labels, data) {
     });
 }
 
-// Generate colors for charts
 function generateColors(count) {
     const colors = [];
     const baseColors = [
