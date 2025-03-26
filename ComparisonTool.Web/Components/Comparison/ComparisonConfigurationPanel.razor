@@ -1,0 +1,201 @@
+﻿@namespace ComparisonTool.Web.Components.Comparison
+@using ComparisonTool.Core
+@using ComparisonTool.Core.Comparison.Configuration
+
+<div class="card">
+    <div class="card-header">
+        <h5>Step 2: Configure Comparison</h5>
+    </div>
+    <div class="card-body">
+        <div class="form-group form-check">
+            <input type="checkbox" class="form-check-input" id="ignoreOrder"
+                   @bind="IgnoreCollectionOrderLocal" />
+            <label class="form-check-label" for="ignoreOrder">
+                Ignore Collection Ordering
+            </label>
+        </div>
+
+        <div class="form-group form-check mt-2">
+            <input type="checkbox" class="form-check-input" id="ignoreCase"
+                   @bind="IgnoreStringCaseLocal" />
+            <label class="form-check-label" for="ignoreCase">
+                Ignore String Case
+            </label>
+        </div>
+
+        <div class="form-group mt-3">
+            <label>Properties to Ignore:</label>
+            <button class="btn btn-sm btn-primary ms-2" @onclick="OpenPropertySelector">
+                Configure Properties
+            </button>
+
+            @if (IgnoreRules.Any())
+            {
+                <div class="mt-2">
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            Currently Ignored Properties (@IgnoreRules.Count)
+                        </div>
+                        <ul class="list-group list-group-flush">
+                            @foreach (var rule in IgnoreRules)
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <span class="me-2">@GetIgnoreRuleDescription(rule)</span>
+                                    </div>
+                                    <button class="btn btn-sm btn-danger" @onclick="() => RemoveIgnoreRule(rule)">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-info mt-2">
+                    No properties are currently being ignored. Click the button to configure.
+                </div>
+            }
+        </div>
+
+        <div class="form-group form-check mt-2">
+            <input type="checkbox" class="form-check-input" id="enablePatternAnalysis"
+                   @bind="EnablePatternAnalysisLocal" />
+            <label class="form-check-label" for="enablePatternAnalysis">
+                Enable Cross-File Pattern Analysis
+            </label>
+            <small class="form-text text-muted d-block">
+                Analyzes common patterns and changes across multiple files. May take longer for large sets of files.
+            </small>
+        </div>
+
+        <button class="btn btn-primary mt-3" @onclick="RunComparison"
+                disabled="@(!CanRunComparison)">
+            Run Comparison
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public bool IgnoreCollectionOrder { get; set; }
+
+    [Parameter]
+    public bool IgnoreStringCase { get; set; }
+
+    [Parameter]
+    public List<IgnoreRule> IgnoreRules { get; set; } = new();
+
+    [Parameter]
+    public bool EnablePatternAnalysis { get; set; }
+
+    [Parameter]
+    public bool CanRunComparison { get; set; }
+
+    [Parameter]
+    public Type ModelType { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> OnIgnoreCollectionOrderChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> OnIgnoreStringCaseChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<bool> OnEnablePatternAnalysisChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<IgnoreRule> OnIgnoreRuleAdded { get; set; }
+
+    [Parameter]
+    public EventCallback<IgnoreRule> OnIgnoreRuleRemoved { get; set; }
+
+    [Parameter]
+    public EventCallback OnRunComparison { get; set; }
+
+    private bool IgnoreCollectionOrderLocal
+    {
+        get => IgnoreCollectionOrder;
+        set
+        {
+            if (IgnoreCollectionOrder != value)
+            {
+                IgnoreCollectionOrder = value;
+                OnIgnoreCollectionOrderChanged.InvokeAsync(value);
+            }
+        }
+    }
+
+    private bool IgnoreStringCaseLocal
+    {
+        get => IgnoreStringCase;
+        set
+        {
+            if (IgnoreStringCase != value)
+            {
+                IgnoreStringCase = value;
+                OnIgnoreStringCaseChanged.InvokeAsync(value);
+            }
+        }
+    }
+
+    private bool EnablePatternAnalysisLocal
+    {
+        get => EnablePatternAnalysis;
+        set
+        {
+            if (EnablePatternAnalysis != value)
+            {
+                EnablePatternAnalysis = value;
+                OnEnablePatternAnalysisChanged.InvokeAsync(value);
+            }
+        }
+    }
+
+    private async Task OpenPropertySelector()
+    {
+        await OnPropertySelectorOpened.InvokeAsync();
+    }
+
+    private async Task RemoveIgnoreRule(IgnoreRule rule)
+    {
+        await OnIgnoreRuleRemoved.InvokeAsync(rule);
+    }
+
+    private async Task RunComparison()
+    {
+        await OnRunComparison.InvokeAsync();
+    }
+
+    private string GetIgnoreRuleDescription(IgnoreRule rule)
+    {
+        var description = rule.PropertyPath;
+
+        if (rule.IgnoreCompletely)
+        {
+            description += " (Ignored completely)";
+        }
+        else
+        {
+            var options = new List<string>();
+
+            if (rule.IgnoreCollectionOrder)
+                options.Add("ignore order");
+
+            if (rule.IgnoreCase)
+                options.Add("ignore case");
+
+            if (options.Any())
+            {
+                description += $" ({string.Join(", ", options)})";
+            }
+        }
+
+        return description;
+    }
+
+    [Parameter]
+    public EventCallback OnPropertySelectorOpened { get; set; }
+}

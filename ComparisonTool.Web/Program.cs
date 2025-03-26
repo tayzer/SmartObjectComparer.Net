@@ -1,4 +1,4 @@
-using ComparisonTool.Core;
+using ComparisonTool.Core.DI;
 using ComparisonTool.Web.Components;
 using Serilog;
 

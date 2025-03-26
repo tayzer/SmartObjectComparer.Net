@@ -1,0 +1,114 @@
+﻿@namespace ComparisonTool.Web.Components.Comparison
+@using ComparisonTool.Core
+@using ComparisonTool.Core.Comparison.Analysis
+@using ComparisonTool.Core.Comparison.Results
+@using KellermanSoftware.CompareNetObjects
+
+<div class="mt-4">
+    <div class="card">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                Comparison: @SelectedPair.File1Name vs @SelectedPair.File2Name
+            </h5>
+            <button class="btn btn-sm btn-outline-primary" @onclick="ExportResults">
+                <i class="bi bi-download me-1"></i> Export This Result
+            </button>
+        </div>
+        <div class="card-body">
+            <EnhancedDifferenceSummary Summary="DifferenceSummary" />
+        </div>
+    </div>
+</div>
+
+@if (!DifferenceSummary.AreEqual)
+{
+    <div class="mt-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Detailed Differences</h5>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="OnToggleShowAll">
+                    @(ShowAllDifferences ? "Show Top 100" : "Show All")
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Property</th>
+                                <th>V1 Value (@SelectedPair.File1Name)</th>
+                                <th>V2 Value (@SelectedPair.File2Name)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var diff in GetFilteredDifferences())
+                            {
+                                <tr>
+                                    <td>@diff.PropertyName</td>
+                                    <td class="text-danger">@FormatValue(diff.Object1Value)</td>
+                                    <td class="text-success">@FormatValue(diff.Object2Value)</td>
+                                </tr>
+                            }
+                            @if (ComparisonResult.Differences.Count > 100 && !ShowAllDifferences)
+                            {
+                                <tr>
+                                    <td colspan="3" class="text-center">
+                                        <em>And @(ComparisonResult.Differences.Count - 100) more differences...</em>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public FilePairComparisonResult SelectedPair { get; set; }
+
+    [Parameter]
+    public DifferenceSummary DifferenceSummary { get; set; }
+
+    [Parameter]
+    public ComparisonResult ComparisonResult { get; set; }
+
+    [Parameter]
+    public bool ShowAllDifferences { get; set; }
+
+    [Parameter]
+    public EventCallback OnToggleShowAll { get; set; }
+
+    [Parameter]
+    public EventCallback OnExportResults { get; set; }
+
+    private IEnumerable<Difference> GetFilteredDifferences()
+    {
+        if (ComparisonResult == null || ComparisonResult.Differences.Count == 0)
+            return Enumerable.Empty<Difference>();
+
+        return ShowAllDifferences
+            ? ComparisonResult.Differences
+            : ComparisonResult.Differences.Take(100);
+    }
+
+    private async Task ExportResults()
+    {
+        await OnExportResults.InvokeAsync();
+    }
+
+    private string FormatValue(object value)
+    {
+        if (value == null) return "null";
+
+        if (value is DateTime dt)
+            return dt.ToString("yyyy-MM-dd HH:mm:ss");
+
+        if (value is string str && str.Length > 100)
+            return str.Substring(0, 97) + "...";
+
+        return value.ToString();
+    }
+}

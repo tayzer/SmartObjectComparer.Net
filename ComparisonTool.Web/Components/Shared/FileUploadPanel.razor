@@ -1,0 +1,80 @@
+﻿@namespace ComparisonTool.Web.Components.Shared
+@inject IJSRuntime JSRuntime
+
+<div class="form-group mt-3">
+    <label>@Label</label>
+    <InputFile class="form-control" OnChange="HandleFileUpload" multiple />
+
+    @if (Files.Any())
+    {
+        <div class="mt-2">
+            <div class="card">
+                <div class="card-header bg-light">
+                    Files (@Files.Count)
+                </div>
+                <ul class="list-group list-group-flush" style="max-height: 200px; overflow-y: auto;">
+                    @for (int i = 0; i < Files.Count; i++)
+                    {
+                        var index = i;
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <small>@Files[i].FileName</small>
+                            </div>
+                            <button class="btn btn-sm btn-danger" @onclick="() => RemoveFile(index)">
+                                <i class="bi bi-x"></i>
+                            </button>
+                        </li>
+                    }
+                </ul>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string Label { get; set; }
+
+    [Parameter]
+    public List<(MemoryStream Stream, string FileName)> Files { get; set; } = new();
+
+    [Parameter]
+    public EventCallback<List<(MemoryStream Stream, string FileName)>> OnFilesChanged { get; set; }
+
+    private async Task HandleFileUpload(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var updatedFiles = new List<(MemoryStream Stream, string FileName)>(Files);
+        
+            foreach (var file in e.GetMultipleFiles(20))
+            {
+                var stream = new MemoryStream();
+                await file.OpenReadStream(maxAllowedSize: 10485760).CopyToAsync(stream);
+                stream.Position = 0;
+
+                updatedFiles.Add((Stream: stream, FileName: file.Name));
+            }
+
+            updatedFiles = updatedFiles.OrderBy(f => f.FileName).ToList();
+        
+            Files = updatedFiles;
+            await OnFilesChanged.InvokeAsync(updatedFiles);
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading files: {ex.Message}");
+        }
+    }
+
+    private async Task RemoveFile(int index)
+    {
+        if (index >= 0 && index < Files.Count)
+        {
+            var updatedFiles = new List<(MemoryStream, string)>(Files);
+            updatedFiles.RemoveAt(index);
+            Files = updatedFiles;
+            await OnFilesChanged.InvokeAsync(updatedFiles);
+        }
+    }
+}

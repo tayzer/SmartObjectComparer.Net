@@ -1,12 +1,19 @@
-﻿@rendermode InteractiveServer
-@page "/"
+﻿@page "/"
+@rendermode InteractiveServer
 @using System.IO
+@using ComparisonTool.Core.Comparison
+@using ComparisonTool.Core.Comparison.Analysis
+@using ComparisonTool.Core.Comparison.Configuration
+@using ComparisonTool.Core.Comparison.Results
+@using ComparisonTool.Core.Serialization
+@using ComparisonTool.Core.Utilities
 @using KellermanSoftware.CompareNetObjects
+@using Microsoft.AspNetCore.Components
 @implements IDisposable
 @inject IXmlDeserializationService DeserializationService
 @inject IComparisonConfigurationService ConfigService
 @inject IComparisonService ComparisonService
-@inject IFileUtils FileUtils
+@inject IFileUtilities FileUtilities
 @inject IJSRuntime JSRuntime
 @inject ILogger<Home> Logger
 
@@ -14,360 +21,66 @@
 
 <div class="row mt-4">
     <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">
-                <h5>Step 1: Select XML Files</h5>
-            </div>
-            <div class="card-body">
-                <div class="form-group">
-                    <label>Select Domain Model:</label>
-                    <select class="form-control" @bind="SelectedModelName">
-                        @foreach (var modelName in DeserializationService.GetRegisteredModelNames())
-                        {
-                            <option value="@modelName">@modelName</option>
-                        }
-                    </select>
-                </div>
-
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="form-group mt-3">
-                            <label>V1 Files (select multiple):</label>
-                            <InputFile class="form-control" OnChange="HandleFolder1Upload" multiple />
-
-                            @if (Folder1Files.Any())
-                            {
-                                <div class="mt-2">
-                                    <div class="card">
-                                        <div class="card-header bg-light">
-                                            V1 Files (@Folder1Files.Count)
-                                        </div>
-                                        <ul class="list-group list-group-flush" style="max-height: 200px; overflow-y: auto;">
-                                            @for (int i = 0; i < Folder1Files.Count; i++)
-                                            {
-                                                var index = i;
-                                                <li class="list-group-item d-flex justify-content-between align-items-center">
-                                                    <div>
-                                                        <small>@Folder1Files[i].FileName</small>
-                                                    </div>
-                                                    <button class="btn btn-sm btn-danger" @onclick="() => RemoveFolder1File(index)">
-                                                        <i class="bi bi-x"></i>
-                                                    </button>
-                                                </li>
-                                            }
-                                        </ul>
-                                    </div>
-                                </div>
-                            }
-                        </div>
-                    </div>
-
-                    <div class="col-md-6">
-                        <div class="form-group mt-3">
-                            <label>V2 Files (select multiple):</label>
-                            <InputFile class="form-control" OnChange="HandleFolder2Upload" multiple />
-
-                            @if (Folder2Files.Any())
-                            {
-                                <div class="mt-2">
-                                    <div class="card">
-                                        <div class="card-header bg-light">
-                                            V2 Files (@Folder2Files.Count)
-                                        </div>
-                                        <ul class="list-group list-group-flush" style="max-height: 200px; overflow-y: auto;">
-                                            @for (int i = 0; i < Folder2Files.Count; i++)
-                                            {
-                                                var index = i;
-                                                <li class="list-group-item d-flex justify-content-between align-items-center">
-                                                    <div>
-                                                        <small>@Folder2Files[i].FileName</small>
-                                                    </div>
-                                                    <button class="btn btn-sm btn-danger" @onclick="() => RemoveFolder2File(index)">
-                                                        <i class="bi bi-x"></i>
-                                                    </button>
-                                                </li>
-                                            }
-                                        </ul>
-                                    </div>
-                                </div>
-                            }
-                        </div>
-                    </div>
-                </div>
-
-                @if (Folder1Files.Any() && Folder2Files.Any())
-                {
-                    <div class="alert alert-info mt-3">
-                        <strong>Files will be paired for comparison in order.</strong><br />
-                        V1 files are sorted by filename, and V2 files are sorted by filename. Each V1 file will be compared with the corresponding V2 file.
-                    </div>
-                }
-            </div>
-        </div>
+        <FileSelector 
+            ModelNames="@DeserializationService.GetRegisteredModelNames()"
+            SelectedModelName="@SelectedModelName"
+            OnModelNameChanged="@(name => SelectedModelName = name)"
+            Folder1Files="@Folder1Files"
+            OnFolder1FilesChanged="@HandleFolder1FilesChanged"
+            Folder2Files="@Folder2Files"
+            OnFolder2FilesChanged="@HandleFolder2FilesChanged" />
     </div>
-
+    
     <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">
-                <h5>Step 2: Configure Comparison</h5>
-            </div>
-            <div class="card-body">
-                <div class="form-group form-check">
-                    <input type="checkbox" class="form-check-input" id="ignoreOrder"
-                           @bind="IgnoreCollectionOrder" />
-                    <label class="form-check-label" for="ignoreOrder">
-                        Ignore Collection Ordering
-                    </label>
-                </div>
-
-                <div class="form-group form-check mt-2">
-                    <input type="checkbox" class="form-check-input" id="ignoreCase"
-                           @bind="IgnoreStringCase" />
-                    <label class="form-check-label" for="ignoreCase">
-                        Ignore String Case
-                    </label>
-                </div>
-
-                <div class="form-group mt-3">
-                    <label>Properties to Ignore:</label>
-                    <button class="btn btn-sm btn-primary ms-2" @onclick="OpenPropertySelector">
-                        Configure Properties
-                    </button>
-
-                    @if (IgnoreRules.Any())
-                    {
-                        <div class="mt-2">
-                            <div class="card">
-                                <div class="card-header bg-light">
-                                    Currently Ignored Properties (@IgnoreRules.Count)
-                                </div>
-                                <ul class="list-group list-group-flush">
-                                    @foreach (var rule in IgnoreRules)
-                                    {
-                                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                                            <div>
-                                                <span class="me-2">@GetIgnoreRuleDescription(rule)</span>
-                                            </div>
-                                            <button class="btn btn-sm btn-danger" @onclick="() => RemoveIgnoreRule(rule)">
-                                                <i class="bi bi-x"></i>
-                                            </button>
-                                        </li>
-                                    }
-                                </ul>
-                            </div>
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="alert alert-info mt-2">
-                            No properties are currently being ignored. Click the button to configure.
-                        </div>
-                    }
-                </div>
-                
-                <div class="form-group form-check mt-2">
-                    <input type="checkbox" class="form-check-input" id="enablePatternAnalysis"
-                           @bind="EnablePatternAnalysis" />
-                    <label class="form-check-label" for="enablePatternAnalysis">
-                        Enable Cross-File Pattern Analysis
-                    </label>
-                    <small class="form-text text-muted d-block">
-                        Analyzes common patterns and changes across multiple files. May take longer for large sets of files.
-                    </small>
-                </div>
-
-                <button class="btn btn-primary mt-3" @onclick="RunFolderComparison"
-                        disabled="@(!CanRunFolderComparison)">
-                    Run Comparison
-                </button>
-            </div>
-        </div>
+        <ComparisonConfigurationPanel
+            IgnoreCollectionOrder="@IgnoreCollectionOrder"
+            OnIgnoreCollectionOrderChanged="@(value => IgnoreCollectionOrder = value)"
+            IgnoreStringCase="@IgnoreStringCase"
+            OnIgnoreStringCaseChanged="@(value => IgnoreStringCase = value)"
+            EnablePatternAnalysis="@EnablePatternAnalysis"
+            OnEnablePatternAnalysisChanged="@(value => EnablePatternAnalysis = value)"
+            IgnoreRules="@IgnoreRules" 
+            OnIgnoreRuleAdded="@AddIgnoreRule"
+            OnIgnoreRuleRemoved="@RemoveIgnoreRule"
+            ModelType="@GetSelectedModelType()"
+            OnPropertySelectorOpened="@OpenPropertySelector"
+            OnRunComparison="@RunFolderComparison"
+            CanRunComparison="@CanRunFolderComparison" />
     </div>
 </div>
 
 @if (IsComparing)
 {
-    <div class="text-center mt-4">
-        <div class="spinner-border" role="status">
-            <span class="visually-hidden">Loading...</span>
-        </div>
-        <p>Comparing XML files...</p>
-    </div>
+    <LoadingIndicator Message="Comparing XML files..." />
 }
 
 @if (FolderComparisonResult != null)
 {
-    <div class="mt-4">
-        <div class="card">
-            <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">V1 vs V2 Comparison Results</h5>
-                <button class="btn btn-sm btn-outline-primary" @onclick="ExportAllFolderResults">
-                    <i class="bi bi-download me-1"></i> Export All Results
-                </button>
-            </div>
-            <div class="card-body">
-                @if (FolderComparisonResult.AllEqual)
-                {
-                    <div class="alert alert-success">
-                        <i class="bi bi-check-circle-fill me-2"></i>
-                        All file pairs are identical according to the current comparison rules.
-                    </div>
-                }
-                else
-                {
-                    <div class="alert alert-warning">
-                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                        Found differences in compared file pairs.
-                    </div>
-
-                    <h6>Select a file pair to view detailed comparison:</h6>
-                    <div class="table-responsive">
-                        <table class="table table-hover">
-                            <thead>
-                                <tr>
-                                    <th>V1 File</th>
-                                    <th>V2 File</th>
-                                    <th>Status</th>
-                                    <th>Differences</th>
-                                    <th>Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @for (int i = 0; i < FolderComparisonResult.FilePairResults.Count; i++)
-                                {
-                                    var index = i;
-                                    var result = FolderComparisonResult.FilePairResults[i];
-                                    <tr class="@(index == SelectedPairIndex ? "table-primary" : "")" style="cursor: pointer;" @onclick="() => SelectPairResult(index)">
-                                        <td>@result.File1Name</td>
-                                        <td>@result.File2Name</td>
-                                        <td>
-                                            <span class="badge @(result.AreEqual ? "bg-success" : "bg-danger")">
-                                                @(result.AreEqual ? "Equal" : "Different")
-                                            </span>
-                                        </td>
-                                        <td>@(result.AreEqual ? "0" : result.Summary.TotalDifferenceCount.ToString())</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-outline-secondary" @onclick:stopPropagation="true" @onclick="() => SelectPairResult(index)">
-                                                View
-                                            </button>
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                }
-            </div>
-        </div>
-    </div>
+    <FileComparisonResults 
+        Result="@FolderComparisonResult"
+        SelectedPairIndex="@SelectedPairIndex" 
+        OnPairSelected="@SelectPairResult" 
+        OnExportAll="@ExportAllFolderResults" />
 }
 
-@if (FolderComparisonResult != null && !FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 1)
+@if (PatternAnalysis != null && (ShowPatternSummary || EnablePatternAnalysis))
 {
-    <div class="mt-3 mb-4">
-        @if (!EnablePatternAnalysis)
-        {
-            <button class="btn btn-outline-secondary" @onclick="GeneratePatternAnalysis" disabled="@(PatternAnalysis != null)">
-                <i class="bi bi-graph-up me-1"></i> Generate Pattern Analysis
-            </button>
-
-            @if (PatternAnalysis != null)
-            {
-                <span class="text-success ms-2">
-                    <i class="bi bi-check-circle"></i> Analysis generated
-                </span>
-            }
-        }
-
-        @if (PatternAnalysis != null)
-        {
-            <div class="d-inline-block ms-2">
-                <button class="btn btn-outline-primary btn-sm" @onclick="() => ShowPatternSummary = !ShowPatternSummary">
-                    @if (ShowPatternSummary)
-                    {
-                        <span><i class="bi bi-chevron-up me-1"></i> Hide Pattern Summary</span>
-                    }
-                    else
-                    {
-                        <span><i class="bi bi-chevron-down me-1"></i> Show Pattern Summary</span>
-                    }
-                </button>
-            </div>
-        }
-    </div>
-}
-
-@if (PatternAnalysis != null && ShowPatternSummary)
-{
-    <div class="mt-3 mb-4">
-        <h5>Cross-File Pattern Analysis</h5>
-        <PatternSummaryComponent Analysis="PatternAnalysis" OnExportAnalysis="ExportPatternAnalysisReport" />
-    </div>
+    <PatternAnalysisPanel 
+        Analysis="@PatternAnalysis" 
+        ShowSummary="@ShowPatternSummary"
+        OnToggleSummary="@(() => ShowPatternSummary = !ShowPatternSummary)"
+        OnExportAnalysis="@ExportPatternAnalysisReport" />
 }
 
 @if (FolderComparisonResult != null && SelectedPairIndex >= 0 && DifferenceSummary != null)
 {
-    <div class="mt-4">
-        <div class="card">
-            <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">
-                    Comparison: @FolderComparisonResult.FilePairResults[SelectedPairIndex].File1Name
-                    vs @FolderComparisonResult.FilePairResults[SelectedPairIndex].File2Name
-                </h5>
-                <button class="btn btn-sm btn-outline-primary" @onclick="ExportFolderResults">
-                    <i class="bi bi-download me-1"></i> Export This Result
-                </button>
-            </div>
-            <div class="card-body">
-                <EnhancedDifferenceSummary Summary="DifferenceSummary" />
-            </div>
-        </div>
-    </div>
-
-    @if (!DifferenceSummary.AreEqual)
-    {
-        <div class="mt-4">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Detailed Differences</h5>
-                    <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleShowAllDifferences">
-                        @(ShowAllDifferences ? "Show Top 100" : "Show All")
-                    </button>
-                </div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-striped">
-                            <thead>
-                                <tr>
-                                    <th>Property</th>
-                                    <th>V1 Value (@FolderComparisonResult.FilePairResults[SelectedPairIndex].File1Name)</th>
-                                    <th>V2 Value (@FolderComparisonResult.FilePairResults[SelectedPairIndex].File2Name)</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var diff in GetFilteredDifferences())
-                                {
-                                    <tr>
-                                        <td>@diff.PropertyName</td>
-                                        <td class="text-danger">@FormatValue(diff.Object1Value)</td>
-                                        <td class="text-success">@FormatValue(diff.Object2Value)</td>
-                                    </tr>
-                                }
-                                @if (ComparisonResult.Differences.Count > 100 && !ShowAllDifferences)
-                                {
-                                    <tr>
-                                        <td colspan="3" class="text-center">
-                                            <em>And @(ComparisonResult.Differences.Count - 100) more differences...</em>
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    }
+    <DetailedDifferencesView 
+        SelectedPair="@FolderComparisonResult.FilePairResults[SelectedPairIndex]"
+        DifferenceSummary="@DifferenceSummary"
+        ComparisonResult="@ComparisonResult"
+        ShowAllDifferences="@ShowAllDifferences"
+        OnToggleShowAll="@ToggleShowAllDifferences"
+        OnExportResults="@ExportFolderResults" />
 }
 
 <HierarchicalPropertySelector @ref="propertySelector"
@@ -375,8 +88,8 @@
                           IgnoredProperties="IgnoreRules"
                           OnPropertyAdded="AddIgnoreRule"
                           OnPropertyRemoved="propertyPath => RemoveIgnoreRule(IgnoreRules.FirstOrDefault(r => r.PropertyPath == propertyPath))" />
+
 @code {
-    // State variables
     private string SelectedModelName { get; set; }
     private bool IgnoreCollectionOrder { get; set; } = false;
     private bool IgnoreStringCase { get; set; } = false;
@@ -391,13 +104,10 @@
     private int SelectedPairIndex { get; set; } = -1;
     private ComparisonPatternAnalysis PatternAnalysis { get; set; }
     private bool ShowPatternSummary { get; set; } = false;
-    private bool EnablePatternAnalysis { get; set; } = true; // Default to enabled
+    private bool EnablePatternAnalysis { get; set; } = true;
     private CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
-
-    // Property selector
     private HierarchicalPropertySelector propertySelector;
 
-    // Enable the comparison button if both files are loaded
     private bool CanRunFolderComparison =>
         !string.IsNullOrEmpty(SelectedModelName) &&
         Folder1Files.Count > 0 &&
@@ -407,14 +117,11 @@
     {
         try
         {
-            // Set initial selection
             SelectedModelName = DeserializationService.GetRegisteredModelNames().FirstOrDefault();
 
-            // Get current configuration settings from the service
             IgnoreCollectionOrder = ConfigService.GetIgnoreCollectionOrder();
             IgnoreStringCase = ConfigService.GetIgnoreStringCase();
 
-            // Convert simple ignored properties to rules
             foreach (var prop in ConfigService.GetIgnoredProperties())
             {
                 IgnoreRules.Add(new IgnoreRule
@@ -432,7 +139,6 @@
 
     public void Dispose()
     {
-        // Clean up cancellation token source
         _cancellationTokenSource?.Cancel();
         _cancellationTokenSource?.Dispose();
     }
@@ -441,7 +147,7 @@
     {
         if (string.IsNullOrEmpty(SelectedModelName))
             return null;
-            
+
         try
         {
             return DeserializationService.GetModelType(SelectedModelName);
@@ -452,74 +158,14 @@
         }
     }
 
-    // File handling
-    private async Task HandleFolder1Upload(InputFileChangeEventArgs e)
+    private void HandleFolder1FilesChanged(List<(MemoryStream Stream, string FileName)> files)
     {
-        try
-        {
-            foreach (var file in e.GetMultipleFiles(20)) // Allow up to 20 files
-            {
-                var stream = new MemoryStream();
-                await file.OpenReadStream(maxAllowedSize: 10485760).CopyToAsync(stream);
-                stream.Position = 0;
-
-                Folder1Files.Add((stream, file.Name));
-            }
-
-            // Sort files by name to help with matching
-            Folder1Files = Folder1Files.OrderBy(f => f.FileName).ToList();
-
-            // Force UI refresh
-            StateHasChanged();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error loading Folder 1 files");
-            await JSRuntime.InvokeVoidAsync("alert", $"Error loading files: {ex.Message}");
-        }
+        Folder1Files = files;
     }
 
-    private async Task HandleFolder2Upload(InputFileChangeEventArgs e)
+    private void HandleFolder2FilesChanged(List<(MemoryStream Stream, string FileName)> files)
     {
-        try
-        {
-            foreach (var file in e.GetMultipleFiles(20)) // Allow up to 20 files
-            {
-                var stream = new MemoryStream();
-                await file.OpenReadStream(maxAllowedSize: 10485760).CopyToAsync(stream);
-                stream.Position = 0;
-
-                Folder2Files.Add((stream, file.Name));
-            }
-
-            // Sort files by name to help with matching
-            Folder2Files = Folder2Files.OrderBy(f => f.FileName).ToList();
-
-            // Force UI refresh
-            StateHasChanged();
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error loading Folder 2 files");
-            await JSRuntime.InvokeVoidAsync("alert", $"Error loading files: {ex.Message}");
-        }
-    }
-
-    // Methods to remove files from folders
-    private void RemoveFolder1File(int index)
-    {
-        if (index >= 0 && index < Folder1Files.Count)
-        {
-            Folder1Files.RemoveAt(index);
-        }
-    }
-
-    private void RemoveFolder2File(int index)
-    {
-        if (index >= 0 && index < Folder2Files.Count)
-        {
-            Folder2Files.RemoveAt(index);
-        }
+        Folder2Files = files;
     }
 
     private async Task OpenPropertySelector()
@@ -529,24 +175,20 @@
 
     private void AddIgnoreRule(IgnoreRule rule)
     {
-        // Remove any existing rule for this property
         var existingRule = IgnoreRules.FirstOrDefault(r => r.PropertyPath == rule.PropertyPath);
         if (existingRule != null)
         {
             IgnoreRules.Remove(existingRule);
         }
 
-        // Add the new rule
         IgnoreRules.Add(rule);
 
-        // If complete ignore, also add to the service
         if (rule.IgnoreCompletely)
         {
             ConfigService.IgnoreProperty(rule.PropertyPath);
         }
         else
         {
-            // Add rule to configuration service
             ConfigService.AddIgnoreRule(rule);
         }
     }
@@ -554,7 +196,7 @@
     private void RemoveIgnoreRule(IgnoreRule rule)
     {
         if (rule == null) return;
-        
+
         IgnoreRules.Remove(rule);
 
         // Also remove from the service
@@ -564,34 +206,6 @@
         }
     }
 
-    private string GetIgnoreRuleDescription(IgnoreRule rule)
-    {
-        var description = rule.PropertyPath;
-
-        if (rule.IgnoreCompletely)
-        {
-            description += " (Ignored completely)";
-        }
-        else
-        {
-            var options = new List<string>();
-
-            if (rule.IgnoreCollectionOrder)
-                options.Add("ignore order");
-
-            if (rule.IgnoreCase)
-                options.Add("ignore case");
-
-            if (options.Any())
-            {
-                description += $" ({string.Join(", ", options)})";
-            }
-        }
-
-        return description;
-    }
-
-    // Run comparison between the two folders
     private async Task RunFolderComparison()
     {
         if (!CanRunFolderComparison)
@@ -604,9 +218,9 @@
             SelectedPairIndex = -1;
             PatternAnalysis = null;
             ShowPatternSummary = false;
-            
+
             // Cancel any existing operations
-            _cancellationTokenSource.Cancel();
+            await _cancellationTokenSource.CancelAsync();
             _cancellationTokenSource.Dispose();
             _cancellationTokenSource = new CancellationTokenSource();
             var cancellationToken = _cancellationTokenSource.Token;
@@ -620,10 +234,9 @@
             {
                 ConfigService.AddIgnoreRule(rule);
             }
-            
+
             ConfigService.ApplyConfiguredSettings();
 
-            // Convert our in-memory lists to the format needed by the service
             var folder1FilesList = Folder1Files
                 .Select(f => ((Stream)f.Stream, f.FileName))
                 .ToList();
@@ -632,14 +245,12 @@
                 .Select(f => ((Stream)f.Stream, f.FileName))
                 .ToList();
 
-            // Run folder comparison
             FolderComparisonResult = await ComparisonService.CompareFoldersAsync(
                 folder1FilesList,
                 folder2FilesList,
                 SelectedModelName,
                 cancellationToken);
 
-            // Select the first file pair by default if there are differences
             if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 0)
             {
                 SelectPairResult(0);
@@ -647,7 +258,6 @@
 
             if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 1 && EnablePatternAnalysis)
             {
-                // Auto-generate pattern analysis if we have multiple files with differences
                 await GeneratePatternAnalysis();
             }
         }
@@ -667,14 +277,12 @@
         }
     }
 
-    // Method to select a specific comparison result to view
     private void SelectPairResult(int index)
     {
         if (index >= 0 && index < FolderComparisonResult?.FilePairResults.Count)
         {
             SelectedPairIndex = index;
 
-            // Set the current ComparisonResult and DifferenceSummary for display
             var selectedPair = FolderComparisonResult.FilePairResults[index];
             ComparisonResult = selectedPair.Result;
             DifferenceSummary = selectedPair.Summary;
@@ -686,16 +294,6 @@
         ShowAllDifferences = !ShowAllDifferences;
     }
 
-    private IEnumerable<Difference> GetFilteredDifferences()
-    {
-        if (ComparisonResult == null || ComparisonResult.Differences.Count == 0)
-            return Enumerable.Empty<Difference>();
-
-        return ShowAllDifferences
-            ? ComparisonResult.Differences
-            : ComparisonResult.Differences.Take(100);
-    }
-
     private async Task GeneratePatternAnalysis()
     {
         if (FolderComparisonResult == null || FolderComparisonResult.FilePairResults.Count <= 1)
@@ -704,15 +302,15 @@
         try
         {
             IsComparing = true;
-            
+
             // Create a new cancellation token
             var cancellationToken = _cancellationTokenSource.Token;
 
             // Generate pattern analysis
             PatternAnalysis = await ComparisonService.AnalyzePatternsAsync(
-                FolderComparisonResult, 
+                FolderComparisonResult,
                 cancellationToken);
-                
+
             ShowPatternSummary = true;
         }
         catch (OperationCanceledException)
@@ -731,7 +329,6 @@
         }
     }
 
-    // Export methods
     private async Task ExportFolderResults()
     {
         if (FolderComparisonResult == null || SelectedPairIndex < 0)
@@ -749,7 +346,7 @@
                           $"V2 file: **{selectedPair.File2Name}**\n\n" +
                           $"---\n\n";
 
-            var report = FileUtils.GenerateReportMarkdown(selectedPair.Summary, headerInfo);
+            var report = FileUtilities.GenerateReportMarkdown(selectedPair.Summary, headerInfo);
 
             // In a real app, you would use JSInterop to download the file
             await JSRuntime.InvokeVoidAsync(
@@ -765,7 +362,6 @@
         }
     }
 
-    // Export a summary of all folder comparisons
     private async Task ExportAllFolderResults()
     {
         if (FolderComparisonResult == null || FolderComparisonResult.FilePairResults.Count == 0)
@@ -773,7 +369,7 @@
 
         try
         {
-            string report = FileUtils.GenerateFolderComparisonReport(FolderComparisonResult);
+            string report = FileUtilities.GenerateFolderComparisonReport(FolderComparisonResult);
 
             await JSRuntime.InvokeVoidAsync(
                 "saveAsFile",
@@ -788,7 +384,6 @@
         }
     }
 
-    // Export pattern analysis report
     private async Task ExportPatternAnalysisReport(string filename)
     {
         if (PatternAnalysis == null)
@@ -796,7 +391,7 @@
 
         try
         {
-            var report = FileUtils.GeneratePatternAnalysisReport(PatternAnalysis);
+            var report = FileUtilities.GeneratePatternAnalysisReport(PatternAnalysis);
 
             await JSRuntime.InvokeVoidAsync(
                 "saveAsFile",
@@ -809,18 +404,5 @@
             Logger.LogError(ex, "Error exporting pattern analysis: {Message}", ex.Message);
             await JSRuntime.InvokeVoidAsync("alert", $"Error exporting pattern analysis: {ex.Message}");
         }
-    }
-
-    private string FormatValue(object value)
-    {
-        if (value == null) return "null";
-        
-        if (value is DateTime dt)
-            return dt.ToString("yyyy-MM-dd HH:mm:ss");
-            
-        if (value is string str && str.Length > 100)
-            return str.Substring(0, 97) + "...";
-            
-        return value.ToString();
     }
 }
