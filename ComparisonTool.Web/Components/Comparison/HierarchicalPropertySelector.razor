@@ -268,12 +268,10 @@
 
         if (string.IsNullOrWhiteSpace(searchTerm))
         {
-            // No search term, show all properties
             FilteredProperties = FilteredProperties.ToList();
         }
         else
         {
-            // Filter properties by search term
             FilteredProperties = FilteredProperties
                 .Where(p => p.Path.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
                 .ToList();
@@ -333,13 +331,10 @@
             IgnoredProperties.Remove(existingRule);
         }
 
-        // Add the new rule
         IgnoredProperties.Add(rule);
 
-        // Notify parent
         await OnPropertyAdded.InvokeAsync(rule);
 
-        // Reset selection
         ResetSelectionState();
     }
 
