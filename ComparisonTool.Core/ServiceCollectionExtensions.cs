@@ -23,12 +23,16 @@ public static class ServiceCollectionExtensions
             services.Configure<ComparisonConfigOptions>(configuration.GetSection("ComparisonSettings"));
         }
 
-        // Register the XML deserialization service
+        services.AddSingleton<XmlSerializerFactory>();
+
+        // Register the XML deserialization service with the factory dependency
         services.AddSingleton<IXmlDeserializationService>(provider => {
             var logger = provider.GetRequiredService<ILogger<XmlDeserializationService>>();
-            var service = new XmlDeserializationService(logger);
+            var serializerFactory = provider.GetRequiredService<XmlSerializerFactory>();
 
-            // Register known domain models
+            var service = new XmlDeserializationService(logger, serializerFactory);
+
+            // todo: shouldnt be done here
             service.RegisterDomainModel<SoapEnvelope>("SoapEnvelope");
 
             return service;

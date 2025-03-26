@@ -44,13 +44,20 @@ public class ComparisonService : IComparisonService
             // Check if model exists (will throw if not found)
             var modelType = _deserializationService.GetModelType(modelName);
 
-            // Deserialize XML files
-            var oldResponse = _deserializationService.DeserializeXml(oldXmlStream, modelType);
-            var newResponse = _deserializationService.DeserializeXml(newXmlStream, modelType);
+            var deserializeMethod = typeof(IXmlDeserializationService)
+                .GetMethod(nameof(IXmlDeserializationService.DeserializeXml))
+                .MakeGenericMethod(modelType);
 
-            // Create clones of the responses that we can modify without affecting the original objects
-            var oldResponseCopy = _deserializationService.CloneObject(oldResponse);
-            var newResponseCopy = _deserializationService.CloneObject(newResponse);
+            var cloneMethod = typeof(IXmlDeserializationService)
+                .GetMethod(nameof(IXmlDeserializationService.CloneObject))
+                .MakeGenericMethod(modelType);
+
+            // Call the methods via reflection
+            var oldResponse = deserializeMethod.Invoke(_deserializationService, new object[] { oldXmlStream });
+            var newResponse = deserializeMethod.Invoke(_deserializationService, new object[] { newXmlStream });
+
+            var oldResponseCopy = cloneMethod.Invoke(_deserializationService, new object[] { oldResponse });
+            var newResponseCopy = cloneMethod.Invoke(_deserializationService, new object[] { newResponse });
 
             // Get properties to ignore for normalization
             var propertiesToIgnore = _configService.GetIgnoreRules()
