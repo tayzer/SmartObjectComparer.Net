@@ -39,6 +39,8 @@
             OnIgnoreStringCaseChanged="@(value => IgnoreStringCase = value)"
             EnablePatternAnalysis="@EnablePatternAnalysis"
             OnEnablePatternAnalysisChanged="@(value => EnablePatternAnalysis = value)"
+            EnableSemanticAnalysis="@EnableSemanticAnalysis"
+            OnEnableSemanticAnalysisChanged="@(value => EnableSemanticAnalysis = value)"
             IgnoreRules="@IgnoreRules" 
             OnIgnoreRuleAdded="@AddIgnoreRule"
             OnIgnoreRuleRemoved="@RemoveIgnoreRule"
@@ -70,6 +72,13 @@
         ShowSummary="@ShowPatternSummary"
         OnToggleSummary="@(() => ShowPatternSummary = !ShowPatternSummary)"
         OnExportAnalysis="@ExportPatternAnalysisReport" />
+}
+
+@if (SemanticAnalysis != null && (ShowPatternSummary || EnablePatternAnalysis))
+{
+    <SemanticGroupsPanel 
+        Analysis="@SemanticAnalysis"
+        OnExportAnalysis="@ExportSemanticAnalysisReport" />
 }
 
 @if (FolderComparisonResult != null && SelectedPairIndex >= 0 && DifferenceSummary != null)
@@ -105,8 +114,10 @@
     private ComparisonPatternAnalysis PatternAnalysis { get; set; }
     private bool ShowPatternSummary { get; set; } = false;
     private bool EnablePatternAnalysis { get; set; } = true;
+    private SemanticDifferenceAnalysis SemanticAnalysis { get; set; }
     private CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
     private HierarchicalPropertySelector propertySelector;
+    private bool EnableSemanticAnalysis { get; set; } = true;
 
     private bool CanRunFolderComparison =>
         !string.IsNullOrEmpty(SelectedModelName) &&
@@ -257,6 +268,16 @@
             {
                 await GeneratePatternAnalysis();
             }
+
+            if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 1 && EnablePatternAnalysis)
+            {
+                await GeneratePatternAnalysis();
+
+                if (PatternAnalysis != null)
+                {
+                    await GenerateSemanticAnalysis();
+                }
+            }
         }
         catch (OperationCanceledException)
         {
@@ -396,6 +417,60 @@
         {
             Logger.LogError(ex, "Error exporting pattern analysis: {Message}", ex.Message);
             await JSRuntime.InvokeVoidAsync("alert", $"Error exporting pattern analysis: {ex.Message}");
+        }
+    }
+
+    private async Task GenerateSemanticAnalysis()
+    {
+        if (FolderComparisonResult == null || PatternAnalysis == null)
+            return;
+        
+        try
+        {
+            IsComparing = true;
+        
+            var cancellationToken = _cancellationTokenSource.Token;
+        
+            SemanticAnalysis = await ComparisonService.AnalyzeSemanticDifferencesAsync(
+                FolderComparisonResult,
+                PatternAnalysis,
+                cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            Logger.LogInformation("Semantic analysis operation was canceled");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error generating semantic analysis: {Message}", ex.Message);
+            await JSRuntime.InvokeVoidAsync("alert", $"Error generating semantic analysis: {ex.Message}");
+        }
+        finally
+        {
+            IsComparing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ExportSemanticAnalysisReport(string filename)
+    {
+        if (SemanticAnalysis == null)
+            return;
+        
+        try
+        {
+            var report = FileUtilities.GenerateSemanticAnalysisReport(SemanticAnalysis);
+        
+            await JSRuntime.InvokeVoidAsync(
+                "saveAsFile",
+                filename,
+                "text/markdown",
+                report);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error exporting semantic analysis: {Message}", ex.Message);
+            await JSRuntime.InvokeVoidAsync("alert", $"Error exporting semantic analysis: {ex.Message}");
         }
     }
 }

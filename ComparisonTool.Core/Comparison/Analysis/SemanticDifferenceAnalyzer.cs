@@ -1,0 +1,296 @@
+﻿using System.Text.RegularExpressions;
+using KellermanSoftware.CompareNetObjects;
+using ComparisonTool.Core.Comparison.Analysis;
+using ComparisonTool.Core.Comparison.Results;
+using System.Text;
+
+namespace ComparisonTool.Core.Comparison.Analysis
+{
+    /// <summary>
+    /// Analyzes differences to create semantic groupings
+    /// </summary>
+    public class SemanticDifferenceAnalyzer
+    {
+        private readonly MultiFolderComparisonResult folderResult;
+        private readonly ComparisonPatternAnalysis patternAnalysis;
+
+        /// <summary>
+        /// Patterns for recognizing common change types
+        /// </summary>
+        private readonly Dictionary<string, Func<Difference, bool>> semanticPatterns = new Dictionary<string, Func<Difference, bool>>
+        {
+            { "Status Changes", diff => IsStatusChange(diff) },
+            { "ID Value Changes", diff => IsIdValueChange(diff) },
+            { "Timestamp/Date Changes", diff => IsDateTimeChange(diff) },
+            { "Score/Value Adjustments", diff => IsScoreValueChange(diff) },
+            { "Name/Description Changes", diff => IsNameOrDescriptionChange(diff) },
+            { "Collection Order Changes", diff => IsCollectionOrderChange(diff) },
+            { "Tag Modifications", diff => IsTagChange(diff) }
+        };
+
+        /// <summary>
+        /// Common document sections for grouping changes
+        /// </summary>
+        private readonly Dictionary<string, HashSet<string>> documentSections = new Dictionary<string, HashSet<string>>
+        {
+            { "Header Information", new HashSet<string> { "ReportId", "GeneratedOn" } },
+            { "Summary Data", new HashSet<string> { "Summary", "TotalResults", "SuccessCount", "FailureCount" } },
+            { "Result Details", new HashSet<string> { "Results[", "Score", "Status", "Description" } },
+            { "Tags & Categories", new HashSet<string> { "Tags", "Tag" } }
+        };
+
+        public SemanticDifferenceAnalyzer(MultiFolderComparisonResult folderResult, ComparisonPatternAnalysis patternAnalysis)
+        {
+            this.folderResult = folderResult;
+            this.patternAnalysis = patternAnalysis;
+        }
+
+        /// <summary>
+        /// Generate semantic difference groups from the comparison results
+        /// </summary>
+        public SemanticDifferenceAnalysis AnalyzeSemanticGroups()
+        {
+            var analysis = new SemanticDifferenceAnalysis
+            {
+                BaseAnalysis = patternAnalysis
+            };
+
+            // 1. Create empty semantic groups based on our patterns
+            var semanticGroups = new Dictionary<string, SemanticDifferenceGroup>();
+            foreach (var pattern in semanticPatterns)
+            {
+                semanticGroups[pattern.Key] = new SemanticDifferenceGroup
+                {
+                    GroupName = pattern.Key,
+                    SemanticDescription = GenerateDescriptionForGroup(pattern.Key)
+                };
+            }
+
+            // 2. Also create document section groups
+            foreach (var section in documentSections)
+            {
+                var key = $"{section.Key} Changes";
+                if (!semanticGroups.ContainsKey(key))
+                {
+                    semanticGroups[key] = new SemanticDifferenceGroup
+                    {
+                        GroupName = key,
+                        SemanticDescription = $"Changes that affect {section.Key.ToLower()}"
+                    };
+                }
+            }
+
+            // 3. Process each file pair's differences
+            foreach (var filePair in folderResult.FilePairResults)
+            {
+                if (filePair.AreEqual) continue;
+
+                var pairIdentifier = $"{filePair.File1Name} vs {filePair.File2Name}";
+
+                // 4. Categorize each difference
+                foreach (var diff in filePair.Result.Differences)
+                {
+                    // 4.1 Try pattern-based categorization first
+                    bool categorized = false;
+                    foreach (var pattern in semanticPatterns)
+                    {
+                        if (pattern.Value(diff))
+                        {
+                            AddDifferenceToGroup(semanticGroups[pattern.Key], diff, pairIdentifier);
+                            categorized = true;
+                            break;
+                        }
+                    }
+
+                    // 4.2 If not categorized, try document section categorization
+                    if (!categorized)
+                    {
+                        foreach (var section in documentSections)
+                        {
+                            if (IsInDocumentSection(diff, section.Value))
+                            {
+                                var key = $"{section.Key} Changes";
+                                AddDifferenceToGroup(semanticGroups[key], diff, pairIdentifier);
+                                categorized = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    // 4.3 If still not categorized, look for specific value patterns
+                    if (!categorized)
+                    {
+                        var valueBasedGroup = CategorizeByValuePattern(diff);
+                        if (!string.IsNullOrEmpty(valueBasedGroup))
+                        {
+                            if (!semanticGroups.ContainsKey(valueBasedGroup))
+                            {
+                                semanticGroups[valueBasedGroup] = new SemanticDifferenceGroup
+                                {
+                                    GroupName = valueBasedGroup,
+                                    SemanticDescription = $"Changes related to {valueBasedGroup.ToLower()}"
+                                };
+                            }
+
+                            AddDifferenceToGroup(semanticGroups[valueBasedGroup], diff, pairIdentifier);
+                        }
+                    }
+                }
+            }
+
+            // 5. Calculate confidence levels and add non-empty groups to the analysis
+            foreach (var group in semanticGroups.Values)
+            {
+                if (group.Differences.Count > 0)
+                {
+                    // Calculate confidence based on how many related properties are affected
+                    // and how many files show the same pattern
+                    int baseConfidence = 50;
+
+                    // More related properties suggests a stronger pattern
+                    baseConfidence += 5 * Math.Min(10, group.RelatedProperties.Count);
+
+                    // More files affected suggests a more significant pattern
+                    baseConfidence += 5 * Math.Min(5, group.AffectedFiles.Count);
+
+                    // Constrain to 0-100 range
+                    group.ConfidenceLevel = Math.Min(100, Math.Max(0, baseConfidence));
+
+                    analysis.SemanticGroups.Add(group);
+                }
+            }
+
+            // 6. Sort by confidence and difference count
+            analysis.SemanticGroups = analysis.SemanticGroups
+                .OrderByDescending(g => g.ConfidenceLevel)
+                .ThenByDescending(g => g.DifferenceCount)
+                .ToList();
+
+            return analysis;
+        }
+
+        private void AddDifferenceToGroup(SemanticDifferenceGroup group, Difference diff, string fileIdentifier)
+        {
+            group.Differences.Add(diff);
+            group.AffectedFiles.Add(fileIdentifier);
+            group.RelatedProperties.Add(NormalizePropertyPath(diff.PropertyName));
+        }
+
+        private string NormalizePropertyPath(string propertyPath)
+        {
+            // Replace specific array indices with [*]
+            return Regex.Replace(propertyPath, @"\[\d+\]", "[*]");
+        }
+
+        private bool IsInDocumentSection(Difference diff, HashSet<string> sectionKeys)
+        {
+            return sectionKeys.Any(key => diff.PropertyName.Contains(key));
+        }
+
+        private string CategorizeByValuePattern(Difference diff)
+        {
+            // Analyze specific value patterns in the differences
+            // This could be extended with more sophisticated pattern recognition
+
+            var oldValue = diff.Object1Value?.ToString();
+            var newValue = diff.Object2Value?.ToString();
+
+            if (oldValue != null && newValue != null)
+            {
+                // Check for GUID/UUID replacements
+                if (IsGuidFormat(oldValue) && IsGuidFormat(newValue))
+                    return "Identifier Replacements";
+
+                // Check for URL/Path changes
+                if ((oldValue.Contains("://") || oldValue.Contains("/")) &&
+                    (newValue.Contains("://") || newValue.Contains("/")))
+                    return "URL/Path Changes";
+
+                // Check for version changes
+                if (Regex.IsMatch(oldValue, @"\d+\.\d+") && Regex.IsMatch(newValue, @"\d+\.\d+"))
+                    return "Version Changes";
+            }
+
+            return null;
+        }
+
+        private static bool IsGuidFormat(string value)
+        {
+            return Regex.IsMatch(value, @"[0-9a-fA-F]{8}[-]?([0-9a-fA-F]{4}[-]?){3}[0-9a-fA-F]{12}");
+        }
+
+        private static bool IsStatusChange(Difference diff)
+        {
+            return diff.PropertyName.EndsWith(".Status") ||
+                   diff.PropertyName.Contains(".Status.") ||
+                   diff.PropertyName.EndsWith("Status");
+        }
+
+        private static bool IsIdValueChange(Difference diff)
+        {
+            return diff.PropertyName.EndsWith(".Id") ||
+                   diff.PropertyName.EndsWith("ReportId") ||
+                   diff.PropertyName.Contains(".Id.") ||
+                   diff.PropertyName.EndsWith("Id");
+        }
+
+        private static bool IsDateTimeChange(Difference diff)
+        {
+            return diff.PropertyName.Contains("Date") ||
+                   diff.PropertyName.Contains("Time") ||
+                   diff.PropertyName.Contains("Generated") ||
+                   diff.Object1Value is DateTime ||
+                   diff.Object2Value is DateTime;
+        }
+
+        private static bool IsScoreValueChange(Difference diff)
+        {
+            return diff.PropertyName.Contains("Score") ||
+                   diff.PropertyName.Contains("Value") ||
+                   diff.PropertyName.Contains("Amount") || 
+                   diff.PropertyName.Contains("Count") ||
+                   (diff.Object1Value is double || diff.Object1Value is int || diff.Object1Value is decimal) &&
+                   (diff.Object2Value is double || diff.Object2Value is int || diff.Object2Value is decimal);
+        }
+
+        private static bool IsNameOrDescriptionChange(Difference diff)
+        {
+            return diff.PropertyName.Contains("Name") ||
+                   diff.PropertyName.Contains("Description") ||
+                   diff.PropertyName.Contains("Title") ||
+                   diff.PropertyName.Contains("Label");
+        }
+
+        private static bool IsCollectionOrderChange(Difference diff)
+        {
+            // Detect collection order changes - this is complex as it may
+            // require context from multiple differences
+            return diff.PropertyName.Contains("[") && diff.PropertyName.Contains("]") &&
+                   // Same values in different positions
+                   diff.Object1Value != null && diff.Object2Value != null &&
+                   diff.Object1Value.ToString() == diff.Object2Value.ToString();
+        }
+
+        private static bool IsTagChange(Difference diff)
+        {
+            return diff.PropertyName.Contains("Tag") ||
+                   diff.PropertyName.Contains("Category") ||
+                   diff.PropertyName.Contains("Label");
+        }
+
+        private string GenerateDescriptionForGroup(string groupName)
+        {
+            return groupName switch
+            {
+                "Status Changes" => "Changes to status values such as Success, Warning, Error",
+                "ID Value Changes" => "Changes to identifier values",
+                "Timestamp/Date Changes" => "Changes to dates, times, or timestamps",
+                "Score/Value Adjustments" => "Changes to numeric scores, counts, or measurements",
+                "Name/Description Changes" => "Changes to names, descriptions, or text content",
+                "Collection Order Changes" => "Changes in the order of items within collections",
+                "Tag Modifications" => "Changes to tags, categories, or labels",
+                _ => $"Changes related to {groupName.ToLower()}"
+            };
+        }
+    }
+}
