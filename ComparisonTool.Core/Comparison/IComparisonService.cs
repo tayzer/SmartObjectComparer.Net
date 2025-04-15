@@ -28,6 +28,17 @@ public interface IComparisonService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Compare multiple folder pairs of XML files in batches with parallel processing
+    /// </summary>
+    Task<MultiFolderComparisonResult> CompareFoldersInBatchesAsync(
+        List<(Stream Stream, string FileName)> folder1Files,
+        List<(Stream Stream, string FileName)> folder2Files,
+        string modelName,
+        int batchSize = 50,
+        IProgress<(int Completed, int Total)> progress = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Analyze patterns across multiple file comparison results
     /// </summary>
     Task<ComparisonPatternAnalysis> AnalyzePatternsAsync(
@@ -37,30 +48,8 @@ public interface IComparisonService
     /// <summary>
     /// Analyze semantic differences across multiple file comparison results
     /// </summary>
-    /// <param name="folderResult">Results of multiple file comparisons</param>
-    /// <param name="patternAnalysis">Pattern analysis of the comparison results</param>
-    /// <param name="cancellationToken">Cancellation token for async operations</param>
-    /// <returns>Semantic analysis of differences across compared files</returns>
     Task<SemanticDifferenceAnalysis> AnalyzeSemanticDifferencesAsync(
         MultiFolderComparisonResult folderResult,
         ComparisonPatternAnalysis patternAnalysis,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Compare multiple folder pairs of XML files in batches with parallel processing
-    /// </summary>
-    Task<MultiFolderComparisonResult> CompareFoldersInBatchesAsync(
-        List<(Stream Stream, string FileName)> folder1Files,
-        List<(Stream Stream, string FileName)> folder2Files,
-        string modelName,
-        int batchSize = 50,
-        CancellationToken cancellationToken = default);
-
-    Task<MultiFolderComparisonResult> CompareFoldersInBatchesAsync(
-        List<(Stream Stream, string FileName)> folder1Files,
-        List<(Stream Stream, string FileName)> folder2Files,
-        string modelName,
-        int batchSize = 50,
-        IProgress<(int Completed, int Total)> progress = null,
         CancellationToken cancellationToken = default);
 }

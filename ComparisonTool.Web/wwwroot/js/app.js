@@ -55,3 +55,36 @@ function generateColors(count) {
 
     return colors;
 }
+
+function processFilesInBatches(files, batchSize, callback) {
+    return new Promise((resolve) => {
+        const totalFiles = files.length;
+        let processed = 0;
+
+        function processNextBatch() {
+            const batch = files.slice(processed, processed + batchSize);
+
+            if (batch.length === 0) {
+                resolve();
+                return;
+            }
+
+            Promise.all(batch.map(callback))
+                .then(() => {
+                    processed += batch.length;
+                    setTimeout(processNextBatch, 0); // Allow UI to refresh
+                });
+        }
+
+        processNextBatch();
+    });
+}
+
+function optimizedFileRead(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+    });
+}

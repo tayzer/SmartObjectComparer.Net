@@ -49,11 +49,6 @@
     </div>
 </div>
 
-@* @if (IsComparing)
-{
-    <LoadingIndicator Message="Comparing XML files..." />
-} *@
-
 @if (IsComparing)
 {
     @if (ShowProgress)
@@ -131,8 +126,10 @@
     private CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
     private HierarchicalPropertySelector propertySelector;
     private bool EnableSemanticAnalysis { get; set; } = true;
-    private int CompletedFiles { get; set; }
-    private int TotalFiles { get; set; }
+
+    // Progress tracking properties
+    private int CompletedFiles { get; set; } = 0;
+    private int TotalFiles { get; set; } = 0;
     private bool ShowProgress => IsComparing && TotalFiles > 0;
 
     private bool CanRunFolderComparison =>
@@ -244,12 +241,17 @@
             FolderComparisonResult = null;
             SelectedPairIndex = -1;
             PatternAnalysis = null;
+            SemanticAnalysis = null;
             ShowPatternSummary = false;
 
             await _cancellationTokenSource.CancelAsync();
             _cancellationTokenSource.Dispose();
             _cancellationTokenSource = new CancellationTokenSource();
             var cancellationToken = _cancellationTokenSource.Token;
+
+            // Reset progress tracking
+            CompletedFiles = 0;
+            TotalFiles = Math.Min(Folder1Files.Count, Folder2Files.Count);
 
             ConfigService.SetIgnoreCollectionOrder(IgnoreCollectionOrder);
             ConfigService.SetIgnoreStringCase(IgnoreStringCase);
@@ -269,9 +271,6 @@
                 .Select(f => ((Stream)f.Stream, f.FileName))
                 .ToList();
 
-            CompletedFiles = 0;
-            TotalFiles = Math.Min(folder1FilesList.Count, folder2FilesList.Count);
-
             // Create progress reporter
             var progressHandler = new Progress<(int Completed, int Total)>(progress =>
             {
@@ -284,7 +283,7 @@
                 folder1FilesList,
                 folder2FilesList,
                 SelectedModelName,
-                50, // Batch size
+                50, // Batch size of 50 files
                 progressHandler,
                 cancellationToken);
 

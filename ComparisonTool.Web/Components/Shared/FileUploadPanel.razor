@@ -3,29 +3,54 @@
 
 <div class="form-group mt-3">
     <label>@Label</label>
-    <InputFile class="form-control" OnChange="HandleFileUpload" multiple />
+    <div class="d-flex gap-2">
+        <InputFile class="form-control" OnChange="HandleFileUpload" multiple />
+        <span class="badge bg-info d-flex align-items-center">
+            @if (Files.Count > 0)
+            {
+                <span>@Files.Count files</span>
+            }
+        </span>
+    </div>
 
     @if (Files.Any())
     {
         <div class="mt-2">
             <div class="card">
-                <div class="card-header bg-light">
-                    Files (@Files.Count)
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <span>Files (@Files.Count)</span>
+                    <div>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="ClearAllFiles">
+                            Clear All
+                        </button>
+                    </div>
                 </div>
-                <ul class="list-group list-group-flush" style="max-height: 200px; overflow-y: auto;">
-                    @for (int i = 0; i < Files.Count; i++)
+                <div style="max-height: 200px; overflow-y: auto;">
+                    @if (Files.Count > 100)
                     {
-                        var index = i;
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            <div>
-                                <small>@Files[i].FileName</small>
-                            </div>
-                            <button class="btn btn-sm btn-danger" @onclick="() => RemoveFile(index)">
-                                <i class="bi bi-x"></i>
-                            </button>
-                        </li>
+                        <div class="p-3 text-center">
+                            <p>@Files.Count files selected.</p>
+                            <p><small class="text-muted">File list not shown for performance reasons.</small></p>
+                        </div>
                     }
-                </ul>
+                    else
+                    {
+                        <ul class="list-group list-group-flush">
+                            @for (int i = 0; i < Math.Min(Files.Count, 100); i++)
+                            {
+                                var index = i;
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <small>@Files[i].FileName</small>
+                                    </div>
+                                    <button class="btn btn-sm btn-danger" @onclick="() => RemoveFile(index)">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
             </div>
         </div>
     }
@@ -45,19 +70,47 @@
     {
         try
         {
+            // Increase the file count limit
+            var maxFilesPerUpload = 2000;
+            var maxFileSize = 20 * 1024 * 1024; // 20MB per file
+
+            var selectedFiles = e.GetMultipleFiles(maxFilesPerUpload);
             var updatedFiles = new List<(MemoryStream Stream, string FileName)>(Files);
-        
-            foreach (var file in e.GetMultipleFiles(20))
+
+            if (selectedFiles.Count >= maxFilesPerUpload)
             {
+                await JSRuntime.InvokeVoidAsync("alert",
+                    $"You selected at least {maxFilesPerUpload} files. Some files may not be processed.");
+            }
+
+            // Process files in smaller batches to avoid UI freezing
+            const int processLimit = 100;
+            int processedCount = 0;
+
+            foreach (var file in selectedFiles)
+            {
+                // Process in batches to avoid UI freezing
+                if (processedCount % processLimit == 0 && processedCount > 0)
+                {
+                    // Update the files list periodically to show progress
+                    Files = updatedFiles.OrderBy(f => f.FileName).ToList();
+                    await OnFilesChanged.InvokeAsync(Files);
+                    StateHasChanged();
+
+                    // Small delay to allow UI to update
+                    await Task.Delay(10);
+                }
+
                 var stream = new MemoryStream();
-                await file.OpenReadStream(maxAllowedSize: 10485760).CopyToAsync(stream);
+                await file.OpenReadStream(maxAllowedSize: maxFileSize).CopyToAsync(stream);
                 stream.Position = 0;
 
                 updatedFiles.Add((Stream: stream, FileName: file.Name));
+                processedCount++;
             }
 
             updatedFiles = updatedFiles.OrderBy(f => f.FileName).ToList();
-        
+
             Files = updatedFiles;
             await OnFilesChanged.InvokeAsync(updatedFiles);
         }
@@ -76,5 +129,11 @@
             Files = updatedFiles;
             await OnFilesChanged.InvokeAsync(updatedFiles);
         }
+    }
+
+    private async Task ClearAllFiles()
+    {
+        Files.Clear();
+        await OnFilesChanged.InvokeAsync(Files);
     }
 }
