@@ -33,4 +33,16 @@ public interface IComparisonService
     Task<ComparisonPatternAnalysis> AnalyzePatternsAsync(
         MultiFolderComparisonResult folderResult,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Analyze semantic differences across multiple file comparison results
+    /// </summary>
+    /// <param name="folderResult">Results of multiple file comparisons</param>
+    /// <param name="patternAnalysis">Pattern analysis of the comparison results</param>
+    /// <param name="cancellationToken">Cancellation token for async operations</param>
+    /// <returns>Semantic analysis of differences across compared files</returns>
+    Task<SemanticDifferenceAnalysis> AnalyzeSemanticDifferencesAsync(
+        MultiFolderComparisonResult folderResult,
+        ComparisonPatternAnalysis patternAnalysis,
+        CancellationToken cancellationToken = default);
 }

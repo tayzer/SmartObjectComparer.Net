@@ -329,6 +329,32 @@ public class ComparisonService : IComparisonService
     }
 
     /// <summary>
+    /// Analyze semantic differences across multiple file comparison results
+    /// </summary>
+    /// <param name="folderResult">Results of multiple file comparisons</param>
+    /// <param name="patternAnalysis">Pattern analysis of the comparison results</param>
+    /// <param name="cancellationToken">Cancellation token for async operations</param>
+    /// <returns>Semantic analysis of differences across compared files</returns>
+    public async Task<SemanticDifferenceAnalysis> AnalyzeSemanticDifferencesAsync(
+        MultiFolderComparisonResult folderResult,
+        ComparisonPatternAnalysis patternAnalysis,
+        CancellationToken cancellationToken = default)
+    {
+        return await Task.Run(() =>
+        {
+            logger.LogInformation("Starting semantic difference analysis");
+
+            var analyzer = new SemanticDifferenceAnalyzer(folderResult, patternAnalysis);
+            var semanticAnalysis = analyzer.AnalyzeSemanticGroups();
+
+            logger.LogInformation("Semantic analysis completed. Found {GroupCount} semantic groups with {DifferenceCount} differences",
+                semanticAnalysis.SemanticGroups.Count, semanticAnalysis.CategorizedDifferences);
+
+            return semanticAnalysis;
+        }, cancellationToken);
+    }
+
+    /// <summary>
     /// Group similar files based on their difference patterns
     /// </summary>
     private void GroupSimilarFiles(MultiFolderComparisonResult folderResult, ComparisonPatternAnalysis analysis)

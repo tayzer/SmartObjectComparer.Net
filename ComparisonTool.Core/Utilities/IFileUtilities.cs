@@ -27,4 +27,11 @@ public interface IFileUtilities
     /// Generates a pattern analysis report
     /// </summary>
     string GeneratePatternAnalysisReport(ComparisonPatternAnalysis analysis);
+
+    /// <summary>
+    /// Generates a semantic difference analysis report
+    /// </summary>
+    /// <param name="analysis">The semantic difference analysis</param>
+    /// <returns>Markdown content as a string</returns>
+    string GenerateSemanticAnalysisReport(SemanticDifferenceAnalysis analysis);
 }

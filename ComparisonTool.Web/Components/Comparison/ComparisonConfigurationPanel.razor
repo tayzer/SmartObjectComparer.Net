@@ -70,6 +70,17 @@
                 Analyzes common patterns and changes across multiple files. May take longer for large sets of files.
             </small>
         </div>
+        
+        <div class="form-group form-check mt-2">
+            <input type="checkbox" class="form-check-input" id="enableSemanticAnalysis"
+                   @bind="EnableSemanticAnalysisLocal" />
+            <label class="form-check-label" for="enableSemanticAnalysis">
+                Enable Semantic Difference Grouping
+            </label>
+            <small class="form-text text-muted d-block">
+                Groups differences by semantic meaning to help focus testing efforts. Requires pattern analysis.
+            </small>
+        </div>
 
         <button class="btn btn-primary mt-3" @onclick="RunComparison"
                 disabled="@(!CanRunComparison)">
@@ -114,6 +125,12 @@
 
     [Parameter]
     public EventCallback OnRunComparison { get; set; }
+
+    [Parameter]
+    public bool EnableSemanticAnalysis { get; set; } = true;
+
+    [Parameter]
+    public EventCallback<bool> OnEnableSemanticAnalysisChanged { get; set; }
 
     private bool IgnoreCollectionOrderLocal
     {
@@ -198,4 +215,17 @@
 
     [Parameter]
     public EventCallback OnPropertySelectorOpened { get; set; }
+
+    private bool EnableSemanticAnalysisLocal
+    {
+        get => EnableSemanticAnalysis;
+        set
+        {
+            if (EnableSemanticAnalysis != value)
+            {
+                EnableSemanticAnalysis = value;
+                OnEnableSemanticAnalysisChanged.InvokeAsync(value);
+            }
+        }
+    }
 }

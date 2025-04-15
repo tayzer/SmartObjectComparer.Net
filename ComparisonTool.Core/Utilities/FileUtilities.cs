@@ -316,6 +316,158 @@ public class FileUtilities : IFileUtilities
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Generates a semantic difference analysis report
+    /// </summary>
+    /// <param name="analysis">The semantic difference analysis</param>
+    /// <returns>Markdown content as a string</returns>
+    public string GenerateSemanticAnalysisReport(SemanticDifferenceAnalysis analysis)
+    {
+        var sb = new StringBuilder();
+
+        sb.AppendLine("# Semantic Difference Analysis Report");
+        sb.AppendLine();
+        sb.AppendLine("## Overview");
+        sb.AppendLine();
+        sb.AppendLine($"- **Total Differences Analyzed:** {analysis.TotalDifferences}");
+        sb.AppendLine($"- **Differences Semantically Categorized:** {analysis.CategorizedDifferences} ({analysis.CategorizedPercentage:F1}%)");
+        sb.AppendLine($"- **Number of Semantic Groups:** {analysis.SemanticGroups.Count}");
+        sb.AppendLine();
+
+        sb.AppendLine("## Semantic Groups");
+        sb.AppendLine();
+        sb.AppendLine("| Group | Description | Differences | Files | Confidence |");
+        sb.AppendLine("|-------|-------------|-------------|-------|------------|");
+
+        foreach (var group in analysis.SemanticGroups)
+        {
+            sb.AppendLine($"| **{group.GroupName}** | {group.SemanticDescription} | {group.DifferenceCount} | {group.FileCount} | {group.ConfidenceLevel}% |");
+        }
+        sb.AppendLine();
+
+        foreach (var group in analysis.SemanticGroups)
+        {
+            sb.AppendLine($"### {group.GroupName}");
+            sb.AppendLine();
+            sb.AppendLine($"**Description:** {group.SemanticDescription}");
+            sb.AppendLine($"**Confidence:** {group.ConfidenceLevel}%");
+            sb.AppendLine($"**Differences:** {group.DifferenceCount}");
+            sb.AppendLine($"**Files Affected:** {group.FileCount}");
+            sb.AppendLine();
+
+            // Related properties
+            sb.AppendLine("#### Related Properties");
+            sb.AppendLine();
+            foreach (var prop in group.RelatedProperties.Take(10))
+            {
+                sb.AppendLine($"- `{prop}`");
+            }
+            if (group.RelatedProperties.Count > 10)
+            {
+                sb.AppendLine($"- *...and {group.RelatedProperties.Count - 10} more properties*");
+            }
+            sb.AppendLine();
+
+            // Example differences
+            sb.AppendLine("#### Example Differences");
+            sb.AppendLine();
+            sb.AppendLine("| Property | Old Value | New Value |");
+            sb.AppendLine("|----------|-----------|-----------|");
+
+            foreach (var diff in group.Differences.Take(5))
+            {
+                sb.AppendLine($"| `{diff.PropertyName}` | {TruncateText(FormatValue(diff.Object1Value), 50)} | {TruncateText(FormatValue(diff.Object2Value), 50)} |");
+            }
+            sb.AppendLine();
+
+            if (group.Differences.Count > 5)
+            {
+                sb.AppendLine($"*...and {group.Differences.Count - 5} more differences*");
+                sb.AppendLine();
+            }
+
+            // Testing guidance
+            sb.AppendLine("#### Testing Recommendations");
+            sb.AppendLine();
+            sb.AppendLine($"When testing these changes, focus on validating that {group.GroupName.ToLower()} are correctly handled throughout the application.");
+            sb.AppendLine("Pay special attention to:");
+            sb.AppendLine();
+
+            // Generate specific testing recommendations based on the group
+            switch (group.GroupName)
+            {
+                case "Status Changes":
+                    sb.AppendLine("- Verify the status transitions are valid according to business rules");
+                    sb.AppendLine("- Check that UI correctly reflects different statuses with appropriate styling");
+                    sb.AppendLine("- Confirm status-dependent behaviors work correctly");
+                    break;
+
+                case "ID Value Changes":
+                    sb.AppendLine("- Ensure consistent ID usage across related entities");
+                    sb.AppendLine("- Verify reference integrity - check that the new IDs are used consistently");
+                    sb.AppendLine("- Test lookup operations using the new ID values");
+                    break;
+
+                case "Timestamp/Date Changes":
+                    sb.AppendLine("- Verify date calculations and comparisons");
+                    sb.AppendLine("- Check date formatting in different contexts");
+                    sb.AppendLine("- Test date-sensitive business logic");
+                    break;
+
+                case "Score/Value Adjustments":
+                    sb.AppendLine("- Verify calculations that depend on these values");
+                    sb.AppendLine("- Validate thresholds and boundaries still function correctly");
+                    sb.AppendLine("- Check that UI elements properly represent the new values");
+                    break;
+
+                case "Name/Description Changes":
+                    sb.AppendLine("- Check for text truncation in UI components");
+                    sb.AppendLine("- Verify translated content if localization is supported");
+                    sb.AppendLine("- Test search/filter functionality with the new text values");
+                    break;
+
+                case "Collection Order Changes":
+                    sb.AppendLine("- Verify sort operations behave correctly");
+                    sb.AppendLine("- Check pagination if applicable");
+                    sb.AppendLine("- Test operations that rely on specific positions within collections");
+                    break;
+
+                case "Tag Modifications":
+                    sb.AppendLine("- Test filtering and categorization features");
+                    sb.AppendLine("- Verify tag-based reporting");
+                    sb.AppendLine("- Check for visual indication of tags in the UI");
+                    break;
+
+                default:
+                    sb.AppendLine("- Test the complete end-to-end flow involving these properties");
+                    sb.AppendLine("- Check data validation rules for the affected fields");
+                    sb.AppendLine("- Verify related calculations and business logic");
+                    break;
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("---");
+            sb.AppendLine();
+        }
+
+        sb.AppendLine("## Summary");
+        sb.AppendLine();
+        sb.AppendLine("This report highlights semantically grouped differences to help focus testing efforts. Pay special attention to:");
+        sb.AppendLine();
+
+        // Highlight the top 3 groups by confidence and size
+        var topGroups = analysis.SemanticGroups
+            .OrderByDescending(g => g.ConfidenceLevel * g.DifferenceCount)
+            .Take(3);
+
+        foreach (var group in topGroups)
+        {
+            sb.AppendLine($"- **{group.GroupName}** - {group.DifferenceCount} differences across {group.FileCount} files");
+        }
+
+        return sb.ToString();
+    }
+
     private string FormatCategoryName(DifferenceCategory category)
     {
         return category switch
