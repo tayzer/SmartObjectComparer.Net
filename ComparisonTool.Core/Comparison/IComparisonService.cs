@@ -45,4 +45,22 @@ public interface IComparisonService
         MultiFolderComparisonResult folderResult,
         ComparisonPatternAnalysis patternAnalysis,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Compare multiple folder pairs of XML files in batches with parallel processing
+    /// </summary>
+    Task<MultiFolderComparisonResult> CompareFoldersInBatchesAsync(
+        List<(Stream Stream, string FileName)> folder1Files,
+        List<(Stream Stream, string FileName)> folder2Files,
+        string modelName,
+        int batchSize = 50,
+        CancellationToken cancellationToken = default);
+
+    Task<MultiFolderComparisonResult> CompareFoldersInBatchesAsync(
+        List<(Stream Stream, string FileName)> folder1Files,
+        List<(Stream Stream, string FileName)> folder2Files,
+        string modelName,
+        int batchSize = 50,
+        IProgress<(int Completed, int Total)> progress = null,
+        CancellationToken cancellationToken = default);
 }

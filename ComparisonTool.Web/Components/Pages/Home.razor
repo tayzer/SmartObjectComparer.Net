@@ -21,82 +21,95 @@
 
 <div class="row mt-4">
     <div class="col-md-6">
-        <FileSelector 
-            ModelNames="@DeserializationService.GetRegisteredModelNames()"
-            SelectedModelName="@SelectedModelName"
-            OnModelNameChanged="@(name => SelectedModelName = name)"
-            Folder1Files="@Folder1Files"
-            OnFolder1FilesChanged="@HandleFolder1FilesChanged"
-            Folder2Files="@Folder2Files"
-            OnFolder2FilesChanged="@HandleFolder2FilesChanged" />
+        <FileSelector ModelNames="@DeserializationService.GetRegisteredModelNames()"
+                      SelectedModelName="@SelectedModelName"
+                      OnModelNameChanged="@(name => SelectedModelName = name)"
+                      Folder1Files="@Folder1Files"
+                      OnFolder1FilesChanged="@HandleFolder1FilesChanged"
+                      Folder2Files="@Folder2Files"
+                      OnFolder2FilesChanged="@HandleFolder2FilesChanged" />
     </div>
-    
+
     <div class="col-md-6">
-        <ComparisonConfigurationPanel
-            IgnoreCollectionOrder="@IgnoreCollectionOrder"
-            OnIgnoreCollectionOrderChanged="@(value => IgnoreCollectionOrder = value)"
-            IgnoreStringCase="@IgnoreStringCase"
-            OnIgnoreStringCaseChanged="@(value => IgnoreStringCase = value)"
-            EnablePatternAnalysis="@EnablePatternAnalysis"
-            OnEnablePatternAnalysisChanged="@(value => EnablePatternAnalysis = value)"
-            EnableSemanticAnalysis="@EnableSemanticAnalysis"
-            OnEnableSemanticAnalysisChanged="@(value => EnableSemanticAnalysis = value)"
-            IgnoreRules="@IgnoreRules" 
-            OnIgnoreRuleAdded="@AddIgnoreRule"
-            OnIgnoreRuleRemoved="@RemoveIgnoreRule"
-            ModelType="@GetSelectedModelType()"
-            OnPropertySelectorOpened="@OpenPropertySelector"
-            OnRunComparison="@RunFolderComparison"
-            CanRunComparison="@CanRunFolderComparison" />
+        <ComparisonConfigurationPanel IgnoreCollectionOrder="@IgnoreCollectionOrder"
+                                      OnIgnoreCollectionOrderChanged="@(value => IgnoreCollectionOrder = value)"
+                                      IgnoreStringCase="@IgnoreStringCase"
+                                      OnIgnoreStringCaseChanged="@(value => IgnoreStringCase = value)"
+                                      EnablePatternAnalysis="@EnablePatternAnalysis"
+                                      OnEnablePatternAnalysisChanged="@(value => EnablePatternAnalysis = value)"
+                                      EnableSemanticAnalysis="@EnableSemanticAnalysis"
+                                      OnEnableSemanticAnalysisChanged="@(value => EnableSemanticAnalysis = value)"
+                                      IgnoreRules="@IgnoreRules"
+                                      OnIgnoreRuleAdded="@AddIgnoreRule"
+                                      OnIgnoreRuleRemoved="@RemoveIgnoreRule"
+                                      ModelType="@GetSelectedModelType()"
+                                      OnPropertySelectorOpened="@OpenPropertySelector"
+                                      OnRunComparison="@RunFolderComparison"
+                                      CanRunComparison="@CanRunFolderComparison" />
     </div>
 </div>
 
-@if (IsComparing)
+@* @if (IsComparing)
 {
     <LoadingIndicator Message="Comparing XML files..." />
+} *@
+
+@if (IsComparing)
+{
+    @if (ShowProgress)
+    {
+        <div class="progress mb-3">
+            <div class="progress-bar progress-bar-striped progress-bar-animated"
+                 role="progressbar"
+                 style="width: @(((double)CompletedFiles / TotalFiles * 100).ToString())%">
+                @CompletedFiles of @TotalFiles files compared
+            </div>
+        </div>
+        <LoadingIndicator Message="@($"Comparing XML files... ({CompletedFiles} of {TotalFiles} completed)")" />
+    }
+    else
+    {
+        <LoadingIndicator Message="Comparing XML files..." />
+    }
 }
 
 @if (FolderComparisonResult != null)
 {
-    <FileComparisonResults 
-        Result="@FolderComparisonResult"
-        SelectedPairIndex="@SelectedPairIndex" 
-        OnPairSelected="@SelectPairResult" 
-        OnExportAll="@ExportAllFolderResults" />
+    <FileComparisonResults Result="@FolderComparisonResult"
+                           SelectedPairIndex="@SelectedPairIndex"
+                           OnPairSelected="@SelectPairResult"
+                           OnExportAll="@ExportAllFolderResults" />
 }
 
 @if (PatternAnalysis != null && (ShowPatternSummary || EnablePatternAnalysis))
 {
-    <PatternAnalysisPanel 
-        Analysis="@PatternAnalysis" 
-        ShowSummary="@ShowPatternSummary"
-        OnToggleSummary="@(() => ShowPatternSummary = !ShowPatternSummary)"
-        OnExportAnalysis="@ExportPatternAnalysisReport" />
+    <PatternAnalysisPanel Analysis="@PatternAnalysis"
+                          ShowSummary="@ShowPatternSummary"
+                          OnToggleSummary="@(() => ShowPatternSummary = !ShowPatternSummary)"
+                          OnExportAnalysis="@ExportPatternAnalysisReport" />
 }
 
 @if (SemanticAnalysis != null && (ShowPatternSummary || EnablePatternAnalysis))
 {
-    <SemanticGroupsPanel 
-        Analysis="@SemanticAnalysis"
-        OnExportAnalysis="@ExportSemanticAnalysisReport" />
+    <SemanticGroupsPanel Analysis="@SemanticAnalysis"
+                         OnExportAnalysis="@ExportSemanticAnalysisReport" />
 }
 
 @if (FolderComparisonResult != null && SelectedPairIndex >= 0 && DifferenceSummary != null)
 {
-    <DetailedDifferencesView 
-        SelectedPair="@FolderComparisonResult.FilePairResults[SelectedPairIndex]"
-        DifferenceSummary="@DifferenceSummary"
-        ComparisonResult="@ComparisonResult"
-        ShowAllDifferences="@ShowAllDifferences"
-        OnToggleShowAll="@ToggleShowAllDifferences"
-        OnExportResults="@ExportFolderResults" />
+    <DetailedDifferencesView SelectedPair="@FolderComparisonResult.FilePairResults[SelectedPairIndex]"
+                             DifferenceSummary="@DifferenceSummary"
+                             ComparisonResult="@ComparisonResult"
+                             ShowAllDifferences="@ShowAllDifferences"
+                             OnToggleShowAll="@ToggleShowAllDifferences"
+                             OnExportResults="@ExportFolderResults" />
 }
 
 <HierarchicalPropertySelector @ref="propertySelector"
-                          ModelType="@GetSelectedModelType()"
-                          IgnoredProperties="IgnoreRules"
-                          OnPropertyAdded="AddIgnoreRule"
-                          OnPropertyRemoved="propertyPath => RemoveIgnoreRule(IgnoreRules.FirstOrDefault(r => r.PropertyPath == propertyPath))" />
+                              ModelType="@GetSelectedModelType()"
+                              IgnoredProperties="IgnoreRules"
+                              OnPropertyAdded="AddIgnoreRule"
+                              OnPropertyRemoved="propertyPath => RemoveIgnoreRule(IgnoreRules.FirstOrDefault(r => r.PropertyPath == propertyPath))" />
 
 @code {
     private string SelectedModelName { get; set; }
@@ -118,6 +131,9 @@
     private CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
     private HierarchicalPropertySelector propertySelector;
     private bool EnableSemanticAnalysis { get; set; } = true;
+    private int CompletedFiles { get; set; }
+    private int TotalFiles { get; set; }
+    private bool ShowProgress => IsComparing && TotalFiles > 0;
 
     private bool CanRunFolderComparison =>
         !string.IsNullOrEmpty(SelectedModelName) &&
@@ -253,10 +269,23 @@
                 .Select(f => ((Stream)f.Stream, f.FileName))
                 .ToList();
 
-            FolderComparisonResult = await ComparisonService.CompareFoldersAsync(
+            CompletedFiles = 0;
+            TotalFiles = Math.Min(folder1FilesList.Count, folder2FilesList.Count);
+
+            // Create progress reporter
+            var progressHandler = new Progress<(int Completed, int Total)>(progress =>
+            {
+                CompletedFiles = progress.Completed;
+                StateHasChanged();
+            });
+
+            // Use the batch processing method with progress reporting
+            FolderComparisonResult = await ComparisonService.CompareFoldersInBatchesAsync(
                 folder1FilesList,
                 folder2FilesList,
                 SelectedModelName,
+                50, // Batch size
+                progressHandler,
                 cancellationToken);
 
             if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 0)
@@ -267,13 +296,8 @@
             if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 1 && EnablePatternAnalysis)
             {
                 await GeneratePatternAnalysis();
-            }
 
-            if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 1 && EnablePatternAnalysis)
-            {
-                await GeneratePatternAnalysis();
-
-                if (PatternAnalysis != null)
+                if (PatternAnalysis != null && EnableSemanticAnalysis)
                 {
                     await GenerateSemanticAnalysis();
                 }
@@ -424,13 +448,13 @@
     {
         if (FolderComparisonResult == null || PatternAnalysis == null)
             return;
-        
+
         try
         {
             IsComparing = true;
-        
+
             var cancellationToken = _cancellationTokenSource.Token;
-        
+
             SemanticAnalysis = await ComparisonService.AnalyzeSemanticDifferencesAsync(
                 FolderComparisonResult,
                 PatternAnalysis,
@@ -456,11 +480,11 @@
     {
         if (SemanticAnalysis == null)
             return;
-        
+
         try
         {
             var report = FileUtilities.GenerateSemanticAnalysisReport(SemanticAnalysis);
-        
+
             await JSRuntime.InvokeVoidAsync(
                 "saveAsFile",
                 filename,
