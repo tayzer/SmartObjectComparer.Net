@@ -89,7 +89,11 @@ public class ComparisonService : IComparisonService
             var result = await Task.Run(() =>
             {
                 var compareLogic = configService.GetCompareLogic();
-                return compareLogic.Compare(oldResponseCopy, newResponseCopy);
+
+                var oldClone = cloneMethod.Invoke(deserializationService, new[] { oldResponseCopy });
+                var newClone = cloneMethod.Invoke(deserializationService, new[] { newResponseCopy });
+
+                return compareLogic.Compare(oldClone, newClone);
             }, cancellationToken);
 
             logger.LogInformation("Comparison completed. Found {DifferenceCount} differences",
