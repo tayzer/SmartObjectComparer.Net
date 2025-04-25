@@ -4,7 +4,15 @@
 <div class="form-group mt-3">
     <label>@Label</label>
     <div class="d-flex gap-2">
-        <InputFile class="form-control" OnChange="HandleFileUpload" multiple />
+        @if (SupportsFolderUpload)
+        {
+            <InputFile class="form-control" OnChange="HandleFileUpload" multiple directory webkitdirectory />
+        }
+        else
+        {
+            <InputFile class="form-control" OnChange="HandleFileUpload" multiple />
+            <small class="text-muted">Your browser doesn't support folder upload. Please select multiple files manually.</small>
+        }
         <span class="badge bg-info d-flex align-items-center">
             @if (Files.Count > 0)
             {
@@ -66,58 +74,107 @@
     [Parameter]
     public EventCallback<List<(MemoryStream Stream, string FileName)>> OnFilesChanged { get; set; }
 
+    private bool SupportsFolderUpload { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Check if browser supports folder upload
+        SupportsFolderUpload = await JSRuntime.InvokeAsync<bool>("checkFolderUploadSupport");
+    }
+
     private async Task HandleFileUpload(InputFileChangeEventArgs e)
     {
         try
         {
-            // Increase the file count limit
-            var maxFilesPerUpload = 2000;
-            var maxFileSize = 20 * 1024 * 1024; // 20MB per file
+            // Set reasonable limits
+            var maxAllowedFiles = 5000; // Higher limit for folder uploads
+            var maxFileSize = 50 * 1024 * 1024; // 50MB per file
+            var batchSize = 50; // Process files in batches of 50
 
-            var selectedFiles = e.GetMultipleFiles(maxFilesPerUpload);
-            var updatedFiles = new List<(MemoryStream Stream, string FileName)>(Files);
+            var selectedFiles = e.GetMultipleFiles(maxAllowedFiles);
 
-            if (selectedFiles.Count >= maxFilesPerUpload)
+            if (selectedFiles.Count >= maxAllowedFiles)
             {
                 await JSRuntime.InvokeVoidAsync("alert",
-                    $"You selected at least {maxFilesPerUpload} files. Some files may not be processed.");
+                    $"You selected at least {maxAllowedFiles} files. Some files may not be processed.");
             }
 
-            // Process files in smaller batches to avoid UI freezing
-            const int processLimit = 100;
-            int processedCount = 0;
+            // Use progressive loading - first clear the display
+            await JSRuntime.InvokeVoidAsync("showProcessingIndicator", "Processing files...");
 
-            foreach (var file in selectedFiles)
-            {
-                // Process in batches to avoid UI freezing
-                if (processedCount % processLimit == 0 && processedCount > 0)
-                {
-                    // Update the files list periodically to show progress
-                    Files = updatedFiles.OrderBy(f => f.FileName).ToList();
-                    await OnFilesChanged.InvokeAsync(Files);
-                    StateHasChanged();
+            // Stream processor that doesn't load everything into memory at once
+            await ProcessFilesInBatches(selectedFiles, batchSize, maxFileSize);
 
-                    // Small delay to allow UI to update
-                    await Task.Delay(10);
-                }
-
-                var stream = new MemoryStream();
-                await file.OpenReadStream(maxAllowedSize: maxFileSize).CopyToAsync(stream);
-                stream.Position = 0;
-
-                updatedFiles.Add((Stream: stream, FileName: file.Name));
-                processedCount++;
-            }
-
-            updatedFiles = updatedFiles.OrderBy(f => f.FileName).ToList();
-
-            Files = updatedFiles;
-            await OnFilesChanged.InvokeAsync(updatedFiles);
+            await JSRuntime.InvokeVoidAsync("hideProcessingIndicator");
         }
         catch (Exception ex)
         {
+            await JSRuntime.InvokeVoidAsync("hideProcessingIndicator");
             await JSRuntime.InvokeVoidAsync("alert", $"Error loading files: {ex.Message}");
         }
+    }
+
+    private async Task ProcessFilesInBatches(IReadOnlyList<IBrowserFile> selectedFiles, int batchSize, long maxFileSize)
+    {
+        // Create a temporary list that we'll fill in batches
+        var updatedFiles = new List<(MemoryStream Stream, string FileName)>(Files);
+
+        // Number of batches we'll need to process
+        int totalBatches = (selectedFiles.Count + batchSize - 1) / batchSize;
+
+        for (int batch = 0; batch < totalBatches; batch++)
+        {
+            int startIdx = batch * batchSize;
+            int endIdx = Math.Min(startIdx + batchSize, selectedFiles.Count);
+
+            // Process this batch
+            for (int i = startIdx; i < endIdx; i++)
+            {
+                var file = selectedFiles[i];
+
+                // Skip files that are too large
+                if (file.Size > maxFileSize)
+                {
+                    await JSRuntime.InvokeVoidAsync("console.warn", $"Skipping {file.Name} (too large)");
+                    continue;
+                }
+
+                try
+                {
+                    // Process each file individually
+                    // Use a streamed approach rather than loading the whole file at once
+                    await using var stream = file.OpenReadStream(maxFileSize);
+                    var memoryStream = new MemoryStream();
+                    await stream.CopyToAsync(memoryStream);
+                    memoryStream.Position = 0;
+
+                    updatedFiles.Add((Stream: memoryStream, FileName: file.Name));
+
+                    // Update progress after each file
+                    var progress = (double)(i + 1) / selectedFiles.Count * 100;
+                    await JSRuntime.InvokeVoidAsync("updateProcessingProgress", progress, i + 1, selectedFiles.Count);
+                }
+                catch (Exception ex)
+                {
+                    await JSRuntime.InvokeVoidAsync("console.error", $"Error processing {file.Name}: {ex.Message}");
+                }
+            }
+
+            // Update UI periodically and allow for garbage collection
+            if (batch % 2 == 0 || batch == totalBatches - 1)
+            {
+                Files = updatedFiles.OrderBy(f => f.FileName).ToList();
+                await OnFilesChanged.InvokeAsync(Files);
+                StateHasChanged();
+
+                // Give the UI a chance to update and garbage collect
+                await Task.Delay(10);
+            }
+        }
+
+        // Final update with all files sorted
+        Files = updatedFiles.OrderBy(f => f.FileName).ToList();
+        await OnFilesChanged.InvokeAsync(Files);
     }
 
     private async Task RemoveFile(int index)

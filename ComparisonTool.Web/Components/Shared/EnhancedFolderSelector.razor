@@ -1,0 +1,87 @@
+﻿@namespace ComparisonTool.Web.Components.Comparison
+@using ComparisonTool.Web.Components.Shared
+
+<div class="card">
+    <div class="card-header">
+        <h5>Step 1: Select XML Files or Folders</h5>
+    </div>
+    <div class="card-body">
+        <div class="form-group">
+            <label>Select Domain Model:</label>
+            <select class="form-control" @bind="SelectedModelNameLocal">
+                @foreach (var modelName in ModelNames)
+                {
+                    <option value="@modelName">@modelName</option>
+                }
+            </select>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6">
+                <FolderUploadPanel Label="V1 Files (select folder or files):"
+                                 Files="Folder1Files"
+                                 OnFilesChanged="HandleFolder1Changed" />
+            </div>
+
+            <div class="col-md-6">
+                <FolderUploadPanel Label="V2 Files (select folder or files):"
+                                 Files="Folder2Files"
+                                 OnFilesChanged="HandleFolder2Changed" />
+            </div>
+        </div>
+
+        @if (Folder1Files.Any() && Folder2Files.Any())
+        {
+            <div class="alert alert-info mt-3">
+                <strong>Files will be paired for comparison in order.</strong><br />
+                V1 files are sorted by filename, and V2 files are sorted by filename. Each V1 file will be compared with the corresponding V2 file.
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public IEnumerable<string> ModelNames { get; set; }
+
+    [Parameter]
+    public string SelectedModelName { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnModelNameChanged { get; set; }
+
+    [Parameter]
+    public List<(MemoryStream Stream, string FileName)> Folder1Files { get; set; } = new();
+
+    [Parameter]
+    public List<(MemoryStream Stream, string FileName)> Folder2Files { get; set; } = new();
+
+    [Parameter]
+    public EventCallback<List<(MemoryStream Stream, string FileName)>> OnFolder1FilesChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<List<(MemoryStream Stream, string FileName)>> OnFolder2FilesChanged { get; set; }
+
+    private string SelectedModelNameLocal
+    {
+        get => SelectedModelName;
+        set
+        {
+            if (SelectedModelName != value)
+            {
+                SelectedModelName = value;
+                OnModelNameChanged.InvokeAsync(value);
+            }
+        }
+    }
+
+    private async Task HandleFolder1Changed(List<(MemoryStream Stream, string FileName)> files)
+    {
+        await OnFolder1FilesChanged.InvokeAsync(files);
+    }
+
+    private async Task HandleFolder2Changed(List<(MemoryStream Stream, string FileName)> files)
+    {
+        await OnFolder2FilesChanged.InvokeAsync(files);
+    }
+}
