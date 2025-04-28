@@ -506,37 +506,93 @@ window.uploadFolderInBatches = async function (inputId, batchSize, dotNetRef) {
         alert('Could not find folder input element.');
         return;
     }
+    
+    // Filter for XML files only
     const files = Array.from(input.files).filter(f => f.name.endsWith('.xml'));
     const totalFiles = files.length;
     let uploaded = 0;
-    for (let i = 0; i < totalFiles; i += batchSize) {
-        const batch = files.slice(i, i + batchSize);
+    let uploadedFileNames = [];
+    
+    // Use smaller batch sizes for very large folder uploads to avoid memory issues
+    const adjustedBatchSize = totalFiles > 500 ? Math.min(batchSize, 10) : batchSize;
+    
+    // Process in batches to avoid overloading the server
+    for (let i = 0; i < totalFiles; i += adjustedBatchSize) {
+        const batch = files.slice(i, i + adjustedBatchSize);
         const form = new FormData();
+        
         for (const file of batch) {
+            // Use webkitRelativePath to preserve folder structure
             form.append('files', file, file.webkitRelativePath || file.name);
         }
+        
         try {
             const response = await fetch('/api/upload/batch', {
                 method: 'POST',
                 body: form
             });
+            
             if (!response.ok) {
                 const err = await response.text();
                 console.log('Batch upload error:', err);
                 if (dotNetRef) dotNetRef.invokeMethodAsync('OnBatchUploadError', err);
                 break;
             }
+            
+            // Parse backend response
+            const result = await response.json();
+            
+            // Handle large file sets with the new approach
+            if (result.batchId) {
+                // For large file sets, the server returns a batch ID instead of the file list
+                // Store the batch ID for later reference
+                if (!uploadedFileNames.includes(result.batchId)) {
+                    uploadedFileNames.push(result.batchId);
+                }
+            } else if (result && result.files) {
+                // For smaller sets, collect the files directly
+                uploadedFileNames = uploadedFileNames.concat(result.files);
+            }
+            
+            // Add a small delay between batches to prevent server overload
+            await new Promise(resolve => setTimeout(resolve, 50));
         } catch (e) {
             console.log('Batch upload exception:', e);
             if (dotNetRef) dotNetRef.invokeMethodAsync('OnBatchUploadError', e.toString());
             break;
         }
+        
         uploaded += batch.length;
         console.log('Batch uploaded:', uploaded, '/', totalFiles);
         if (dotNetRef) dotNetRef.invokeMethodAsync('OnBatchUploadProgress', uploaded, totalFiles);
     }
+    
+    // For large uploads, we might need to fetch the file list in a separate request
+    // to avoid memory issues in the initial response
+    if (uploadedFileNames.length === 1 && uploadedFileNames[0].length === 8) {
+        // This looks like a batch ID, not a file path
+        const batchId = uploadedFileNames[0];
+        try {
+            const response = await fetch(`/api/upload/batch/${batchId}`);
+            if (response.ok) {
+                const result = await response.json();
+                if (result && result.files) {
+                    uploadedFileNames = result.files;
+                }
+            }
+        } catch (e) {
+            console.error('Error fetching file list:', e);
+        }
+    }
+    
+    // Send result back to Blazor
+    const uploadResult = JSON.stringify({ 
+        uploaded: uploadedFileNames.length, 
+        files: uploadedFileNames
+    });
+    
     console.log('Upload complete:', uploaded, '/', totalFiles);
-    if (dotNetRef) dotNetRef.invokeMethodAsync('OnBatchUploadComplete', uploaded, totalFiles);
+    if (dotNetRef) dotNetRef.invokeMethodAsync('OnBatchUploadComplete', uploadResult);
 };
 
 // Helper to trigger hidden input click and handle upload after file selection

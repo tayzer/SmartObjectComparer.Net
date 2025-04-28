@@ -18,9 +18,20 @@ builder.Host.UseSerilog();
 builder.Services
     .AddXmlComparisonServices(builder.Configuration)
     .AddRazorComponents()
-    .AddInteractiveServerComponents();
+    .AddInteractiveServerComponents(options =>
+    {
+        options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(30);
+        options.DisconnectedCircuitMaxRetained = 100;
+    });
 
 builder.Services.AddBlazorBootstrap();
+
+builder.Services.AddSignalR(options =>
+{
+    options.MaximumReceiveMessageSize = 10 * 1024 * 1024;
+    options.ClientTimeoutInterval = TimeSpan.FromMinutes(5);
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+});
 
 // Register logging - make sure it's properly configured
 builder.Logging.ClearProviders();

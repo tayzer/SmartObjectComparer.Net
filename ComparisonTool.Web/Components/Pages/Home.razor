@@ -1,4 +1,4 @@
-﻿@page "/"
+@page "/"
 @rendermode InteractiveServer
 @using System.IO
 @using ComparisonTool.Core.Comparison
@@ -113,7 +113,7 @@ else
 {
     <div class="row mt-4">
         <div class="col-md-6">
-            <EnhancedFolderSelector ModelNames="@DeserializationService.GetRegisteredModelNames()"
+            <FileSelector ModelNames="@DeserializationService.GetRegisteredModelNames()"
                           SelectedModelName="@SelectedModelName"
                           OnModelNameChanged="@(name => SelectedModelName = name)"
                           Folder1Files="@Folder1Files"
@@ -219,8 +219,8 @@ else
     private string Directory2Path { get; set; }
     
     // File upload mode properties
-    private List<(MemoryStream Stream, string FileName)> Folder1Files { get; set; } = new();
-    private List<(MemoryStream Stream, string FileName)> Folder2Files { get; set; } = new();
+    private List<string> Folder1Files { get; set; } = new();
+    private List<string> Folder2Files { get; set; } = new();
     
     // Comparison state
     private bool IsComparing { get; set; } = false;
@@ -309,12 +309,12 @@ else
         }
     }
 
-    private void HandleFolder1FilesChanged(List<(MemoryStream Stream, string FileName)> files)
+    private void HandleFolder1FilesChanged(List<string> files)
     {
         Folder1Files = files;
     }
 
-    private void HandleFolder2FilesChanged(List<(MemoryStream Stream, string FileName)> files)
+    private void HandleFolder2FilesChanged(List<string> files)
     {
         Folder2Files = files;
     }
@@ -524,17 +524,9 @@ else
                 var totalFiles = Math.Min(Folder1Files.Count, Folder2Files.Count);
                 Progress = new ComparisonProgress(0, totalFiles, "Comparing files...");
                 
-                var folder1FilesList = Folder1Files
-                    .Select(f => ((Stream)f.Stream, f.FileName))
-                    .ToList();
-
-                var folder2FilesList = Folder2Files
-                    .Select(f => ((Stream)f.Stream, f.FileName))
-                    .ToList();
-
                 FolderComparisonResult = await ComparisonService.CompareFoldersInBatchesAsync(
-                    folder1FilesList,
-                    folder2FilesList,
+                    Folder1Files,
+                    Folder2Files,
                     SelectedModelName,
                     50, // Batch size of 50 files
                     new Progress<(int Completed, int Total)>(progress =>

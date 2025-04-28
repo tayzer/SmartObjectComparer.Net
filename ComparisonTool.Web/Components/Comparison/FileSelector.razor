@@ -1,4 +1,4 @@
-﻿@namespace ComparisonTool.Web.Components.Comparison
+@namespace ComparisonTool.Web.Components.Comparison
 @using ComparisonTool.Web.Components.Shared
 
 <div class="card">
@@ -18,13 +18,13 @@
 
         <div class="row">
             <div class="col-md-6">
-                <FileUploadPanel Label="V1 Files (select multiple):"
+                <FolderUploadPanel Label="V1 Folder (select folder):"
                                  Files="Folder1Files"
                                  OnFilesChanged="HandleFolder1Changed" />
             </div>
 
             <div class="col-md-6">
-                <FileUploadPanel Label="V2 Files (select multiple):"
+                <FolderUploadPanel Label="V2 Folder (select folder):"
                                  Files="Folder2Files"
                                  OnFilesChanged="HandleFolder2Changed" />
             </div>
@@ -51,16 +51,16 @@
     public EventCallback<string> OnModelNameChanged { get; set; }
 
     [Parameter]
-    public List<(MemoryStream Stream, string FileName)> Folder1Files { get; set; } = new();
+    public List<string> Folder1Files { get; set; } = new();
 
     [Parameter]
-    public List<(MemoryStream Stream, string FileName)> Folder2Files { get; set; } = new();
+    public List<string> Folder2Files { get; set; } = new();
 
     [Parameter]
-    public EventCallback<List<(MemoryStream Stream, string FileName)>> OnFolder1FilesChanged { get; set; }
+    public EventCallback<List<string>> OnFolder1FilesChanged { get; set; }
 
     [Parameter]
-    public EventCallback<List<(MemoryStream Stream, string FileName)>> OnFolder2FilesChanged { get; set; }
+    public EventCallback<List<string>> OnFolder2FilesChanged { get; set; }
 
     private string SelectedModelNameLocal
     {
@@ -75,12 +75,12 @@
         }
     }
 
-    private async Task HandleFolder1Changed(List<(MemoryStream Stream, string FileName)> files)
+    private async Task HandleFolder1Changed(List<string> files)
     {
         await OnFolder1FilesChanged.InvokeAsync(files);
     }
 
-    private async Task HandleFolder2Changed(List<(MemoryStream Stream, string FileName)> files)
+    private async Task HandleFolder2Changed(List<string> files)
     {
         await OnFolder2FilesChanged.InvokeAsync(files);
     }

@@ -1,9 +1,10 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using System.Collections.Concurrent;
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.Serialization;
+using ComparisonTool.Core.Utilities;
 using KellermanSoftware.CompareNetObjects;
 using Microsoft.Extensions.Logging;
 
@@ -17,15 +18,20 @@ public class ComparisonService : IComparisonService
     private readonly ILogger<ComparisonService> logger;
     private readonly IXmlDeserializationService deserializationService;
     private readonly IComparisonConfigurationService configService;
+    private readonly IFileSystemService fileSystemService;
+
+    private const int MaxConcurrentComparisons = 4; // Limit concurrent operations, todo: set via config?
 
     public ComparisonService(
         ILogger<ComparisonService> logger,
         IXmlDeserializationService deserializationService,
-        IComparisonConfigurationService configService)
+        IComparisonConfigurationService configService,
+        IFileSystemService fileSystemService)
     {
         this.logger = logger;
         this.deserializationService = deserializationService;
         this.configService = configService;
+        this.fileSystemService = fileSystemService;
     }
 
     /// <summary>
@@ -119,14 +125,12 @@ public class ComparisonService : IComparisonService
     /// <param name="cancellationToken">Cancellation token for async operations</param>
     /// <returns>Results of comparing multiple files</returns>
     public async Task<MultiFolderComparisonResult> CompareFoldersAsync(
-        List<(Stream Stream, string FileName)> folder1Files,
-        List<(Stream Stream, string FileName)> folder2Files,
+        List<string> folder1Files,
+        List<string> folder2Files,
         string modelName,
         CancellationToken cancellationToken = default)
     {
         var result = new MultiFolderComparisonResult();
-
-        // Determine how many pairs we can make
         int pairCount = Math.Min(folder1Files.Count, folder2Files.Count);
         result.TotalPairsCompared = pairCount;
 
@@ -136,49 +140,29 @@ public class ComparisonService : IComparisonService
             return result;
         }
 
-        logger.LogInformation("Starting comparison of {PairCount} file pairs using model {ModelName}",
-            pairCount, modelName);
+        logger.LogInformation("Starting comparison of {PairCount} file pairs using model {ModelName}", pairCount, modelName);
 
-        // For each pair of files, compare them
         for (int i = 0; i < pairCount; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-
-            var (file1Stream, file1Name) = folder1Files[i];
-            var (file2Stream, file2Name) = folder2Files[i];
-
+            var file1Path = folder1Files[i];
+            var file2Path = folder2Files[i];
             try
             {
-                logger.LogInformation("Comparing pair {PairNumber}/{TotalPairs}: {File1} vs {File2}",
-                    i + 1, pairCount, file1Name, file2Name);
-
-                // Reset streams to beginning
-                file1Stream.Position = 0;
-                file2Stream.Position = 0;
-
-                // Do the comparison
-                var pairResult = await CompareXmlFilesAsync(
-                    file1Stream,
-                    file2Stream,
-                    modelName,
-                    cancellationToken);
-
-                // Generate summary
+                logger.LogInformation("Comparing pair {PairNumber}/{TotalPairs}: {File1} vs {File2}", i + 1, pairCount, file1Path, file2Path);
+                using var file1Stream = await fileSystemService.OpenFileStreamAsync(file1Path, cancellationToken);
+                using var file2Stream = await fileSystemService.OpenFileStreamAsync(file2Path, cancellationToken);
+                var pairResult = await CompareXmlFilesAsync(file1Stream, file2Stream, modelName, cancellationToken);
                 var categorizer = new DifferenceCategorizer();
                 var summary = categorizer.CategorizeAndSummarize(pairResult);
-
-                // Add to results
                 var filePairResult = new FilePairComparisonResult
                 {
-                    File1Name = file1Name,
-                    File2Name = file2Name,
+                    File1Name = file1Path,
+                    File2Name = file2Path,
                     Result = pairResult,
                     Summary = summary
                 };
-
                 result.FilePairResults.Add(filePairResult);
-
-                // Update overall equality status
                 if (!summary.AreEqual)
                 {
                     result.AllEqual = false;
@@ -186,15 +170,11 @@ public class ComparisonService : IComparisonService
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error comparing files {File1} and {File2}", file1Name, file2Name);
+                logger.LogError(ex, "Error comparing files {File1} and {File2}", file1Path, file2Path);
                 throw;
             }
         }
-
-        logger.LogInformation("Folder comparison completed. {EqualCount} equal, {DifferentCount} different",
-            result.FilePairResults.Count(r => r.AreEqual),
-            result.FilePairResults.Count(r => !r.AreEqual));
-
+        logger.LogInformation("Folder comparison completed. {EqualCount} equal, {DifferentCount} different", result.FilePairResults.Count(r => r.AreEqual), result.FilePairResults.Count(r => !r.AreEqual));
         return result;
     }
 
@@ -209,8 +189,8 @@ public class ComparisonService : IComparisonService
     /// <param name="cancellationToken">Cancellation token for async operations</param>
     /// <returns>Results of comparing multiple files</returns>
     public async Task<MultiFolderComparisonResult> CompareFoldersInBatchesAsync(
-        List<(Stream Stream, string FileName)> folder1Files,
-        List<(Stream Stream, string FileName)> folder2Files,
+        List<string> folder1Files,
+        List<string> folder2Files,
         string modelName,
         int batchSize = 50,
         IProgress<(int Completed, int Total)> progress = null,
@@ -219,183 +199,88 @@ public class ComparisonService : IComparisonService
         var result = new MultiFolderComparisonResult();
         result.TotalPairsCompared = Math.Min(folder1Files.Count, folder2Files.Count);
         int completedPairs = 0;
-
+        int equalityFlag = 1;
         if (result.TotalPairsCompared == 0)
         {
             logger.LogWarning("No file pairs to compare");
             return result;
         }
-
-        logger.LogInformation("Starting batch comparison of {PairCount} file pairs using model {ModelName}",
-            result.TotalPairsCompared, modelName);
-
-        result.AllEqual = true; // Start assuming all equal
-
-        // Process in batches
-        for (int batchStart = 0; batchStart < result.TotalPairsCompared; batchStart += batchSize)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            int currentBatchSize = Math.Min(batchSize, result.TotalPairsCompared - batchStart);
-
-            logger.LogInformation("Processing batch {BatchNumber} with {BatchSize} files (total progress: {CompletedPairs}/{TotalPairs})",
-                batchStart / batchSize + 1, currentBatchSize, completedPairs, result.TotalPairsCompared);
-
-            var batchResult = await ProcessFileBatchAsync(
-                folder1Files.Skip(batchStart).Take(currentBatchSize).ToList(),
-                folder2Files.Skip(batchStart).Take(currentBatchSize).ToList(),
-                modelName,
-                cancellationToken);
-
-            // Merge batch results into the final result
-            result.FilePairResults.AddRange(batchResult.FilePairResults);
-            result.AllEqual = result.AllEqual && batchResult.AllEqual;
-
-            // Update progress
-            completedPairs += currentBatchSize;
-            progress?.Report((completedPairs, result.TotalPairsCompared));
-
-            // Release resources after each batch
-            ReleaseMemory();
-        }
-
-        // Sort results by filename for consistent display
-        result.FilePairResults = result.FilePairResults
-            .OrderBy(r => r.File1Name)
-            .ToList();
-
-        logger.LogInformation("Batch comparison completed. {EqualCount} equal, {DifferentCount} different",
-            result.FilePairResults.Count(r => r.AreEqual),
-            result.FilePairResults.Count(r => !r.AreEqual));
-
-        return result;
-    }
-
-    /// <summary>
-    /// Process a batch of files in parallel
-    /// </summary>
-    private async Task<MultiFolderComparisonResult> ProcessFileBatchAsync(
-        List<(Stream Stream, string FileName)> folder1Files,
-        List<(Stream Stream, string FileName)> folder2Files,
-        string modelName,
-        CancellationToken cancellationToken = default)
-    {
-        var result = new MultiFolderComparisonResult();
+        batchSize = AdjustBatchSize(result.TotalPairsCompared, batchSize);
+        logger.LogInformation("Starting batch comparison of {PairCount} file pairs using model {ModelName}", result.TotalPairsCompared, modelName);
         var filePairResults = new ConcurrentBag<FilePairComparisonResult>();
-
-        // Use int instead of bool for atomic operations
-        int equalityFlag = 1; // 1 means all equal so far
-
-        // Calculate degree of parallelism (adjust based on system capabilities)
-        int degreeOfParallelism = Math.Min(Environment.ProcessorCount, folder1Files.Count);
-        degreeOfParallelism = Math.Max(1, degreeOfParallelism);
-
-        logger.LogInformation("Processing {FileCount} files with parallelism degree {DegreeOfParallelism}",
-            folder1Files.Count, degreeOfParallelism);
-
-        // Create semaphore to limit concurrent operations
-        using var semaphore = new SemaphoreSlim(degreeOfParallelism);
-
-        // Create tasks for parallel execution
-        var tasks = new List<Task>();
-
-        for (int i = 0; i < folder1Files.Count; i++)
-        {
-            var index = i;
-            var task = Task.Run(async () =>
-            {
-                try
-                {
-                    await semaphore.WaitAsync(cancellationToken);
-
-                    var (file1Stream, file1Name) = folder1Files[index];
-                    var (file2Stream, file2Name) = folder2Files[index];
-
-                    // Clone streams to avoid concurrent access issues
-                    var file1Copy = new MemoryStream();
-                    var file2Copy = new MemoryStream();
-
-                    file1Stream.Position = 0;
-                    file2Stream.Position = 0;
-
-                    await file1Stream.CopyToAsync(file1Copy, cancellationToken);
-                    await file2Stream.CopyToAsync(file2Copy, cancellationToken);
-
-                    file1Copy.Position = 0;
-                    file2Copy.Position = 0;
-
-                    // Perform the comparison
-                    var pairResult = await CompareXmlFilesAsync(
-                        file1Copy,
-                        file2Copy,
-                        modelName,
-                        cancellationToken);
-
-                    // Generate summary using existing analyzer
-                    var categorizer = new DifferenceCategorizer();
-                    var summary = categorizer.CategorizeAndSummarize(pairResult);
-
-                    // Create result
-                    var filePairResult = new FilePairComparisonResult
-                    {
-                        File1Name = file1Name,
-                        File2Name = file2Name,
-                        Result = pairResult,
-                        Summary = summary
-                    };
-
-                    filePairResults.Add(filePairResult);
-
-                    // Update equality tracking using atomic operation
-                    if (!summary.AreEqual)
-                    {
-                        Interlocked.Exchange(ref equalityFlag, 0);
-                    }
-
-                    // Clean up
-                    file1Copy.Dispose();
-                    file2Copy.Dispose();
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Error comparing files {File1} and {File2}",
-                        folder1Files[index].FileName, folder2Files[index].FileName);
-                    throw;
-                }
-                finally
-                {
-                    semaphore.Release();
-                }
-            }, cancellationToken);
-
-            tasks.Add(task);
-        }
-
+        int totalBatches = (result.TotalPairsCompared + batchSize - 1) / batchSize;
         try
         {
-            // Wait for all tasks to complete, but handle when some might be canceled
-            try
+            for (int batchIndex = 0; batchIndex < totalBatches; batchIndex++)
             {
-                await Task.WhenAll(tasks);
+                cancellationToken.ThrowIfCancellationRequested();
+                int batchStartIndex = batchIndex * batchSize;
+                int currentBatchSize = Math.Min(batchSize, result.TotalPairsCompared - batchStartIndex);
+                logger.LogInformation("Processing batch {BatchNumber}/{TotalBatches} with {BatchSize} files", batchIndex + 1, totalBatches, currentBatchSize);
+                var batch1Files = folder1Files.Skip(batchStartIndex).Take(currentBatchSize).ToList();
+                var batch2Files = folder2Files.Skip(batchStartIndex).Take(currentBatchSize).ToList();
+                using var semaphore = new SemaphoreSlim(MaxConcurrentComparisons);
+                var tasks = new List<Task<FilePairComparisonResult>>();
+                for (int i = 0; i < currentBatchSize; i++)
+                {
+                    var localIndex = i;
+                    tasks.Add(Task.Run(async () =>
+                    {
+                        await semaphore.WaitAsync(cancellationToken);
+                        try
+                        {
+                            var file1Path = batch1Files[localIndex];
+                            var file2Path = batch2Files[localIndex];
+                            using var file1Stream = await fileSystemService.OpenFileStreamAsync(file1Path, cancellationToken);
+                            using var file2Stream = await fileSystemService.OpenFileStreamAsync(file2Path, cancellationToken);
+                            var comparisonResult = await CompareXmlFilesAsync(file1Stream, file2Stream, modelName, cancellationToken);
+                            var categorizer = new DifferenceCategorizer();
+                            var summary = categorizer.CategorizeAndSummarize(comparisonResult);
+                            return new FilePairComparisonResult
+                            {
+                                File1Name = file1Path,
+                                File2Name = file2Path,
+                                Result = comparisonResult,
+                                Summary = summary
+                            };
+                        }
+                        finally
+                        {
+                            semaphore.Release();
+                        }
+                    }, cancellationToken));
+                }
+                while (tasks.Count > 0)
+                {
+                    var completedTask = await Task.WhenAny(tasks);
+                    tasks.Remove(completedTask);
+                    try
+                    {
+                        var pairResult = await completedTask;
+                        filePairResults.Add(pairResult);
+                        if (!pairResult.AreEqual)
+                        {
+                            Interlocked.Exchange(ref equalityFlag, 0);
+                        }
+                        completedPairs++;
+                        progress?.Report((completedPairs, result.TotalPairsCompared));
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Error in batch file comparison task");
+                    }
+                }
             }
-            catch (OperationCanceledException)
-            {
-                // Some tasks may have completed successfully, so we'll use what we have
-                logger.LogWarning("Some comparison tasks were canceled");
-            }
-
-            // Populate the result with whatever we have
-            result.FilePairResults = filePairResults.ToList();
-            result.AllEqual = equalityFlag == 1; // Convert back to boolean
-            result.TotalPairsCompared = result.FilePairResults.Count;
-
-            return result;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error processing file batch");
+            logger.LogError(ex, "Error during batch folder comparison");
             throw;
         }
+        result.FilePairResults = filePairResults.OrderBy(r => r.File1Name).ToList();
+        result.AllEqual = equalityFlag == 1;
+        logger.LogInformation("Batch comparison completed. {EqualCount} equal, {DifferentCount} different", result.FilePairResults.Count(r => r.AreEqual), result.FilePairResults.Count(r => !r.AreEqual));
+        return result;
     }
 
     /// <summary>
@@ -805,5 +690,26 @@ public class ComparisonService : IComparisonService
         // For paths like Body.Response.Results.Score, extract Score
         var parts = propertyPath.Split('.');
         return parts.Length > 0 ? parts[parts.Length - 1] : string.Empty;
+    }
+
+    /// <summary>
+    /// Adjust batch size based on file count and available memory
+    /// </summary>
+    private int AdjustBatchSize(int fileCount, int defaultBatchSize)
+    {
+        // For very large file sets, use smaller batches
+        if (fileCount > 2000)
+            return Math.Min(defaultBatchSize, 20);
+
+        // For large file sets, use the default
+        if (fileCount > 500)
+            return defaultBatchSize;
+
+        // For smaller file sets, can use larger batches
+        if (fileCount > 100)
+            return defaultBatchSize * 2;
+
+        // For very small sets, use larger batches for better parallelism
+        return Math.Max(fileCount, defaultBatchSize);
     }
 }

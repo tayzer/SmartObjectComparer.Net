@@ -75,7 +75,7 @@
                                 {
                                     <li class="list-group-item d-flex justify-content-between align-items-center">
                                         <div>
-                                            <small>@GetFileNameOnly(file.FileName)</small>
+                                            <small>@GetFileNameOnly(file)</small>
                                         </div>
                                         <button class="btn btn-sm btn-danger" @onclick="() => RemoveFile(file)">
                                             <i class="bi bi-x"></i>
@@ -110,10 +110,10 @@
     public string Label { get; set; }
 
     [Parameter]
-    public List<(MemoryStream Stream, string FileName)> Files { get; set; } = new();
+    public List<string> Files { get; set; } = new();
 
     [Parameter]
-    public EventCallback<List<(MemoryStream Stream, string FileName)>> OnFilesChanged { get; set; }
+    public EventCallback<List<string>> OnFilesChanged { get; set; }
 
     private bool IsProcessing { get; set; } = false;
     private int ProcessedFiles { get; set; } = 0;
@@ -153,13 +153,12 @@
     }
 
     [JSInvokable]
-    public async Task OnBatchUploadComplete(int uploaded, int total)
+    public async Task OnBatchUploadComplete(string fileListJson)
     {
         IsProcessing = false;
-        ProcessedFiles = uploaded;
-        TotalFiles = total;
-        // Optionally, fetch uploaded file list from server or keep only filenames
-        Files = Enumerable.Range(0, uploaded).Select(i => ((MemoryStream)null, $"UploadedFile_{i + 1}.xml")).ToList();
+        // Parse the JSON string returned from the backend (should be { uploaded: N, files: [ ... ] })
+        var fileList = System.Text.Json.JsonSerializer.Deserialize<UploadResponse>(fileListJson);
+        Files = fileList?.files ?? new List<string>();
         await OnFilesChanged.InvokeAsync(Files);
         StateHasChanged();
     }
@@ -231,7 +230,7 @@
             // Update file list with just the file names (not streams)
             Files = selectedFiles
                 .Where(f => f.Name.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) && f.Size <= maxFileSize)
-                .Select(f => (Stream: (MemoryStream)null, FileName: isFolder ? f.Name : GetFileNameOnly(f.Name)))
+                .Select(f => isFolder ? f.Name : GetFileNameOnly(f.Name))
                 .ToList();
             await OnFilesChanged.InvokeAsync(Files);
 
@@ -251,9 +250,9 @@
         }
     }
 
-    private async Task RemoveFile((MemoryStream Stream, string FileName) file)
+    private async Task RemoveFile(string file)
     {
-        var updatedFiles = Files.Where(f => f.FileName != file.FileName).ToList();
+        var updatedFiles = Files.Where(f => f != file).ToList();
         Files = updatedFiles;
         await OnFilesChanged.InvokeAsync(updatedFiles);
     }
@@ -264,10 +263,10 @@
         await OnFilesChanged.InvokeAsync(Files);
     }
 
-    private IEnumerable<IGrouping<string, (MemoryStream Stream, string FileName)>> GetFolderGroups()
+    private IEnumerable<IGrouping<string, string>> GetFolderGroups()
     {
         return Files
-            .GroupBy(f => GetFolderPath(f.FileName))
+            .GroupBy(f => GetFolderPath(f))
             .OrderBy(g => g.Key);
     }
 
@@ -295,5 +294,11 @@
             return fullPath;
 
         return fullPath.Substring(lastSlashIndex + 1);
+    }
+
+    private class UploadResponse
+    {
+        public int uploaded { get; set; }
+        public List<string> files { get; set; }
     }
 }
