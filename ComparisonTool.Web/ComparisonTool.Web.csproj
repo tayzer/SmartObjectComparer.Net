@@ -18,20 +18,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Remove="NewFile.xml" />
-    <None Remove="OldFile.xml" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="NewFile.xml">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="OldFile.xml">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="Blazor.Bootstrap" Version="3.3.1" />
     <PackageReference Include="Serilog.AspNetCore" Version="8.0.1" />
     <PackageReference Include="Serilog.Settings.Configuration" Version="8.0.0" />
