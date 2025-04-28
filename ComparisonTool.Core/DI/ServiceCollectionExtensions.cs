@@ -30,6 +30,9 @@ public static class ServiceCollectionExtensions
 
         // Add performance tracking service
         services.AddSingleton<PerformanceTracker>();
+        
+        // Add system resource monitor
+        services.AddSingleton<SystemResourceMonitor>();
 
         services.AddSingleton<IXmlDeserializationService>(provider =>
         {

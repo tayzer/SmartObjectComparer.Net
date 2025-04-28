@@ -20,6 +20,7 @@ public class DirectoryComparisonService
     private readonly IXmlDeserializationService deserializationService;
     private readonly IComparisonConfigurationService configService;
     private readonly PerformanceTracker _performanceTracker;
+    private readonly SystemResourceMonitor _resourceMonitor;
 
     public DirectoryComparisonService(
         ILogger<DirectoryComparisonService> logger,
@@ -27,7 +28,8 @@ public class DirectoryComparisonService
         IFileSystemService fileSystemService,
         IXmlDeserializationService deserializationService,
         IComparisonConfigurationService configService,
-        PerformanceTracker performanceTracker)
+        PerformanceTracker performanceTracker,
+        SystemResourceMonitor resourceMonitor)
     {
         this.logger = logger;
         this.comparisonService = comparisonService;
@@ -35,6 +37,7 @@ public class DirectoryComparisonService
         this.deserializationService = deserializationService;
         this.configService = configService;
         this._performanceTracker = performanceTracker;
+        this._resourceMonitor = resourceMonitor;
     }
 
     /// <summary>
@@ -291,7 +294,7 @@ public class DirectoryComparisonService
                 await Parallel.ForEachAsync(
                     Enumerable.Range(0, pairCount),
                     new ParallelOptions { 
-                        MaxDegreeOfParallelism = CalculateParallelism(pairCount), 
+                        MaxDegreeOfParallelism = CalculateParallelism(pairCount, folder1Files), 
                         CancellationToken = cancellationToken 
                     },
                     async (index, ct) =>
@@ -417,25 +420,20 @@ public class DirectoryComparisonService
     }
 
     /// <summary>
-    /// Calculate parallelism based on batch size
+    /// Calculate optimal parallelism based on file count, file sizes, and system resources
     /// </summary>
-    private int CalculateParallelism(int batchSize)
+    private int CalculateParallelism(int fileCount, IEnumerable<string> sampleFiles = null)
     {
-        var processorCount = Environment.ProcessorCount;
-
-        // For very small batches, limit parallelism
-        if (batchSize < 10)
-            return Math.Max(1, processorCount / 4);
-
-        // For small batches, use moderate parallelism
-        if (batchSize < 50)
-            return Math.Max(2, processorCount / 2);
-
-        // For moderate batches, use high parallelism
-        if (batchSize < 200)
-            return Math.Max(4, processorCount - 1);
-
-        // For large batches, use full parallelism
-        return processorCount;
+        // Use the resource monitor to determine optimal parallelism
+        long averageFileSizeKb = 0;
+        
+        // If sample files were provided, estimate average file size
+        if (sampleFiles != null)
+        {
+            averageFileSizeKb = _performanceTracker.TrackOperation("Calculate_Avg_FileSize", () => 
+                _resourceMonitor.CalculateAverageFileSizeKb(sampleFiles.Take(Math.Min(20, fileCount))));
+        }
+        
+        return _resourceMonitor.CalculateOptimalParallelism(fileCount, averageFileSizeKb);
     }
 }
