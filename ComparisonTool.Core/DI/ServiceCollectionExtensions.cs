@@ -1,4 +1,4 @@
-﻿using ComparisonTool.Core.Comparison;
+using ComparisonTool.Core.Comparison;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Models;
 using ComparisonTool.Core.Serialization;
@@ -27,6 +27,9 @@ public static class ServiceCollectionExtensions
         }
 
         services.AddSingleton<XmlSerializerFactory>();
+
+        // Add performance tracking service
+        services.AddSingleton<PerformanceTracker>();
 
         services.AddSingleton<IXmlDeserializationService>(provider =>
         {

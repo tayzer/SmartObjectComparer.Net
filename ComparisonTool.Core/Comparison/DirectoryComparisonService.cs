@@ -19,19 +19,22 @@ public class DirectoryComparisonService
     private readonly IFileSystemService fileSystemService;
     private readonly IXmlDeserializationService deserializationService;
     private readonly IComparisonConfigurationService configService;
+    private readonly PerformanceTracker _performanceTracker;
 
     public DirectoryComparisonService(
         ILogger<DirectoryComparisonService> logger,
         IComparisonService comparisonService,
         IFileSystemService fileSystemService,
         IXmlDeserializationService deserializationService,
-        IComparisonConfigurationService configService)
+        IComparisonConfigurationService configService,
+        PerformanceTracker performanceTracker)
     {
         this.logger = logger;
         this.comparisonService = comparisonService;
         this.fileSystemService = fileSystemService;
         this.deserializationService = deserializationService;
         this.configService = configService;
+        this._performanceTracker = performanceTracker;
     }
 
     /// <summary>
@@ -247,98 +250,149 @@ public class DirectoryComparisonService
         IProgress<ComparisonProgress> progress = null,
         CancellationToken cancellationToken = default)
     {
-        // Sort files by name for consistent ordering
-        folder1Files = folder1Files.OrderBy(f => Path.GetFileName(f)).ToList();
-        folder2Files = folder2Files.OrderBy(f => Path.GetFileName(f)).ToList();
-        
-        // Determine how many pairs we can make (minimum of both lists)
-        int pairCount = Math.Min(folder1Files.Count, folder2Files.Count);
-        
-        progress?.Report(new ComparisonProgress(0, pairCount, $"Will compare {pairCount} files in order"));
-        
-        var result = new MultiFolderComparisonResult
+        return await _performanceTracker.TrackOperationAsync("CompareFolderUploadsAsync", async () => 
         {
-            TotalPairsCompared = pairCount,
-            AllEqual = true,
-            FilePairResults = new List<FilePairComparisonResult>(),
-            Metadata = new Dictionary<string, object>()
-        };
-        
-        int equalityFlag = 1;
-        int processed = 0;
-        var filePairResults = new ConcurrentBag<FilePairComparisonResult>();
-        
-        // Process files by index position instead of matching names
-        await Parallel.ForEachAsync(
-            Enumerable.Range(0, pairCount),
-            new ParallelOptions { MaxDegreeOfParallelism = CalculateParallelism(pairCount), CancellationToken = cancellationToken },
-            async (index, ct) =>
-            {
-                try
-                {
-                    var file1Path = folder1Files[index];
-                    var file2Path = folder2Files[index];
-                    
-                    // Get display names for the UI
-                    var file1Name = Path.GetFileName(file1Path);
-                    var file2Name = Path.GetFileName(file2Path);
-                    
-                    using var file1Stream = await fileSystemService.OpenFileStreamAsync(file1Path, ct);
-                    using var file2Stream = await fileSystemService.OpenFileStreamAsync(file2Path, ct);
-                    
-                    var comparisonResult = await comparisonService.CompareXmlFilesAsync(file1Stream, file2Stream, modelName, ct);
-                    var categorizer = new DifferenceCategorizer();
-                    var summary = categorizer.CategorizeAndSummarize(comparisonResult);
-                    
-                    var pairResult = new FilePairComparisonResult
-                    {
-                        File1Name = file1Name,
-                        File2Name = file2Name,
-                        Result = comparisonResult,
-                        Summary = summary
-                    };
-                    
-                    filePairResults.Add(pairResult);
-                    
-                    if (!summary.AreEqual)
-                    {
-                        Interlocked.Exchange(ref equalityFlag, 0);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "Error comparing file pair at index {Index}", index);
-                }
-                
-                int current = Interlocked.Increment(ref processed);
-                if (current % 10 == 0 || current == pairCount)
-                {
-                    progress?.Report(new ComparisonProgress(current, pairCount, $"Compared {current} of {pairCount} files"));
-                }
+            // Record timing statistics about input
+            _performanceTracker.TrackOperation("Folder_Stats", () => {
+                logger.LogInformation(
+                    "Starting comparison of {Folder1Count} files in folder 1 and {Folder2Count} files in folder 2",
+                    folder1Files.Count, folder2Files.Count);
             });
-        
-        result.FilePairResults = filePairResults.OrderBy(r => r.File1Name).ToList();
-        result.AllEqual = equalityFlag == 1;
-        
-        logger.LogInformation("Upload comparison completed. {Equal} equal, {Different} different", result.FilePairResults.Count(r => r.AreEqual), result.FilePairResults.Count(r => !r.AreEqual));
-        progress?.Report(new ComparisonProgress(pairCount, pairCount, "Comparison completed"));
-        
-        // Pattern and semantic analysis (unchanged)
-        ComparisonPatternAnalysis patternAnalysis = null;
-        if (enablePatternAnalysis && !result.AllEqual && result.FilePairResults.Count > 1)
-        {
-            progress?.Report(new ComparisonProgress(pairCount, pairCount, "Analyzing patterns..."));
-            patternAnalysis = await comparisonService.AnalyzePatternsAsync(result, cancellationToken);
-            if (enableSemanticAnalysis && patternAnalysis != null)
+            
+            // Sort files by name for consistent ordering
+            var sortedFiles = _performanceTracker.TrackOperation("Sort_Files", () => {
+                var f1 = folder1Files.OrderBy(f => Path.GetFileName(f)).ToList();
+                var f2 = folder2Files.OrderBy(f => Path.GetFileName(f)).ToList();
+                return (f1, f2);
+            });
+            
+            folder1Files = sortedFiles.f1;
+            folder2Files = sortedFiles.f2;
+            
+            // Determine how many pairs we can make (minimum of both lists)
+            int pairCount = Math.Min(folder1Files.Count, folder2Files.Count);
+            
+            progress?.Report(new ComparisonProgress(0, pairCount, $"Will compare {pairCount} files in order"));
+            
+            var result = new MultiFolderComparisonResult
             {
-                progress?.Report(new ComparisonProgress(pairCount, pairCount, "Analyzing semantic differences..."));
-                var semanticAnalysis = await comparisonService.AnalyzeSemanticDifferencesAsync(result, patternAnalysis, cancellationToken);
-                result.Metadata["SemanticAnalysis"] = semanticAnalysis;
+                TotalPairsCompared = pairCount,
+                AllEqual = true,
+                FilePairResults = new List<FilePairComparisonResult>(),
+                Metadata = new Dictionary<string, object>()
+            };
+            
+            int equalityFlag = 1;
+            int processed = 0;
+            var filePairResults = new ConcurrentBag<FilePairComparisonResult>();
+            
+            // Process files by index position instead of matching names
+            await _performanceTracker.TrackOperationAsync("Parallel_Comparison", async () => {
+                await Parallel.ForEachAsync(
+                    Enumerable.Range(0, pairCount),
+                    new ParallelOptions { 
+                        MaxDegreeOfParallelism = CalculateParallelism(pairCount), 
+                        CancellationToken = cancellationToken 
+                    },
+                    async (index, ct) =>
+                    {
+                        try
+                        {
+                            var file1Path = folder1Files[index];
+                            var file2Path = folder2Files[index];
+                            
+                            // Get display names for the UI
+                            var file1Name = Path.GetFileName(file1Path);
+                            var file2Name = Path.GetFileName(file2Path);
+                            
+                            var operationId = _performanceTracker.StartOperation($"Compare_File_{index}");
+                            
+                            try
+                            {
+                                using var file1Stream = await fileSystemService.OpenFileStreamAsync(file1Path, ct);
+                                using var file2Stream = await fileSystemService.OpenFileStreamAsync(file2Path, ct);
+                                
+                                var comparisonResult = await comparisonService.CompareXmlFilesAsync(file1Stream, file2Stream, modelName, ct);
+                                var categorizer = new DifferenceCategorizer();
+                                var summary = categorizer.CategorizeAndSummarize(comparisonResult);
+                                
+                                var pairResult = new FilePairComparisonResult
+                                {
+                                    File1Name = file1Name,
+                                    File2Name = file2Name,
+                                    Result = comparisonResult,
+                                    Summary = summary
+                                };
+                                
+                                filePairResults.Add(pairResult);
+                                
+                                if (!summary.AreEqual)
+                                {
+                                    Interlocked.Exchange(ref equalityFlag, 0);
+                                }
+                            }
+                            finally
+                            {
+                                _performanceTracker.StopOperation(operationId);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogError(ex, "Error comparing file pair at index {Index}", index);
+                        }
+                        
+                        int current = Interlocked.Increment(ref processed);
+                        if (current % 10 == 0 || current == pairCount)
+                        {
+                            progress?.Report(new ComparisonProgress(current, pairCount, $"Compared {current} of {pairCount} files"));
+                        }
+                    });
+            });
+            
+            // Process results
+            await _performanceTracker.TrackOperationAsync("Process_Results", async () => {
+                result.FilePairResults = filePairResults.OrderBy(r => r.File1Name).ToList();
+                result.AllEqual = equalityFlag == 1;
+                
+                logger.LogInformation("Comparison completed. {Equal} equal, {Different} different", 
+                    result.FilePairResults.Count(r => r.Summary.AreEqual), 
+                    result.FilePairResults.Count(r => !r.Summary.AreEqual));
+                    
+                progress?.Report(new ComparisonProgress(pairCount, pairCount, "Comparison completed"));
+            });
+            
+            // Pattern and semantic analysis
+            if (enablePatternAnalysis && !result.AllEqual && result.FilePairResults.Count > 1)
+            {
+                await _performanceTracker.TrackOperationAsync("Pattern_Analysis", async () => {
+                    progress?.Report(new ComparisonProgress(pairCount, pairCount, "Analyzing patterns..."));
+                    var patternAnalysis = await comparisonService.AnalyzePatternsAsync(result, cancellationToken);
+                    result.Metadata["PatternAnalysis"] = patternAnalysis;
+                    
+                    if (enableSemanticAnalysis && patternAnalysis != null)
+                    {
+                        await _performanceTracker.TrackOperationAsync("Semantic_Analysis", async () => {
+                            progress?.Report(new ComparisonProgress(pairCount, pairCount, "Analyzing semantic differences..."));
+                            var semanticAnalysis = await comparisonService.AnalyzeSemanticDifferencesAsync(
+                                result, patternAnalysis, cancellationToken);
+                            result.Metadata["SemanticAnalysis"] = semanticAnalysis;
+                        });
+                    }
+                });
             }
-            result.Metadata["PatternAnalysis"] = patternAnalysis;
-        }
-        
-        return result;
+            
+            // Log performance data
+            _performanceTracker.LogReport();
+            
+            // Save performance reports to files
+            var reportsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "PerformanceReports");
+            var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            var baseFileName = $"FolderComparison_{timestamp}";
+            _performanceTracker.SaveReportToFile(Path.Combine(reportsDirectory, $"{baseFileName}.txt"));
+            _performanceTracker.SaveReportToCsv(Path.Combine(reportsDirectory, $"{baseFileName}.csv"));
+            
+            return result;
+        });
     }
 
     /// <summary>

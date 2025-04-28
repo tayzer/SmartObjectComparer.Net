@@ -19,19 +19,22 @@ public class ComparisonService : IComparisonService
     private readonly IXmlDeserializationService deserializationService;
     private readonly IComparisonConfigurationService configService;
     private readonly IFileSystemService fileSystemService;
+    private readonly PerformanceTracker _performanceTracker;
 
-    private const int MaxConcurrentComparisons = 4; // Limit concurrent operations, todo: set via config?
+    private const int MaxConcurrentComparisons = 5; // Limit concurrent operations, todo: set via config?
 
     public ComparisonService(
         ILogger<ComparisonService> logger,
         IXmlDeserializationService deserializationService,
         IComparisonConfigurationService configService,
-        IFileSystemService fileSystemService)
+        IFileSystemService fileSystemService,
+        PerformanceTracker performanceTracker)
     {
         this.logger = logger;
         this.deserializationService = deserializationService;
         this.configService = configService;
         this.fileSystemService = fileSystemService;
+        this._performanceTracker = performanceTracker;
     }
 
     /// <summary>
@@ -48,72 +51,91 @@ public class ComparisonService : IComparisonService
         string modelName,
         CancellationToken cancellationToken = default)
     {
-        try
+        return await _performanceTracker.TrackOperationAsync("CompareXmlFilesAsync", async () =>
         {
-            logger.LogInformation("Starting comparison of XML files using model {ModelName}", modelName);
-
-            // Check if model exists (will throw if not found)
-            var modelType = deserializationService.GetModelType(modelName);
-
-            var deserializeMethod = typeof(IXmlDeserializationService)
-                .GetMethod(nameof(IXmlDeserializationService.DeserializeXml))
-                .MakeGenericMethod(modelType);
-
-            var cloneMethod = typeof(IXmlDeserializationService)
-                .GetMethod(nameof(IXmlDeserializationService.CloneObject))
-                .MakeGenericMethod(modelType);
-
-            // Call the methods via reflection
-            var oldResponse = deserializeMethod.Invoke(deserializationService, new object[] { oldXmlStream });
-            var newResponse = deserializeMethod.Invoke(deserializationService, new object[] { newXmlStream });
-
-            var oldResponseCopy = cloneMethod.Invoke(deserializationService, new object[] { oldResponse });
-            var newResponseCopy = cloneMethod.Invoke(deserializationService, new object[] { newResponse });
-
-            // Get properties to ignore for normalization
-            var propertiesToIgnore = configService.GetIgnoreRules()
-                .Where(r => r.IgnoreCompletely)
-                .Select(r => GetPropertyNameFromPath(r.PropertyPath))
-                .Where(p => !string.IsNullOrEmpty(p))
-                .Distinct()
-                .ToList();
-
-            // Normalize property values in both object graphs
-            if (propertiesToIgnore.Any())
+            try
             {
-                await Task.Run(() =>
+                logger.LogInformation("Starting comparison of XML files using model {ModelName}", modelName);
+
+                // Check if model exists (will throw if not found)
+                var modelType = deserializationService.GetModelType(modelName);
+
+                var deserializeMethod = typeof(IXmlDeserializationService)
+                    .GetMethod(nameof(IXmlDeserializationService.DeserializeXml))
+                    .MakeGenericMethod(modelType);
+
+                var cloneMethod = typeof(IXmlDeserializationService)
+                    .GetMethod(nameof(IXmlDeserializationService.CloneObject))
+                    .MakeGenericMethod(modelType);
+
+                // Call the methods via reflection with performance tracking
+                object oldResponse = await _performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}", () => 
+                    Task.FromResult(deserializeMethod.Invoke(deserializationService, new object[] { oldXmlStream })));
+                    
+                object newResponse = await _performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}", () => 
+                    Task.FromResult(deserializeMethod.Invoke(deserializationService, new object[] { newXmlStream })));
+
+                object oldResponseCopy = _performanceTracker.TrackOperation($"Clone_Old_{modelName}", () => 
+                    cloneMethod.Invoke(deserializationService, new object[] { oldResponse }));
+                    
+                object newResponseCopy = _performanceTracker.TrackOperation($"Clone_New_{modelName}", () => 
+                    cloneMethod.Invoke(deserializationService, new object[] { newResponse }));
+
+                // Get properties to ignore for normalization
+                var propertiesToIgnore = await _performanceTracker.TrackOperationAsync("Get_Ignore_Rules", () => Task.FromResult(
+                    configService.GetIgnoreRules()
+                        .Where(r => r.IgnoreCompletely)
+                        .Select(r => GetPropertyNameFromPath(r.PropertyPath))
+                        .Where(p => !string.IsNullOrEmpty(p))
+                        .Distinct()
+                        .ToList()));
+
+                // Normalize property values in both object graphs
+                if (propertiesToIgnore.Any())
                 {
-                    configService.NormalizePropertyValues(oldResponseCopy, propertiesToIgnore);
-                    configService.NormalizePropertyValues(newResponseCopy, propertiesToIgnore);
-                }, cancellationToken);
+                    await _performanceTracker.TrackOperationAsync("Normalize_Properties", async () => 
+                    {
+                        await Task.Run(() =>
+                        {
+                            configService.NormalizePropertyValues(oldResponseCopy, propertiesToIgnore);
+                            configService.NormalizePropertyValues(newResponseCopy, propertiesToIgnore);
+                        }, cancellationToken);
+                    });
+                }
+
+                // Apply configured settings
+                await _performanceTracker.TrackOperationAsync("Apply_Config_Settings", async () => 
+                {
+                    configService.ApplyConfiguredSettings();
+                });
+
+                // Compare the normalized objects
+                var result = await _performanceTracker.TrackOperationAsync("Compare_Objects", async () => 
+                {
+                    return await Task.Run(() =>
+                    {
+                        var compareLogic = configService.GetCompareLogic();
+
+                        var oldClone = cloneMethod.Invoke(deserializationService, new[] { oldResponseCopy });
+                        var newClone = cloneMethod.Invoke(deserializationService, new[] { newResponseCopy });
+
+                        return compareLogic.Compare(oldClone, newClone);
+                    }, cancellationToken);
+                });
+
+                logger.LogInformation("Comparison completed. Found {DifferenceCount} differences",
+                    result.Differences.Count);
+
+                var filteredResult = FilterDuplicateDifferences(result);
+
+                return filteredResult;
             }
-
-            // Apply configured settings
-            configService.ApplyConfiguredSettings();
-
-            // Compare the normalized objects
-            var result = await Task.Run(() =>
+            catch (Exception ex)
             {
-                var compareLogic = configService.GetCompareLogic();
-
-                var oldClone = cloneMethod.Invoke(deserializationService, new[] { oldResponseCopy });
-                var newClone = cloneMethod.Invoke(deserializationService, new[] { newResponseCopy });
-
-                return compareLogic.Compare(oldClone, newClone);
-            }, cancellationToken);
-
-            logger.LogInformation("Comparison completed. Found {DifferenceCount} differences",
-                result.Differences.Count);
-
-            var filteredResult = FilterDuplicateDifferences(result);
-
-            return filteredResult;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error occurred while comparing XML files");
-            throw;
-        }
+                logger.LogError(ex, "Error occurred while comparing XML files");
+                throw;
+            }
+        });
     }
 
     /// <summary>
