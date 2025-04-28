@@ -247,43 +247,59 @@ public class DirectoryComparisonService
         IProgress<ComparisonProgress> progress = null,
         CancellationToken cancellationToken = default)
     {
-        // Find matching file pairs by name
-        var fileNames1 = new HashSet<string>(folder1Files.Select(Path.GetFileName), StringComparer.OrdinalIgnoreCase);
-        var fileNames2 = new HashSet<string>(folder2Files.Select(Path.GetFileName), StringComparer.OrdinalIgnoreCase);
-        var commonFiles = fileNames1.Intersect(fileNames2, StringComparer.OrdinalIgnoreCase).ToList();
-        progress?.Report(new ComparisonProgress(0, commonFiles.Count, $"Found {commonFiles.Count} matching files"));
+        // Sort files by name for consistent ordering
+        folder1Files = folder1Files.OrderBy(f => Path.GetFileName(f)).ToList();
+        folder2Files = folder2Files.OrderBy(f => Path.GetFileName(f)).ToList();
+        
+        // Determine how many pairs we can make (minimum of both lists)
+        int pairCount = Math.Min(folder1Files.Count, folder2Files.Count);
+        
+        progress?.Report(new ComparisonProgress(0, pairCount, $"Will compare {pairCount} files in order"));
+        
         var result = new MultiFolderComparisonResult
         {
-            TotalPairsCompared = commonFiles.Count,
+            TotalPairsCompared = pairCount,
             AllEqual = true,
             FilePairResults = new List<FilePairComparisonResult>(),
             Metadata = new Dictionary<string, object>()
         };
+        
         int equalityFlag = 1;
         int processed = 0;
         var filePairResults = new ConcurrentBag<FilePairComparisonResult>();
+        
+        // Process files by index position instead of matching names
         await Parallel.ForEachAsync(
-            commonFiles,
-            new ParallelOptions { MaxDegreeOfParallelism = CalculateParallelism(commonFiles.Count), CancellationToken = cancellationToken },
-            async (fileName, ct) =>
+            Enumerable.Range(0, pairCount),
+            new ParallelOptions { MaxDegreeOfParallelism = CalculateParallelism(pairCount), CancellationToken = cancellationToken },
+            async (index, ct) =>
             {
                 try
                 {
-                    var file1Path = folder1Files.First(f => Path.GetFileName(f).Equals(fileName, StringComparison.OrdinalIgnoreCase));
-                    var file2Path = folder2Files.First(f => Path.GetFileName(f).Equals(fileName, StringComparison.OrdinalIgnoreCase));
+                    var file1Path = folder1Files[index];
+                    var file2Path = folder2Files[index];
+                    
+                    // Get display names for the UI
+                    var file1Name = Path.GetFileName(file1Path);
+                    var file2Name = Path.GetFileName(file2Path);
+                    
                     using var file1Stream = await fileSystemService.OpenFileStreamAsync(file1Path, ct);
                     using var file2Stream = await fileSystemService.OpenFileStreamAsync(file2Path, ct);
+                    
                     var comparisonResult = await comparisonService.CompareXmlFilesAsync(file1Stream, file2Stream, modelName, ct);
                     var categorizer = new DifferenceCategorizer();
                     var summary = categorizer.CategorizeAndSummarize(comparisonResult);
+                    
                     var pairResult = new FilePairComparisonResult
                     {
-                        File1Name = fileName,
-                        File2Name = fileName,
+                        File1Name = file1Name,
+                        File2Name = file2Name,
                         Result = comparisonResult,
                         Summary = summary
                     };
+                    
                     filePairResults.Add(pairResult);
+                    
                     if (!summary.AreEqual)
                     {
                         Interlocked.Exchange(ref equalityFlag, 0);
@@ -291,32 +307,37 @@ public class DirectoryComparisonService
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "Error comparing file {FileName}", fileName);
+                    logger.LogError(ex, "Error comparing file pair at index {Index}", index);
                 }
+                
                 int current = Interlocked.Increment(ref processed);
-                if (current % 10 == 0 || current == commonFiles.Count)
+                if (current % 10 == 0 || current == pairCount)
                 {
-                    progress?.Report(new ComparisonProgress(current, commonFiles.Count, $"Compared {current} of {commonFiles.Count} files"));
+                    progress?.Report(new ComparisonProgress(current, pairCount, $"Compared {current} of {pairCount} files"));
                 }
             });
+        
         result.FilePairResults = filePairResults.OrderBy(r => r.File1Name).ToList();
         result.AllEqual = equalityFlag == 1;
+        
         logger.LogInformation("Upload comparison completed. {Equal} equal, {Different} different", result.FilePairResults.Count(r => r.AreEqual), result.FilePairResults.Count(r => !r.AreEqual));
-        progress?.Report(new ComparisonProgress(commonFiles.Count, commonFiles.Count, "Comparison completed"));
+        progress?.Report(new ComparisonProgress(pairCount, pairCount, "Comparison completed"));
+        
         // Pattern and semantic analysis (unchanged)
         ComparisonPatternAnalysis patternAnalysis = null;
         if (enablePatternAnalysis && !result.AllEqual && result.FilePairResults.Count > 1)
         {
-            progress?.Report(new ComparisonProgress(commonFiles.Count, commonFiles.Count, "Analyzing patterns..."));
+            progress?.Report(new ComparisonProgress(pairCount, pairCount, "Analyzing patterns..."));
             patternAnalysis = await comparisonService.AnalyzePatternsAsync(result, cancellationToken);
             if (enableSemanticAnalysis && patternAnalysis != null)
             {
-                progress?.Report(new ComparisonProgress(commonFiles.Count, commonFiles.Count, "Analyzing semantic differences..."));
+                progress?.Report(new ComparisonProgress(pairCount, pairCount, "Analyzing semantic differences..."));
                 var semanticAnalysis = await comparisonService.AnalyzeSemanticDifferencesAsync(result, patternAnalysis, cancellationToken);
                 result.Metadata["SemanticAnalysis"] = semanticAnalysis;
             }
             result.Metadata["PatternAnalysis"] = patternAnalysis;
         }
+        
         return result;
     }
 
