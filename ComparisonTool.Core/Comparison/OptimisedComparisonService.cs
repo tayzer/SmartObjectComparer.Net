@@ -12,18 +12,23 @@ namespace ComparisonTool.Core.Comparison;
 
 /// <summary>
 /// Service responsible for executing comparisons between objects and handling comparison results
+/// Optimized for large file sets with memory management and efficient batch processing
 /// </summary>
-public class ComparisonService : IComparisonService
+public class OptimizedComparisonService : IComparisonService
 {
-    private readonly ILogger<ComparisonService> logger;
+    private readonly ILogger<OptimizedComparisonService> logger;
     private readonly IXmlDeserializationService deserializationService;
     private readonly IComparisonConfigurationService configService;
     private readonly IFileSystemService fileSystemService;
 
-    private const int MaxConcurrentComparisons = 4; // Limit concurrent operations, todo: set via config?
+    // Memory management settings
+    private const int MaxConcurrentComparisons = 4; // Limit concurrent operations
+    private const int StandardBatchSize = 50; // Default batch size
+    private const int LargeBatchThreshold = 500; // Threshold for large batches
+    private const int MemoryReleaseInterval = 100; // Release memory after this many files
 
-    public ComparisonService(
-        ILogger<ComparisonService> logger,
+    public OptimizedComparisonService(
+        ILogger<OptimizedComparisonService> logger,
         IXmlDeserializationService deserializationService,
         IComparisonConfigurationService configService,
         IFileSystemService fileSystemService)
@@ -37,11 +42,6 @@ public class ComparisonService : IComparisonService
     /// <summary>
     /// Compare two XML files using the specified domain model
     /// </summary>
-    /// <param name="oldXmlStream">Stream containing the old/reference XML</param>
-    /// <param name="newXmlStream">Stream containing the new/comparison XML</param>
-    /// <param name="modelName">Name of the registered model to use for deserialization</param>
-    /// <param name="cancellationToken">Cancellation token for async operations</param>
-    /// <returns>Comparison result with differences</returns>
     public async Task<ComparisonResult> CompareXmlFilesAsync(
         Stream oldXmlStream,
         Stream newXmlStream,
@@ -50,7 +50,7 @@ public class ComparisonService : IComparisonService
     {
         try
         {
-            logger.LogInformation("Starting comparison of XML files using model {ModelName}", modelName);
+            logger.LogDebug("Starting comparison of XML files using model {ModelName}", modelName);
 
             // Check if model exists (will throw if not found)
             var modelType = deserializationService.GetModelType(modelName);
@@ -59,55 +59,27 @@ public class ComparisonService : IComparisonService
                 .GetMethod(nameof(IXmlDeserializationService.DeserializeXml))
                 .MakeGenericMethod(modelType);
 
-            var cloneMethod = typeof(IXmlDeserializationService)
-                .GetMethod(nameof(IXmlDeserializationService.CloneObject))
-                .MakeGenericMethod(modelType);
-
             // Call the methods via reflection
+            oldXmlStream.Position = 0;
+            newXmlStream.Position = 0;
+
             var oldResponse = deserializeMethod.Invoke(deserializationService, new object[] { oldXmlStream });
             var newResponse = deserializeMethod.Invoke(deserializationService, new object[] { newXmlStream });
-
-            var oldResponseCopy = cloneMethod.Invoke(deserializationService, new object[] { oldResponse });
-            var newResponseCopy = cloneMethod.Invoke(deserializationService, new object[] { newResponse });
-
-            // Get properties to ignore for normalization
-            var propertiesToIgnore = configService.GetIgnoreRules()
-                .Where(r => r.IgnoreCompletely)
-                .Select(r => GetPropertyNameFromPath(r.PropertyPath))
-                .Where(p => !string.IsNullOrEmpty(p))
-                .Distinct()
-                .ToList();
-
-            // Normalize property values in both object graphs
-            if (propertiesToIgnore.Any())
-            {
-                await Task.Run(() =>
-                {
-                    configService.NormalizePropertyValues(oldResponseCopy, propertiesToIgnore);
-                    configService.NormalizePropertyValues(newResponseCopy, propertiesToIgnore);
-                }, cancellationToken);
-            }
 
             // Apply configured settings
             configService.ApplyConfiguredSettings();
 
-            // Compare the normalized objects
+            // Compare the objects
             var result = await Task.Run(() =>
             {
                 var compareLogic = configService.GetCompareLogic();
-
-                var oldClone = cloneMethod.Invoke(deserializationService, new[] { oldResponseCopy });
-                var newClone = cloneMethod.Invoke(deserializationService, new[] { newResponseCopy });
-
-                return compareLogic.Compare(oldClone, newClone);
+                return compareLogic.Compare(oldResponse, newResponse);
             }, cancellationToken);
 
-            logger.LogInformation("Comparison completed. Found {DifferenceCount} differences",
+            logger.LogDebug("Comparison completed. Found {DifferenceCount} differences",
                 result.Differences.Count);
 
-            var filteredResult = FilterDuplicateDifferences(result);
-
-            return filteredResult;
+            return result;
         }
         catch (Exception ex)
         {
@@ -117,31 +89,33 @@ public class ComparisonService : IComparisonService
     }
 
     /// <summary>
-    /// Compare multiple folder pairs of XML files
+    /// Compare multiple folder pairs of XML files with optimized memory usage
     /// </summary>
-    /// <param name="folder1Files">List of files from the first folder</param>
-    /// <param name="folder2Files">List of files from the second folder</param>
-    /// <param name="modelName">Name of the registered model to use for deserialization</param>
-    /// <param name="cancellationToken">Cancellation token for async operations</param>
-    /// <returns>Results of comparing multiple files</returns>
     public async Task<MultiFolderComparisonResult> CompareFoldersAsync(
         List<string> folder1Files,
         List<string> folder2Files,
         string modelName,
         CancellationToken cancellationToken = default)
     {
+        if (folder1Files.Count > LargeBatchThreshold || folder2Files.Count > LargeBatchThreshold)
+        {
+            return await CompareFoldersInBatchesAsync(
+                folder1Files,
+                folder2Files,
+                modelName,
+                StandardBatchSize,
+                null,
+                cancellationToken);
+        }
         var result = new MultiFolderComparisonResult();
         int pairCount = Math.Min(folder1Files.Count, folder2Files.Count);
         result.TotalPairsCompared = pairCount;
-
         if (pairCount == 0)
         {
             logger.LogWarning("No file pairs to compare");
             return result;
         }
-
         logger.LogInformation("Starting comparison of {PairCount} file pairs using model {ModelName}", pairCount, modelName);
-
         for (int i = 0; i < pairCount; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -149,7 +123,7 @@ public class ComparisonService : IComparisonService
             var file2Path = folder2Files[i];
             try
             {
-                logger.LogInformation("Comparing pair {PairNumber}/{TotalPairs}: {File1} vs {File2}", i + 1, pairCount, file1Path, file2Path);
+                logger.LogDebug("Comparing pair {PairNumber}/{TotalPairs}: {File1} vs {File2}", i + 1, pairCount, file1Path, file2Path);
                 using var file1Stream = await fileSystemService.OpenFileStreamAsync(file1Path, cancellationToken);
                 using var file2Stream = await fileSystemService.OpenFileStreamAsync(file2Path, cancellationToken);
                 var pairResult = await CompareXmlFilesAsync(file1Stream, file2Stream, modelName, cancellationToken);
@@ -167,6 +141,10 @@ public class ComparisonService : IComparisonService
                 {
                     result.AllEqual = false;
                 }
+                if (i > 0 && i % MemoryReleaseInterval == 0)
+                {
+                    ReleaseMemory();
+                }
             }
             catch (Exception ex)
             {
@@ -180,19 +158,13 @@ public class ComparisonService : IComparisonService
 
     /// <summary>
     /// Compare multiple folder pairs of XML files in batches with parallel processing
+    /// Optimized for memory usage with very large file sets
     /// </summary>
-    /// <param name="folder1Files">List of files from the first folder</param>
-    /// <param name="folder2Files">List of files from the second folder</param>
-    /// <param name="modelName">Name of the registered model to use for deserialization</param>
-    /// <param name="batchSize">Number of files to process in each batch</param>
-    /// <param name="progress">Progress reporter</param>
-    /// <param name="cancellationToken">Cancellation token for async operations</param>
-    /// <returns>Results of comparing multiple files</returns>
     public async Task<MultiFolderComparisonResult> CompareFoldersInBatchesAsync(
         List<string> folder1Files,
         List<string> folder2Files,
         string modelName,
-        int batchSize = 50,
+        int batchSize = StandardBatchSize,
         IProgress<(int Completed, int Total)> progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -286,9 +258,6 @@ public class ComparisonService : IComparisonService
     /// <summary>
     /// Analyze patterns across multiple file comparison results
     /// </summary>
-    /// <param name="folderResult">Results of multiple file comparisons</param>
-    /// <param name="cancellationToken">Cancellation token for async operations</param>
-    /// <returns>Analysis of patterns across compared files</returns>
     public async Task<ComparisonPatternAnalysis> AnalyzePatternsAsync(
         MultiFolderComparisonResult folderResult,
         CancellationToken cancellationToken = default)
@@ -304,6 +273,12 @@ public class ComparisonService : IComparisonService
                 FilesWithDifferences = folderResult.FilePairResults.Count(r => !r.AreEqual),
                 TotalDifferences = folderResult.FilePairResults.Sum(r => r.Summary?.TotalDifferenceCount ?? 0)
             };
+
+            // Process in batches for large result sets
+            if (folderResult.FilePairResults.Count > LargeBatchThreshold)
+            {
+                return AnalyzePatternsBatched(folderResult, analysis, cancellationToken);
+            }
 
             // Initialize category counts
             foreach (DifferenceCategory category in Enum.GetValues(typeof(DifferenceCategory)))
@@ -326,9 +301,12 @@ public class ComparisonService : IComparisonService
                 // Add to category counts
                 foreach (var category in filePair.Summary.DifferencesByChangeType)
                 {
-                    if (analysis.TotalByCategory.ContainsKey(category.Key))
+                    lock (analysis.TotalByCategory)
                     {
-                        analysis.TotalByCategory[category.Key] += category.Value.Count;
+                        if (analysis.TotalByCategory.ContainsKey(category.Key))
+                        {
+                            analysis.TotalByCategory[category.Key] += category.Value.Count;
+                        }
                     }
                 }
 
@@ -339,29 +317,35 @@ public class ComparisonService : IComparisonService
                     string normalizedPath = NormalizePropertyPath(diff.PropertyName);
 
                     // Create pattern info if not exists
-                    if (!allPathPatterns.ContainsKey(normalizedPath))
+                    lock (allPathPatterns)
                     {
-                        allPathPatterns[normalizedPath] = new GlobalPatternInfo
+                        if (!allPathPatterns.ContainsKey(normalizedPath))
                         {
-                            PatternPath = normalizedPath,
-                            OccurrenceCount = 0,
-                            FileCount = 0
-                        };
-                    }
+                            allPathPatterns[normalizedPath] = new GlobalPatternInfo
+                            {
+                                PatternPath = normalizedPath,
+                                _occurrenceCount = 0,
+                                _fileCount = 0,
+                                AffectedFiles = new List<string>(),
+                                Examples = new List<Difference>()
+                            };
+                        }
 
-                    // Update pattern info
-                    var patternInfo = allPathPatterns[normalizedPath];
-                    patternInfo.OccurrenceCount++;
-                    if (!patternInfo.AffectedFiles.Contains(pairIdentifier))
-                    {
-                        patternInfo.AffectedFiles.Add(pairIdentifier);
-                        patternInfo.FileCount++;
-                    }
+                        // Update pattern info
+                        var patternInfo = allPathPatterns[normalizedPath];
+                        patternInfo._occurrenceCount++;
 
-                    // Add example if we don't have many
-                    if (patternInfo.Examples.Count < 3)
-                    {
-                        patternInfo.Examples.Add(diff);
+                        if (!patternInfo.AffectedFiles.Contains(pairIdentifier))
+                        {
+                            patternInfo.AffectedFiles.Add(pairIdentifier);
+                            patternInfo._fileCount++;
+                        }
+
+                        // Add example if we don't have many
+                        if (patternInfo.Examples.Count < 3)
+                        {
+                            patternInfo.Examples.Add(diff);
+                        }
                     }
 
                     // Track property change info (create key from property + old value + new value)
@@ -369,25 +353,30 @@ public class ComparisonService : IComparisonService
                     var newValue = diff.Object2Value?.ToString() ?? "null";
                     var changeKey = $"{normalizedPath}|{oldValue}|{newValue}";
 
-                    if (!allPropertyChanges.ContainsKey(changeKey))
+                    lock (allPropertyChanges)
                     {
-                        allPropertyChanges[changeKey] = new GlobalPropertyChangeInfo
+                        if (!allPropertyChanges.ContainsKey(changeKey))
                         {
-                            PropertyName = normalizedPath,
-                            OccurrenceCount = 0,
-                            CommonChanges = new Dictionary<string, string>
+                            allPropertyChanges[changeKey] = new GlobalPropertyChangeInfo
                             {
-                                { oldValue, newValue }
-                            }
-                        };
-                    }
+                                PropertyName = normalizedPath,
+                                _occurrenceCount = 0,
+                                CommonChanges = new Dictionary<string, string>
+                                {
+                                    { oldValue, newValue }
+                                },
+                                AffectedFiles = new List<string>()
+                            };
+                        }
 
-                    // Update property change info
-                    var changeInfo = allPropertyChanges[changeKey];
-                    changeInfo.OccurrenceCount++;
-                    if (!changeInfo.AffectedFiles.Contains(pairIdentifier))
-                    {
-                        changeInfo.AffectedFiles.Add(pairIdentifier);
+                        // Update property change info
+                        var changeInfo = allPropertyChanges[changeKey];
+                        changeInfo._occurrenceCount++;
+
+                        if (!changeInfo.AffectedFiles.Contains(pairIdentifier))
+                        {
+                            changeInfo.AffectedFiles.Add(pairIdentifier);
+                        }
                     }
                 }
             }
@@ -419,17 +408,184 @@ public class ComparisonService : IComparisonService
     }
 
     /// <summary>
+    /// Analyze patterns in batches for large result sets
+    /// </summary>
+    private ComparisonPatternAnalysis AnalyzePatternsBatched(
+        MultiFolderComparisonResult folderResult,
+        ComparisonPatternAnalysis analysis,
+        CancellationToken cancellationToken)
+    {
+        // Initialize category counts
+        foreach (DifferenceCategory category in Enum.GetValues(typeof(DifferenceCategory)))
+        {
+            analysis.TotalByCategory[category] = 0;
+        }
+
+        // Use concurrent collections for thread safety
+        var allPathPatterns = new ConcurrentDictionary<string, GlobalPatternInfo>();
+        var allPropertyChanges = new ConcurrentDictionary<string, GlobalPropertyChangeInfo>();
+
+        // Dictionary to track category totals
+        var categoryTotals = new ConcurrentDictionary<DifferenceCategory, int>();
+        foreach (DifferenceCategory category in Enum.GetValues(typeof(DifferenceCategory)))
+        {
+            categoryTotals[category] = 0;
+        }
+
+        // Calculate optimal batch size
+        int batchSize = AdjustBatchSize(folderResult.FilePairResults.Count, StandardBatchSize);
+        int batchCount = (folderResult.FilePairResults.Count + batchSize - 1) / batchSize;
+
+        logger.LogInformation("Processing pattern analysis in {BatchCount} batches of size {BatchSize}",
+            batchCount, batchSize);
+
+        // Process in batches
+        for (int batchIndex = 0; batchIndex < batchCount; batchIndex++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            int startIndex = batchIndex * batchSize;
+            int endIndex = Math.Min(startIndex + batchSize, folderResult.FilePairResults.Count);
+
+            // Process this batch of files
+            Parallel.For(startIndex, endIndex, new ParallelOptions
+            {
+                MaxDegreeOfParallelism = Environment.ProcessorCount / 2, // Limit parallelism
+                CancellationToken = cancellationToken
+            }, fileIndex =>
+            {
+                var filePair = folderResult.FilePairResults[fileIndex];
+                if (filePair.AreEqual) return;
+
+                var pairIdentifier = $"{filePair.File1Name} vs {filePair.File2Name}";
+
+                // Add to category counts - thread safe with ConcurrentDictionary
+                foreach (var category in filePair.Summary.DifferencesByChangeType)
+                {
+                    categoryTotals.AddOrUpdate(
+                        category.Key,
+                        category.Value.Count,
+                        (_, existingCount) => existingCount + category.Value.Count);
+                }
+
+                // Process each difference
+                foreach (var diff in filePair.Result.Differences)
+                {
+                    // Normalize the property path (remove indices, backing fields)
+                    string normalizedPath = NormalizePropertyPath(diff.PropertyName);
+
+                    // Update or create pattern info - thread safe with ConcurrentDictionary
+                    allPathPatterns.AddOrUpdate(
+                        normalizedPath,
+                        // Create new
+                        _ => new GlobalPatternInfo
+                        {
+                            PatternPath = normalizedPath,
+                            _occurrenceCount = 1, // Use the field directly for thread safety
+                            _fileCount = 1,       // Use the field directly for thread safety
+                            AffectedFiles = new List<string> { pairIdentifier },
+                            Examples = new List<Difference> { diff }
+                        },
+                        // Update existing
+                        (_, existing) =>
+                        {
+                            // Use the field directly for Interlocked operations  
+                            Interlocked.Increment(ref existing._occurrenceCount);
+
+                            lock (existing)
+                            {
+                                if (!existing.AffectedFiles.Contains(pairIdentifier))
+                                {
+                                    existing.AffectedFiles.Add(pairIdentifier);
+                                    Interlocked.Increment(ref existing._fileCount);
+                                }
+
+                                if (existing.Examples.Count < 3)
+                                {
+                                    existing.Examples.Add(diff);
+                                }
+                            }
+
+                            return existing;
+                        });
+
+                    // Similar thread-safe approach for property changes
+                    var oldValue = diff.Object1Value?.ToString() ?? "null";
+                    var newValue = diff.Object2Value?.ToString() ?? "null";
+                    var changeKey = $"{normalizedPath}|{oldValue}|{newValue}";
+
+                    allPropertyChanges.AddOrUpdate(
+                        changeKey,
+                        // Create new
+                        _ => new GlobalPropertyChangeInfo
+                        {
+                            PropertyName = normalizedPath,
+                            _occurrenceCount = 1, // Use the field directly for thread safety
+                            CommonChanges = new Dictionary<string, string> { { oldValue, newValue } },
+                            AffectedFiles = new List<string> { pairIdentifier }
+                        },
+                        // Update existing
+                        (_, existing) =>
+                        {
+                            // Use the field directly for Interlocked operations  
+                            Interlocked.Increment(ref existing._occurrenceCount);
+
+                            lock (existing)
+                            {
+                                if (!existing.AffectedFiles.Contains(pairIdentifier))
+                                {
+                                    existing.AffectedFiles.Add(pairIdentifier);
+                                }
+                            }
+
+                            return existing;
+                        });
+                }
+            });
+
+            // Release memory between batches
+            if (batchIndex < batchCount - 1)
+            {
+                ReleaseMemory();
+            }
+        }
+
+        // Update the main analysis object with the totals from our concurrent dictionaries
+        foreach (var category in categoryTotals)
+        {
+            analysis.TotalByCategory[category.Key] = category.Value;
+        }
+
+        // Convert and sort the concurrent collections
+        analysis.CommonPathPatterns = allPathPatterns.Values
+            .Where(p => p.FileCount > 1) // Only patterns that appear in multiple files
+            .OrderByDescending(p => p.FileCount)
+            .ThenByDescending(p => p.OccurrenceCount)
+            .Take(20) // Limit to top 20 patterns
+            .ToList();
+
+        analysis.CommonPropertyChanges = allPropertyChanges.Values
+            .Where(c => c.AffectedFiles.Count > 1) // Only changes that appear in multiple files
+            .OrderByDescending(c => c.AffectedFiles.Count)
+            .ThenByDescending(c => c.OccurrenceCount)
+            .Take(20) // Limit to top 20 common changes
+            .ToList();
+
+        // Group similar files (low priority - do at the end)
+        GroupSimilarFiles(folderResult, analysis);
+
+        return analysis;
+    }
+
+    /// <summary>
     /// Analyze semantic differences across multiple file comparison results
     /// </summary>
-    /// <param name="folderResult">Results of multiple file comparisons</param>
-    /// <param name="patternAnalysis">Pattern analysis of the comparison results</param>
-    /// <param name="cancellationToken">Cancellation token for async operations</param>
-    /// <returns>Semantic analysis of differences across compared files</returns>
     public async Task<SemanticDifferenceAnalysis> AnalyzeSemanticDifferencesAsync(
         MultiFolderComparisonResult folderResult,
         ComparisonPatternAnalysis patternAnalysis,
         CancellationToken cancellationToken = default)
     {
+        // Existing implementation without changes
         return await Task.Run(() =>
         {
             logger.LogInformation("Starting semantic difference analysis");
@@ -602,94 +758,18 @@ public class ComparisonService : IComparisonService
     }
 
     /// <summary>
-    /// Filter duplicate differences from a comparison result
-    /// </summary>
-    private ComparisonResult FilterDuplicateDifferences(ComparisonResult result)
-    {
-        if (result.Differences.Count <= 1)
-            return result;
-
-        // Group differences by their actual values that changed
-        var uniqueDiffs = result.Differences
-            .GroupBy(d => new
-            {
-                OldValue = d.Object1Value?.ToString() ?? "null",
-                NewValue = d.Object2Value?.ToString() ?? "null"
-            })
-            .Select(group =>
-            {
-                // From each group, pick the simplest property path (one without backing fields)
-                var bestMatch = group
-                    .OrderBy(d => d.PropertyName.Contains("k__BackingField") ? 1 : 0)
-                    .ThenBy(d => d.PropertyName.Length)
-                    .First();
-
-                return bestMatch;
-            })
-            .ToList();
-
-        // Clear and replace the differences
-        result.Differences.Clear();
-        result.Differences.AddRange(uniqueDiffs);
-
-        return result;
-    }
-
-    /// <summary>
     /// Force garbage collection to release memory
     /// </summary>
     private void ReleaseMemory()
     {
-        GC.Collect();
+        // Force garbage collection
+        GC.Collect(2, GCCollectionMode.Forced, true, true);
         GC.WaitForPendingFinalizers();
-        GC.Collect();
-    }
+        GC.Collect(2, GCCollectionMode.Forced, true, true);
 
-    /// <summary>
-    /// Normalize a property path by replacing array indices with wildcards
-    /// and removing backing field notation
-    /// </summary>
-    private string NormalizePropertyPath(string propertyPath)
-    {
-        // Replace array indices with [*]
-        var normalized = Regex.Replace(propertyPath, @"\[\d+\]", "[*]");
-
-        // Remove backing fields
-        normalized = Regex.Replace(normalized, @"<(\w+)>k__BackingField", "$1");
-
-        return normalized;
-    }
-
-    /// <summary>
-    /// Extract the property name from a path
-    /// </summary>
-    private string GetPropertyNameFromPath(string propertyPath)
-    {
-        if (string.IsNullOrEmpty(propertyPath))
-            return string.Empty;
-
-        // If it's already a simple property name, return it
-        if (!propertyPath.Contains(".") && !propertyPath.Contains("["))
-            return propertyPath;
-
-        // Handle paths with array indices
-        if (propertyPath.Contains("["))
-        {
-            // If it's something like Results[0].Score, extract Score
-            var lastDotIndex = propertyPath.LastIndexOf('.');
-            if (lastDotIndex >= 0 && lastDotIndex < propertyPath.Length - 1)
-                return propertyPath.Substring(lastDotIndex + 1);
-
-            // If it's something like [0].Score, extract Score
-            var lastBracketIndex = propertyPath.LastIndexOf(']');
-            if (lastBracketIndex >= 0 && lastBracketIndex < propertyPath.Length - 2 &&
-                propertyPath[lastBracketIndex + 1] == '.')
-                return propertyPath.Substring(lastBracketIndex + 2);
-        }
-
-        // For paths like Body.Response.Results.Score, extract Score
-        var parts = propertyPath.Split('.');
-        return parts.Length > 0 ? parts[parts.Length - 1] : string.Empty;
+        // Log memory status
+        long memoryUsed = GC.GetTotalMemory(false) / (1024 * 1024); // MB
+        logger.LogDebug("Memory usage after GC: {MemoryUsed} MB", memoryUsed);
     }
 
     /// <summary>
@@ -711,5 +791,20 @@ public class ComparisonService : IComparisonService
 
         // For very small sets, use larger batches for better parallelism
         return Math.Max(fileCount, defaultBatchSize);
+    }
+
+    /// <summary>
+    /// Normalize a property path by replacing array indices with wildcards
+    /// and removing backing field notation
+    /// </summary>
+    private string NormalizePropertyPath(string propertyPath)
+    {
+        // Replace array indices with [*]
+        var normalized = Regex.Replace(propertyPath, @"\[\d+\]", "[*]");
+
+        // Remove backing fields
+        normalized = Regex.Replace(normalized, @"<(\w+)>k__BackingField", "$1");
+
+        return normalized;
     }
 }

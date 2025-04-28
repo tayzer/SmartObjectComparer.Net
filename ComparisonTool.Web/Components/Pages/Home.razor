@@ -1,4 +1,4 @@
-﻿@page "/"
+@page "/"
 @rendermode InteractiveServer
 @using System.IO
 @using ComparisonTool.Core.Comparison
@@ -7,65 +7,163 @@
 @using ComparisonTool.Core.Comparison.Results
 @using ComparisonTool.Core.Serialization
 @using ComparisonTool.Core.Utilities
+@using ComparisonTool.Web.Services
 @using KellermanSoftware.CompareNetObjects
 @using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Forms
 @implements IDisposable
 @inject IXmlDeserializationService DeserializationService
 @inject IComparisonConfigurationService ConfigService
 @inject IComparisonService ComparisonService
+@inject IFileSystemService FileSystemService
+@inject DirectoryComparisonService DirectoryComparisonService
 @inject IFileUtilities FileUtilities
 @inject IJSRuntime JSRuntime
 @inject ILogger<Home> Logger
 
 <h1>XML Comparison Tool</h1>
 
-<div class="row mt-4">
-    <div class="col-md-6">
-        <FileSelector ModelNames="@DeserializationService.GetRegisteredModelNames()"
-                      SelectedModelName="@SelectedModelName"
-                      OnModelNameChanged="@(name => SelectedModelName = name)"
-                      Folder1Files="@Folder1Files"
-                      OnFolder1FilesChanged="@HandleFolder1FilesChanged"
-                      Folder2Files="@Folder2Files"
-                      OnFolder2FilesChanged="@HandleFolder2FilesChanged" />
-    </div>
-
-    <div class="col-md-6">
-        <ComparisonConfigurationPanel IgnoreCollectionOrder="@IgnoreCollectionOrder"
-                                      OnIgnoreCollectionOrderChanged="@(value => IgnoreCollectionOrder = value)"
-                                      IgnoreStringCase="@IgnoreStringCase"
-                                      OnIgnoreStringCaseChanged="@(value => IgnoreStringCase = value)"
-                                      EnablePatternAnalysis="@EnablePatternAnalysis"
-                                      OnEnablePatternAnalysisChanged="@(value => EnablePatternAnalysis = value)"
-                                      EnableSemanticAnalysis="@EnableSemanticAnalysis"
-                                      OnEnableSemanticAnalysisChanged="@(value => EnableSemanticAnalysis = value)"
-                                      IgnoreRules="@IgnoreRules"
-                                      OnIgnoreRuleAdded="@AddIgnoreRule"
-                                      OnIgnoreRuleRemoved="@RemoveIgnoreRule"
-                                      ModelType="@GetSelectedModelType()"
-                                      OnPropertySelectorOpened="@OpenPropertySelector"
-                                      OnRunComparison="@RunFolderComparison"
-                                      CanRunComparison="@CanRunFolderComparison" />
+<div class="mb-4">
+    <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" id="useDirectModeSwitch" @bind="UseDirectoryMode" />
+        <label class="form-check-label" for="useDirectModeSwitch">
+            @(UseDirectoryMode ? "Directory Mode: Compare folders on server" : "Upload Mode: Compare uploaded files")
+        </label>
     </div>
 </div>
 
-@if (IsComparing)
+@if (UseDirectoryMode)
 {
-    @if (ShowProgress)
-    {
-        <div class="progress mb-3">
-            <div class="progress-bar progress-bar-striped progress-bar-animated"
-                 role="progressbar"
-                 style="width: @(((double)CompletedFiles / TotalFiles * 100).ToString())%">
-                @CompletedFiles of @TotalFiles files compared
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Step 1: Select Folders to Compare</h5>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label>Select Domain Model:</label>
+                        <select class="form-control" @bind="SelectedModelName">
+                            @foreach (var modelName in DeserializationService.GetRegisteredModelNames())
+                            {
+                                <option value="@modelName">@modelName</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="form-group mt-3">
+                        <label>V1 Directory:</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" @bind="Directory1Path" placeholder="Enter path to first directory" />
+                            <button class="btn btn-outline-secondary" type="button" @onclick="BrowseDirectory1">
+                                <i class="bi bi-folder"></i> Browse
+                            </button>
+                        </div>
+                        @if (!string.IsNullOrEmpty(Directory1Path) && Directory.Exists(Directory1Path))
+                        {
+                            <small class="text-success">Directory exists with @GetXmlFileCount(Directory1Path) XML files</small>
+                        }
+                        else if (!string.IsNullOrEmpty(Directory1Path))
+                        {
+                            <small class="text-danger">Directory does not exist</small>
+                        }
+                    </div>
+
+                    <div class="form-group mt-3">
+                        <label>V2 Directory:</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" @bind="Directory2Path" placeholder="Enter path to second directory" />
+                            <button class="btn btn-outline-secondary" type="button" @onclick="BrowseDirectory2">
+                                <i class="bi bi-folder"></i> Browse
+                            </button>
+                        </div>
+                        @if (!string.IsNullOrEmpty(Directory2Path) && Directory.Exists(Directory2Path))
+                        {
+                            <small class="text-success">Directory exists with @GetXmlFileCount(Directory2Path) XML files</small>
+                        }
+                        else if (!string.IsNullOrEmpty(Directory2Path))
+                        {
+                            <small class="text-danger">Directory does not exist</small>
+                        }
+                    </div>
+                </div>
             </div>
         </div>
-        <LoadingIndicator Message="@($"Comparing XML files... ({CompletedFiles} of {TotalFiles} completed)")" />
-    }
-    else
-    {
-        <LoadingIndicator Message="Comparing XML files..." />
-    }
+
+        <div class="col-md-6">
+            <ComparisonConfigurationPanel IgnoreCollectionOrder="@IgnoreCollectionOrder"
+                                          OnIgnoreCollectionOrderChanged="@(value => IgnoreCollectionOrder = value)"
+                                          IgnoreStringCase="@IgnoreStringCase"
+                                          OnIgnoreStringCaseChanged="@(value => IgnoreStringCase = value)"
+                                          EnablePatternAnalysis="@EnablePatternAnalysis"
+                                          OnEnablePatternAnalysisChanged="@(value => EnablePatternAnalysis = value)"
+                                          EnableSemanticAnalysis="@EnableSemanticAnalysis"
+                                          OnEnableSemanticAnalysisChanged="@(value => EnableSemanticAnalysis = value)"
+                                          IgnoreRules="@IgnoreRules"
+                                          OnIgnoreRuleAdded="@AddIgnoreRule"
+                                          OnIgnoreRuleRemoved="@RemoveIgnoreRule"
+                                          ModelType="@GetSelectedModelType()"
+                                          OnPropertySelectorOpened="@OpenPropertySelector"
+                                          OnRunComparison="@RunDirectoryComparison"
+                                          CanRunComparison="@CanRunDirectoryComparison" />
+        </div>
+    </div>
+}
+else
+{
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <FileSelector ModelNames="@DeserializationService.GetRegisteredModelNames()"
+                          SelectedModelName="@SelectedModelName"
+                          OnModelNameChanged="@(name => SelectedModelName = name)"
+                          Folder1Files="@Folder1Files"
+                          OnFolder1FilesChanged="@HandleFolder1FilesChanged"
+                          Folder2Files="@Folder2Files"
+                          OnFolder2FilesChanged="@HandleFolder2FilesChanged" />
+        </div>
+
+        <div class="col-md-6">
+            <ComparisonConfigurationPanel IgnoreCollectionOrder="@IgnoreCollectionOrder"
+                                          OnIgnoreCollectionOrderChanged="@(value => IgnoreCollectionOrder = value)"
+                                          IgnoreStringCase="@IgnoreStringCase"
+                                          OnIgnoreStringCaseChanged="@(value => IgnoreStringCase = value)"
+                                          EnablePatternAnalysis="@EnablePatternAnalysis"
+                                          OnEnablePatternAnalysisChanged="@(value => EnablePatternAnalysis = value)"
+                                          EnableSemanticAnalysis="@EnableSemanticAnalysis"
+                                          OnEnableSemanticAnalysisChanged="@(value => EnableSemanticAnalysis = value)"
+                                          IgnoreRules="@IgnoreRules"
+                                          OnIgnoreRuleAdded="@AddIgnoreRule"
+                                          OnIgnoreRuleRemoved="@RemoveIgnoreRule"
+                                          ModelType="@GetSelectedModelType()"
+                                          OnPropertySelectorOpened="@OpenPropertySelector"
+                                          OnRunComparison="@RunFolderComparison"
+                                          CanRunComparison="@CanRunFolderComparison" />
+        </div>
+    </div>
+}
+
+@if (IsComparing)
+{
+    <div class="card mt-4">
+        <div class="card-body">
+            <div class="progress mb-3">
+                <div class="progress-bar progress-bar-striped progress-bar-animated"
+                     role="progressbar"
+                     style="width: @(Progress.PercentComplete)%">
+                    @Progress.Status
+                </div>
+            </div>
+            <div class="text-center">
+                <p>@Progress.Status (@Progress.Completed of @Progress.Total completed)</p>
+                @if (IsCancellable)
+                {
+                    <button class="btn btn-sm btn-warning" @onclick="CancelComparison">
+                        <i class="bi bi-x-circle me-1"></i> Cancel
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
 }
 
 @if (FolderComparisonResult != null)
@@ -107,35 +205,49 @@
                               OnPropertyRemoved="propertyPath => RemoveIgnoreRule(IgnoreRules.FirstOrDefault(r => r.PropertyPath == propertyPath))" />
 
 @code {
+    // Configuration properties
     private string SelectedModelName { get; set; }
     private bool IgnoreCollectionOrder { get; set; } = false;
     private bool IgnoreStringCase { get; set; } = false;
     private List<IgnoreRule> IgnoreRules { get; set; } = new List<IgnoreRule>();
+    private bool EnablePatternAnalysis { get; set; } = true;
+    private bool EnableSemanticAnalysis { get; set; } = true;
+    private bool UseDirectoryMode { get; set; } = false;
+    
+    // Directory mode properties
+    private string Directory1Path { get; set; }
+    private string Directory2Path { get; set; }
+    
+    // File upload mode properties
+    private List<string> Folder1Files { get; set; } = new();
+    private List<string> Folder2Files { get; set; } = new();
+    
+    // Comparison state
     private bool IsComparing { get; set; } = false;
+    private ComparisonProgress Progress { get; set; } = new ComparisonProgress(0, 0, "Ready");
+    private bool IsCancellable { get; set; } = true;
     private ComparisonResult ComparisonResult { get; set; }
     private DifferenceSummary DifferenceSummary { get; set; }
     private bool ShowAllDifferences { get; set; } = false;
-    private List<(MemoryStream Stream, string FileName)> Folder1Files { get; set; } = new List<(MemoryStream, string)>();
-    private List<(MemoryStream Stream, string FileName)> Folder2Files { get; set; } = new List<(MemoryStream, string)>();
     private MultiFolderComparisonResult FolderComparisonResult { get; set; }
     private int SelectedPairIndex { get; set; } = -1;
     private ComparisonPatternAnalysis PatternAnalysis { get; set; }
     private bool ShowPatternSummary { get; set; } = false;
-    private bool EnablePatternAnalysis { get; set; } = true;
     private SemanticDifferenceAnalysis SemanticAnalysis { get; set; }
     private CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
     private HierarchicalPropertySelector propertySelector;
-    private bool EnableSemanticAnalysis { get; set; } = true;
-
-    // Progress tracking properties
-    private int CompletedFiles { get; set; } = 0;
-    private int TotalFiles { get; set; } = 0;
-    private bool ShowProgress => IsComparing && TotalFiles > 0;
 
     private bool CanRunFolderComparison =>
         !string.IsNullOrEmpty(SelectedModelName) &&
         Folder1Files.Count > 0 &&
         Folder2Files.Count > 0;
+        
+    private bool CanRunDirectoryComparison =>
+        !string.IsNullOrEmpty(SelectedModelName) &&
+        !string.IsNullOrEmpty(Directory1Path) &&
+        !string.IsNullOrEmpty(Directory2Path) &&
+        Directory.Exists(Directory1Path) &&
+        Directory.Exists(Directory2Path);
 
     protected override void OnInitialized()
     {
@@ -181,13 +293,28 @@
             return null;
         }
     }
+    
+    private int GetXmlFileCount(string directoryPath)
+    {
+        if (string.IsNullOrEmpty(directoryPath) || !Directory.Exists(directoryPath))
+            return 0;
+            
+        try
+        {
+            return Directory.GetFiles(directoryPath, "*.xml", SearchOption.AllDirectories).Length;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
 
-    private void HandleFolder1FilesChanged(List<(MemoryStream Stream, string FileName)> files)
+    private void HandleFolder1FilesChanged(List<string> files)
     {
         Folder1Files = files;
     }
 
-    private void HandleFolder2FilesChanged(List<(MemoryStream Stream, string FileName)> files)
+    private void HandleFolder2FilesChanged(List<string> files)
     {
         Folder2Files = files;
     }
@@ -229,6 +356,107 @@
             ConfigService.RemoveIgnoredProperty(rule.PropertyPath);
         }
     }
+    
+    private async Task BrowseDirectory1()
+    {
+        var result = await JSRuntime.InvokeAsync<string>("browseFolder", "Select V1 Directory");
+        if (!string.IsNullOrEmpty(result))
+        {
+            Directory1Path = result;
+            StateHasChanged();
+        }
+    }
+    
+    private async Task BrowseDirectory2()
+    {
+        var result = await JSRuntime.InvokeAsync<string>("browseFolder", "Select V2 Directory");
+        if (!string.IsNullOrEmpty(result))
+        {
+            Directory2Path = result;
+            StateHasChanged();
+        }
+    }
+    
+    private async Task RunDirectoryComparison()
+    {
+        if (!CanRunDirectoryComparison)
+            return;
+            
+        try
+        {
+            IsComparing = true;
+            IsCancellable = true;
+            FolderComparisonResult = null;
+            SelectedPairIndex = -1;
+            PatternAnalysis = null;
+            SemanticAnalysis = null;
+            ShowPatternSummary = false;
+            Progress = new ComparisonProgress(0, 0, "Preparing comparison...");
+
+            await ResetCancellationToken();
+            var cancellationToken = _cancellationTokenSource.Token;
+
+            ConfigService.SetIgnoreCollectionOrder(IgnoreCollectionOrder);
+            ConfigService.SetIgnoreStringCase(IgnoreStringCase);
+
+            foreach (var rule in IgnoreRules)
+            {
+                ConfigService.AddIgnoreRule(rule);
+            }
+
+            ConfigService.ApplyConfiguredSettings();
+            
+            // Create progress reporter
+            var progressReporter = new Progress<ComparisonProgress>(progress =>
+            {
+                Progress = progress;
+                StateHasChanged();
+            });
+            
+            // Run the comparison
+            FolderComparisonResult = await DirectoryComparisonService.CompareDirectoriesAsync(
+                Directory1Path,
+                Directory2Path,
+                SelectedModelName,
+                EnablePatternAnalysis,
+                EnableSemanticAnalysis,
+                progressReporter,
+                cancellationToken);
+                
+            // Select the first result if there are differences
+            if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 0)
+            {
+                SelectPairResult(0);
+            }
+            
+            // Get pattern and semantic analysis from metadata if available
+            if (FolderComparisonResult.Metadata.TryGetValue("PatternAnalysis", out var patternAnalysisObj))
+            {
+                PatternAnalysis = patternAnalysisObj as ComparisonPatternAnalysis;
+                ShowPatternSummary = true;
+            }
+            
+            if (FolderComparisonResult.Metadata.TryGetValue("SemanticAnalysis", out var semanticAnalysisObj))
+            {
+                SemanticAnalysis = semanticAnalysisObj as SemanticDifferenceAnalysis;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            Logger.LogInformation("Comparison operation was canceled");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error comparing directories: {Message}", ex.Message);
+            await JSRuntime.InvokeVoidAsync("alert", $"Error comparing directories: {ex.Message}");
+        }
+        finally
+        {
+            IsComparing = false;
+            IsCancellable = false;
+            StateHasChanged();
+        }
+    }
 
     private async Task RunFolderComparison()
     {
@@ -238,20 +466,16 @@
         try
         {
             IsComparing = true;
+            IsCancellable = true;
             FolderComparisonResult = null;
             SelectedPairIndex = -1;
             PatternAnalysis = null;
             SemanticAnalysis = null;
             ShowPatternSummary = false;
+            Progress = new ComparisonProgress(0, 0, "Preparing comparison...");
 
-            await _cancellationTokenSource.CancelAsync();
-            _cancellationTokenSource.Dispose();
-            _cancellationTokenSource = new CancellationTokenSource();
+            await ResetCancellationToken();
             var cancellationToken = _cancellationTokenSource.Token;
-
-            // Reset progress tracking
-            CompletedFiles = 0;
-            TotalFiles = Math.Min(Folder1Files.Count, Folder2Files.Count);
 
             ConfigService.SetIgnoreCollectionOrder(IgnoreCollectionOrder);
             ConfigService.SetIgnoreStringCase(IgnoreStringCase);
@@ -263,42 +487,71 @@
 
             ConfigService.ApplyConfiguredSettings();
 
-            var folder1FilesList = Folder1Files
-                .Select(f => ((Stream)f.Stream, f.FileName))
-                .ToList();
-
-            var folder2FilesList = Folder2Files
-                .Select(f => ((Stream)f.Stream, f.FileName))
-                .ToList();
-
             // Create progress reporter
-            var progressHandler = new Progress<(int Completed, int Total)>(progress =>
+            var progressReporter = new Progress<ComparisonProgress>(progress =>
             {
-                CompletedFiles = progress.Completed;
+                Progress = progress;
                 StateHasChanged();
             });
 
-            // Use the batch processing method with progress reporting
-            FolderComparisonResult = await ComparisonService.CompareFoldersInBatchesAsync(
-                folder1FilesList,
-                folder2FilesList,
-                SelectedModelName,
-                50, // Batch size of 50 files
-                progressHandler,
-                cancellationToken);
-
-            if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 0)
+            // Use folder uploads method
+            if (Folder1Files.Count > 500 || Folder2Files.Count > 500)
             {
-                SelectPairResult(0);
-            }
-
-            if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 1 && EnablePatternAnalysis)
-            {
-                await GeneratePatternAnalysis();
-
-                if (PatternAnalysis != null && EnableSemanticAnalysis)
+                FolderComparisonResult = await DirectoryComparisonService.CompareFolderUploadsAsync(
+                    Folder1Files,
+                    Folder2Files,
+                    SelectedModelName,
+                    EnablePatternAnalysis,
+                    EnableSemanticAnalysis,
+                    progressReporter,
+                    cancellationToken);
+                    
+                // Get pattern and semantic analysis from metadata if available
+                if (FolderComparisonResult.Metadata.TryGetValue("PatternAnalysis", out var patternAnalysisObj))
                 {
-                    await GenerateSemanticAnalysis();
+                    PatternAnalysis = patternAnalysisObj as ComparisonPatternAnalysis;
+                    ShowPatternSummary = true;
+                }
+                
+                if (FolderComparisonResult.Metadata.TryGetValue("SemanticAnalysis", out var semanticAnalysisObj))
+                {
+                    SemanticAnalysis = semanticAnalysisObj as SemanticDifferenceAnalysis;
+                }
+            }
+            else
+            {
+                // Use the batch processing method with progress reporting
+                var totalFiles = Math.Min(Folder1Files.Count, Folder2Files.Count);
+                Progress = new ComparisonProgress(0, totalFiles, "Comparing files...");
+                
+                FolderComparisonResult = await ComparisonService.CompareFoldersInBatchesAsync(
+                    Folder1Files,
+                    Folder2Files,
+                    SelectedModelName,
+                    50, // Batch size of 50 files
+                    new Progress<(int Completed, int Total)>(progress =>
+                    {
+                        Progress = new ComparisonProgress(progress.Completed, progress.Total, 
+                            $"Compared {progress.Completed} of {progress.Total} files");
+                        StateHasChanged();
+                    }),
+                    cancellationToken);
+
+                if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 0)
+                {
+                    SelectPairResult(0);
+                }
+
+                if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 1 && EnablePatternAnalysis)
+                {
+                    Progress = new ComparisonProgress(totalFiles, totalFiles, "Analyzing patterns...");
+                    await GeneratePatternAnalysis();
+
+                    if (PatternAnalysis != null && EnableSemanticAnalysis)
+                    {
+                        Progress = new ComparisonProgress(totalFiles, totalFiles, "Analyzing semantic differences...");
+                        await GenerateSemanticAnalysis();
+                    }
                 }
             }
         }
@@ -314,7 +567,24 @@
         finally
         {
             IsComparing = false;
+            IsCancellable = false;
             StateHasChanged();
+        }
+    }
+    
+    private async Task ResetCancellationToken()
+    {
+        await _cancellationTokenSource.CancelAsync();
+        _cancellationTokenSource.Dispose();
+        _cancellationTokenSource = new CancellationTokenSource();
+    }
+    
+    private async Task CancelComparison()
+    {
+        if (IsCancellable)
+        {
+            await _cancellationTokenSource.CancelAsync();
+            IsCancellable = false;
         }
     }
 
@@ -342,8 +612,6 @@
 
         try
         {
-            IsComparing = true;
-
             var cancellationToken = _cancellationTokenSource.Token;
 
             PatternAnalysis = await ComparisonService.AnalyzePatternsAsync(
@@ -361,10 +629,30 @@
             Logger.LogError(ex, "Error generating pattern analysis: {Message}", ex.Message);
             await JSRuntime.InvokeVoidAsync("alert", $"Error generating pattern analysis: {ex.Message}");
         }
-        finally
+    }
+
+    private async Task GenerateSemanticAnalysis()
+    {
+        if (FolderComparisonResult == null || PatternAnalysis == null)
+            return;
+
+        try
         {
-            IsComparing = false;
-            StateHasChanged();
+            var cancellationToken = _cancellationTokenSource.Token;
+
+            SemanticAnalysis = await ComparisonService.AnalyzeSemanticDifferencesAsync(
+                FolderComparisonResult,
+                PatternAnalysis,
+                cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            Logger.LogInformation("Semantic analysis operation was canceled");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error generating semantic analysis: {Message}", ex.Message);
+            await JSRuntime.InvokeVoidAsync("alert", $"Error generating semantic analysis: {ex.Message}");
         }
     }
 
@@ -440,38 +728,6 @@
         {
             Logger.LogError(ex, "Error exporting pattern analysis: {Message}", ex.Message);
             await JSRuntime.InvokeVoidAsync("alert", $"Error exporting pattern analysis: {ex.Message}");
-        }
-    }
-
-    private async Task GenerateSemanticAnalysis()
-    {
-        if (FolderComparisonResult == null || PatternAnalysis == null)
-            return;
-
-        try
-        {
-            IsComparing = true;
-
-            var cancellationToken = _cancellationTokenSource.Token;
-
-            SemanticAnalysis = await ComparisonService.AnalyzeSemanticDifferencesAsync(
-                FolderComparisonResult,
-                PatternAnalysis,
-                cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            Logger.LogInformation("Semantic analysis operation was canceled");
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error generating semantic analysis: {Message}", ex.Message);
-            await JSRuntime.InvokeVoidAsync("alert", $"Error generating semantic analysis: {ex.Message}");
-        }
-        finally
-        {
-            IsComparing = false;
-            StateHasChanged();
         }
     }
 

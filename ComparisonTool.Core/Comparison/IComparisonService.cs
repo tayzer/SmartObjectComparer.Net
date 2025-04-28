@@ -1,4 +1,4 @@
-﻿using ComparisonTool.Core.Comparison.Analysis;
+using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Results;
 using KellermanSoftware.CompareNetObjects;
 
@@ -22,8 +22,8 @@ public interface IComparisonService
     /// Compare multiple folder pairs of XML files
     /// </summary>
     Task<MultiFolderComparisonResult> CompareFoldersAsync(
-        List<(Stream Stream, string FileName)> folder1Files,
-        List<(Stream Stream, string FileName)> folder2Files,
+        List<string> folder1Files,
+        List<string> folder2Files,
         string modelName,
         CancellationToken cancellationToken = default);
 
@@ -31,8 +31,8 @@ public interface IComparisonService
     /// Compare multiple folder pairs of XML files in batches with parallel processing
     /// </summary>
     Task<MultiFolderComparisonResult> CompareFoldersInBatchesAsync(
-        List<(Stream Stream, string FileName)> folder1Files,
-        List<(Stream Stream, string FileName)> folder2Files,
+        List<string> folder1Files,
+        List<string> folder2Files,
         string modelName,
         int batchSize = 50,
         IProgress<(int Completed, int Total)> progress = null,

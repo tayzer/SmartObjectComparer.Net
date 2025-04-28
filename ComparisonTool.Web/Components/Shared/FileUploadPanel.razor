@@ -1,10 +1,18 @@
-﻿@namespace ComparisonTool.Web.Components.Shared
+@namespace ComparisonTool.Web.Components.Shared
 @inject IJSRuntime JSRuntime
 
 <div class="form-group mt-3">
     <label>@Label</label>
     <div class="d-flex gap-2">
-        <InputFile class="form-control" OnChange="HandleFileUpload" multiple />
+        @if (SupportsFolderUpload)
+        {
+            <InputFile class="form-control" OnChange="HandleFileUpload" multiple directory webkitdirectory />
+        }
+        else
+        {
+            <InputFile class="form-control" OnChange="HandleFileUpload" multiple />
+            <small class="text-muted">Your browser doesn't support folder upload. Please select multiple files manually.</small>
+        }
         <span class="badge bg-info d-flex align-items-center">
             @if (Files.Count > 0)
             {
@@ -41,7 +49,7 @@
                                 var index = i;
                                 <li class="list-group-item d-flex justify-content-between align-items-center">
                                     <div>
-                                        <small>@Files[i].FileName</small>
+                                        <small>@Files[i]</small>
                                     </div>
                                     <button class="btn btn-sm btn-danger" @onclick="() => RemoveFile(index)">
                                         <i class="bi bi-x"></i>
@@ -61,70 +69,36 @@
     public string Label { get; set; }
 
     [Parameter]
-    public List<(MemoryStream Stream, string FileName)> Files { get; set; } = new();
+    public List<string> Files { get; set; } = new();
 
     [Parameter]
-    public EventCallback<List<(MemoryStream Stream, string FileName)>> OnFilesChanged { get; set; }
+    public EventCallback<List<string>> OnFilesChanged { get; set; }
+
+    private bool SupportsFolderUpload { get; set; }
+    private bool _checkedFolderSupport = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_checkedFolderSupport)
+        {
+            SupportsFolderUpload = await JSRuntime.InvokeAsync<bool>("checkFolderUploadSupport");
+            _checkedFolderSupport = true;
+            StateHasChanged(); // Ensure UI updates after JS interop
+        }
+    }
 
     private async Task HandleFileUpload(InputFileChangeEventArgs e)
     {
-        try
-        {
-            // Increase the file count limit
-            var maxFilesPerUpload = 2000;
-            var maxFileSize = 20 * 1024 * 1024; // 20MB per file
-
-            var selectedFiles = e.GetMultipleFiles(maxFilesPerUpload);
-            var updatedFiles = new List<(MemoryStream Stream, string FileName)>(Files);
-
-            if (selectedFiles.Count >= maxFilesPerUpload)
-            {
-                await JSRuntime.InvokeVoidAsync("alert",
-                    $"You selected at least {maxFilesPerUpload} files. Some files may not be processed.");
-            }
-
-            // Process files in smaller batches to avoid UI freezing
-            const int processLimit = 100;
-            int processedCount = 0;
-
-            foreach (var file in selectedFiles)
-            {
-                // Process in batches to avoid UI freezing
-                if (processedCount % processLimit == 0 && processedCount > 0)
-                {
-                    // Update the files list periodically to show progress
-                    Files = updatedFiles.OrderBy(f => f.FileName).ToList();
-                    await OnFilesChanged.InvokeAsync(Files);
-                    StateHasChanged();
-
-                    // Small delay to allow UI to update
-                    await Task.Delay(10);
-                }
-
-                var stream = new MemoryStream();
-                await file.OpenReadStream(maxAllowedSize: maxFileSize).CopyToAsync(stream);
-                stream.Position = 0;
-
-                updatedFiles.Add((Stream: stream, FileName: file.Name));
-                processedCount++;
-            }
-
-            updatedFiles = updatedFiles.OrderBy(f => f.FileName).ToList();
-
-            Files = updatedFiles;
-            await OnFilesChanged.InvokeAsync(updatedFiles);
-        }
-        catch (Exception ex)
-        {
-            await JSRuntime.InvokeVoidAsync("alert", $"Error loading files: {ex.Message}");
-        }
+        // Update Files as List<string> (file names)
+        Files = e.GetMultipleFiles().Select(f => f.Name).ToList();
+        await OnFilesChanged.InvokeAsync(Files);
     }
 
     private async Task RemoveFile(int index)
     {
         if (index >= 0 && index < Files.Count)
         {
-            var updatedFiles = new List<(MemoryStream, string)>(Files);
+            var updatedFiles = new List<string>(Files);
             updatedFiles.RemoveAt(index);
             Files = updatedFiles;
             await OnFilesChanged.InvokeAsync(updatedFiles);

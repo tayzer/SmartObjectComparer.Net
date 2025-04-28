@@ -3,6 +3,7 @@ using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Models;
 using ComparisonTool.Core.Serialization;
 using ComparisonTool.Core.Utilities;
+using ComparisonTool.Web.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -45,6 +46,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IComparisonService, ComparisonService>();
 
         services.AddScoped<IFileUtilities, FileUtilities>();
+
+        services.AddSingleton<IFileSystemService, FileSystemService>();
+
+        services.AddScoped<DirectoryComparisonService>();
 
         return services;
     }
