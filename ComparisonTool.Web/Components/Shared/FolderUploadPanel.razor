@@ -1,12 +1,14 @@
-﻿@namespace ComparisonTool.Web.Components.Shared
+@namespace ComparisonTool.Web.Components.Shared
 @inject IJSRuntime JSRuntime
+@using Microsoft.JSInterop
+@implements IDisposable
 
 <div class="form-group mt-3">
     <label>@Label</label>
     <div class="d-flex flex-column gap-2">
         <div class="d-flex gap-2">
             <InputFile class="form-control" OnChange="HandleFileUpload" multiple />
-            <button class="btn btn-outline-primary" @onclick="BrowseFolder" type="button">
+            <button class="btn btn-outline-primary" @onclick="TriggerFolderUpload" type="button">
                 <i class="bi bi-folder"></i> Select Folder
             </button>
             <span class="badge bg-info d-flex align-items-center">
@@ -16,9 +18,8 @@
                 }
             </span>
         </div>
-        <div id="folderUploadElement_@GetHashCode()" style="display:none;">
-            <InputFile OnChange="HandleFolderUpload" multiple directory webkitdirectory />
-        </div>
+        <!-- Hidden folder input for JS batch upload -->
+        <input type="file" id="jsFolderInput_@_folderInputId" style="display:none" multiple webkitdirectory directory />
     </div>
 
     @if (IsProcessing)
@@ -121,12 +122,146 @@
     private double ProgressPercentage => TotalFiles == 0 ? 0 : (double)ProcessedFiles / TotalFiles * 100;
     private bool HasMultipleFolders => GetFolderGroups().Count() > 1;
 
-    private async Task BrowseFolder()
+    private string _folderInputId = Guid.NewGuid().ToString("N");
+    private DotNetObjectReference<FolderUploadPanel> _dotNetRef;
+
+    protected override void OnInitialized()
     {
-        // Trigger the hidden input with directory attribute
-        string elementId = $"folderUploadElement_{GetHashCode()}";
-        await JSRuntime.InvokeVoidAsync("document.querySelector", $"#{elementId} input").AsTask();
-        await JSRuntime.InvokeVoidAsync("clickElement", $"#{elementId} input");
+        _dotNetRef = DotNetObjectReference.Create(this);
+    }
+
+    public void Dispose()
+    {
+        _dotNetRef?.Dispose();
+    }
+
+    private async Task TriggerFolderUpload()
+    {
+        string fullInputId = $"jsFolderInput_{_folderInputId}";
+        // Only trigger the input dialog; upload will be handled by JS after user selects files
+        await JSRuntime.InvokeVoidAsync("triggerFolderInput", fullInputId, 25, _dotNetRef);
+    }
+
+    [JSInvokable]
+    public Task OnBatchUploadProgress(int uploaded, int total)
+    {
+        IsProcessing = true;
+        ProcessedFiles = uploaded;
+        TotalFiles = total;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public async Task OnBatchUploadComplete(int uploaded, int total)
+    {
+        IsProcessing = false;
+        ProcessedFiles = uploaded;
+        TotalFiles = total;
+        // Optionally, fetch uploaded file list from server or keep only filenames
+        Files = Enumerable.Range(0, uploaded).Select(i => ((MemoryStream)null, $"UploadedFile_{i + 1}.xml")).ToList();
+        await OnFilesChanged.InvokeAsync(Files);
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public Task OnBatchUploadError(string error)
+    {
+        IsProcessing = false;
+        StateHasChanged();
+        JSRuntime.InvokeVoidAsync("alert", $"Batch upload error: {error}");
+        return Task.CompletedTask;
+    }
+
+    private async Task HandleFileUpload(InputFileChangeEventArgs e)
+    {
+        await ProcessUploadedFiles(e.GetMultipleFiles(), false);
+    }
+
+    private async Task ProcessUploadedFiles(IReadOnlyList<IBrowserFile> selectedFiles, bool isFolder)
+    {
+        if (selectedFiles.Count == 0)
+            return;
+
+        try
+        {
+            IsProcessing = true;
+            ProcessedFiles = 0;
+            TotalFiles = selectedFiles.Count;
+            StateHasChanged();
+
+            // Set reasonable limits
+            var maxFileSize = 50 * 1024 * 1024; // 50MB per file
+            var batchSize = 25; // Process files in batches of 25
+
+            int totalBatches = (selectedFiles.Count + batchSize - 1) / batchSize;
+            int xmlFileCount = 0;
+            int skippedFiles = 0;
+
+            for (int batch = 0; batch < totalBatches; batch++)
+            {
+                int startIdx = batch * batchSize;
+                int endIdx = Math.Min(startIdx + batchSize, selectedFiles.Count);
+                var batchFileNames = new List<string>();
+
+                for (int i = startIdx; i < endIdx; i++)
+                {
+                    var file = selectedFiles[i];
+                    if (file.Size > maxFileSize)
+                    {
+                        skippedFiles++;
+                        continue;
+                    }
+                    bool isXmlFile = file.Name.EndsWith(".xml", StringComparison.OrdinalIgnoreCase);
+                    if (!isXmlFile)
+                    {
+                        skippedFiles++;
+                        continue;
+                    }
+                    xmlFileCount++;
+                    string fileName = isFolder ? file.Name : GetFileNameOnly(file.Name);
+                    batchFileNames.Add(fileName);
+                }
+
+                ProcessedFiles = Math.Min(endIdx, selectedFiles.Count);
+                StateHasChanged();
+                await Task.Delay(10); // Let UI update
+            }
+
+            // Update file list with just the file names (not streams)
+            Files = selectedFiles
+                .Where(f => f.Name.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) && f.Size <= maxFileSize)
+                .Select(f => (Stream: (MemoryStream)null, FileName: isFolder ? f.Name : GetFileNameOnly(f.Name)))
+                .ToList();
+            await OnFilesChanged.InvokeAsync(Files);
+
+            if (skippedFiles > 0)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Loaded {xmlFileCount} XML files. Skipped {skippedFiles} non-XML or too large files.");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error loading files: {ex.Message}");
+        }
+        finally
+        {
+            IsProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RemoveFile((MemoryStream Stream, string FileName) file)
+    {
+        var updatedFiles = Files.Where(f => f.FileName != file.FileName).ToList();
+        Files = updatedFiles;
+        await OnFilesChanged.InvokeAsync(updatedFiles);
+    }
+
+    private async Task ClearAllFiles()
+    {
+        Files.Clear();
+        await OnFilesChanged.InvokeAsync(Files);
     }
 
     private IEnumerable<IGrouping<string, (MemoryStream Stream, string FileName)>> GetFolderGroups()
@@ -160,137 +295,5 @@
             return fullPath;
 
         return fullPath.Substring(lastSlashIndex + 1);
-    }
-
-    private async Task HandleFileUpload(InputFileChangeEventArgs e)
-    {
-        await ProcessUploadedFiles(e.GetMultipleFiles(), false);
-    }
-
-    private async Task HandleFolderUpload(InputFileChangeEventArgs e)
-    {
-        await ProcessUploadedFiles(e.GetMultipleFiles(), true);
-    }
-
-    private async Task ProcessUploadedFiles(IReadOnlyList<IBrowserFile> selectedFiles, bool isFolder)
-    {
-        if (selectedFiles.Count == 0)
-            return;
-
-        try
-        {
-            IsProcessing = true;
-            ProcessedFiles = 0;
-            TotalFiles = selectedFiles.Count;
-            StateHasChanged();
-
-            // Set reasonable limits
-            var maxFileSize = 50 * 1024 * 1024; // 50MB per file
-            var batchSize = 50; // Process files in batches of 50
-
-            // Create a temporary list that we'll fill in batches
-            var updatedFiles = new List<(MemoryStream Stream, string FileName)>(Files);
-
-            // Number of batches we'll need to process
-            int totalBatches = (selectedFiles.Count + batchSize - 1) / batchSize;
-            int xmlFileCount = 0;
-
-            for (int batch = 0; batch < totalBatches; batch++)
-            {
-                int startIdx = batch * batchSize;
-                int endIdx = Math.Min(startIdx + batchSize, selectedFiles.Count);
-
-                // Process this batch
-                for (int i = startIdx; i < endIdx; i++)
-                {
-                    var file = selectedFiles[i];
-
-                    // Skip files that are too large
-                    if (file.Size > maxFileSize)
-                    {
-                        ProcessedFiles++;
-                        StateHasChanged();
-                        continue;
-                    }
-
-                    // Only process XML files - we can modify this filter as needed
-                    bool isXmlFile = file.Name.EndsWith(".xml", StringComparison.OrdinalIgnoreCase);
-                    if (!isXmlFile)
-                    {
-                        ProcessedFiles++;
-                        StateHasChanged();
-                        continue;
-                    }
-
-                    xmlFileCount++;
-
-                    try
-                    {
-                        // Process XML file
-                        var memoryStream = new MemoryStream();
-                        await file.OpenReadStream(maxFileSize).CopyToAsync(memoryStream);
-                        memoryStream.Position = 0;
-
-                        // For folder uploads, preserve the full path
-                        string fileName = isFolder ? file.Name : GetFileNameOnly(file.Name);
-                        updatedFiles.Add((Stream: memoryStream, FileName: fileName));
-                    }
-                    catch (Exception ex)
-                    {
-                        await JSRuntime.InvokeVoidAsync("console.error", $"Error processing {file.Name}: {ex.Message}");
-                    }
-
-                    ProcessedFiles++;
-                    if (ProcessedFiles % 10 == 0 || ProcessedFiles == TotalFiles)
-                    {
-                        StateHasChanged();
-                    }
-                }
-
-                // Update UI periodically and allow for garbage collection
-                if (batch % 2 == 0 || batch == totalBatches - 1)
-                {
-                    Files = updatedFiles.OrderBy(f => f.FileName).ToList();
-                    await OnFilesChanged.InvokeAsync(Files);
-                    StateHasChanged();
-
-                    // Give the UI a chance to update
-                    await Task.Delay(10);
-                }
-            }
-
-            // Final update
-            Files = updatedFiles.OrderBy(f => f.FileName).ToList();
-            await OnFilesChanged.InvokeAsync(Files);
-
-            // Inform user about non-XML files that were skipped
-            int skippedFiles = selectedFiles.Count - xmlFileCount;
-            if (skippedFiles > 0)
-            {
-                await JSRuntime.InvokeVoidAsync("alert", $"Loaded {xmlFileCount} XML files. Skipped {skippedFiles} non-XML files.");
-            }
-        }
-        catch (Exception ex)
-        {
-            await JSRuntime.InvokeVoidAsync("alert", $"Error loading files: {ex.Message}");
-        }
-        finally
-        {
-            IsProcessing = false;
-            StateHasChanged();
-        }
-    }
-
-    private async Task RemoveFile((MemoryStream Stream, string FileName) file)
-    {
-        var updatedFiles = Files.Where(f => f.FileName != file.FileName).ToList();
-        Files = updatedFiles;
-        await OnFilesChanged.InvokeAsync(updatedFiles);
-    }
-
-    private async Task ClearAllFiles()
-    {
-        Files.Clear();
-        await OnFilesChanged.InvokeAsync(Files);
     }
 }

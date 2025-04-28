@@ -1,4 +1,5 @@
 using ComparisonTool.Core.DI;
+using ComparisonTool.Web;
 using ComparisonTool.Web.Components;
 using Serilog;
 
@@ -44,5 +45,7 @@ app.UseAntiforgery();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+
+app.MapFileBatchUploadApi();
 
 app.Run();

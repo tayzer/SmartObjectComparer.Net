@@ -1,4 +1,4 @@
-﻿function saveAsFile(filename, contentType, content) {
+function saveAsFile(filename, contentType, content) {
     const blob = new Blob([content], { type: contentType });
     const url = URL.createObjectURL(blob);
 
@@ -496,3 +496,58 @@ function estimateMemoryUsage(files) {
         isLarge: estimatedMemoryMB > 500 // Flag if more than 500MB estimated
     };
 }
+
+// Batch upload folder files to backend using fetch and notify Blazor of progress/errors via DotNetObjectRef
+window.uploadFolderInBatches = async function (inputId, batchSize, dotNetRef) {
+    console.log('uploadFolderInBatches called with', inputId, batchSize, dotNetRef);
+    const input = document.getElementById(inputId);
+    console.log('Resolved input:', input);
+    if (!input || !input.files) {
+        alert('Could not find folder input element.');
+        return;
+    }
+    const files = Array.from(input.files).filter(f => f.name.endsWith('.xml'));
+    const totalFiles = files.length;
+    let uploaded = 0;
+    for (let i = 0; i < totalFiles; i += batchSize) {
+        const batch = files.slice(i, i + batchSize);
+        const form = new FormData();
+        for (const file of batch) {
+            form.append('files', file, file.webkitRelativePath || file.name);
+        }
+        try {
+            const response = await fetch('/api/upload/batch', {
+                method: 'POST',
+                body: form
+            });
+            if (!response.ok) {
+                const err = await response.text();
+                console.log('Batch upload error:', err);
+                if (dotNetRef) dotNetRef.invokeMethodAsync('OnBatchUploadError', err);
+                break;
+            }
+        } catch (e) {
+            console.log('Batch upload exception:', e);
+            if (dotNetRef) dotNetRef.invokeMethodAsync('OnBatchUploadError', e.toString());
+            break;
+        }
+        uploaded += batch.length;
+        console.log('Batch uploaded:', uploaded, '/', totalFiles);
+        if (dotNetRef) dotNetRef.invokeMethodAsync('OnBatchUploadProgress', uploaded, totalFiles);
+    }
+    console.log('Upload complete:', uploaded, '/', totalFiles);
+    if (dotNetRef) dotNetRef.invokeMethodAsync('OnBatchUploadComplete', uploaded, totalFiles);
+};
+
+// Helper to trigger hidden input click and handle upload after file selection
+window.triggerFolderInput = function(inputId, batchSize, dotNetRef) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    // Remove any previous event handler to avoid duplicate uploads
+    input.onchange = null;
+    input.value = '';
+    input.onchange = function() {
+        window.uploadFolderInBatches(inputId, batchSize, dotNetRef);
+    };
+    input.click();
+};
