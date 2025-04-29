@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using KellermanSoftware.CompareNetObjects;
+using Microsoft.Extensions.Logging;
 
 namespace ComparisonTool.Core.Comparison.Analysis;
 
@@ -8,16 +9,26 @@ namespace ComparisonTool.Core.Comparison.Analysis;
 /// </summary>
 public class DifferenceCategorizer
 {
+    private readonly ILogger logger;
+    public DifferenceCategorizer(ILogger logger = null)
+    {
+        this.logger = logger;
+    }
+
     /// <summary>
     /// Creates a structured summary from CompareNETObjects comparison result
     /// </summary>
     public DifferenceSummary CategorizeAndSummarize(ComparisonResult comparisonResult)
     {
+        logger?.LogInformation("Starting difference summary. AreEqual={AreEqual}, DifferenceCount={Count}",
+            comparisonResult.AreEqual, comparisonResult.Differences?.Count ?? 0);
+
         var summary = new DifferenceSummary();
 
         if (comparisonResult.AreEqual)
         {
             summary.AreEqual = true;
+            logger?.LogInformation("Objects are equal. No differences to categorize.");
             return summary;
         }
 
@@ -35,6 +46,11 @@ public class DifferenceCategorizer
 
         // Create category statistics
         CalculateStatistics(summary);
+
+        logger?.LogInformation("Completed difference summary. Categories: {CategoryCount}, Patterns: {PatternCount}, RootObjects: {RootObjectCount}",
+            summary.DifferencesByChangeType.Count,
+            summary.CommonPatterns?.Count ?? 0,
+            summary.DifferencesByRootObject.Count);
 
         return summary;
     }
@@ -89,6 +105,7 @@ public class DifferenceCategorizer
 
             summary.DifferencesByChangeType[category].Add(diff);
         }
+        logger?.LogDebug("Categorized differences into {CategoryCount} categories.", summary.DifferencesByChangeType.Count);
     }
 
     private void CategorizeByPathPattern(List<Difference> differences, DifferenceSummary summary)
@@ -122,6 +139,7 @@ public class DifferenceCategorizer
         summary.CommonPatterns = summary.CommonPatterns
             .OrderByDescending(p => p.OccurrenceCount)
             .ToList();
+        logger?.LogDebug("Identified {PatternCount} common property path patterns.", summary.CommonPatterns.Count);
     }
 
     private void CategorizeByRootObject(List<Difference> differences, DifferenceSummary summary)
@@ -147,6 +165,7 @@ public class DifferenceCategorizer
             }
             summary.DifferencesByRootObjectAndCategory[rootObject][category].Add(diff);
         }
+        logger?.LogDebug("Categorized differences into {RootObjectCount} root objects.", summary.DifferencesByRootObject.Count);
     }
 
     private void CalculateStatistics(DifferenceSummary summary)
@@ -164,6 +183,7 @@ public class DifferenceCategorizer
             double percentage = (double)rootObj.Value.Count / summary.TotalDifferenceCount * 100;
             summary.RootObjectPercentages[rootObj.Key] = Math.Round(percentage, 1);
         }
+        logger?.LogDebug("Calculated statistics for {CategoryCount} categories and {RootObjectCount} root objects.", summary.CategoryPercentages.Count, summary.RootObjectPercentages.Count);
     }
 
     private bool IsNumericDifference(object value1, object value2)

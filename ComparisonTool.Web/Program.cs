@@ -33,9 +33,10 @@ builder.Services.AddSignalR(options =>
     options.KeepAliveInterval = TimeSpan.FromSeconds(15);
 });
 
-// Register logging - make sure it's properly configured
 builder.Logging.ClearProviders();
 builder.Logging.AddSerilog(Log.Logger);
+
+ThreadPoolConfig.Configure();
 
 var app = builder.Build();
 

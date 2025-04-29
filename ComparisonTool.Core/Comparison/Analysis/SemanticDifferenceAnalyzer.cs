@@ -3,6 +3,7 @@ using KellermanSoftware.CompareNetObjects;
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Results;
 using System.Text;
+using Microsoft.Extensions.Logging;
 
 namespace ComparisonTool.Core.Comparison.Analysis
 {
@@ -13,6 +14,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
     {
         private readonly MultiFolderComparisonResult folderResult;
         private readonly ComparisonPatternAnalysis patternAnalysis;
+        private readonly ILogger logger;
 
         /// <summary>
         /// Patterns for recognizing common change types
@@ -39,10 +41,11 @@ namespace ComparisonTool.Core.Comparison.Analysis
             { "Tags & Categories", new HashSet<string> { "Tags", "Tag" } }
         };
 
-        public SemanticDifferenceAnalyzer(MultiFolderComparisonResult folderResult, ComparisonPatternAnalysis patternAnalysis)
+        public SemanticDifferenceAnalyzer(MultiFolderComparisonResult folderResult, ComparisonPatternAnalysis patternAnalysis, ILogger logger = null)
         {
             this.folderResult = folderResult;
             this.patternAnalysis = patternAnalysis;
+            this.logger = logger;
         }
 
         /// <summary>
@@ -50,6 +53,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
         /// </summary>
         public SemanticDifferenceAnalysis AnalyzeSemanticGroups()
         {
+            logger?.LogInformation("Starting semantic group analysis for {FileCount} file pairs", folderResult.FilePairResults.Count);
             var analysis = new SemanticDifferenceAnalysis
             {
                 BaseAnalysis = patternAnalysis
@@ -80,16 +84,21 @@ namespace ComparisonTool.Core.Comparison.Analysis
                 }
             }
 
+            int filePairIndex = 0;
             // 3. Process each file pair's differences
             foreach (var filePair in folderResult.FilePairResults)
             {
+                filePairIndex++;
                 if (filePair.AreEqual) continue;
 
                 var pairIdentifier = $"{filePair.File1Name} vs {filePair.File2Name}";
+                logger?.LogDebug("Analyzing differences for file pair {PairIndex}/{TotalPairs}: {PairIdentifier}", filePairIndex, folderResult.FilePairResults.Count, pairIdentifier);
 
                 // 4. Categorize each difference
+                int diffIndex = 0;
                 foreach (var diff in filePair.Result.Differences)
                 {
+                    diffIndex++;
                     // 4.1 Try pattern-based categorization first
                     bool categorized = false;
                     foreach (var pattern in semanticPatterns)
@@ -97,6 +106,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
                         if (pattern.Value(diff))
                         {
                             AddDifferenceToGroup(semanticGroups[pattern.Key], diff, pairIdentifier);
+                            logger?.LogTrace("Categorized difference {DiffIndex} in {PairIdentifier} as '{PatternKey}'", diffIndex, pairIdentifier, pattern.Key);
                             categorized = true;
                             break;
                         }
@@ -111,6 +121,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
                             {
                                 var key = $"{section.Key} Changes";
                                 AddDifferenceToGroup(semanticGroups[key], diff, pairIdentifier);
+                                logger?.LogTrace("Categorized difference {DiffIndex} in {PairIdentifier} as document section '{SectionKey}'", diffIndex, pairIdentifier, section.Key);
                                 categorized = true;
                                 break;
                             }
@@ -133,6 +144,11 @@ namespace ComparisonTool.Core.Comparison.Analysis
                             }
 
                             AddDifferenceToGroup(semanticGroups[valueBasedGroup], diff, pairIdentifier);
+                            logger?.LogTrace("Categorized difference {DiffIndex} in {PairIdentifier} as value pattern '{ValuePattern}'", diffIndex, pairIdentifier, valueBasedGroup);
+                        }
+                        else
+                        {
+                            logger?.LogTrace("Difference {DiffIndex} in {PairIdentifier} could not be categorized", diffIndex, pairIdentifier);
                         }
                     }
                 }
@@ -143,20 +159,12 @@ namespace ComparisonTool.Core.Comparison.Analysis
             {
                 if (group.Differences.Count > 0)
                 {
-                    // Calculate confidence based on how many related properties are affected
-                    // and how many files show the same pattern
                     int baseConfidence = 50;
-
-                    // More related properties suggests a stronger pattern
                     baseConfidence += 5 * Math.Min(10, group.RelatedProperties.Count);
-
-                    // More files affected suggests a more significant pattern
                     baseConfidence += 5 * Math.Min(5, group.AffectedFiles.Count);
-
-                    // Constrain to 0-100 range
                     group.ConfidenceLevel = Math.Min(100, Math.Max(0, baseConfidence));
-
                     analysis.SemanticGroups.Add(group);
+                    logger?.LogDebug("Added semantic group '{GroupName}' with {DifferenceCount} differences and confidence {Confidence}", group.GroupName, group.DifferenceCount, group.ConfidenceLevel);
                 }
             }
 
@@ -166,6 +174,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
                 .ThenByDescending(g => g.DifferenceCount)
                 .ToList();
 
+            logger?.LogInformation("Semantic group analysis complete. {GroupCount} groups created, {TotalCategorized} differences categorized.", analysis.SemanticGroups.Count, analysis.CategorizedDifferences);
             return analysis;
         }
 
@@ -179,7 +188,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
         private string NormalizePropertyPath(string propertyPath)
         {
             // Replace specific array indices with [*]
-            return Regex.Replace(propertyPath, @"\[\d+\]", "[*]");
+            return Regex.Replace(propertyPath, @"\\[\\d+\\]", "[*]");
         }
 
         private bool IsInDocumentSection(Difference diff, HashSet<string> sectionKeys)
@@ -207,7 +216,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
                     return "URL/Path Changes";
 
                 // Check for version changes
-                if (Regex.IsMatch(oldValue, @"\d+\.\d+") && Regex.IsMatch(newValue, @"\d+\.\d+"))
+                if (Regex.IsMatch(oldValue, @"\\d+\\.\\d+") && Regex.IsMatch(newValue, @"\\d+\\.\\d+"))
                     return "Version Changes";
             }
 
@@ -247,7 +256,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
         {
             return diff.PropertyName.Contains("Score") ||
                    diff.PropertyName.Contains("Value") ||
-                   diff.PropertyName.Contains("Amount") || 
+                   diff.PropertyName.Contains("Amount") ||
                    diff.PropertyName.Contains("Count") ||
                    (diff.Object1Value is double || diff.Object1Value is int || diff.Object1Value is decimal) &&
                    (diff.Object2Value is double || diff.Object2Value is int || diff.Object2Value is decimal);
