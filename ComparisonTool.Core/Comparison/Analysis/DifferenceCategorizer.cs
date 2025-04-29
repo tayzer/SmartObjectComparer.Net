@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using KellermanSoftware.CompareNetObjects;
 
 namespace ComparisonTool.Core.Comparison.Analysis;
@@ -129,13 +129,23 @@ public class DifferenceCategorizer
         foreach (var diff in differences)
         {
             string rootObject = GetRootObjectName(diff.PropertyName);
+            DifferenceCategory category = GetDifferenceCategory(diff);
 
             if (!summary.DifferencesByRootObject.ContainsKey(rootObject))
             {
                 summary.DifferencesByRootObject[rootObject] = new List<Difference>();
             }
-
             summary.DifferencesByRootObject[rootObject].Add(diff);
+
+            if (!summary.DifferencesByRootObjectAndCategory.ContainsKey(rootObject))
+            {
+                summary.DifferencesByRootObjectAndCategory[rootObject] = new Dictionary<DifferenceCategory, List<Difference>>();
+            }
+            if (!summary.DifferencesByRootObjectAndCategory[rootObject].ContainsKey(category))
+            {
+                summary.DifferencesByRootObjectAndCategory[rootObject][category] = new List<Difference>();
+            }
+            summary.DifferencesByRootObjectAndCategory[rootObject][category].Add(diff);
         }
     }
 
@@ -199,5 +209,46 @@ public class DifferenceCategorizer
             return propertyPath.Substring(0, dotIndex);
 
         return propertyPath.Substring(0, Math.Min(dotIndex, bracketIndex));
+    }
+
+    private DifferenceCategory GetDifferenceCategory(Difference diff)
+    {
+        // Check if it's a collection difference
+        if (diff.PropertyName.Contains("[") && diff.PropertyName.Contains("]"))
+        {
+            if (diff.Object1Value == null && diff.Object2Value != null)
+                return DifferenceCategory.ItemAdded;
+            else if (diff.Object1Value != null && diff.Object2Value == null)
+                return DifferenceCategory.ItemRemoved;
+            else
+                return DifferenceCategory.CollectionItemChanged;
+        }
+        else if (diff.Object1Value is string || diff.Object2Value is string)
+        {
+            return DifferenceCategory.TextContentChanged;
+        }
+        else if (diff.Object1Value is double || diff.Object2Value is double ||
+                 diff.Object1Value is float || diff.Object2Value is float ||
+                 diff.Object1Value is int || diff.Object2Value is int ||
+                 diff.Object1Value is long || diff.Object2Value is long)
+        {
+            return DifferenceCategory.NumericValueChanged;
+        }
+        else if (diff.Object1Value is DateTime || diff.Object2Value is DateTime)
+        {
+            return DifferenceCategory.DateTimeChanged;
+        }
+        else if (diff.Object1Value is bool || diff.Object2Value is bool)
+        {
+            return DifferenceCategory.BooleanValueChanged;
+        }
+        else if (diff.Object1Value == null || diff.Object2Value == null)
+        {
+            return DifferenceCategory.NullValueChange;
+        }
+        else
+        {
+            return DifferenceCategory.Other;
+        }
     }
 }

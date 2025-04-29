@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using KellermanSoftware.CompareNetObjects;
 
 namespace ComparisonTool.Core.Comparison.Analysis;
@@ -14,6 +14,8 @@ public class DifferenceSummary
     public Dictionary<DifferenceCategory, List<Difference>> DifferencesByChangeType { get; set; } = new();
 
     public Dictionary<string, List<Difference>> DifferencesByRootObject { get; set; } = new();
+
+    public Dictionary<string, Dictionary<DifferenceCategory, List<Difference>>> DifferencesByRootObjectAndCategory { get; set; } = new();
 
     public Dictionary<DifferenceCategory, double> CategoryPercentages { get; set; } = new();
 
@@ -53,30 +55,46 @@ public class DifferenceSummary
 
         sb.AppendLine();
 
-        // Summary by root object
-        sb.AppendLine("## Differences by Root Object");
+        // Summary by root object and category
+        sb.AppendLine("## Differences by Root Object and Category");
+        sb.AppendLine();
+        foreach (var obj in DifferencesByRootObjectAndCategory.OrderByDescending(o => o.Value.SelectMany(v => v.Value).Count()))
+        {
+            int total = obj.Value.SelectMany(v => v.Value).Count();
+            sb.AppendLine($"### {obj.Key} (Total: {total})");
+            foreach (var cat in obj.Value.OrderByDescending(c => c.Value.Count))
+            {
+                sb.AppendLine($"- {FormatCategoryName(cat.Key)}: {cat.Value.Count}");
+                foreach (var diff in cat.Value.Take(5)) // show up to 5 examples
+                {
+                    sb.AppendLine($"    - Property: `{diff.PropertyName}` | Old: `{FormatValue(diff.Object1Value)}` | New: `{FormatValue(diff.Object2Value)}`");
+                }
+                if (cat.Value.Count > 5)
+                    sb.AppendLine($"    ...and {cat.Value.Count - 5} more");
+            }
+            sb.AppendLine();
+        }
+
+        // Fallback: Summary by root object (legacy)
+        sb.AppendLine("## Differences by Root Object (Legacy)");
         sb.AppendLine();
         sb.AppendLine("| Object | Count | Percentage |");
         sb.AppendLine("|--------|-------|------------|");
-
         foreach (var obj in DifferencesByRootObject.OrderByDescending(o => o.Value.Count))
         {
             sb.AppendLine($"| {obj.Key} | {obj.Value.Count} | {RootObjectPercentages[obj.Key]}% |");
         }
-
         sb.AppendLine();
 
         // Common patterns
         sb.AppendLine("## Common Difference Patterns");
         sb.AppendLine();
-
         foreach (var pattern in CommonPatterns.Take(10)) // Top 10 patterns
         {
             sb.AppendLine($"### Pattern: {pattern.Pattern} ({pattern.OccurrenceCount} occurrences)");
             sb.AppendLine();
             sb.AppendLine("Example differences:");
             sb.AppendLine();
-
             foreach (var example in pattern.Examples)
             {
                 sb.AppendLine($"- Property: `{example.PropertyName}`");
@@ -85,7 +103,6 @@ public class DifferenceSummary
                 sb.AppendLine();
             }
         }
-
         return sb.ToString();
     }
 
