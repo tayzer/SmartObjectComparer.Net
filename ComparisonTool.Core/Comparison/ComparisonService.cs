@@ -428,11 +428,12 @@ public class ComparisonService : IComparisonService
     /// <param name="cancellationToken">Cancellation token for async operations</param>
     /// <returns>Analysis of patterns across compared files</returns>
     public async Task<ComparisonPatternAnalysis> AnalyzePatternsAsync(
-        MultiFolderComparisonResult folderResult,
-        CancellationToken cancellationToken = default)
+      MultiFolderComparisonResult folderResult,
+      CancellationToken cancellationToken = default)
     {
         return await Task.Run(() =>
         {
+            var overallSw = System.Diagnostics.Stopwatch.StartNew();
             logger.LogInformation("Starting pattern analysis of {FileCount} comparison results",
                 folderResult.FilePairResults.Count);
 
@@ -449,108 +450,104 @@ public class ComparisonService : IComparisonService
                 analysis.TotalByCategory[category] = 0;
             }
 
-            // Process all differences to find common patterns
-            var allPathPatterns = new Dictionary<string, GlobalPatternInfo>();
-            var allPropertyChanges = new Dictionary<string, GlobalPropertyChangeInfo>();
+            var allPathPatterns = new ConcurrentDictionary<string, GlobalPatternInfo>();
+            var allPropertyChanges = new ConcurrentDictionary<string, GlobalPropertyChangeInfo>();
+            var categoryCounts = new ConcurrentDictionary<DifferenceCategory, int>();
 
-            foreach (var filePair in folderResult.FilePairResults)
+            var phaseSw = System.Diagnostics.Stopwatch.StartNew();
+            // Parallelize over file pairs
+            System.Threading.Tasks.Parallel.ForEach(folderResult.FilePairResults, new System.Threading.Tasks.ParallelOptions { CancellationToken = cancellationToken }, filePair =>
             {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                if (filePair.AreEqual) continue;
-
+                if (filePair.AreEqual) return;
                 var pairIdentifier = $"{filePair.File1Name} vs {filePair.File2Name}";
 
-                // Add to category counts
+                // Category counts
                 foreach (var category in filePair.Summary.DifferencesByChangeType)
                 {
-                    if (analysis.TotalByCategory.ContainsKey(category.Key))
-                    {
-                        analysis.TotalByCategory[category.Key] += category.Value.Count;
-                    }
+                    categoryCounts.AddOrUpdate(category.Key, category.Value.Count, (k, v) => v + category.Value.Count);
                 }
 
-                // Process each difference
                 foreach (var diff in filePair.Result.Differences)
                 {
-                    // Normalize the property path (remove indices, backing fields)
                     string normalizedPath = NormalizePropertyPath(diff.PropertyName);
 
-                    // Create pattern info if not exists
-                    if (!allPathPatterns.ContainsKey(normalizedPath))
+                    // Path pattern aggregation
+                    var patternInfo = allPathPatterns.GetOrAdd(normalizedPath, _ => new GlobalPatternInfo
                     {
-                        allPathPatterns[normalizedPath] = new GlobalPatternInfo
+                        PatternPath = normalizedPath,
+                        _occurrenceCount = 0,
+                        _fileCount = 0
+                    });
+                    System.Threading.Interlocked.Increment(ref patternInfo._occurrenceCount);
+                    lock (patternInfo.AffectedFiles)
+                    {
+                        if (!patternInfo.AffectedFiles.Contains(pairIdentifier))
                         {
-                            PatternPath = normalizedPath,
-                            OccurrenceCount = 0,
-                            FileCount = 0
-                        };
+                            patternInfo.AffectedFiles.Add(pairIdentifier);
+                            patternInfo._fileCount++;
+                        }
                     }
-
-                    // Update pattern info
-                    var patternInfo = allPathPatterns[normalizedPath];
-                    patternInfo.OccurrenceCount++;
-                    if (!patternInfo.AffectedFiles.Contains(pairIdentifier))
+                    lock (patternInfo.Examples)
                     {
-                        patternInfo.AffectedFiles.Add(pairIdentifier);
-                        patternInfo.FileCount++;
+                        if (patternInfo.Examples.Count < 3)
+                        {
+                            patternInfo.Examples.Add(diff);
+                        }
                     }
 
-                    // Add example if we don't have many
-                    if (patternInfo.Examples.Count < 3)
-                    {
-                        patternInfo.Examples.Add(diff);
-                    }
-
-                    // Track property change info (create key from property + old value + new value)
+                    // Property change aggregation
                     var oldValue = diff.Object1Value?.ToString() ?? "null";
                     var newValue = diff.Object2Value?.ToString() ?? "null";
                     var changeKey = $"{normalizedPath}|{oldValue}|{newValue}";
-
-                    if (!allPropertyChanges.ContainsKey(changeKey))
+                    var changeInfo = allPropertyChanges.GetOrAdd(changeKey, _ => new GlobalPropertyChangeInfo
                     {
-                        allPropertyChanges[changeKey] = new GlobalPropertyChangeInfo
+                        PropertyName = normalizedPath,
+                        _occurrenceCount = 0,
+                        CommonChanges = new Dictionary<string, string> { { oldValue, newValue } }
+                    });
+                    System.Threading.Interlocked.Increment(ref changeInfo._occurrenceCount);
+                    lock (changeInfo.AffectedFiles)
+                    {
+                        if (!changeInfo.AffectedFiles.Contains(pairIdentifier))
                         {
-                            PropertyName = normalizedPath,
-                            OccurrenceCount = 0,
-                            CommonChanges = new Dictionary<string, string>
-                            {
-                                { oldValue, newValue }
-                            }
-                        };
-                    }
-
-                    // Update property change info
-                    var changeInfo = allPropertyChanges[changeKey];
-                    changeInfo.OccurrenceCount++;
-                    if (!changeInfo.AffectedFiles.Contains(pairIdentifier))
-                    {
-                        changeInfo.AffectedFiles.Add(pairIdentifier);
+                            changeInfo.AffectedFiles.Add(pairIdentifier);
+                        }
                     }
                 }
+            });
+            logger.LogInformation("[TIMING] Parallel pattern aggregation took {ElapsedMs} ms", phaseSw.ElapsedMilliseconds);
+
+            // Copy category counts to analysis
+            foreach (var kvp in categoryCounts)
+            {
+                analysis.TotalByCategory[kvp.Key] = kvp.Value;
             }
 
+            var sortSw = System.Diagnostics.Stopwatch.StartNew();
             // Sort and select most common patterns
             analysis.CommonPathPatterns = allPathPatterns.Values
-                .Where(p => p.FileCount > 1) // Only patterns that appear in multiple files
+                .Where(p => p.FileCount > 1)
                 .OrderByDescending(p => p.FileCount)
                 .ThenByDescending(p => p.OccurrenceCount)
-                .Take(20) // Limit to top 20 patterns
+                .Take(20)
                 .ToList();
 
             // Sort and select most common property changes
             analysis.CommonPropertyChanges = allPropertyChanges.Values
-                .Where(c => c.AffectedFiles.Count > 1) // Only changes that appear in multiple files
+                .Where(c => c.AffectedFiles.Count > 1)
                 .OrderByDescending(c => c.AffectedFiles.Count)
                 .ThenByDescending(c => c.OccurrenceCount)
-                .Take(20) // Limit to top 20 common changes
+                .Take(20)
                 .ToList();
+            logger.LogInformation("[TIMING] Sorting and selection took {ElapsedMs} ms", sortSw.ElapsedMilliseconds);
 
             // Group similar files based on their difference patterns
+            var groupSw = System.Diagnostics.Stopwatch.StartNew();
             GroupSimilarFiles(folderResult, analysis);
+            logger.LogInformation("[TIMING] Grouping similar files took {ElapsedMs} ms", groupSw.ElapsedMilliseconds);
 
-            logger.LogInformation("Pattern analysis completed. Found {PatternCount} common patterns across files",
-                analysis.CommonPathPatterns.Count);
+            logger.LogInformation("Pattern analysis completed. Found {PatternCount} common patterns across files. Total time: {TotalMs} ms",
+                analysis.CommonPathPatterns.Count, overallSw.ElapsedMilliseconds);
 
             return analysis;
         }, cancellationToken);
