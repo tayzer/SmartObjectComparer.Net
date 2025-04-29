@@ -99,6 +99,8 @@
                                           OnEnablePatternAnalysisChanged="@(value => EnablePatternAnalysis = value)"
                                           EnableSemanticAnalysis="@EnableSemanticAnalysis"
                                           OnEnableSemanticAnalysisChanged="@(value => EnableSemanticAnalysis = value)"
+                                          EnableStructuralAnalysis="@EnableStructuralAnalysis"
+                                          OnEnableStructuralAnalysisChanged="@(value => EnableStructuralAnalysis = value)"
                                           IgnoreRules="@IgnoreRules"
                                           OnIgnoreRuleAdded="@AddIgnoreRule"
                                           OnIgnoreRuleRemoved="@RemoveIgnoreRule"
@@ -131,6 +133,8 @@ else
                                           OnEnablePatternAnalysisChanged="@(value => EnablePatternAnalysis = value)"
                                           EnableSemanticAnalysis="@EnableSemanticAnalysis"
                                           OnEnableSemanticAnalysisChanged="@(value => EnableSemanticAnalysis = value)"
+                                          EnableStructuralAnalysis="@EnableStructuralAnalysis"
+                                          OnEnableStructuralAnalysisChanged="@(value => EnableStructuralAnalysis = value)"
                                           IgnoreRules="@IgnoreRules"
                                           OnIgnoreRuleAdded="@AddIgnoreRule"
                                           OnIgnoreRuleRemoved="@RemoveIgnoreRule"
@@ -182,6 +186,21 @@ else
                           OnExportAnalysis="@ExportPatternAnalysisReport" />
 }
 
+@if (StructuralAnalysis != null && EnableStructuralAnalysis)
+{
+    <StructuralPatternPanel Analysis="@StructuralAnalysis" />
+}
+else if (EnableStructuralAnalysis && FolderComparisonResult != null && !FolderComparisonResult.AllEqual)
+{
+    <div class="alert alert-info mt-3">
+        <h5>Structural Analysis</h5>
+        <p>Structural analysis is enabled but no patterns were found or the analysis didn't run.</p>
+        <button class="btn btn-primary btn-sm" @onclick="GenerateStructuralAnalysis">
+            Run Structural Analysis
+        </button>
+    </div>
+}
+
 @if (SemanticAnalysis != null && (ShowPatternSummary || EnablePatternAnalysis))
 {
     <SemanticGroupsPanel Analysis="@SemanticAnalysis"
@@ -212,6 +231,7 @@ else
     private List<IgnoreRule> IgnoreRules { get; set; } = new List<IgnoreRule>();
     private bool EnablePatternAnalysis { get; set; } = true;
     private bool EnableSemanticAnalysis { get; set; } = true;
+    private bool EnableStructuralAnalysis { get; set; } = true;
     private bool UseDirectoryMode { get; set; } = false;
     
     // Directory mode properties
@@ -234,6 +254,7 @@ else
     private ComparisonPatternAnalysis PatternAnalysis { get; set; }
     private bool ShowPatternSummary { get; set; } = false;
     private SemanticDifferenceAnalysis SemanticAnalysis { get; set; }
+    private StructuralDifferenceAnalyzer.StructuralAnalysisResult StructuralAnalysis { get; set; }
     private CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
     private HierarchicalPropertySelector propertySelector;
 
@@ -384,13 +405,10 @@ else
             
         try
         {
+            await ClearAndReset();
+            
             IsComparing = true;
             IsCancellable = true;
-            FolderComparisonResult = null;
-            SelectedPairIndex = -1;
-            PatternAnalysis = null;
-            SemanticAnalysis = null;
-            ShowPatternSummary = false;
             Progress = new ComparisonProgress(0, 0, "Preparing comparison...");
 
             await ResetCancellationToken();
@@ -440,6 +458,12 @@ else
             {
                 SemanticAnalysis = semanticAnalysisObj as SemanticDifferenceAnalysis;
             }
+            
+            // Generate structural analysis if needed
+            if (EnableStructuralAnalysis && !FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 1)
+            {
+                await GenerateStructuralAnalysis();
+            }
         }
         catch (OperationCanceledException)
         {
@@ -465,13 +489,10 @@ else
 
         try
         {
+            await ClearAndReset();
+            
             IsComparing = true;
             IsCancellable = true;
-            FolderComparisonResult = null;
-            SelectedPairIndex = -1;
-            PatternAnalysis = null;
-            SemanticAnalysis = null;
-            ShowPatternSummary = false;
             Progress = new ComparisonProgress(0, 0, "Preparing comparison...");
 
             await ResetCancellationToken();
@@ -520,37 +541,38 @@ else
             }
             else
             {
-                // Use the batch processing method with progress reporting
-                var totalFiles = Math.Min(Folder1Files.Count, Folder2Files.Count);
-                Progress = new ComparisonProgress(0, totalFiles, "Comparing files...");
-                
-                FolderComparisonResult = await ComparisonService.CompareFoldersInBatchesAsync(
+                // Use standard comparison service for smaller sets
+                FolderComparisonResult = await ComparisonService.CompareFoldersAsync(
                     Folder1Files,
                     Folder2Files,
                     SelectedModelName,
-                    50, // Batch size of 50 files
-                    new Progress<(int Completed, int Total)>(progress =>
-                    {
-                        Progress = new ComparisonProgress(progress.Completed, progress.Total, 
-                            $"Compared {progress.Completed} of {progress.Total} files");
-                        StateHasChanged();
-                    }),
                     cancellationToken);
 
+                // Select the first result if there are differences
                 if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 0)
                 {
                     SelectPairResult(0);
                 }
 
+                // Generate pattern analysis if configured
                 if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 1 && EnablePatternAnalysis)
                 {
-                    Progress = new ComparisonProgress(totalFiles, totalFiles, "Analyzing patterns...");
+                    // Analyze patterns
                     await GeneratePatternAnalysis();
-
+                    
+                    // Generate semantic analysis if needed
                     if (PatternAnalysis != null && EnableSemanticAnalysis)
                     {
-                        Progress = new ComparisonProgress(totalFiles, totalFiles, "Analyzing semantic differences...");
                         await GenerateSemanticAnalysis();
+                    }
+                    
+                    // Generate structural analysis if enabled
+                    if (EnableStructuralAnalysis && !FolderComparisonResult.AllEqual)
+                    {
+                        Progress = new ComparisonProgress(0, 0, "Starting structural analysis...");
+                        StateHasChanged();
+                        await Task.Delay(100); // Ensure UI updates
+                        await GenerateStructuralAnalysis();
                     }
                 }
             }
@@ -607,16 +629,33 @@ else
 
     private async Task GeneratePatternAnalysis()
     {
-        if (FolderComparisonResult == null || FolderComparisonResult.FilePairResults.Count <= 1)
+        if (FolderComparisonResult == null)
             return;
 
         try
         {
+            // Create progress reporter
+            var progress = new Progress<ComparisonProgress>(p =>
+            {
+                Progress = p;
+                StateHasChanged();
+            });
+
+            await ResetCancellationToken();
             var cancellationToken = _cancellationTokenSource.Token;
+
+            Progress = new ComparisonProgress(0, 0, "Analyzing patterns...");
+            StateHasChanged();
 
             PatternAnalysis = await ComparisonService.AnalyzePatternsAsync(
                 FolderComparisonResult,
                 cancellationToken);
+
+            // Add to metadata to save with results
+            if (FolderComparisonResult.Metadata.ContainsKey("PatternAnalysis"))
+                FolderComparisonResult.Metadata["PatternAnalysis"] = PatternAnalysis;
+            else
+                FolderComparisonResult.Metadata.Add("PatternAnalysis", PatternAnalysis);
 
             ShowPatternSummary = true;
         }
@@ -626,8 +665,7 @@ else
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error generating pattern analysis: {Message}", ex.Message);
-            await JSRuntime.InvokeVoidAsync("alert", $"Error generating pattern analysis: {ex.Message}");
+            Logger.LogError(ex, "Error analyzing patterns: {Message}", ex.Message);
         }
     }
 
@@ -653,6 +691,44 @@ else
         {
             Logger.LogError(ex, "Error generating semantic analysis: {Message}", ex.Message);
             await JSRuntime.InvokeVoidAsync("alert", $"Error generating semantic analysis: {ex.Message}");
+        }
+    }
+
+    private async Task GenerateStructuralAnalysis()
+    {
+        if (FolderComparisonResult == null)
+            return;
+        
+        try
+        {
+            Logger.LogInformation("Starting structural pattern analysis...");
+            Progress = new ComparisonProgress(0, 0, "Generating structural pattern analysis...");
+            StateHasChanged();
+            
+            await Task.Delay(100); // Allow UI to update
+            
+            var structuralAnalyzer = new StructuralDifferenceAnalyzer(FolderComparisonResult, Logger);
+            StructuralAnalysis = structuralAnalyzer.AnalyzeStructuralPatterns();
+            
+            Logger.LogInformation("Structural analysis completed. Found patterns: {MissingElements}, {MissingProps}, {OrderDiffs}",
+                StructuralAnalysis?.MissingCollectionElements?.Count ?? 0,
+                StructuralAnalysis?.ConsistentlyMissingProperties?.Count ?? 0,
+                StructuralAnalysis?.ElementOrderDifferences?.Count ?? 0);
+            
+            // Add to metadata to save with results
+            if (FolderComparisonResult.Metadata.ContainsKey("StructuralAnalysis"))
+                FolderComparisonResult.Metadata["StructuralAnalysis"] = StructuralAnalysis;
+            else
+                FolderComparisonResult.Metadata.Add("StructuralAnalysis", StructuralAnalysis);
+            
+            Progress = new ComparisonProgress(0, 0, "Structural analysis complete");
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error generating structural pattern analysis");
+            Progress = new ComparisonProgress(0, 0, "Error generating structural analysis");
+            StateHasChanged();
         }
     }
 
@@ -750,6 +826,32 @@ else
         {
             Logger.LogError(ex, "Error exporting semantic analysis: {Message}", ex.Message);
             await JSRuntime.InvokeVoidAsync("alert", $"Error exporting semantic analysis: {ex.Message}");
+        }
+    }
+
+    private async Task ClearAndReset()
+    {
+        try
+        {
+            // Reset all comparison results
+            ComparisonResult = null;
+            DifferenceSummary = null;
+            FolderComparisonResult = null;
+            SelectedPairIndex = -1;
+            PatternAnalysis = null;
+            SemanticAnalysis = null;
+            StructuralAnalysis = null;
+            ShowPatternSummary = false;
+            ShowAllDifferences = false;
+            
+            // Force garbage collection to clean up memory
+            GC.Collect();
+            
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error clearing comparison results");
         }
     }
 }

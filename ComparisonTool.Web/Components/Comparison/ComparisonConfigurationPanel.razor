@@ -81,6 +81,17 @@
                 Groups differences by semantic meaning to help focus testing efforts. Requires pattern analysis.
             </small>
         </div>
+        
+        <div class="form-group form-check mt-2">
+            <input type="checkbox" class="form-check-input" id="enableStructuralAnalysis"
+                   @bind="EnableStructuralAnalysisLocal" />
+            <label class="form-check-label" for="enableStructuralAnalysis">
+                Enable Structural Pattern Analysis
+            </label>
+            <small class="form-text text-muted d-block">
+                Identifies recurring missing elements in collections and structural patterns. Provides detailed guidance for testers.
+            </small>
+        </div>
 
         <button class="btn btn-primary mt-3" @onclick="RunComparison"
                 disabled="@(!CanRunComparison)">
@@ -131,6 +142,12 @@
 
     [Parameter]
     public EventCallback<bool> OnEnableSemanticAnalysisChanged { get; set; }
+    
+    [Parameter]
+    public bool EnableStructuralAnalysis { get; set; } = true;
+    
+    [Parameter]
+    public EventCallback<bool> OnEnableStructuralAnalysisChanged { get; set; }
 
     private bool IgnoreCollectionOrderLocal
     {
@@ -167,6 +184,32 @@
             {
                 EnablePatternAnalysis = value;
                 OnEnablePatternAnalysisChanged.InvokeAsync(value);
+            }
+        }
+    }
+    
+    private bool EnableSemanticAnalysisLocal
+    {
+        get => EnableSemanticAnalysis;
+        set
+        {
+            if (EnableSemanticAnalysis != value)
+            {
+                EnableSemanticAnalysis = value;
+                OnEnableSemanticAnalysisChanged.InvokeAsync(value);
+            }
+        }
+    }
+    
+    private bool EnableStructuralAnalysisLocal
+    {
+        get => EnableStructuralAnalysis;
+        set
+        {
+            if (EnableStructuralAnalysis != value)
+            {
+                EnableStructuralAnalysis = value;
+                OnEnableStructuralAnalysisChanged.InvokeAsync(value);
             }
         }
     }
@@ -215,17 +258,4 @@
 
     [Parameter]
     public EventCallback OnPropertySelectorOpened { get; set; }
-
-    private bool EnableSemanticAnalysisLocal
-    {
-        get => EnableSemanticAnalysis;
-        set
-        {
-            if (EnableSemanticAnalysis != value)
-            {
-                EnableSemanticAnalysis = value;
-                OnEnableSemanticAnalysisChanged.InvokeAsync(value);
-            }
-        }
-    }
 }

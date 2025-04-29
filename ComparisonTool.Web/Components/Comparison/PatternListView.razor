@@ -1,0 +1,43 @@
+@namespace ComparisonTool.Web.Components.Comparison
+@using ComparisonTool.Core.Comparison.Analysis
+
+<div class="table-responsive">
+    <table class="table table-sm table-striped table-hover">
+        <thead>
+            <tr>
+                <th>Pattern</th>
+                <th>Type</th>
+                <th>Files</th>
+                <th>Occurrences</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var pattern in Patterns)
+            {
+                <tr @onclick="@(() => OnSelectPattern.InvokeAsync(pattern))" class="cursor-pointer">
+                    <td><code>@pattern.FullPattern</code></td>
+                    <td>@(pattern.IsCollectionElement ? "Collection Element" : "Property")</td>
+                    <td>@pattern.FileCount (@pattern.Consistency.ToString("0.0")%)</td>
+                    <td>@pattern.OccurrenceCount</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+<style>
+    .cursor-pointer {
+        cursor: pointer;
+    }
+    .cursor-pointer:hover {
+        background-color: rgba(0,0,0,0.05);
+    }
+</style>
+
+@code {
+    [Parameter]
+    public List<StructuralDifferenceAnalyzer.StructuralPattern> Patterns { get; set; }
+    
+    [Parameter]
+    public EventCallback<StructuralDifferenceAnalyzer.StructuralPattern> OnSelectPattern { get; set; }
+} 
