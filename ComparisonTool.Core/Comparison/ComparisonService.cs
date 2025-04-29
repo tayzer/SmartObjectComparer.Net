@@ -118,7 +118,10 @@ public class ComparisonService : IComparisonService
                 {
                     return await Task.Run(() =>
                     {
-                        var compareLogic = configService.GetCompareLogic();
+                        // Create a new instance of the CompareLogic for this comparison.
+
+                        var compareConfig = configService.GetCurrentConfig().Clone();
+                        var compareLogic = new CompareLogic(compareConfig);
 
                         var oldClone = cloneMethod.Invoke(deserializationService, new[] { oldResponseCopy });
                         var newClone = cloneMethod.Invoke(deserializationService, new[] { newResponseCopy });
