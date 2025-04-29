@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using System.Collections.Concurrent;
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Configuration;
@@ -580,150 +580,113 @@ public class ComparisonService : IComparisonService
     }
 
     /// <summary>
-    /// Group similar files based on their difference patterns
+    /// Group similar files based on their difference patterns using a hybrid (exact + MinHash/LSH) approach
     /// </summary>
     private void GroupSimilarFiles(MultiFolderComparisonResult folderResult, ComparisonPatternAnalysis analysis)
     {
-        // Skip if not enough files with differences
         if (analysis.FilesWithDifferences <= 1)
             return;
 
-        // Create fingerprints of each file's differences
+        // Step 1: Build fingerprints
         var fileFingerprints = new Dictionary<string, HashSet<string>>();
-
         foreach (var filePair in folderResult.FilePairResults)
         {
             if (filePair.AreEqual) continue;
-
             var pairIdentifier = $"{filePair.File1Name} vs {filePair.File2Name}";
             var fingerprint = new HashSet<string>();
-
             foreach (var diff in filePair.Result.Differences)
-            {
                 fingerprint.Add(NormalizePropertyPath(diff.PropertyName));
-            }
-
             fileFingerprints[pairIdentifier] = fingerprint;
         }
 
-        // Build similarity matrix
-        var similarities = new Dictionary<(string, string), double>();
-        var fileIds = fileFingerprints.Keys.ToList();
-
-        for (int i = 0; i < fileIds.Count; i++)
+        // Step 2: Group by exact signature
+        var signatureToFiles = new Dictionary<string, List<string>>();
+        var fileToSignature = new Dictionary<string, string>();
+        foreach (var kvp in fileFingerprints)
         {
-            for (int j = i + 1; j < fileIds.Count; j++)
-            {
-                var file1 = fileIds[i];
-                var file2 = fileIds[j];
-                var set1 = fileFingerprints[file1];
-                var set2 = fileFingerprints[file2];
-
-                // Calculate Jaccard similarity
-                var intersection = set1.Intersect(set2).Count();
-                var union = set1.Count + set2.Count - intersection;
-                var similarity = (double)intersection / (union == 0 ? 1 : union);
-
-                similarities[(file1, file2)] = similarity;
-            }
+            var signature = string.Join("|", kvp.Value.OrderBy(x => x));
+            if (!signatureToFiles.ContainsKey(signature))
+                signatureToFiles[signature] = new List<string>();
+            signatureToFiles[signature].Add(kvp.Key);
+            fileToSignature[kvp.Key] = signature;
         }
 
-        // Group files using a simple threshold-based approach
         var grouped = new HashSet<string>();
-        var similarityThreshold = 0.6; // 60% similarity to be considered in the same group
-
-        foreach (var similarity in similarities.OrderByDescending(s => s.Value))
+        // Add exact groups
+        foreach (var group in signatureToFiles.Values)
         {
-            if (similarity.Value < similarityThreshold)
-                continue;
-
-            var file1 = similarity.Key.Item1;
-            var file2 = similarity.Key.Item2;
-
-            // Find or create a group
-            var existingGroup = analysis.SimilarFileGroups.FirstOrDefault(g =>
-                g.FilePairs.Contains(file1) || g.FilePairs.Contains(file2));
-
-            if (existingGroup != null)
+            if (group.Count > 1)
             {
-                // Add to existing group
-                if (!existingGroup.FilePairs.Contains(file1))
-                {
-                    existingGroup.FilePairs.Add(file1);
-                    existingGroup.FileCount++;
-                    grouped.Add(file1);
-                }
-
-                if (!existingGroup.FilePairs.Contains(file2))
-                {
-                    existingGroup.FilePairs.Add(file2);
-                    existingGroup.FileCount++;
-                    grouped.Add(file2);
-                }
-            }
-            else
-            {
-                // Create new group
-                var newGroup = new SimilarFileGroup
+                analysis.SimilarFileGroups.Add(new SimilarFileGroup
                 {
                     GroupName = $"Group {analysis.SimilarFileGroups.Count + 1}",
-                    FileCount = 0,
-                    FilePairs = new List<string>(),
-                    CommonPattern = "Files with similar difference patterns"
-                };
-
-                if (!grouped.Contains(file1))
-                {
-                    newGroup.FilePairs.Add(file1);
-                    newGroup.FileCount++;
-                    grouped.Add(file1);
-                }
-
-                if (!grouped.Contains(file2))
-                {
-                    newGroup.FilePairs.Add(file2);
-                    newGroup.FileCount++;
-                    grouped.Add(file2);
-                }
-
-                if (newGroup.FileCount > 0)
-                {
-                    analysis.SimilarFileGroups.Add(newGroup);
-                }
+                    FileCount = group.Count,
+                    FilePairs = group.ToList(),
+                    CommonPattern = $"Identical difference pattern ({group.Count} files)"
+                });
+                foreach (var f in group)
+                    grouped.Add(f);
             }
         }
 
-        // For each group, identify common patterns
-        foreach (var group in analysis.SimilarFileGroups)
+        // Step 3: Fuzzy grouping with MinHash + LSH
+        var minHasher = new ComparisonTool.Core.Comparison.Analysis.MinHash(64);
+        var minhashSigs = new Dictionary<string, int[]>();
+        foreach (var kvp in fileFingerprints)
         {
-            // Find patterns common to all files in the group
-            HashSet<string> commonPatterns = null;
-
-            foreach (var file in group.FilePairs)
+            if (!grouped.Contains(kvp.Key))
+                minhashSigs[kvp.Key] = minHasher.ComputeSignature(kvp.Value);
+        }
+        // LSH: bucket by first K hash values
+        int lshBands = 8, bandSize = 8; // 8 bands of 8 hashes each
+        var lshBuckets = new Dictionary<string, List<string>>();
+        foreach (var kvp in minhashSigs)
+        {
+            string bucketKey = string.Join("-", kvp.Value.Take(lshBands * bandSize).Select((v, i) => i % bandSize == 0 ? v.ToString() : null).Where(x => x != null));
+            if (!lshBuckets.ContainsKey(bucketKey))
+                lshBuckets[bucketKey] = new List<string>();
+            lshBuckets[bucketKey].Add(kvp.Key);
+        }
+        // For each bucket, group files with high estimated Jaccard
+        var used = new HashSet<string>();
+        foreach (var bucket in lshBuckets.Values)
+        {
+            if (bucket.Count < 2) continue;
+            var group = new List<string>();
+            for (int i = 0; i < bucket.Count; i++)
             {
-                var filePatterns = fileFingerprints[file];
-
-                if (commonPatterns == null)
+                if (used.Contains(bucket[i])) continue;
+                group.Clear();
+                group.Add(bucket[i]);
+                used.Add(bucket[i]);
+                var sig1 = minhashSigs[bucket[i]];
+                for (int j = i + 1; j < bucket.Count; j++)
                 {
-                    commonPatterns = new HashSet<string>(filePatterns);
+                    if (used.Contains(bucket[j])) continue;
+                    var sig2 = minhashSigs[bucket[j]];
+                    double estJaccard = minHasher.EstimateJaccard(sig1, sig2);
+                    if (estJaccard >= 0.6)
+                    {
+                        group.Add(bucket[j]);
+                        used.Add(bucket[j]);
+                    }
                 }
-                else
+                if (group.Count > 1)
                 {
-                    commonPatterns.IntersectWith(filePatterns);
+                    analysis.SimilarFileGroups.Add(new SimilarFileGroup
+                    {
+                        GroupName = $"Group {analysis.SimilarFileGroups.Count + 1}",
+                        FileCount = group.Count,
+                        FilePairs = group.ToList(),
+                        CommonPattern = $"Fuzzy-similar difference pattern ({group.Count} files, est. Jaccard ≥ 0.6)"
+                    });
                 }
-            }
-
-            if (commonPatterns != null && commonPatterns.Count > 0)
-            {
-                group.CommonPattern = $"{commonPatterns.Count} common difference pattern(s) including: " +
-                                      string.Join(", ", commonPatterns.Take(3).Select(p => $"'{p}'"));
             }
         }
-
-        // Add singleton groups for any files not grouped
+        // Step 4: Add singletons
         foreach (var file in fileFingerprints.Keys)
         {
-            if (!grouped.Contains(file))
+            if (!grouped.Contains(file) && !used.Contains(file))
             {
                 analysis.SimilarFileGroups.Add(new SimilarFileGroup
                 {
