@@ -193,8 +193,8 @@ public class ComparisonService : IComparisonService
                 var summary = categorizer.CategorizeAndSummarize(pairResult);
                 var filePairResult = new FilePairComparisonResult
                 {
-                    File1Name = file1Path,
-                    File2Name = file2Path,
+                    File1Name = Path.GetFileName(file1Path),
+                    File2Name = Path.GetFileName(file2Path),
                     Result = pairResult,
                     Summary = summary
                 };
