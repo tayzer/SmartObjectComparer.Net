@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System;
+using System.Text.Json.Serialization;
 
 namespace ComparisonTool.Core.Comparison.Configuration
 {
@@ -11,6 +12,10 @@ namespace ComparisonTool.Core.Comparison.Configuration
     /// </summary>
     public class IgnoreRule
     {
+        // NOTE: The logger field is problematic for simple JSON serialization/deserialization
+        // as ILogger cannot be easily represented in JSON. 
+        // We use NullLogger.Instance as a fallback.
+        [JsonIgnore] // Tell serializer to ignore this field completely
         private readonly ILogger _logger;
 
         /// <summary>
@@ -21,20 +26,22 @@ namespace ComparisonTool.Core.Comparison.Configuration
         /// <summary>
         /// Whether to completely ignore this property during comparison
         /// </summary>
-        public bool IgnoreCompletely { get; set; }
+        public bool IgnoreCompletely { get; set; } = false;
 
         /// <summary>
         /// For collections, whether to ignore the order of items
         /// </summary>
-        public bool IgnoreCollectionOrder { get; set; }
-
-        /// <summary>
-        /// For strings, whether to ignore case when comparing
-        /// </summary>
-        public bool IgnoreCase { get; set; }
+        public bool IgnoreCollectionOrder { get; set; } = false;
+        
+        // Parameterless constructor explicitly marked for JSON deserialization
+        [JsonConstructor] 
+        public IgnoreRule()
+        {
+            this._logger = NullLogger.Instance; // Assign a default logger
+        }
         
         /// <summary>
-        /// Constructor for IgnoreRule
+        /// Constructor for programmatic creation with logger
         /// </summary>
         public IgnoreRule(ILogger logger = null)
         {
@@ -46,6 +53,8 @@ namespace ComparisonTool.Core.Comparison.Configuration
         /// </summary>
         public void ApplyTo(ComparisonConfig config)
         {
+            if (string.IsNullOrEmpty(PropertyPath)) return;
+
             if (IgnoreCompletely)
             {
                 // Normalize the property path to handle variations in XML deserialization
@@ -55,10 +64,11 @@ namespace ComparisonTool.Core.Comparison.Configuration
                     PropertyPath, normalizedPath);
                 
                 // Add the property to be ignored
-                config.MembersToIgnore.Add(PropertyPath);
+                if (!config.MembersToIgnore.Contains(PropertyPath)) 
+                    config.MembersToIgnore.Add(PropertyPath);
                 
                 // If the normalized path is different, add it too
-                if (normalizedPath != PropertyPath)
+                if (normalizedPath != PropertyPath && !config.MembersToIgnore.Contains(normalizedPath))
                 {
                     config.MembersToIgnore.Add(normalizedPath);
                 }
@@ -71,32 +81,22 @@ namespace ComparisonTool.Core.Comparison.Configuration
                 {
                     string withoutBodyResponse = PropertyPath.Replace("Body.Response.", "");
                     _logger.LogDebug("Adding version without Body.Response prefix: {Path}", withoutBodyResponse);
-                    config.MembersToIgnore.Add(withoutBodyResponse);
+                     if (!config.MembersToIgnore.Contains(withoutBodyResponse)) 
+                        config.MembersToIgnore.Add(withoutBodyResponse);
                     AddCollectionVariations(config, withoutBodyResponse);
                 }
             }
-
-            // Case insensitivity is a global setting in CompareNetObjects
-            if (IgnoreCase)
+            else
             {
-                _logger.LogDebug("Setting case insensitivity for property: {PropertyPath}", PropertyPath);
-                config.CaseSensitive = false;
-            }
-
-            // CRITICAL: We NEVER set the global IgnoreCollectionOrder flag
-            // Collection order ignoring is handled by the PropertySpecificCollectionOrderComparer
-            if (IgnoreCollectionOrder)
-            {
-                _logger.LogWarning("[IMPORTANT] Property {PropertyPath} has collection order ignoring enabled - this is handled ONLY by PropertySpecificCollectionOrderComparer", 
-                    PropertyPath);
+                // If not ignoring completely, ensure it's NOT in MembersToIgnore
+                if (config.MembersToIgnore.Contains(PropertyPath))
+                    config.MembersToIgnore.Remove(PropertyPath);
                 
-                // DO NOT set this flag - ever! It would make all collections ignore order.
-                // config.IgnoreCollectionOrder = true;  <-- THIS IS BAD. DON'T DO THIS.
-                
-                // Double-check that global flag is not accidentally set to true
-                if (config.IgnoreCollectionOrder)
+                // Property-specific collection order is handled by PropertySpecificCollectionOrderComparer
+                if (IgnoreCollectionOrder)
                 {
-                    _logger.LogWarning("[WARNING] The global IgnoreCollectionOrder flag is set to TRUE. This will make ALL collections ignore order, regardless of property-specific settings!");
+                    _logger.LogWarning("[IMPORTANT] Property {PropertyPath} has collection order ignoring enabled - this is handled ONLY by PropertySpecificCollectionOrderComparer", PropertyPath);
+                    // No direct config change here; the custom comparer handles it.
                 }
             }
         }

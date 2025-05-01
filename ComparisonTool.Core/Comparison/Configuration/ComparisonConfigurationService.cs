@@ -135,11 +135,10 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         if (rule == null) return;
 
         // Log the rule being added
-        logger.LogWarning("Adding rule for {PropertyPath} with settings: IgnoreCompletely={IgnoreCompletely}, IgnoreCollectionOrder={IgnoreOrder}, IgnoreCase={IgnoreCase}",
+        logger.LogWarning("Adding rule for {PropertyPath} with settings: IgnoreCompletely={IgnoreCompletely}, IgnoreCollectionOrder={IgnoreOrder}",
             rule.PropertyPath,
             rule.IgnoreCompletely,
-            rule.IgnoreCollectionOrder,
-            rule.IgnoreCase);
+            rule.IgnoreCollectionOrder);
 
         RemoveIgnoredProperty(rule.PropertyPath);
 
@@ -148,8 +147,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         {
             PropertyPath = rule.PropertyPath,
             IgnoreCompletely = rule.IgnoreCompletely,
-            IgnoreCollectionOrder = rule.IgnoreCollectionOrder,
-            IgnoreCase = rule.IgnoreCase
+            IgnoreCollectionOrder = rule.IgnoreCollectionOrder
         };
         
         ignoreRules.Add(newRule);
@@ -173,7 +171,6 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         var settings = new List<string>();
         if (rule.IgnoreCompletely) settings.Add("IgnoreCompletely");
         if (rule.IgnoreCollectionOrder) settings.Add("IgnoreCollectionOrder");
-        if (rule.IgnoreCase) settings.Add("IgnoreCase");
         return string.Join(", ", settings);
     }
 

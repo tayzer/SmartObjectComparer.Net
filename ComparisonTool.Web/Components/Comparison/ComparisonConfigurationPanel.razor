@@ -1,261 +1,243 @@
 ﻿@namespace ComparisonTool.Web.Components.Comparison
 @using ComparisonTool.Core
 @using ComparisonTool.Core.Comparison.Configuration
+@using Microsoft.AspNetCore.Components.Forms
+@using System.Text.Json
+@using Microsoft.JSInterop
+
+@inject IComparisonConfigurationService ConfigService
+@inject IJSRuntime JSRuntime
 
 <div class="card">
     <div class="card-header">
-        <h5>Step 2: Configure Comparison</h5>
+        <h5>Step 2: Configure Comparison Options</h5>
     </div>
     <div class="card-body">
-        <div class="form-group form-check">
-            <input type="checkbox" class="form-check-input" id="ignoreOrder"
-                   @bind="IgnoreCollectionOrderLocal" />
-            <label class="form-check-label" for="ignoreOrder">
-                Ignore Collection Ordering
-            </label>
+        <h6>Global Settings</h6>
+        <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" id="ignoreCollectionOrderSwitch" @bind="IgnoreCollectionOrder" @bind:after="() => OnIgnoreCollectionOrderChanged.InvokeAsync(IgnoreCollectionOrder)" />
+            <label class="form-check-label" for="ignoreCollectionOrderSwitch">Ignore Collection Order Globally</label>
+        </div>
+        <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="ignoreStringCaseSwitch" @bind="IgnoreStringCase" @bind:after="() => OnIgnoreStringCaseChanged.InvokeAsync(IgnoreStringCase)" />
+            <label class="form-check-label" for="ignoreStringCaseSwitch">Ignore String Case Globally</label>
         </div>
 
-        <div class="form-group form-check mt-2">
-            <input type="checkbox" class="form-check-input" id="ignoreCase"
-                   @bind="IgnoreStringCaseLocal" />
-            <label class="form-check-label" for="ignoreCase">
-                Ignore String Case
-            </label>
+        <h6>Analysis Options</h6>
+        <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" id="enablePatternAnalysisSwitch" @bind="EnablePatternAnalysis" @bind:after="() => OnEnablePatternAnalysisChanged.InvokeAsync(EnablePatternAnalysis)" />
+            <label class="form-check-label" for="enablePatternAnalysisSwitch">Enable Pattern Analysis</label>
+        </div>
+        <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" id="enableSemanticAnalysisSwitch" @bind="EnableSemanticAnalysis" @bind:after="() => OnEnableSemanticAnalysisChanged.InvokeAsync(EnableSemanticAnalysis)" />
+            <label class="form-check-label" for="enableSemanticAnalysisSwitch">Enable Semantic Analysis</label>
+        </div>
+        <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="enableStructuralAnalysisSwitch" @bind="EnableStructuralAnalysis" @bind:after="() => OnEnableStructuralAnalysisChanged.InvokeAsync(EnableStructuralAnalysis)" />
+            <label class="form-check-label" for="enableStructuralAnalysisSwitch">Enable Structural Analysis</label>
         </div>
 
-        <div class="form-group mt-3">
-            <label>Properties to Ignore:</label>
-            <button class="btn btn-sm btn-primary ms-2" @onclick="OpenPropertySelector">
-                Configure Properties
-            </button>
+        <h6>Property Specific Rules</h6>
+        <button class="btn btn-sm btn-outline-primary mb-2" @onclick="OpenPropertySelector" disabled="@(!IsModelSelected)">
+            <i class="bi bi-list-nested me-1"></i> Add/Edit Property Rule
+        </button>
+        @if (!IsModelSelected)
+        {
+            <small class="d-block text-muted">Select a model first to add property rules.</small>
+        }
 
-            @if (IgnoreRules.Any())
-            {
-                <div class="mt-2">
-                    <div class="card">
-                        <div class="card-header bg-light">
-                            Currently Ignored Properties (@IgnoreRules.Count)
-                        </div>
-                        <ul class="list-group list-group-flush">
-                            @foreach (var rule in IgnoreRules)
-                            {
-                                <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <span class="me-2">@GetIgnoreRuleDescription(rule)</span>
-                                    </div>
-                                    <button class="btn btn-sm btn-danger" @onclick="() => RemoveIgnoreRule(rule)">
-                                        <i class="bi bi-x"></i>
-                                    </button>
-                                </li>
-                            }
-                        </ul>
-                    </div>
-                </div>
-            }
-            else
-            {
-                <div class="alert alert-info mt-2">
-                    No properties are currently being ignored. Click the button to configure.
-                </div>
-            }
-        </div>
-
-        <div class="form-group form-check mt-2">
-            <input type="checkbox" class="form-check-input" id="enablePatternAnalysis"
-                   @bind="EnablePatternAnalysisLocal" />
-            <label class="form-check-label" for="enablePatternAnalysis">
-                Enable Cross-File Pattern Analysis
-            </label>
-            <small class="form-text text-muted d-block">
-                Analyzes common patterns and changes across multiple files. May take longer for large sets of files.
-            </small>
-        </div>
+        @if (IgnoreRules.Any())
+        {
+            <ul class="list-group list-group-flush mb-3">
+                @foreach (var rule in IgnoreRules)
+                {
+                    <li class="list-group-item d-flex justify-content-between align-items-center p-1">
+                        <span>
+                            <i class="bi bi-diagram-3 me-1"></i> @rule.PropertyPath
+                            <small class="text-muted ms-2">(@GetRuleDescription(rule))</small>
+                        </span>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => OnIgnoreRuleRemoved.InvokeAsync(rule)">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </li>
+                }
+            </ul>
+        }
+        else
+        {
+            <p class="text-muted">No property-specific rules added.</p>
+        }
         
-        <div class="form-group form-check mt-2">
-            <input type="checkbox" class="form-check-input" id="enableSemanticAnalysis"
-                   @bind="EnableSemanticAnalysisLocal" />
-            <label class="form-check-label" for="enableSemanticAnalysis">
-                Enable Semantic Difference Grouping
-            </label>
-            <small class="form-text text-muted d-block">
-                Groups differences by semantic meaning to help focus testing efforts. Requires pattern analysis.
-            </small>
+        @* --- Import/Export Buttons --- *@
+        <div class="d-flex justify-content-start gap-2 mt-3 mb-3">
+             <InputFile OnChange="HandleImportFileSelected" accept=".json" id="import-config-input" style="display: none;" />
+             <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('import-config-input').click();">
+                 <i class="bi bi-upload me-1"></i> Import Config...
+             </button>
+             <button class="btn btn-sm btn-outline-secondary" @onclick="ExportConfiguration" disabled="@(!IgnoreRules.Any())">
+                 <i class="bi bi-download me-1"></i> Export Config
+             </button>
         </div>
+         @if (!string.IsNullOrEmpty(importStatusMessage))
+         {
+             <div class="alert @(importStatusIsError ? "alert-danger" : "alert-success") mt-2 p-2" role="alert">
+                 @importStatusMessage
+             </div>
+         }
         
-        <div class="form-group form-check mt-2">
-            <input type="checkbox" class="form-check-input" id="enableStructuralAnalysis"
-                   @bind="EnableStructuralAnalysisLocal" />
-            <label class="form-check-label" for="enableStructuralAnalysis">
-                Enable Structural Pattern Analysis
-            </label>
-            <small class="form-text text-muted d-block">
-                Identifies recurring missing elements in collections and structural patterns. Provides detailed guidance for testers.
-            </small>
-        </div>
-
-        <button class="btn btn-primary mt-3" @onclick="RunComparison"
-                disabled="@(!CanRunComparison)">
-            Run Comparison
+    </div>
+    <div class="card-footer text-end">
+        <button class="btn btn-success" @onclick="OnRunComparison" disabled="@(!CanRunComparison)">
+            <i class="bi bi-play-fill me-1"></i> Run Comparison
         </button>
     </div>
 </div>
 
 @code {
-    [Parameter]
-    public bool IgnoreCollectionOrder { get; set; }
+    [Parameter] public bool IgnoreCollectionOrder { get; set; }
+    [Parameter] public EventCallback<bool> OnIgnoreCollectionOrderChanged { get; set; }
+    [Parameter] public bool IgnoreStringCase { get; set; } 
+    [Parameter] public EventCallback<bool> OnIgnoreStringCaseChanged { get; set; }
+    [Parameter] public bool EnablePatternAnalysis { get; set; }
+    [Parameter] public EventCallback<bool> OnEnablePatternAnalysisChanged { get; set; }
+    [Parameter] public bool EnableSemanticAnalysis { get; set; }
+    [Parameter] public EventCallback<bool> OnEnableSemanticAnalysisChanged { get; set; }
+    [Parameter] public bool EnableStructuralAnalysis { get; set; }
+    [Parameter] public EventCallback<bool> OnEnableStructuralAnalysisChanged { get; set; }
+    [Parameter] public List<IgnoreRule> IgnoreRules { get; set; } = new List<IgnoreRule>();
+    [Parameter] public EventCallback<IgnoreRule> OnIgnoreRuleAdded { get; set; }
+    [Parameter] public EventCallback<IgnoreRule> OnIgnoreRuleRemoved { get; set; }
+    [Parameter] public Type ModelType { get; set; }
+    [Parameter] public EventCallback OnPropertySelectorOpened { get; set; }
+    [Parameter] public EventCallback OnRunComparison { get; set; }
+    [Parameter] public bool CanRunComparison { get; set; }
 
-    [Parameter]
-    public bool IgnoreStringCase { get; set; }
-
-    [Parameter]
-    public List<IgnoreRule> IgnoreRules { get; set; } = new();
-
-    [Parameter]
-    public bool EnablePatternAnalysis { get; set; }
-
-    [Parameter]
-    public bool CanRunComparison { get; set; }
-
-    [Parameter]
-    public Type ModelType { get; set; }
-
-    [Parameter]
-    public EventCallback<bool> OnIgnoreCollectionOrderChanged { get; set; }
-
-    [Parameter]
-    public EventCallback<bool> OnIgnoreStringCaseChanged { get; set; }
-
-    [Parameter]
-    public EventCallback<bool> OnEnablePatternAnalysisChanged { get; set; }
-
-    [Parameter]
-    public EventCallback<IgnoreRule> OnIgnoreRuleAdded { get; set; }
-
-    [Parameter]
-    public EventCallback<IgnoreRule> OnIgnoreRuleRemoved { get; set; }
-
-    [Parameter]
-    public EventCallback OnRunComparison { get; set; }
-
-    [Parameter]
-    public bool EnableSemanticAnalysis { get; set; } = true;
-
-    [Parameter]
-    public EventCallback<bool> OnEnableSemanticAnalysisChanged { get; set; }
-    
-    [Parameter]
-    public bool EnableStructuralAnalysis { get; set; } = true;
-    
-    [Parameter]
-    public EventCallback<bool> OnEnableStructuralAnalysisChanged { get; set; }
-
-    private bool IgnoreCollectionOrderLocal
-    {
-        get => IgnoreCollectionOrder;
-        set
-        {
-            if (IgnoreCollectionOrder != value)
-            {
-                IgnoreCollectionOrder = value;
-                OnIgnoreCollectionOrderChanged.InvokeAsync(value);
-            }
-        }
-    }
-
-    private bool IgnoreStringCaseLocal
-    {
-        get => IgnoreStringCase;
-        set
-        {
-            if (IgnoreStringCase != value)
-            {
-                IgnoreStringCase = value;
-                OnIgnoreStringCaseChanged.InvokeAsync(value);
-            }
-        }
-    }
-
-    private bool EnablePatternAnalysisLocal
-    {
-        get => EnablePatternAnalysis;
-        set
-        {
-            if (EnablePatternAnalysis != value)
-            {
-                EnablePatternAnalysis = value;
-                OnEnablePatternAnalysisChanged.InvokeAsync(value);
-            }
-        }
-    }
-    
-    private bool EnableSemanticAnalysisLocal
-    {
-        get => EnableSemanticAnalysis;
-        set
-        {
-            if (EnableSemanticAnalysis != value)
-            {
-                EnableSemanticAnalysis = value;
-                OnEnableSemanticAnalysisChanged.InvokeAsync(value);
-            }
-        }
-    }
-    
-    private bool EnableStructuralAnalysisLocal
-    {
-        get => EnableStructuralAnalysis;
-        set
-        {
-            if (EnableStructuralAnalysis != value)
-            {
-                EnableStructuralAnalysis = value;
-                OnEnableStructuralAnalysisChanged.InvokeAsync(value);
-            }
-        }
-    }
+    private bool IsModelSelected => ModelType != null;
+    private string importStatusMessage = string.Empty;
+    private bool importStatusIsError = false;
 
     private async Task OpenPropertySelector()
     {
         await OnPropertySelectorOpened.InvokeAsync();
     }
 
-    private async Task RemoveIgnoreRule(IgnoreRule rule)
+    private string GetRuleDescription(IgnoreRule rule)
     {
-        await OnIgnoreRuleRemoved.InvokeAsync(rule);
+        var parts = new List<string>();
+        if (rule.IgnoreCompletely) parts.Add("Ignore Completely");
+        if (rule.IgnoreCollectionOrder) parts.Add("Ignore Order");
+        return string.Join(", ", parts);
     }
 
-    private async Task RunComparison()
+    // --- Export Logic ---
+    private async Task ExportConfiguration()
     {
-        await OnRunComparison.InvokeAsync();
-    }
-
-    private string GetIgnoreRuleDescription(IgnoreRule rule)
-    {
-        var description = rule.PropertyPath;
-
-        if (rule.IgnoreCompletely)
+        importStatusMessage = string.Empty; // Clear any previous import status
+        if (!IgnoreRules.Any())
         {
-            description += " (Ignored completely)";
+            importStatusMessage = "No rules to export.";
+            importStatusIsError = true;
+            return;
         }
-        else
+
+        try
         {
-            var options = new List<string>();
+            // Use a local list from the parameter to ensure we export what's shown
+            var rulesToExport = IgnoreRules;
+            var json = JsonSerializer.Serialize(rulesToExport, new JsonSerializerOptions { WriteIndented = true });
+            var fileName = $"comparison_config_{DateTime.Now:yyyyMMdd_HHmmss}.json";
 
-            if (rule.IgnoreCollectionOrder)
-                options.Add("ignore order");
+            await JSRuntime.InvokeVoidAsync("saveAsFile", fileName, "application/json", json);
+        }
+        catch (Exception ex)
+        {
+            importStatusMessage = $"Export failed: {ex.Message}";
+            importStatusIsError = true;
+            // Optionally log the full exception
+        }
+    }
 
-            if (rule.IgnoreCase)
-                options.Add("ignore case");
+    // --- Import Logic ---
+    private async Task HandleImportFileSelected(InputFileChangeEventArgs e)
+    {
+        importStatusMessage = string.Empty;
+        importStatusIsError = false;
+        var file = e.File;
 
-            if (options.Any())
+        if (file == null)
+        {
+            importStatusMessage = "No file selected.";
+            importStatusIsError = true;
+            return;
+        }
+
+        if (!file.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        {
+            importStatusMessage = "Invalid file type. Please select a .json configuration file.";
+            importStatusIsError = true;
+            return;
+        }
+
+        try
+        {
+            // Limit file size (e.g., 1MB)
+            long maxFileSize = 1 * 1024 * 1024; 
+            if (file.Size > maxFileSize)
             {
-                description += $" ({string.Join(", ", options)})";
+                 importStatusMessage = $"File size exceeds the limit of {maxFileSize / 1024 / 1024} MB.";
+                 importStatusIsError = true;
+                 return;
             }
+
+            // Read and deserialize
+            List<IgnoreRule> importedRules;
+            await using var stream = file.OpenReadStream(maxFileSize);
+            using var reader = new StreamReader(stream);
+            var json = await reader.ReadToEndAsync();
+            
+            importedRules = JsonSerializer.Deserialize<List<IgnoreRule>>(json);
+
+            if (importedRules == null || !importedRules.Any())
+            {
+                importStatusMessage = "File does not contain valid rules or is empty.";
+                importStatusIsError = true;
+                return;
+            }
+
+            // Clear existing rules (using the remove callback for each)
+            var currentRules = IgnoreRules.ToList(); // Copy to avoid modification issues
+            foreach (var rule in currentRules)
+            {
+                await OnIgnoreRuleRemoved.InvokeAsync(rule); 
+            }
+            
+            // Add imported rules (using the add callback)
+            foreach (var rule in importedRules)
+            {
+                 // Re-create the rule without IgnoreCase
+                await OnIgnoreRuleAdded.InvokeAsync(new IgnoreRule 
+                {
+                    PropertyPath = rule.PropertyPath,
+                    IgnoreCompletely = rule.IgnoreCompletely,
+                    IgnoreCollectionOrder = rule.IgnoreCollectionOrder
+                });
+            }
+
+            importStatusMessage = $"Successfully imported {importedRules.Count} rules.";
+            importStatusIsError = false;
         }
-
-        return description;
+        catch (JsonException jsonEx)
+        {
+            importStatusMessage = $"Import failed: Invalid JSON format. {jsonEx.Message}";
+            importStatusIsError = true;
+        }
+        catch (Exception ex)
+        {
+            importStatusMessage = $"Import failed: {ex.Message}";
+            importStatusIsError = true;
+        }
+        
+        // Trigger UI update
+        StateHasChanged();
     }
-
-    [Parameter]
-    public EventCallback OnPropertySelectorOpened { get; set; }
 }

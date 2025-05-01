@@ -69,20 +69,9 @@
                                 {
                                     <div class="form-check mb-2">
                                         <input class="form-check-input" type="checkbox" id="ignoreOrdering"
-                                               @bind="IgnoreCollectionOrder">
+                                               @bind="IgnoreCollectionOrder" disabled="@IgnoreProperty">
                                         <label class="form-check-label" for="ignoreOrdering">
                                             Ignore collection ordering
-                                        </label>
-                                    </div>
-                                }
-
-                                @if (IsStringProperty(selectedProperty))
-                                {
-                                    <div class="form-check mb-2">
-                                        <input class="form-check-input" type="checkbox" id="ignoreCase"
-                                               @bind="IgnoreCase">
-                                        <label class="form-check-label" for="ignoreCase">
-                                            Ignore case sensitivity
                                         </label>
                                     </div>
                                 }
@@ -163,7 +152,6 @@
     private string searchTerm = "";
     private bool IgnoreProperty { get; set; }
     private bool IgnoreCollectionOrder { get; set; }
-    private bool IgnoreCase { get; set; }
 
     private List<PropertyInfo> AllProperties { get; set; } = new List<PropertyInfo>();
     private List<PropertyViewModel> FilteredProperties { get; set; } = new List<PropertyViewModel>();
@@ -285,19 +273,17 @@
         Console.WriteLine($"Selected property: {propertyPath}");
         selectedProperty = propertyPath;
 
-        // Check if this property is already being ignored
         var existingRule = IgnoredProperties.FirstOrDefault(p => p.PropertyPath == propertyPath);
         if (existingRule != null)
         {
             IgnoreProperty = existingRule.IgnoreCompletely;
             IgnoreCollectionOrder = existingRule.IgnoreCollectionOrder;
-            IgnoreCase = existingRule.IgnoreCase;
         }
         else
         {
-            IgnoreProperty = true;
-            IgnoreCollectionOrder = IsCollectionProperty(propertyPath);
-            IgnoreCase = IsStringProperty(propertyPath);
+            // Default values when selecting a new property
+            IgnoreProperty = false; // Default to NOT ignore completely
+            IgnoreCollectionOrder = false;
         }
 
         StateHasChanged();
@@ -308,7 +294,6 @@
         selectedProperty = null;
         IgnoreProperty = false;
         IgnoreCollectionOrder = false;
-        IgnoreCase = false;
     }
 
     private async Task AddCurrentProperty()
@@ -320,8 +305,7 @@
             {
                 PropertyPath = selectedProperty,
                 IgnoreCompletely = IgnoreProperty,
-                IgnoreCollectionOrder = IgnoreCollectionOrder,
-                IgnoreCase = IgnoreCase
+                IgnoreCollectionOrder = IgnoreCollectionOrder
             };
 
         // Remove existing rule for this property if it exists
@@ -424,9 +408,6 @@
         if (rule.IgnoreCollectionOrder)
             options.Add("ignore order");
 
-        if (rule.IgnoreCase)
-            options.Add("ignore case");
-
-        return string.Join(", ", options);
+        return options.Any() ? string.Join(", ", options) : "No specific rules";
     }
 }
