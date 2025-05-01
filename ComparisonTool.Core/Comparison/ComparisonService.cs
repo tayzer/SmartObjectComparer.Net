@@ -118,13 +118,20 @@ public class ComparisonService : IComparisonService
                 {
                     return await Task.Run(() =>
                     {
-                        // Create a new instance of the CompareLogic for this comparison.
+                        // Use the existing CompareLogic instance from the configuration service
+                        var compareLogic = configService.GetCompareLogic();
 
-                        var compareConfig = configService.GetCurrentConfig().Clone();
-                        var compareLogic = new CompareLogic(compareConfig);
+                        // We should compare the original cloned objects before normalization, 
+                        // as normalization might affect order or values needed by the specific comparer
+                        var oldClone = cloneMethod.Invoke(deserializationService, new[] { oldResponse }); 
+                        var newClone = cloneMethod.Invoke(deserializationService, new[] { newResponse });
 
-                        var oldClone = cloneMethod.Invoke(deserializationService, new[] { oldResponseCopy });
-                        var newClone = cloneMethod.Invoke(deserializationService, new[] { newResponseCopy });
+                        // Ensure the configuration is applied right before comparison
+                        configService.ApplyConfiguredSettings(); 
+
+                        logger.LogWarning("Performing comparison with {ComparerCount} custom comparers. First: {FirstComparer}",
+                            compareLogic.Config.CustomComparers.Count,
+                            compareLogic.Config.CustomComparers.FirstOrDefault()?.GetType().Name ?? "none");
 
                         return compareLogic.Compare(oldClone, newClone);
                     }, cancellationToken);

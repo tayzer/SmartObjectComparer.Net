@@ -1,7 +1,9 @@
 ﻿using System.Reflection;
 using KellermanSoftware.CompareNetObjects;
+using KellermanSoftware.CompareNetObjects.TypeComparers;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Text.RegularExpressions;
 
 namespace ComparisonTool.Core.Comparison.Configuration;
 
@@ -98,7 +100,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// </summary>
     public void IgnoreProperty(string propertyPath)
     {
-        var rule = new IgnoreRule
+        var rule = new IgnoreRule(logger)
         {
             PropertyPath = propertyPath,
             IgnoreCompletely = true
@@ -132,12 +134,38 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     {
         if (rule == null) return;
 
+        // Log the rule being added
+        logger.LogWarning("Adding rule for {PropertyPath} with settings: IgnoreCompletely={IgnoreCompletely}, IgnoreCollectionOrder={IgnoreOrder}, IgnoreCase={IgnoreCase}",
+            rule.PropertyPath,
+            rule.IgnoreCompletely,
+            rule.IgnoreCollectionOrder,
+            rule.IgnoreCase);
+
         RemoveIgnoredProperty(rule.PropertyPath);
 
-        ignoreRules.Add(rule);
+        // Create a new rule with our logger to ensure proper logging
+        var newRule = new IgnoreRule(logger)
+        {
+            PropertyPath = rule.PropertyPath,
+            IgnoreCompletely = rule.IgnoreCompletely,
+            IgnoreCollectionOrder = rule.IgnoreCollectionOrder,
+            IgnoreCase = rule.IgnoreCase
+        };
+        
+        ignoreRules.Add(newRule);
+        
         logger.LogDebug("Added rule for {PropertyPath} with settings: {Settings}",
             rule.PropertyPath,
             GetRuleSettingsDescription(rule));
+            
+        // For debugging: output the current list of all rules
+        var rulesWithIgnoreOrder = ignoreRules
+            .Where(r => r.IgnoreCollectionOrder)
+            .Select(r => r.PropertyPath)
+            .ToList();
+            
+        logger.LogWarning("Current collection order ignore rules: {Rules}", 
+            string.Join(", ", rulesWithIgnoreOrder));
     }
 
     private string GetRuleSettingsDescription(IgnoreRule rule)
@@ -173,14 +201,157 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// </summary>
     public void ApplyConfiguredSettings()
     {
-        compareLogic.Config.MembersToIgnore.Clear();
-
-        foreach (var rule in ignoreRules)
+        try
         {
-            rule.ApplyTo(compareLogic.Config);
-        }
+            // Make sure global ignore collection order is OFF so our specific rules work
+            compareLogic.Config.IgnoreCollectionOrder = false;
+            logger.LogWarning("Setting global IgnoreCollectionOrder to FALSE to ensure property-specific rules work");
+            
+            // Clear any existing configuration
+            compareLogic.Config.MembersToIgnore.Clear();
+            
+            logger.LogDebug("Cleared existing members to ignore");
+            
+            // Check all the rules to make sure we have both Results and RelatedItems
+            var resultsRule = ignoreRules.Any(r => r.PropertyPath.Contains("Results") && r.IgnoreCollectionOrder);
+            var relatedItemsRule = ignoreRules.Any(r => r.PropertyPath.Contains("RelatedItems") && r.IgnoreCollectionOrder);
+            
+            logger.LogWarning("Rules check - Have Results rule: {HasResults}, Have RelatedItems rule: {HasRelatedItems}",
+                resultsRule, relatedItemsRule);
+            
+            // Remove any existing custom comparers of our type to avoid duplicates
+            var removedCount = compareLogic.Config.CustomComparers.RemoveAll(c => c is PropertySpecificCollectionOrderComparer);
+            
+            logger.LogWarning("Removed {RemovedCount} existing PropertySpecificCollectionOrderComparer instances", removedCount);
+            
+            // Get all properties that need to ignore collection order
+            var propertiesWithIgnoreOrder = ignoreRules
+                .Where(r => r.IgnoreCollectionOrder && !r.IgnoreCompletely)
+                .Select(r => r.PropertyPath)
+                .ToList();
+                
+            logger.LogWarning("Found {Count} properties with ignore collection order setting: {Properties}", 
+                propertiesWithIgnoreOrder.Count, 
+                string.Join(", ", propertiesWithIgnoreOrder));
+            
+            // Also dump existing comparers for debugging
+            var comparerTypes = compareLogic.Config.CustomComparers.Select(c => c.GetType().Name).ToList();
+            logger.LogWarning("Current custom comparers: {ComparerTypes}", string.Join(", ", comparerTypes));
+            
+            // If we have properties that need to ignore collection order
+            if (propertiesWithIgnoreOrder.Any())
+            {
+                try
+                {
+                    // Get the current comparers to inspect
+                    var originalComparers = compareLogic.Config.CustomComparers.ToList();
+                    
+                    // Get a root comparer using the factory
+                    var rootComparer = RootComparerFactory.GetRootComparer();
+                    
+                    logger.LogWarning("Successfully created RootComparer from factory");
+                    
+                    // Make a copy of the property paths with wildcards to ensure matching works properly
+                    var expandedProperties = new List<string>(propertiesWithIgnoreOrder);
+                    
+                    // Add wildcard versions if not already present
+                    foreach (var property in propertiesWithIgnoreOrder.ToList()) // Use ToList to avoid modifying during iteration
+                    {
+                        // Add wildcarded versions of collection paths
+                        if (property.Contains("Results") && !property.Contains("[*]"))
+                        {
+                            // Add with wildcard if it doesn't already have one
+                            string wildcardPath = property.Contains("[") 
+                                ? Regex.Replace(property, @"\[\d+\]", "[*]") 
+                                : property + "[*]";
+                            
+                            if (!expandedProperties.Contains(wildcardPath))
+                            {
+                                expandedProperties.Add(wildcardPath);
+                                logger.LogWarning("Added wildcard version: {WildcardPath}", wildcardPath);
+                            }
+                        }
+                        
+                        if (property.Contains("RelatedItems") && !property.Contains("[*]"))
+                        {
+                            // Add with wildcard if it doesn't already have one
+                            string wildcardPath = property.Contains("[") 
+                                ? Regex.Replace(property, @"\[\d+\]", "[*]") 
+                                : property + "[*]";
+                            
+                            if (!expandedProperties.Contains(wildcardPath))
+                            {
+                                expandedProperties.Add(wildcardPath);
+                                logger.LogWarning("Added wildcard version: {WildcardPath}", wildcardPath);
+                            }
+                        }
+                    }
+                    
+                    // Create our custom comparer to handle property-specific collection ordering
+                    var propertySpecificComparer = new PropertySpecificCollectionOrderComparer(
+                        rootComparer, 
+                        expandedProperties,
+                        logger);
+                        
+                    // Important: Ensure our comparer is the FIRST comparer in the list so it runs before others
+                    // Create a new list with our comparer first, then all original comparers
+                    var newComparerList = new List<BaseTypeComparer>
+                    {
+                        propertySpecificComparer // Our comparer is first
+                    };
+                    
+                    // Add all the existing comparers (excluding any previous instances of our comparer)
+                    newComparerList.AddRange(originalComparers.Where(c => !(c is PropertySpecificCollectionOrderComparer)));
+                    
+                    // Set the new list of comparers
+                    compareLogic.Config.CustomComparers = newComparerList;
+                        
+                    logger.LogWarning("Added property-specific collection order comparer at the BEGINNING of the custom comparers list for {PropertyCount} properties", 
+                        expandedProperties.Count);
+                    
+                    // Verify our comparer is first
+                    var firstComparerName = compareLogic.Config.CustomComparers.FirstOrDefault()?.GetType().Name ?? "none";
+                    logger.LogWarning("First comparer is now: {FirstComparer}", firstComparerName);
+                    
+                    // Turn off the global ignore collection order to ensure our per-property comparer works
+                    var savedIgnoreOrder = compareLogic.Config.IgnoreCollectionOrder;
+                    if (savedIgnoreOrder) 
+                    {
+                        compareLogic.Config.IgnoreCollectionOrder = false;
+                        logger.LogWarning("Disabled global IgnoreCollectionOrder setting (was: {Original}) to ensure property-specific comparison works", 
+                            savedIgnoreOrder);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Error creating PropertySpecificCollectionOrderComparer");
+                }
+            }
 
-        logger.LogInformation("Applied configuration settings with {RuleCount} rules", ignoreRules.Count);
+            // Apply all rules
+            int rulesApplied = 0;
+            foreach (var rule in ignoreRules)
+            {
+                try 
+                {
+                    rule.ApplyTo(compareLogic.Config);
+                    rulesApplied++;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Error applying rule for property {PropertyPath}", rule.PropertyPath);
+                }
+            }
+            
+            logger.LogWarning("Applied configuration settings with {RuleCount} rules. MembersToIgnore: {IgnoreCount}, CustomComparers: {ComparerCount}",
+                rulesApplied,
+                compareLogic.Config.MembersToIgnore.Count,
+                compareLogic.Config.CustomComparers.Count);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error in ApplyConfiguredSettings");
+        }
     }
 
     /// <summary>
