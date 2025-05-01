@@ -607,3 +607,11 @@ window.triggerFolderInput = function(inputId, batchSize, dotNetRef) {
     };
     input.click();
 };
+
+window.scrollToElement = function(elementId) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        // Use 'start' to align the top of the element with the top of the scrollable ancestor
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+};
