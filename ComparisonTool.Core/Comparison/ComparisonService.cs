@@ -7,6 +7,7 @@ using ComparisonTool.Core.Serialization;
 using ComparisonTool.Core.Utilities;
 using KellermanSoftware.CompareNetObjects;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace ComparisonTool.Core.Comparison;
 
@@ -133,7 +134,31 @@ public class ComparisonService : IComparisonService
                             compareLogic.Config.CustomComparers.Count,
                             compareLogic.Config.CustomComparers.FirstOrDefault()?.GetType().Name ?? "none");
 
-                        return compareLogic.Compare(oldClone, newClone);
+                        // Wrap the comparison in a try-catch to handle collection modification exceptions
+                        try
+                        {
+                            return compareLogic.Compare(oldClone, newClone);
+                        }
+                        catch (InvalidOperationException ex) when (ex.Message.Contains("Collection was modified"))
+                        {
+                            logger.LogWarning(ex, "Collection was modified during comparison. Using defensive comparison approach.");
+                            
+                            // Create a deep copy using JSON serialization as an alternative approach
+                            var settings = new JsonSerializerOptions { 
+                                WriteIndented = false,
+                                PropertyNameCaseInsensitive = true
+                            };
+                            
+                            // Serialize and deserialize both objects
+                            string oldJson = JsonSerializer.Serialize(oldClone, oldClone.GetType(), settings);
+                            string newJson = JsonSerializer.Serialize(newClone, newClone.GetType(), settings);
+                            
+                            var oldCopy = JsonSerializer.Deserialize(oldJson, oldClone.GetType(), settings);
+                            var newCopy = JsonSerializer.Deserialize(newJson, newClone.GetType(), settings);
+                            
+                            // Try comparison again with the JSON-based copies
+                            return compareLogic.Compare(oldCopy, newCopy);
+                        }
                     }, cancellationToken);
                 });
 
