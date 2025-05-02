@@ -31,6 +31,11 @@ public class SearchResponse
     [XmlArray(ElementName = "Results")]
     [XmlArrayItem(ElementName = "Result")]
     public List<ResultItem> Results { get; set; } = new();
+    
+    // A new collection of related items to test property-specific collection order ignoring.
+    [XmlArray(ElementName = "RelatedItems")]
+    [XmlArrayItem(ElementName = "Item")]
+    public List<RelatedItem> RelatedItems { get; set; } = new();
 }
 
 public class Summary
@@ -64,6 +69,19 @@ public class ResultItem
     [XmlArray(ElementName = "Tags")]
     [XmlArrayItem(ElementName = "Tag")]
     public List<string> Tags { get; set; } = new();
+}
+
+// A new class for related items
+public class RelatedItem
+{
+    [XmlElement(ElementName = "ItemId")]
+    public int ItemId { get; set; }
+    
+    [XmlElement(ElementName = "ItemName")]
+    public string ItemName { get; set; } = string.Empty;
+    
+    [XmlElement(ElementName = "Relevance")]
+    public double Relevance { get; set; }
 }
 
 public class Details

@@ -11,6 +11,7 @@
 @using KellermanSoftware.CompareNetObjects
 @using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
 @implements IDisposable
 @inject IXmlDeserializationService DeserializationService
 @inject IComparisonConfigurationService ConfigService
@@ -20,6 +21,8 @@
 @inject IFileUtilities FileUtilities
 @inject IJSRuntime JSRuntime
 @inject ILogger<Home> Logger
+@inject PerformanceTracker PerformanceTracker
+@inject SystemResourceMonitor ResourceMonitor
 
 <h1>XML Comparison Tool</h1>
 
@@ -610,16 +613,28 @@ else if (EnableStructuralAnalysis && FolderComparisonResult != null && !FolderCo
         }
     }
 
-    private void SelectPairResult(int index)
+    private async Task SelectPairResult(int index)
     {
-        if (index >= 0 && index < FolderComparisonResult?.FilePairResults.Count)
-        {
-            SelectedPairIndex = index;
+        if (FolderComparisonResult == null || index < 0 || index >= FolderComparisonResult.FilePairResults.Count)
+            return;
+            
+        SelectedPairIndex = index;
 
-            var selectedPair = FolderComparisonResult.FilePairResults[index];
-            ComparisonResult = selectedPair.Result;
-            DifferenceSummary = selectedPair.Summary;
+        var selectedPair = FolderComparisonResult.FilePairResults[index];
+        ComparisonResult = selectedPair.Result;
+        DifferenceSummary = selectedPair.Summary;
+        
+        // Scroll to the detailed differences section after selection
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("scrollToElement", "detailed-differences-section");
         }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to scroll to detailed differences section.");
+        }
+        
+        StateHasChanged(); // Ensure UI updates with selection
     }
 
     private void ToggleShowAllDifferences()
