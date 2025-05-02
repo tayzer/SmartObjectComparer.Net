@@ -1,8 +1,10 @@
-﻿//using ComparisonTool.Core.Comparison.Configuration;
+//using ComparisonTool.Core.Comparison.Configuration;
 //using ComparisonTool.Core.Comparison.Results;
 //using ComparisonTool.Core.Serialization;
 //using KellermanSoftware.CompareNetObjects;
 //using Microsoft.Extensions.Logging;
+//using System.Collections.Generic;
+//using System.Threading;
 
 //namespace ComparisonTool.Core.Comparison;
 
@@ -15,6 +17,7 @@
 //    private readonly IXmlDeserializationService deserializationService;
 //    private readonly IComparisonConfigurationService configService;
 //    private readonly IComparisonService comparisonService;
+//    private readonly object comparisonLock = new object();
 
 //    public XmlComparisonService(
 //        ILogger<XmlComparisonService> logger,
@@ -71,11 +74,19 @@
 //                    "XML stream cannot be null");
 //            }
 
-//            // Delegate to the new comparison service
-//            return await comparisonService.CompareXmlFilesAsync(
-//                oldXmlStream,
-//                newXmlStream,
-//                modelName);
+//            var oldClone = DeepClone(await deserializationService.DeserializeAsync(oldXmlStream, modelName));
+//            var newClone = DeepClone(await deserializationService.DeserializeAsync(newXmlStream, modelName));
+
+//            // Create snapshots of collections to prevent modification during comparison
+//            if (oldClone.Items != null)
+//                oldClone.Items = new List<Item>(oldClone.Items);
+//            if (newClone.Items != null)
+//                newClone.Items = new List<Item>(newClone.Items);
+
+//            lock (comparisonLock)
+//            {
+//                return await comparisonService.CompareAsync(oldClone, newClone);
+//            }
 //        }
 //        catch (Exception ex)
 //        {
@@ -169,5 +180,17 @@
 //    public ComparisonConfig GetCurrentConfig()
 //    {
 //        return configService.GetCurrentConfig();
+//    }
+
+//    private T DeepClone<T>(T obj)
+//    {
+//        using (var ms = new MemoryStream())
+//        {
+//            var formatter = new BinaryFormatter();
+//            formatter.Serialize(ms, obj);
+//            ms.Position = 0;
+
+//            return (T)formatter.Deserialize(ms);
+//        }
 //    }
 //}
