@@ -181,6 +181,16 @@ else
                            OnExportAll="@ExportAllFolderResults" />
 }
 
+@if (FolderComparisonResult != null && SelectedPairIndex >= 0 && DifferenceSummary != null)
+{
+    <DetailedDifferencesView SelectedPair="@FolderComparisonResult.FilePairResults[SelectedPairIndex]"
+                             DifferenceSummary="@DifferenceSummary"
+                             ComparisonResult="@ComparisonResult"
+                             ShowAllDifferences="@ShowAllDifferences"
+                             OnToggleShowAll="@ToggleShowAllDifferences"
+                             OnExportResults="@ExportFolderResults" />
+}
+
 @if (PatternAnalysis != null && (ShowPatternSummary || EnablePatternAnalysis))
 {
     <PatternAnalysisPanel Analysis="@PatternAnalysis"
@@ -208,16 +218,6 @@ else if (EnableStructuralAnalysis && FolderComparisonResult != null && !FolderCo
 {
     <SemanticGroupsPanel Analysis="@SemanticAnalysis"
                          OnExportAnalysis="@ExportSemanticAnalysisReport" />
-}
-
-@if (FolderComparisonResult != null && SelectedPairIndex >= 0 && DifferenceSummary != null)
-{
-    <DetailedDifferencesView SelectedPair="@FolderComparisonResult.FilePairResults[SelectedPairIndex]"
-                             DifferenceSummary="@DifferenceSummary"
-                             ComparisonResult="@ComparisonResult"
-                             ShowAllDifferences="@ShowAllDifferences"
-                             OnToggleShowAll="@ToggleShowAllDifferences"
-                             OnExportResults="@ExportFolderResults" />
 }
 
 <HierarchicalPropertySelector @ref="propertySelector"

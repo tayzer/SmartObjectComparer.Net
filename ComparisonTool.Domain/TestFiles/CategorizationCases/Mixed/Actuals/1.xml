@@ -1,0 +1,57 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <soap:Body>
+    <SearchResponse xmlns="urn:soap.co.uk/soap:search1">
+      <ReportId>order-test-123</ReportId>
+      <GeneratedOn>2025-05-01T10:00:00</GeneratedOn>
+      <Summary>
+        <TotalResults>3</TotalResults>
+        <SuccessCount>3</SuccessCount>
+        <FailureCount>0</FailureCount>
+      </Summary>
+      <!-- Results collection in expected order: A, B, C -->
+      <Results>
+        <Result>
+          <Id>1</Id>
+          <Name>Item A</Name>
+          <Score>95.5</Score>
+          <Details>
+            <Description>Description for Item A</Description>
+            <Status>Success</Status>
+          </Details>
+          <Tags>
+            <Tag>First</Tag>
+            <Tag>Important</Tag>
+          </Tags>
+        </Result>
+        <Result>
+          <Id>2</Id>
+          <Name>Item B</Name>
+          <Score>86.2</Score>
+          <Details>
+            <Description>Description for Item B</Description>
+            <Status>Failure</Status>
+          </Details>
+          <Tags>
+            <Tag>Second</Tag>
+            <Tag>Medium</Tag>
+          </Tags>
+        </Result>
+        <Result>
+          <Id>3</Id>
+          <Name>Item C</Name>
+          <Score>75.8</Score>
+          <Details>
+            <Description>Description for Item C</Description>
+            <Status>Success</Status>
+          </Details>
+          <Tags>
+            <Tag>Third</Tag>
+            <Tag>Low</Tag>
+          </Tags>
+        </Result>
+      </Results>
+      <!-- RelatedItems collection in expected order: X, Y, Z -->
+    </SearchResponse>
+  </soap:Body>
+</soap:Envelope>
