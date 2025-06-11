@@ -32,9 +32,13 @@
             <input class="form-check-input" type="checkbox" id="enableSemanticAnalysisSwitch" @bind="EnableSemanticAnalysis" @bind:after="() => OnEnableSemanticAnalysisChanged.InvokeAsync(EnableSemanticAnalysis)" />
             <label class="form-check-label" for="enableSemanticAnalysisSwitch">Enable Semantic Analysis</label>
         </div>
-        <div class="form-check form-switch mb-3">
+        <div class="form-check form-switch mb-2">
             <input class="form-check-input" type="checkbox" id="enableStructuralAnalysisSwitch" @bind="EnableStructuralAnalysis" @bind:after="() => OnEnableStructuralAnalysisChanged.InvokeAsync(EnableStructuralAnalysis)" />
             <label class="form-check-label" for="enableStructuralAnalysisSwitch">Enable Structural Analysis</label>
+        </div>
+        <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="enableEnhancedStructuralAnalysisSwitch" @bind="EnableEnhancedStructuralAnalysis" @bind:after="() => OnEnableEnhancedStructuralAnalysisChanged.InvokeAsync(EnableEnhancedStructuralAnalysis)" />
+            <label class="form-check-label" for="enableEnhancedStructuralAnalysisSwitch">Enable Enhanced Structural Analysis</label>
         </div>
 
         <h6>Property Specific Rules</h6>
@@ -104,6 +108,8 @@
     [Parameter] public EventCallback<bool> OnEnableSemanticAnalysisChanged { get; set; }
     [Parameter] public bool EnableStructuralAnalysis { get; set; }
     [Parameter] public EventCallback<bool> OnEnableStructuralAnalysisChanged { get; set; }
+    [Parameter] public bool EnableEnhancedStructuralAnalysis { get; set; }
+    [Parameter] public EventCallback<bool> OnEnableEnhancedStructuralAnalysisChanged { get; set; }
     [Parameter] public List<IgnoreRule> IgnoreRules { get; set; } = new List<IgnoreRule>();
     [Parameter] public EventCallback<IgnoreRule> OnIgnoreRuleAdded { get; set; }
     [Parameter] public EventCallback<IgnoreRule> OnIgnoreRuleRemoved { get; set; }

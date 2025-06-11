@@ -104,6 +104,8 @@
                                           OnEnableSemanticAnalysisChanged="@(value => EnableSemanticAnalysis = value)"
                                           EnableStructuralAnalysis="@EnableStructuralAnalysis"
                                           OnEnableStructuralAnalysisChanged="@(value => EnableStructuralAnalysis = value)"
+                                          EnableEnhancedStructuralAnalysis="@EnableEnhancedStructuralAnalysis"
+                                          OnEnableEnhancedStructuralAnalysisChanged="@(value => EnableEnhancedStructuralAnalysis = value)"
                                           IgnoreRules="@IgnoreRules"
                                           OnIgnoreRuleAdded="@AddIgnoreRule"
                                           OnIgnoreRuleRemoved="@RemoveIgnoreRule"
@@ -138,6 +140,8 @@ else
                                           OnEnableSemanticAnalysisChanged="@(value => EnableSemanticAnalysis = value)"
                                           EnableStructuralAnalysis="@EnableStructuralAnalysis"
                                           OnEnableStructuralAnalysisChanged="@(value => EnableStructuralAnalysis = value)"
+                                          EnableEnhancedStructuralAnalysis="@EnableEnhancedStructuralAnalysis"
+                                          OnEnableEnhancedStructuralAnalysisChanged="@(value => EnableEnhancedStructuralAnalysis = value)"
                                           IgnoreRules="@IgnoreRules"
                                           OnIgnoreRuleAdded="@AddIgnoreRule"
                                           OnIgnoreRuleRemoved="@RemoveIgnoreRule"
@@ -214,6 +218,21 @@ else if (EnableStructuralAnalysis && FolderComparisonResult != null && !FolderCo
     </div>
 }
 
+@if (EnhancedStructuralAnalysis != null && EnableEnhancedStructuralAnalysis)
+{
+    <EnhancedStructuralPatternPanel Analysis="@EnhancedStructuralAnalysis" />
+}
+else if (EnableEnhancedStructuralAnalysis && FolderComparisonResult != null && !FolderComparisonResult.AllEqual)
+{
+    <div class="alert alert-info mt-3">
+        <h5>Enhanced Structural Analysis</h5>
+        <p>Enhanced structural analysis is enabled but no patterns were found or the analysis didn't run.</p>
+        <button class="btn btn-success btn-sm" @onclick="GenerateEnhancedStructuralAnalysis">
+            Run Enhanced Structural Analysis
+        </button>
+    </div>
+}
+
 @if (SemanticAnalysis != null && (ShowPatternSummary || EnablePatternAnalysis))
 {
     <SemanticGroupsPanel Analysis="@SemanticAnalysis"
@@ -235,6 +254,7 @@ else if (EnableStructuralAnalysis && FolderComparisonResult != null && !FolderCo
     private bool EnablePatternAnalysis { get; set; } = true;
     private bool EnableSemanticAnalysis { get; set; } = true;
     private bool EnableStructuralAnalysis { get; set; } = true;
+    private bool EnableEnhancedStructuralAnalysis { get; set; } = true;
     private bool UseDirectoryMode { get; set; } = false;
     
     // Directory mode properties
@@ -258,6 +278,7 @@ else if (EnableStructuralAnalysis && FolderComparisonResult != null && !FolderCo
     private bool ShowPatternSummary { get; set; } = false;
     private SemanticDifferenceAnalysis SemanticAnalysis { get; set; }
     private StructuralDifferenceAnalyzer.StructuralAnalysisResult StructuralAnalysis { get; set; }
+    private EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult EnhancedStructuralAnalysis { get; set; }
     private CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
     private HierarchicalPropertySelector propertySelector;
 
@@ -467,6 +488,12 @@ else if (EnableStructuralAnalysis && FolderComparisonResult != null && !FolderCo
             {
                 await GenerateStructuralAnalysis();
             }
+            
+            // Generate enhanced structural analysis if needed
+            if (EnableEnhancedStructuralAnalysis && !FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 1)
+            {
+                await GenerateEnhancedStructuralAnalysis();
+            }
         }
         catch (OperationCanceledException)
         {
@@ -576,6 +603,15 @@ else if (EnableStructuralAnalysis && FolderComparisonResult != null && !FolderCo
                         StateHasChanged();
                         await Task.Delay(100); // Ensure UI updates
                         await GenerateStructuralAnalysis();
+                    }
+                    
+                    // Generate enhanced structural analysis if enabled
+                    if (EnableEnhancedStructuralAnalysis && !FolderComparisonResult.AllEqual)
+                    {
+                        Progress = new ComparisonProgress(0, 0, "Starting enhanced structural analysis...");
+                        StateHasChanged();
+                        await Task.Delay(100); // Ensure UI updates
+                        await GenerateEnhancedStructuralAnalysis();
                     }
                 }
             }
@@ -747,6 +783,46 @@ else if (EnableStructuralAnalysis && FolderComparisonResult != null && !FolderCo
         }
     }
 
+    private async Task GenerateEnhancedStructuralAnalysis()
+    {
+        if (FolderComparisonResult == null)
+            return;
+        
+        try
+        {
+            Logger.LogInformation("Starting enhanced structural pattern analysis...");
+            Progress = new ComparisonProgress(0, 0, "Generating enhanced structural pattern analysis...");
+            StateHasChanged();
+            
+            await Task.Delay(100); // Allow UI to update
+            
+            var enhancedStructuralAnalyzer = new EnhancedStructuralDifferenceAnalyzer(FolderComparisonResult, Logger);
+            EnhancedStructuralAnalysis = enhancedStructuralAnalyzer.AnalyzeStructuralPatterns();
+            
+            Logger.LogInformation("Enhanced structural analysis completed. Found patterns: {Critical}, {MissingElements}, {MissingProps}, {ValueDiffs}, {OrderDiffs}",
+                EnhancedStructuralAnalysis?.CriticalMissingElements?.Count ?? 0,
+                EnhancedStructuralAnalysis?.MissingCollectionElements?.Count ?? 0,
+                EnhancedStructuralAnalysis?.ConsistentlyMissingProperties?.Count ?? 0,
+                EnhancedStructuralAnalysis?.ConsistentValueDifferences?.Count ?? 0,
+                EnhancedStructuralAnalysis?.ElementOrderDifferences?.Count ?? 0);
+            
+            // Add to metadata to save with results
+            if (FolderComparisonResult.Metadata.ContainsKey("EnhancedStructuralAnalysis"))
+                FolderComparisonResult.Metadata["EnhancedStructuralAnalysis"] = EnhancedStructuralAnalysis;
+            else
+                FolderComparisonResult.Metadata.Add("EnhancedStructuralAnalysis", EnhancedStructuralAnalysis);
+            
+            Progress = new ComparisonProgress(0, 0, "Enhanced structural analysis complete");
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error generating enhanced structural pattern analysis");
+            Progress = new ComparisonProgress(0, 0, "Error generating enhanced structural analysis");
+            StateHasChanged();
+        }
+    }
+
     private async Task ExportFolderResults()
     {
         if (FolderComparisonResult == null || SelectedPairIndex < 0)
@@ -856,6 +932,7 @@ else if (EnableStructuralAnalysis && FolderComparisonResult != null && !FolderCo
             PatternAnalysis = null;
             SemanticAnalysis = null;
             StructuralAnalysis = null;
+            EnhancedStructuralAnalysis = null;
             ShowPatternSummary = false;
             ShowAllDifferences = false;
             

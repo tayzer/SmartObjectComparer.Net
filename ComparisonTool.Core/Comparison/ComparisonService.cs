@@ -611,6 +611,28 @@ public class ComparisonService : IComparisonService
         }, cancellationToken);
     }
 
+    public async Task<EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult>
+        AnalyzeStructualPatternsAsync(
+            MultiFolderComparisonResult folderResult,
+            CancellationToken cancellationToken = default)
+    {
+        return await Task.Run(() =>
+        {
+            logger.LogInformation("Starting enhanced structural pattern analysis");
+
+            var analyzer = new EnhancedStructuralDifferenceAnalyzer(folderResult, logger);
+            var structuralAnalysis = analyzer.AnalyzeStructuralPatterns();
+
+            logger.LogInformation(
+                "Enhanced structural analysis completed. Found {CriticalCound} critical missing elements, {MissingProps} missing properties, and {OrderDiffs} order differences",
+                structuralAnalysis.CriticalMissingElements.Count,
+                structuralAnalysis.ConsistentlyMissingProperties.Count,
+                structuralAnalysis.ElementOrderDifferences.Count);
+
+            return structuralAnalysis;
+        }, cancellationToken);
+    }
+
     /// <summary>
     /// Group similar files based on their difference patterns using a hybrid (exact + MinHash/LSH) approach
     /// </summary>

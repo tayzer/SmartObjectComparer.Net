@@ -188,7 +188,7 @@
     {
         var result = new Dictionary<string, Type>();
 
-        if (depth > 5) // Limit recursion depth
+        if (depth > 10) // Increased recursion depth limit to handle deeper nesting
             return result;
 
         foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
@@ -221,16 +221,24 @@
                     }
 
                     if (elementType != null &&
-                        !elementType.IsPrimitive &&
-                        elementType != typeof(string))
+                        // Process all element types (even primitive ones), just not strings directly
+                        // This ensures we include things like Summary.Id even if Id is primitive
+                        (elementType != typeof(string)))
                     {
                         // Add collection path
                         result[$"{path}[*]"] = prop.PropertyType;
 
+                        // Log collection path for debugging
+                        Console.WriteLine($"Adding collection path: {path}[*] of type {elementType.Name}");
+
                         // Process element type properties
+                        // For complex element types, we need to go deeper to find all nested properties
+                        // This especially helps with nested objects inside collection items
                         var childProps = GetAllPropertyPaths(elementType, $"{path}[*]", depth + 1);
                         foreach (var childProp in childProps)
                         {
+                            // Log child property of collection for debugging
+                            Console.WriteLine($"  - Adding collection sub-property: {childProp.Key}");
                             result[childProp.Key] = childProp.Value;
                         }
                     }
