@@ -1,6 +1,19 @@
 @namespace ComparisonTool.Web.Components.Comparison
 @using ComparisonTool.Core.Comparison.Analysis
+@using ComparisonTool.Core.Comparison.Results
 @using KellermanSoftware.CompareNetObjects
+
+<style>
+    .btn-xs {
+        padding: 0.2rem 0.4rem;
+        font-size: 0.7rem;
+        line-height: 1;
+    }
+    
+    .cursor-pointer {
+        cursor: pointer;
+    }
+</style>
 
 <div class="card mb-4">
     <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
@@ -403,17 +416,109 @@
                     </div>
                     
                     <div class="mt-3">
-                        <h6>Affected Files (@SelectedPattern.FileCount):</h6>
-                        <div class="affected-files-list">
-                            @foreach (var file in SelectedPattern.AffectedFiles.Take(5))
-                            {
-                                <div class="mb-1 small"><i class="bi bi-file-earmark"></i> @file</div>
-                            }
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0">Affected Files (@SelectedPattern.FileCount):</h6>
                             @if (SelectedPattern.AffectedFiles.Count > 5)
                             {
-                                <div class="small text-muted">...and @(SelectedPattern.AffectedFiles.Count - 5) more files</div>
+                                <button class="btn btn-sm btn-outline-primary" @onclick="ToggleAllAffectedFiles">
+                                    @(ShowAllAffectedFiles ? "🔼 Show Less" : "🔽 View All")
+                                </button>
                             }
                         </div>
+                        <div class="affected-files-list">
+                            @if (ShowAllAffectedFiles)
+                            {
+                                <div class="border rounded p-2" style="max-height: 400px; overflow-y: auto;">
+                                    @foreach (var file in SelectedPattern.AffectedFiles)
+                                    {
+                                        <div class="d-flex justify-content-between align-items-center mb-1 p-1 border-bottom">
+                                            <div class="small">
+                                                <i class="bi bi-file-earmark me-1"></i> @file
+                                            </div>
+                                            <button class="btn btn-xs btn-outline-info" 
+                                                    @onclick="() => ShowFilePairDifferences(file)"
+                                                    title="View differences for this file pair">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                @foreach (var file in SelectedPattern.AffectedFiles.Take(5))
+                                {
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <div class="small">
+                                            <i class="bi bi-file-earmark me-1"></i> @file
+                                        </div>
+                                        <button class="btn btn-xs btn-outline-info" 
+                                                @onclick="() => ShowFilePairDifferences(file)"
+                                                title="View differences for this file pair">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                    </div>
+                                }
+                                @if (SelectedPattern.AffectedFiles.Count > 5)
+                                {
+                                    <div class="small text-muted">...and @(SelectedPattern.AffectedFiles.Count - 5) more files</div>
+                                }
+                            }
+                        </div>
+                        
+                        @if (ShowFileDifferences && SelectedFileDifferences.Any())
+                        {
+                            <div class="mt-3 border rounded p-3" style="background-color: #f8f9fa;">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h6 class="mb-0">
+                                        <i class="bi bi-zoom-in text-primary"></i> 
+                                        Differences in: @SelectedFilePair
+                                    </h6>
+                                    <button class="btn btn-sm btn-outline-secondary" 
+                                            @onclick="() => { ShowFileDifferences = false; SelectedFilePair = null; }"
+                                            title="Close differences view">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                </div>
+                                
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th style="width: 40%;">Property</th>
+                                                <th style="width: 30%;">Expected</th>
+                                                <th style="width: 30%;">Actual</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var diff in SelectedFileDifferences)
+                                            {
+                                                <tr>
+                                                    <td><code class="small">@diff.PropertyName</code></td>
+                                                    <td class="text-break small">@FormatValue(diff.Object1Value)</td>
+                                                    <td class="text-break small">@FormatValue(diff.Object2Value)</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                @if (SelectedFileDifferences.Count > 0)
+                                {
+                                    <div class="mt-2 text-muted small">
+                                        <i class="bi bi-info-circle"></i> 
+                                        Showing @SelectedFileDifferences.Count differences related to this pattern
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else if (ShowFileDifferences && !SelectedFileDifferences.Any())
+                        {
+                            <div class="mt-3 alert alert-info">
+                                <i class="bi bi-info-circle"></i> 
+                                No differences found for this pattern in the selected file pair.
+                            </div>
+                        }
                     </div>
                 </div>
             }
@@ -425,9 +530,16 @@
     [Parameter]
     public EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult Analysis { get; set; }
     
+    [Parameter]
+    public MultiFolderComparisonResult FolderComparisonResult { get; set; }
+    
     private bool ShowDetailedView { get; set; } = false;
     private string ActiveTab { get; set; } = "critical";
     private EnhancedStructuralDifferenceAnalyzer.StructuralPattern SelectedPattern { get; set; }
+    private bool ShowAllAffectedFiles { get; set; } = false;
+    private bool ShowFileDifferences { get; set; } = false;
+    private string SelectedFilePair { get; set; }
+    private List<Difference> SelectedFileDifferences { get; set; } = new();
     
     private void ToggleView()
     {
@@ -437,6 +549,70 @@
     private void SetSelectedPattern(EnhancedStructuralDifferenceAnalyzer.StructuralPattern pattern)
     {
         SelectedPattern = pattern;
+        ShowAllAffectedFiles = false;
+        ShowFileDifferences = false;
+        SelectedFilePair = null;
+        SelectedFileDifferences.Clear();
+    }
+    
+    private void ToggleAllAffectedFiles()
+    {
+        ShowAllAffectedFiles = !ShowAllAffectedFiles;
+        if (!ShowAllAffectedFiles)
+        {
+            ShowFileDifferences = false;
+            SelectedFilePair = null;
+            SelectedFileDifferences.Clear();
+        }
+    }
+    
+    private void ShowFilePairDifferences(string filePair)
+    {
+        SelectedFilePair = filePair;
+        SelectedFileDifferences.Clear();
+        
+        if (FolderComparisonResult?.FilePairResults == null)
+        {
+            ShowFileDifferences = false;
+            return;
+        }
+        
+        // Find the matching file pair result
+        var matchingResult = FolderComparisonResult.FilePairResults
+            .FirstOrDefault(r => $"{r.File1Name} vs {r.File2Name}" == filePair);
+            
+        if (matchingResult?.Result?.Differences == null)
+        {
+            ShowFileDifferences = false;
+            return;
+        }
+        
+        // Filter differences to only those matching the selected pattern
+        var normalizedPattern = SelectedPattern.FullPattern.Replace("[*]", "");
+        var missingProperty = SelectedPattern.MissingProperty ?? "";
+        
+        SelectedFileDifferences = matchingResult.Result.Differences
+            .Where(d => {
+                // Check if this difference is related to the pattern
+                var propertyName = d.PropertyName;
+                
+                // Direct match with normalized pattern
+                if (propertyName.Contains(normalizedPattern))
+                    return true;
+                
+                // Check if this is the missing property we're looking for
+                if (!string.IsNullOrEmpty(missingProperty) && propertyName.EndsWith(missingProperty))
+                    return true;
+                    
+                // Check if the parent path matches
+                if (!string.IsNullOrEmpty(SelectedPattern.ParentPath) && propertyName.StartsWith(SelectedPattern.ParentPath))
+                    return true;
+                
+                return false;
+            })
+            .ToList();
+            
+        ShowFileDifferences = true;
     }
     
     private string FormatValue(object value)

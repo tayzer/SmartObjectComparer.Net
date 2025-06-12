@@ -222,7 +222,8 @@ else if (EnableStructuralAnalysis && FolderComparisonResult != null && !FolderCo
 
 @if (EnhancedStructuralAnalysis != null && EnableEnhancedStructuralAnalysis)
 {
-    <EnhancedStructuralPatternPanel Analysis="@EnhancedStructuralAnalysis" />
+                                    <EnhancedStructuralPatternPanel Analysis="@EnhancedStructuralAnalysis" 
+                                                              FolderComparisonResult="@FolderComparisonResult" />
 }
 else if (EnableEnhancedStructuralAnalysis && FolderComparisonResult != null && !FolderComparisonResult.AllEqual)
 {
