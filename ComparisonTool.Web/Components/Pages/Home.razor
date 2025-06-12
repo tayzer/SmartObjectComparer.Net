@@ -813,11 +813,12 @@ else if (EnableEnhancedStructuralAnalysis && FolderComparisonResult != null && !
             var enhancedStructuralAnalyzer = new EnhancedStructuralDifferenceAnalyzer(FolderComparisonResult, Logger);
             EnhancedStructuralAnalysis = enhancedStructuralAnalyzer.AnalyzeStructuralPatterns();
             
-            Logger.LogInformation("Enhanced structural analysis completed. Found patterns: {Critical}, {MissingElements}, {MissingProps}, {ValueDiffs}, {OrderDiffs}",
+            Logger.LogInformation("Enhanced structural analysis completed. Found patterns: {Critical}, {MissingElements}, {MissingProps}, {ValueDiffs}, {GeneralDiffs}, {OrderDiffs}",
                 EnhancedStructuralAnalysis?.CriticalMissingElements?.Count ?? 0,
                 EnhancedStructuralAnalysis?.MissingCollectionElements?.Count ?? 0,
                 EnhancedStructuralAnalysis?.ConsistentlyMissingProperties?.Count ?? 0,
                 EnhancedStructuralAnalysis?.ConsistentValueDifferences?.Count ?? 0,
+                EnhancedStructuralAnalysis?.GeneralValueDifferences?.Count ?? 0,
                 EnhancedStructuralAnalysis?.ElementOrderDifferences?.Count ?? 0);
             
             // Add to metadata to save with results

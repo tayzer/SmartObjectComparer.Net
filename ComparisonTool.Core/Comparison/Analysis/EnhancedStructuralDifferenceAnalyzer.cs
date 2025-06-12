@@ -71,6 +71,8 @@ namespace ComparisonTool.Core.Comparison.Analysis
              
             public List<StructuralPattern> ConsistentValueDifferences { get; set; } = new List<StructuralPattern>();
 
+            public List<StructuralPattern> GeneralValueDifferences { get; set; } = new List<StructuralPattern>();
+
             public List<StructuralPattern> AllPatterns { get; set; } = new List<StructuralPattern>();
 
             // Summary statistics
@@ -181,6 +183,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
             AnalyzeCollectionElements(allDifferences, structuralPatterns);
             AnalyzeOrderDifferences(allDifferences, structuralPatterns);
             AnalyzeValueDifferences(allDifferences, valueDifferences, structuralPatterns);
+            AnalyzeGeneralValueDifferences(allDifferences, structuralPatterns);
 
             // Calculate consistency percentages and organise patterns
             foreach (var pattern in structuralPatterns.Values)
@@ -199,8 +202,10 @@ namespace ComparisonTool.Core.Comparison.Analysis
                     case false when pattern.Category is DifferenceCategory.NullValueChange or DifferenceCategory.ItemRemoved:
                         result.ConsistentlyMissingProperties.Add(pattern);
                         break;
+                    case false when pattern.Category is DifferenceCategory.GeneralValueChanged:
+                        result.GeneralValueDifferences.Add(pattern);
+                        break;
                     default:
-                    {
                         if (pattern.Category == DifferenceCategory.CollectionItemChanged)
                         {
                             result.ElementOrderDifferences.Add(pattern);
@@ -210,42 +215,27 @@ namespace ComparisonTool.Core.Comparison.Analysis
                         {
                             result.ConsistentValueDifferences.Add(pattern);
                         }
-
                         break;
-                    }
                 }
             }
 
-            // Sort each category by consistency and occurance count.
-            result.CriticalMissingElements = result.CriticalMissingElements
-                .OrderByDescending(c => c.Consistency)
-                .ThenByDescending(c => c.OccurenceCount)
-                .ToList();
+            // Combine all patterns for AllPatterns list
+            result.AllPatterns.AddRange(result.CriticalMissingElements);
+            result.AllPatterns.AddRange(result.ConsistentlyMissingProperties);
+            result.AllPatterns.AddRange(result.MissingCollectionElements);
+            result.AllPatterns.AddRange(result.ElementOrderDifferences);
+            result.AllPatterns.AddRange(result.ConsistentValueDifferences);
+            result.AllPatterns.AddRange(result.GeneralValueDifferences);
 
-            result.ConsistentlyMissingProperties = result.ConsistentlyMissingProperties
-                .OrderByDescending(c => c.Consistency)
-                .ThenByDescending(c => c.OccurenceCount)
-                .ToList();
-
-            result.MissingCollectionElements = result.MissingCollectionElements
-                .OrderByDescending(c => c.Consistency)
-                .ThenByDescending(c => c.OccurenceCount)
-                .ToList();
-
-            result.ElementOrderDifferences = result.ElementOrderDifferences
-                .OrderByDescending(c => c.Consistency)
-                .ThenByDescending(c => c.OccurenceCount)
-                .ToList();
-
+            // Sort by criticality, then consistency
             result.ConsistentValueDifferences = result.ConsistentValueDifferences
-                .OrderByDescending(c => c.Consistency)
-                .ThenByDescending(c => c.OccurenceCount)
+                .OrderByDescending(p => p.Consistency)
+                .ThenByDescending(p => p.FileCount)
                 .ToList();
 
-            result.AllPatterns = structuralPatterns.Values
-                .OrderByDescending(c => c.IsCriticalProperty)
-                .ThenByDescending(c => c.Consistency)
-                .ThenByDescending(c => c.OccurenceCount)
+            result.GeneralValueDifferences = result.GeneralValueDifferences
+                .OrderByDescending(p => p.Consistency)
+                .ThenByDescending(p => p.FileCount)
                 .ToList();
 
             logger?.LogInformation("Enhanced structural analysis complete. Found {CriticalCount} critical missing elements, {MissingProps} consistently missing properties, and {OrderDiffs} element order differences",
@@ -735,6 +725,86 @@ namespace ComparisonTool.Core.Comparison.Analysis
                 else
                 {
                     return $"Check if '{propertyName}' should be present in the response.";
+                }
+            }
+        }
+
+        private void AnalyzeGeneralValueDifferences(List<(Difference Difference, string FilePair, FilePairComparisonResult Result)> allDifferences, Dictionary<string, StructuralPattern> structuralPatterns)
+        {
+            // Track general change frequency regardless of specific values
+            var generalChangeCounts = new Dictionary<string, Dictionary<string, int>>();
+
+            // First pass: count all value changes by normalized path
+            foreach (var (difference, filePair, _) in allDifferences)
+            {
+                // Only count non-missing value differences
+                if (!IsPropertyMissing(difference) && difference.Object1Value != null && difference.Object2Value != null)
+                {
+                    var normalizedPath = NormalizePropertyPath(difference.PropertyName);
+
+                    if (!generalChangeCounts.ContainsKey(normalizedPath))
+                    {
+                        generalChangeCounts[normalizedPath] = new Dictionary<string, int>();
+                    }
+
+                    if (!generalChangeCounts[normalizedPath].ContainsKey(filePair))
+                    {
+                        generalChangeCounts[normalizedPath][filePair] = 0;
+                    }
+
+                    generalChangeCounts[normalizedPath][filePair]++;
+                }
+            }
+
+            // Second pass: create patterns for paths with changes in multiple files
+            foreach (var pathEntry in generalChangeCounts)
+            {
+                var path = pathEntry.Key;
+                var fileCounts = pathEntry.Value;
+
+                // Only consider paths that have changes in multiple files
+                if (fileCounts.Count > 1)
+                {
+                    var segments = ExtractPathSegments(path);
+                    var propertyName = segments.Last();
+                    var parentPath = segments.Count > 1 ? string.Join(".", segments.Take(segments.Count - 1)) : string.Empty;
+
+                    // Use a pattern key that won't conflict with specific value change patterns
+                    var pattern = $"{path}_GENERAL_CHANGE";
+
+                    if (!structuralPatterns.ContainsKey(pattern))
+                    {
+                        var affectedFiles = fileCounts.Keys.ToList();
+                        var totalOccurrences = fileCounts.Values.Sum();
+
+                        // Find examples of differences for this path
+                        var examples = allDifferences
+                            .Where(d => NormalizePropertyPath(d.Difference.PropertyName) == path && 
+                                       !IsPropertyMissing(d.Difference))
+                            .Take(3)
+                            .Select(d => d.Difference)
+                            .ToList();
+
+                        var description = $"The value of '{propertyName}' changes frequently across files (regardless of specific values)";
+                        var action = $"Review why '{propertyName}' varies across files. This property shows differences in {affectedFiles.Count} files with {totalOccurrences} total changes";
+
+                        structuralPatterns[pattern] = new StructuralPattern()
+                        {
+                            ParentPath = parentPath,
+                            MissingProperty = propertyName,
+                            FullPattern = path,
+                            Category = DifferenceCategory.GeneralValueChanged,
+                            IsCollectionElement = path.Contains("[*]"),
+                            CollectionName = path.Contains("[*]") ? ExtractCollectionName(path) : string.Empty,
+                            AffectedFiles = affectedFiles,
+                            Examples = examples,
+                            OccurenceCount = totalOccurrences,
+                            FileCount = affectedFiles.Count,
+                            IsCriticalProperty = false,
+                            HumanReadableDescription = description,
+                            RecommendAction = action
+                        };
+                    }
                 }
             }
         }

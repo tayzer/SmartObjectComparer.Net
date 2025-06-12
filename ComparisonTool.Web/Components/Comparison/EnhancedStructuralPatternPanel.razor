@@ -142,6 +142,13 @@
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
+                        <button class="nav-link @(ActiveTab == "general" ? "active" : "")" 
+                                @onclick="@(() => ActiveTab = "general")">
+                            <i class="bi bi-bar-chart"></i>
+                            General Changes (@Analysis.GeneralValueDifferences.Count)
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
                         <button class="nav-link @(ActiveTab == "order" ? "active" : "")" 
                                 @onclick="@(() => ActiveTab = "order")">
                             <i class="bi bi-sort-down"></i>
@@ -223,6 +230,24 @@
                         else
                         {
                             <EnhancedPatternListView Patterns="Analysis.ConsistentValueDifferences" 
+                                                   OnSelectPattern="SetSelectedPattern" />
+                        }
+                    }
+                    
+                    @if (ActiveTab == "general")
+                    {
+                        <h6><i class="bi bi-bar-chart text-info"></i> General Value Changes</h6>
+                        <div class="small text-muted mb-3">
+                            Properties that show differences across files, regardless of specific values changed.
+                        </div>
+                        
+                        @if (!Analysis.GeneralValueDifferences.Any())
+                        {
+                            <div class="alert alert-info">No general value changes detected.</div>
+                        }
+                        else
+                        {
+                            <EnhancedPatternListView Patterns="Analysis.GeneralValueDifferences" 
                                                    OnSelectPattern="SetSelectedPattern" />
                         }
                     }
@@ -439,6 +464,8 @@
             DifferenceCategory.NumericValueChanged => "bg-info",
             DifferenceCategory.DateTimeChanged => "bg-secondary",
             DifferenceCategory.BooleanValueChanged => "bg-warning",
+            DifferenceCategory.ValueChanged => "bg-primary",
+            DifferenceCategory.GeneralValueChanged => "bg-success",
             _ => "bg-secondary"
         };
     }
