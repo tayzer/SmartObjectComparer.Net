@@ -111,6 +111,7 @@
                                           OnIgnoreRuleRemoved="@RemoveIgnoreRule"
                                           ModelType="@GetSelectedModelType()"
                                           OnPropertySelectorOpened="@OpenPropertySelector"
+                                          OnTreePropertySelectorOpened="@OpenTreePropertySelector"
                                           OnRunComparison="@RunDirectoryComparison"
                                           CanRunComparison="@CanRunDirectoryComparison" />
         </div>
@@ -147,6 +148,7 @@ else
                                           OnIgnoreRuleRemoved="@RemoveIgnoreRule"
                                           ModelType="@GetSelectedModelType()"
                                           OnPropertySelectorOpened="@OpenPropertySelector"
+                                          OnTreePropertySelectorOpened="@OpenTreePropertySelector"
                                           OnRunComparison="@RunFolderComparison"
                                           CanRunComparison="@CanRunFolderComparison" />
         </div>
@@ -245,6 +247,12 @@ else if (EnableEnhancedStructuralAnalysis && FolderComparisonResult != null && !
                               OnPropertyAdded="AddIgnoreRule"
                               OnPropertyRemoved="propertyPath => RemoveIgnoreRule(IgnoreRules.FirstOrDefault(r => r.PropertyPath == propertyPath))" />
 
+<ObjectTreePropertySelector @ref="treePropertySelector"
+                           ModelType="@GetSelectedModelType()"
+                           IgnoredProperties="IgnoreRules"
+                           OnPropertyAdded="AddIgnoreRule"
+                           OnPropertyRemoved="propertyPath => RemoveIgnoreRule(IgnoreRules.FirstOrDefault(r => r.PropertyPath == propertyPath))" />
+
 @code {
     // Configuration properties
     private string SelectedModelName { get; set; }
@@ -281,6 +289,7 @@ else if (EnableEnhancedStructuralAnalysis && FolderComparisonResult != null && !
     private EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult EnhancedStructuralAnalysis { get; set; }
     private CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
     private HierarchicalPropertySelector propertySelector;
+    private ObjectTreePropertySelector treePropertySelector;
 
     private bool CanRunFolderComparison =>
         !string.IsNullOrEmpty(SelectedModelName) &&
@@ -367,6 +376,11 @@ else if (EnableEnhancedStructuralAnalysis && FolderComparisonResult != null && !
     private async Task OpenPropertySelector()
     {
         await propertySelector.ShowAsync();
+    }
+
+    private async Task OpenTreePropertySelector()
+    {
+        await treePropertySelector.ShowAsync();
     }
 
     private void AddIgnoreRule(IgnoreRule rule)

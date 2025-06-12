@@ -1,0 +1,1018 @@
+@using ComparisonTool.Core.Comparison.Configuration
+@using System.Reflection
+@using System.Text.RegularExpressions
+@using Microsoft.AspNetCore.Components.Web
+@using BlazorBootstrap
+
+<Modal @ref="propertyModal" Title="Property Tree Navigator - Ignore Rules" Size="ModalSize.ExtraLarge">
+    <BodyTemplate>
+        <div class="row">
+            <!-- Left Panel: Tree Navigation -->
+            <div class="col-md-8">
+                <!-- Enhanced Search with Autocomplete -->
+                <div class="mb-3">
+                    <div class="input-group">
+                        <span class="input-group-text">
+                            <i class="bi bi-search"></i>
+                        </span>
+                        <input type="text" class="form-control" placeholder="Search properties... (supports partial matching, regex patterns)" 
+                               @bind-value="searchTerm" @bind-value:event="oninput" @onkeyup="OnSearchKeyUp" />
+                        <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            Filter
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="#" @onclick="() => SetSearchFilter(FilterAll)" @onclick:preventDefault="true">All Properties</a></li>
+                            <li><a class="dropdown-item" href="#" @onclick="() => SetSearchFilter(FilterCollections)" @onclick:preventDefault="true">Collections Only</a></li>
+                            <li><a class="dropdown-item" href="#" @onclick="() => SetSearchFilter(FilterPrimitives)" @onclick:preventDefault="true">Primitive Types</a></li>
+                            <li><a class="dropdown-item" href="#" @onclick="() => SetSearchFilter(FilterComplex)" @onclick:preventDefault="true">Complex Objects</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="#" @onclick="() => SetSearchFilter(FilterIgnored)" @onclick:preventDefault="true">Currently Ignored</a></li>
+                        </ul>
+                        @if (!string.IsNullOrEmpty(searchTerm))
+                        {
+                            <button class="btn btn-outline-danger" type="button" @onclick="ClearSearch">
+                                <i class="bi bi-x"></i>
+                            </button>
+                        }
+                    </div>
+                    
+                    <!-- Search suggestions -->
+                    @if (searchSuggestions.Any() && !string.IsNullOrEmpty(searchTerm))
+                    {
+                        <div class="card mt-2">
+                            <div class="card-body py-2">
+                                <small class="text-muted">Suggestions:</small>
+                                <div class="d-flex flex-wrap gap-1 mt-1">
+                                    @foreach (var suggestion in searchSuggestions.Take(10))
+                                    {
+                                        <span class="badge bg-light text-dark cursor-pointer" @onclick="() => ApplySuggestion(suggestion)">
+                                            @suggestion
+                                        </span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <!-- Breadcrumb Navigation -->
+                @if (selectedPropertyPath.Any())
+                {
+                    <nav class="mb-3">
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item">
+                                <a href="#" @onclick="() => NavigateToBreadcrumb(new List<string>())" @onclick:preventDefault="true">
+                                    <i class="bi bi-house"></i> Root
+                                </a>
+                            </li>
+                            @for (int i = 0; i < selectedPropertyPath.Count; i++)
+                            {
+                                var pathSegment = selectedPropertyPath[i];
+                                var breadcrumbPath = selectedPropertyPath.Take(i + 1).ToList();
+                                var isLast = i == selectedPropertyPath.Count - 1;
+                                
+                                <li class="breadcrumb-item @(isLast ? "active" : "")">
+                                    @if (!isLast)
+                                    {
+                                        <a href="#" @onclick="() => NavigateToBreadcrumb(breadcrumbPath)" @onclick:preventDefault="true">
+                                            @if (pathSegment == "[*]")
+                                            {
+                                                <i class="bi bi-collection me-1"></i><text>Items</text>
+                                            }
+                                            else
+                                            {
+                                                @pathSegment
+                                            }
+                                        </a>
+                                    }
+                                    else
+                                    {
+                                        @if (pathSegment == "[*]")
+                                        {
+                                            <i class="bi bi-collection me-1"></i><text>Items</text>
+                                        }
+                                        else
+                                        {
+                                            @pathSegment
+                                        }
+                                    }
+                                </li>
+                            }
+                        </ol>
+                    </nav>
+                }
+
+                <!-- Object Tree View -->
+                <div class="border rounded p-3" style="max-height: 400px; overflow-y: auto; background-color: #fafafa;">
+                    <h6 class="mb-3">
+                        <i class="bi bi-diagram-3"></i> 
+                        Object Tree Navigation
+                        @if (!string.IsNullOrEmpty(currentSearchFilter) && currentSearchFilter != "all")
+                        {
+                            <span class="badge bg-info ms-2">@currentSearchFilter</span>
+                        }
+                    </h6>
+                    
+                    <div class="tree-container">
+                        @if (IsLoading)
+                        {
+                            <div class="text-center py-3">
+                                <div class="spinner-border spinner-border-sm" role="status"></div>
+                                <span class="ms-2">Loading object tree...</span>
+                            </div>
+                        }
+                        else
+                        {
+                            @RenderTreeLevel(GetCurrentLevelNodes(), selectedPropertyPath)
+                        }
+                    </div>
+                </div>
+                
+                <!-- Quick Actions -->
+                <div class="mt-3">
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button class="btn btn-outline-secondary" @onclick="ExpandAll">
+                            <i class="bi bi-plus-square"></i> Expand All
+                        </button>
+                        <button class="btn btn-outline-secondary" @onclick="CollapseAll">
+                            <i class="bi bi-dash-square"></i> Collapse All
+                        </button>
+                        <button class="btn btn-outline-info" @onclick="RefreshTree">
+                            <i class="bi bi-arrow-clockwise"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Property Configuration -->
+            <div class="col-md-4">
+                <div class="border rounded p-3 h-100">
+                    <h6><i class="bi bi-gear"></i> Property Configuration</h6>
+                    
+                    @if (!string.IsNullOrEmpty(selectedProperty))
+                    {
+                        <div class="alert alert-primary">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <strong>Selected Property:</strong><br/>
+                                    <code class="small">@selectedProperty</code>
+                                </div>
+                                <button class="btn btn-sm btn-outline-primary" @onclick="ClearSelection">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-body">
+                                <!-- Property Type Info -->
+                                @if (GetPropertyType(selectedProperty) != null)
+                                {
+                                    <div class="mb-3">
+                                        <small class="text-muted">Type:</small><br/>
+                                        <code class="small">@GetFriendlyTypeName(GetPropertyType(selectedProperty))</code>
+                                        @if (IsCollectionProperty(selectedProperty))
+                                        {
+                                            <span class="badge bg-warning ms-1">Collection</span>
+                                        }
+                                        @if (IsPrimitiveProperty(selectedProperty))
+                                        {
+                                            <span class="badge bg-info ms-1">Primitive</span>
+                                        }
+                                    </div>
+                                }
+
+                                <!-- Ignore Rules Configuration -->
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" id="ignoreProperty"
+                                           @bind="IgnoreProperty">
+                                    <label class="form-check-label" for="ignoreProperty">
+                                        <i class="bi bi-eye-slash"></i> Ignore this property completely
+                                    </label>
+                                    <small class="form-text text-muted d-block">Property will be excluded from all comparisons</small>
+                                </div>
+
+                                @if (IsCollectionProperty(selectedProperty))
+                                {
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" id="ignoreOrdering"
+                                               @bind="IgnoreCollectionOrder" disabled="@IgnoreProperty">
+                                        <label class="form-check-label" for="ignoreOrdering">
+                                            <i class="bi bi-arrow-down-up"></i> Ignore collection ordering
+                                        </label>
+                                        <small class="form-text text-muted d-block">Items can appear in any order</small>
+                                    </div>
+                                }
+
+                                <button class="btn btn-success w-100 mt-3" @onclick="AddCurrentProperty">
+                                    <i class="bi bi-plus-circle"></i> Add Ignore Rule
+                                </button>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-secondary">
+                            <i class="bi bi-info-circle"></i> 
+                            Select a property from the tree to configure ignore rules.
+                        </div>
+                        
+                        <!-- Quick Add Common Properties -->
+                        <div class="mt-3">
+                            <h6>Quick Add Common Ignores:</h6>
+                            <div class="d-grid gap-2">
+                                @foreach (var common in GetCommonIgnoreProperties())
+                                {
+                                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => QuickAddProperty(common)">
+                                        <i class="bi bi-lightning"></i> @common
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Currently Ignored Properties Section -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0"><i class="bi bi-list-check"></i> Currently Ignored Properties</h6>
+                        <span class="badge bg-secondary">@IgnoredProperties.Count rules</span>
+                    </div>
+                    <div class="card-body">
+                        @if (IgnoredProperties.Any())
+                        {
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Property Path</th>
+                                            <th>Type</th>
+                                            <th>Rules</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var rule in IgnoredProperties.OrderBy(r => r.PropertyPath))
+                                        {
+                                            <tr>
+                                                <td>
+                                                    <code class="small">@rule.PropertyPath</code>
+                                                    @if (IsCollectionProperty(rule.PropertyPath))
+                                                    {
+                                                        <span class="badge bg-warning ms-1">Collection</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    @if (GetPropertyType(rule.PropertyPath) != null)
+                                                    {
+                                                        <small>@GetFriendlyTypeName(GetPropertyType(rule.PropertyPath))</small>
+                                                    }
+                                                    else
+                                                    {
+                                                        <small class="text-muted">Unknown</small>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    @if (rule.IgnoreCompletely)
+                                                    {
+                                                        <span class="badge bg-danger">Ignored</span>
+                                                    }
+                                                    @if (rule.IgnoreCollectionOrder)
+                                                    {
+                                                        <span class="badge bg-warning">Order Ignored</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    <div class="btn-group btn-group-sm">
+                                                        <button class="btn btn-outline-primary" @onclick="() => EditIgnoredProperty(rule.PropertyPath)">
+                                                            <i class="bi bi-pencil"></i>
+                                                        </button>
+                                                        <button class="btn btn-outline-danger" @onclick="() => RemoveIgnoredProperty(rule.PropertyPath)">
+                                                            <i class="bi bi-trash"></i>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle"></i> No ignore rules configured yet. Use the tree navigator to add properties.
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </BodyTemplate>
+    <FooterTemplate>
+        <div class="d-flex justify-content-between w-100">
+            <div>
+                <Button Color="ButtonColor.Info" @onclick="ShowHelpModal">
+                    <i class="bi bi-question-circle"></i> Help
+                </Button>
+            </div>
+            <div>
+                <Button Color="ButtonColor.Secondary" @onclick="ClosePropertySelector">Close</Button>
+            </div>
+        </div>
+    </FooterTemplate>
+</Modal>
+
+<!-- Help Modal -->
+<Modal @ref="helpModal" Title="Property Tree Navigator Help" Size="ModalSize.Large">
+    <BodyTemplate>
+        <div class="help-content">
+            <h6>Navigation Features:</h6>
+            <ul>
+                <li><strong>Tree Navigation:</strong> Click folder icons to expand/collapse object hierarchies</li>
+                <li><strong>Breadcrumbs:</strong> Click breadcrumb items to quickly navigate to parent levels</li>
+                <li><strong>Search:</strong> Use partial matching, wildcards (*), or regex patterns</li>
+                <li><strong>Filters:</strong> Filter by property types (collections, primitives, etc.)</li>
+            </ul>
+            
+            <h6>Search Examples:</h6>
+            <ul>
+                <li><code>Results</code> - Find all properties containing "Results"</li>
+                <li><code>*.Name</code> - Find all "Name" properties</li>
+                <li><code>Body.Response.*</code> - Find all properties under Body.Response</li>
+                <li><code>[0-9]+</code> - Find properties with numbers (regex)</li>
+            </ul>
+            
+            <h6>Ignore Rule Types:</h6>
+            <ul>
+                <li><strong>Ignore Completely:</strong> Property is excluded from all comparisons</li>
+                <li><strong>Ignore Collection Order:</strong> Array/list items can be in any order</li>
+            </ul>
+        </div>
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Secondary" @onclick="CloseHelpModal">Close</Button>
+    </FooterTemplate>
+</Modal>
+
+@code {
+    [Parameter] public Type ModelType { get; set; }
+    [Parameter] public List<IgnoreRule> IgnoredProperties { get; set; } = new List<IgnoreRule>();
+    [Parameter] public EventCallback<IgnoreRule> OnPropertyAdded { get; set; }
+    [Parameter] public EventCallback<string> OnPropertyRemoved { get; set; }
+
+    // Filter constants
+    private const string FilterAll = "all";
+    private const string FilterCollections = "collections";
+    private const string FilterPrimitives = "primitives";
+    private const string FilterComplex = "complex";
+    private const string FilterIgnored = "ignored";
+
+    private Modal propertyModal;
+    private Modal helpModal;
+    private string selectedProperty;
+    private List<string> selectedPropertyPath = new List<string>();
+    private string searchTerm = "";
+    private string currentSearchFilter = "all";
+    private bool IgnoreProperty { get; set; }
+    private bool IgnoreCollectionOrder { get; set; }
+    private bool IsLoading { get; set; } = false;
+
+    // Tree navigation state
+    private Dictionary<string, bool> expandedNodes = new Dictionary<string, bool>();
+    private Dictionary<string, PropertyTreeNode> propertyTree = new Dictionary<string, PropertyTreeNode>();
+    private List<string> searchSuggestions = new List<string>();
+
+    public class PropertyTreeNode
+    {
+        public string Name { get; set; }
+        public string FullPath { get; set; }
+        public Type PropertyType { get; set; }
+        public bool IsCollection { get; set; }
+        public bool IsPrimitive { get; set; }
+        public Dictionary<string, PropertyTreeNode> Children { get; set; } = new Dictionary<string, PropertyTreeNode>();
+        public bool IsExpanded { get; set; } = false;
+    }
+
+    public async Task ShowAsync()
+    {
+        if (ModelType != null)
+        {
+            IsLoading = true;
+            StateHasChanged();
+            
+            await Task.Delay(50); // Allow UI to update
+            BuildPropertyTree();
+            UpdateSearchSuggestions();
+            
+            IsLoading = false;
+        }
+
+        ResetSelectionState();
+        await propertyModal.ShowAsync();
+    }
+
+    private void BuildPropertyTree()
+    {
+        propertyTree.Clear();
+        expandedNodes.Clear();
+        
+        var allPaths = GetAllPropertyPaths(ModelType);
+        
+        foreach (var kvp in allPaths)
+        {
+            AddToTree(kvp.Key, kvp.Value);
+        }
+    }
+
+         private void AddToTree(string path, Type type)
+     {
+         var segments = SplitPropertyPath(path);
+         var currentLevel = propertyTree;
+         var currentPath = "";
+ 
+         for (int i = 0; i < segments.Count; i++)
+         {
+             var segment = segments[i];
+             currentPath = string.IsNullOrEmpty(currentPath) ? segment : 
+                          segment == "[*]" ? $"{currentPath}[*]" : $"{currentPath}.{segment}";
+             
+             if (!currentLevel.ContainsKey(segment))
+             {
+                 var isLastSegment = i == segments.Count - 1;
+                 currentLevel[segment] = new PropertyTreeNode
+                 {
+                     Name = segment,
+                     FullPath = currentPath,
+                     PropertyType = isLastSegment ? type : null,
+                     IsCollection = isLastSegment && IsCollectionType(type),
+                     IsPrimitive = isLastSegment && IsPrimitiveType(type)
+                 };
+             }
+             
+             currentLevel = currentLevel[segment].Children;
+         }
+     }
+
+     private List<string> SplitPropertyPath(string path)
+     {
+         var segments = new List<string>();
+         var parts = path.Split('.');
+         
+         foreach (var part in parts)
+         {
+             if (part.Contains("[*]"))
+             {
+                 var beforeBracket = part.Substring(0, part.IndexOf("[*]"));
+                 if (!string.IsNullOrEmpty(beforeBracket))
+                 {
+                     segments.Add(beforeBracket);
+                 }
+                 segments.Add("[*]");
+                 
+                 var afterBracket = part.Substring(part.IndexOf("[*]") + 3);
+                 if (!string.IsNullOrEmpty(afterBracket))
+                 {
+                     segments.Add(afterBracket);
+                 }
+             }
+             else
+             {
+                 segments.Add(part);
+             }
+         }
+         
+         return segments;
+     }
+
+    private RenderFragment RenderTreeLevel(Dictionary<string, PropertyTreeNode> nodes, List<string> currentPath)
+    {
+        return @<text>
+            @foreach (var kvp in GetFilteredNodes(nodes))
+            {
+                var node = kvp.Value;
+                var hasChildren = node.Children.Any();
+                var isExpanded = IsNodeExpanded(node.FullPath);
+                var indentLevel = currentPath.Count;
+                var isSelected = selectedProperty == node.FullPath;
+
+                <div class="tree-node mb-1" style="margin-left: @(indentLevel * 20)px;">
+                    <div class="d-flex align-items-center tree-node-content @(isSelected ? "selected" : "")" 
+                         @onclick="() => SelectPropertyFromTree(node.FullPath)">
+                        
+                        @if (hasChildren)
+                        {
+                            <button class="btn btn-sm btn-link p-0 me-1 tree-toggle" 
+                                    @onclick="() => ToggleNode(node.FullPath)" 
+                                    @onclick:stopPropagation="true">
+                                @if (node.Name == "[*]")
+                                {
+                                    <i class="bi @(isExpanded ? "bi-collection" : "bi-collection") text-primary"></i>
+                                }
+                                else
+                                {
+                                    <i class="bi @(isExpanded ? "bi-folder2-open" : "bi-folder2") text-warning"></i>
+                                }
+                            </button>
+                        }
+                        else
+                        {
+                            @if (node.Name == "[*]")
+                            {
+                                <i class="bi bi-collection me-1 text-primary"></i>
+                            }
+                            else
+                            {
+                                <i class="bi bi-file-earmark me-1 text-muted"></i>
+                            }
+                        }
+
+                        <span class="tree-node-label flex-grow-1 @(isSelected ? "fw-bold" : "")">
+                            @if (node.Name == "[*]")
+                            {
+                                <text>Items</text>
+                            }
+                            else
+                            {
+                                @node.Name
+                            }
+                        </span>
+
+                        <!-- Property type indicators -->
+                        @if (node.IsCollection)
+                        {
+                            <span class="badge bg-warning me-1">[]</span>
+                        }
+                        @if (node.IsPrimitive)
+                        {
+                            <span class="badge bg-info me-1">P</span>
+                        }
+                        @if (node.Name == "[*]")
+                        {
+                            <span class="badge bg-primary me-1">Items</span>
+                        }
+                        
+                        <!-- Ignore status indicator -->
+                        @if (IsPropertyIgnored(node.FullPath))
+                        {
+                            <i class="bi bi-eye-slash text-danger me-1" title="Property is ignored"></i>
+                        }
+                    </div>
+
+                    @if (hasChildren && isExpanded)
+                    {
+                        <div class="tree-children mt-1">
+                            @RenderTreeLevel(node.Children, currentPath.Concat(new[] { node.Name }).ToList())
+                        </div>
+                    }
+                </div>
+            }
+        </text>;
+    }
+
+    private Dictionary<string, PropertyTreeNode> GetCurrentLevelNodes()
+    {
+        var currentLevel = propertyTree;
+        
+        foreach (var segment in selectedPropertyPath)
+        {
+            if (currentLevel.ContainsKey(segment))
+            {
+                currentLevel = currentLevel[segment].Children;
+            }
+            else
+            {
+                return new Dictionary<string, PropertyTreeNode>();
+            }
+        }
+        
+        return currentLevel;
+    }
+
+    private Dictionary<string, PropertyTreeNode> GetFilteredNodes(Dictionary<string, PropertyTreeNode> nodes)
+    {
+        if (string.IsNullOrEmpty(searchTerm) && currentSearchFilter == "all")
+            return nodes;
+
+        var filtered = new Dictionary<string, PropertyTreeNode>();
+
+        foreach (var kvp in nodes)
+        {
+            var node = kvp.Value;
+            bool matches = false;
+
+            // Apply search term filter
+            if (!string.IsNullOrEmpty(searchTerm))
+            {
+                matches = node.FullPath.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
+                         node.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase);
+                
+                // Support wildcard and regex patterns
+                if (!matches && searchTerm.Contains("*"))
+                {
+                    var regexPattern = "^" + Regex.Escape(searchTerm).Replace("\\*", ".*") + "$";
+                    matches = Regex.IsMatch(node.FullPath, regexPattern, RegexOptions.IgnoreCase);
+                }
+            }
+            else
+            {
+                matches = true;
+            }
+
+            // Apply type filter
+            if (matches && currentSearchFilter != "all")
+            {
+                matches = currentSearchFilter switch
+                {
+                    "collections" => node.IsCollection,
+                    "primitives" => node.IsPrimitive,
+                    "complex" => !node.IsPrimitive && !node.IsCollection,
+                    "ignored" => IsPropertyIgnored(node.FullPath),
+                    _ => true
+                };
+            }
+
+            if (matches)
+            {
+                filtered[kvp.Key] = node;
+            }
+        }
+
+        return filtered;
+    }
+
+    private bool IsNodeExpanded(string path)
+    {
+        return expandedNodes.TryGetValue(path, out var expanded) && expanded;
+    }
+
+    private void ToggleNode(string path)
+    {
+        expandedNodes[path] = !IsNodeExpanded(path);
+        StateHasChanged();
+    }
+
+    private void SelectPropertyFromTree(string path)
+    {
+        selectedProperty = path;
+        
+        // Update property path for breadcrumbs - handle [*] notation
+        selectedPropertyPath = SplitPropertyPath(path);
+        
+        // Load existing rule if it exists
+        var existingRule = IgnoredProperties.FirstOrDefault(p => p.PropertyPath == path);
+        if (existingRule != null)
+        {
+            IgnoreProperty = existingRule.IgnoreCompletely;
+            IgnoreCollectionOrder = existingRule.IgnoreCollectionOrder;
+        }
+        else
+        {
+            IgnoreProperty = false;
+            IgnoreCollectionOrder = false;
+        }
+
+        StateHasChanged();
+    }
+
+    private void NavigateToBreadcrumb(List<string> path)
+    {
+        selectedPropertyPath = path.ToList();
+        
+        // Reconstruct the full property path
+        var fullPath = ReconstructPropertyPath(path);
+        if (!string.IsNullOrEmpty(fullPath))
+        {
+            selectedProperty = fullPath;
+            
+            // Load existing rule if it exists
+            var existingRule = IgnoredProperties.FirstOrDefault(p => p.PropertyPath == fullPath);
+            if (existingRule != null)
+            {
+                IgnoreProperty = existingRule.IgnoreCompletely;
+                IgnoreCollectionOrder = existingRule.IgnoreCollectionOrder;
+            }
+            else
+            {
+                IgnoreProperty = false;
+                IgnoreCollectionOrder = false;
+            }
+        }
+        
+        StateHasChanged();
+    }
+
+    private string ReconstructPropertyPath(List<string> segments)
+    {
+        if (!segments.Any()) return "";
+        
+        var result = "";
+        for (int i = 0; i < segments.Count; i++)
+        {
+            var segment = segments[i];
+            if (segment == "[*]")
+            {
+                result += "[*]";
+            }
+            else
+            {
+                if (i > 0 && segments[i - 1] != "[*]")
+                {
+                    result += ".";
+                }
+                result += segment;
+            }
+        }
+        
+        return result;
+    }
+
+    private void OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && searchSuggestions.Any())
+        {
+            ApplySuggestion(searchSuggestions.First());
+        }
+        UpdateSearchSuggestions();
+    }
+
+    private void UpdateSearchSuggestions()
+    {
+        searchSuggestions.Clear();
+        
+        if (string.IsNullOrEmpty(searchTerm) || searchTerm.Length < 2)
+            return;
+
+        var allPaths = GetAllPropertyPaths(ModelType);
+        searchSuggestions = allPaths.Keys
+            .Where(path => path.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+            .Take(10)
+            .ToList();
+    }
+
+    private void ApplySuggestion(string suggestion)
+    {
+        searchTerm = suggestion;
+        SelectPropertyFromTree(suggestion);
+        UpdateSearchSuggestions();
+    }
+
+    private void SetSearchFilter(string filter)
+    {
+        currentSearchFilter = filter;
+        StateHasChanged();
+    }
+
+    private void ClearSearch()
+    {
+        searchTerm = "";
+        currentSearchFilter = "all";
+        searchSuggestions.Clear();
+        StateHasChanged();
+    }
+
+    private void ExpandAll()
+    {
+        foreach (var path in GetAllPropertyPaths(ModelType).Keys)
+        {
+            expandedNodes[path] = true;
+        }
+        StateHasChanged();
+    }
+
+    private void CollapseAll()
+    {
+        expandedNodes.Clear();
+        StateHasChanged();
+    }
+
+    private void RefreshTree()
+    {
+        BuildPropertyTree();
+        StateHasChanged();
+    }
+
+    private void ClearSelection()
+    {
+        selectedProperty = "";
+        selectedPropertyPath.Clear();
+        ResetSelectionState();
+    }
+
+    private void QuickAddProperty(string propertyPath)
+    {
+        selectedProperty = propertyPath;
+        IgnoreProperty = true;
+        IgnoreCollectionOrder = false;
+        AddCurrentProperty();
+    }
+
+    private void EditIgnoredProperty(string propertyPath)
+    {
+        SelectPropertyFromTree(propertyPath);
+    }
+
+    private bool IsPropertyIgnored(string propertyPath)
+    {
+        return IgnoredProperties.Any(r => r.PropertyPath == propertyPath);
+    }
+
+    private List<string> GetCommonIgnoreProperties()
+    {
+        return new List<string>
+        {
+            "Id", "Timestamp", "CreatedDate", "ModifiedDate", 
+            "Version", "RequestId", "SessionId"
+        };
+    }
+
+    private async Task ShowHelpModal()
+    {
+        await helpModal.ShowAsync();
+    }
+
+    private void CloseHelpModal()
+    {
+        helpModal.HideAsync();
+    }
+
+    // ... (Include all the existing methods from HierarchicalPropertySelector like GetAllPropertyPaths, etc.)
+    
+    private Dictionary<string, Type> GetAllPropertyPaths(Type type, string basePath = "", int depth = 0)
+    {
+        var result = new Dictionary<string, Type>();
+
+        if (depth > 10)
+            return result;
+
+        foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
+            string path = string.IsNullOrEmpty(basePath) ? prop.Name : $"{basePath}.{prop.Name}";
+            result[path] = prop.PropertyType;
+
+            // Handle collection types - explore their item properties
+            if (IsCollectionType(prop.PropertyType) && depth < 8)
+            {
+                var itemType = GetCollectionItemType(prop.PropertyType);
+                if (itemType != null && !IsPrimitiveType(itemType))
+                {
+                    string collectionItemPath = $"{path}[*]";
+                    result[collectionItemPath] = itemType;
+                    
+                    // Recursively explore collection item properties
+                    var itemPaths = GetAllPropertyPaths(itemType, collectionItemPath, depth + 1);
+                    foreach (var itemPath in itemPaths)
+                    {
+                        result[itemPath.Key] = itemPath.Value;
+                    }
+                }
+            }
+            // Handle regular complex types
+            else if (!IsPrimitiveType(prop.PropertyType) && prop.PropertyType != typeof(string) && depth < 8)
+            {
+                var nestedPaths = GetAllPropertyPaths(prop.PropertyType, path, depth + 1);
+                foreach (var nested in nestedPaths)
+                {
+                    result[nested.Key] = nested.Value;
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private Type GetCollectionItemType(Type collectionType)
+    {
+        if (collectionType.IsArray)
+        {
+            return collectionType.GetElementType();
+        }
+        
+        if (collectionType.IsGenericType)
+        {
+            var genericArgs = collectionType.GetGenericArguments();
+            if (genericArgs.Length > 0)
+            {
+                return genericArgs[0];
+            }
+        }
+        
+        return null;
+    }
+
+    private bool IsPrimitiveType(Type type)
+    {
+        return type.IsPrimitive || type == typeof(string) || type == typeof(DateTime) || 
+               type == typeof(decimal) || type == typeof(Guid) || 
+               (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>));
+    }
+
+    private bool IsCollectionType(Type type)
+    {
+        return type.IsArray || 
+               (type.IsGenericType && (
+                   type.GetGenericTypeDefinition() == typeof(List<>) ||
+                   type.GetGenericTypeDefinition() == typeof(IList<>) ||
+                   type.GetGenericTypeDefinition() == typeof(IEnumerable<>) ||
+                   type.GetGenericTypeDefinition() == typeof(ICollection<>)
+               ));
+    }
+
+    private bool IsCollectionProperty(string propertyPath)
+    {
+        var type = GetPropertyType(propertyPath);
+        return type != null && IsCollectionType(type);
+    }
+
+    private bool IsPrimitiveProperty(string propertyPath)
+    {
+        var type = GetPropertyType(propertyPath);
+        return type != null && IsPrimitiveType(type);
+    }
+
+    private Type GetPropertyType(string propertyPath)
+    {
+        var allPaths = GetAllPropertyPaths(ModelType);
+        return allPaths.TryGetValue(propertyPath, out var type) ? type : null;
+    }
+
+    private string GetFriendlyTypeName(Type type)
+    {
+        if (type == null) return "Unknown";
+
+        if (type == typeof(string)) return "String";
+        if (type == typeof(int)) return "Integer";
+        if (type == typeof(bool)) return "Boolean";
+        if (type == typeof(DateTime)) return "DateTime";
+        if (type == typeof(decimal) || type == typeof(double) || type == typeof(float)) return "Number";
+
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
+            return GetFriendlyTypeName(type.GetGenericArguments()[0]) + "?";
+
+        if (type.IsArray)
+            return GetFriendlyTypeName(type.GetElementType()) + "[]";
+
+        if (type.IsGenericType)
+        {
+            var elementType = type.GetGenericArguments().FirstOrDefault();
+            if (elementType != null)
+                return $"List<{GetFriendlyTypeName(elementType)}>";
+            else
+                return "Collection";
+        }
+
+        return type.Name;
+    }
+
+    private void ResetSelectionState()
+    {
+        selectedProperty = null;
+        IgnoreProperty = false;
+        IgnoreCollectionOrder = false;
+    }
+
+    private async Task AddCurrentProperty()
+    {
+        if (string.IsNullOrEmpty(selectedProperty))
+            return;
+
+        var rule = new IgnoreRule
+        {
+            PropertyPath = selectedProperty,
+            IgnoreCompletely = IgnoreProperty,
+            IgnoreCollectionOrder = IgnoreCollectionOrder
+        };
+
+        var existingRule = IgnoredProperties.FirstOrDefault(p => p.PropertyPath == selectedProperty);
+        if (existingRule != null)
+        {
+            IgnoredProperties.Remove(existingRule);
+        }
+
+        IgnoredProperties.Add(rule);
+        await OnPropertyAdded.InvokeAsync(rule);
+
+        ResetSelectionState();
+        StateHasChanged();
+    }
+
+    private async Task RemoveIgnoredProperty(string propertyPath)
+    {
+        var rule = IgnoredProperties.FirstOrDefault(p => p.PropertyPath == propertyPath);
+        if (rule != null)
+        {
+            IgnoredProperties.Remove(rule);
+            await OnPropertyRemoved.InvokeAsync(propertyPath);
+        }
+        StateHasChanged();
+    }
+
+    private void ClosePropertySelector()
+    {
+        propertyModal.HideAsync();
+    }
+}

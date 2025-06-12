@@ -15,12 +15,15 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     private readonly ILogger<ComparisonConfigurationService> logger;
     private readonly CompareLogic compareLogic;
     private readonly List<IgnoreRule> ignoreRules = new();
+    private readonly List<SmartIgnoreRule> smartIgnoreRules = new();
+    private readonly SmartIgnoreProcessor smartIgnoreProcessor;
 
     public ComparisonConfigurationService(
         ILogger<ComparisonConfigurationService> logger,
         IOptions<ComparisonConfigurationOptions> options = null)
     {
         this.logger = logger;
+        this.smartIgnoreProcessor = new SmartIgnoreProcessor(logger);
 
         var configOptions = options?.Value ?? new ComparisonConfigurationOptions();
 
@@ -325,7 +328,13 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
                 }
             }
 
-            // Apply all rules
+            // Apply smart ignore rules to configuration
+            smartIgnoreProcessor.ApplyRulesToConfig(smartIgnoreRules, compareLogic.Config);
+
+            // Handle property ignore rules - we'll enhance the MembersToIgnore with our custom logic
+            // by overriding the comparison result processing rather than using a custom comparer
+
+            // Apply all legacy rules (but don't rely on MembersToIgnore for [*] patterns)
             int rulesApplied = 0;
             foreach (var rule in ignoreRules)
             {
@@ -349,6 +358,150 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         {
             logger.LogError(ex, "Error in ApplyConfiguredSettings");
         }
+    }
+
+    /// <summary>
+    /// Filter differences based on ignore rules with pattern matching support
+    /// </summary>
+    /// <param name="result">The comparison result to filter</param>
+    /// <returns>A filtered comparison result</returns>
+    public ComparisonResult FilterIgnoredDifferences(ComparisonResult result)
+    {
+        if (result == null || !result.Differences.Any())
+            return result;
+
+        var propertiesToIgnoreCompletely = ignoreRules
+            .Where(r => r.IgnoreCompletely)
+            .Select(r => r.PropertyPath)
+            .ToHashSet();
+
+        if (!propertiesToIgnoreCompletely.Any())
+            return result;
+
+        logger.LogInformation("Filtering differences using {Count} tree navigator ignore patterns: {Patterns}", 
+            propertiesToIgnoreCompletely.Count, string.Join(", ", propertiesToIgnoreCompletely));
+
+        var originalCount = result.Differences.Count;
+        var filteredDifferences = new List<Difference>();
+
+        foreach (var difference in result.Differences)
+        {
+            bool shouldIgnore = PropertyIgnoreHelper.ShouldIgnoreProperty(difference.PropertyName, propertiesToIgnoreCompletely, logger);
+            
+            // Also check the static MembersToIgnore list (for System.Collections variations)
+            // Check both exact matches and if the difference is a sub-property of any ignored path
+            if (!shouldIgnore)
+            {
+                foreach (var ignoredPath in compareLogic.Config.MembersToIgnore)
+                {
+                    if (difference.PropertyName.Equals(ignoredPath, StringComparison.OrdinalIgnoreCase) ||
+                        difference.PropertyName.StartsWith(ignoredPath + ".", StringComparison.OrdinalIgnoreCase))
+                    {
+                        shouldIgnore = true;
+                        logger.LogInformation("FILTERING OUT difference for ignored property: {PropertyPath} (matched static MembersToIgnore: {MatchedPath})", 
+                            difference.PropertyName, ignoredPath);
+                        break;
+                    }
+                }
+            }
+            
+            if (!shouldIgnore)
+            {
+                filteredDifferences.Add(difference);
+                logger.LogDebug("KEEPING difference for property: {PropertyPath}", difference.PropertyName);
+            }
+            else if (!compareLogic.Config.MembersToIgnore.Contains(difference.PropertyName))
+            {
+                logger.LogInformation("FILTERING OUT difference for ignored property: {PropertyPath} (matched tree navigator rule)", difference.PropertyName);
+            }
+        }
+
+        result.Differences.Clear();
+        result.Differences.AddRange(filteredDifferences);
+
+        var filteredCount = result.Differences.Count;
+        var removedCount = originalCount - filteredCount;
+
+        if (removedCount > 0)
+        {
+            logger.LogInformation("Tree Navigator filtering removed {RemovedCount} differences from {OriginalCount} total (kept {FilteredCount})", 
+                removedCount, originalCount, filteredCount);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Add a smart ignore rule
+    /// </summary>
+    public void AddSmartIgnoreRule(SmartIgnoreRule rule)
+    {
+        if (rule == null) return;
+
+        // Remove existing rule with same type and value
+        smartIgnoreRules.RemoveAll(r => r.Type == rule.Type && r.Value == rule.Value);
+        
+        smartIgnoreRules.Add(rule);
+        logger.LogInformation("Added smart ignore rule: {Description}", rule.Description);
+    }
+
+    /// <summary>
+    /// Remove a smart ignore rule
+    /// </summary>
+    public void RemoveSmartIgnoreRule(SmartIgnoreRule rule)
+    {
+        if (rule == null) return;
+
+        var removed = smartIgnoreRules.RemoveAll(r => r.Type == rule.Type && r.Value == rule.Value);
+        if (removed > 0)
+        {
+            logger.LogInformation("Removed smart ignore rule: {Description}", rule.Description);
+        }
+    }
+
+    /// <summary>
+    /// Apply a preset of smart ignore rules
+    /// </summary>
+    public void ApplySmartIgnorePreset(string presetName)
+    {
+        if (!SmartIgnorePresets.AllPresets.TryGetValue(presetName, out var preset))
+        {
+            logger.LogWarning("Unknown preset: {PresetName}", presetName);
+            return;
+        }
+
+        foreach (var rule in preset)
+        {
+            AddSmartIgnoreRule(rule);
+        }
+
+        logger.LogInformation("Applied smart ignore preset '{PresetName}' with {Count} rules", presetName, preset.Count);
+    }
+
+    /// <summary>
+    /// Clear all smart ignore rules
+    /// </summary>
+    public void ClearSmartIgnoreRules()
+    {
+        var count = smartIgnoreRules.Count;
+        smartIgnoreRules.Clear();
+        logger.LogInformation("Cleared {Count} smart ignore rules", count);
+    }
+
+    /// <summary>
+    /// Get all smart ignore rules
+    /// </summary>
+    public IReadOnlyList<SmartIgnoreRule> GetSmartIgnoreRules()
+    {
+        return smartIgnoreRules.ToList();
+    }
+
+    /// <summary>
+    /// Filter differences using smart ignore rules
+    /// </summary>
+    public ComparisonResult FilterSmartIgnoredDifferences(ComparisonResult result, Type modelType = null)
+    {
+        return smartIgnoreProcessor.FilterResult(result, smartIgnoreRules, modelType);
     }
 
     /// <summary>

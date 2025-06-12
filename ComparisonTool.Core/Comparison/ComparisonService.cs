@@ -165,6 +165,10 @@ public class ComparisonService : IComparisonService
                 logger.LogInformation("Comparison completed. Found {DifferenceCount} differences",
                     result.Differences.Count);
 
+                // Filter out ignored properties using smart rules and legacy pattern matching
+                result = configService.FilterSmartIgnoredDifferences(result, modelType);
+                result = configService.FilterIgnoredDifferences(result);
+
                 var filteredResult = FilterDuplicateDifferences(result);
 
                 return filteredResult;

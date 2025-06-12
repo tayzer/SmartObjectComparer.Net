@@ -41,13 +41,34 @@
             <label class="form-check-label" for="enableEnhancedStructuralAnalysisSwitch">Enable Enhanced Structural Analysis</label>
         </div>
 
-        <h6>Property Specific Rules</h6>
-        <button class="btn btn-sm btn-outline-primary mb-2" @onclick="OpenPropertySelector" disabled="@(!IsModelSelected)">
-            <i class="bi bi-list-nested me-1"></i> Add/Edit Property Rule
-        </button>
+        <!-- Smart Ignore Rules Section -->
+        <SmartIgnoreConfigurationPanel SmartIgnoreRules="@GetSmartIgnoreRules()"
+                                       OnRuleAdded="@HandleSmartIgnoreRuleAdded"
+                                       OnRuleRemoved="@HandleSmartIgnoreRuleRemoved"
+                                       OnPresetApplied="@HandleSmartIgnorePresetApplied"
+                                       OnRulesCleared="@HandleSmartIgnoreRulesCleared" />
+
+        <h6 class="mt-4">Tree Navigator (Visual Property Selection)</h6>
+        <div class="d-flex gap-2 mb-2">
+            <button class="btn btn-sm btn-outline-primary" @onclick="OpenPropertySelector" disabled="@(!IsModelSelected)">
+                <i class="bi bi-list-nested me-1"></i> Simple Property Selector
+            </button>
+            <button class="btn btn-sm btn-outline-success" @onclick="OpenTreePropertySelector" disabled="@(!IsModelSelected)">
+                <i class="bi bi-diagram-3 me-1"></i> Tree Navigator ⭐
+            </button>
+        </div>
         @if (!IsModelSelected)
         {
-            <small class="d-block text-muted">Select a model first to add property rules.</small>
+            <small class="d-block text-muted">Select a model first to browse and ignore properties.</small>
+        }
+        else
+        {
+            <div class="alert alert-success py-2 px-3 mt-2">
+                <small>
+                    <i class="bi bi-check-circle"></i> 
+                    <strong>Fixed & Enhanced!</strong> The <strong>Tree Navigator</strong> now properly ignores selected properties. Browse your domain model visually with breadcrumbs, collection support ([*]), and advanced search.
+                </small>
+            </div>
         }
 
         @if (IgnoreRules.Any())
@@ -115,6 +136,7 @@
     [Parameter] public EventCallback<IgnoreRule> OnIgnoreRuleRemoved { get; set; }
     [Parameter] public Type ModelType { get; set; }
     [Parameter] public EventCallback OnPropertySelectorOpened { get; set; }
+    [Parameter] public EventCallback OnTreePropertySelectorOpened { get; set; }
     [Parameter] public EventCallback OnRunComparison { get; set; }
     [Parameter] public bool CanRunComparison { get; set; }
 
@@ -125,6 +147,41 @@
     private async Task OpenPropertySelector()
     {
         await OnPropertySelectorOpened.InvokeAsync();
+    }
+
+    private async Task OpenTreePropertySelector()
+    {
+        await OnTreePropertySelectorOpened.InvokeAsync();
+    }
+
+    // Smart Ignore Rules handling
+    private List<SmartIgnoreRule> GetSmartIgnoreRules()
+    {
+        return ConfigService.GetSmartIgnoreRules().ToList();
+    }
+
+    private async Task HandleSmartIgnoreRuleAdded(SmartIgnoreRule rule)
+    {
+        ConfigService.AddSmartIgnoreRule(rule);
+        StateHasChanged();
+    }
+
+    private async Task HandleSmartIgnoreRuleRemoved(SmartIgnoreRule rule)
+    {
+        ConfigService.RemoveSmartIgnoreRule(rule);
+        StateHasChanged();
+    }
+
+    private async Task HandleSmartIgnorePresetApplied(string presetName)
+    {
+        ConfigService.ApplySmartIgnorePreset(presetName);
+        StateHasChanged();
+    }
+
+    private async Task HandleSmartIgnoreRulesCleared()
+    {
+        ConfigService.ClearSmartIgnoreRules();
+        StateHasChanged();
     }
 
     private string GetRuleDescription(IgnoreRule rule)
