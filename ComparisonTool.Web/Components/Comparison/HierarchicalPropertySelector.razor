@@ -3,6 +3,112 @@
 @using System.Reflection
 @using BlazorBootstrap
 
+<style>
+    .ignored-properties-container {
+        margin-top: 1rem;
+    }
+
+    .ignored-properties-header {
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    .ignored-properties-header h6 {
+        color: #495057;
+        font-weight: 600;
+    }
+
+    .ignored-properties-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .ignored-property-card {
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        padding: 0.75rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: all 0.2s ease;
+    }
+
+    .ignored-property-card:hover {
+        border-color: #007bff;
+        box-shadow: 0 2px 8px rgba(0, 123, 255, 0.1);
+    }
+
+    .property-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .property-path {
+        margin-bottom: 0.5rem;
+    }
+
+    .property-path code {
+        font-size: 0.875rem;
+        color: #6f42c1;
+        background: #f8f9fa;
+        padding: 0.2rem 0.4rem;
+        border-radius: 4px;
+        word-break: break-word;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    }
+
+    .property-settings {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .property-settings .badge {
+        font-size: 0.7rem;
+        padding: 0.25rem 0.5rem;
+    }
+
+    .property-actions {
+        margin-left: 1rem;
+    }
+
+    .no-ignored-properties {
+        text-align: center;
+        padding: 2rem 1rem;
+        color: #6c757d;
+        background: #f8f9fa;
+        border-radius: 6px;
+    }
+
+    .empty-state-icon {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+    .empty-state-text {
+        font-size: 1.1rem;
+        margin-bottom: 0.5rem;
+        color: #495057;
+    }
+
+    @@media (max-width: 768px) {
+        .ignored-property-card {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        
+        .property-actions {
+            margin-left: 0;
+            margin-top: 0.75rem;
+            align-self: flex-end;
+        }
+    }
+</style>
+
 <Modal @ref="propertyModal" Title="Select Properties to Ignore" Size="ModalSize.Large">
     <BodyTemplate>
         <div class="row">
@@ -94,35 +200,60 @@
                     <h5>Currently Ignored Properties</h5>
                     @if (IgnoredProperties.Any())
                     {
-                        <table class="table table-striped">
-                            <thead>
-                                <tr>
-                                    <th>Property</th>
-                                    <th>Ignore Settings</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var rule in IgnoredProperties)
+                        <div class="ignored-properties-container">
+                            <div class="ignored-properties-header">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-shield-x me-2"></i>
+                                    Currently Ignored Properties
+                                    <span class="badge bg-secondary ms-2">@IgnoredProperties.Count</span>
+                                </h6>
+                                <small class="text-muted">Properties that will be excluded from comparison</small>
+                            </div>
+                            
+                            <div class="ignored-properties-list">
+                                @foreach (var rule in IgnoredProperties.OrderBy(r => r.PropertyPath))
                                 {
-                                    <tr>
-                                        <td>@rule.PropertyPath</td>
-                                        <td>@GetIgnoreRuleDescription(rule)</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-danger"
-                                                    @onclick="() => RemoveIgnoredProperty(rule.PropertyPath)">
+                                    <div class="ignored-property-card">
+                                        <div class="property-info">
+                                            <div class="property-path">
+                                                <i class="bi bi-diagram-3 me-2 text-primary"></i>
+                                                <code>@rule.PropertyPath</code>
+                                            </div>
+                                            <div class="property-settings">
+                                                @if (rule.IgnoreCompletely)
+                                                {
+                                                    <span class="badge bg-danger">
+                                                        <i class="bi bi-eye-slash me-1"></i>Ignore Completely
+                                                    </span>
+                                                }
+                                                @if (rule.IgnoreCollectionOrder)
+                                                {
+                                                    <span class="badge bg-warning">
+                                                        <i class="bi bi-arrow-down-up me-1"></i>Ignore Order
+                                                    </span>
+                                                }
+                                            </div>
+                                        </div>
+                                        <div class="property-actions">
+                                            <button class="btn btn-sm btn-outline-danger" 
+                                                    @onclick="() => RemoveIgnoredProperty(rule.PropertyPath)"
+                                                    title="Remove ignore rule">
                                                 <i class="bi bi-trash"></i>
                                             </button>
-                                        </td>
-                                    </tr>
+                                        </div>
+                                    </div>
                                 }
-                            </tbody>
-                        </table>
+                            </div>
+                        </div>
                     }
                     else
                     {
-                        <div class="alert alert-secondary">
-                            No properties are currently being ignored.
+                        <div class="no-ignored-properties">
+                            <div class="empty-state-icon">
+                                <i class="bi bi-shield-check"></i>
+                            </div>
+                            <p class="empty-state-text">No properties are currently being ignored</p>
+                            <small class="text-muted">Select properties from the tree above to add ignore rules</small>
                         </div>
                     }
                 </div>

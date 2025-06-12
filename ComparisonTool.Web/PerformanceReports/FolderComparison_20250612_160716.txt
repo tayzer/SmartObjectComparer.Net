@@ -1,0 +1,7108 @@
+SYSTEM PERFORMANCE REPORT
+=========================
+
+Operation: CompareXmlFilesAsync
+  Calls:       1000
+  Total Time:  381170ms
+  Average:     381.17ms
+  Median:      214.50ms
+  Min/Max:     87ms / 7459ms
+
+Operation: Compare_Objects
+  Calls:       1000
+  Total Time:  192064ms
+  Average:     192.06ms
+  Median:      88.00ms
+  Min/Max:     9ms / 6745ms
+
+Operation: Apply_Config_Settings
+  Calls:       1000
+  Total Time:  132728ms
+  Average:     132.73ms
+  Median:      77.00ms
+  Min/Max:     18ms / 1915ms
+
+Operation: Parallel_Comparison
+  Calls:       1
+  Total Time:  12610ms
+  Average:     12610.00ms
+  Median:      12610.00ms
+  Min/Max:     12610ms / 12610ms
+
+Operation: Compare_File_6
+  Calls:       1
+  Total Time:  7529ms
+  Average:     7529.00ms
+  Median:      7529.00ms
+  Min/Max:     7529ms / 7529ms
+
+Operation: Compare_File_77
+  Calls:       1
+  Total Time:  7457ms
+  Average:     7457.00ms
+  Median:      7457.00ms
+  Min/Max:     7457ms / 7457ms
+
+Operation: Compare_File_16
+  Calls:       1
+  Total Time:  7176ms
+  Average:     7176.00ms
+  Median:      7176.00ms
+  Min/Max:     7176ms / 7176ms
+
+Operation: Compare_File_3
+  Calls:       1
+  Total Time:  5917ms
+  Average:     5917.00ms
+  Median:      5917.00ms
+  Min/Max:     5917ms / 5917ms
+
+Operation: Compare_File_12
+  Calls:       1
+  Total Time:  4620ms
+  Average:     4620.00ms
+  Median:      4620.00ms
+  Min/Max:     4620ms / 4620ms
+
+Operation: Compare_File_573
+  Calls:       1
+  Total Time:  4522ms
+  Average:     4522.00ms
+  Median:      4522.00ms
+  Min/Max:     4522ms / 4522ms
+
+Operation: Compare_File_0
+  Calls:       1
+  Total Time:  4477ms
+  Average:     4477.00ms
+  Median:      4477.00ms
+  Min/Max:     4477ms / 4477ms
+
+Operation: Compare_File_26
+  Calls:       1
+  Total Time:  3754ms
+  Average:     3754.00ms
+  Median:      3754.00ms
+  Min/Max:     3754ms / 3754ms
+
+Operation: Compare_File_650
+  Calls:       1
+  Total Time:  2979ms
+  Average:     2979.00ms
+  Median:      2979.00ms
+  Min/Max:     2979ms / 2979ms
+
+Operation: Compare_File_69
+  Calls:       1
+  Total Time:  2889ms
+  Average:     2889.00ms
+  Median:      2889.00ms
+  Min/Max:     2889ms / 2889ms
+
+Operation: Compare_File_579
+  Calls:       1
+  Total Time:  2674ms
+  Average:     2674.00ms
+  Median:      2674.00ms
+  Min/Max:     2674ms / 2674ms
+
+Operation: Compare_File_48
+  Calls:       1
+  Total Time:  2476ms
+  Average:     2476.00ms
+  Median:      2476.00ms
+  Min/Max:     2476ms / 2476ms
+
+Operation: Compare_File_761
+  Calls:       1
+  Total Time:  2460ms
+  Average:     2460.00ms
+  Median:      2460.00ms
+  Min/Max:     2460ms / 2460ms
+
+Operation: Compare_File_610
+  Calls:       1
+  Total Time:  2379ms
+  Average:     2379.00ms
+  Median:      2379.00ms
+  Min/Max:     2379ms / 2379ms
+
+Operation: Compare_File_738
+  Calls:       1
+  Total Time:  2334ms
+  Average:     2334.00ms
+  Median:      2334.00ms
+  Min/Max:     2334ms / 2334ms
+
+Operation: Compare_File_368
+  Calls:       1
+  Total Time:  2282ms
+  Average:     2282.00ms
+  Median:      2282.00ms
+  Min/Max:     2282ms / 2282ms
+
+Operation: Compare_File_810
+  Calls:       1
+  Total Time:  2279ms
+  Average:     2279.00ms
+  Median:      2279.00ms
+  Min/Max:     2279ms / 2279ms
+
+Operation: Compare_File_510
+  Calls:       1
+  Total Time:  2188ms
+  Average:     2188.00ms
+  Median:      2188.00ms
+  Min/Max:     2188ms / 2188ms
+
+Operation: Compare_File_51
+  Calls:       1
+  Total Time:  2154ms
+  Average:     2154.00ms
+  Median:      2154.00ms
+  Min/Max:     2154ms / 2154ms
+
+Operation: Compare_File_10
+  Calls:       1
+  Total Time:  2089ms
+  Average:     2089.00ms
+  Median:      2089.00ms
+  Min/Max:     2089ms / 2089ms
+
+Operation: Compare_File_475
+  Calls:       1
+  Total Time:  2054ms
+  Average:     2054.00ms
+  Median:      2054.00ms
+  Min/Max:     2054ms / 2054ms
+
+Operation: Compare_File_726
+  Calls:       1
+  Total Time:  2029ms
+  Average:     2029.00ms
+  Median:      2029.00ms
+  Min/Max:     2029ms / 2029ms
+
+Operation: Compare_File_523
+  Calls:       1
+  Total Time:  1981ms
+  Average:     1981.00ms
+  Median:      1981.00ms
+  Min/Max:     1981ms / 1981ms
+
+Operation: Compare_File_576
+  Calls:       1
+  Total Time:  1969ms
+  Average:     1969.00ms
+  Median:      1969.00ms
+  Min/Max:     1969ms / 1969ms
+
+Operation: Compare_File_494
+  Calls:       1
+  Total Time:  1922ms
+  Average:     1922.00ms
+  Median:      1922.00ms
+  Min/Max:     1922ms / 1922ms
+
+Operation: Deserialize_Old_SoapEnvelope
+  Calls:       1000
+  Total Time:  1920ms
+  Average:     1.92ms
+  Median:      0.00ms
+  Min/Max:     0ms / 135ms
+
+Operation: Compare_File_345
+  Calls:       1
+  Total Time:  1773ms
+  Average:     1773.00ms
+  Median:      1773.00ms
+  Min/Max:     1773ms / 1773ms
+
+Operation: Compare_File_295
+  Calls:       1
+  Total Time:  1705ms
+  Average:     1705.00ms
+  Median:      1705.00ms
+  Min/Max:     1705ms / 1705ms
+
+Operation: Compare_File_365
+  Calls:       1
+  Total Time:  1700ms
+  Average:     1700.00ms
+  Median:      1700.00ms
+  Min/Max:     1700ms / 1700ms
+
+Operation: Compare_File_865
+  Calls:       1
+  Total Time:  1640ms
+  Average:     1640.00ms
+  Median:      1640.00ms
+  Min/Max:     1640ms / 1640ms
+
+Operation: Compare_File_46
+  Calls:       1
+  Total Time:  1622ms
+  Average:     1622.00ms
+  Median:      1622.00ms
+  Min/Max:     1622ms / 1622ms
+
+Operation: Compare_File_85
+  Calls:       1
+  Total Time:  1573ms
+  Average:     1573.00ms
+  Median:      1573.00ms
+  Min/Max:     1573ms / 1573ms
+
+Operation: Compare_File_469
+  Calls:       1
+  Total Time:  1518ms
+  Average:     1518.00ms
+  Median:      1518.00ms
+  Min/Max:     1518ms / 1518ms
+
+Operation: Compare_File_815
+  Calls:       1
+  Total Time:  1499ms
+  Average:     1499.00ms
+  Median:      1499.00ms
+  Min/Max:     1499ms / 1499ms
+
+Operation: Compare_File_39
+  Calls:       1
+  Total Time:  1467ms
+  Average:     1467.00ms
+  Median:      1467.00ms
+  Min/Max:     1467ms / 1467ms
+
+Operation: Compare_File_853
+  Calls:       1
+  Total Time:  1420ms
+  Average:     1420.00ms
+  Median:      1420.00ms
+  Min/Max:     1420ms / 1420ms
+
+Operation: Compare_File_706
+  Calls:       1
+  Total Time:  1377ms
+  Average:     1377.00ms
+  Median:      1377.00ms
+  Min/Max:     1377ms / 1377ms
+
+Operation: Compare_File_234
+  Calls:       1
+  Total Time:  1375ms
+  Average:     1375.00ms
+  Median:      1375.00ms
+  Min/Max:     1375ms / 1375ms
+
+Operation: Compare_File_45
+  Calls:       1
+  Total Time:  1364ms
+  Average:     1364.00ms
+  Median:      1364.00ms
+  Min/Max:     1364ms / 1364ms
+
+Operation: Compare_File_408
+  Calls:       1
+  Total Time:  1329ms
+  Average:     1329.00ms
+  Median:      1329.00ms
+  Min/Max:     1329ms / 1329ms
+
+Operation: Compare_File_28
+  Calls:       1
+  Total Time:  1327ms
+  Average:     1327.00ms
+  Median:      1327.00ms
+  Min/Max:     1327ms / 1327ms
+
+Operation: Compare_File_385
+  Calls:       1
+  Total Time:  1319ms
+  Average:     1319.00ms
+  Median:      1319.00ms
+  Min/Max:     1319ms / 1319ms
+
+Operation: Compare_File_324
+  Calls:       1
+  Total Time:  1296ms
+  Average:     1296.00ms
+  Median:      1296.00ms
+  Min/Max:     1296ms / 1296ms
+
+Operation: Compare_File_443
+  Calls:       1
+  Total Time:  1276ms
+  Average:     1276.00ms
+  Median:      1276.00ms
+  Min/Max:     1276ms / 1276ms
+
+Operation: Compare_File_543
+  Calls:       1
+  Total Time:  1265ms
+  Average:     1265.00ms
+  Median:      1265.00ms
+  Min/Max:     1265ms / 1265ms
+
+Operation: Compare_File_856
+  Calls:       1
+  Total Time:  1209ms
+  Average:     1209.00ms
+  Median:      1209.00ms
+  Min/Max:     1209ms / 1209ms
+
+Operation: Compare_File_27
+  Calls:       1
+  Total Time:  1200ms
+  Average:     1200.00ms
+  Median:      1200.00ms
+  Min/Max:     1200ms / 1200ms
+
+Operation: Compare_File_40
+  Calls:       1
+  Total Time:  1198ms
+  Average:     1198.00ms
+  Median:      1198.00ms
+  Min/Max:     1198ms / 1198ms
+
+Operation: Compare_File_779
+  Calls:       1
+  Total Time:  1191ms
+  Average:     1191.00ms
+  Median:      1191.00ms
+  Min/Max:     1191ms / 1191ms
+
+Operation: Compare_File_216
+  Calls:       1
+  Total Time:  1190ms
+  Average:     1190.00ms
+  Median:      1190.00ms
+  Min/Max:     1190ms / 1190ms
+
+Operation: Compare_File_838
+  Calls:       1
+  Total Time:  1168ms
+  Average:     1168.00ms
+  Median:      1168.00ms
+  Min/Max:     1168ms / 1168ms
+
+Operation: Compare_File_900
+  Calls:       1
+  Total Time:  1158ms
+  Average:     1158.00ms
+  Median:      1158.00ms
+  Min/Max:     1158ms / 1158ms
+
+Operation: Compare_File_612
+  Calls:       1
+  Total Time:  1157ms
+  Average:     1157.00ms
+  Median:      1157.00ms
+  Min/Max:     1157ms / 1157ms
+
+Operation: Compare_File_663
+  Calls:       1
+  Total Time:  1134ms
+  Average:     1134.00ms
+  Median:      1134.00ms
+  Min/Max:     1134ms / 1134ms
+
+Operation: Compare_File_205
+  Calls:       1
+  Total Time:  1102ms
+  Average:     1102.00ms
+  Median:      1102.00ms
+  Min/Max:     1102ms / 1102ms
+
+Operation: Compare_File_427
+  Calls:       1
+  Total Time:  1077ms
+  Average:     1077.00ms
+  Median:      1077.00ms
+  Min/Max:     1077ms / 1077ms
+
+Operation: Compare_File_41
+  Calls:       1
+  Total Time:  1073ms
+  Average:     1073.00ms
+  Median:      1073.00ms
+  Min/Max:     1073ms / 1073ms
+
+Operation: Compare_File_825
+  Calls:       1
+  Total Time:  1057ms
+  Average:     1057.00ms
+  Median:      1057.00ms
+  Min/Max:     1057ms / 1057ms
+
+Operation: Compare_File_24
+  Calls:       1
+  Total Time:  1047ms
+  Average:     1047.00ms
+  Median:      1047.00ms
+  Min/Max:     1047ms / 1047ms
+
+Operation: Compare_File_519
+  Calls:       1
+  Total Time:  1033ms
+  Average:     1033.00ms
+  Median:      1033.00ms
+  Min/Max:     1033ms / 1033ms
+
+Operation: Compare_File_294
+  Calls:       1
+  Total Time:  1019ms
+  Average:     1019.00ms
+  Median:      1019.00ms
+  Min/Max:     1019ms / 1019ms
+
+Operation: Compare_File_229
+  Calls:       1
+  Total Time:  969ms
+  Average:     969.00ms
+  Median:      969.00ms
+  Min/Max:     969ms / 969ms
+
+Operation: Compare_File_312
+  Calls:       1
+  Total Time:  931ms
+  Average:     931.00ms
+  Median:      931.00ms
+  Min/Max:     931ms / 931ms
+
+Operation: Compare_File_509
+  Calls:       1
+  Total Time:  926ms
+  Average:     926.00ms
+  Median:      926.00ms
+  Min/Max:     926ms / 926ms
+
+Operation: Compare_File_242
+  Calls:       1
+  Total Time:  905ms
+  Average:     905.00ms
+  Median:      905.00ms
+  Min/Max:     905ms / 905ms
+
+Operation: Compare_File_399
+  Calls:       1
+  Total Time:  899ms
+  Average:     899.00ms
+  Median:      899.00ms
+  Min/Max:     899ms / 899ms
+
+Operation: Compare_File_210
+  Calls:       1
+  Total Time:  898ms
+  Average:     898.00ms
+  Median:      898.00ms
+  Min/Max:     898ms / 898ms
+
+Operation: Compare_File_701
+  Calls:       1
+  Total Time:  892ms
+  Average:     892.00ms
+  Median:      892.00ms
+  Min/Max:     892ms / 892ms
+
+Operation: Compare_File_22
+  Calls:       1
+  Total Time:  886ms
+  Average:     886.00ms
+  Median:      886.00ms
+  Min/Max:     886ms / 886ms
+
+Operation: Compare_File_387
+  Calls:       1
+  Total Time:  883ms
+  Average:     883.00ms
+  Median:      883.00ms
+  Min/Max:     883ms / 883ms
+
+Operation: Compare_File_327
+  Calls:       1
+  Total Time:  879ms
+  Average:     879.00ms
+  Median:      879.00ms
+  Min/Max:     879ms / 879ms
+
+Operation: Compare_File_546
+  Calls:       1
+  Total Time:  877ms
+  Average:     877.00ms
+  Median:      877.00ms
+  Min/Max:     877ms / 877ms
+
+Operation: Compare_File_937
+  Calls:       1
+  Total Time:  856ms
+  Average:     856.00ms
+  Median:      856.00ms
+  Min/Max:     856ms / 856ms
+
+Operation: Compare_File_223
+  Calls:       1
+  Total Time:  853ms
+  Average:     853.00ms
+  Median:      853.00ms
+  Min/Max:     853ms / 853ms
+
+Operation: Compare_File_725
+  Calls:       1
+  Total Time:  845ms
+  Average:     845.00ms
+  Median:      845.00ms
+  Min/Max:     845ms / 845ms
+
+Operation: Compare_File_21
+  Calls:       1
+  Total Time:  842ms
+  Average:     842.00ms
+  Median:      842.00ms
+  Min/Max:     842ms / 842ms
+
+Operation: Compare_File_481
+  Calls:       1
+  Total Time:  836ms
+  Average:     836.00ms
+  Median:      836.00ms
+  Min/Max:     836ms / 836ms
+
+Operation: Compare_File_739
+  Calls:       1
+  Total Time:  823ms
+  Average:     823.00ms
+  Median:      823.00ms
+  Min/Max:     823ms / 823ms
+
+Operation: Compare_File_487
+  Calls:       1
+  Total Time:  808ms
+  Average:     808.00ms
+  Median:      808.00ms
+  Min/Max:     808ms / 808ms
+
+Operation: Compare_File_649
+  Calls:       1
+  Total Time:  803ms
+  Average:     803.00ms
+  Median:      803.00ms
+  Min/Max:     803ms / 803ms
+
+Operation: Compare_File_694
+  Calls:       1
+  Total Time:  794ms
+  Average:     794.00ms
+  Median:      794.00ms
+  Min/Max:     794ms / 794ms
+
+Operation: Compare_File_756
+  Calls:       1
+  Total Time:  788ms
+  Average:     788.00ms
+  Median:      788.00ms
+  Min/Max:     788ms / 788ms
+
+Operation: Compare_File_442
+  Calls:       1
+  Total Time:  785ms
+  Average:     785.00ms
+  Median:      785.00ms
+  Min/Max:     785ms / 785ms
+
+Operation: Compare_File_784
+  Calls:       1
+  Total Time:  784ms
+  Average:     784.00ms
+  Median:      784.00ms
+  Min/Max:     784ms / 784ms
+
+Operation: Compare_File_23
+  Calls:       1
+  Total Time:  784ms
+  Average:     784.00ms
+  Median:      784.00ms
+  Min/Max:     784ms / 784ms
+
+Operation: Compare_File_916
+  Calls:       1
+  Total Time:  778ms
+  Average:     778.00ms
+  Median:      778.00ms
+  Min/Max:     778ms / 778ms
+
+Operation: Compare_File_315
+  Calls:       1
+  Total Time:  775ms
+  Average:     775.00ms
+  Median:      775.00ms
+  Min/Max:     775ms / 775ms
+
+Operation: Compare_File_426
+  Calls:       1
+  Total Time:  774ms
+  Average:     774.00ms
+  Median:      774.00ms
+  Min/Max:     774ms / 774ms
+
+Operation: Compare_File_919
+  Calls:       1
+  Total Time:  772ms
+  Average:     772.00ms
+  Median:      772.00ms
+  Min/Max:     772ms / 772ms
+
+Operation: Compare_File_302
+  Calls:       1
+  Total Time:  772ms
+  Average:     772.00ms
+  Median:      772.00ms
+  Min/Max:     772ms / 772ms
+
+Operation: Compare_File_942
+  Calls:       1
+  Total Time:  769ms
+  Average:     769.00ms
+  Median:      769.00ms
+  Min/Max:     769ms / 769ms
+
+Operation: Compare_File_557
+  Calls:       1
+  Total Time:  766ms
+  Average:     766.00ms
+  Median:      766.00ms
+  Min/Max:     766ms / 766ms
+
+Operation: Compare_File_774
+  Calls:       1
+  Total Time:  760ms
+  Average:     760.00ms
+  Median:      760.00ms
+  Min/Max:     760ms / 760ms
+
+Operation: Compare_File_31
+  Calls:       1
+  Total Time:  751ms
+  Average:     751.00ms
+  Median:      751.00ms
+  Min/Max:     751ms / 751ms
+
+Operation: Compare_File_618
+  Calls:       1
+  Total Time:  746ms
+  Average:     746.00ms
+  Median:      746.00ms
+  Min/Max:     746ms / 746ms
+
+Operation: Compare_File_707
+  Calls:       1
+  Total Time:  746ms
+  Average:     746.00ms
+  Median:      746.00ms
+  Min/Max:     746ms / 746ms
+
+Operation: Compare_File_17
+  Calls:       1
+  Total Time:  734ms
+  Average:     734.00ms
+  Median:      734.00ms
+  Min/Max:     734ms / 734ms
+
+Operation: Compare_File_165
+  Calls:       1
+  Total Time:  711ms
+  Average:     711.00ms
+  Median:      711.00ms
+  Min/Max:     711ms / 711ms
+
+Operation: Compare_File_811
+  Calls:       1
+  Total Time:  710ms
+  Average:     710.00ms
+  Median:      710.00ms
+  Min/Max:     710ms / 710ms
+
+Operation: Compare_File_633
+  Calls:       1
+  Total Time:  705ms
+  Average:     705.00ms
+  Median:      705.00ms
+  Min/Max:     705ms / 705ms
+
+Operation: Compare_File_920
+  Calls:       1
+  Total Time:  703ms
+  Average:     703.00ms
+  Median:      703.00ms
+  Min/Max:     703ms / 703ms
+
+Operation: Compare_File_375
+  Calls:       1
+  Total Time:  703ms
+  Average:     703.00ms
+  Median:      703.00ms
+  Min/Max:     703ms / 703ms
+
+Operation: Compare_File_917
+  Calls:       1
+  Total Time:  696ms
+  Average:     696.00ms
+  Median:      696.00ms
+  Min/Max:     696ms / 696ms
+
+Operation: Compare_File_136
+  Calls:       1
+  Total Time:  692ms
+  Average:     692.00ms
+  Median:      692.00ms
+  Min/Max:     692ms / 692ms
+
+Operation: Compare_File_832
+  Calls:       1
+  Total Time:  691ms
+  Average:     691.00ms
+  Median:      691.00ms
+  Min/Max:     691ms / 691ms
+
+Operation: Compare_File_858
+  Calls:       1
+  Total Time:  690ms
+  Average:     690.00ms
+  Median:      690.00ms
+  Min/Max:     690ms / 690ms
+
+Operation: Compare_File_263
+  Calls:       1
+  Total Time:  672ms
+  Average:     672.00ms
+  Median:      672.00ms
+  Min/Max:     672ms / 672ms
+
+Operation: Compare_File_19
+  Calls:       1
+  Total Time:  671ms
+  Average:     671.00ms
+  Median:      671.00ms
+  Min/Max:     671ms / 671ms
+
+Operation: Compare_File_767
+  Calls:       1
+  Total Time:  664ms
+  Average:     664.00ms
+  Median:      664.00ms
+  Min/Max:     664ms / 664ms
+
+Operation: Compare_File_338
+  Calls:       1
+  Total Time:  662ms
+  Average:     662.00ms
+  Median:      662.00ms
+  Min/Max:     662ms / 662ms
+
+Operation: Compare_File_30
+  Calls:       1
+  Total Time:  654ms
+  Average:     654.00ms
+  Median:      654.00ms
+  Min/Max:     654ms / 654ms
+
+Operation: Compare_File_20
+  Calls:       1
+  Total Time:  653ms
+  Average:     653.00ms
+  Median:      653.00ms
+  Min/Max:     653ms / 653ms
+
+Operation: Compare_File_352
+  Calls:       1
+  Total Time:  648ms
+  Average:     648.00ms
+  Median:      648.00ms
+  Min/Max:     648ms / 648ms
+
+Operation: Compare_File_29
+  Calls:       1
+  Total Time:  636ms
+  Average:     636.00ms
+  Median:      636.00ms
+  Min/Max:     636ms / 636ms
+
+Operation: Compare_File_358
+  Calls:       1
+  Total Time:  633ms
+  Average:     633.00ms
+  Median:      633.00ms
+  Min/Max:     633ms / 633ms
+
+Operation: Compare_File_547
+  Calls:       1
+  Total Time:  629ms
+  Average:     629.00ms
+  Median:      629.00ms
+  Min/Max:     629ms / 629ms
+
+Operation: Compare_File_264
+  Calls:       1
+  Total Time:  629ms
+  Average:     629.00ms
+  Median:      629.00ms
+  Min/Max:     629ms / 629ms
+
+Operation: Compare_File_595
+  Calls:       1
+  Total Time:  629ms
+  Average:     629.00ms
+  Median:      629.00ms
+  Min/Max:     629ms / 629ms
+
+Operation: Compare_File_404
+  Calls:       1
+  Total Time:  629ms
+  Average:     629.00ms
+  Median:      629.00ms
+  Min/Max:     629ms / 629ms
+
+Operation: Compare_File_293
+  Calls:       1
+  Total Time:  628ms
+  Average:     628.00ms
+  Median:      628.00ms
+  Min/Max:     628ms / 628ms
+
+Operation: Compare_File_191
+  Calls:       1
+  Total Time:  627ms
+  Average:     627.00ms
+  Median:      627.00ms
+  Min/Max:     627ms / 627ms
+
+Operation: Compare_File_504
+  Calls:       1
+  Total Time:  620ms
+  Average:     620.00ms
+  Median:      620.00ms
+  Min/Max:     620ms / 620ms
+
+Operation: Compare_File_177
+  Calls:       1
+  Total Time:  618ms
+  Average:     618.00ms
+  Median:      618.00ms
+  Min/Max:     618ms / 618ms
+
+Operation: Compare_File_354
+  Calls:       1
+  Total Time:  610ms
+  Average:     610.00ms
+  Median:      610.00ms
+  Min/Max:     610ms / 610ms
+
+Operation: Compare_File_25
+  Calls:       1
+  Total Time:  608ms
+  Average:     608.00ms
+  Median:      608.00ms
+  Min/Max:     608ms / 608ms
+
+Operation: Compare_File_957
+  Calls:       1
+  Total Time:  608ms
+  Average:     608.00ms
+  Median:      608.00ms
+  Min/Max:     608ms / 608ms
+
+Operation: Compare_File_565
+  Calls:       1
+  Total Time:  601ms
+  Average:     601.00ms
+  Median:      601.00ms
+  Min/Max:     601ms / 601ms
+
+Operation: Compare_File_158
+  Calls:       1
+  Total Time:  601ms
+  Average:     601.00ms
+  Median:      601.00ms
+  Min/Max:     601ms / 601ms
+
+Operation: Compare_File_458
+  Calls:       1
+  Total Time:  596ms
+  Average:     596.00ms
+  Median:      596.00ms
+  Min/Max:     596ms / 596ms
+
+Operation: Compare_File_202
+  Calls:       1
+  Total Time:  594ms
+  Average:     594.00ms
+  Median:      594.00ms
+  Min/Max:     594ms / 594ms
+
+Operation: Compare_File_577
+  Calls:       1
+  Total Time:  591ms
+  Average:     591.00ms
+  Median:      591.00ms
+  Min/Max:     591ms / 591ms
+
+Operation: Compare_File_18
+  Calls:       1
+  Total Time:  578ms
+  Average:     578.00ms
+  Median:      578.00ms
+  Min/Max:     578ms / 578ms
+
+Operation: Compare_File_364
+  Calls:       1
+  Total Time:  574ms
+  Average:     574.00ms
+  Median:      574.00ms
+  Min/Max:     574ms / 574ms
+
+Operation: Compare_File_306
+  Calls:       1
+  Total Time:  570ms
+  Average:     570.00ms
+  Median:      570.00ms
+  Min/Max:     570ms / 570ms
+
+Operation: Compare_File_15
+  Calls:       1
+  Total Time:  569ms
+  Average:     569.00ms
+  Median:      569.00ms
+  Min/Max:     569ms / 569ms
+
+Operation: Compare_File_14
+  Calls:       1
+  Total Time:  562ms
+  Average:     562.00ms
+  Median:      562.00ms
+  Min/Max:     562ms / 562ms
+
+Operation: Compare_File_262
+  Calls:       1
+  Total Time:  559ms
+  Average:     559.00ms
+  Median:      559.00ms
+  Min/Max:     559ms / 559ms
+
+Operation: Compare_File_798
+  Calls:       1
+  Total Time:  559ms
+  Average:     559.00ms
+  Median:      559.00ms
+  Min/Max:     559ms / 559ms
+
+Operation: Compare_File_144
+  Calls:       1
+  Total Time:  553ms
+  Average:     553.00ms
+  Median:      553.00ms
+  Min/Max:     553ms / 553ms
+
+Operation: Compare_File_586
+  Calls:       1
+  Total Time:  553ms
+  Average:     553.00ms
+  Median:      553.00ms
+  Min/Max:     553ms / 553ms
+
+Operation: Compare_File_343
+  Calls:       1
+  Total Time:  549ms
+  Average:     549.00ms
+  Median:      549.00ms
+  Min/Max:     549ms / 549ms
+
+Operation: Compare_File_13
+  Calls:       1
+  Total Time:  543ms
+  Average:     543.00ms
+  Median:      543.00ms
+  Min/Max:     543ms / 543ms
+
+Operation: Compare_File_480
+  Calls:       1
+  Total Time:  543ms
+  Average:     543.00ms
+  Median:      543.00ms
+  Min/Max:     543ms / 543ms
+
+Operation: Compare_File_893
+  Calls:       1
+  Total Time:  543ms
+  Average:     543.00ms
+  Median:      543.00ms
+  Min/Max:     543ms / 543ms
+
+Operation: Compare_File_287
+  Calls:       1
+  Total Time:  542ms
+  Average:     542.00ms
+  Median:      542.00ms
+  Min/Max:     542ms / 542ms
+
+Operation: Compare_File_11
+  Calls:       1
+  Total Time:  542ms
+  Average:     542.00ms
+  Median:      542.00ms
+  Min/Max:     542ms / 542ms
+
+Operation: Compare_File_687
+  Calls:       1
+  Total Time:  539ms
+  Average:     539.00ms
+  Median:      539.00ms
+  Min/Max:     539ms / 539ms
+
+Operation: Compare_File_393
+  Calls:       1
+  Total Time:  536ms
+  Average:     536.00ms
+  Median:      536.00ms
+  Min/Max:     536ms / 536ms
+
+Operation: Compare_File_266
+  Calls:       1
+  Total Time:  536ms
+  Average:     536.00ms
+  Median:      536.00ms
+  Min/Max:     536ms / 536ms
+
+Operation: Compare_File_688
+  Calls:       1
+  Total Time:  535ms
+  Average:     535.00ms
+  Median:      535.00ms
+  Min/Max:     535ms / 535ms
+
+Operation: Compare_File_631
+  Calls:       1
+  Total Time:  532ms
+  Average:     532.00ms
+  Median:      532.00ms
+  Min/Max:     532ms / 532ms
+
+Operation: Compare_File_710
+  Calls:       1
+  Total Time:  531ms
+  Average:     531.00ms
+  Median:      531.00ms
+  Min/Max:     531ms / 531ms
+
+Operation: Compare_File_941
+  Calls:       1
+  Total Time:  527ms
+  Average:     527.00ms
+  Median:      527.00ms
+  Min/Max:     527ms / 527ms
+
+Operation: Compare_File_314
+  Calls:       1
+  Total Time:  527ms
+  Average:     527.00ms
+  Median:      527.00ms
+  Min/Max:     527ms / 527ms
+
+Operation: Compare_File_414
+  Calls:       1
+  Total Time:  522ms
+  Average:     522.00ms
+  Median:      522.00ms
+  Min/Max:     522ms / 522ms
+
+Operation: Compare_File_970
+  Calls:       1
+  Total Time:  522ms
+  Average:     522.00ms
+  Median:      522.00ms
+  Min/Max:     522ms / 522ms
+
+Operation: Compare_File_847
+  Calls:       1
+  Total Time:  521ms
+  Average:     521.00ms
+  Median:      521.00ms
+  Min/Max:     521ms / 521ms
+
+Operation: Compare_File_484
+  Calls:       1
+  Total Time:  516ms
+  Average:     516.00ms
+  Median:      516.00ms
+  Min/Max:     516ms / 516ms
+
+Operation: Compare_File_954
+  Calls:       1
+  Total Time:  515ms
+  Average:     515.00ms
+  Median:      515.00ms
+  Min/Max:     515ms / 515ms
+
+Operation: Compare_File_626
+  Calls:       1
+  Total Time:  513ms
+  Average:     513.00ms
+  Median:      513.00ms
+  Min/Max:     513ms / 513ms
+
+Operation: Compare_File_9
+  Calls:       1
+  Total Time:  513ms
+  Average:     513.00ms
+  Median:      513.00ms
+  Min/Max:     513ms / 513ms
+
+Operation: Compare_File_763
+  Calls:       1
+  Total Time:  511ms
+  Average:     511.00ms
+  Median:      511.00ms
+  Min/Max:     511ms / 511ms
+
+Operation: Compare_File_456
+  Calls:       1
+  Total Time:  509ms
+  Average:     509.00ms
+  Median:      509.00ms
+  Min/Max:     509ms / 509ms
+
+Operation: Compare_File_175
+  Calls:       1
+  Total Time:  507ms
+  Average:     507.00ms
+  Median:      507.00ms
+  Min/Max:     507ms / 507ms
+
+Operation: Compare_File_782
+  Calls:       1
+  Total Time:  506ms
+  Average:     506.00ms
+  Median:      506.00ms
+  Min/Max:     506ms / 506ms
+
+Operation: Compare_File_607
+  Calls:       1
+  Total Time:  506ms
+  Average:     506.00ms
+  Median:      506.00ms
+  Min/Max:     506ms / 506ms
+
+Operation: Compare_File_84
+  Calls:       1
+  Total Time:  506ms
+  Average:     506.00ms
+  Median:      506.00ms
+  Min/Max:     506ms / 506ms
+
+Operation: Compare_File_963
+  Calls:       1
+  Total Time:  505ms
+  Average:     505.00ms
+  Median:      505.00ms
+  Min/Max:     505ms / 505ms
+
+Operation: Compare_File_827
+  Calls:       1
+  Total Time:  503ms
+  Average:     503.00ms
+  Median:      503.00ms
+  Min/Max:     503ms / 503ms
+
+Operation: Compare_File_530
+  Calls:       1
+  Total Time:  500ms
+  Average:     500.00ms
+  Median:      500.00ms
+  Min/Max:     500ms / 500ms
+
+Operation: Compare_File_5
+  Calls:       1
+  Total Time:  498ms
+  Average:     498.00ms
+  Median:      498.00ms
+  Min/Max:     498ms / 498ms
+
+Operation: Compare_File_1
+  Calls:       1
+  Total Time:  498ms
+  Average:     498.00ms
+  Median:      498.00ms
+  Min/Max:     498ms / 498ms
+
+Operation: Compare_File_8
+  Calls:       1
+  Total Time:  498ms
+  Average:     498.00ms
+  Median:      498.00ms
+  Min/Max:     498ms / 498ms
+
+Operation: Compare_File_2
+  Calls:       1
+  Total Time:  498ms
+  Average:     498.00ms
+  Median:      498.00ms
+  Min/Max:     498ms / 498ms
+
+Operation: Compare_File_7
+  Calls:       1
+  Total Time:  498ms
+  Average:     498.00ms
+  Median:      498.00ms
+  Min/Max:     498ms / 498ms
+
+Operation: Compare_File_4
+  Calls:       1
+  Total Time:  498ms
+  Average:     498.00ms
+  Median:      498.00ms
+  Min/Max:     498ms / 498ms
+
+Operation: Compare_File_703
+  Calls:       1
+  Total Time:  495ms
+  Average:     495.00ms
+  Median:      495.00ms
+  Min/Max:     495ms / 495ms
+
+Operation: Compare_File_892
+  Calls:       1
+  Total Time:  495ms
+  Average:     495.00ms
+  Median:      495.00ms
+  Min/Max:     495ms / 495ms
+
+Operation: Compare_File_564
+  Calls:       1
+  Total Time:  486ms
+  Average:     486.00ms
+  Median:      486.00ms
+  Min/Max:     486ms / 486ms
+
+Operation: Compare_File_592
+  Calls:       1
+  Total Time:  486ms
+  Average:     486.00ms
+  Median:      486.00ms
+  Min/Max:     486ms / 486ms
+
+Operation: Compare_File_491
+  Calls:       1
+  Total Time:  485ms
+  Average:     485.00ms
+  Median:      485.00ms
+  Min/Max:     485ms / 485ms
+
+Operation: Compare_File_412
+  Calls:       1
+  Total Time:  483ms
+  Average:     483.00ms
+  Median:      483.00ms
+  Min/Max:     483ms / 483ms
+
+Operation: Compare_File_590
+  Calls:       1
+  Total Time:  483ms
+  Average:     483.00ms
+  Median:      483.00ms
+  Min/Max:     483ms / 483ms
+
+Operation: Compare_File_742
+  Calls:       1
+  Total Time:  481ms
+  Average:     481.00ms
+  Median:      481.00ms
+  Min/Max:     481ms / 481ms
+
+Operation: Compare_File_192
+  Calls:       1
+  Total Time:  479ms
+  Average:     479.00ms
+  Median:      479.00ms
+  Min/Max:     479ms / 479ms
+
+Operation: Compare_File_305
+  Calls:       1
+  Total Time:  473ms
+  Average:     473.00ms
+  Median:      473.00ms
+  Min/Max:     473ms / 473ms
+
+Operation: Compare_File_472
+  Calls:       1
+  Total Time:  473ms
+  Average:     473.00ms
+  Median:      473.00ms
+  Min/Max:     473ms / 473ms
+
+Operation: Compare_File_952
+  Calls:       1
+  Total Time:  471ms
+  Average:     471.00ms
+  Median:      471.00ms
+  Min/Max:     471ms / 471ms
+
+Operation: Compare_File_289
+  Calls:       1
+  Total Time:  469ms
+  Average:     469.00ms
+  Median:      469.00ms
+  Min/Max:     469ms / 469ms
+
+Operation: Compare_File_744
+  Calls:       1
+  Total Time:  468ms
+  Average:     468.00ms
+  Median:      468.00ms
+  Min/Max:     468ms / 468ms
+
+Operation: Compare_File_597
+  Calls:       1
+  Total Time:  465ms
+  Average:     465.00ms
+  Median:      465.00ms
+  Min/Max:     465ms / 465ms
+
+Operation: Compare_File_245
+  Calls:       1
+  Total Time:  464ms
+  Average:     464.00ms
+  Median:      464.00ms
+  Min/Max:     464ms / 464ms
+
+Operation: Compare_File_836
+  Calls:       1
+  Total Time:  464ms
+  Average:     464.00ms
+  Median:      464.00ms
+  Min/Max:     464ms / 464ms
+
+Operation: Compare_File_524
+  Calls:       1
+  Total Time:  462ms
+  Average:     462.00ms
+  Median:      462.00ms
+  Min/Max:     462ms / 462ms
+
+Operation: Compare_File_716
+  Calls:       1
+  Total Time:  461ms
+  Average:     461.00ms
+  Median:      461.00ms
+  Min/Max:     461ms / 461ms
+
+Operation: Compare_File_225
+  Calls:       1
+  Total Time:  459ms
+  Average:     459.00ms
+  Median:      459.00ms
+  Min/Max:     459ms / 459ms
+
+Operation: Compare_File_250
+  Calls:       1
+  Total Time:  457ms
+  Average:     457.00ms
+  Median:      457.00ms
+  Min/Max:     457ms / 457ms
+
+Operation: Compare_File_673
+  Calls:       1
+  Total Time:  453ms
+  Average:     453.00ms
+  Median:      453.00ms
+  Min/Max:     453ms / 453ms
+
+Operation: Compare_File_918
+  Calls:       1
+  Total Time:  449ms
+  Average:     449.00ms
+  Median:      449.00ms
+  Min/Max:     449ms / 449ms
+
+Operation: Compare_File_465
+  Calls:       1
+  Total Time:  449ms
+  Average:     449.00ms
+  Median:      449.00ms
+  Min/Max:     449ms / 449ms
+
+Operation: Compare_File_552
+  Calls:       1
+  Total Time:  441ms
+  Average:     441.00ms
+  Median:      441.00ms
+  Min/Max:     441ms / 441ms
+
+Operation: Compare_File_652
+  Calls:       1
+  Total Time:  440ms
+  Average:     440.00ms
+  Median:      440.00ms
+  Min/Max:     440ms / 440ms
+
+Operation: Compare_File_829
+  Calls:       1
+  Total Time:  440ms
+  Average:     440.00ms
+  Median:      440.00ms
+  Min/Max:     440ms / 440ms
+
+Operation: Compare_File_190
+  Calls:       1
+  Total Time:  439ms
+  Average:     439.00ms
+  Median:      439.00ms
+  Min/Max:     439ms / 439ms
+
+Operation: Compare_File_104
+  Calls:       1
+  Total Time:  438ms
+  Average:     438.00ms
+  Median:      438.00ms
+  Min/Max:     438ms / 438ms
+
+Operation: Compare_File_563
+  Calls:       1
+  Total Time:  437ms
+  Average:     437.00ms
+  Median:      437.00ms
+  Min/Max:     437ms / 437ms
+
+Operation: Compare_File_331
+  Calls:       1
+  Total Time:  436ms
+  Average:     436.00ms
+  Median:      436.00ms
+  Min/Max:     436ms / 436ms
+
+Operation: Compare_File_437
+  Calls:       1
+  Total Time:  436ms
+  Average:     436.00ms
+  Median:      436.00ms
+  Min/Max:     436ms / 436ms
+
+Operation: Compare_File_401
+  Calls:       1
+  Total Time:  432ms
+  Average:     432.00ms
+  Median:      432.00ms
+  Min/Max:     432ms / 432ms
+
+Operation: Compare_File_317
+  Calls:       1
+  Total Time:  431ms
+  Average:     431.00ms
+  Median:      431.00ms
+  Min/Max:     431ms / 431ms
+
+Operation: Compare_File_57
+  Calls:       1
+  Total Time:  428ms
+  Average:     428.00ms
+  Median:      428.00ms
+  Min/Max:     428ms / 428ms
+
+Operation: Compare_File_944
+  Calls:       1
+  Total Time:  428ms
+  Average:     428.00ms
+  Median:      428.00ms
+  Min/Max:     428ms / 428ms
+
+Operation: Compare_File_888
+  Calls:       1
+  Total Time:  426ms
+  Average:     426.00ms
+  Median:      426.00ms
+  Min/Max:     426ms / 426ms
+
+Operation: Compare_File_859
+  Calls:       1
+  Total Time:  426ms
+  Average:     426.00ms
+  Median:      426.00ms
+  Min/Max:     426ms / 426ms
+
+Operation: Compare_File_854
+  Calls:       1
+  Total Time:  425ms
+  Average:     425.00ms
+  Median:      425.00ms
+  Min/Max:     425ms / 425ms
+
+Operation: Compare_File_793
+  Calls:       1
+  Total Time:  424ms
+  Average:     424.00ms
+  Median:      424.00ms
+  Min/Max:     424ms / 424ms
+
+Operation: Compare_File_535
+  Calls:       1
+  Total Time:  424ms
+  Average:     424.00ms
+  Median:      424.00ms
+  Min/Max:     424ms / 424ms
+
+Operation: Compare_File_143
+  Calls:       1
+  Total Time:  423ms
+  Average:     423.00ms
+  Median:      423.00ms
+  Min/Max:     423ms / 423ms
+
+Operation: Compare_File_411
+  Calls:       1
+  Total Time:  423ms
+  Average:     423.00ms
+  Median:      423.00ms
+  Min/Max:     423ms / 423ms
+
+Operation: Compare_File_973
+  Calls:       1
+  Total Time:  422ms
+  Average:     422.00ms
+  Median:      422.00ms
+  Min/Max:     422ms / 422ms
+
+Operation: Compare_File_496
+  Calls:       1
+  Total Time:  422ms
+  Average:     422.00ms
+  Median:      422.00ms
+  Min/Max:     422ms / 422ms
+
+Operation: Compare_File_318
+  Calls:       1
+  Total Time:  421ms
+  Average:     421.00ms
+  Median:      421.00ms
+  Min/Max:     421ms / 421ms
+
+Operation: Compare_File_669
+  Calls:       1
+  Total Time:  421ms
+  Average:     421.00ms
+  Median:      421.00ms
+  Min/Max:     421ms / 421ms
+
+Operation: Compare_File_122
+  Calls:       1
+  Total Time:  418ms
+  Average:     418.00ms
+  Median:      418.00ms
+  Min/Max:     418ms / 418ms
+
+Operation: Compare_File_975
+  Calls:       1
+  Total Time:  418ms
+  Average:     418.00ms
+  Median:      418.00ms
+  Min/Max:     418ms / 418ms
+
+Operation: Compare_File_126
+  Calls:       1
+  Total Time:  416ms
+  Average:     416.00ms
+  Median:      416.00ms
+  Min/Max:     416ms / 416ms
+
+Operation: Compare_File_750
+  Calls:       1
+  Total Time:  415ms
+  Average:     415.00ms
+  Median:      415.00ms
+  Min/Max:     415ms / 415ms
+
+Operation: Compare_File_927
+  Calls:       1
+  Total Time:  415ms
+  Average:     415.00ms
+  Median:      415.00ms
+  Min/Max:     415ms / 415ms
+
+Operation: Compare_File_533
+  Calls:       1
+  Total Time:  415ms
+  Average:     415.00ms
+  Median:      415.00ms
+  Min/Max:     415ms / 415ms
+
+Operation: Compare_File_566
+  Calls:       1
+  Total Time:  414ms
+  Average:     414.00ms
+  Median:      414.00ms
+  Min/Max:     414ms / 414ms
+
+Operation: Compare_File_883
+  Calls:       1
+  Total Time:  413ms
+  Average:     413.00ms
+  Median:      413.00ms
+  Min/Max:     413ms / 413ms
+
+Operation: Compare_File_170
+  Calls:       1
+  Total Time:  412ms
+  Average:     412.00ms
+  Median:      412.00ms
+  Min/Max:     412ms / 412ms
+
+Operation: Compare_File_667
+  Calls:       1
+  Total Time:  410ms
+  Average:     410.00ms
+  Median:      410.00ms
+  Min/Max:     410ms / 410ms
+
+Operation: Compare_File_105
+  Calls:       1
+  Total Time:  410ms
+  Average:     410.00ms
+  Median:      410.00ms
+  Min/Max:     410ms / 410ms
+
+Operation: Compare_File_455
+  Calls:       1
+  Total Time:  407ms
+  Average:     407.00ms
+  Median:      407.00ms
+  Min/Max:     407ms / 407ms
+
+Operation: Compare_File_271
+  Calls:       1
+  Total Time:  405ms
+  Average:     405.00ms
+  Median:      405.00ms
+  Min/Max:     405ms / 405ms
+
+Operation: Compare_File_433
+  Calls:       1
+  Total Time:  404ms
+  Average:     404.00ms
+  Median:      404.00ms
+  Min/Max:     404ms / 404ms
+
+Operation: Compare_File_97
+  Calls:       1
+  Total Time:  402ms
+  Average:     402.00ms
+  Median:      402.00ms
+  Min/Max:     402ms / 402ms
+
+Operation: Compare_File_736
+  Calls:       1
+  Total Time:  400ms
+  Average:     400.00ms
+  Median:      400.00ms
+  Min/Max:     400ms / 400ms
+
+Operation: Compare_File_809
+  Calls:       1
+  Total Time:  398ms
+  Average:     398.00ms
+  Median:      398.00ms
+  Min/Max:     398ms / 398ms
+
+Operation: Compare_File_348
+  Calls:       1
+  Total Time:  397ms
+  Average:     397.00ms
+  Median:      397.00ms
+  Min/Max:     397ms / 397ms
+
+Operation: Compare_File_125
+  Calls:       1
+  Total Time:  397ms
+  Average:     397.00ms
+  Median:      397.00ms
+  Min/Max:     397ms / 397ms
+
+Operation: Compare_File_389
+  Calls:       1
+  Total Time:  396ms
+  Average:     396.00ms
+  Median:      396.00ms
+  Min/Max:     396ms / 396ms
+
+Operation: Compare_File_977
+  Calls:       1
+  Total Time:  396ms
+  Average:     396.00ms
+  Median:      396.00ms
+  Min/Max:     396ms / 396ms
+
+Operation: Compare_File_131
+  Calls:       1
+  Total Time:  395ms
+  Average:     395.00ms
+  Median:      395.00ms
+  Min/Max:     395ms / 395ms
+
+Operation: Compare_File_224
+  Calls:       1
+  Total Time:  393ms
+  Average:     393.00ms
+  Median:      393.00ms
+  Min/Max:     393ms / 393ms
+
+Operation: Compare_File_286
+  Calls:       1
+  Total Time:  386ms
+  Average:     386.00ms
+  Median:      386.00ms
+  Min/Max:     386ms / 386ms
+
+Operation: Compare_File_435
+  Calls:       1
+  Total Time:  386ms
+  Average:     386.00ms
+  Median:      386.00ms
+  Min/Max:     386ms / 386ms
+
+Operation: Compare_File_799
+  Calls:       1
+  Total Time:  384ms
+  Average:     384.00ms
+  Median:      384.00ms
+  Min/Max:     384ms / 384ms
+
+Operation: Compare_File_492
+  Calls:       1
+  Total Time:  382ms
+  Average:     382.00ms
+  Median:      382.00ms
+  Min/Max:     382ms / 382ms
+
+Operation: Compare_File_142
+  Calls:       1
+  Total Time:  382ms
+  Average:     382.00ms
+  Median:      382.00ms
+  Min/Max:     382ms / 382ms
+
+Operation: Compare_File_403
+  Calls:       1
+  Total Time:  381ms
+  Average:     381.00ms
+  Median:      381.00ms
+  Min/Max:     381ms / 381ms
+
+Operation: Compare_File_34
+  Calls:       1
+  Total Time:  381ms
+  Average:     381.00ms
+  Median:      381.00ms
+  Min/Max:     381ms / 381ms
+
+Operation: Compare_File_172
+  Calls:       1
+  Total Time:  380ms
+  Average:     380.00ms
+  Median:      380.00ms
+  Min/Max:     380ms / 380ms
+
+Operation: Compare_File_606
+  Calls:       1
+  Total Time:  376ms
+  Average:     376.00ms
+  Median:      376.00ms
+  Min/Max:     376ms / 376ms
+
+Operation: Compare_File_764
+  Calls:       1
+  Total Time:  376ms
+  Average:     376.00ms
+  Median:      376.00ms
+  Min/Max:     376ms / 376ms
+
+Operation: Compare_File_787
+  Calls:       1
+  Total Time:  375ms
+  Average:     375.00ms
+  Median:      375.00ms
+  Min/Max:     375ms / 375ms
+
+Operation: Compare_File_623
+  Calls:       1
+  Total Time:  375ms
+  Average:     375.00ms
+  Median:      375.00ms
+  Min/Max:     375ms / 375ms
+
+Operation: Compare_File_969
+  Calls:       1
+  Total Time:  374ms
+  Average:     374.00ms
+  Median:      374.00ms
+  Min/Max:     374ms / 374ms
+
+Operation: Compare_File_521
+  Calls:       1
+  Total Time:  373ms
+  Average:     373.00ms
+  Median:      373.00ms
+  Min/Max:     373ms / 373ms
+
+Operation: Compare_File_850
+  Calls:       1
+  Total Time:  372ms
+  Average:     372.00ms
+  Median:      372.00ms
+  Min/Max:     372ms / 372ms
+
+Operation: Compare_File_574
+  Calls:       1
+  Total Time:  371ms
+  Average:     371.00ms
+  Median:      371.00ms
+  Min/Max:     371ms / 371ms
+
+Operation: Compare_File_545
+  Calls:       1
+  Total Time:  371ms
+  Average:     371.00ms
+  Median:      371.00ms
+  Min/Max:     371ms / 371ms
+
+Operation: Compare_File_171
+  Calls:       1
+  Total Time:  371ms
+  Average:     371.00ms
+  Median:      371.00ms
+  Min/Max:     371ms / 371ms
+
+Operation: Compare_File_542
+  Calls:       1
+  Total Time:  370ms
+  Average:     370.00ms
+  Median:      370.00ms
+  Min/Max:     370ms / 370ms
+
+Operation: Compare_File_181
+  Calls:       1
+  Total Time:  366ms
+  Average:     366.00ms
+  Median:      366.00ms
+  Min/Max:     366ms / 366ms
+
+Operation: Compare_File_446
+  Calls:       1
+  Total Time:  365ms
+  Average:     365.00ms
+  Median:      365.00ms
+  Min/Max:     365ms / 365ms
+
+Operation: Compare_File_199
+  Calls:       1
+  Total Time:  361ms
+  Average:     361.00ms
+  Median:      361.00ms
+  Min/Max:     361ms / 361ms
+
+Operation: Compare_File_196
+  Calls:       1
+  Total Time:  360ms
+  Average:     360.00ms
+  Median:      360.00ms
+  Min/Max:     360ms / 360ms
+
+Operation: Compare_File_536
+  Calls:       1
+  Total Time:  360ms
+  Average:     360.00ms
+  Median:      360.00ms
+  Min/Max:     360ms / 360ms
+
+Operation: Compare_File_932
+  Calls:       1
+  Total Time:  359ms
+  Average:     359.00ms
+  Median:      359.00ms
+  Min/Max:     359ms / 359ms
+
+Operation: Compare_File_93
+  Calls:       1
+  Total Time:  358ms
+  Average:     358.00ms
+  Median:      358.00ms
+  Min/Max:     358ms / 358ms
+
+Operation: Compare_File_180
+  Calls:       1
+  Total Time:  357ms
+  Average:     357.00ms
+  Median:      357.00ms
+  Min/Max:     357ms / 357ms
+
+Operation: Compare_File_486
+  Calls:       1
+  Total Time:  357ms
+  Average:     357.00ms
+  Median:      357.00ms
+  Min/Max:     357ms / 357ms
+
+Operation: Compare_File_215
+  Calls:       1
+  Total Time:  356ms
+  Average:     356.00ms
+  Median:      356.00ms
+  Min/Max:     356ms / 356ms
+
+Operation: Compare_File_344
+  Calls:       1
+  Total Time:  356ms
+  Average:     356.00ms
+  Median:      356.00ms
+  Min/Max:     356ms / 356ms
+
+Operation: Compare_File_922
+  Calls:       1
+  Total Time:  354ms
+  Average:     354.00ms
+  Median:      354.00ms
+  Min/Max:     354ms / 354ms
+
+Operation: Compare_File_451
+  Calls:       1
+  Total Time:  354ms
+  Average:     354.00ms
+  Median:      354.00ms
+  Min/Max:     354ms / 354ms
+
+Operation: Compare_File_147
+  Calls:       1
+  Total Time:  353ms
+  Average:     353.00ms
+  Median:      353.00ms
+  Min/Max:     353ms / 353ms
+
+Operation: Compare_File_329
+  Calls:       1
+  Total Time:  350ms
+  Average:     350.00ms
+  Median:      350.00ms
+  Min/Max:     350ms / 350ms
+
+Operation: Compare_File_632
+  Calls:       1
+  Total Time:  350ms
+  Average:     350.00ms
+  Median:      350.00ms
+  Min/Max:     350ms / 350ms
+
+Operation: Compare_File_720
+  Calls:       1
+  Total Time:  350ms
+  Average:     350.00ms
+  Median:      350.00ms
+  Min/Max:     350ms / 350ms
+
+Operation: Compare_File_300
+  Calls:       1
+  Total Time:  349ms
+  Average:     349.00ms
+  Median:      349.00ms
+  Min/Max:     349ms / 349ms
+
+Operation: Compare_File_608
+  Calls:       1
+  Total Time:  349ms
+  Average:     349.00ms
+  Median:      349.00ms
+  Min/Max:     349ms / 349ms
+
+Operation: Compare_File_828
+  Calls:       1
+  Total Time:  347ms
+  Average:     347.00ms
+  Median:      347.00ms
+  Min/Max:     347ms / 347ms
+
+Operation: Compare_File_466
+  Calls:       1
+  Total Time:  346ms
+  Average:     346.00ms
+  Median:      346.00ms
+  Min/Max:     346ms / 346ms
+
+Operation: Compare_File_150
+  Calls:       1
+  Total Time:  344ms
+  Average:     344.00ms
+  Median:      344.00ms
+  Min/Max:     344ms / 344ms
+
+Operation: Compare_File_162
+  Calls:       1
+  Total Time:  342ms
+  Average:     342.00ms
+  Median:      342.00ms
+  Min/Max:     342ms / 342ms
+
+Operation: Compare_File_505
+  Calls:       1
+  Total Time:  339ms
+  Average:     339.00ms
+  Median:      339.00ms
+  Min/Max:     339ms / 339ms
+
+Operation: Compare_File_360
+  Calls:       1
+  Total Time:  339ms
+  Average:     339.00ms
+  Median:      339.00ms
+  Min/Max:     339ms / 339ms
+
+Operation: Compare_File_534
+  Calls:       1
+  Total Time:  337ms
+  Average:     337.00ms
+  Median:      337.00ms
+  Min/Max:     337ms / 337ms
+
+Operation: Compare_File_333
+  Calls:       1
+  Total Time:  336ms
+  Average:     336.00ms
+  Median:      336.00ms
+  Min/Max:     336ms / 336ms
+
+Operation: Compare_File_206
+  Calls:       1
+  Total Time:  336ms
+  Average:     336.00ms
+  Median:      336.00ms
+  Min/Max:     336ms / 336ms
+
+Operation: Compare_File_588
+  Calls:       1
+  Total Time:  333ms
+  Average:     333.00ms
+  Median:      333.00ms
+  Min/Max:     333ms / 333ms
+
+Operation: Compare_File_982
+  Calls:       1
+  Total Time:  333ms
+  Average:     333.00ms
+  Median:      333.00ms
+  Min/Max:     333ms / 333ms
+
+Operation: Compare_File_819
+  Calls:       1
+  Total Time:  333ms
+  Average:     333.00ms
+  Median:      333.00ms
+  Min/Max:     333ms / 333ms
+
+Operation: Compare_File_721
+  Calls:       1
+  Total Time:  332ms
+  Average:     332.00ms
+  Median:      332.00ms
+  Min/Max:     332ms / 332ms
+
+Operation: Compare_File_902
+  Calls:       1
+  Total Time:  332ms
+  Average:     332.00ms
+  Median:      332.00ms
+  Min/Max:     332ms / 332ms
+
+Operation: Compare_File_477
+  Calls:       1
+  Total Time:  330ms
+  Average:     330.00ms
+  Median:      330.00ms
+  Min/Max:     330ms / 330ms
+
+Operation: Compare_File_66
+  Calls:       1
+  Total Time:  328ms
+  Average:     328.00ms
+  Median:      328.00ms
+  Min/Max:     328ms / 328ms
+
+Operation: Compare_File_580
+  Calls:       1
+  Total Time:  327ms
+  Average:     327.00ms
+  Median:      327.00ms
+  Min/Max:     327ms / 327ms
+
+Operation: Compare_File_112
+  Calls:       1
+  Total Time:  327ms
+  Average:     327.00ms
+  Median:      327.00ms
+  Min/Max:     327ms / 327ms
+
+Operation: Compare_File_880
+  Calls:       1
+  Total Time:  325ms
+  Average:     325.00ms
+  Median:      325.00ms
+  Min/Max:     325ms / 325ms
+
+Operation: Compare_File_145
+  Calls:       1
+  Total Time:  325ms
+  Average:     325.00ms
+  Median:      325.00ms
+  Min/Max:     325ms / 325ms
+
+Operation: Compare_File_304
+  Calls:       1
+  Total Time:  325ms
+  Average:     325.00ms
+  Median:      325.00ms
+  Min/Max:     325ms / 325ms
+
+Operation: Compare_File_843
+  Calls:       1
+  Total Time:  324ms
+  Average:     324.00ms
+  Median:      324.00ms
+  Min/Max:     324ms / 324ms
+
+Operation: Compare_File_544
+  Calls:       1
+  Total Time:  324ms
+  Average:     324.00ms
+  Median:      324.00ms
+  Min/Max:     324ms / 324ms
+
+Operation: Compare_File_153
+  Calls:       1
+  Total Time:  324ms
+  Average:     324.00ms
+  Median:      324.00ms
+  Min/Max:     324ms / 324ms
+
+Operation: Compare_File_237
+  Calls:       1
+  Total Time:  324ms
+  Average:     324.00ms
+  Median:      324.00ms
+  Min/Max:     324ms / 324ms
+
+Operation: Compare_File_247
+  Calls:       1
+  Total Time:  324ms
+  Average:     324.00ms
+  Median:      324.00ms
+  Min/Max:     324ms / 324ms
+
+Operation: Compare_File_154
+  Calls:       1
+  Total Time:  322ms
+  Average:     322.00ms
+  Median:      322.00ms
+  Min/Max:     322ms / 322ms
+
+Operation: Compare_File_164
+  Calls:       1
+  Total Time:  322ms
+  Average:     322.00ms
+  Median:      322.00ms
+  Min/Max:     322ms / 322ms
+
+Operation: Compare_File_684
+  Calls:       1
+  Total Time:  322ms
+  Average:     322.00ms
+  Median:      322.00ms
+  Min/Max:     322ms / 322ms
+
+Operation: Compare_File_419
+  Calls:       1
+  Total Time:  322ms
+  Average:     322.00ms
+  Median:      322.00ms
+  Min/Max:     322ms / 322ms
+
+Operation: Compare_File_680
+  Calls:       1
+  Total Time:  321ms
+  Average:     321.00ms
+  Median:      321.00ms
+  Min/Max:     321ms / 321ms
+
+Operation: Compare_File_275
+  Calls:       1
+  Total Time:  320ms
+  Average:     320.00ms
+  Median:      320.00ms
+  Min/Max:     320ms / 320ms
+
+Operation: Compare_File_986
+  Calls:       1
+  Total Time:  319ms
+  Average:     319.00ms
+  Median:      319.00ms
+  Min/Max:     319ms / 319ms
+
+Operation: Compare_File_201
+  Calls:       1
+  Total Time:  318ms
+  Average:     318.00ms
+  Median:      318.00ms
+  Min/Max:     318ms / 318ms
+
+Operation: Compare_File_213
+  Calls:       1
+  Total Time:  318ms
+  Average:     318.00ms
+  Median:      318.00ms
+  Min/Max:     318ms / 318ms
+
+Operation: Compare_File_766
+  Calls:       1
+  Total Time:  315ms
+  Average:     315.00ms
+  Median:      315.00ms
+  Min/Max:     315ms / 315ms
+
+Operation: Compare_File_692
+  Calls:       1
+  Total Time:  315ms
+  Average:     315.00ms
+  Median:      315.00ms
+  Min/Max:     315ms / 315ms
+
+Operation: Compare_File_179
+  Calls:       1
+  Total Time:  315ms
+  Average:     315.00ms
+  Median:      315.00ms
+  Min/Max:     315ms / 315ms
+
+Operation: Compare_File_476
+  Calls:       1
+  Total Time:  314ms
+  Average:     314.00ms
+  Median:      314.00ms
+  Min/Max:     314ms / 314ms
+
+Operation: Compare_File_806
+  Calls:       1
+  Total Time:  313ms
+  Average:     313.00ms
+  Median:      313.00ms
+  Min/Max:     313ms / 313ms
+
+Operation: Compare_File_529
+  Calls:       1
+  Total Time:  312ms
+  Average:     312.00ms
+  Median:      312.00ms
+  Min/Max:     312ms / 312ms
+
+Operation: Compare_File_89
+  Calls:       1
+  Total Time:  311ms
+  Average:     311.00ms
+  Median:      311.00ms
+  Min/Max:     311ms / 311ms
+
+Operation: Compare_File_207
+  Calls:       1
+  Total Time:  311ms
+  Average:     311.00ms
+  Median:      311.00ms
+  Min/Max:     311ms / 311ms
+
+Operation: Compare_File_857
+  Calls:       1
+  Total Time:  310ms
+  Average:     310.00ms
+  Median:      310.00ms
+  Min/Max:     310ms / 310ms
+
+Operation: Compare_File_895
+  Calls:       1
+  Total Time:  307ms
+  Average:     307.00ms
+  Median:      307.00ms
+  Min/Max:     307ms / 307ms
+
+Operation: Compare_File_445
+  Calls:       1
+  Total Time:  307ms
+  Average:     307.00ms
+  Median:      307.00ms
+  Min/Max:     307ms / 307ms
+
+Operation: Compare_File_220
+  Calls:       1
+  Total Time:  306ms
+  Average:     306.00ms
+  Median:      306.00ms
+  Min/Max:     306ms / 306ms
+
+Operation: Compare_File_448
+  Calls:       1
+  Total Time:  306ms
+  Average:     306.00ms
+  Median:      306.00ms
+  Min/Max:     306ms / 306ms
+
+Operation: Compare_File_503
+  Calls:       1
+  Total Time:  306ms
+  Average:     306.00ms
+  Median:      306.00ms
+  Min/Max:     306ms / 306ms
+
+Operation: Compare_File_638
+  Calls:       1
+  Total Time:  306ms
+  Average:     306.00ms
+  Median:      306.00ms
+  Min/Max:     306ms / 306ms
+
+Operation: Compare_File_575
+  Calls:       1
+  Total Time:  305ms
+  Average:     305.00ms
+  Median:      305.00ms
+  Min/Max:     305ms / 305ms
+
+Operation: Compare_File_320
+  Calls:       1
+  Total Time:  305ms
+  Average:     305.00ms
+  Median:      305.00ms
+  Min/Max:     305ms / 305ms
+
+Operation: Compare_File_705
+  Calls:       1
+  Total Time:  304ms
+  Average:     304.00ms
+  Median:      304.00ms
+  Min/Max:     304ms / 304ms
+
+Operation: Compare_File_675
+  Calls:       1
+  Total Time:  303ms
+  Average:     303.00ms
+  Median:      303.00ms
+  Min/Max:     303ms / 303ms
+
+Operation: Compare_File_254
+  Calls:       1
+  Total Time:  302ms
+  Average:     302.00ms
+  Median:      302.00ms
+  Min/Max:     302ms / 302ms
+
+Operation: Compare_File_925
+  Calls:       1
+  Total Time:  302ms
+  Average:     302.00ms
+  Median:      302.00ms
+  Min/Max:     302ms / 302ms
+
+Operation: Compare_File_337
+  Calls:       1
+  Total Time:  302ms
+  Average:     302.00ms
+  Median:      302.00ms
+  Min/Max:     302ms / 302ms
+
+Operation: Compare_File_52
+  Calls:       1
+  Total Time:  301ms
+  Average:     301.00ms
+  Median:      301.00ms
+  Min/Max:     301ms / 301ms
+
+Operation: Compare_File_363
+  Calls:       1
+  Total Time:  300ms
+  Average:     300.00ms
+  Median:      300.00ms
+  Min/Max:     300ms / 300ms
+
+Operation: Compare_File_420
+  Calls:       1
+  Total Time:  295ms
+  Average:     295.00ms
+  Median:      295.00ms
+  Min/Max:     295ms / 295ms
+
+Operation: Compare_File_274
+  Calls:       1
+  Total Time:  294ms
+  Average:     294.00ms
+  Median:      294.00ms
+  Min/Max:     294ms / 294ms
+
+Operation: Compare_File_211
+  Calls:       1
+  Total Time:  293ms
+  Average:     293.00ms
+  Median:      293.00ms
+  Min/Max:     293ms / 293ms
+
+Operation: Compare_File_946
+  Calls:       1
+  Total Time:  291ms
+  Average:     291.00ms
+  Median:      291.00ms
+  Min/Max:     291ms / 291ms
+
+Operation: Compare_File_116
+  Calls:       1
+  Total Time:  291ms
+  Average:     291.00ms
+  Median:      291.00ms
+  Min/Max:     291ms / 291ms
+
+Operation: Compare_File_691
+  Calls:       1
+  Total Time:  288ms
+  Average:     288.00ms
+  Median:      288.00ms
+  Min/Max:     288ms / 288ms
+
+Operation: Compare_File_261
+  Calls:       1
+  Total Time:  287ms
+  Average:     287.00ms
+  Median:      287.00ms
+  Min/Max:     287ms / 287ms
+
+Operation: Compare_File_765
+  Calls:       1
+  Total Time:  287ms
+  Average:     287.00ms
+  Median:      287.00ms
+  Min/Max:     287ms / 287ms
+
+Operation: Compare_File_600
+  Calls:       1
+  Total Time:  287ms
+  Average:     287.00ms
+  Median:      287.00ms
+  Min/Max:     287ms / 287ms
+
+Operation: Compare_File_62
+  Calls:       1
+  Total Time:  286ms
+  Average:     286.00ms
+  Median:      286.00ms
+  Min/Max:     286ms / 286ms
+
+Operation: Compare_File_453
+  Calls:       1
+  Total Time:  285ms
+  Average:     285.00ms
+  Median:      285.00ms
+  Min/Max:     285ms / 285ms
+
+Operation: Compare_File_867
+  Calls:       1
+  Total Time:  284ms
+  Average:     284.00ms
+  Median:      284.00ms
+  Min/Max:     284ms / 284ms
+
+Operation: Compare_File_603
+  Calls:       1
+  Total Time:  282ms
+  Average:     282.00ms
+  Median:      282.00ms
+  Min/Max:     282ms / 282ms
+
+Operation: Compare_File_357
+  Calls:       1
+  Total Time:  281ms
+  Average:     281.00ms
+  Median:      281.00ms
+  Min/Max:     281ms / 281ms
+
+Operation: Compare_File_670
+  Calls:       1
+  Total Time:  281ms
+  Average:     281.00ms
+  Median:      281.00ms
+  Min/Max:     281ms / 281ms
+
+Operation: Compare_File_833
+  Calls:       1
+  Total Time:  281ms
+  Average:     281.00ms
+  Median:      281.00ms
+  Min/Max:     281ms / 281ms
+
+Operation: Compare_File_490
+  Calls:       1
+  Total Time:  280ms
+  Average:     280.00ms
+  Median:      280.00ms
+  Min/Max:     280ms / 280ms
+
+Operation: Compare_File_398
+  Calls:       1
+  Total Time:  279ms
+  Average:     279.00ms
+  Median:      279.00ms
+  Min/Max:     279ms / 279ms
+
+Operation: Compare_File_297
+  Calls:       1
+  Total Time:  279ms
+  Average:     279.00ms
+  Median:      279.00ms
+  Min/Max:     279ms / 279ms
+
+Operation: Compare_File_120
+  Calls:       1
+  Total Time:  278ms
+  Average:     278.00ms
+  Median:      278.00ms
+  Min/Max:     278ms / 278ms
+
+Operation: Compare_File_908
+  Calls:       1
+  Total Time:  276ms
+  Average:     276.00ms
+  Median:      276.00ms
+  Min/Max:     276ms / 276ms
+
+Operation: Compare_File_671
+  Calls:       1
+  Total Time:  275ms
+  Average:     275.00ms
+  Median:      275.00ms
+  Min/Max:     275ms / 275ms
+
+Operation: Compare_File_711
+  Calls:       1
+  Total Time:  275ms
+  Average:     275.00ms
+  Median:      275.00ms
+  Min/Max:     275ms / 275ms
+
+Operation: Compare_File_800
+  Calls:       1
+  Total Time:  273ms
+  Average:     273.00ms
+  Median:      273.00ms
+  Min/Max:     273ms / 273ms
+
+Operation: Compare_File_609
+  Calls:       1
+  Total Time:  273ms
+  Average:     273.00ms
+  Median:      273.00ms
+  Min/Max:     273ms / 273ms
+
+Operation: Compare_File_214
+  Calls:       1
+  Total Time:  272ms
+  Average:     272.00ms
+  Median:      272.00ms
+  Min/Max:     272ms / 272ms
+
+Operation: Compare_File_63
+  Calls:       1
+  Total Time:  271ms
+  Average:     271.00ms
+  Median:      271.00ms
+  Min/Max:     271ms / 271ms
+
+Operation: Compare_File_878
+  Calls:       1
+  Total Time:  271ms
+  Average:     271.00ms
+  Median:      271.00ms
+  Min/Max:     271ms / 271ms
+
+Operation: Compare_File_971
+  Calls:       1
+  Total Time:  270ms
+  Average:     270.00ms
+  Median:      270.00ms
+  Min/Max:     270ms / 270ms
+
+Operation: Compare_File_282
+  Calls:       1
+  Total Time:  270ms
+  Average:     270.00ms
+  Median:      270.00ms
+  Min/Max:     270ms / 270ms
+
+Operation: Compare_File_734
+  Calls:       1
+  Total Time:  270ms
+  Average:     270.00ms
+  Median:      270.00ms
+  Min/Max:     270ms / 270ms
+
+Operation: Compare_File_406
+  Calls:       1
+  Total Time:  269ms
+  Average:     269.00ms
+  Median:      269.00ms
+  Min/Max:     269ms / 269ms
+
+Operation: Compare_File_818
+  Calls:       1
+  Total Time:  269ms
+  Average:     269.00ms
+  Median:      269.00ms
+  Min/Max:     269ms / 269ms
+
+Operation: Compare_File_651
+  Calls:       1
+  Total Time:  268ms
+  Average:     268.00ms
+  Median:      268.00ms
+  Min/Max:     268ms / 268ms
+
+Operation: Compare_File_558
+  Calls:       1
+  Total Time:  268ms
+  Average:     268.00ms
+  Median:      268.00ms
+  Min/Max:     268ms / 268ms
+
+Operation: Compare_File_912
+  Calls:       1
+  Total Time:  268ms
+  Average:     268.00ms
+  Median:      268.00ms
+  Min/Max:     268ms / 268ms
+
+Operation: Compare_File_72
+  Calls:       1
+  Total Time:  267ms
+  Average:     267.00ms
+  Median:      267.00ms
+  Min/Max:     267ms / 267ms
+
+Operation: Compare_File_251
+  Calls:       1
+  Total Time:  267ms
+  Average:     267.00ms
+  Median:      267.00ms
+  Min/Max:     267ms / 267ms
+
+Operation: Compare_File_940
+  Calls:       1
+  Total Time:  267ms
+  Average:     267.00ms
+  Median:      267.00ms
+  Min/Max:     267ms / 267ms
+
+Operation: Compare_File_134
+  Calls:       1
+  Total Time:  265ms
+  Average:     265.00ms
+  Median:      265.00ms
+  Min/Max:     265ms / 265ms
+
+Operation: Compare_File_889
+  Calls:       1
+  Total Time:  265ms
+  Average:     265.00ms
+  Median:      265.00ms
+  Min/Max:     265ms / 265ms
+
+Operation: Compare_File_967
+  Calls:       1
+  Total Time:  265ms
+  Average:     265.00ms
+  Median:      265.00ms
+  Min/Max:     265ms / 265ms
+
+Operation: Compare_File_374
+  Calls:       1
+  Total Time:  265ms
+  Average:     265.00ms
+  Median:      265.00ms
+  Min/Max:     265ms / 265ms
+
+Operation: Compare_File_994
+  Calls:       1
+  Total Time:  264ms
+  Average:     264.00ms
+  Median:      264.00ms
+  Min/Max:     264ms / 264ms
+
+Operation: Compare_File_288
+  Calls:       1
+  Total Time:  263ms
+  Average:     263.00ms
+  Median:      263.00ms
+  Min/Max:     263ms / 263ms
+
+Operation: Compare_File_238
+  Calls:       1
+  Total Time:  262ms
+  Average:     262.00ms
+  Median:      262.00ms
+  Min/Max:     262ms / 262ms
+
+Operation: Compare_File_962
+  Calls:       1
+  Total Time:  262ms
+  Average:     262.00ms
+  Median:      262.00ms
+  Min/Max:     262ms / 262ms
+
+Operation: Compare_File_436
+  Calls:       1
+  Total Time:  261ms
+  Average:     261.00ms
+  Median:      261.00ms
+  Min/Max:     261ms / 261ms
+
+Operation: Compare_File_369
+  Calls:       1
+  Total Time:  261ms
+  Average:     261.00ms
+  Median:      261.00ms
+  Min/Max:     261ms / 261ms
+
+Operation: Compare_File_647
+  Calls:       1
+  Total Time:  261ms
+  Average:     261.00ms
+  Median:      261.00ms
+  Min/Max:     261ms / 261ms
+
+Operation: Compare_File_729
+  Calls:       1
+  Total Time:  260ms
+  Average:     260.00ms
+  Median:      260.00ms
+  Min/Max:     260ms / 260ms
+
+Operation: Compare_File_379
+  Calls:       1
+  Total Time:  259ms
+  Average:     259.00ms
+  Median:      259.00ms
+  Min/Max:     259ms / 259ms
+
+Operation: Compare_File_511
+  Calls:       1
+  Total Time:  259ms
+  Average:     259.00ms
+  Median:      259.00ms
+  Min/Max:     259ms / 259ms
+
+Operation: Compare_File_909
+  Calls:       1
+  Total Time:  258ms
+  Average:     258.00ms
+  Median:      258.00ms
+  Min/Max:     258ms / 258ms
+
+Operation: Compare_File_517
+  Calls:       1
+  Total Time:  257ms
+  Average:     257.00ms
+  Median:      257.00ms
+  Min/Max:     257ms / 257ms
+
+Operation: Compare_File_759
+  Calls:       1
+  Total Time:  256ms
+  Average:     256.00ms
+  Median:      256.00ms
+  Min/Max:     256ms / 256ms
+
+Operation: Compare_File_648
+  Calls:       1
+  Total Time:  256ms
+  Average:     256.00ms
+  Median:      256.00ms
+  Min/Max:     256ms / 256ms
+
+Operation: Compare_File_904
+  Calls:       1
+  Total Time:  256ms
+  Average:     256.00ms
+  Median:      256.00ms
+  Min/Max:     256ms / 256ms
+
+Operation: Compare_File_757
+  Calls:       1
+  Total Time:  255ms
+  Average:     255.00ms
+  Median:      255.00ms
+  Min/Max:     255ms / 255ms
+
+Operation: Compare_File_362
+  Calls:       1
+  Total Time:  255ms
+  Average:     255.00ms
+  Median:      255.00ms
+  Min/Max:     255ms / 255ms
+
+Operation: Compare_File_682
+  Calls:       1
+  Total Time:  254ms
+  Average:     254.00ms
+  Median:      254.00ms
+  Min/Max:     254ms / 254ms
+
+Operation: Compare_File_993
+  Calls:       1
+  Total Time:  254ms
+  Average:     254.00ms
+  Median:      254.00ms
+  Min/Max:     254ms / 254ms
+
+Operation: Compare_File_353
+  Calls:       1
+  Total Time:  254ms
+  Average:     254.00ms
+  Median:      254.00ms
+  Min/Max:     254ms / 254ms
+
+Operation: Compare_File_719
+  Calls:       1
+  Total Time:  253ms
+  Average:     253.00ms
+  Median:      253.00ms
+  Min/Max:     253ms / 253ms
+
+Operation: Compare_File_98
+  Calls:       1
+  Total Time:  253ms
+  Average:     253.00ms
+  Median:      253.00ms
+  Min/Max:     253ms / 253ms
+
+Operation: Compare_File_791
+  Calls:       1
+  Total Time:  253ms
+  Average:     253.00ms
+  Median:      253.00ms
+  Min/Max:     253ms / 253ms
+
+Operation: Compare_File_772
+  Calls:       1
+  Total Time:  252ms
+  Average:     252.00ms
+  Median:      252.00ms
+  Min/Max:     252ms / 252ms
+
+Operation: Compare_File_460
+  Calls:       1
+  Total Time:  252ms
+  Average:     252.00ms
+  Median:      252.00ms
+  Min/Max:     252ms / 252ms
+
+Operation: Compare_File_874
+  Calls:       1
+  Total Time:  251ms
+  Average:     251.00ms
+  Median:      251.00ms
+  Min/Max:     251ms / 251ms
+
+Operation: Compare_File_498
+  Calls:       1
+  Total Time:  251ms
+  Average:     251.00ms
+  Median:      251.00ms
+  Min/Max:     251ms / 251ms
+
+Operation: Compare_File_168
+  Calls:       1
+  Total Time:  251ms
+  Average:     251.00ms
+  Median:      251.00ms
+  Min/Max:     251ms / 251ms
+
+Operation: Compare_File_980
+  Calls:       1
+  Total Time:  251ms
+  Average:     251.00ms
+  Median:      251.00ms
+  Min/Max:     251ms / 251ms
+
+Operation: Compare_File_697
+  Calls:       1
+  Total Time:  250ms
+  Average:     250.00ms
+  Median:      250.00ms
+  Min/Max:     250ms / 250ms
+
+Operation: Compare_File_636
+  Calls:       1
+  Total Time:  249ms
+  Average:     249.00ms
+  Median:      249.00ms
+  Min/Max:     249ms / 249ms
+
+Operation: Clone_Old_SoapEnvelope
+  Calls:       1000
+  Total Time:  249ms
+  Average:     0.25ms
+  Median:      0.00ms
+  Min/Max:     0ms / 12ms
+
+Operation: Compare_File_507
+  Calls:       1
+  Total Time:  248ms
+  Average:     248.00ms
+  Median:      248.00ms
+  Min/Max:     248ms / 248ms
+
+Operation: Compare_File_553
+  Calls:       1
+  Total Time:  247ms
+  Average:     247.00ms
+  Median:      247.00ms
+  Min/Max:     247ms / 247ms
+
+Operation: Compare_File_584
+  Calls:       1
+  Total Time:  247ms
+  Average:     247.00ms
+  Median:      247.00ms
+  Min/Max:     247ms / 247ms
+
+Operation: Compare_File_381
+  Calls:       1
+  Total Time:  247ms
+  Average:     247.00ms
+  Median:      247.00ms
+  Min/Max:     247ms / 247ms
+
+Operation: Compare_File_752
+  Calls:       1
+  Total Time:  246ms
+  Average:     246.00ms
+  Median:      246.00ms
+  Min/Max:     246ms / 246ms
+
+Operation: Compare_File_525
+  Calls:       1
+  Total Time:  246ms
+  Average:     246.00ms
+  Median:      246.00ms
+  Min/Max:     246ms / 246ms
+
+Operation: Compare_File_248
+  Calls:       1
+  Total Time:  246ms
+  Average:     246.00ms
+  Median:      246.00ms
+  Min/Max:     246ms / 246ms
+
+Operation: Compare_File_747
+  Calls:       1
+  Total Time:  246ms
+  Average:     246.00ms
+  Median:      246.00ms
+  Min/Max:     246ms / 246ms
+
+Operation: Compare_File_907
+  Calls:       1
+  Total Time:  245ms
+  Average:     245.00ms
+  Median:      245.00ms
+  Min/Max:     245ms / 245ms
+
+Operation: Compare_File_844
+  Calls:       1
+  Total Time:  244ms
+  Average:     244.00ms
+  Median:      244.00ms
+  Min/Max:     244ms / 244ms
+
+Operation: Compare_File_65
+  Calls:       1
+  Total Time:  244ms
+  Average:     244.00ms
+  Median:      244.00ms
+  Min/Max:     244ms / 244ms
+
+Operation: Compare_File_279
+  Calls:       1
+  Total Time:  244ms
+  Average:     244.00ms
+  Median:      244.00ms
+  Min/Max:     244ms / 244ms
+
+Operation: Compare_File_121
+  Calls:       1
+  Total Time:  244ms
+  Average:     244.00ms
+  Median:      244.00ms
+  Min/Max:     244ms / 244ms
+
+Operation: Compare_File_797
+  Calls:       1
+  Total Time:  243ms
+  Average:     243.00ms
+  Median:      243.00ms
+  Min/Max:     243ms / 243ms
+
+Operation: Compare_File_322
+  Calls:       1
+  Total Time:  243ms
+  Average:     243.00ms
+  Median:      243.00ms
+  Min/Max:     243ms / 243ms
+
+Operation: Compare_File_936
+  Calls:       1
+  Total Time:  243ms
+  Average:     243.00ms
+  Median:      243.00ms
+  Min/Max:     243ms / 243ms
+
+Operation: Compare_File_377
+  Calls:       1
+  Total Time:  243ms
+  Average:     243.00ms
+  Median:      243.00ms
+  Min/Max:     243ms / 243ms
+
+Operation: Compare_File_624
+  Calls:       1
+  Total Time:  243ms
+  Average:     243.00ms
+  Median:      243.00ms
+  Min/Max:     243ms / 243ms
+
+Operation: Compare_File_137
+  Calls:       1
+  Total Time:  242ms
+  Average:     242.00ms
+  Median:      242.00ms
+  Min/Max:     242ms / 242ms
+
+Operation: Compare_File_80
+  Calls:       1
+  Total Time:  242ms
+  Average:     242.00ms
+  Median:      242.00ms
+  Min/Max:     242ms / 242ms
+
+Operation: Compare_File_813
+  Calls:       1
+  Total Time:  241ms
+  Average:     241.00ms
+  Median:      241.00ms
+  Min/Max:     241ms / 241ms
+
+Operation: Compare_File_86
+  Calls:       1
+  Total Time:  241ms
+  Average:     241.00ms
+  Median:      241.00ms
+  Min/Max:     241ms / 241ms
+
+Operation: Compare_File_625
+  Calls:       1
+  Total Time:  241ms
+  Average:     241.00ms
+  Median:      241.00ms
+  Min/Max:     241ms / 241ms
+
+Operation: Compare_File_964
+  Calls:       1
+  Total Time:  240ms
+  Average:     240.00ms
+  Median:      240.00ms
+  Min/Max:     240ms / 240ms
+
+Operation: Compare_File_961
+  Calls:       1
+  Total Time:  240ms
+  Average:     240.00ms
+  Median:      240.00ms
+  Min/Max:     240ms / 240ms
+
+Operation: Compare_File_440
+  Calls:       1
+  Total Time:  239ms
+  Average:     239.00ms
+  Median:      239.00ms
+  Min/Max:     239ms / 239ms
+
+Operation: Compare_File_257
+  Calls:       1
+  Total Time:  239ms
+  Average:     239.00ms
+  Median:      239.00ms
+  Min/Max:     239ms / 239ms
+
+Operation: Compare_File_407
+  Calls:       1
+  Total Time:  238ms
+  Average:     238.00ms
+  Median:      238.00ms
+  Min/Max:     238ms / 238ms
+
+Operation: Compare_File_310
+  Calls:       1
+  Total Time:  237ms
+  Average:     237.00ms
+  Median:      237.00ms
+  Min/Max:     237ms / 237ms
+
+Operation: Compare_File_241
+  Calls:       1
+  Total Time:  237ms
+  Average:     237.00ms
+  Median:      237.00ms
+  Min/Max:     237ms / 237ms
+
+Operation: Compare_File_639
+  Calls:       1
+  Total Time:  237ms
+  Average:     237.00ms
+  Median:      237.00ms
+  Min/Max:     237ms / 237ms
+
+Operation: Compare_File_685
+  Calls:       1
+  Total Time:  237ms
+  Average:     237.00ms
+  Median:      237.00ms
+  Min/Max:     237ms / 237ms
+
+Operation: Compare_File_193
+  Calls:       1
+  Total Time:  236ms
+  Average:     236.00ms
+  Median:      236.00ms
+  Min/Max:     236ms / 236ms
+
+Operation: Compare_File_123
+  Calls:       1
+  Total Time:  236ms
+  Average:     236.00ms
+  Median:      236.00ms
+  Min/Max:     236ms / 236ms
+
+Operation: Compare_File_614
+  Calls:       1
+  Total Time:  236ms
+  Average:     236.00ms
+  Median:      236.00ms
+  Min/Max:     236ms / 236ms
+
+Operation: Compare_File_471
+  Calls:       1
+  Total Time:  236ms
+  Average:     236.00ms
+  Median:      236.00ms
+  Min/Max:     236ms / 236ms
+
+Operation: Compare_File_634
+  Calls:       1
+  Total Time:  236ms
+  Average:     236.00ms
+  Median:      236.00ms
+  Min/Max:     236ms / 236ms
+
+Operation: Compare_File_660
+  Calls:       1
+  Total Time:  236ms
+  Average:     236.00ms
+  Median:      236.00ms
+  Min/Max:     236ms / 236ms
+
+Operation: Compare_File_653
+  Calls:       1
+  Total Time:  235ms
+  Average:     235.00ms
+  Median:      235.00ms
+  Min/Max:     235ms / 235ms
+
+Operation: Compare_File_270
+  Calls:       1
+  Total Time:  235ms
+  Average:     235.00ms
+  Median:      235.00ms
+  Min/Max:     235ms / 235ms
+
+Operation: Compare_File_938
+  Calls:       1
+  Total Time:  234ms
+  Average:     234.00ms
+  Median:      234.00ms
+  Min/Max:     234ms / 234ms
+
+Operation: Compare_File_831
+  Calls:       1
+  Total Time:  234ms
+  Average:     234.00ms
+  Median:      234.00ms
+  Min/Max:     234ms / 234ms
+
+Operation: Compare_File_931
+  Calls:       1
+  Total Time:  233ms
+  Average:     233.00ms
+  Median:      233.00ms
+  Min/Max:     233ms / 233ms
+
+Operation: Compare_File_95
+  Calls:       1
+  Total Time:  233ms
+  Average:     233.00ms
+  Median:      233.00ms
+  Min/Max:     233ms / 233ms
+
+Operation: Compare_File_111
+  Calls:       1
+  Total Time:  233ms
+  Average:     233.00ms
+  Median:      233.00ms
+  Min/Max:     233ms / 233ms
+
+Operation: Compare_File_955
+  Calls:       1
+  Total Time:  232ms
+  Average:     232.00ms
+  Median:      232.00ms
+  Min/Max:     232ms / 232ms
+
+Operation: Compare_File_70
+  Calls:       1
+  Total Time:  232ms
+  Average:     232.00ms
+  Median:      232.00ms
+  Min/Max:     232ms / 232ms
+
+Operation: Compare_File_96
+  Calls:       1
+  Total Time:  232ms
+  Average:     232.00ms
+  Median:      232.00ms
+  Min/Max:     232ms / 232ms
+
+Operation: Compare_File_849
+  Calls:       1
+  Total Time:  231ms
+  Average:     231.00ms
+  Median:      231.00ms
+  Min/Max:     231ms / 231ms
+
+Operation: Compare_File_240
+  Calls:       1
+  Total Time:  231ms
+  Average:     231.00ms
+  Median:      231.00ms
+  Min/Max:     231ms / 231ms
+
+Operation: Compare_File_400
+  Calls:       1
+  Total Time:  230ms
+  Average:     230.00ms
+  Median:      230.00ms
+  Min/Max:     230ms / 230ms
+
+Operation: Compare_File_431
+  Calls:       1
+  Total Time:  230ms
+  Average:     230.00ms
+  Median:      230.00ms
+  Min/Max:     230ms / 230ms
+
+Operation: Compare_File_551
+  Calls:       1
+  Total Time:  229ms
+  Average:     229.00ms
+  Median:      229.00ms
+  Min/Max:     229ms / 229ms
+
+Operation: Compare_File_167
+  Calls:       1
+  Total Time:  227ms
+  Average:     227.00ms
+  Median:      227.00ms
+  Min/Max:     227ms / 227ms
+
+Operation: Compare_File_127
+  Calls:       1
+  Total Time:  227ms
+  Average:     227.00ms
+  Median:      227.00ms
+  Min/Max:     227ms / 227ms
+
+Operation: Compare_File_447
+  Calls:       1
+  Total Time:  226ms
+  Average:     226.00ms
+  Median:      226.00ms
+  Min/Max:     226ms / 226ms
+
+Operation: Compare_File_313
+  Calls:       1
+  Total Time:  226ms
+  Average:     226.00ms
+  Median:      226.00ms
+  Min/Max:     226ms / 226ms
+
+Operation: Compare_File_681
+  Calls:       1
+  Total Time:  226ms
+  Average:     226.00ms
+  Median:      226.00ms
+  Min/Max:     226ms / 226ms
+
+Operation: Compare_File_146
+  Calls:       1
+  Total Time:  226ms
+  Average:     226.00ms
+  Median:      226.00ms
+  Min/Max:     226ms / 226ms
+
+Operation: Compare_File_152
+  Calls:       1
+  Total Time:  225ms
+  Average:     225.00ms
+  Median:      225.00ms
+  Min/Max:     225ms / 225ms
+
+Operation: Compare_File_712
+  Calls:       1
+  Total Time:  225ms
+  Average:     225.00ms
+  Median:      225.00ms
+  Min/Max:     225ms / 225ms
+
+Operation: Compare_File_397
+  Calls:       1
+  Total Time:  224ms
+  Average:     224.00ms
+  Median:      224.00ms
+  Min/Max:     224ms / 224ms
+
+Operation: Compare_File_735
+  Calls:       1
+  Total Time:  224ms
+  Average:     224.00ms
+  Median:      224.00ms
+  Min/Max:     224ms / 224ms
+
+Operation: Compare_File_605
+  Calls:       1
+  Total Time:  224ms
+  Average:     224.00ms
+  Median:      224.00ms
+  Min/Max:     224ms / 224ms
+
+Operation: Compare_File_538
+  Calls:       1
+  Total Time:  223ms
+  Average:     223.00ms
+  Median:      223.00ms
+  Min/Max:     223ms / 223ms
+
+Operation: Compare_File_730
+  Calls:       1
+  Total Time:  222ms
+  Average:     222.00ms
+  Median:      222.00ms
+  Min/Max:     222ms / 222ms
+
+Operation: Compare_File_930
+  Calls:       1
+  Total Time:  221ms
+  Average:     221.00ms
+  Median:      221.00ms
+  Min/Max:     221ms / 221ms
+
+Operation: Compare_File_396
+  Calls:       1
+  Total Time:  221ms
+  Average:     221.00ms
+  Median:      221.00ms
+  Min/Max:     221ms / 221ms
+
+Operation: Compare_File_875
+  Calls:       1
+  Total Time:  221ms
+  Average:     221.00ms
+  Median:      221.00ms
+  Min/Max:     221ms / 221ms
+
+Operation: Compare_File_518
+  Calls:       1
+  Total Time:  221ms
+  Average:     221.00ms
+  Median:      221.00ms
+  Min/Max:     221ms / 221ms
+
+Operation: Compare_File_512
+  Calls:       1
+  Total Time:  220ms
+  Average:     220.00ms
+  Median:      220.00ms
+  Min/Max:     220ms / 220ms
+
+Operation: Compare_File_585
+  Calls:       1
+  Total Time:  220ms
+  Average:     220.00ms
+  Median:      220.00ms
+  Min/Max:     220ms / 220ms
+
+Operation: Compare_File_686
+  Calls:       1
+  Total Time:  220ms
+  Average:     220.00ms
+  Median:      220.00ms
+  Min/Max:     220ms / 220ms
+
+Operation: Compare_File_714
+  Calls:       1
+  Total Time:  220ms
+  Average:     220.00ms
+  Median:      220.00ms
+  Min/Max:     220ms / 220ms
+
+Operation: Compare_File_178
+  Calls:       1
+  Total Time:  220ms
+  Average:     220.00ms
+  Median:      220.00ms
+  Min/Max:     220ms / 220ms
+
+Operation: Compare_File_786
+  Calls:       1
+  Total Time:  219ms
+  Average:     219.00ms
+  Median:      219.00ms
+  Min/Max:     219ms / 219ms
+
+Operation: Compare_File_75
+  Calls:       1
+  Total Time:  219ms
+  Average:     219.00ms
+  Median:      219.00ms
+  Min/Max:     219ms / 219ms
+
+Operation: Compare_File_114
+  Calls:       1
+  Total Time:  219ms
+  Average:     219.00ms
+  Median:      219.00ms
+  Min/Max:     219ms / 219ms
+
+Operation: Compare_File_58
+  Calls:       1
+  Total Time:  219ms
+  Average:     219.00ms
+  Median:      219.00ms
+  Min/Max:     219ms / 219ms
+
+Operation: Compare_File_467
+  Calls:       1
+  Total Time:  218ms
+  Average:     218.00ms
+  Median:      218.00ms
+  Min/Max:     218ms / 218ms
+
+Operation: Compare_File_129
+  Calls:       1
+  Total Time:  216ms
+  Average:     216.00ms
+  Median:      216.00ms
+  Min/Max:     216ms / 216ms
+
+Operation: Compare_File_979
+  Calls:       1
+  Total Time:  216ms
+  Average:     216.00ms
+  Median:      216.00ms
+  Min/Max:     216ms / 216ms
+
+Operation: Compare_File_156
+  Calls:       1
+  Total Time:  216ms
+  Average:     216.00ms
+  Median:      216.00ms
+  Min/Max:     216ms / 216ms
+
+Operation: Compare_File_278
+  Calls:       1
+  Total Time:  215ms
+  Average:     215.00ms
+  Median:      215.00ms
+  Min/Max:     215ms / 215ms
+
+Operation: Compare_File_390
+  Calls:       1
+  Total Time:  215ms
+  Average:     215.00ms
+  Median:      215.00ms
+  Min/Max:     215ms / 215ms
+
+Operation: Compare_File_423
+  Calls:       1
+  Total Time:  214ms
+  Average:     214.00ms
+  Median:      214.00ms
+  Min/Max:     214ms / 214ms
+
+Operation: Compare_File_637
+  Calls:       1
+  Total Time:  214ms
+  Average:     214.00ms
+  Median:      214.00ms
+  Min/Max:     214ms / 214ms
+
+Operation: Compare_File_876
+  Calls:       1
+  Total Time:  214ms
+  Average:     214.00ms
+  Median:      214.00ms
+  Min/Max:     214ms / 214ms
+
+Operation: Compare_File_76
+  Calls:       1
+  Total Time:  214ms
+  Average:     214.00ms
+  Median:      214.00ms
+  Min/Max:     214ms / 214ms
+
+Operation: Compare_File_745
+  Calls:       1
+  Total Time:  214ms
+  Average:     214.00ms
+  Median:      214.00ms
+  Min/Max:     214ms / 214ms
+
+Operation: Compare_File_335
+  Calls:       1
+  Total Time:  213ms
+  Average:     213.00ms
+  Median:      213.00ms
+  Min/Max:     213ms / 213ms
+
+Operation: Compare_File_409
+  Calls:       1
+  Total Time:  213ms
+  Average:     213.00ms
+  Median:      213.00ms
+  Min/Max:     213ms / 213ms
+
+Operation: Compare_File_968
+  Calls:       1
+  Total Time:  213ms
+  Average:     213.00ms
+  Median:      213.00ms
+  Min/Max:     213ms / 213ms
+
+Operation: Compare_File_61
+  Calls:       1
+  Total Time:  213ms
+  Average:     213.00ms
+  Median:      213.00ms
+  Min/Max:     213ms / 213ms
+
+Operation: Compare_File_561
+  Calls:       1
+  Total Time:  213ms
+  Average:     213.00ms
+  Median:      213.00ms
+  Min/Max:     213ms / 213ms
+
+Operation: Compare_File_758
+  Calls:       1
+  Total Time:  213ms
+  Average:     213.00ms
+  Median:      213.00ms
+  Min/Max:     213ms / 213ms
+
+Operation: Compare_File_635
+  Calls:       1
+  Total Time:  213ms
+  Average:     213.00ms
+  Median:      213.00ms
+  Min/Max:     213ms / 213ms
+
+Operation: Compare_File_391
+  Calls:       1
+  Total Time:  212ms
+  Average:     212.00ms
+  Median:      212.00ms
+  Min/Max:     212ms / 212ms
+
+Operation: Compare_File_910
+  Calls:       1
+  Total Time:  212ms
+  Average:     212.00ms
+  Median:      212.00ms
+  Min/Max:     212ms / 212ms
+
+Operation: Compare_File_355
+  Calls:       1
+  Total Time:  212ms
+  Average:     212.00ms
+  Median:      212.00ms
+  Min/Max:     212ms / 212ms
+
+Operation: Compare_File_325
+  Calls:       1
+  Total Time:  212ms
+  Average:     212.00ms
+  Median:      212.00ms
+  Min/Max:     212ms / 212ms
+
+Operation: Compare_File_388
+  Calls:       1
+  Total Time:  212ms
+  Average:     212.00ms
+  Median:      212.00ms
+  Min/Max:     212ms / 212ms
+
+Operation: Compare_File_983
+  Calls:       1
+  Total Time:  211ms
+  Average:     211.00ms
+  Median:      211.00ms
+  Min/Max:     211ms / 211ms
+
+Operation: Compare_File_253
+  Calls:       1
+  Total Time:  211ms
+  Average:     211.00ms
+  Median:      211.00ms
+  Min/Max:     211ms / 211ms
+
+Operation: Compare_File_139
+  Calls:       1
+  Total Time:  210ms
+  Average:     210.00ms
+  Median:      210.00ms
+  Min/Max:     210ms / 210ms
+
+Operation: Compare_File_514
+  Calls:       1
+  Total Time:  210ms
+  Average:     210.00ms
+  Median:      210.00ms
+  Min/Max:     210ms / 210ms
+
+Operation: Compare_File_55
+  Calls:       1
+  Total Time:  210ms
+  Average:     210.00ms
+  Median:      210.00ms
+  Min/Max:     210ms / 210ms
+
+Operation: Compare_File_188
+  Calls:       1
+  Total Time:  209ms
+  Average:     209.00ms
+  Median:      209.00ms
+  Min/Max:     209ms / 209ms
+
+Operation: Compare_File_882
+  Calls:       1
+  Total Time:  209ms
+  Average:     209.00ms
+  Median:      209.00ms
+  Min/Max:     209ms / 209ms
+
+Operation: Compare_File_506
+  Calls:       1
+  Total Time:  209ms
+  Average:     209.00ms
+  Median:      209.00ms
+  Min/Max:     209ms / 209ms
+
+Operation: Compare_File_243
+  Calls:       1
+  Total Time:  209ms
+  Average:     209.00ms
+  Median:      209.00ms
+  Min/Max:     209ms / 209ms
+
+Operation: Compare_File_44
+  Calls:       1
+  Total Time:  208ms
+  Average:     208.00ms
+  Median:      208.00ms
+  Min/Max:     208ms / 208ms
+
+Operation: Compare_File_119
+  Calls:       1
+  Total Time:  208ms
+  Average:     208.00ms
+  Median:      208.00ms
+  Min/Max:     208ms / 208ms
+
+Operation: Compare_File_284
+  Calls:       1
+  Total Time:  208ms
+  Average:     208.00ms
+  Median:      208.00ms
+  Min/Max:     208ms / 208ms
+
+Operation: Compare_File_198
+  Calls:       1
+  Total Time:  207ms
+  Average:     207.00ms
+  Median:      207.00ms
+  Min/Max:     207ms / 207ms
+
+Operation: Compare_File_380
+  Calls:       1
+  Total Time:  207ms
+  Average:     207.00ms
+  Median:      207.00ms
+  Min/Max:     207ms / 207ms
+
+Operation: Compare_File_132
+  Calls:       1
+  Total Time:  206ms
+  Average:     206.00ms
+  Median:      206.00ms
+  Min/Max:     206ms / 206ms
+
+Operation: Compare_File_659
+  Calls:       1
+  Total Time:  206ms
+  Average:     206.00ms
+  Median:      206.00ms
+  Min/Max:     206ms / 206ms
+
+Operation: Compare_File_233
+  Calls:       1
+  Total Time:  206ms
+  Average:     206.00ms
+  Median:      206.00ms
+  Min/Max:     206ms / 206ms
+
+Operation: Compare_File_578
+  Calls:       1
+  Total Time:  205ms
+  Average:     205.00ms
+  Median:      205.00ms
+  Min/Max:     205ms / 205ms
+
+Operation: Compare_File_478
+  Calls:       1
+  Total Time:  205ms
+  Average:     205.00ms
+  Median:      205.00ms
+  Min/Max:     205ms / 205ms
+
+Operation: Compare_File_715
+  Calls:       1
+  Total Time:  205ms
+  Average:     205.00ms
+  Median:      205.00ms
+  Min/Max:     205ms / 205ms
+
+Operation: Compare_File_64
+  Calls:       1
+  Total Time:  204ms
+  Average:     204.00ms
+  Median:      204.00ms
+  Min/Max:     204ms / 204ms
+
+Operation: Compare_File_824
+  Calls:       1
+  Total Time:  204ms
+  Average:     204.00ms
+  Median:      204.00ms
+  Min/Max:     204ms / 204ms
+
+Operation: Compare_File_163
+  Calls:       1
+  Total Time:  203ms
+  Average:     203.00ms
+  Median:      203.00ms
+  Min/Max:     203ms / 203ms
+
+Operation: Compare_File_997
+  Calls:       1
+  Total Time:  203ms
+  Average:     203.00ms
+  Median:      203.00ms
+  Min/Max:     203ms / 203ms
+
+Operation: Compare_File_683
+  Calls:       1
+  Total Time:  203ms
+  Average:     203.00ms
+  Median:      203.00ms
+  Min/Max:     203ms / 203ms
+
+Operation: Compare_File_449
+  Calls:       1
+  Total Time:  203ms
+  Average:     203.00ms
+  Median:      203.00ms
+  Min/Max:     203ms / 203ms
+
+Operation: Compare_File_323
+  Calls:       1
+  Total Time:  203ms
+  Average:     203.00ms
+  Median:      203.00ms
+  Min/Max:     203ms / 203ms
+
+Operation: Compare_File_258
+  Calls:       1
+  Total Time:  202ms
+  Average:     202.00ms
+  Median:      202.00ms
+  Min/Max:     202ms / 202ms
+
+Operation: Compare_File_298
+  Calls:       1
+  Total Time:  202ms
+  Average:     202.00ms
+  Median:      202.00ms
+  Min/Max:     202ms / 202ms
+
+Operation: Compare_File_94
+  Calls:       1
+  Total Time:  202ms
+  Average:     202.00ms
+  Median:      202.00ms
+  Min/Max:     202ms / 202ms
+
+Operation: Compare_File_989
+  Calls:       1
+  Total Time:  202ms
+  Average:     202.00ms
+  Median:      202.00ms
+  Min/Max:     202ms / 202ms
+
+Operation: Compare_File_204
+  Calls:       1
+  Total Time:  201ms
+  Average:     201.00ms
+  Median:      201.00ms
+  Min/Max:     201ms / 201ms
+
+Operation: Compare_File_808
+  Calls:       1
+  Total Time:  201ms
+  Average:     201.00ms
+  Median:      201.00ms
+  Min/Max:     201ms / 201ms
+
+Operation: Compare_File_740
+  Calls:       1
+  Total Time:  201ms
+  Average:     201.00ms
+  Median:      201.00ms
+  Min/Max:     201ms / 201ms
+
+Operation: Compare_File_87
+  Calls:       1
+  Total Time:  201ms
+  Average:     201.00ms
+  Median:      201.00ms
+  Min/Max:     201ms / 201ms
+
+Operation: Compare_File_468
+  Calls:       1
+  Total Time:  201ms
+  Average:     201.00ms
+  Median:      201.00ms
+  Min/Max:     201ms / 201ms
+
+Operation: Compare_File_189
+  Calls:       1
+  Total Time:  201ms
+  Average:     201.00ms
+  Median:      201.00ms
+  Min/Max:     201ms / 201ms
+
+Operation: Compare_File_777
+  Calls:       1
+  Total Time:  200ms
+  Average:     200.00ms
+  Median:      200.00ms
+  Min/Max:     200ms / 200ms
+
+Operation: Compare_File_184
+  Calls:       1
+  Total Time:  200ms
+  Average:     200.00ms
+  Median:      200.00ms
+  Min/Max:     200ms / 200ms
+
+Operation: Compare_File_704
+  Calls:       1
+  Total Time:  200ms
+  Average:     200.00ms
+  Median:      200.00ms
+  Min/Max:     200ms / 200ms
+
+Operation: Compare_File_664
+  Calls:       1
+  Total Time:  200ms
+  Average:     200.00ms
+  Median:      200.00ms
+  Min/Max:     200ms / 200ms
+
+Operation: Compare_File_71
+  Calls:       1
+  Total Time:  198ms
+  Average:     198.00ms
+  Median:      198.00ms
+  Min/Max:     198ms / 198ms
+
+Operation: Compare_File_991
+  Calls:       1
+  Total Time:  198ms
+  Average:     198.00ms
+  Median:      198.00ms
+  Min/Max:     198ms / 198ms
+
+Operation: Compare_File_520
+  Calls:       1
+  Total Time:  198ms
+  Average:     198.00ms
+  Median:      198.00ms
+  Min/Max:     198ms / 198ms
+
+Operation: Compare_File_656
+  Calls:       1
+  Total Time:  198ms
+  Average:     198.00ms
+  Median:      198.00ms
+  Min/Max:     198ms / 198ms
+
+Operation: Compare_File_38
+  Calls:       1
+  Total Time:  198ms
+  Average:     198.00ms
+  Median:      198.00ms
+  Min/Max:     198ms / 198ms
+
+Operation: Compare_File_176
+  Calls:       1
+  Total Time:  198ms
+  Average:     198.00ms
+  Median:      198.00ms
+  Min/Max:     198ms / 198ms
+
+Operation: Compare_File_532
+  Calls:       1
+  Total Time:  198ms
+  Average:     198.00ms
+  Median:      198.00ms
+  Min/Max:     198ms / 198ms
+
+Operation: Compare_File_256
+  Calls:       1
+  Total Time:  197ms
+  Average:     197.00ms
+  Median:      197.00ms
+  Min/Max:     197ms / 197ms
+
+Operation: Compare_File_906
+  Calls:       1
+  Total Time:  197ms
+  Average:     197.00ms
+  Median:      197.00ms
+  Min/Max:     197ms / 197ms
+
+Operation: Compare_File_499
+  Calls:       1
+  Total Time:  197ms
+  Average:     197.00ms
+  Median:      197.00ms
+  Min/Max:     197ms / 197ms
+
+Operation: Compare_File_801
+  Calls:       1
+  Total Time:  196ms
+  Average:     196.00ms
+  Median:      196.00ms
+  Min/Max:     196ms / 196ms
+
+Operation: Compare_File_662
+  Calls:       1
+  Total Time:  196ms
+  Average:     196.00ms
+  Median:      196.00ms
+  Min/Max:     196ms / 196ms
+
+Operation: Compare_File_987
+  Calls:       1
+  Total Time:  196ms
+  Average:     196.00ms
+  Median:      196.00ms
+  Min/Max:     196ms / 196ms
+
+Operation: Compare_File_665
+  Calls:       1
+  Total Time:  196ms
+  Average:     196.00ms
+  Median:      196.00ms
+  Min/Max:     196ms / 196ms
+
+Operation: Compare_File_301
+  Calls:       1
+  Total Time:  195ms
+  Average:     195.00ms
+  Median:      195.00ms
+  Min/Max:     195ms / 195ms
+
+Operation: Compare_File_155
+  Calls:       1
+  Total Time:  195ms
+  Average:     195.00ms
+  Median:      195.00ms
+  Min/Max:     195ms / 195ms
+
+Operation: Compare_File_526
+  Calls:       1
+  Total Time:  195ms
+  Average:     195.00ms
+  Median:      195.00ms
+  Min/Max:     195ms / 195ms
+
+Operation: Compare_File_562
+  Calls:       1
+  Total Time:  195ms
+  Average:     195.00ms
+  Median:      195.00ms
+  Min/Max:     195ms / 195ms
+
+Operation: Compare_File_283
+  Calls:       1
+  Total Time:  195ms
+  Average:     195.00ms
+  Median:      195.00ms
+  Min/Max:     195ms / 195ms
+
+Operation: Compare_File_817
+  Calls:       1
+  Total Time:  194ms
+  Average:     194.00ms
+  Median:      194.00ms
+  Min/Max:     194ms / 194ms
+
+Operation: Compare_File_861
+  Calls:       1
+  Total Time:  193ms
+  Average:     193.00ms
+  Median:      193.00ms
+  Min/Max:     193ms / 193ms
+
+Operation: Compare_File_981
+  Calls:       1
+  Total Time:  192ms
+  Average:     192.00ms
+  Median:      192.00ms
+  Min/Max:     192ms / 192ms
+
+Operation: Compare_File_60
+  Calls:       1
+  Total Time:  192ms
+  Average:     192.00ms
+  Median:      192.00ms
+  Min/Max:     192ms / 192ms
+
+Operation: Compare_File_871
+  Calls:       1
+  Total Time:  192ms
+  Average:     192.00ms
+  Median:      192.00ms
+  Min/Max:     192ms / 192ms
+
+Operation: Compare_File_56
+  Calls:       1
+  Total Time:  192ms
+  Average:     192.00ms
+  Median:      192.00ms
+  Min/Max:     192ms / 192ms
+
+Operation: Compare_File_654
+  Calls:       1
+  Total Time:  192ms
+  Average:     192.00ms
+  Median:      192.00ms
+  Min/Max:     192ms / 192ms
+
+Operation: Compare_File_217
+  Calls:       1
+  Total Time:  192ms
+  Average:     192.00ms
+  Median:      192.00ms
+  Min/Max:     192ms / 192ms
+
+Operation: Compare_File_197
+  Calls:       1
+  Total Time:  191ms
+  Average:     191.00ms
+  Median:      191.00ms
+  Min/Max:     191ms / 191ms
+
+Operation: Compare_File_107
+  Calls:       1
+  Total Time:  191ms
+  Average:     191.00ms
+  Median:      191.00ms
+  Min/Max:     191ms / 191ms
+
+Operation: Compare_File_661
+  Calls:       1
+  Total Time:  191ms
+  Average:     191.00ms
+  Median:      191.00ms
+  Min/Max:     191ms / 191ms
+
+Operation: Compare_File_43
+  Calls:       1
+  Total Time:  190ms
+  Average:     190.00ms
+  Median:      190.00ms
+  Min/Max:     190ms / 190ms
+
+Operation: Compare_File_870
+  Calls:       1
+  Total Time:  190ms
+  Average:     190.00ms
+  Median:      190.00ms
+  Min/Max:     190ms / 190ms
+
+Operation: Compare_File_990
+  Calls:       1
+  Total Time:  190ms
+  Average:     190.00ms
+  Median:      190.00ms
+  Min/Max:     190ms / 190ms
+
+Operation: Compare_File_299
+  Calls:       1
+  Total Time:  190ms
+  Average:     190.00ms
+  Median:      190.00ms
+  Min/Max:     190ms / 190ms
+
+Operation: Compare_File_424
+  Calls:       1
+  Total Time:  190ms
+  Average:     190.00ms
+  Median:      190.00ms
+  Min/Max:     190ms / 190ms
+
+Operation: Compare_File_495
+  Calls:       1
+  Total Time:  190ms
+  Average:     190.00ms
+  Median:      190.00ms
+  Min/Max:     190ms / 190ms
+
+Operation: Compare_File_252
+  Calls:       1
+  Total Time:  190ms
+  Average:     190.00ms
+  Median:      190.00ms
+  Min/Max:     190ms / 190ms
+
+Operation: Compare_File_896
+  Calls:       1
+  Total Time:  190ms
+  Average:     190.00ms
+  Median:      190.00ms
+  Min/Max:     190ms / 190ms
+
+Operation: Compare_File_416
+  Calls:       1
+  Total Time:  190ms
+  Average:     190.00ms
+  Median:      190.00ms
+  Min/Max:     190ms / 190ms
+
+Operation: Compare_File_281
+  Calls:       1
+  Total Time:  189ms
+  Average:     189.00ms
+  Median:      189.00ms
+  Min/Max:     189ms / 189ms
+
+Operation: Compare_File_696
+  Calls:       1
+  Total Time:  189ms
+  Average:     189.00ms
+  Median:      189.00ms
+  Min/Max:     189ms / 189ms
+
+Operation: Compare_File_425
+  Calls:       1
+  Total Time:  189ms
+  Average:     189.00ms
+  Median:      189.00ms
+  Min/Max:     189ms / 189ms
+
+Operation: Compare_File_894
+  Calls:       1
+  Total Time:  189ms
+  Average:     189.00ms
+  Median:      189.00ms
+  Min/Max:     189ms / 189ms
+
+Operation: Compare_File_42
+  Calls:       1
+  Total Time:  189ms
+  Average:     189.00ms
+  Median:      189.00ms
+  Min/Max:     189ms / 189ms
+
+Operation: Compare_File_619
+  Calls:       1
+  Total Time:  188ms
+  Average:     188.00ms
+  Median:      188.00ms
+  Min/Max:     188ms / 188ms
+
+Operation: Compare_File_473
+  Calls:       1
+  Total Time:  188ms
+  Average:     188.00ms
+  Median:      188.00ms
+  Min/Max:     188ms / 188ms
+
+Operation: Compare_File_837
+  Calls:       1
+  Total Time:  188ms
+  Average:     188.00ms
+  Median:      188.00ms
+  Min/Max:     188ms / 188ms
+
+Operation: Compare_File_709
+  Calls:       1
+  Total Time:  187ms
+  Average:     187.00ms
+  Median:      187.00ms
+  Min/Max:     187ms / 187ms
+
+Operation: Compare_File_438
+  Calls:       1
+  Total Time:  187ms
+  Average:     187.00ms
+  Median:      187.00ms
+  Min/Max:     187ms / 187ms
+
+Operation: Compare_File_947
+  Calls:       1
+  Total Time:  187ms
+  Average:     187.00ms
+  Median:      187.00ms
+  Min/Max:     187ms / 187ms
+
+Operation: Compare_File_771
+  Calls:       1
+  Total Time:  187ms
+  Average:     187.00ms
+  Median:      187.00ms
+  Min/Max:     187ms / 187ms
+
+Operation: Compare_File_604
+  Calls:       1
+  Total Time:  187ms
+  Average:     187.00ms
+  Median:      187.00ms
+  Min/Max:     187ms / 187ms
+
+Operation: Compare_File_221
+  Calls:       1
+  Total Time:  186ms
+  Average:     186.00ms
+  Median:      186.00ms
+  Min/Max:     186ms / 186ms
+
+Operation: Compare_File_939
+  Calls:       1
+  Total Time:  186ms
+  Average:     186.00ms
+  Median:      186.00ms
+  Min/Max:     186ms / 186ms
+
+Operation: Compare_File_556
+  Calls:       1
+  Total Time:  186ms
+  Average:     186.00ms
+  Median:      186.00ms
+  Min/Max:     186ms / 186ms
+
+Operation: Compare_File_903
+  Calls:       1
+  Total Time:  186ms
+  Average:     186.00ms
+  Median:      186.00ms
+  Min/Max:     186ms / 186ms
+
+Operation: Compare_File_386
+  Calls:       1
+  Total Time:  185ms
+  Average:     185.00ms
+  Median:      185.00ms
+  Min/Max:     185ms / 185ms
+
+Operation: Compare_File_594
+  Calls:       1
+  Total Time:  185ms
+  Average:     185.00ms
+  Median:      185.00ms
+  Min/Max:     185ms / 185ms
+
+Operation: Compare_File_268
+  Calls:       1
+  Total Time:  184ms
+  Average:     184.00ms
+  Median:      184.00ms
+  Min/Max:     184ms / 184ms
+
+Operation: Compare_File_174
+  Calls:       1
+  Total Time:  184ms
+  Average:     184.00ms
+  Median:      184.00ms
+  Min/Max:     184ms / 184ms
+
+Operation: Compare_File_292
+  Calls:       1
+  Total Time:  184ms
+  Average:     184.00ms
+  Median:      184.00ms
+  Min/Max:     184ms / 184ms
+
+Operation: Compare_File_593
+  Calls:       1
+  Total Time:  184ms
+  Average:     184.00ms
+  Median:      184.00ms
+  Min/Max:     184ms / 184ms
+
+Operation: Compare_File_676
+  Calls:       1
+  Total Time:  183ms
+  Average:     183.00ms
+  Median:      183.00ms
+  Min/Max:     183ms / 183ms
+
+Operation: Compare_File_589
+  Calls:       1
+  Total Time:  183ms
+  Average:     183.00ms
+  Median:      183.00ms
+  Min/Max:     183ms / 183ms
+
+Operation: Compare_File_863
+  Calls:       1
+  Total Time:  183ms
+  Average:     183.00ms
+  Median:      183.00ms
+  Min/Max:     183ms / 183ms
+
+Operation: Compare_File_92
+  Calls:       1
+  Total Time:  182ms
+  Average:     182.00ms
+  Median:      182.00ms
+  Min/Max:     182ms / 182ms
+
+Operation: Compare_File_236
+  Calls:       1
+  Total Time:  182ms
+  Average:     182.00ms
+  Median:      182.00ms
+  Min/Max:     182ms / 182ms
+
+Operation: Compare_File_788
+  Calls:       1
+  Total Time:  182ms
+  Average:     182.00ms
+  Median:      182.00ms
+  Min/Max:     182ms / 182ms
+
+Operation: Compare_File_537
+  Calls:       1
+  Total Time:  182ms
+  Average:     182.00ms
+  Median:      182.00ms
+  Min/Max:     182ms / 182ms
+
+Operation: Compare_File_334
+  Calls:       1
+  Total Time:  182ms
+  Average:     182.00ms
+  Median:      182.00ms
+  Min/Max:     182ms / 182ms
+
+Operation: Compare_File_417
+  Calls:       1
+  Total Time:  181ms
+  Average:     181.00ms
+  Median:      181.00ms
+  Min/Max:     181ms / 181ms
+
+Operation: Compare_File_373
+  Calls:       1
+  Total Time:  181ms
+  Average:     181.00ms
+  Median:      181.00ms
+  Min/Max:     181ms / 181ms
+
+Operation: Compare_File_115
+  Calls:       1
+  Total Time:  181ms
+  Average:     181.00ms
+  Median:      181.00ms
+  Min/Max:     181ms / 181ms
+
+Operation: Compare_File_731
+  Calls:       1
+  Total Time:  181ms
+  Average:     181.00ms
+  Median:      181.00ms
+  Min/Max:     181ms / 181ms
+
+Operation: Compare_File_500
+  Calls:       1
+  Total Time:  180ms
+  Average:     180.00ms
+  Median:      180.00ms
+  Min/Max:     180ms / 180ms
+
+Operation: Compare_File_599
+  Calls:       1
+  Total Time:  180ms
+  Average:     180.00ms
+  Median:      180.00ms
+  Min/Max:     180ms / 180ms
+
+Operation: Compare_File_228
+  Calls:       1
+  Total Time:  180ms
+  Average:     180.00ms
+  Median:      180.00ms
+  Min/Max:     180ms / 180ms
+
+Operation: Compare_File_753
+  Calls:       1
+  Total Time:  180ms
+  Average:     180.00ms
+  Median:      180.00ms
+  Min/Max:     180ms / 180ms
+
+Operation: Compare_File_280
+  Calls:       1
+  Total Time:  179ms
+  Average:     179.00ms
+  Median:      179.00ms
+  Min/Max:     179ms / 179ms
+
+Operation: Compare_File_99
+  Calls:       1
+  Total Time:  179ms
+  Average:     179.00ms
+  Median:      179.00ms
+  Min/Max:     179ms / 179ms
+
+Operation: Compare_File_899
+  Calls:       1
+  Total Time:  179ms
+  Average:     179.00ms
+  Median:      179.00ms
+  Min/Max:     179ms / 179ms
+
+Operation: Compare_File_848
+  Calls:       1
+  Total Time:  179ms
+  Average:     179.00ms
+  Median:      179.00ms
+  Min/Max:     179ms / 179ms
+
+Operation: Compare_File_273
+  Calls:       1
+  Total Time:  179ms
+  Average:     179.00ms
+  Median:      179.00ms
+  Min/Max:     179ms / 179ms
+
+Operation: Compare_File_149
+  Calls:       1
+  Total Time:  179ms
+  Average:     179.00ms
+  Median:      179.00ms
+  Min/Max:     179ms / 179ms
+
+Operation: Compare_File_341
+  Calls:       1
+  Total Time:  178ms
+  Average:     178.00ms
+  Median:      178.00ms
+  Min/Max:     178ms / 178ms
+
+Operation: Compare_File_133
+  Calls:       1
+  Total Time:  178ms
+  Average:     178.00ms
+  Median:      178.00ms
+  Min/Max:     178ms / 178ms
+
+Operation: Compare_File_773
+  Calls:       1
+  Total Time:  178ms
+  Average:     178.00ms
+  Median:      178.00ms
+  Min/Max:     178ms / 178ms
+
+Operation: Compare_File_222
+  Calls:       1
+  Total Time:  178ms
+  Average:     178.00ms
+  Median:      178.00ms
+  Min/Max:     178ms / 178ms
+
+Operation: Compare_File_303
+  Calls:       1
+  Total Time:  178ms
+  Average:     178.00ms
+  Median:      178.00ms
+  Min/Max:     178ms / 178ms
+
+Operation: Compare_File_88
+  Calls:       1
+  Total Time:  178ms
+  Average:     178.00ms
+  Median:      178.00ms
+  Min/Max:     178ms / 178ms
+
+Operation: Compare_File_587
+  Calls:       1
+  Total Time:  178ms
+  Average:     178.00ms
+  Median:      178.00ms
+  Min/Max:     178ms / 178ms
+
+Operation: Compare_File_203
+  Calls:       1
+  Total Time:  178ms
+  Average:     178.00ms
+  Median:      178.00ms
+  Min/Max:     178ms / 178ms
+
+Operation: Compare_File_308
+  Calls:       1
+  Total Time:  177ms
+  Average:     177.00ms
+  Median:      177.00ms
+  Min/Max:     177ms / 177ms
+
+Operation: Compare_File_646
+  Calls:       1
+  Total Time:  177ms
+  Average:     177.00ms
+  Median:      177.00ms
+  Min/Max:     177ms / 177ms
+
+Operation: Compare_File_326
+  Calls:       1
+  Total Time:  177ms
+  Average:     177.00ms
+  Median:      177.00ms
+  Min/Max:     177ms / 177ms
+
+Operation: Compare_File_336
+  Calls:       1
+  Total Time:  177ms
+  Average:     177.00ms
+  Median:      177.00ms
+  Min/Max:     177ms / 177ms
+
+Operation: Compare_File_434
+  Calls:       1
+  Total Time:  177ms
+  Average:     177.00ms
+  Median:      177.00ms
+  Min/Max:     177ms / 177ms
+
+Operation: Compare_File_528
+  Calls:       1
+  Total Time:  177ms
+  Average:     177.00ms
+  Median:      177.00ms
+  Min/Max:     177ms / 177ms
+
+Operation: Compare_File_943
+  Calls:       1
+  Total Time:  177ms
+  Average:     177.00ms
+  Median:      177.00ms
+  Min/Max:     177ms / 177ms
+
+Operation: Compare_File_182
+  Calls:       1
+  Total Time:  177ms
+  Average:     177.00ms
+  Median:      177.00ms
+  Min/Max:     177ms / 177ms
+
+Operation: Compare_File_555
+  Calls:       1
+  Total Time:  176ms
+  Average:     176.00ms
+  Median:      176.00ms
+  Min/Max:     176ms / 176ms
+
+Operation: Compare_File_173
+  Calls:       1
+  Total Time:  176ms
+  Average:     176.00ms
+  Median:      176.00ms
+  Min/Max:     176ms / 176ms
+
+Operation: Compare_File_733
+  Calls:       1
+  Total Time:  176ms
+  Average:     176.00ms
+  Median:      176.00ms
+  Min/Max:     176ms / 176ms
+
+Operation: Compare_File_102
+  Calls:       1
+  Total Time:  175ms
+  Average:     175.00ms
+  Median:      175.00ms
+  Min/Max:     175ms / 175ms
+
+Operation: Compare_File_376
+  Calls:       1
+  Total Time:  175ms
+  Average:     175.00ms
+  Median:      175.00ms
+  Min/Max:     175ms / 175ms
+
+Operation: Compare_File_881
+  Calls:       1
+  Total Time:  175ms
+  Average:     175.00ms
+  Median:      175.00ms
+  Min/Max:     175ms / 175ms
+
+Operation: Compare_File_332
+  Calls:       1
+  Total Time:  175ms
+  Average:     175.00ms
+  Median:      175.00ms
+  Min/Max:     175ms / 175ms
+
+Operation: Compare_File_212
+  Calls:       1
+  Total Time:  175ms
+  Average:     175.00ms
+  Median:      175.00ms
+  Min/Max:     175ms / 175ms
+
+Operation: Compare_File_290
+  Calls:       1
+  Total Time:  174ms
+  Average:     174.00ms
+  Median:      174.00ms
+  Min/Max:     174ms / 174ms
+
+Operation: Compare_File_820
+  Calls:       1
+  Total Time:  174ms
+  Average:     174.00ms
+  Median:      174.00ms
+  Min/Max:     174ms / 174ms
+
+Operation: Compare_File_864
+  Calls:       1
+  Total Time:  174ms
+  Average:     174.00ms
+  Median:      174.00ms
+  Min/Max:     174ms / 174ms
+
+Operation: Compare_File_135
+  Calls:       1
+  Total Time:  174ms
+  Average:     174.00ms
+  Median:      174.00ms
+  Min/Max:     174ms / 174ms
+
+Operation: Compare_File_267
+  Calls:       1
+  Total Time:  174ms
+  Average:     174.00ms
+  Median:      174.00ms
+  Min/Max:     174ms / 174ms
+
+Operation: Compare_File_887
+  Calls:       1
+  Total Time:  174ms
+  Average:     174.00ms
+  Median:      174.00ms
+  Min/Max:     174ms / 174ms
+
+Operation: Compare_File_539
+  Calls:       1
+  Total Time:  174ms
+  Average:     174.00ms
+  Median:      174.00ms
+  Min/Max:     174ms / 174ms
+
+Operation: Compare_File_117
+  Calls:       1
+  Total Time:  173ms
+  Average:     173.00ms
+  Median:      173.00ms
+  Min/Max:     173ms / 173ms
+
+Operation: Compare_File_572
+  Calls:       1
+  Total Time:  172ms
+  Average:     172.00ms
+  Median:      172.00ms
+  Min/Max:     172ms / 172ms
+
+Operation: Compare_File_655
+  Calls:       1
+  Total Time:  172ms
+  Average:     172.00ms
+  Median:      172.00ms
+  Min/Max:     172ms / 172ms
+
+Operation: Compare_File_67
+  Calls:       1
+  Total Time:  171ms
+  Average:     171.00ms
+  Median:      171.00ms
+  Min/Max:     171ms / 171ms
+
+Operation: Compare_File_602
+  Calls:       1
+  Total Time:  171ms
+  Average:     171.00ms
+  Median:      171.00ms
+  Min/Max:     171ms / 171ms
+
+Operation: Compare_File_367
+  Calls:       1
+  Total Time:  171ms
+  Average:     171.00ms
+  Median:      171.00ms
+  Min/Max:     171ms / 171ms
+
+Operation: Compare_File_643
+  Calls:       1
+  Total Time:  171ms
+  Average:     171.00ms
+  Median:      171.00ms
+  Min/Max:     171ms / 171ms
+
+Operation: Compare_File_755
+  Calls:       1
+  Total Time:  171ms
+  Average:     171.00ms
+  Median:      171.00ms
+  Min/Max:     171ms / 171ms
+
+Operation: Compare_File_823
+  Calls:       1
+  Total Time:  170ms
+  Average:     170.00ms
+  Median:      170.00ms
+  Min/Max:     170ms / 170ms
+
+Operation: Compare_File_194
+  Calls:       1
+  Total Time:  170ms
+  Average:     170.00ms
+  Median:      170.00ms
+  Min/Max:     170ms / 170ms
+
+Operation: Compare_File_68
+  Calls:       1
+  Total Time:  170ms
+  Average:     170.00ms
+  Median:      170.00ms
+  Min/Max:     170ms / 170ms
+
+Operation: Compare_File_356
+  Calls:       1
+  Total Time:  170ms
+  Average:     170.00ms
+  Median:      170.00ms
+  Min/Max:     170ms / 170ms
+
+Operation: Compare_File_568
+  Calls:       1
+  Total Time:  170ms
+  Average:     170.00ms
+  Median:      170.00ms
+  Min/Max:     170ms / 170ms
+
+Operation: Compare_File_884
+  Calls:       1
+  Total Time:  169ms
+  Average:     169.00ms
+  Median:      169.00ms
+  Min/Max:     169ms / 169ms
+
+Operation: Compare_File_321
+  Calls:       1
+  Total Time:  169ms
+  Average:     169.00ms
+  Median:      169.00ms
+  Min/Max:     169ms / 169ms
+
+Operation: Compare_File_459
+  Calls:       1
+  Total Time:  169ms
+  Average:     169.00ms
+  Median:      169.00ms
+  Min/Max:     169ms / 169ms
+
+Operation: Compare_File_230
+  Calls:       1
+  Total Time:  168ms
+  Average:     168.00ms
+  Median:      168.00ms
+  Min/Max:     168ms / 168ms
+
+Operation: Compare_File_439
+  Calls:       1
+  Total Time:  167ms
+  Average:     167.00ms
+  Median:      167.00ms
+  Min/Max:     167ms / 167ms
+
+Operation: Compare_File_402
+  Calls:       1
+  Total Time:  167ms
+  Average:     167.00ms
+  Median:      167.00ms
+  Min/Max:     167ms / 167ms
+
+Operation: Compare_File_54
+  Calls:       1
+  Total Time:  167ms
+  Average:     167.00ms
+  Median:      167.00ms
+  Min/Max:     167ms / 167ms
+
+Operation: Compare_File_347
+  Calls:       1
+  Total Time:  167ms
+  Average:     167.00ms
+  Median:      167.00ms
+  Min/Max:     167ms / 167ms
+
+Operation: Compare_File_239
+  Calls:       1
+  Total Time:  167ms
+  Average:     167.00ms
+  Median:      167.00ms
+  Min/Max:     167ms / 167ms
+
+Operation: Compare_File_418
+  Calls:       1
+  Total Time:  167ms
+  Average:     167.00ms
+  Median:      167.00ms
+  Min/Max:     167ms / 167ms
+
+Operation: Compare_File_914
+  Calls:       1
+  Total Time:  167ms
+  Average:     167.00ms
+  Median:      167.00ms
+  Min/Max:     167ms / 167ms
+
+Operation: Compare_File_36
+  Calls:       1
+  Total Time:  166ms
+  Average:     166.00ms
+  Median:      166.00ms
+  Min/Max:     166ms / 166ms
+
+Operation: Compare_File_470
+  Calls:       1
+  Total Time:  166ms
+  Average:     166.00ms
+  Median:      166.00ms
+  Min/Max:     166ms / 166ms
+
+Operation: Compare_File_845
+  Calls:       1
+  Total Time:  166ms
+  Average:     166.00ms
+  Median:      166.00ms
+  Min/Max:     166ms / 166ms
+
+Operation: Compare_File_81
+  Calls:       1
+  Total Time:  166ms
+  Average:     166.00ms
+  Median:      166.00ms
+  Min/Max:     166ms / 166ms
+
+Operation: Compare_File_342
+  Calls:       1
+  Total Time:  166ms
+  Average:     166.00ms
+  Median:      166.00ms
+  Min/Max:     166ms / 166ms
+
+Operation: Compare_File_775
+  Calls:       1
+  Total Time:  166ms
+  Average:     166.00ms
+  Median:      166.00ms
+  Min/Max:     166ms / 166ms
+
+Operation: Compare_File_350
+  Calls:       1
+  Total Time:  166ms
+  Average:     166.00ms
+  Median:      166.00ms
+  Min/Max:     166ms / 166ms
+
+Operation: Compare_File_778
+  Calls:       1
+  Total Time:  166ms
+  Average:     166.00ms
+  Median:      166.00ms
+  Min/Max:     166ms / 166ms
+
+Operation: Compare_File_762
+  Calls:       1
+  Total Time:  165ms
+  Average:     165.00ms
+  Median:      165.00ms
+  Min/Max:     165ms / 165ms
+
+Operation: Compare_File_718
+  Calls:       1
+  Total Time:  165ms
+  Average:     165.00ms
+  Median:      165.00ms
+  Min/Max:     165ms / 165ms
+
+Operation: Compare_File_346
+  Calls:       1
+  Total Time:  164ms
+  Average:     164.00ms
+  Median:      164.00ms
+  Min/Max:     164ms / 164ms
+
+Operation: Compare_File_708
+  Calls:       1
+  Total Time:  164ms
+  Average:     164.00ms
+  Median:      164.00ms
+  Min/Max:     164ms / 164ms
+
+Operation: Compare_File_776
+  Calls:       1
+  Total Time:  164ms
+  Average:     164.00ms
+  Median:      164.00ms
+  Min/Max:     164ms / 164ms
+
+Operation: Compare_File_950
+  Calls:       1
+  Total Time:  163ms
+  Average:     163.00ms
+  Median:      163.00ms
+  Min/Max:     163ms / 163ms
+
+Operation: Compare_File_78
+  Calls:       1
+  Total Time:  163ms
+  Average:     163.00ms
+  Median:      163.00ms
+  Min/Max:     163ms / 163ms
+
+Operation: Compare_File_890
+  Calls:       1
+  Total Time:  163ms
+  Average:     163.00ms
+  Median:      163.00ms
+  Min/Max:     163ms / 163ms
+
+Operation: Compare_File_124
+  Calls:       1
+  Total Time:  163ms
+  Average:     163.00ms
+  Median:      163.00ms
+  Min/Max:     163ms / 163ms
+
+Operation: Compare_File_984
+  Calls:       1
+  Total Time:  163ms
+  Average:     163.00ms
+  Median:      163.00ms
+  Min/Max:     163ms / 163ms
+
+Operation: Compare_File_570
+  Calls:       1
+  Total Time:  162ms
+  Average:     162.00ms
+  Median:      162.00ms
+  Min/Max:     162ms / 162ms
+
+Operation: Compare_File_106
+  Calls:       1
+  Total Time:  162ms
+  Average:     162.00ms
+  Median:      162.00ms
+  Min/Max:     162ms / 162ms
+
+Operation: Compare_File_351
+  Calls:       1
+  Total Time:  162ms
+  Average:     162.00ms
+  Median:      162.00ms
+  Min/Max:     162ms / 162ms
+
+Operation: Compare_File_140
+  Calls:       1
+  Total Time:  162ms
+  Average:     162.00ms
+  Median:      162.00ms
+  Min/Max:     162ms / 162ms
+
+Operation: Compare_File_929
+  Calls:       1
+  Total Time:  162ms
+  Average:     162.00ms
+  Median:      162.00ms
+  Min/Max:     162ms / 162ms
+
+Operation: Compare_File_992
+  Calls:       1
+  Total Time:  162ms
+  Average:     162.00ms
+  Median:      162.00ms
+  Min/Max:     162ms / 162ms
+
+Operation: Compare_File_790
+  Calls:       1
+  Total Time:  162ms
+  Average:     162.00ms
+  Median:      162.00ms
+  Min/Max:     162ms / 162ms
+
+Operation: Compare_File_567
+  Calls:       1
+  Total Time:  162ms
+  Average:     162.00ms
+  Median:      162.00ms
+  Min/Max:     162ms / 162ms
+
+Operation: Compare_File_371
+  Calls:       1
+  Total Time:  161ms
+  Average:     161.00ms
+  Median:      161.00ms
+  Min/Max:     161ms / 161ms
+
+Operation: Compare_File_208
+  Calls:       1
+  Total Time:  161ms
+  Average:     161.00ms
+  Median:      161.00ms
+  Min/Max:     161ms / 161ms
+
+Operation: Compare_File_515
+  Calls:       1
+  Total Time:  161ms
+  Average:     161.00ms
+  Median:      161.00ms
+  Min/Max:     161ms / 161ms
+
+Operation: Compare_File_383
+  Calls:       1
+  Total Time:  161ms
+  Average:     161.00ms
+  Median:      161.00ms
+  Min/Max:     161ms / 161ms
+
+Operation: Compare_File_679
+  Calls:       1
+  Total Time:  160ms
+  Average:     160.00ms
+  Median:      160.00ms
+  Min/Max:     160ms / 160ms
+
+Operation: Compare_File_978
+  Calls:       1
+  Total Time:  160ms
+  Average:     160.00ms
+  Median:      160.00ms
+  Min/Max:     160ms / 160ms
+
+Operation: Compare_File_430
+  Calls:       1
+  Total Time:  160ms
+  Average:     160.00ms
+  Median:      160.00ms
+  Min/Max:     160ms / 160ms
+
+Operation: Compare_File_872
+  Calls:       1
+  Total Time:  160ms
+  Average:     160.00ms
+  Median:      160.00ms
+  Min/Max:     160ms / 160ms
+
+Operation: Compare_File_785
+  Calls:       1
+  Total Time:  160ms
+  Average:     160.00ms
+  Median:      160.00ms
+  Min/Max:     160ms / 160ms
+
+Operation: Compare_File_826
+  Calls:       1
+  Total Time:  160ms
+  Average:     160.00ms
+  Median:      160.00ms
+  Min/Max:     160ms / 160ms
+
+Operation: Compare_File_789
+  Calls:       1
+  Total Time:  159ms
+  Average:     159.00ms
+  Median:      159.00ms
+  Min/Max:     159ms / 159ms
+
+Operation: Compare_File_73
+  Calls:       1
+  Total Time:  159ms
+  Average:     159.00ms
+  Median:      159.00ms
+  Min/Max:     159ms / 159ms
+
+Operation: Compare_File_621
+  Calls:       1
+  Total Time:  159ms
+  Average:     159.00ms
+  Median:      159.00ms
+  Min/Max:     159ms / 159ms
+
+Operation: Compare_File_450
+  Calls:       1
+  Total Time:  159ms
+  Average:     159.00ms
+  Median:      159.00ms
+  Min/Max:     159ms / 159ms
+
+Operation: Compare_File_723
+  Calls:       1
+  Total Time:  159ms
+  Average:     159.00ms
+  Median:      159.00ms
+  Min/Max:     159ms / 159ms
+
+Operation: Compare_File_754
+  Calls:       1
+  Total Time:  159ms
+  Average:     159.00ms
+  Median:      159.00ms
+  Min/Max:     159ms / 159ms
+
+Operation: Compare_File_807
+  Calls:       1
+  Total Time:  159ms
+  Average:     159.00ms
+  Median:      159.00ms
+  Min/Max:     159ms / 159ms
+
+Operation: Compare_File_616
+  Calls:       1
+  Total Time:  158ms
+  Average:     158.00ms
+  Median:      158.00ms
+  Min/Max:     158ms / 158ms
+
+Operation: Compare_File_265
+  Calls:       1
+  Total Time:  158ms
+  Average:     158.00ms
+  Median:      158.00ms
+  Min/Max:     158ms / 158ms
+
+Operation: Compare_File_413
+  Calls:       1
+  Total Time:  158ms
+  Average:     158.00ms
+  Median:      158.00ms
+  Min/Max:     158ms / 158ms
+
+Operation: Compare_File_926
+  Calls:       1
+  Total Time:  158ms
+  Average:     158.00ms
+  Median:      158.00ms
+  Min/Max:     158ms / 158ms
+
+Operation: Compare_File_161
+  Calls:       1
+  Total Time:  158ms
+  Average:     158.00ms
+  Median:      158.00ms
+  Min/Max:     158ms / 158ms
+
+Operation: Compare_File_698
+  Calls:       1
+  Total Time:  158ms
+  Average:     158.00ms
+  Median:      158.00ms
+  Min/Max:     158ms / 158ms
+
+Operation: Compare_File_462
+  Calls:       1
+  Total Time:  157ms
+  Average:     157.00ms
+  Median:      157.00ms
+  Min/Max:     157ms / 157ms
+
+Operation: Compare_File_935
+  Calls:       1
+  Total Time:  157ms
+  Average:     157.00ms
+  Median:      157.00ms
+  Min/Max:     157ms / 157ms
+
+Operation: Compare_File_998
+  Calls:       1
+  Total Time:  157ms
+  Average:     157.00ms
+  Median:      157.00ms
+  Min/Max:     157ms / 157ms
+
+Operation: Compare_File_629
+  Calls:       1
+  Total Time:  157ms
+  Average:     157.00ms
+  Median:      157.00ms
+  Min/Max:     157ms / 157ms
+
+Operation: Compare_File_501
+  Calls:       1
+  Total Time:  157ms
+  Average:     157.00ms
+  Median:      157.00ms
+  Min/Max:     157ms / 157ms
+
+Operation: Compare_File_724
+  Calls:       1
+  Total Time:  157ms
+  Average:     157.00ms
+  Median:      157.00ms
+  Min/Max:     157ms / 157ms
+
+Operation: Compare_File_441
+  Calls:       1
+  Total Time:  157ms
+  Average:     157.00ms
+  Median:      157.00ms
+  Min/Max:     157ms / 157ms
+
+Operation: Compare_File_340
+  Calls:       1
+  Total Time:  157ms
+  Average:     157.00ms
+  Median:      157.00ms
+  Min/Max:     157ms / 157ms
+
+Operation: Compare_File_796
+  Calls:       1
+  Total Time:  156ms
+  Average:     156.00ms
+  Median:      156.00ms
+  Min/Max:     156ms / 156ms
+
+Operation: Compare_File_868
+  Calls:       1
+  Total Time:  156ms
+  Average:     156.00ms
+  Median:      156.00ms
+  Min/Max:     156ms / 156ms
+
+Operation: Compare_File_531
+  Calls:       1
+  Total Time:  156ms
+  Average:     156.00ms
+  Median:      156.00ms
+  Min/Max:     156ms / 156ms
+
+Operation: Compare_File_464
+  Calls:       1
+  Total Time:  156ms
+  Average:     156.00ms
+  Median:      156.00ms
+  Min/Max:     156ms / 156ms
+
+Operation: Compare_File_309
+  Calls:       1
+  Total Time:  156ms
+  Average:     156.00ms
+  Median:      156.00ms
+  Min/Max:     156ms / 156ms
+
+Operation: Compare_File_461
+  Calls:       1
+  Total Time:  156ms
+  Average:     156.00ms
+  Median:      156.00ms
+  Min/Max:     156ms / 156ms
+
+Operation: Compare_File_479
+  Calls:       1
+  Total Time:  156ms
+  Average:     156.00ms
+  Median:      156.00ms
+  Min/Max:     156ms / 156ms
+
+Operation: Compare_File_37
+  Calls:       1
+  Total Time:  155ms
+  Average:     155.00ms
+  Median:      155.00ms
+  Min/Max:     155ms / 155ms
+
+Operation: Compare_File_103
+  Calls:       1
+  Total Time:  155ms
+  Average:     155.00ms
+  Median:      155.00ms
+  Min/Max:     155ms / 155ms
+
+Operation: Compare_File_32
+  Calls:       1
+  Total Time:  155ms
+  Average:     155.00ms
+  Median:      155.00ms
+  Min/Max:     155ms / 155ms
+
+Operation: Compare_File_805
+  Calls:       1
+  Total Time:  155ms
+  Average:     155.00ms
+  Median:      155.00ms
+  Min/Max:     155ms / 155ms
+
+Operation: Compare_File_642
+  Calls:       1
+  Total Time:  155ms
+  Average:     155.00ms
+  Median:      155.00ms
+  Min/Max:     155ms / 155ms
+
+Operation: Compare_File_160
+  Calls:       1
+  Total Time:  155ms
+  Average:     155.00ms
+  Median:      155.00ms
+  Min/Max:     155ms / 155ms
+
+Operation: Compare_File_516
+  Calls:       1
+  Total Time:  155ms
+  Average:     155.00ms
+  Median:      155.00ms
+  Min/Max:     155ms / 155ms
+
+Operation: Compare_File_83
+  Calls:       1
+  Total Time:  155ms
+  Average:     155.00ms
+  Median:      155.00ms
+  Min/Max:     155ms / 155ms
+
+Operation: Compare_File_244
+  Calls:       1
+  Total Time:  155ms
+  Average:     155.00ms
+  Median:      155.00ms
+  Min/Max:     155ms / 155ms
+
+Operation: Compare_File_169
+  Calls:       1
+  Total Time:  154ms
+  Average:     154.00ms
+  Median:      154.00ms
+  Min/Max:     154ms / 154ms
+
+Operation: Compare_File_291
+  Calls:       1
+  Total Time:  154ms
+  Average:     154.00ms
+  Median:      154.00ms
+  Min/Max:     154ms / 154ms
+
+Operation: Compare_File_219
+  Calls:       1
+  Total Time:  154ms
+  Average:     154.00ms
+  Median:      154.00ms
+  Min/Max:     154ms / 154ms
+
+Operation: Compare_File_307
+  Calls:       1
+  Total Time:  154ms
+  Average:     154.00ms
+  Median:      154.00ms
+  Min/Max:     154ms / 154ms
+
+Operation: Compare_File_200
+  Calls:       1
+  Total Time:  153ms
+  Average:     153.00ms
+  Median:      153.00ms
+  Min/Max:     153ms / 153ms
+
+Operation: Compare_File_272
+  Calls:       1
+  Total Time:  153ms
+  Average:     153.00ms
+  Median:      153.00ms
+  Min/Max:     153ms / 153ms
+
+Operation: Compare_File_185
+  Calls:       1
+  Total Time:  153ms
+  Average:     153.00ms
+  Median:      153.00ms
+  Min/Max:     153ms / 153ms
+
+Operation: Compare_File_846
+  Calls:       1
+  Total Time:  153ms
+  Average:     153.00ms
+  Median:      153.00ms
+  Min/Max:     153ms / 153ms
+
+Operation: Compare_File_816
+  Calls:       1
+  Total Time:  153ms
+  Average:     153.00ms
+  Median:      153.00ms
+  Min/Max:     153ms / 153ms
+
+Operation: Compare_File_502
+  Calls:       1
+  Total Time:  153ms
+  Average:     153.00ms
+  Median:      153.00ms
+  Min/Max:     153ms / 153ms
+
+Operation: Compare_File_748
+  Calls:       1
+  Total Time:  153ms
+  Average:     153.00ms
+  Median:      153.00ms
+  Min/Max:     153ms / 153ms
+
+Operation: Compare_File_792
+  Calls:       1
+  Total Time:  152ms
+  Average:     152.00ms
+  Median:      152.00ms
+  Min/Max:     152ms / 152ms
+
+Operation: Compare_File_860
+  Calls:       1
+  Total Time:  152ms
+  Average:     152.00ms
+  Median:      152.00ms
+  Min/Max:     152ms / 152ms
+
+Operation: Compare_File_101
+  Calls:       1
+  Total Time:  152ms
+  Average:     152.00ms
+  Median:      152.00ms
+  Min/Max:     152ms / 152ms
+
+Operation: Compare_File_803
+  Calls:       1
+  Total Time:  152ms
+  Average:     152.00ms
+  Median:      152.00ms
+  Min/Max:     152ms / 152ms
+
+Operation: Compare_File_668
+  Calls:       1
+  Total Time:  152ms
+  Average:     152.00ms
+  Median:      152.00ms
+  Min/Max:     152ms / 152ms
+
+Operation: Compare_File_840
+  Calls:       1
+  Total Time:  151ms
+  Average:     151.00ms
+  Median:      151.00ms
+  Min/Max:     151ms / 151ms
+
+Operation: Compare_File_493
+  Calls:       1
+  Total Time:  151ms
+  Average:     151.00ms
+  Median:      151.00ms
+  Min/Max:     151ms / 151ms
+
+Operation: Compare_File_316
+  Calls:       1
+  Total Time:  151ms
+  Average:     151.00ms
+  Median:      151.00ms
+  Min/Max:     151ms / 151ms
+
+Operation: Compare_File_113
+  Calls:       1
+  Total Time:  151ms
+  Average:     151.00ms
+  Median:      151.00ms
+  Min/Max:     151ms / 151ms
+
+Operation: Compare_File_693
+  Calls:       1
+  Total Time:  151ms
+  Average:     151.00ms
+  Median:      151.00ms
+  Min/Max:     151ms / 151ms
+
+Operation: Compare_File_141
+  Calls:       1
+  Total Time:  151ms
+  Average:     151.00ms
+  Median:      151.00ms
+  Min/Max:     151ms / 151ms
+
+Operation: Compare_File_601
+  Calls:       1
+  Total Time:  150ms
+  Average:     150.00ms
+  Median:      150.00ms
+  Min/Max:     150ms / 150ms
+
+Operation: Compare_File_554
+  Calls:       1
+  Total Time:  150ms
+  Average:     150.00ms
+  Median:      150.00ms
+  Min/Max:     150ms / 150ms
+
+Operation: Compare_File_891
+  Calls:       1
+  Total Time:  150ms
+  Average:     150.00ms
+  Median:      150.00ms
+  Min/Max:     150ms / 150ms
+
+Operation: Compare_File_392
+  Calls:       1
+  Total Time:  150ms
+  Average:     150.00ms
+  Median:      150.00ms
+  Min/Max:     150ms / 150ms
+
+Operation: Compare_File_760
+  Calls:       1
+  Total Time:  150ms
+  Average:     150.00ms
+  Median:      150.00ms
+  Min/Max:     150ms / 150ms
+
+Operation: Compare_File_378
+  Calls:       1
+  Total Time:  149ms
+  Average:     149.00ms
+  Median:      149.00ms
+  Min/Max:     149ms / 149ms
+
+Operation: Compare_File_657
+  Calls:       1
+  Total Time:  149ms
+  Average:     149.00ms
+  Median:      149.00ms
+  Min/Max:     149ms / 149ms
+
+Operation: Compare_File_485
+  Calls:       1
+  Total Time:  149ms
+  Average:     149.00ms
+  Median:      149.00ms
+  Min/Max:     149ms / 149ms
+
+Operation: Compare_File_366
+  Calls:       1
+  Total Time:  149ms
+  Average:     149.00ms
+  Median:      149.00ms
+  Min/Max:     149ms / 149ms
+
+Operation: Compare_File_770
+  Calls:       1
+  Total Time:  149ms
+  Average:     149.00ms
+  Median:      149.00ms
+  Min/Max:     149ms / 149ms
+
+Operation: Compare_File_780
+  Calls:       1
+  Total Time:  149ms
+  Average:     149.00ms
+  Median:      149.00ms
+  Min/Max:     149ms / 149ms
+
+Operation: Compare_File_855
+  Calls:       1
+  Total Time:  148ms
+  Average:     148.00ms
+  Median:      148.00ms
+  Min/Max:     148ms / 148ms
+
+Operation: Compare_File_743
+  Calls:       1
+  Total Time:  148ms
+  Average:     148.00ms
+  Median:      148.00ms
+  Min/Max:     148ms / 148ms
+
+Operation: Compare_File_118
+  Calls:       1
+  Total Time:  148ms
+  Average:     148.00ms
+  Median:      148.00ms
+  Min/Max:     148ms / 148ms
+
+Operation: Compare_File_372
+  Calls:       1
+  Total Time:  147ms
+  Average:     147.00ms
+  Median:      147.00ms
+  Min/Max:     147ms / 147ms
+
+Operation: Compare_File_666
+  Calls:       1
+  Total Time:  147ms
+  Average:     147.00ms
+  Median:      147.00ms
+  Min/Max:     147ms / 147ms
+
+Operation: Compare_File_879
+  Calls:       1
+  Total Time:  147ms
+  Average:     147.00ms
+  Median:      147.00ms
+  Min/Max:     147ms / 147ms
+
+Operation: Compare_File_966
+  Calls:       1
+  Total Time:  147ms
+  Average:     147.00ms
+  Median:      147.00ms
+  Min/Max:     147ms / 147ms
+
+Operation: Compare_File_700
+  Calls:       1
+  Total Time:  147ms
+  Average:     147.00ms
+  Median:      147.00ms
+  Min/Max:     147ms / 147ms
+
+Operation: Compare_File_540
+  Calls:       1
+  Total Time:  146ms
+  Average:     146.00ms
+  Median:      146.00ms
+  Min/Max:     146ms / 146ms
+
+Operation: Compare_File_951
+  Calls:       1
+  Total Time:  146ms
+  Average:     146.00ms
+  Median:      146.00ms
+  Min/Max:     146ms / 146ms
+
+Operation: Compare_File_841
+  Calls:       1
+  Total Time:  146ms
+  Average:     146.00ms
+  Median:      146.00ms
+  Min/Max:     146ms / 146ms
+
+Operation: Compare_File_617
+  Calls:       1
+  Total Time:  146ms
+  Average:     146.00ms
+  Median:      146.00ms
+  Min/Max:     146ms / 146ms
+
+Operation: Compare_File_988
+  Calls:       1
+  Total Time:  145ms
+  Average:     145.00ms
+  Median:      145.00ms
+  Min/Max:     145ms / 145ms
+
+Operation: Compare_File_513
+  Calls:       1
+  Total Time:  145ms
+  Average:     145.00ms
+  Median:      145.00ms
+  Min/Max:     145ms / 145ms
+
+Operation: Compare_File_583
+  Calls:       1
+  Total Time:  145ms
+  Average:     145.00ms
+  Median:      145.00ms
+  Min/Max:     145ms / 145ms
+
+Operation: Compare_File_689
+  Calls:       1
+  Total Time:  145ms
+  Average:     145.00ms
+  Median:      145.00ms
+  Min/Max:     145ms / 145ms
+
+Operation: Compare_File_33
+  Calls:       1
+  Total Time:  145ms
+  Average:     145.00ms
+  Median:      145.00ms
+  Min/Max:     145ms / 145ms
+
+Operation: Compare_File_421
+  Calls:       1
+  Total Time:  145ms
+  Average:     145.00ms
+  Median:      145.00ms
+  Min/Max:     145ms / 145ms
+
+Operation: Compare_File_452
+  Calls:       1
+  Total Time:  145ms
+  Average:     145.00ms
+  Median:      145.00ms
+  Min/Max:     145ms / 145ms
+
+Operation: Compare_File_960
+  Calls:       1
+  Total Time:  144ms
+  Average:     144.00ms
+  Median:      144.00ms
+  Min/Max:     144ms / 144ms
+
+Operation: Compare_File_674
+  Calls:       1
+  Total Time:  144ms
+  Average:     144.00ms
+  Median:      144.00ms
+  Min/Max:     144ms / 144ms
+
+Operation: Compare_File_90
+  Calls:       1
+  Total Time:  144ms
+  Average:     144.00ms
+  Median:      144.00ms
+  Min/Max:     144ms / 144ms
+
+Operation: Compare_File_82
+  Calls:       1
+  Total Time:  144ms
+  Average:     144.00ms
+  Median:      144.00ms
+  Min/Max:     144ms / 144ms
+
+Operation: Compare_File_949
+  Calls:       1
+  Total Time:  143ms
+  Average:     143.00ms
+  Median:      143.00ms
+  Min/Max:     143ms / 143ms
+
+Operation: Compare_File_866
+  Calls:       1
+  Total Time:  143ms
+  Average:     143.00ms
+  Median:      143.00ms
+  Min/Max:     143ms / 143ms
+
+Operation: Compare_File_166
+  Calls:       1
+  Total Time:  142ms
+  Average:     142.00ms
+  Median:      142.00ms
+  Min/Max:     142ms / 142ms
+
+Operation: Compare_File_235
+  Calls:       1
+  Total Time:  142ms
+  Average:     142.00ms
+  Median:      142.00ms
+  Min/Max:     142ms / 142ms
+
+Operation: Compare_File_644
+  Calls:       1
+  Total Time:  142ms
+  Average:     142.00ms
+  Median:      142.00ms
+  Min/Max:     142ms / 142ms
+
+Operation: Compare_File_569
+  Calls:       1
+  Total Time:  141ms
+  Average:     141.00ms
+  Median:      141.00ms
+  Min/Max:     141ms / 141ms
+
+Operation: Compare_File_157
+  Calls:       1
+  Total Time:  139ms
+  Average:     139.00ms
+  Median:      139.00ms
+  Min/Max:     139ms / 139ms
+
+Operation: Compare_File_615
+  Calls:       1
+  Total Time:  139ms
+  Average:     139.00ms
+  Median:      139.00ms
+  Min/Max:     139ms / 139ms
+
+Operation: Compare_File_527
+  Calls:       1
+  Total Time:  139ms
+  Average:     139.00ms
+  Median:      139.00ms
+  Min/Max:     139ms / 139ms
+
+Operation: Compare_File_508
+  Calls:       1
+  Total Time:  139ms
+  Average:     139.00ms
+  Median:      139.00ms
+  Min/Max:     139ms / 139ms
+
+Operation: Compare_File_100
+  Calls:       1
+  Total Time:  139ms
+  Average:     139.00ms
+  Median:      139.00ms
+  Min/Max:     139ms / 139ms
+
+Operation: Compare_File_209
+  Calls:       1
+  Total Time:  139ms
+  Average:     139.00ms
+  Median:      139.00ms
+  Min/Max:     139ms / 139ms
+
+Operation: Compare_File_232
+  Calls:       1
+  Total Time:  139ms
+  Average:     139.00ms
+  Median:      139.00ms
+  Min/Max:     139ms / 139ms
+
+Operation: Compare_File_751
+  Calls:       1
+  Total Time:  138ms
+  Average:     138.00ms
+  Median:      138.00ms
+  Min/Max:     138ms / 138ms
+
+Operation: Compare_File_187
+  Calls:       1
+  Total Time:  138ms
+  Average:     138.00ms
+  Median:      138.00ms
+  Min/Max:     138ms / 138ms
+
+Operation: Compare_File_834
+  Calls:       1
+  Total Time:  138ms
+  Average:     138.00ms
+  Median:      138.00ms
+  Min/Max:     138ms / 138ms
+
+Operation: Compare_File_737
+  Calls:       1
+  Total Time:  138ms
+  Average:     138.00ms
+  Median:      138.00ms
+  Min/Max:     138ms / 138ms
+
+Operation: Compare_File_428
+  Calls:       1
+  Total Time:  138ms
+  Average:     138.00ms
+  Median:      138.00ms
+  Min/Max:     138ms / 138ms
+
+Operation: Compare_File_429
+  Calls:       1
+  Total Time:  138ms
+  Average:     138.00ms
+  Median:      138.00ms
+  Min/Max:     138ms / 138ms
+
+Operation: Compare_File_159
+  Calls:       1
+  Total Time:  138ms
+  Average:     138.00ms
+  Median:      138.00ms
+  Min/Max:     138ms / 138ms
+
+Operation: Compare_File_330
+  Calls:       1
+  Total Time:  138ms
+  Average:     138.00ms
+  Median:      138.00ms
+  Min/Max:     138ms / 138ms
+
+Operation: Compare_File_285
+  Calls:       1
+  Total Time:  137ms
+  Average:     137.00ms
+  Median:      137.00ms
+  Min/Max:     137ms / 137ms
+
+Operation: Compare_File_339
+  Calls:       1
+  Total Time:  137ms
+  Average:     137.00ms
+  Median:      137.00ms
+  Min/Max:     137ms / 137ms
+
+Operation: Compare_File_821
+  Calls:       1
+  Total Time:  137ms
+  Average:     137.00ms
+  Median:      137.00ms
+  Min/Max:     137ms / 137ms
+
+Operation: Compare_File_138
+  Calls:       1
+  Total Time:  137ms
+  Average:     137.00ms
+  Median:      137.00ms
+  Min/Max:     137ms / 137ms
+
+Operation: Compare_File_933
+  Calls:       1
+  Total Time:  137ms
+  Average:     137.00ms
+  Median:      137.00ms
+  Min/Max:     137ms / 137ms
+
+Operation: Compare_File_522
+  Calls:       1
+  Total Time:  137ms
+  Average:     137.00ms
+  Median:      137.00ms
+  Min/Max:     137ms / 137ms
+
+Operation: Compare_File_976
+  Calls:       1
+  Total Time:  136ms
+  Average:     136.00ms
+  Median:      136.00ms
+  Min/Max:     136ms / 136ms
+
+Operation: Compare_File_768
+  Calls:       1
+  Total Time:  136ms
+  Average:     136.00ms
+  Median:      136.00ms
+  Min/Max:     136ms / 136ms
+
+Operation: Compare_File_79
+  Calls:       1
+  Total Time:  136ms
+  Average:     136.00ms
+  Median:      136.00ms
+  Min/Max:     136ms / 136ms
+
+Operation: Compare_File_741
+  Calls:       1
+  Total Time:  136ms
+  Average:     136.00ms
+  Median:      136.00ms
+  Min/Max:     136ms / 136ms
+
+Operation: Compare_File_915
+  Calls:       1
+  Total Time:  135ms
+  Average:     135.00ms
+  Median:      135.00ms
+  Min/Max:     135ms / 135ms
+
+Operation: Compare_File_996
+  Calls:       1
+  Total Time:  135ms
+  Average:     135.00ms
+  Median:      135.00ms
+  Min/Max:     135ms / 135ms
+
+Operation: Compare_File_958
+  Calls:       1
+  Total Time:  134ms
+  Average:     134.00ms
+  Median:      134.00ms
+  Min/Max:     134ms / 134ms
+
+Operation: Compare_File_622
+  Calls:       1
+  Total Time:  134ms
+  Average:     134.00ms
+  Median:      134.00ms
+  Min/Max:     134ms / 134ms
+
+Operation: Compare_File_359
+  Calls:       1
+  Total Time:  134ms
+  Average:     134.00ms
+  Median:      134.00ms
+  Min/Max:     134ms / 134ms
+
+Operation: Compare_File_382
+  Calls:       1
+  Total Time:  134ms
+  Average:     134.00ms
+  Median:      134.00ms
+  Min/Max:     134ms / 134ms
+
+Operation: Compare_File_783
+  Calls:       1
+  Total Time:  134ms
+  Average:     134.00ms
+  Median:      134.00ms
+  Min/Max:     134ms / 134ms
+
+Operation: Compare_File_457
+  Calls:       1
+  Total Time:  134ms
+  Average:     134.00ms
+  Median:      134.00ms
+  Min/Max:     134ms / 134ms
+
+Operation: Compare_File_74
+  Calls:       1
+  Total Time:  134ms
+  Average:     134.00ms
+  Median:      134.00ms
+  Min/Max:     134ms / 134ms
+
+Operation: Compare_File_35
+  Calls:       1
+  Total Time:  133ms
+  Average:     133.00ms
+  Median:      133.00ms
+  Min/Max:     133ms / 133ms
+
+Operation: Compare_File_959
+  Calls:       1
+  Total Time:  133ms
+  Average:     133.00ms
+  Median:      133.00ms
+  Min/Max:     133ms / 133ms
+
+Operation: Compare_File_571
+  Calls:       1
+  Total Time:  133ms
+  Average:     133.00ms
+  Median:      133.00ms
+  Min/Max:     133ms / 133ms
+
+Operation: Compare_File_822
+  Calls:       1
+  Total Time:  133ms
+  Average:     133.00ms
+  Median:      133.00ms
+  Min/Max:     133ms / 133ms
+
+Operation: Compare_File_732
+  Calls:       1
+  Total Time:  132ms
+  Average:     132.00ms
+  Median:      132.00ms
+  Min/Max:     132ms / 132ms
+
+Operation: Compare_File_50
+  Calls:       1
+  Total Time:  132ms
+  Average:     132.00ms
+  Median:      132.00ms
+  Min/Max:     132ms / 132ms
+
+Operation: Compare_File_690
+  Calls:       1
+  Total Time:  132ms
+  Average:     132.00ms
+  Median:      132.00ms
+  Min/Max:     132ms / 132ms
+
+Operation: Compare_File_395
+  Calls:       1
+  Total Time:  132ms
+  Average:     132.00ms
+  Median:      132.00ms
+  Min/Max:     132ms / 132ms
+
+Operation: Compare_File_109
+  Calls:       1
+  Total Time:  131ms
+  Average:     131.00ms
+  Median:      131.00ms
+  Min/Max:     131ms / 131ms
+
+Operation: Compare_File_231
+  Calls:       1
+  Total Time:  131ms
+  Average:     131.00ms
+  Median:      131.00ms
+  Min/Max:     131ms / 131ms
+
+Operation: Compare_File_276
+  Calls:       1
+  Total Time:  131ms
+  Average:     131.00ms
+  Median:      131.00ms
+  Min/Max:     131ms / 131ms
+
+Operation: Compare_File_91
+  Calls:       1
+  Total Time:  131ms
+  Average:     131.00ms
+  Median:      131.00ms
+  Min/Max:     131ms / 131ms
+
+Operation: Compare_File_928
+  Calls:       1
+  Total Time:  131ms
+  Average:     131.00ms
+  Median:      131.00ms
+  Min/Max:     131ms / 131ms
+
+Operation: Compare_File_148
+  Calls:       1
+  Total Time:  131ms
+  Average:     131.00ms
+  Median:      131.00ms
+  Min/Max:     131ms / 131ms
+
+Operation: Compare_File_658
+  Calls:       1
+  Total Time:  131ms
+  Average:     131.00ms
+  Median:      131.00ms
+  Min/Max:     131ms / 131ms
+
+Operation: Compare_File_645
+  Calls:       1
+  Total Time:  130ms
+  Average:     130.00ms
+  Median:      130.00ms
+  Min/Max:     130ms / 130ms
+
+Operation: Compare_File_463
+  Calls:       1
+  Total Time:  130ms
+  Average:     130.00ms
+  Median:      130.00ms
+  Min/Max:     130ms / 130ms
+
+Operation: Compare_File_444
+  Calls:       1
+  Total Time:  130ms
+  Average:     130.00ms
+  Median:      130.00ms
+  Min/Max:     130ms / 130ms
+
+Operation: Compare_File_394
+  Calls:       1
+  Total Time:  130ms
+  Average:     130.00ms
+  Median:      130.00ms
+  Min/Max:     130ms / 130ms
+
+Operation: Compare_File_195
+  Calls:       1
+  Total Time:  130ms
+  Average:     130.00ms
+  Median:      130.00ms
+  Min/Max:     130ms / 130ms
+
+Operation: Compare_File_749
+  Calls:       1
+  Total Time:  130ms
+  Average:     130.00ms
+  Median:      130.00ms
+  Min/Max:     130ms / 130ms
+
+Operation: Compare_File_497
+  Calls:       1
+  Total Time:  129ms
+  Average:     129.00ms
+  Median:      129.00ms
+  Min/Max:     129ms / 129ms
+
+Operation: Compare_File_995
+  Calls:       1
+  Total Time:  129ms
+  Average:     129.00ms
+  Median:      129.00ms
+  Min/Max:     129ms / 129ms
+
+Operation: Compare_File_311
+  Calls:       1
+  Total Time:  129ms
+  Average:     129.00ms
+  Median:      129.00ms
+  Min/Max:     129ms / 129ms
+
+Operation: Compare_File_474
+  Calls:       1
+  Total Time:  129ms
+  Average:     129.00ms
+  Median:      129.00ms
+  Min/Max:     129ms / 129ms
+
+Operation: Compare_File_454
+  Calls:       1
+  Total Time:  129ms
+  Average:     129.00ms
+  Median:      129.00ms
+  Min/Max:     129ms / 129ms
+
+Operation: Compare_File_488
+  Calls:       1
+  Total Time:  129ms
+  Average:     129.00ms
+  Median:      129.00ms
+  Min/Max:     129ms / 129ms
+
+Operation: Compare_File_269
+  Calls:       1
+  Total Time:  129ms
+  Average:     129.00ms
+  Median:      129.00ms
+  Min/Max:     129ms / 129ms
+
+Operation: Compare_File_186
+  Calls:       1
+  Total Time:  129ms
+  Average:     129.00ms
+  Median:      129.00ms
+  Min/Max:     129ms / 129ms
+
+Operation: Compare_File_422
+  Calls:       1
+  Total Time:  129ms
+  Average:     129.00ms
+  Median:      129.00ms
+  Min/Max:     129ms / 129ms
+
+Operation: Compare_File_873
+  Calls:       1
+  Total Time:  128ms
+  Average:     128.00ms
+  Median:      128.00ms
+  Min/Max:     128ms / 128ms
+
+Operation: Compare_File_581
+  Calls:       1
+  Total Time:  128ms
+  Average:     128.00ms
+  Median:      128.00ms
+  Min/Max:     128ms / 128ms
+
+Operation: Compare_File_249
+  Calls:       1
+  Total Time:  128ms
+  Average:     128.00ms
+  Median:      128.00ms
+  Min/Max:     128ms / 128ms
+
+Operation: Compare_File_59
+  Calls:       1
+  Total Time:  128ms
+  Average:     128.00ms
+  Median:      128.00ms
+  Min/Max:     128ms / 128ms
+
+Operation: Compare_File_405
+  Calls:       1
+  Total Time:  128ms
+  Average:     128.00ms
+  Median:      128.00ms
+  Min/Max:     128ms / 128ms
+
+Operation: Compare_File_130
+  Calls:       1
+  Total Time:  128ms
+  Average:     128.00ms
+  Median:      128.00ms
+  Min/Max:     128ms / 128ms
+
+Operation: Compare_File_781
+  Calls:       1
+  Total Time:  128ms
+  Average:     128.00ms
+  Median:      128.00ms
+  Min/Max:     128ms / 128ms
+
+Operation: Compare_File_559
+  Calls:       1
+  Total Time:  128ms
+  Average:     128.00ms
+  Median:      128.00ms
+  Min/Max:     128ms / 128ms
+
+Operation: Compare_File_255
+  Calls:       1
+  Total Time:  127ms
+  Average:     127.00ms
+  Median:      127.00ms
+  Min/Max:     127ms / 127ms
+
+Operation: Compare_File_548
+  Calls:       1
+  Total Time:  127ms
+  Average:     127.00ms
+  Median:      127.00ms
+  Min/Max:     127ms / 127ms
+
+Operation: Compare_File_812
+  Calls:       1
+  Total Time:  127ms
+  Average:     127.00ms
+  Median:      127.00ms
+  Min/Max:     127ms / 127ms
+
+Operation: Compare_File_728
+  Calls:       1
+  Total Time:  126ms
+  Average:     126.00ms
+  Median:      126.00ms
+  Min/Max:     126ms / 126ms
+
+Operation: Compare_File_277
+  Calls:       1
+  Total Time:  126ms
+  Average:     126.00ms
+  Median:      126.00ms
+  Min/Max:     126ms / 126ms
+
+Operation: Compare_File_953
+  Calls:       1
+  Total Time:  126ms
+  Average:     126.00ms
+  Median:      126.00ms
+  Min/Max:     126ms / 126ms
+
+Operation: Compare_File_911
+  Calls:       1
+  Total Time:  125ms
+  Average:     125.00ms
+  Median:      125.00ms
+  Min/Max:     125ms / 125ms
+
+Operation: Compare_File_814
+  Calls:       1
+  Total Time:  124ms
+  Average:     124.00ms
+  Median:      124.00ms
+  Min/Max:     124ms / 124ms
+
+Operation: Compare_File_560
+  Calls:       1
+  Total Time:  124ms
+  Average:     124.00ms
+  Median:      124.00ms
+  Min/Max:     124ms / 124ms
+
+Operation: Compare_File_410
+  Calls:       1
+  Total Time:  124ms
+  Average:     124.00ms
+  Median:      124.00ms
+  Min/Max:     124ms / 124ms
+
+Operation: Compare_File_842
+  Calls:       1
+  Total Time:  124ms
+  Average:     124.00ms
+  Median:      124.00ms
+  Min/Max:     124ms / 124ms
+
+Operation: Compare_File_699
+  Calls:       1
+  Total Time:  123ms
+  Average:     123.00ms
+  Median:      123.00ms
+  Min/Max:     123ms / 123ms
+
+Operation: Compare_File_885
+  Calls:       1
+  Total Time:  123ms
+  Average:     123.00ms
+  Median:      123.00ms
+  Min/Max:     123ms / 123ms
+
+Operation: Compare_File_727
+  Calls:       1
+  Total Time:  123ms
+  Average:     123.00ms
+  Median:      123.00ms
+  Min/Max:     123ms / 123ms
+
+Operation: Compare_File_128
+  Calls:       1
+  Total Time:  123ms
+  Average:     123.00ms
+  Median:      123.00ms
+  Min/Max:     123ms / 123ms
+
+Operation: Compare_File_678
+  Calls:       1
+  Total Time:  122ms
+  Average:     122.00ms
+  Median:      122.00ms
+  Min/Max:     122ms / 122ms
+
+Operation: Compare_File_349
+  Calls:       1
+  Total Time:  122ms
+  Average:     122.00ms
+  Median:      122.00ms
+  Min/Max:     122ms / 122ms
+
+Operation: Compare_File_921
+  Calls:       1
+  Total Time:  122ms
+  Average:     122.00ms
+  Median:      122.00ms
+  Min/Max:     122ms / 122ms
+
+Operation: Compare_File_49
+  Calls:       1
+  Total Time:  122ms
+  Average:     122.00ms
+  Median:      122.00ms
+  Min/Max:     122ms / 122ms
+
+Operation: Compare_File_370
+  Calls:       1
+  Total Time:  122ms
+  Average:     122.00ms
+  Median:      122.00ms
+  Min/Max:     122ms / 122ms
+
+Operation: Compare_File_839
+  Calls:       1
+  Total Time:  122ms
+  Average:     122.00ms
+  Median:      122.00ms
+  Min/Max:     122ms / 122ms
+
+Operation: Compare_File_901
+  Calls:       1
+  Total Time:  121ms
+  Average:     121.00ms
+  Median:      121.00ms
+  Min/Max:     121ms / 121ms
+
+Operation: Compare_File_319
+  Calls:       1
+  Total Time:  121ms
+  Average:     121.00ms
+  Median:      121.00ms
+  Min/Max:     121ms / 121ms
+
+Operation: Compare_File_702
+  Calls:       1
+  Total Time:  121ms
+  Average:     121.00ms
+  Median:      121.00ms
+  Min/Max:     121ms / 121ms
+
+Operation: Compare_File_541
+  Calls:       1
+  Total Time:  121ms
+  Average:     121.00ms
+  Median:      121.00ms
+  Min/Max:     121ms / 121ms
+
+Operation: Compare_File_415
+  Calls:       1
+  Total Time:  121ms
+  Average:     121.00ms
+  Median:      121.00ms
+  Min/Max:     121ms / 121ms
+
+Operation: Compare_File_611
+  Calls:       1
+  Total Time:  120ms
+  Average:     120.00ms
+  Median:      120.00ms
+  Min/Max:     120ms / 120ms
+
+Operation: Compare_File_591
+  Calls:       1
+  Total Time:  120ms
+  Average:     120.00ms
+  Median:      120.00ms
+  Min/Max:     120ms / 120ms
+
+Operation: Compare_File_972
+  Calls:       1
+  Total Time:  120ms
+  Average:     120.00ms
+  Median:      120.00ms
+  Min/Max:     120ms / 120ms
+
+Operation: Compare_File_296
+  Calls:       1
+  Total Time:  120ms
+  Average:     120.00ms
+  Median:      120.00ms
+  Min/Max:     120ms / 120ms
+
+Operation: Compare_File_802
+  Calls:       1
+  Total Time:  120ms
+  Average:     120.00ms
+  Median:      120.00ms
+  Min/Max:     120ms / 120ms
+
+Operation: Compare_File_934
+  Calls:       1
+  Total Time:  119ms
+  Average:     119.00ms
+  Median:      119.00ms
+  Min/Max:     119ms / 119ms
+
+Operation: Compare_File_672
+  Calls:       1
+  Total Time:  119ms
+  Average:     119.00ms
+  Median:      119.00ms
+  Min/Max:     119ms / 119ms
+
+Operation: Compare_File_582
+  Calls:       1
+  Total Time:  119ms
+  Average:     119.00ms
+  Median:      119.00ms
+  Min/Max:     119ms / 119ms
+
+Operation: Compare_File_489
+  Calls:       1
+  Total Time:  119ms
+  Average:     119.00ms
+  Median:      119.00ms
+  Min/Max:     119ms / 119ms
+
+Operation: Compare_File_227
+  Calls:       1
+  Total Time:  119ms
+  Average:     119.00ms
+  Median:      119.00ms
+  Min/Max:     119ms / 119ms
+
+Operation: Compare_File_722
+  Calls:       1
+  Total Time:  118ms
+  Average:     118.00ms
+  Median:      118.00ms
+  Min/Max:     118ms / 118ms
+
+Operation: Compare_File_628
+  Calls:       1
+  Total Time:  118ms
+  Average:     118.00ms
+  Median:      118.00ms
+  Min/Max:     118ms / 118ms
+
+Operation: Compare_File_108
+  Calls:       1
+  Total Time:  118ms
+  Average:     118.00ms
+  Median:      118.00ms
+  Min/Max:     118ms / 118ms
+
+Operation: Compare_File_985
+  Calls:       1
+  Total Time:  117ms
+  Average:     117.00ms
+  Median:      117.00ms
+  Min/Max:     117ms / 117ms
+
+Operation: Compare_File_898
+  Calls:       1
+  Total Time:  117ms
+  Average:     117.00ms
+  Median:      117.00ms
+  Min/Max:     117ms / 117ms
+
+Operation: Compare_File_596
+  Calls:       1
+  Total Time:  117ms
+  Average:     117.00ms
+  Median:      117.00ms
+  Min/Max:     117ms / 117ms
+
+Operation: Compare_File_53
+  Calls:       1
+  Total Time:  117ms
+  Average:     117.00ms
+  Median:      117.00ms
+  Min/Max:     117ms / 117ms
+
+Operation: Compare_File_483
+  Calls:       1
+  Total Time:  116ms
+  Average:     116.00ms
+  Median:      116.00ms
+  Min/Max:     116ms / 116ms
+
+Operation: Compare_File_183
+  Calls:       1
+  Total Time:  116ms
+  Average:     116.00ms
+  Median:      116.00ms
+  Min/Max:     116ms / 116ms
+
+Operation: Compare_File_549
+  Calls:       1
+  Total Time:  116ms
+  Average:     116.00ms
+  Median:      116.00ms
+  Min/Max:     116ms / 116ms
+
+Operation: Compare_File_886
+  Calls:       1
+  Total Time:  116ms
+  Average:     116.00ms
+  Median:      116.00ms
+  Min/Max:     116ms / 116ms
+
+Operation: Compare_File_677
+  Calls:       1
+  Total Time:  115ms
+  Average:     115.00ms
+  Median:      115.00ms
+  Min/Max:     115ms / 115ms
+
+Operation: Compare_File_47
+  Calls:       1
+  Total Time:  115ms
+  Average:     115.00ms
+  Median:      115.00ms
+  Min/Max:     115ms / 115ms
+
+Operation: Compare_File_695
+  Calls:       1
+  Total Time:  115ms
+  Average:     115.00ms
+  Median:      115.00ms
+  Min/Max:     115ms / 115ms
+
+Operation: Compare_File_432
+  Calls:       1
+  Total Time:  114ms
+  Average:     114.00ms
+  Median:      114.00ms
+  Min/Max:     114ms / 114ms
+
+Operation: Compare_File_328
+  Calls:       1
+  Total Time:  114ms
+  Average:     114.00ms
+  Median:      114.00ms
+  Min/Max:     114ms / 114ms
+
+Operation: Compare_File_974
+  Calls:       1
+  Total Time:  114ms
+  Average:     114.00ms
+  Median:      114.00ms
+  Min/Max:     114ms / 114ms
+
+Operation: Compare_File_948
+  Calls:       1
+  Total Time:  113ms
+  Average:     113.00ms
+  Median:      113.00ms
+  Min/Max:     113ms / 113ms
+
+Operation: Compare_File_482
+  Calls:       1
+  Total Time:  113ms
+  Average:     113.00ms
+  Median:      113.00ms
+  Min/Max:     113ms / 113ms
+
+Operation: Compare_File_717
+  Calls:       1
+  Total Time:  112ms
+  Average:     112.00ms
+  Median:      112.00ms
+  Min/Max:     112ms / 112ms
+
+Operation: Compare_File_246
+  Calls:       1
+  Total Time:  112ms
+  Average:     112.00ms
+  Median:      112.00ms
+  Min/Max:     112ms / 112ms
+
+Operation: Compare_File_851
+  Calls:       1
+  Total Time:  112ms
+  Average:     112.00ms
+  Median:      112.00ms
+  Min/Max:     112ms / 112ms
+
+Operation: Compare_File_627
+  Calls:       1
+  Total Time:  112ms
+  Average:     112.00ms
+  Median:      112.00ms
+  Min/Max:     112ms / 112ms
+
+Operation: Compare_File_956
+  Calls:       1
+  Total Time:  111ms
+  Average:     111.00ms
+  Median:      111.00ms
+  Min/Max:     111ms / 111ms
+
+Operation: Compare_File_630
+  Calls:       1
+  Total Time:  111ms
+  Average:     111.00ms
+  Median:      111.00ms
+  Min/Max:     111ms / 111ms
+
+Operation: Compare_File_923
+  Calls:       1
+  Total Time:  111ms
+  Average:     111.00ms
+  Median:      111.00ms
+  Min/Max:     111ms / 111ms
+
+Operation: Compare_File_769
+  Calls:       1
+  Total Time:  110ms
+  Average:     110.00ms
+  Median:      110.00ms
+  Min/Max:     110ms / 110ms
+
+Operation: Pattern_Analysis
+  Calls:       1
+  Total Time:  110ms
+  Average:     110.00ms
+  Median:      110.00ms
+  Min/Max:     110ms / 110ms
+
+Operation: Compare_File_913
+  Calls:       1
+  Total Time:  110ms
+  Average:     110.00ms
+  Median:      110.00ms
+  Min/Max:     110ms / 110ms
+
+Operation: Compare_File_965
+  Calls:       1
+  Total Time:  109ms
+  Average:     109.00ms
+  Median:      109.00ms
+  Min/Max:     109ms / 109ms
+
+Operation: Compare_File_905
+  Calls:       1
+  Total Time:  109ms
+  Average:     109.00ms
+  Median:      109.00ms
+  Min/Max:     109ms / 109ms
+
+Operation: Compare_File_550
+  Calls:       1
+  Total Time:  109ms
+  Average:     109.00ms
+  Median:      109.00ms
+  Min/Max:     109ms / 109ms
+
+Operation: Compare_File_226
+  Calls:       1
+  Total Time:  109ms
+  Average:     109.00ms
+  Median:      109.00ms
+  Min/Max:     109ms / 109ms
+
+Operation: Compare_File_361
+  Calls:       1
+  Total Time:  107ms
+  Average:     107.00ms
+  Median:      107.00ms
+  Min/Max:     107ms / 107ms
+
+Operation: Compare_File_999
+  Calls:       1
+  Total Time:  107ms
+  Average:     107.00ms
+  Median:      107.00ms
+  Min/Max:     107ms / 107ms
+
+Operation: Compare_File_877
+  Calls:       1
+  Total Time:  107ms
+  Average:     107.00ms
+  Median:      107.00ms
+  Min/Max:     107ms / 107ms
+
+Operation: Compare_File_804
+  Calls:       1
+  Total Time:  106ms
+  Average:     106.00ms
+  Median:      106.00ms
+  Min/Max:     106ms / 106ms
+
+Operation: Compare_File_835
+  Calls:       1
+  Total Time:  106ms
+  Average:     106.00ms
+  Median:      106.00ms
+  Min/Max:     106ms / 106ms
+
+Operation: Compare_File_218
+  Calls:       1
+  Total Time:  106ms
+  Average:     106.00ms
+  Median:      106.00ms
+  Min/Max:     106ms / 106ms
+
+Operation: Compare_File_640
+  Calls:       1
+  Total Time:  106ms
+  Average:     106.00ms
+  Median:      106.00ms
+  Min/Max:     106ms / 106ms
+
+Operation: Compare_File_830
+  Calls:       1
+  Total Time:  105ms
+  Average:     105.00ms
+  Median:      105.00ms
+  Min/Max:     105ms / 105ms
+
+Operation: Compare_File_259
+  Calls:       1
+  Total Time:  105ms
+  Average:     105.00ms
+  Median:      105.00ms
+  Min/Max:     105ms / 105ms
+
+Operation: Compare_File_384
+  Calls:       1
+  Total Time:  104ms
+  Average:     104.00ms
+  Median:      104.00ms
+  Min/Max:     104ms / 104ms
+
+Operation: Compare_File_794
+  Calls:       1
+  Total Time:  103ms
+  Average:     103.00ms
+  Median:      103.00ms
+  Min/Max:     103ms / 103ms
+
+Operation: Compare_File_613
+  Calls:       1
+  Total Time:  103ms
+  Average:     103.00ms
+  Median:      103.00ms
+  Min/Max:     103ms / 103ms
+
+Operation: Compare_File_746
+  Calls:       1
+  Total Time:  103ms
+  Average:     103.00ms
+  Median:      103.00ms
+  Min/Max:     103ms / 103ms
+
+Operation: Compare_File_260
+  Calls:       1
+  Total Time:  102ms
+  Average:     102.00ms
+  Median:      102.00ms
+  Min/Max:     102ms / 102ms
+
+Operation: Compare_File_924
+  Calls:       1
+  Total Time:  102ms
+  Average:     102.00ms
+  Median:      102.00ms
+  Min/Max:     102ms / 102ms
+
+Operation: Compare_File_641
+  Calls:       1
+  Total Time:  100ms
+  Average:     100.00ms
+  Median:      100.00ms
+  Min/Max:     100ms / 100ms
+
+Operation: Compare_File_795
+  Calls:       1
+  Total Time:  100ms
+  Average:     100.00ms
+  Median:      100.00ms
+  Min/Max:     100ms / 100ms
+
+Operation: Compare_File_110
+  Calls:       1
+  Total Time:  99ms
+  Average:     99.00ms
+  Median:      99.00ms
+  Min/Max:     99ms / 99ms
+
+Operation: Compare_File_151
+  Calls:       1
+  Total Time:  99ms
+  Average:     99.00ms
+  Median:      99.00ms
+  Min/Max:     99ms / 99ms
+
+Operation: Compare_File_862
+  Calls:       1
+  Total Time:  98ms
+  Average:     98.00ms
+  Median:      98.00ms
+  Min/Max:     98ms / 98ms
+
+Operation: Compare_File_852
+  Calls:       1
+  Total Time:  97ms
+  Average:     97.00ms
+  Median:      97.00ms
+  Min/Max:     97ms / 97ms
+
+Operation: Compare_File_598
+  Calls:       1
+  Total Time:  94ms
+  Average:     94.00ms
+  Median:      94.00ms
+  Min/Max:     94ms / 94ms
+
+Operation: Compare_File_945
+  Calls:       1
+  Total Time:  93ms
+  Average:     93.00ms
+  Median:      93.00ms
+  Min/Max:     93ms / 93ms
+
+Operation: Compare_File_713
+  Calls:       1
+  Total Time:  92ms
+  Average:     92.00ms
+  Median:      92.00ms
+  Min/Max:     92ms / 92ms
+
+Operation: Compare_File_869
+  Calls:       1
+  Total Time:  92ms
+  Average:     92.00ms
+  Median:      92.00ms
+  Min/Max:     92ms / 92ms
+
+Operation: Compare_File_897
+  Calls:       1
+  Total Time:  91ms
+  Average:     91.00ms
+  Median:      91.00ms
+  Min/Max:     91ms / 91ms
+
+Operation: Compare_File_620
+  Calls:       1
+  Total Time:  87ms
+  Average:     87.00ms
+  Median:      87.00ms
+  Min/Max:     87ms / 87ms
+
+Operation: Get_Ignore_Rules
+  Calls:       1000
+  Total Time:  56ms
+  Average:     0.06ms
+  Median:      0.00ms
+  Min/Max:     0ms / 4ms
+
+Operation: Semantic_Analysis
+  Calls:       1
+  Total Time:  27ms
+  Average:     27.00ms
+  Median:      27.00ms
+  Min/Max:     27ms / 27ms
+
+Operation: Clone_New_SoapEnvelope
+  Calls:       1000
+  Total Time:  15ms
+  Average:     0.01ms
+  Median:      0.00ms
+  Min/Max:     0ms / 4ms
+
+Operation: Process_Results
+  Calls:       1
+  Total Time:  5ms
+  Average:     5.00ms
+  Median:      5.00ms
+  Min/Max:     5ms / 5ms
+
+Operation: Calculate_Avg_FileSize
+  Calls:       1
+  Total Time:  2ms
+  Average:     2.00ms
+  Median:      2.00ms
+  Min/Max:     2ms / 2ms
+
+Operation: Sort_Files
+  Calls:       1
+  Total Time:  2ms
+  Average:     2.00ms
+  Median:      2.00ms
+  Min/Max:     2ms / 2ms
+
+Operation: Folder_Stats
+  Calls:       1
+  Total Time:  1ms
+  Average:     1.00ms
+  Median:      1.00ms
+  Min/Max:     1ms / 1ms
+
+Operation: Deserialize_New_SoapEnvelope
+  Calls:       1000
+  Total Time:  0ms
+  Average:     0.00ms
+  Median:      0.00ms
+  Min/Max:     0ms / 0ms
+
