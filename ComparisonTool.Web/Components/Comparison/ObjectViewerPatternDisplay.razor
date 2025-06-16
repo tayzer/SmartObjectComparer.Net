@@ -1,0 +1,419 @@
+@namespace ComparisonTool.Web.Components.Comparison
+@using ComparisonTool.Core.Comparison.Analysis
+
+<style>
+    .object-viewer-container {
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+    }
+    
+    .object-group-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+        padding: 0.75rem 1rem;
+        cursor: pointer;
+        transition: background-color 0.15s ease-in-out;
+    }
+    
+    .object-group-header:hover {
+        background-color: #e9ecef;
+    }
+    
+    .object-group-content {
+        border-left: 3px solid #007bff;
+        margin-left: 1rem;
+    }
+    
+    .child-pattern-row {
+        border-bottom: 1px solid #f1f3f4;
+        padding: 0.5rem 1rem;
+        margin-left: 1rem;
+    }
+    
+    .child-pattern-row:last-child {
+        border-bottom: none;
+    }
+    
+    .expand-icon {
+        transition: transform 0.15s ease-in-out;
+    }
+    
+    .expand-icon.expanded {
+        transform: rotate(90deg);
+    }
+    
+    .pattern-path-hierarchy {
+        font-family: 'Courier New', Consolas, monospace;
+        background-color: #f8f9fa;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        border: 1px solid #dee2e6;
+    }
+    
+    .individual-pattern {
+        background-color: #ffffff;
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+        margin-bottom: 0.5rem;
+    }
+</style>
+
+<div class="object-viewer-container">
+    @if (!PatternGroups.Any())
+    {
+        <div class="text-center py-4 text-muted">
+            <i class="bi bi-info-circle"></i>
+            No patterns available for object view.
+        </div>
+    }
+    else
+    {
+        @foreach (var group in PatternGroups.OrderBy(g => g.CommonAncestorPath))
+        {
+            <div class="individual-pattern">
+                <!-- Group Header -->
+                <div class="object-group-header" @onclick="() => ToggleGroup(group.CommonAncestorPath)">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-chevron-right expand-icon me-2 @(IsGroupExpanded(group.CommonAncestorPath) ? "expanded" : "")"></i>
+                            <div>
+                                <div class="pattern-path-hierarchy">
+                                    <strong>@group.CommonAncestorPath</strong>
+                                </div>
+                                <small class="text-muted mt-1 d-block">
+                                    @group.Patterns.Count pattern@(group.Patterns.Count != 1 ? "s" : "") • 
+                                    @group.TotalOccurrences total occurrence@(group.TotalOccurrences != 1 ? "s" : "") •
+                                    @group.AffectedFileCount file@(group.AffectedFileCount != 1 ? "s" : "")
+                                </small>
+                            </div>
+                        </div>
+                        <div class="d-flex align-items-center">
+                            @if (group.HasCriticalPatterns)
+                            {
+                                <span class="badge bg-danger me-2">
+                                    <i class="bi bi-exclamation-triangle"></i>
+                                    Critical
+                                </span>
+                            }
+                            <div class="d-flex align-items-center">
+                                <div class="progress me-2" style="height: 15px; width: 80px;">
+                                    <div class="progress-bar @GetGroupConsistencyClass(group.AverageConsistency)" 
+                                         style="width: @(group.AverageConsistency)%">
+                                    </div>
+                                </div>
+                                <small>@group.AverageConsistency.ToString("0.0")%</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Expanded Content -->
+                @if (IsGroupExpanded(group.CommonAncestorPath))
+                {
+                    <div class="object-group-content">
+                        @foreach (var pattern in group.Patterns.OrderByDescending(p => p.IsCriticalProperty).ThenByDescending(p => p.Consistency))
+                        {
+                            <div class="child-pattern-row @GetPatternRowClass(pattern)" @onclick="() => OnSelectPattern.InvokeAsync(pattern)">
+                                <div class="row align-items-center">
+                                    <div class="col-md-1">
+                                        @if (ShowPriority)
+                                        {
+                                            @if (pattern.IsCriticalProperty)
+                                            {
+                                                <span class="badge bg-danger">
+                                                    <i class="bi bi-exclamation-triangle"></i>
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-secondary">Normal</span>
+                                            }
+                                        }
+                                    </div>
+                                    <div class="col-md-3">
+                                        <code class="small">@GetRelativePattern(pattern.FullPattern, group.CommonAncestorPath)</code>
+                                        @if (pattern.IsCollectionElement)
+                                        {
+                                            <br />
+                                            <small class="text-muted">Collection: @pattern.CollectionName</small>
+                                        }
+                                    </div>
+                                    <div class="col-md-4">
+                                        @if (!string.IsNullOrEmpty(pattern.HumanReadableDescription))
+                                        {
+                                            <small>@pattern.HumanReadableDescription</small>
+                                        }
+                                        else
+                                        {
+                                            <small class="text-muted">@(pattern.IsCollectionElement ? "Collection Element" : "Property")</small>
+                                        }
+                                    </div>
+                                    <div class="col-md-1">
+                                        <span class="badge bg-info">@pattern.FileCount</span>
+                                    </div>
+                                    <div class="col-md-1">
+                                        <span class="badge bg-primary">@pattern.OccurenceCount</span>
+                                    </div>
+                                    <div class="col-md-1">
+                                        <div class="d-flex align-items-center">
+                                            <div class="progress flex-grow-1 me-1" style="height: 12px; width: 40px;">
+                                                <div class="progress-bar @GetConsistencyProgressClass(pattern.Consistency)" 
+                                                     style="width: @(pattern.Consistency)%">
+                                                </div>
+                                            </div>
+                                            <small>@pattern.Consistency.ToString("0.0")%</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-1">
+                                        @if (!string.IsNullOrEmpty(pattern.RecommendAction))
+                                        {
+                                            <i class="bi bi-lightbulb text-warning" title="@pattern.RecommendAction"></i>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter]
+    public List<EnhancedStructuralDifferenceAnalyzer.StructuralPattern> Patterns { get; set; } = new();
+    
+    [Parameter]
+    public EventCallback<EnhancedStructuralDifferenceAnalyzer.StructuralPattern> OnSelectPattern { get; set; }
+    
+    [Parameter]
+    public bool ShowPriority { get; set; } = false;
+
+    private List<PatternGroup> PatternGroups = new();
+    private HashSet<string> ExpandedGroups = new();
+
+    public class PatternGroup
+    {
+        public string CommonAncestorPath { get; set; } = string.Empty;
+        public List<EnhancedStructuralDifferenceAnalyzer.StructuralPattern> Patterns { get; set; } = new();
+        public int TotalOccurrences => Patterns.Sum(p => p.OccurenceCount);
+        public int AffectedFileCount => Patterns.Select(p => p.FileCount).Max();
+        public double AverageConsistency => Patterns.Any() ? Patterns.Average(p => p.Consistency) : 0;
+        public bool HasCriticalPatterns => Patterns.Any(p => p.IsCriticalProperty);
+    }
+
+    protected override void OnParametersSet()
+    {
+        base.OnParametersSet();
+        GroupPatternsByCommonAncestor();
+    }
+
+    private void GroupPatternsByCommonAncestor()
+    {
+        PatternGroups.Clear();
+        
+        if (!Patterns.Any())
+            return;
+
+        // Group patterns by their highest common ancestor path
+        var groups = new Dictionary<string, List<EnhancedStructuralDifferenceAnalyzer.StructuralPattern>>();
+
+        foreach (var pattern in Patterns)
+        {
+            var ancestorPath = FindHighestCommonAncestor(pattern.FullPattern, Patterns);
+            
+            if (!groups.ContainsKey(ancestorPath))
+            {
+                groups[ancestorPath] = new List<EnhancedStructuralDifferenceAnalyzer.StructuralPattern>();
+            }
+            
+            groups[ancestorPath].Add(pattern);
+        }
+
+        // Convert to PatternGroup objects
+        PatternGroups = groups.Select(kvp => new PatternGroup
+        {
+            CommonAncestorPath = kvp.Key,
+            Patterns = kvp.Value
+        }).ToList();
+
+        // Auto-expand groups with critical patterns or single groups
+        if (PatternGroups.Count == 1)
+        {
+            ExpandedGroups.Add(PatternGroups.First().CommonAncestorPath);
+        }
+        else
+        {
+            foreach (var group in PatternGroups.Where(g => g.HasCriticalPatterns))
+            {
+                ExpandedGroups.Add(group.CommonAncestorPath);
+            }
+        }
+    }
+
+    private string FindHighestCommonAncestor(string patternPath, List<EnhancedStructuralDifferenceAnalyzer.StructuralPattern> allPatterns)
+    {
+        // First, check for array patterns like Body.Response.Results[*].Score
+        var arrayBasePath = ExtractArrayBasePath(patternPath);
+        if (!string.IsNullOrEmpty(arrayBasePath))
+        {
+            // See if other patterns share this array base path
+            var arrayRelatedPatterns = allPatterns
+                .Where(p => p.FullPattern != patternPath && ExtractArrayBasePath(p.FullPattern) == arrayBasePath)
+                .ToList();
+                
+            if (arrayRelatedPatterns.Any())
+            {
+                return arrayBasePath;
+            }
+        }
+        
+        var pathSegments = patternPath.Split('.').ToList();
+        
+        // Find other patterns that share path segments with this one
+        var relatedPatterns = allPatterns
+            .Where(p => p.FullPattern != patternPath && SharesPathPrefix(p.FullPattern, patternPath))
+            .ToList();
+
+        if (!relatedPatterns.Any())
+        {
+            // If no related patterns, try to find a meaningful parent by removing the last segment
+            if (pathSegments.Count > 1)
+            {
+                return string.Join(".", pathSegments.Take(pathSegments.Count - 1));
+            }
+            return patternPath;
+        }
+
+        // Find the longest common prefix among all related patterns
+        var commonSegments = pathSegments.ToList();
+        
+        foreach (var relatedPattern in relatedPatterns)
+        {
+            var relatedSegments = relatedPattern.FullPattern.Split('.').ToList();
+            var maxCommonLength = Math.Min(commonSegments.Count, relatedSegments.Count);
+            
+            for (int i = 0; i < maxCommonLength; i++)
+            {
+                if (i >= commonSegments.Count || !NormalizeSegment(commonSegments[i]).Equals(NormalizeSegment(relatedSegments[i]), StringComparison.OrdinalIgnoreCase))
+                {
+                    commonSegments = commonSegments.Take(i).ToList();
+                    break;
+                }
+            }
+        }
+
+        // Ensure we have at least one segment for grouping
+        if (!commonSegments.Any())
+        {
+            return pathSegments.FirstOrDefault() ?? patternPath;
+        }
+
+        return string.Join(".", commonSegments);
+    }
+    
+    private string ExtractArrayBasePath(string path)
+    {
+        // Extract base path from patterns like "Body.Response.Results[*].Score"
+        // Should return "Body.Response.Results"
+        var match = System.Text.RegularExpressions.Regex.Match(path, @"^(.+?)\[\*\]");
+        if (match.Success)
+        {
+            return match.Groups[1].Value;
+        }
+        
+        // Also handle patterns like "Body.Response.Results[Order]"
+        if (path.Contains("[Order]"))
+        {
+            return path.Replace("[Order]", "").TrimEnd('.');
+        }
+        
+        return "";
+    }
+    
+    private string NormalizeSegment(string segment)
+    {
+        // Normalize segments to handle array indices
+        return System.Text.RegularExpressions.Regex.Replace(segment, @"\[\*\]|\[Order\]|\[\d+\]", "");
+    }
+
+    private bool SharesPathPrefix(string path1, string path2)
+    {
+        var segments1 = path1.Split('.');
+        var segments2 = path2.Split('.');
+        var minLength = Math.Min(segments1.Length, segments2.Length);
+        
+        // Require at least 2 common segments to be considered related
+        var commonCount = 0;
+        for (int i = 0; i < minLength; i++)
+        {
+            if (segments1[i] == segments2[i])
+                commonCount++;
+            else
+                break;
+        }
+        
+        return commonCount >= 2;
+    }
+
+    private string GetRelativePattern(string fullPattern, string ancestorPath)
+    {
+        if (fullPattern.StartsWith(ancestorPath + "."))
+        {
+            return fullPattern.Substring(ancestorPath.Length + 1);
+        }
+        return fullPattern;
+    }
+
+    private void ToggleGroup(string groupPath)
+    {
+        if (ExpandedGroups.Contains(groupPath))
+        {
+            ExpandedGroups.Remove(groupPath);
+        }
+        else
+        {
+            ExpandedGroups.Add(groupPath);
+        }
+    }
+
+    private bool IsGroupExpanded(string groupPath)
+    {
+        return ExpandedGroups.Contains(groupPath);
+    }
+
+    private string GetPatternRowClass(EnhancedStructuralDifferenceAnalyzer.StructuralPattern pattern)
+    {
+        var classes = new List<string> { "cursor-pointer" };
+        
+        if (pattern.IsCriticalProperty)
+            classes.Add("border-start border-danger border-3");
+        else if (pattern.Consistency >= 80)
+            classes.Add("border-start border-warning border-2");
+            
+        return string.Join(" ", classes);
+    }
+
+    private string GetConsistencyProgressClass(double consistency)
+    {
+        return consistency switch
+        {
+            >= 80 => "bg-danger",
+            >= 60 => "bg-warning", 
+            >= 40 => "bg-info",
+            _ => "bg-success"
+        };
+    }
+
+    private string GetGroupConsistencyClass(double consistency)
+    {
+        return consistency switch
+        {
+            >= 80 => "bg-danger",
+            >= 60 => "bg-warning", 
+            >= 40 => "bg-info",
+            _ => "bg-success"
+        };
+    }
+} 
