@@ -126,9 +126,70 @@ namespace ComparisonTool.Core.Comparison.Configuration
         }
 
         /// <summary>
-        /// Add variations of the property path to handle collection items
+        /// Add variations of the property path to handle collection items (performance optimized)
         /// </summary>
         private void AddCollectionVariations(ComparisonConfig config, string propertyPath)
+        {
+            try
+            {
+                _logger.LogDebug("Creating optimized collection variations for: {PropertyPath}", propertyPath);
+
+                // Handle paths that already contain [*] - add only essential variations
+                if (propertyPath.Contains("[*]"))
+                {
+                    _logger.LogDebug("Path contains [*], creating minimal essential variations");
+                    
+                    // Add only the original [*] pattern and a few numbered variations (reduced from 20 to 3)
+                    for (int idx = 0; idx < 3; idx++)
+                    {
+                        string numberedPath = propertyPath.Replace("[*]", $"[{idx}]");
+                        if (!config.MembersToIgnore.Contains(numberedPath))
+                        {
+                            config.MembersToIgnore.Add(numberedPath);
+                            _logger.LogDebug("Added numbered variation: {Path}", numberedPath);
+                        }
+                    }
+
+                    // Add only the regex pattern (most effective)
+                    string regexPattern = propertyPath.Replace("[*]", @"\[\d+\]");
+                    if (!config.MembersToIgnore.Contains(regexPattern))
+                    {
+                        config.MembersToIgnore.Add(regexPattern);
+                        _logger.LogDebug("Added regex pattern: {Pattern}", regexPattern);
+                    }
+                }
+                else
+                {
+                    // For simple property names, add minimal variations
+                    if (!propertyPath.Contains(".") && !propertyPath.Contains("["))
+                    {
+                        string propertyName = propertyPath;
+                        
+                        // Add only to the most critical collections
+                        string[] criticalCollections = { "T", "E" }; // Reduced from 7 to 2
+                        
+                        foreach (var collection in criticalCollections)
+                        {
+                            string wildcardPath = $"{collection}[*].{propertyName}";
+                            if (!config.MembersToIgnore.Contains(wildcardPath))
+                            {
+                                config.MembersToIgnore.Add(wildcardPath);
+                                _logger.LogDebug("Added essential collection path: {Path}", wildcardPath);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error adding collection variations for {PropertyPath}", propertyPath);
+            }
+        }
+
+        /// <summary>
+        /// Add variations of the property path to handle collection items
+        /// </summary>
+        private void AddCollectionVariationsOld(ComparisonConfig config, string propertyPath)
         {
             try
             {
@@ -138,7 +199,7 @@ namespace ComparisonTool.Core.Comparison.Configuration
                 if (propertyPath.Contains("[*]"))
                 {
                     _logger.LogDebug("Path contains [*], creating numbered variations");
-                    
+
                     // Create numbered index variations (0-19 to cover more cases)
                     for (int idx = 0; idx < 20; idx++)
                     {
@@ -155,7 +216,7 @@ namespace ComparisonTool.Core.Comparison.Configuration
 
                     // Add pattern-based variations
                     AddPatternBasedVariations(config, propertyPath);
-                    
+
                     // Add System.Collections.IList.Item[*] variations for comparison library collection handling
                     AddSystemCollectionVariations(config, propertyPath);
                 }

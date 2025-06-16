@@ -4,6 +4,12 @@
 @using Microsoft.AspNetCore.Components.Web
 @using BlazorBootstrap
 
+<style>
+    .property-row-selected {
+        background-color: #e7f3ff !important;
+    }
+</style>
+
 <Modal @ref="propertyModal" Title="Property Tree Navigator - Ignore Rules" Size="ModalSize.ExtraLarge">
     <BodyTemplate>
         <div class="row">
@@ -128,6 +134,27 @@
                     </div>
                 </div>
                 
+                <!-- Bulk Selection Actions -->
+                @if (selectedProperties.Any())
+                {
+                    <div class="alert alert-info mt-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="bi bi-check-square"></i>
+                                <strong>@selectedProperties.Count properties selected</strong>
+                            </div>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-success" @onclick="ShowBulkIgnoreConfirmation">
+                                    <i class="bi bi-eye-slash"></i> Ignore All Selected
+                                </button>
+                                <button class="btn btn-outline-secondary" @onclick="ClearAllSelections">
+                                    <i class="bi bi-x-square"></i> Clear Selection
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                }
+
                 <!-- Quick Actions -->
                 <div class="mt-3">
                     <div class="btn-group btn-group-sm" role="group">
@@ -139,6 +166,10 @@
                         </button>
                         <button class="btn btn-outline-info" @onclick="RefreshTree">
                             <i class="bi bi-arrow-clockwise"></i> Refresh
+                        </button>
+                        <button class="btn btn-outline-primary" @onclick="ToggleSelectAllVisible">
+                            <i class="bi bi-check-all"></i> 
+                            @(selectAllVisible ? "Deselect All Visible" : "Select All Visible")
                         </button>
                     </div>
                 </div>
@@ -359,6 +390,96 @@
     </FooterTemplate>
 </Modal>
 
+<!-- Bulk Ignore Confirmation Modal -->
+<Modal @ref="bulkIgnoreModal" Title="Confirm Bulk Ignore" Size="ModalSize.Regular">
+    <BodyTemplate>
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            <strong>Bulk Ignore Confirmation</strong>
+        </div>
+        <p>You are about to ignore <strong>@selectedProperties.Count properties</strong> completely from comparison.</p>
+        
+        @if (isProcessingBulkIgnore)
+        {
+            <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span>Processing...</span>
+                    <span>@bulkIgnoreProgress%</span>
+                </div>
+                <div class="progress mb-2">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                         role="progressbar" 
+                         style="width: @(bulkIgnoreProgress)%" 
+                         aria-valuenow="@bulkIgnoreProgress" 
+                         aria-valuemin="0" 
+                         aria-valuemax="100"></div>
+                </div>
+                <small class="text-muted">@bulkIgnoreStatus</small>
+            </div>
+        }
+        else
+        {
+            <div class="mb-3">
+                <label class="form-label">Ignore Settings for All Selected Properties:</label>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="bulkIgnoreCompletely" @bind="bulkIgnoreCompletely">
+                    <label class="form-check-label" for="bulkIgnoreCompletely">
+                        <i class="bi bi-eye-slash"></i> Ignore completely
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="bulkIgnoreCollectionOrder" 
+                           @bind="bulkIgnoreCollectionOrder" disabled="@bulkIgnoreCompletely">
+                    <label class="form-check-label" for="bulkIgnoreCollectionOrder">
+                        <i class="bi bi-arrow-down-up"></i> Ignore collection ordering (for collection properties)
+                    </label>
+                </div>
+            </div>
+        }
+
+        @if (selectedProperties.Count > 10)
+        {
+            <div class="alert alert-info">
+                <strong>Preview of properties to be ignored:</strong>
+                <ul class="mb-0 mt-2">
+                    @foreach (var prop in selectedProperties.Take(10))
+                    {
+                        <li><code>@prop</code></li>
+                    }
+                    <li><em>... and @(selectedProperties.Count - 10) more properties</em></li>
+                </ul>
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-info">
+                <strong>Properties to be ignored:</strong>
+                <ul class="mb-0 mt-2">
+                    @foreach (var prop in selectedProperties)
+                    {
+                        <li><code>@prop</code></li>
+                    }
+                </ul>
+            </div>
+        }
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Success" @onclick="ExecuteBulkIgnore" Disabled="@isProcessingBulkIgnore">
+            @if (isProcessingBulkIgnore)
+            {
+                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                <text>Processing...</text>
+            }
+            else
+            {
+                <i class="bi bi-check"></i>
+                <text>Confirm Ignore</text>
+            }
+        </Button>
+        <Button Color="ButtonColor.Secondary" @onclick="CancelBulkIgnore" Disabled="@isProcessingBulkIgnore">Cancel</Button>
+    </FooterTemplate>
+</Modal>
+
 @code {
     [Parameter] public Type ModelType { get; set; }
     [Parameter] public List<IgnoreRule> IgnoredProperties { get; set; } = new List<IgnoreRule>();
@@ -374,6 +495,7 @@
 
     private Modal propertyModal;
     private Modal helpModal;
+    private Modal bulkIgnoreModal;
     private string selectedProperty;
     private List<string> selectedPropertyPath = new List<string>();
     private string searchTerm = "";
@@ -381,6 +503,15 @@
     private bool IgnoreProperty { get; set; }
     private bool IgnoreCollectionOrder { get; set; }
     private bool IsLoading { get; set; } = false;
+    
+    // Bulk selection fields
+    private List<string> selectedProperties = new List<string>();
+    private bool selectAllVisible = false;
+    private bool bulkIgnoreCompletely { get; set; } = true;
+    private bool bulkIgnoreCollectionOrder { get; set; } = false;
+    private bool isProcessingBulkIgnore { get; set; } = false;
+    private int bulkIgnoreProgress { get; set; } = 0;
+    private string bulkIgnoreStatus { get; set; } = "";
 
     // Tree navigation state
     private Dictionary<string, bool> expandedNodes = new Dictionary<string, bool>();
@@ -501,8 +632,14 @@
                 var isSelected = selectedProperty == node.FullPath;
 
                 <div class="tree-node mb-1" style="margin-left: @(indentLevel * 20)px;">
-                    <div class="d-flex align-items-center tree-node-content @(isSelected ? "selected" : "")" 
+                    <div class="d-flex align-items-center tree-node-content @(isSelected ? "selected" : "") @(selectedProperties.Contains(node.FullPath) ? "property-row-selected" : "")" 
                          @onclick="() => SelectPropertyFromTree(node.FullPath)">
+                        
+                        <!-- Selection checkbox -->
+                        <input class="form-check-input me-2" type="checkbox"
+                               checked="@selectedProperties.Contains(node.FullPath)"
+                               @onchange="(e) => TogglePropertySelectionFromCheckbox(e, node.FullPath)"
+                               @onclick:stopPropagation="true" />
                         
                         @if (hasChildren)
                         {
@@ -1014,5 +1151,193 @@
     private void ClosePropertySelector()
     {
         propertyModal.HideAsync();
+    }
+
+    // Bulk selection methods
+    private void TogglePropertySelectionFromCheckbox(ChangeEventArgs e, string propertyPath)
+    {
+        var isChecked = (bool)(e.Value ?? false);
+        
+        if (isChecked && !selectedProperties.Contains(propertyPath))
+        {
+            selectedProperties.Add(propertyPath);
+        }
+        else if (!isChecked && selectedProperties.Contains(propertyPath))
+        {
+            selectedProperties.Remove(propertyPath);
+        }
+        
+        UpdateSelectAllVisibleState();
+        StateHasChanged();
+    }
+
+    private void ToggleSelectAllVisible()
+    {
+        selectAllVisible = !selectAllVisible;
+        
+        if (selectAllVisible)
+        {
+            // Select all visible properties in current tree level
+            var visiblePaths = GetAllVisiblePropertyPaths();
+            foreach (var path in visiblePaths)
+            {
+                if (!selectedProperties.Contains(path))
+                {
+                    selectedProperties.Add(path);
+                }
+            }
+        }
+        else
+        {
+            // Deselect all visible properties
+            var visiblePaths = GetAllVisiblePropertyPaths();
+            foreach (var path in visiblePaths)
+            {
+                selectedProperties.Remove(path);
+            }
+        }
+        
+        StateHasChanged();
+    }
+
+    private List<string> GetAllVisiblePropertyPaths()
+    {
+        var paths = new List<string>();
+        CollectVisiblePaths(GetFilteredNodes(GetCurrentLevelNodes()), paths);
+        return paths;
+    }
+
+    private void CollectVisiblePaths(Dictionary<string, PropertyTreeNode> nodes, List<string> paths)
+    {
+        foreach (var node in nodes.Values)
+        {
+            if (!string.IsNullOrEmpty(node.FullPath))
+            {
+                paths.Add(node.FullPath);
+            }
+            
+            if (IsNodeExpanded(node.FullPath))
+            {
+                CollectVisiblePaths(node.Children, paths);
+            }
+        }
+    }
+
+    private void UpdateSelectAllVisibleState()
+    {
+        var visiblePaths = GetAllVisiblePropertyPaths();
+        if (visiblePaths.Any())
+        {
+            selectAllVisible = visiblePaths.All(path => selectedProperties.Contains(path));
+        }
+        else
+        {
+            selectAllVisible = false;
+        }
+    }
+
+    private async Task ShowBulkIgnoreConfirmation()
+    {
+        if (!selectedProperties.Any())
+            return;
+
+        // Reset bulk ignore settings to defaults
+        bulkIgnoreCompletely = true;
+        bulkIgnoreCollectionOrder = false;
+        
+        await bulkIgnoreModal.ShowAsync();
+    }
+
+    private async Task ExecuteBulkIgnore()
+    {
+        if (!selectedProperties.Any())
+            return;
+
+        try
+        {
+            // Show loading state
+            isProcessingBulkIgnore = true;
+            bulkIgnoreProgress = 0;
+            var propertiesCount = selectedProperties.Count;
+            bulkIgnoreStatus = $"Starting bulk ignore for {propertiesCount} properties...";
+            StateHasChanged();
+            
+            Console.WriteLine($"Starting bulk ignore for {propertiesCount} properties...");
+
+            // Process in batches to avoid UI freezing
+            var batchSize = 50; // Process 50 properties at a time
+            var batches = selectedProperties
+                .Select((property, index) => new { property, index })
+                .GroupBy(x => x.index / batchSize)
+                .Select(g => g.Select(x => x.property).ToList())
+                .ToList();
+
+            var processedCount = 0;
+
+            for (int batchIndex = 0; batchIndex < batches.Count; batchIndex++)
+            {
+                var batch = batches[batchIndex];
+                bulkIgnoreStatus = $"Processing batch {batchIndex + 1}/{batches.Count} ({batch.Count} properties)";
+                Console.WriteLine(bulkIgnoreStatus);
+
+                foreach (var propertyPath in batch)
+                {
+                    var rule = new IgnoreRule
+                    {
+                        PropertyPath = propertyPath,
+                        IgnoreCompletely = bulkIgnoreCompletely,
+                        IgnoreCollectionOrder = !bulkIgnoreCompletely && bulkIgnoreCollectionOrder && IsCollectionProperty(propertyPath)
+                    };
+
+                    // Remove existing rule for this property if it exists
+                    var existingRule = IgnoredProperties.FirstOrDefault(p => p.PropertyPath == propertyPath);
+                    if (existingRule != null)
+                    {
+                        IgnoredProperties.Remove(existingRule);
+                    }
+
+                    IgnoredProperties.Add(rule);
+                    await OnPropertyAdded.InvokeAsync(rule);
+                    
+                    processedCount++;
+                    bulkIgnoreProgress = (int)((double)processedCount / propertiesCount * 100);
+                }
+
+                // Allow UI to update between batches
+                StateHasChanged();
+                await Task.Delay(10); // Small delay to prevent UI blocking
+            }
+
+            bulkIgnoreStatus = $"Bulk ignore completed successfully for {propertiesCount} properties";
+            Console.WriteLine(bulkIgnoreStatus);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error during bulk ignore: {ex.Message}");
+            // Continue with cleanup even if there was an error
+        }
+        finally
+        {
+            // Clear selections and close modal
+            isProcessingBulkIgnore = false;
+            bulkIgnoreProgress = 0;
+            bulkIgnoreStatus = "";
+            selectedProperties.Clear();
+            selectAllVisible = false;
+            await bulkIgnoreModal.HideAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task CancelBulkIgnore()
+    {
+        await bulkIgnoreModal.HideAsync();
+    }
+
+    private void ClearAllSelections()
+    {
+        selectedProperties.Clear();
+        selectAllVisible = false;
+        StateHasChanged();
     }
 }

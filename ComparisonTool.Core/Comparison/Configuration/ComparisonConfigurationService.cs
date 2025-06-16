@@ -334,19 +334,37 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             // Handle property ignore rules - we'll enhance the MembersToIgnore with our custom logic
             // by overriding the comparison result processing rather than using a custom comparer
 
-            // Apply all legacy rules (but don't rely on MembersToIgnore for [*] patterns)
+            // Apply rules with safety limits to prevent performance issues
             int rulesApplied = 0;
+            int beforeCount = compareLogic.Config.MembersToIgnore.Count;
+            
             foreach (var rule in ignoreRules)
             {
                 try 
                 {
                     rule.ApplyTo(compareLogic.Config);
                     rulesApplied++;
+                    
+                    // Safety check: if we're generating too many ignore patterns, warn and stop
+                    int currentCount = compareLogic.Config.MembersToIgnore.Count;
+                    if (currentCount > 1000) // Reasonable limit
+                    {
+                        logger.LogWarning("Ignore pattern limit reached ({CurrentCount} patterns). Stopping rule application to maintain performance. Consider more specific ignore rules.", currentCount);
+                        break;
+                    }
                 }
                 catch (Exception ex)
                 {
                     logger.LogError(ex, "Error applying rule for property {PropertyPath}", rule.PropertyPath);
                 }
+            }
+            
+            int finalCount = compareLogic.Config.MembersToIgnore.Count;
+            int generatedPatterns = finalCount - beforeCount;
+            
+            if (generatedPatterns > 500)
+            {
+                logger.LogWarning("Generated {GeneratedPatterns} ignore patterns from {RulesApplied} rules. This may impact performance.", generatedPatterns, rulesApplied);
             }
             
             logger.LogWarning("Applied configuration settings with {RuleCount} rules. MembersToIgnore: {IgnoreCount}, CustomComparers: {ComparerCount}",
