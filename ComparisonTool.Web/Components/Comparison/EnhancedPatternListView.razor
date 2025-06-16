@@ -1,90 +1,128 @@
 @namespace ComparisonTool.Web.Components.Comparison
 @using ComparisonTool.Core.Comparison.Analysis
 
-<div class="table-responsive">
-    <table class="table table-sm table-striped table-hover">
-        <thead>
-            <tr>
-                @if (ShowPriority)
-                {
-                    <th>Priority</th>
-                }
-                <th>Pattern</th>
-                <th>Description</th>
-                <th>Files</th>
-                <th>Occurrences</th>
-                <th>Consistency</th>
-                <th>Action</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var pattern in Patterns.OrderByDescending(p => p.IsCriticalProperty).ThenByDescending(p => p.Consistency))
+<style>
+    .cursor-pointer {
+        cursor: pointer;
+    }
+</style>
+
+<div class="mb-3 d-flex justify-content-between align-items-center">
+    <div class="small text-muted">
+        @if (Patterns.Any())
+        {
+            <span>@Patterns.Count patterns</span>
+            @if (ShouldDefaultToObjectView())
             {
-                <tr @onclick="() => OnSelectPattern.InvokeAsync(pattern)" class="cursor-pointer @GetRowClass(pattern)">
+                <span class="text-success"> • Auto-grouped</span>
+            }
+        }
+    </div>
+    <div class="btn-group btn-group-sm" role="group">
+        <button type="button" class="btn @(ViewMode == "list" ? "btn-primary" : "btn-outline-primary")" 
+                @onclick="@(() => SetViewMode("list"))">
+            <i class="bi bi-list"></i> List View
+        </button>
+        <button type="button" class="btn @(ViewMode == "object" ? "btn-primary" : "btn-outline-primary")" 
+                @onclick="@(() => SetViewMode("object"))">
+            <i class="bi bi-diagram-3"></i> Object View
+        </button>
+    </div>
+</div>
+
+@if (ViewMode == "object")
+{
+    <ObjectViewerPatternDisplay Patterns="Patterns" 
+                                OnSelectPattern="OnSelectPattern" 
+                                ShowPriority="ShowPriority" />
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-sm table-striped table-hover">
+            <thead>
+                <tr>
                     @if (ShowPriority)
                     {
+                        <th>Priority</th>
+                    }
+                    <th>Pattern</th>
+                    <th>Description</th>
+                    <th>Files</th>
+                    <th>Occurrences</th>
+                    <th>Consistency</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var pattern in Patterns.OrderByDescending(p => p.IsCriticalProperty).ThenByDescending(p => p.Consistency))
+                {
+                    <tr @onclick="() => OnSelectPattern.InvokeAsync(pattern)" class="cursor-pointer @GetRowClass(pattern)">
+                        @if (ShowPriority)
+                        {
+                            <td>
+                                @if (pattern.IsCriticalProperty)
+                                {
+                                    <span class="badge bg-danger">
+                                        <i class="bi bi-exclamation-triangle"></i> Critical
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">Normal</span>
+                                }
+                            </td>
+                        }
                         <td>
-                            @if (pattern.IsCriticalProperty)
+                            <code class="small">@pattern.FullPattern</code>
+                            @if (pattern.IsCollectionElement)
                             {
-                                <span class="badge bg-danger">
-                                    <i class="bi bi-exclamation-triangle"></i> Critical
-                                </span>
+                                <br />
+                                <small class="text-muted">Collection: @pattern.CollectionName</small>
+                            }
+                        </td>
+                        <td class="small">
+                            @if (!string.IsNullOrEmpty(pattern.HumanReadableDescription))
+                            {
+                                <div>@pattern.HumanReadableDescription</div>
                             }
                             else
                             {
-                                <span class="badge bg-secondary">Normal</span>
+                                <span class="text-muted">@(pattern.IsCollectionElement ? "Collection Element" : "Property")</span>
                             }
                         </td>
-                    }
-                    <td>
-                        <code class="small">@pattern.FullPattern</code>
-                        @if (pattern.IsCollectionElement)
-                        {
-                            <br />
-                            <small class="text-muted">Collection: @pattern.CollectionName</small>
-                        }
-                    </td>
-                    <td class="small">
-                        @if (!string.IsNullOrEmpty(pattern.HumanReadableDescription))
-                        {
-                            <div>@pattern.HumanReadableDescription</div>
-                        }
-                        else
-                        {
-                            <span class="text-muted">@(pattern.IsCollectionElement ? "Collection Element" : "Property")</span>
-                        }
-                    </td>
-                    <td>
-                        <span class="badge bg-info">@pattern.FileCount</span>
-                    </td>
-                    <td>
-                        <span class="badge bg-primary">@pattern.OccurenceCount</span>
-                    </td>
-                    <td>
-                        <div class="d-flex align-items-center">
-                            <div class="progress flex-grow-1 me-2" style="height: 15px; width: 60px;">
-                                <div class="progress-bar @GetConsistencyProgressClass(pattern.Consistency)" 
-                                     style="width: @(pattern.Consistency)%">
+                        <td>
+                            <span class="badge bg-info">@pattern.FileCount</span>
+                        </td>
+                        <td>
+                            <span class="badge bg-primary">@pattern.OccurenceCount</span>
+                        </td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <div class="progress flex-grow-1 me-2" style="height: 15px; width: 60px;">
+                                    <div class="progress-bar @GetConsistencyProgressClass(pattern.Consistency)" 
+                                         style="width: @(pattern.Consistency)%">
+                                    </div>
                                 </div>
+                                <small>@pattern.Consistency.ToString("0.0")%</small>
                             </div>
-                            <small>@pattern.Consistency.ToString("0.0")%</small>
-                        </div>
-                    </td>
-                    <td>
-                        @if (!string.IsNullOrEmpty(pattern.RecommendAction))
-                        {
-                            <i class="bi bi-lightbulb text-warning" title="@pattern.RecommendAction"></i>
-                        }
-                        else
-                        {
-                            <span class="text-muted">-</span>
-                        }
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
-</div>
+                        </td>
+                        <td>
+                            @if (!string.IsNullOrEmpty(pattern.RecommendAction))
+                            {
+                                <i class="bi bi-lightbulb text-warning" title="@pattern.RecommendAction"></i>
+                            }
+                            else
+                            {
+                                <span class="text-muted">-</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
 
 @if (!Patterns.Any())
 {
@@ -103,6 +141,77 @@
     
     [Parameter]
     public bool ShowPriority { get; set; } = false;
+    
+    private string ViewMode { get; set; } = "list";
+    
+    protected override void OnParametersSet()
+    {
+        base.OnParametersSet();
+        
+        // Auto-select object view if there are many patterns that could benefit from grouping
+        if (ShouldDefaultToObjectView())
+        {
+            ViewMode = "object";
+        }
+    }
+    
+    private bool ShouldDefaultToObjectView()
+    {
+        if (Patterns.Count < 3) return false;
+        
+        // Check if there are patterns that share common path prefixes at different levels
+        for (int segments = 2; segments <= 5; segments++)
+        {
+            var pathGroups = Patterns
+                .GroupBy(p => GetPathPrefix(p.FullPattern, segments))
+                .Where(g => g.Count() > 1)
+                .ToList();
+                
+            if (pathGroups.Any())
+            {
+                return true;
+            }
+        }
+        
+        // Also check for array patterns like Results[*]
+        var arrayPatternGroups = Patterns
+            .GroupBy(p => ExtractArrayBasePath(p.FullPattern))
+            .Where(g => g.Count() > 1 && !string.IsNullOrEmpty(g.Key))
+            .ToList();
+            
+        return arrayPatternGroups.Any();
+    }
+    
+    private string ExtractArrayBasePath(string path)
+    {
+        // Extract base path from patterns like "Body.Response.Results[*].Score"
+        // Should return "Body.Response.Results"
+        var match = System.Text.RegularExpressions.Regex.Match(path, @"^(.+?)\[\*\]");
+        if (match.Success)
+        {
+            return match.Groups[1].Value;
+        }
+        
+        // Also handle patterns like "Body.Response.Results[Order]"
+        if (path.Contains("[Order]"))
+        {
+            return path.Replace("[Order]", "").TrimEnd('.');
+        }
+        
+        return "";
+    }
+    
+    private string GetPathPrefix(string path, int segmentCount)
+    {
+        var segments = path.Split('.');
+        if (segments.Length <= segmentCount) return path;
+        return string.Join(".", segments.Take(segmentCount));
+    }
+    
+    private void SetViewMode(string mode)
+    {
+        ViewMode = mode;
+    }
     
     private string GetRowClass(EnhancedStructuralDifferenceAnalyzer.StructuralPattern pattern)
     {

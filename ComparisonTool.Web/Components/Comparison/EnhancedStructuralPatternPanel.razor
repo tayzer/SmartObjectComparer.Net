@@ -4,6 +4,18 @@
 @using KellermanSoftware.CompareNetObjects
 
 <style>
+    .cursor-pointer {
+        cursor: pointer;
+    }
+    
+    .hover-bg-light:hover {
+        background-color: #f8f9fa !important;
+        border-radius: 0.25rem;
+        transition: background-color 0.15s ease-in-out;
+    }
+</style>
+
+<style>
     .btn-xs {
         padding: 0.2rem 0.4rem;
         font-size: 0.7rem;
@@ -431,15 +443,13 @@
                                 <div class="border rounded p-2" style="max-height: 400px; overflow-y: auto;">
                                     @foreach (var file in SelectedPattern.AffectedFiles)
                                     {
-                                        <div class="d-flex justify-content-between align-items-center mb-1 p-1 border-bottom">
+                                        <div class="d-flex justify-content-between align-items-center mb-1 p-2 border-bottom cursor-pointer hover-bg-light" 
+                                             @onclick="() => ShowFilePairDifferences(file)"
+                                             title="Click to view differences for this file pair">
                                             <div class="small">
                                                 <i class="bi bi-file-earmark me-1"></i> @file
                                             </div>
-                                            <button class="btn btn-xs btn-outline-info" 
-                                                    @onclick="() => ShowFilePairDifferences(file)"
-                                                    title="View differences for this file pair">
-                                                <i class="bi bi-eye"></i>
-                                            </button>
+                                            <i class="bi bi-eye text-info"></i>
                                         </div>
                                     }
                                 </div>
@@ -448,20 +458,18 @@
                             {
                                 @foreach (var file in SelectedPattern.AffectedFiles.Take(5))
                                 {
-                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <div class="d-flex justify-content-between align-items-center mb-1 p-2 cursor-pointer hover-bg-light" 
+                                         @onclick="() => ShowFilePairDifferences(file)"
+                                         title="Click to view differences for this file pair">
                                         <div class="small">
                                             <i class="bi bi-file-earmark me-1"></i> @file
                                         </div>
-                                        <button class="btn btn-xs btn-outline-info" 
-                                                @onclick="() => ShowFilePairDifferences(file)"
-                                                title="View differences for this file pair">
-                                            <i class="bi bi-eye"></i>
-                                        </button>
+                                        <i class="bi bi-eye text-info"></i>
                                     </div>
                                 }
                                 @if (SelectedPattern.AffectedFiles.Count > 5)
                                 {
-                                    <div class="small text-muted">...and @(SelectedPattern.AffectedFiles.Count - 5) more files</div>
+                                    <div class="small text-muted p-2">...and @(SelectedPattern.AffectedFiles.Count - 5) more files</div>
                                 }
                             }
                         </div>
