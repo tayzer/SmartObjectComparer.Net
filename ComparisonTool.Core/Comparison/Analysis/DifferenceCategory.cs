@@ -13,5 +13,7 @@ public enum DifferenceCategory
     ItemAdded,
     ItemRemoved,
     NullValueChange,
+    ValueChanged,
+    GeneralValueChanged,
     Other
 }

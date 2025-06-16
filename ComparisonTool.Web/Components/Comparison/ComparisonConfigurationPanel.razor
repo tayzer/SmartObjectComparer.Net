@@ -8,6 +8,173 @@
 @inject IComparisonConfigurationService ConfigService
 @inject IJSRuntime JSRuntime
 
+<style>
+
+
+    .ignore-rules-compact {
+        margin-top: 0.5rem;
+    }
+
+    .rules-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+        padding-bottom: 0.25rem;
+        border-bottom: 1px solid #e9ecef;
+    }
+
+    .rules-count {
+        font-weight: 600;
+        color: #495057;
+        font-size: 0.9rem;
+    }
+
+    .compact-rules-table {
+        max-height: 300px;
+        overflow-y: auto;
+        border: 1px solid #e9ecef;
+        border-radius: 4px;
+    }
+
+    .rule-group-compact {
+        background: #f8f9fa;
+        padding: 0.25rem 0.5rem;
+        border-bottom: 1px solid #e9ecef;
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: #6c757d;
+    }
+
+    .group-label {
+        display: flex;
+        align-items: center;
+    }
+
+    .rule-row {
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        gap: 0.5rem;
+        padding: 0.4rem 0.5rem;
+        border-bottom: 1px solid #f1f3f4;
+        align-items: center;
+        transition: background-color 0.15s ease;
+    }
+
+    .rule-row:hover {
+        background-color: #f8f9fa;
+    }
+
+    .rule-row:last-child {
+        border-bottom: none;
+    }
+
+    .rule-path-compact {
+        min-width: 0;
+        overflow: hidden;
+    }
+
+    .rule-path-compact code {
+        font-size: 0.8rem;
+        color: #6f42c1;
+        background: none;
+        padding: 0;
+        border-radius: 0;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        word-break: break-all;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: block;
+    }
+
+    .rule-settings-compact {
+        display: flex;
+        gap: 0.25rem;
+        align-items: center;
+    }
+
+    .setting-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        font-size: 0.7rem;
+        line-height: 1;
+    }
+
+    .setting-badge.ignore {
+        background: #dc3545;
+        color: white;
+    }
+
+    .setting-badge.order {
+        background: #ffc107;
+        color: #212529;
+    }
+
+    .rule-actions-compact {
+        display: flex;
+        align-items: center;
+    }
+
+    .btn-remove-compact {
+        border: none;
+        background: none;
+        color: #6c757d;
+        cursor: pointer;
+        padding: 0.2rem;
+        border-radius: 3px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        font-size: 0.8rem;
+        transition: all 0.15s ease;
+    }
+
+    .btn-remove-compact:hover {
+        background: #dc3545;
+        color: white;
+    }
+
+    .empty-state-compact {
+        padding: 1rem;
+        text-align: center;
+        color: #6c757d;
+        font-style: italic;
+        background: #f8f9fa;
+        border-radius: 4px;
+        font-size: 0.9rem;
+    }
+
+    /* Mobile responsiveness */
+    @@media (max-width: 768px) {
+        .rule-row {
+            grid-template-columns: 1fr auto;
+            gap: 0.3rem;
+        }
+        
+        .rule-settings-compact {
+            grid-column: 1;
+            justify-self: start;
+            margin-top: 0.25rem;
+        }
+        
+        .rule-actions-compact {
+            grid-column: 2;
+            grid-row: 1;
+        }
+        
+        .compact-rules-table {
+            max-height: 250px;
+        }
+    }
+</style>
+
 <div class="card">
     <div class="card-header">
         <h5>Step 2: Configure Comparison Options</h5>
@@ -32,40 +199,114 @@
             <input class="form-check-input" type="checkbox" id="enableSemanticAnalysisSwitch" @bind="EnableSemanticAnalysis" @bind:after="() => OnEnableSemanticAnalysisChanged.InvokeAsync(EnableSemanticAnalysis)" />
             <label class="form-check-label" for="enableSemanticAnalysisSwitch">Enable Semantic Analysis</label>
         </div>
-        <div class="form-check form-switch mb-3">
+        <div class="form-check form-switch mb-2">
             <input class="form-check-input" type="checkbox" id="enableStructuralAnalysisSwitch" @bind="EnableStructuralAnalysis" @bind:after="() => OnEnableStructuralAnalysisChanged.InvokeAsync(EnableStructuralAnalysis)" />
             <label class="form-check-label" for="enableStructuralAnalysisSwitch">Enable Structural Analysis</label>
         </div>
+        <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="enableEnhancedStructuralAnalysisSwitch" @bind="EnableEnhancedStructuralAnalysis" @bind:after="() => OnEnableEnhancedStructuralAnalysisChanged.InvokeAsync(EnableEnhancedStructuralAnalysis)" />
+            <label class="form-check-label" for="enableEnhancedStructuralAnalysisSwitch">Enable Enhanced Structural Analysis</label>
+        </div>
 
-        <h6>Property Specific Rules</h6>
-        <button class="btn btn-sm btn-outline-primary mb-2" @onclick="OpenPropertySelector" disabled="@(!IsModelSelected)">
-            <i class="bi bi-list-nested me-1"></i> Add/Edit Property Rule
-        </button>
+        <!-- Smart Ignore Rules Section -->
+        <SmartIgnoreConfigurationPanel SmartIgnoreRules="@GetSmartIgnoreRules()"
+                                       OnRuleAdded="@HandleSmartIgnoreRuleAdded"
+                                       OnRuleRemoved="@HandleSmartIgnoreRuleRemoved"
+                                       OnPresetApplied="@HandleSmartIgnorePresetApplied"
+                                       OnRulesCleared="@HandleSmartIgnoreRulesCleared" />
+
+        <h6 class="mt-4">Tree Navigator (Visual Property Selection)</h6>
+        <div class="d-flex gap-2 mb-2">
+            <button class="btn btn-sm btn-outline-primary" @onclick="OpenPropertySelector" disabled="@(!IsModelSelected)">
+                <i class="bi bi-list-nested me-1"></i> Simple Property Selector
+            </button>
+            <button class="btn btn-sm btn-outline-success" @onclick="OpenTreePropertySelector" disabled="@(!IsModelSelected)">
+                <i class="bi bi-diagram-3 me-1"></i> Tree Navigator ⭐
+            </button>
+        </div>
         @if (!IsModelSelected)
         {
-            <small class="d-block text-muted">Select a model first to add property rules.</small>
+            <small class="d-block text-muted">Select a model first to browse and ignore properties.</small>
+        }
+        else
+        {
+            <div class="alert alert-success py-2 px-3 mt-2">
+                <small>
+                    <i class="bi bi-check-circle"></i> 
+                    <strong>Fixed & Enhanced!</strong> The <strong>Tree Navigator</strong> now properly ignores selected properties. Browse your domain model visually with breadcrumbs, collection support ([*]), and advanced search.
+                </small>
+            </div>
         }
 
         @if (IgnoreRules.Any())
         {
-            <ul class="list-group list-group-flush mb-3">
-                @foreach (var rule in IgnoreRules)
-                {
-                    <li class="list-group-item d-flex justify-content-between align-items-center p-1">
-                        <span>
-                            <i class="bi bi-diagram-3 me-1"></i> @rule.PropertyPath
-                            <small class="text-muted ms-2">(@GetRuleDescription(rule))</small>
-                        </span>
-                        <button class="btn btn-sm btn-outline-danger" @onclick="() => OnIgnoreRuleRemoved.InvokeAsync(rule)">
-                            <i class="bi bi-trash"></i>
-                        </button>
-                    </li>
-                }
-            </ul>
+            <div class="ignore-rules-compact">
+                <div class="rules-header">
+                    <span class="rules-count">
+                        <i class="bi bi-shield-x me-1"></i>
+                        @IgnoreRules.Count Ignore Rules
+                    </span>
+                    @if (IgnoreRules.Count > 10)
+                    {
+                        <small class="text-muted">Showing all rules in compact view</small>
+                    }
+                </div>
+                
+                <div class="compact-rules-table">
+                    @{
+                        var groupedRules = GetCompactRuleGroups();
+                    }
+                    
+                    @foreach (var group in groupedRules)
+                    {
+                        @if (groupedRules.Count > 1)
+                        {
+                            <div class="rule-group-compact">
+                                <span class="group-label">
+                                    <i class="@group.Icon me-1"></i>@group.Name (@group.Rules.Count)
+                                </span>
+                            </div>
+                        }
+                        
+                        @foreach (var rule in group.Rules)
+                        {
+                            <div class="rule-row">
+                                <div class="rule-path-compact">
+                                    <code>@rule.PropertyPath</code>
+                                </div>
+                                <div class="rule-settings-compact">
+                                    @if (rule.IgnoreCompletely)
+                                    {
+                                        <span class="setting-badge ignore">
+                                            <i class="bi bi-eye-slash"></i>
+                                        </span>
+                                    }
+                                    @if (rule.IgnoreCollectionOrder)
+                                    {
+                                        <span class="setting-badge order">
+                                            <i class="bi bi-arrow-down-up"></i>
+                                        </span>
+                                    }
+                                </div>
+                                <div class="rule-actions-compact">
+                                    <button class="btn-remove-compact" 
+                                            @onclick="() => OnIgnoreRuleRemoved.InvokeAsync(rule)"
+                                            title="Remove rule">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
         }
         else
         {
-            <p class="text-muted">No property-specific rules added.</p>
+            <div class="empty-state-compact">
+                <i class="bi bi-shield-check me-2"></i>
+                <span>No ignore rules configured</span>
+            </div>
         }
         
         @* --- Import/Export Buttons --- *@
@@ -104,11 +345,14 @@
     [Parameter] public EventCallback<bool> OnEnableSemanticAnalysisChanged { get; set; }
     [Parameter] public bool EnableStructuralAnalysis { get; set; }
     [Parameter] public EventCallback<bool> OnEnableStructuralAnalysisChanged { get; set; }
+    [Parameter] public bool EnableEnhancedStructuralAnalysis { get; set; }
+    [Parameter] public EventCallback<bool> OnEnableEnhancedStructuralAnalysisChanged { get; set; }
     [Parameter] public List<IgnoreRule> IgnoreRules { get; set; } = new List<IgnoreRule>();
     [Parameter] public EventCallback<IgnoreRule> OnIgnoreRuleAdded { get; set; }
     [Parameter] public EventCallback<IgnoreRule> OnIgnoreRuleRemoved { get; set; }
     [Parameter] public Type ModelType { get; set; }
     [Parameter] public EventCallback OnPropertySelectorOpened { get; set; }
+    [Parameter] public EventCallback OnTreePropertySelectorOpened { get; set; }
     [Parameter] public EventCallback OnRunComparison { get; set; }
     [Parameter] public bool CanRunComparison { get; set; }
 
@@ -121,12 +365,120 @@
         await OnPropertySelectorOpened.InvokeAsync();
     }
 
+    private async Task OpenTreePropertySelector()
+    {
+        await OnTreePropertySelectorOpened.InvokeAsync();
+    }
+
+    // Smart Ignore Rules handling
+    private List<SmartIgnoreRule> GetSmartIgnoreRules()
+    {
+        return ConfigService.GetSmartIgnoreRules().ToList();
+    }
+
+    private async Task HandleSmartIgnoreRuleAdded(SmartIgnoreRule rule)
+    {
+        ConfigService.AddSmartIgnoreRule(rule);
+        StateHasChanged();
+    }
+
+    private async Task HandleSmartIgnoreRuleRemoved(SmartIgnoreRule rule)
+    {
+        ConfigService.RemoveSmartIgnoreRule(rule);
+        StateHasChanged();
+    }
+
+    private async Task HandleSmartIgnorePresetApplied(string presetName)
+    {
+        ConfigService.ApplySmartIgnorePreset(presetName);
+        StateHasChanged();
+    }
+
+    private async Task HandleSmartIgnoreRulesCleared()
+    {
+        ConfigService.ClearSmartIgnoreRules();
+        StateHasChanged();
+    }
+
     private string GetRuleDescription(IgnoreRule rule)
     {
         var parts = new List<string>();
         if (rule.IgnoreCompletely) parts.Add("Ignore Completely");
         if (rule.IgnoreCollectionOrder) parts.Add("Ignore Order");
         return string.Join(", ", parts);
+    }
+
+    // Helper classes and methods for compact UI
+    private class CompactRuleGroup
+    {
+        public string Name { get; set; }
+        public string Icon { get; set; }
+        public List<IgnoreRule> Rules { get; set; } = new();
+    }
+
+    private List<CompactRuleGroup> GetCompactRuleGroups()
+    {
+        var groups = new List<CompactRuleGroup>();
+
+        // Simple Properties (single level)
+        var simpleRules = IgnoreRules.Where(r => !r.PropertyPath.Contains('.') && !r.PropertyPath.Contains('['))
+                                   .OrderBy(r => r.PropertyPath)
+                                   .ToList();
+        if (simpleRules.Any())
+        {
+            groups.Add(new CompactRuleGroup
+            {
+                Name = "Root Properties",
+                Icon = "bi bi-house",
+                Rules = simpleRules
+            });
+        }
+
+        // Nested Properties (multiple levels but not collections)
+        var nestedRules = IgnoreRules.Where(r => r.PropertyPath.Contains('.') && 
+                                               !r.PropertyPath.Contains('[') && 
+                                               !r.PropertyPath.Contains(']'))
+                                    .OrderBy(r => r.PropertyPath)
+                                    .ToList();
+        if (nestedRules.Any())
+        {
+            groups.Add(new CompactRuleGroup
+            {
+                Name = "Nested Properties",
+                Icon = "bi bi-diagram-3",
+                Rules = nestedRules
+            });
+        }
+
+        // Collection Properties
+        var collectionRules = IgnoreRules.Where(r => r.PropertyPath.Contains('[') && r.PropertyPath.Contains(']'))
+                                        .OrderBy(r => r.PropertyPath)
+                                        .ToList();
+        if (collectionRules.Any())
+        {
+            groups.Add(new CompactRuleGroup
+            {
+                Name = "Collections",
+                Icon = "bi bi-collection",
+                Rules = collectionRules
+            });
+        }
+
+        // If only one group or few rules, don't group them
+        if (groups.Count == 1 || IgnoreRules.Count <= 5)
+        {
+            return new List<CompactRuleGroup>
+            {
+                new CompactRuleGroup
+                {
+                    Name = "All Rules",
+                    Icon = "bi bi-list",
+                    Rules = IgnoreRules.OrderBy(r => r.PropertyPath).ToList()
+                }
+            };
+        }
+
+        return groups;
     }
 
     // --- Export Logic ---

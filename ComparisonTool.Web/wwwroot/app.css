@@ -49,3 +49,93 @@ h1:focus {
 .darker-border-checkbox.form-check-input {
     border-color: #929292;
 }
+
+.cursor-pointer {
+    cursor: pointer;
+}
+
+/* Object Tree Property Selector Styles */
+.tree-container {
+    font-family: 'Courier New', Consolas, monospace;
+    font-size: 0.9em;
+}
+
+.tree-node {
+    user-select: none;
+}
+
+.tree-node-content {
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.tree-node-content:hover {
+    background-color: #e9ecef;
+}
+
+.tree-node-content.selected {
+    background-color: #cfe2ff;
+    border: 1px solid #86b7fe;
+}
+
+.tree-toggle {
+    border: none !important;
+    padding: 0 !important;
+    background: none !important;
+    box-shadow: none !important;
+}
+
+.tree-toggle:hover {
+    background-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+.tree-node-label {
+    font-weight: 500;
+    color: #495057;
+}
+
+.tree-children {
+    border-left: 1px dotted #dee2e6;
+    margin-left: 10px;
+    padding-left: 10px;
+}
+
+/* Search suggestions styling */
+.search-suggestions .badge {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.search-suggestions .badge:hover {
+    transform: scale(1.05);
+    background-color: #0d6efd !important;
+    color: white !important;
+}
+
+/* Breadcrumb enhancements */
+.breadcrumb-item a {
+    text-decoration: none;
+    color: #0d6efd;
+}
+
+.breadcrumb-item a:hover {
+    text-decoration: underline;
+}
+
+/* Property configuration panel styling */
+.property-config-panel {
+    border-left: 3px solid #0d6efd;
+    background-color: #f8f9fa;
+}
+
+/* Tree navigation indicators */
+.tree-node .badge {
+    font-size: 0.7em;
+    opacity: 0.8;
+}
+
+.tree-node:hover .badge {
+    opacity: 1;
+}

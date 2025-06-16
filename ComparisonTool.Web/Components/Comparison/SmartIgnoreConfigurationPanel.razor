@@ -1,0 +1,414 @@
+@using ComparisonTool.Core.Comparison.Configuration
+@using BlazorBootstrap
+
+<Card>
+    <CardHeader>
+        <div class="d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">
+                <i class="bi bi-magic"></i> Smart Ignore Rules
+                <span class="badge bg-secondary ms-2">@SmartIgnoreRules.Count active</span>
+            </h6>
+            <div class="btn-group btn-group-sm">
+                <Button Color="ButtonColor.Success" Size="ButtonSize.Small" @onclick="ShowPresetsModal">
+                    <i class="bi bi-star"></i> Presets
+                </Button>
+                <Button Color="ButtonColor.Secondary" Size="ButtonSize.Small" @onclick="ShowCustomRuleModal">
+                    <i class="bi bi-plus"></i> Custom Rule
+                </Button>
+                <Button Color="ButtonColor.Danger" Size="ButtonSize.Small" @onclick="ClearAllRules" 
+                        Disabled="@(!SmartIgnoreRules.Any())">
+                    <i class="bi bi-trash"></i> Clear All
+                </Button>
+            </div>
+        </div>
+    </CardHeader>
+    <CardBody>
+        @if (!SmartIgnoreRules.Any())
+        {
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i>
+                No smart ignore rules configured. Use <strong>Presets</strong> for quick setup or <strong>Custom Rule</strong> for specific needs.
+            </div>
+        }
+        else
+        {
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Quick Toggles</h6>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="toggleIdFields" 
+                               checked="@HasIdFieldsRule" @onchange="ToggleIdFields">
+                        <label class="form-check-label" for="toggleIdFields">
+                            <i class="bi bi-key text-primary"></i> Ignore ID fields (Id, Guid, Key, etc.)
+                        </label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="toggleTimestamps" 
+                               checked="@HasTimestampsRule" @onchange="ToggleTimestamps">
+                        <label class="form-check-label" for="toggleTimestamps">
+                            <i class="bi bi-clock text-warning"></i> Ignore timestamps (DateTime, CreatedDate, etc.)
+                        </label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="toggleMetadata" 
+                               checked="@HasMetadataRule" @onchange="ToggleMetadata">
+                        <label class="form-check-label" for="toggleMetadata">
+                            <i class="bi bi-database text-info"></i> Ignore metadata (Version, ETag, etc.)
+                        </label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="toggleCollectionOrder" 
+                               checked="@HasCollectionOrderRule" @onchange="ToggleCollectionOrder">
+                        <label class="form-check-label" for="toggleCollectionOrder">
+                            <i class="bi bi-list-ol text-success"></i> Ignore collection ordering
+                        </label>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h6>Active Rules</h6>
+                    <div style="max-height: 200px; overflow-y: auto;">
+                        @foreach (var rule in SmartIgnoreRules.Where(r => r.IsEnabled).OrderBy(r => r.Type).ThenBy(r => r.Value))
+                        {
+                            <div class="d-flex justify-content-between align-items-center mb-1 p-2 border rounded">
+                                <div>
+                                    <small class="text-muted">@GetRuleTypeIcon(rule.Type)</small>
+                                    <span class="small">@rule.Description</span>
+                                </div>
+                                <button class="btn btn-outline-secondary btn-sm" 
+                                        @onclick="() => RemoveRule(rule)">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </CardBody>
+</Card>
+
+<!-- Presets Modal -->
+<Modal @ref="presetsModal" Title="Smart Ignore Presets" Size="ModalSize.Large">
+    <BodyTemplate>
+        <div class="row">
+            @foreach (var preset in SmartIgnorePresets.AllPresets)
+            {
+                <div class="col-md-6 mb-3">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">
+                                @GetPresetIcon(preset.Key) @preset.Key
+                                <span class="badge bg-secondary ms-2">@preset.Value.Count rules</span>
+                            </h6>
+                            <p class="card-text small text-muted">
+                                @GetPresetDescription(preset.Key)
+                            </p>
+                            <div class="mb-2">
+                                <small class="text-muted">Rules:</small>
+                                <ul class="small mb-2">
+                                    @foreach (var rule in preset.Value.Take(3))
+                                    {
+                                        <li>@rule.Description</li>
+                                    }
+                                    @if (preset.Value.Count > 3)
+                                    {
+                                        <li><em>...and @(preset.Value.Count - 3) more</em></li>
+                                    }
+                                </ul>
+                            </div>
+                            <Button Color="ButtonColor.Primary" Size="ButtonSize.Small" 
+                                    @onclick="() => ApplyPreset(preset.Key)" class="w-100">
+                                Apply Preset
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Secondary" @onclick="ClosePresetsModal">Close</Button>
+    </FooterTemplate>
+</Modal>
+
+<!-- Custom Rule Modal -->
+<Modal @ref="customRuleModal" Title="Add Custom Ignore Rule">
+    <BodyTemplate>
+        <div class="mb-3">
+            <label class="form-label">Rule Type</label>
+            <select class="form-select" @bind="NewRuleType">
+                <option value="@SmartIgnoreType.PropertyName">Property Name (exact match)</option>
+                <option value="@SmartIgnoreType.NamePattern">Name Pattern (with wildcards)</option>
+                <option value="@SmartIgnoreType.PropertyType">Property Type</option>
+            </select>
+        </div>
+        
+        <div class="mb-3">
+            <label class="form-label">Value</label>
+            @if (NewRuleType == SmartIgnoreType.PropertyName)
+            {
+                <input type="text" class="form-control" @bind="NewRuleValue" 
+                       placeholder="e.g., Id, Timestamp, Status">
+                <small class="form-text text-muted">Enter exact property name to ignore</small>
+            }
+            else if (NewRuleType == SmartIgnoreType.NamePattern)
+            {
+                <input type="text" class="form-control" @bind="NewRuleValue" 
+                       placeholder="e.g., *Id, Request*, *Date">
+                <small class="form-text text-muted">Use * for wildcards (e.g., *Id ignores UserId, ProductId, etc.)</small>
+            }
+            else if (NewRuleType == SmartIgnoreType.PropertyType)
+            {
+                <select class="form-select" @bind="NewRuleValue">
+                    <option value="System.DateTime">DateTime</option>
+                    <option value="System.Guid">Guid</option>
+                    <option value="System.String">String</option>
+                    <option value="System.Int32">Integer</option>
+                    <option value="System.Boolean">Boolean</option>
+                </select>
+                <small class="form-text text-muted">All properties of this type will be ignored</small>
+            }
+        </div>
+        
+        <div class="mb-3">
+            <label class="form-label">Description (optional)</label>
+            <input type="text" class="form-control" @bind="NewRuleDescription" 
+                   placeholder="Describe what this rule does">
+        </div>
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Primary" @onclick="AddCustomRule" 
+                Disabled="@string.IsNullOrWhiteSpace(NewRuleValue)">
+            Add Rule
+        </Button>
+        <Button Color="ButtonColor.Secondary" @onclick="CloseCustomRuleModal">Cancel</Button>
+    </FooterTemplate>
+</Modal>
+
+@code {
+    [Parameter] public List<SmartIgnoreRule> SmartIgnoreRules { get; set; } = new();
+    [Parameter] public EventCallback<SmartIgnoreRule> OnRuleAdded { get; set; }
+    [Parameter] public EventCallback<SmartIgnoreRule> OnRuleRemoved { get; set; }
+    [Parameter] public EventCallback<string> OnPresetApplied { get; set; }
+    [Parameter] public EventCallback OnRulesCleared { get; set; }
+
+    private Modal presetsModal;
+    private Modal customRuleModal;
+
+    // Custom rule creation
+    private SmartIgnoreType NewRuleType = SmartIgnoreType.PropertyName;
+    private string NewRuleValue = "";
+    private string NewRuleDescription = "";
+
+    // Quick toggle states
+    private bool HasIdFieldsRule => SmartIgnoreRules.Any(r => r.Value == "Id" && r.Type == SmartIgnoreType.PropertyName);
+    private bool HasTimestampsRule => SmartIgnoreRules.Any(r => r.Value == "System.DateTime" && r.Type == SmartIgnoreType.PropertyType);
+    private bool HasMetadataRule => SmartIgnoreRules.Any(r => r.Value == "Version" && r.Type == SmartIgnoreType.PropertyName);
+    private bool HasCollectionOrderRule => SmartIgnoreRules.Any(r => r.Type == SmartIgnoreType.CollectionOrdering);
+
+    private async Task ShowPresetsModal()
+    {
+        await presetsModal.ShowAsync();
+    }
+
+    private async Task ClosePresetsModal()
+    {
+        await presetsModal.HideAsync();
+    }
+
+    private async Task ShowCustomRuleModal()
+    {
+        ResetCustomRuleForm();
+        await customRuleModal.ShowAsync();
+    }
+
+    private async Task CloseCustomRuleModal()
+    {
+        await customRuleModal.HideAsync();
+    }
+
+    private void ResetCustomRuleForm()
+    {
+        NewRuleType = SmartIgnoreType.PropertyName;
+        NewRuleValue = "";
+        NewRuleDescription = "";
+    }
+
+    private async Task ApplyPreset(string presetName)
+    {
+        await OnPresetApplied.InvokeAsync(presetName);
+        await ClosePresetsModal();
+        StateHasChanged();
+    }
+
+    private async Task AddCustomRule()
+    {
+        if (string.IsNullOrWhiteSpace(NewRuleValue))
+            return;
+
+        var rule = new SmartIgnoreRule
+        {
+            Type = NewRuleType,
+            Value = NewRuleValue,
+            Description = string.IsNullOrWhiteSpace(NewRuleDescription) 
+                ? GetAutoDescription(NewRuleType, NewRuleValue)
+                : NewRuleDescription,
+            IsEnabled = true
+        };
+
+        await OnRuleAdded.InvokeAsync(rule);
+        await CloseCustomRuleModal();
+        StateHasChanged();
+    }
+
+    private async Task RemoveRule(SmartIgnoreRule rule)
+    {
+        await OnRuleRemoved.InvokeAsync(rule);
+        StateHasChanged();
+    }
+
+    private async Task ClearAllRules()
+    {
+        await OnRulesCleared.InvokeAsync();
+        StateHasChanged();
+    }
+
+    private async Task ToggleIdFields()
+    {
+        if (HasIdFieldsRule)
+        {
+            // Remove ID-related rules
+            var idRules = SmartIgnorePresets.IgnoreIdFields;
+            foreach (var rule in idRules)
+            {
+                await OnRuleRemoved.InvokeAsync(rule);
+            }
+        }
+        else
+        {
+            // Add ID-related rules
+            await OnPresetApplied.InvokeAsync("ID Fields");
+        }
+        StateHasChanged();
+    }
+
+    private async Task ToggleTimestamps()
+    {
+        if (HasTimestampsRule)
+        {
+            // Remove timestamp-related rules
+            var timestampRules = SmartIgnorePresets.IgnoreTimestamps;
+            foreach (var rule in timestampRules)
+            {
+                await OnRuleRemoved.InvokeAsync(rule);
+            }
+        }
+        else
+        {
+            // Add timestamp-related rules
+            await OnPresetApplied.InvokeAsync("Timestamps");
+        }
+        StateHasChanged();
+    }
+
+    private async Task ToggleMetadata()
+    {
+        if (HasMetadataRule)
+        {
+            // Remove metadata-related rules
+            var metadataRules = SmartIgnorePresets.IgnoreMetadata;
+            foreach (var rule in metadataRules)
+            {
+                await OnRuleRemoved.InvokeAsync(rule);
+            }
+        }
+        else
+        {
+            // Add metadata-related rules
+            await OnPresetApplied.InvokeAsync("Metadata");
+        }
+        StateHasChanged();
+    }
+
+    private async Task ToggleCollectionOrder()
+    {
+        if (HasCollectionOrderRule)
+        {
+            // Remove collection ordering rule
+            var rule = SmartIgnoreRules.FirstOrDefault(r => r.Type == SmartIgnoreType.CollectionOrdering);
+            if (rule != null)
+            {
+                await OnRuleRemoved.InvokeAsync(rule);
+            }
+        }
+        else
+        {
+            // Add collection ordering rule
+            var rule = SmartIgnoreRule.IgnoreCollectionOrdering();
+            await OnRuleAdded.InvokeAsync(rule);
+        }
+        StateHasChanged();
+    }
+
+    private string GetRuleTypeIcon(SmartIgnoreType type)
+    {
+        return type switch
+        {
+            SmartIgnoreType.PropertyName => "🏷️",
+            SmartIgnoreType.NamePattern => "🔍",
+            SmartIgnoreType.PropertyType => "📦",
+            SmartIgnoreType.CollectionOrdering => "📋",
+            _ => "❓"
+        };
+    }
+
+    private string GetPresetIcon(string presetName)
+    {
+        return presetName switch
+        {
+            "ID Fields" => "🔑",
+            "Timestamps" => "⏰",
+            "Metadata" => "📊",
+            "Functional Comparison" => "⚡",
+            _ => "📋"
+        };
+    }
+
+    private string GetPresetDescription(string presetName)
+    {
+        return presetName switch
+        {
+            "ID Fields" => "Ignores all identifier fields like Id, Guid, Key, and similar patterns.",
+            "Timestamps" => "Ignores all DateTime fields and timestamp-related properties.",
+            "Metadata" => "Ignores system metadata like Version, ETag, RequestId, etc.",
+            "Functional Comparison" => "Complete preset for business logic comparison - ignores technical fields, focuses on data.",
+            _ => "Custom preset"
+        };
+    }
+
+    private string GetAutoDescription(SmartIgnoreType type, string value)
+    {
+        return type switch
+        {
+            SmartIgnoreType.PropertyName => $"Ignore all '{value}' properties",
+            SmartIgnoreType.NamePattern => $"Ignore properties matching '{value}'",
+            SmartIgnoreType.PropertyType => $"Ignore all {value} properties",
+            SmartIgnoreType.CollectionOrdering => "Ignore collection ordering",
+            _ => $"Custom rule: {value}"
+        };
+    }
+}
+
+<style>
+    .cursor-pointer {
+        cursor: pointer;
+    }
+    
+    .form-check-label {
+        cursor: pointer;
+    }
+    
+    .card-text ul {
+        padding-left: 1rem;
+    }
+</style> 

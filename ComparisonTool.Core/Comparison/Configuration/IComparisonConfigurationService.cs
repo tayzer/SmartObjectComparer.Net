@@ -67,5 +67,40 @@ public interface IComparisonConfigurationService
     /// </summary>
     void ApplyConfiguredSettings();
 
+    /// <summary>
+    /// Filter differences based on ignore rules with pattern matching support
+    /// </summary>
+    ComparisonResult FilterIgnoredDifferences(ComparisonResult result);
+
+    /// <summary>
+    /// Add a smart ignore rule
+    /// </summary>
+    void AddSmartIgnoreRule(SmartIgnoreRule rule);
+
+    /// <summary>
+    /// Remove a smart ignore rule
+    /// </summary>
+    void RemoveSmartIgnoreRule(SmartIgnoreRule rule);
+
+    /// <summary>
+    /// Apply a preset of smart ignore rules
+    /// </summary>
+    void ApplySmartIgnorePreset(string presetName);
+
+    /// <summary>
+    /// Clear all smart ignore rules
+    /// </summary>
+    void ClearSmartIgnoreRules();
+
+    /// <summary>
+    /// Get all smart ignore rules
+    /// </summary>
+    IReadOnlyList<SmartIgnoreRule> GetSmartIgnoreRules();
+
+    /// <summary>
+    /// Filter differences using smart ignore rules
+    /// </summary>
+    ComparisonResult FilterSmartIgnoredDifferences(ComparisonResult result, Type modelType = null);
+
     void NormalizePropertyValues(object obj, List<string> propertyNames);
 }

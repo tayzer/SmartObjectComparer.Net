@@ -3,6 +3,157 @@
 @using System.Reflection
 @using BlazorBootstrap
 
+<style>
+    .ignored-properties-container {
+        margin-top: 1rem;
+    }
+
+    .ignored-properties-header {
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    .ignored-properties-header h6 {
+        color: #495057;
+        font-weight: 600;
+    }
+
+    .ignored-properties-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .ignored-property-card {
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        padding: 0.75rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: all 0.2s ease;
+    }
+
+    .ignored-property-card:hover {
+        border-color: #007bff;
+        box-shadow: 0 2px 8px rgba(0, 123, 255, 0.1);
+    }
+
+    .property-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .property-path {
+        margin-bottom: 0.5rem;
+    }
+
+    .property-path code {
+        font-size: 0.875rem;
+        color: #6f42c1;
+        background: #f8f9fa;
+        padding: 0.2rem 0.4rem;
+        border-radius: 4px;
+        word-break: break-word;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    }
+
+    .property-settings {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .property-settings .badge {
+        font-size: 0.7rem;
+        padding: 0.25rem 0.5rem;
+    }
+
+    .property-actions {
+        margin-left: 1rem;
+    }
+
+    .no-ignored-properties {
+        text-align: center;
+        padding: 2rem 1rem;
+        color: #6c757d;
+        background: #f8f9fa;
+        border-radius: 6px;
+    }
+
+    .empty-state-icon {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+    .empty-state-text {
+        font-size: 1.1rem;
+        margin-bottom: 0.5rem;
+        color: #495057;
+    }
+
+    .bulk-actions-toolbar {
+        background: #e7f3ff;
+        border: 1px solid #b3d9ff;
+        border-radius: 6px;
+        padding: 0.75rem;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .selection-info {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 500;
+        color: #0056b3;
+    }
+
+    .bulk-actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .property-row-selected {
+        background-color: #e7f3ff !important;
+    }
+
+    .select-all-row {
+        background-color: #f8f9fa;
+        font-weight: 500;
+    }
+
+    @@media (max-width: 768px) {
+        .ignored-property-card {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        
+        .property-actions {
+            margin-left: 0;
+            margin-top: 0.75rem;
+            align-self: flex-end;
+        }
+
+        .bulk-actions-toolbar {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .bulk-actions {
+            justify-content: center;
+        }
+    }
+</style>
+
 <Modal @ref="propertyModal" Title="Select Properties to Ignore" Size="ModalSize.Large">
     <BodyTemplate>
         <div class="row">
@@ -15,12 +166,37 @@
                     </button>
                 </div>
 
+                <!-- Bulk Actions Toolbar -->
+                @if (selectedProperties.Any())
+                {
+                    <div class="bulk-actions-toolbar">
+                        <div class="selection-info">
+                            <i class="bi bi-check-square"></i>
+                            <span>@selectedProperties.Count of @FilteredProperties.Count properties selected</span>
+                        </div>
+                        <div class="bulk-actions">
+                            <button class="btn btn-sm btn-success" @onclick="ShowBulkIgnoreConfirmation">
+                                <i class="bi bi-eye-slash"></i> Ignore All Selected
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="ClearAllSelections">
+                                <i class="bi bi-x-square"></i> Clear Selection
+                            </button>
+                        </div>
+                    </div>
+                }
+
                 <div class="mt-3">
                     <h5>All Properties</h5>
-                    <div style="max-height: 300px; overflow-y: auto;">
+                    <div style="max-height: 400px; overflow-y: auto;">
                         <table class="table table-hover">
-                            <thead>
-                                <tr>
+                            <thead class="sticky-top">
+                                <tr class="select-all-row">
+                                    <th style="width: 40px;">
+                                        <input class="form-check-input" type="checkbox" 
+                                               checked="@selectAll" 
+                                               @onchange="ToggleSelectAll"
+                                               title="Select/Deselect All" />
+                                    </th>
                                     <th>Property Path</th>
                                     <th>Type</th>
                                     <th>Actions</th>
@@ -29,15 +205,25 @@
                             <tbody>
                                 @foreach (var prop in FilteredProperties)
                                 {
-                                    <tr @onclick="() => SelectProperty(prop.Path)"
-                                        class="@(selectedProperty == prop.Path ? "table-primary" : "")">
-                                        <td>@prop.Path</td>
+                                    var isSelected = selectedProperties.Contains(prop.Path);
+                                    <tr class="@(isSelected ? "property-row-selected" : "")"
+                                        @onclick="() => TogglePropertySelection(prop.Path)">
+                                        <td>
+                                            <input class="form-check-input" type="checkbox"
+                                                   checked="@isSelected"
+                                                   @onchange="(e) => TogglePropertySelectionFromCheckbox(e, prop.Path)"
+                                                   @onclick:stopPropagation="true" />
+                                        </td>
+                                        <td @onclick="() => SelectProperty(prop.Path)" style="cursor: pointer;"
+                                            class="@(selectedProperty == prop.Path ? "text-primary fw-bold" : "")">
+                                            @prop.Path
+                                        </td>
                                         <td>@prop.TypeName</td>
                                         <td>
                                             <button class="btn btn-sm btn-outline-primary"
                                                     @onclick:stopPropagation="true"
                                                     @onclick="() => SelectProperty(prop.Path)">
-                                                Select
+                                                Configure
                                             </button>
                                         </td>
                                     </tr>
@@ -94,35 +280,60 @@
                     <h5>Currently Ignored Properties</h5>
                     @if (IgnoredProperties.Any())
                     {
-                        <table class="table table-striped">
-                            <thead>
-                                <tr>
-                                    <th>Property</th>
-                                    <th>Ignore Settings</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var rule in IgnoredProperties)
+                        <div class="ignored-properties-container">
+                            <div class="ignored-properties-header">
+                                <h6 class="mb-0">
+                                    <i class="bi bi-shield-x me-2"></i>
+                                    Currently Ignored Properties
+                                    <span class="badge bg-secondary ms-2">@IgnoredProperties.Count</span>
+                                </h6>
+                                <small class="text-muted">Properties that will be excluded from comparison</small>
+                            </div>
+                            
+                            <div class="ignored-properties-list">
+                                @foreach (var rule in IgnoredProperties.OrderBy(r => r.PropertyPath))
                                 {
-                                    <tr>
-                                        <td>@rule.PropertyPath</td>
-                                        <td>@GetIgnoreRuleDescription(rule)</td>
-                                        <td>
-                                            <button class="btn btn-sm btn-danger"
-                                                    @onclick="() => RemoveIgnoredProperty(rule.PropertyPath)">
+                                    <div class="ignored-property-card">
+                                        <div class="property-info">
+                                            <div class="property-path">
+                                                <i class="bi bi-diagram-3 me-2 text-primary"></i>
+                                                <code>@rule.PropertyPath</code>
+                                            </div>
+                                            <div class="property-settings">
+                                                @if (rule.IgnoreCompletely)
+                                                {
+                                                    <span class="badge bg-danger">
+                                                        <i class="bi bi-eye-slash me-1"></i>Ignore Completely
+                                                    </span>
+                                                }
+                                                @if (rule.IgnoreCollectionOrder)
+                                                {
+                                                    <span class="badge bg-warning">
+                                                        <i class="bi bi-arrow-down-up me-1"></i>Ignore Order
+                                                    </span>
+                                                }
+                                            </div>
+                                        </div>
+                                        <div class="property-actions">
+                                            <button class="btn btn-sm btn-outline-danger" 
+                                                    @onclick="() => RemoveIgnoredProperty(rule.PropertyPath)"
+                                                    title="Remove ignore rule">
                                                 <i class="bi bi-trash"></i>
                                             </button>
-                                        </td>
-                                    </tr>
+                                        </div>
+                                    </div>
                                 }
-                            </tbody>
-                        </table>
+                            </div>
+                        </div>
                     }
                     else
                     {
-                        <div class="alert alert-secondary">
-                            No properties are currently being ignored.
+                        <div class="no-ignored-properties">
+                            <div class="empty-state-icon">
+                                <i class="bi bi-shield-check"></i>
+                            </div>
+                            <p class="empty-state-text">No properties are currently being ignored</p>
+                            <small class="text-muted">Select properties from the tree above to add ignore rules</small>
                         </div>
                     }
                 </div>
@@ -131,6 +342,96 @@
     </BodyTemplate>
     <FooterTemplate>
         <Button Color="ButtonColor.Secondary" @onclick="ClosePropertySelector">Close</Button>
+    </FooterTemplate>
+</Modal>
+
+<!-- Bulk Ignore Confirmation Modal -->
+<Modal @ref="bulkIgnoreModal" Title="Confirm Bulk Ignore" Size="ModalSize.Regular">
+    <BodyTemplate>
+        <div class="alert alert-warning">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            <strong>Bulk Ignore Confirmation</strong>
+        </div>
+        <p>You are about to ignore <strong>@selectedProperties.Count properties</strong> completely from comparison.</p>
+        
+        @if (isProcessingBulkIgnore)
+        {
+            <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span>Processing...</span>
+                    <span>@bulkIgnoreProgress%</span>
+                </div>
+                <div class="progress mb-2">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                         role="progressbar" 
+                         style="width: @(bulkIgnoreProgress)%" 
+                         aria-valuenow="@bulkIgnoreProgress" 
+                         aria-valuemin="0" 
+                         aria-valuemax="100"></div>
+                </div>
+                <small class="text-muted">@bulkIgnoreStatus</small>
+            </div>
+        }
+        else
+        {
+            <div class="mb-3">
+                <label class="form-label">Ignore Settings for All Selected Properties:</label>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="bulkIgnoreCompletely" @bind="bulkIgnoreCompletely">
+                    <label class="form-check-label" for="bulkIgnoreCompletely">
+                        <i class="bi bi-eye-slash"></i> Ignore completely
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="bulkIgnoreCollectionOrder" 
+                           @bind="bulkIgnoreCollectionOrder" disabled="@bulkIgnoreCompletely">
+                    <label class="form-check-label" for="bulkIgnoreCollectionOrder">
+                        <i class="bi bi-arrow-down-up"></i> Ignore collection ordering (for collection properties)
+                    </label>
+                </div>
+            </div>
+        }
+
+        @if (selectedProperties.Count > 10)
+        {
+            <div class="alert alert-info">
+                <strong>Preview of properties to be ignored:</strong>
+                <ul class="mb-0 mt-2">
+                    @foreach (var prop in selectedProperties.Take(10))
+                    {
+                        <li><code>@prop</code></li>
+                    }
+                    <li><em>... and @(selectedProperties.Count - 10) more properties</em></li>
+                </ul>
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-info">
+                <strong>Properties to be ignored:</strong>
+                <ul class="mb-0 mt-2">
+                    @foreach (var prop in selectedProperties)
+                    {
+                        <li><code>@prop</code></li>
+                    }
+                </ul>
+            </div>
+        }
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Success" @onclick="ExecuteBulkIgnore" Disabled="@isProcessingBulkIgnore">
+            @if (isProcessingBulkIgnore)
+            {
+                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                <text>Processing...</text>
+            }
+            else
+            {
+                <i class="bi bi-check"></i>
+                <text>Confirm Ignore</text>
+            }
+        </Button>
+        <Button Color="ButtonColor.Secondary" @onclick="CancelBulkIgnore" Disabled="@isProcessingBulkIgnore">Cancel</Button>
     </FooterTemplate>
 </Modal>
 
@@ -148,13 +449,21 @@
     public EventCallback<string> OnPropertyRemoved { get; set; }
 
     private Modal propertyModal;
+    private Modal bulkIgnoreModal;
     private string selectedProperty;
     private string searchTerm = "";
     private bool IgnoreProperty { get; set; }
     private bool IgnoreCollectionOrder { get; set; }
+    private bool bulkIgnoreCompletely { get; set; } = true;
+    private bool bulkIgnoreCollectionOrder { get; set; } = false;
+    private bool isProcessingBulkIgnore { get; set; } = false;
+    private int bulkIgnoreProgress { get; set; } = 0;
+    private string bulkIgnoreStatus { get; set; } = "";
 
     private List<PropertyInfo> AllProperties { get; set; } = new List<PropertyInfo>();
     private List<PropertyViewModel> FilteredProperties { get; set; } = new List<PropertyViewModel>();
+    private List<string> selectedProperties = new List<string>();
+    private bool selectAll = false;
 
     private class PropertyViewModel
     {
@@ -188,7 +497,7 @@
     {
         var result = new Dictionary<string, Type>();
 
-        if (depth > 5) // Limit recursion depth
+        if (depth > 10) // Increased recursion depth limit to handle deeper nesting
             return result;
 
         foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
@@ -221,16 +530,24 @@
                     }
 
                     if (elementType != null &&
-                        !elementType.IsPrimitive &&
-                        elementType != typeof(string))
+                        // Process all element types (even primitive ones), just not strings directly
+                        // This ensures we include things like Summary.Id even if Id is primitive
+                        (elementType != typeof(string)))
                     {
                         // Add collection path
                         result[$"{path}[*]"] = prop.PropertyType;
 
+                        // Log collection path for debugging
+                        Console.WriteLine($"Adding collection path: {path}[*] of type {elementType.Name}");
+
                         // Process element type properties
+                        // For complex element types, we need to go deeper to find all nested properties
+                        // This especially helps with nested objects inside collection items
                         var childProps = GetAllPropertyPaths(elementType, $"{path}[*]", depth + 1);
                         foreach (var childProp in childProps)
                         {
+                            // Log child property of collection for debugging
+                            Console.WriteLine($"  - Adding collection sub-property: {childProp.Key}");
                             result[childProp.Key] = childProp.Value;
                         }
                     }
@@ -254,17 +571,26 @@
     {
         Console.WriteLine($"Searching for: {searchTerm}");
 
+        var allPaths = GetAllPropertyPaths(ModelType);
+        var allProperties = allPaths.Select(p => new PropertyViewModel
+        {
+            Path = p.Key,
+            TypeName = GetFriendlyTypeName(p.Value)
+        }).ToList();
+
         if (string.IsNullOrWhiteSpace(searchTerm))
         {
-            FilteredProperties = FilteredProperties.ToList();
+            FilteredProperties = allProperties;
         }
         else
         {
-            FilteredProperties = FilteredProperties
+            FilteredProperties = allProperties
                 .Where(p => p.Path.Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
                 .ToList();
         }
 
+        // Update select all state based on filtered results
+        UpdateSelectAllState();
         StateHasChanged();
     }
 
@@ -294,6 +620,22 @@
         selectedProperty = null;
         IgnoreProperty = false;
         IgnoreCollectionOrder = false;
+        selectedProperties.Clear();
+        selectAll = false;
+    }
+
+    private void UpdateSelectAllState()
+    {
+        // Update select all checkbox state based on current selections
+        if (FilteredProperties.Any())
+        {
+            var filteredPaths = FilteredProperties.Select(p => p.Path).ToList();
+            selectAll = filteredPaths.All(path => selectedProperties.Contains(path));
+        }
+        else
+        {
+            selectAll = false;
+        }
     }
 
     private async Task AddCurrentProperty()
@@ -409,5 +751,170 @@
             options.Add("ignore order");
 
         return options.Any() ? string.Join(", ", options) : "No specific rules";
+    }
+
+    private void ToggleSelectAll(ChangeEventArgs e)
+    {
+        selectAll = (bool)(e.Value ?? false);
+        
+        if (selectAll)
+        {
+            // Select all filtered properties
+            var filteredPaths = FilteredProperties.Select(p => p.Path).ToList();
+            foreach (var path in filteredPaths)
+            {
+                if (!selectedProperties.Contains(path))
+                {
+                    selectedProperties.Add(path);
+                }
+            }
+        }
+        else
+        {
+            // Deselect all filtered properties
+            var filteredPaths = FilteredProperties.Select(p => p.Path).ToList();
+            foreach (var path in filteredPaths)
+            {
+                selectedProperties.Remove(path);
+            }
+        }
+        StateHasChanged();
+    }
+
+    private void TogglePropertySelection(string propertyPath)
+    {
+        if (selectedProperties.Contains(propertyPath))
+        {
+            selectedProperties.Remove(propertyPath);
+        }
+        else
+        {
+            selectedProperties.Add(propertyPath);
+        }
+        
+        UpdateSelectAllState();
+        StateHasChanged();
+    }
+
+    private void TogglePropertySelectionFromCheckbox(ChangeEventArgs e, string propertyPath)
+    {
+        var isChecked = (bool)(e.Value ?? false);
+        
+        if (isChecked && !selectedProperties.Contains(propertyPath))
+        {
+            selectedProperties.Add(propertyPath);
+        }
+        else if (!isChecked && selectedProperties.Contains(propertyPath))
+        {
+            selectedProperties.Remove(propertyPath);
+        }
+        
+        UpdateSelectAllState();
+        StateHasChanged();
+    }
+
+    private async Task ShowBulkIgnoreConfirmation()
+    {
+        if (!selectedProperties.Any())
+            return;
+
+        // Reset bulk ignore settings to defaults
+        bulkIgnoreCompletely = true;
+        bulkIgnoreCollectionOrder = false;
+        
+        await bulkIgnoreModal.ShowAsync();
+    }
+
+    private async Task ExecuteBulkIgnore()
+    {
+        if (!selectedProperties.Any())
+            return;
+
+        try
+        {
+            // Show loading state
+            isProcessingBulkIgnore = true;
+            bulkIgnoreProgress = 0;
+            var propertiesCount = selectedProperties.Count;
+            bulkIgnoreStatus = $"Starting bulk ignore for {propertiesCount} properties...";
+            StateHasChanged();
+            
+            Console.WriteLine($"Starting bulk ignore for {propertiesCount} properties...");
+
+            // Process in batches to avoid UI freezing
+            var batchSize = 50; // Process 50 properties at a time
+            var batches = selectedProperties
+                .Select((property, index) => new { property, index })
+                .GroupBy(x => x.index / batchSize)
+                .Select(g => g.Select(x => x.property).ToList())
+                .ToList();
+
+            var processedCount = 0;
+
+            for (int batchIndex = 0; batchIndex < batches.Count; batchIndex++)
+            {
+                var batch = batches[batchIndex];
+                bulkIgnoreStatus = $"Processing batch {batchIndex + 1}/{batches.Count} ({batch.Count} properties)";
+                Console.WriteLine(bulkIgnoreStatus);
+
+                foreach (var propertyPath in batch)
+                {
+                    var rule = new IgnoreRule
+                    {
+                        PropertyPath = propertyPath,
+                        IgnoreCompletely = bulkIgnoreCompletely,
+                        IgnoreCollectionOrder = !bulkIgnoreCompletely && bulkIgnoreCollectionOrder && IsCollectionProperty(propertyPath)
+                    };
+
+                    // Remove existing rule for this property if it exists
+                    var existingRule = IgnoredProperties.FirstOrDefault(p => p.PropertyPath == propertyPath);
+                    if (existingRule != null)
+                    {
+                        IgnoredProperties.Remove(existingRule);
+                    }
+
+                    IgnoredProperties.Add(rule);
+                    await OnPropertyAdded.InvokeAsync(rule);
+                    
+                    processedCount++;
+                    bulkIgnoreProgress = (int)((double)processedCount / propertiesCount * 100);
+                }
+
+                // Allow UI to update between batches
+                StateHasChanged();
+                await Task.Delay(10); // Small delay to prevent UI blocking
+            }
+
+            bulkIgnoreStatus = $"Bulk ignore completed successfully for {propertiesCount} properties";
+            Console.WriteLine(bulkIgnoreStatus);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error during bulk ignore: {ex.Message}");
+            // Continue with cleanup even if there was an error
+        }
+        finally
+        {
+            // Clear selections and close modal
+            isProcessingBulkIgnore = false;
+            bulkIgnoreProgress = 0;
+            bulkIgnoreStatus = "";
+            selectedProperties.Clear();
+            selectAll = false;
+            await bulkIgnoreModal.HideAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task CancelBulkIgnore()
+    {
+        await bulkIgnoreModal.HideAsync();
+    }
+
+    private void ClearAllSelections()
+    {
+        selectedProperties.Clear();
+        selectAll = false;
+        StateHasChanged();
     }
 }

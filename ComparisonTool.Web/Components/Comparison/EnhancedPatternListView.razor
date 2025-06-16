@@ -1,0 +1,128 @@
+@namespace ComparisonTool.Web.Components.Comparison
+@using ComparisonTool.Core.Comparison.Analysis
+
+<div class="table-responsive">
+    <table class="table table-sm table-striped table-hover">
+        <thead>
+            <tr>
+                @if (ShowPriority)
+                {
+                    <th>Priority</th>
+                }
+                <th>Pattern</th>
+                <th>Description</th>
+                <th>Files</th>
+                <th>Occurrences</th>
+                <th>Consistency</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var pattern in Patterns.OrderByDescending(p => p.IsCriticalProperty).ThenByDescending(p => p.Consistency))
+            {
+                <tr @onclick="() => OnSelectPattern.InvokeAsync(pattern)" class="cursor-pointer @GetRowClass(pattern)">
+                    @if (ShowPriority)
+                    {
+                        <td>
+                            @if (pattern.IsCriticalProperty)
+                            {
+                                <span class="badge bg-danger">
+                                    <i class="bi bi-exclamation-triangle"></i> Critical
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">Normal</span>
+                            }
+                        </td>
+                    }
+                    <td>
+                        <code class="small">@pattern.FullPattern</code>
+                        @if (pattern.IsCollectionElement)
+                        {
+                            <br />
+                            <small class="text-muted">Collection: @pattern.CollectionName</small>
+                        }
+                    </td>
+                    <td class="small">
+                        @if (!string.IsNullOrEmpty(pattern.HumanReadableDescription))
+                        {
+                            <div>@pattern.HumanReadableDescription</div>
+                        }
+                        else
+                        {
+                            <span class="text-muted">@(pattern.IsCollectionElement ? "Collection Element" : "Property")</span>
+                        }
+                    </td>
+                    <td>
+                        <span class="badge bg-info">@pattern.FileCount</span>
+                    </td>
+                    <td>
+                        <span class="badge bg-primary">@pattern.OccurenceCount</span>
+                    </td>
+                    <td>
+                        <div class="d-flex align-items-center">
+                            <div class="progress flex-grow-1 me-2" style="height: 15px; width: 60px;">
+                                <div class="progress-bar @GetConsistencyProgressClass(pattern.Consistency)" 
+                                     style="width: @(pattern.Consistency)%">
+                                </div>
+                            </div>
+                            <small>@pattern.Consistency.ToString("0.0")%</small>
+                        </div>
+                    </td>
+                    <td>
+                        @if (!string.IsNullOrEmpty(pattern.RecommendAction))
+                        {
+                            <i class="bi bi-lightbulb text-warning" title="@pattern.RecommendAction"></i>
+                        }
+                        else
+                        {
+                            <span class="text-muted">-</span>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@if (!Patterns.Any())
+{
+    <div class="text-center py-3 text-muted">
+        <i class="bi bi-info-circle"></i>
+        No patterns found in this category.
+    </div>
+}
+
+@code {
+    [Parameter]
+    public List<EnhancedStructuralDifferenceAnalyzer.StructuralPattern> Patterns { get; set; } = new();
+    
+    [Parameter]
+    public EventCallback<EnhancedStructuralDifferenceAnalyzer.StructuralPattern> OnSelectPattern { get; set; }
+    
+    [Parameter]
+    public bool ShowPriority { get; set; } = false;
+    
+    private string GetRowClass(EnhancedStructuralDifferenceAnalyzer.StructuralPattern pattern)
+    {
+        if (pattern.IsCriticalProperty)
+            return "table-danger";
+        
+        if (pattern.Consistency >= 80)
+            return "table-warning";
+            
+        return "";
+    }
+    
+    private string GetConsistencyProgressClass(double consistency)
+    {
+        return consistency switch
+        {
+            >= 80 => "bg-danger",
+            >= 60 => "bg-warning", 
+            >= 40 => "bg-info",
+            _ => "bg-success"
+        };
+    }
+} 

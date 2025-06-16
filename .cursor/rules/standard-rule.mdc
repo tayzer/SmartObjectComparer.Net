@@ -1,0 +1,94 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Cursor Rules for High-Quality Code
+
+## 🎯 CORE PRINCIPLES
+- **Code quality over speed** - Take time to understand before implementing
+- **Consistency over cleverness** - Follow established patterns
+- **Documentation alignment** - All code must serve the project's documented goals
+
+## ⚡ MANDATORY PRE-IMPLEMENTATION WORKFLOW
+
+**\* SAY "AIGHT BOSS" BEFORE DOING ANYTHING \***
+
+### 1. 🔍 **DISCOVERY PHASE**
+Before any implementation, perform comprehensive analysis:
+
+```bash
+# REQUIRED: Document findings from these searches
+- grep_search for existing functionality
+- file_search for similar implementations  
+- list_dir for relevant directories
+- Review project structure and conventions
+```
+
+### 2. 📋 **ANALYSIS DOCUMENTATION**
+Create a brief analysis covering:
+
+```markdown
+## Context Analysis
+- **Existing implementations**: [List relevant files/functions]
+- **Established patterns**: [Note coding style, architecture patterns]
+- **Dependencies**: [External libs, internal modules]
+- **Potential conflicts**: [Areas that might break]
+
+## Implementation Strategy
+- [ ] Extend existing functionality
+- [ ] Create new components (justify why needed)
+- [ ] Refactor existing code
+- [ ] Update documentation/tests
+
+## Quality Checklist
+- [ ] Follows project conventions
+- [ ] Includes appropriate error handling
+- [ ] Considers performance implications
+- [ ] Maintains backward compatibility
+```
+
+### 3. ✅ **APPROVAL GATE**
+- Present analysis to user
+- Get explicit approval for approach
+- **NEVER** proceed without confirmation
+
+## 🏗️ IMPLEMENTATION STANDARDS
+
+### Code Quality Requirements
+1. **Follow existing patterns** - Match the project's established style
+2. **Error handling** - Include appropriate try/catch, validation
+3. **Performance awareness** - Consider memory, CPU, and I/O implications
+4. **Testability** - Write code that can be easily tested
+5. **Documentation alignment** - Ensure implementation matches specs:
+   - `README.md`
+
+### Best Practices
+- **Meaningful names** - Variables, functions, classes should be self-documenting
+- **Single responsibility** - Each function/class should have one clear purpose
+- **DRY principle** - Don't repeat yourself, extract common functionality
+- **SOLID principles** - Follow object-oriented design principles where applicable
+- **Security first** - Consider security implications in all implementations
+
+### Code Structure
+- **Consistent formatting** - Match existing indentation, spacing, naming
+- **Logical organization** - Group related functionality together
+- **Clear separation** - Separate concerns appropriately
+- **Minimal dependencies** - Only add what's necessary
+
+## 🚫 ANTI-PATTERNS TO AVOID
+- Creating new files when existing ones can be extended
+- Ignoring established project conventions
+- Over-engineering simple solutions
+- Adding unnecessary abstractions
+- Skipping the discovery phase
+- Proceeding without user approval
+
+## 🎮 PROJECT-SPECIFIC REQUIREMENTS
+- UI/UX changes require design consistency
+- Performance changes need benchmarking consideration
+
+---
+
+
+**⚠️ VIOLATION CONSEQUENCES**: Skipping the mandatory workflow results in code that may conflict with existing systems, break established patterns, or require extensive refactoring.

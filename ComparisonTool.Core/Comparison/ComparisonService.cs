@@ -165,6 +165,10 @@ public class ComparisonService : IComparisonService
                 logger.LogInformation("Comparison completed. Found {DifferenceCount} differences",
                     result.Differences.Count);
 
+                // Filter out ignored properties using smart rules and legacy pattern matching
+                result = configService.FilterSmartIgnoredDifferences(result, modelType);
+                result = configService.FilterIgnoredDifferences(result);
+
                 var filteredResult = FilterDuplicateDifferences(result);
 
                 return filteredResult;
@@ -608,6 +612,28 @@ public class ComparisonService : IComparisonService
                 semanticAnalysis.SemanticGroups.Count, semanticAnalysis.CategorizedDifferences);
 
             return semanticAnalysis;
+        }, cancellationToken);
+    }
+
+    public async Task<EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult>
+        AnalyzeStructualPatternsAsync(
+            MultiFolderComparisonResult folderResult,
+            CancellationToken cancellationToken = default)
+    {
+        return await Task.Run(() =>
+        {
+            logger.LogInformation("Starting enhanced structural pattern analysis");
+
+            var analyzer = new EnhancedStructuralDifferenceAnalyzer(folderResult, logger);
+            var structuralAnalysis = analyzer.AnalyzeStructuralPatterns();
+
+            logger.LogInformation(
+                "Enhanced structural analysis completed. Found {CriticalCound} critical missing elements, {MissingProps} missing properties, and {OrderDiffs} order differences",
+                structuralAnalysis.CriticalMissingElements.Count,
+                structuralAnalysis.ConsistentlyMissingProperties.Count,
+                structuralAnalysis.ElementOrderDifferences.Count);
+
+            return structuralAnalysis;
         }, cancellationToken);
     }
 

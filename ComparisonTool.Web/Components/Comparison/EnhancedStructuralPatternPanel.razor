@@ -1,0 +1,659 @@
+@namespace ComparisonTool.Web.Components.Comparison
+@using ComparisonTool.Core.Comparison.Analysis
+@using ComparisonTool.Core.Comparison.Results
+@using KellermanSoftware.CompareNetObjects
+
+<style>
+    .btn-xs {
+        padding: 0.2rem 0.4rem;
+        font-size: 0.7rem;
+        line-height: 1;
+    }
+    
+    .cursor-pointer {
+        cursor: pointer;
+    }
+</style>
+
+<div class="card mb-4">
+    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">
+            <i class="bi bi-search"></i>
+            Enhanced Structural Pattern Analysis
+        </h5>
+        <div>
+            <button class="btn btn-sm btn-light me-2" @onclick="ToggleView">
+                @(ShowDetailedView ? "Show Summary" : "Show Details")
+            </button>
+        </div>
+    </div>
+    
+    <div class="card-body">
+        @if (Analysis == null || !Analysis.AllPatterns.Any())
+        {
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i>
+                No significant enhanced structural patterns found in the comparison results.
+            </div>
+        }
+        else
+        {
+            <div class="mb-3">
+                <p class="mb-2">
+                    <strong>Enhanced structural analysis</strong> identifies critical missing elements, provides human-readable descriptions, 
+                    and offers recommended actions for addressing differences across files.
+                </p>
+                
+                <!-- Summary Statistics -->
+                <div class="row mb-3">
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body text-center py-2">
+                                <h6 class="card-title mb-1 text-muted">Files Analyzed</h6>
+                                <h4 class="mb-0 text-primary">@Analysis.TotalFilesAnalyzed</h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body text-center py-2">
+                                <h6 class="card-title mb-1 text-muted">Files with Differences</h6>
+                                <h4 class="mb-0 text-warning">@Analysis.FilesWithDifferences</h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body text-center py-2">
+                                <h6 class="card-title mb-1 text-muted">Total Differences</h6>
+                                <h4 class="mb-0 text-info">@Analysis.TotalDifferencesFound</h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body text-center py-2">
+                                <h6 class="card-title mb-1 text-muted">Critical Issues</h6>
+                                <h4 class="mb-0 text-danger">@Analysis.CriticalDifferencesFound</h4>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            @if (!ShowDetailedView)
+            {
+                <div>
+                    <h6>Pattern Summary (@Analysis.AllPatterns.Count)</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Priority</th>
+                                    <th>Pattern</th>
+                                    <th>Description</th>
+                                    <th>Files</th>
+                                    <th>Occurrences</th>
+                                    <th>Consistency</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var pattern in Analysis.AllPatterns.OrderByDescending(p => p.IsCriticalProperty).ThenByDescending(p => p.Consistency).Take(10))
+                                {
+                                    <tr @onclick="() => SetSelectedPattern(pattern)" class="cursor-pointer">
+                                        <td>
+                                            @if (pattern.IsCriticalProperty)
+                                            {
+                                                <span class="badge bg-danger">Critical</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-secondary">Normal</span>
+                                            }
+                                        </td>
+                                        <td><code class="small">@pattern.FullPattern</code></td>
+                                        <td class="small">@pattern.HumanReadableDescription</td>
+                                        <td>@pattern.FileCount</td>
+                                        <td>@pattern.OccurenceCount</td>
+                                        <td>@pattern.Consistency.ToString("0.0")%</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <ul class="nav nav-tabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link @(ActiveTab == "critical" ? "active" : "")" 
+                                @onclick="@(() => ActiveTab = "critical")">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            Critical Elements (@Analysis.CriticalMissingElements.Count)
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link @(ActiveTab == "missing" ? "active" : "")" 
+                                @onclick="@(() => ActiveTab = "missing")">
+                            <i class="bi bi-collection"></i>
+                            Missing Collection Elements (@Analysis.MissingCollectionElements.Count)
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link @(ActiveTab == "properties" ? "active" : "")" 
+                                @onclick="@(() => ActiveTab = "properties")">
+                            <i class="bi bi-list-ul"></i>
+                            Missing Properties (@Analysis.ConsistentlyMissingProperties.Count)
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link @(ActiveTab == "values" ? "active" : "")" 
+                                @onclick="@(() => ActiveTab = "values")">
+                            <i class="bi bi-arrow-left-right"></i>
+                            Value Differences (@Analysis.ConsistentValueDifferences.Count)
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link @(ActiveTab == "general" ? "active" : "")" 
+                                @onclick="@(() => ActiveTab = "general")">
+                            <i class="bi bi-bar-chart"></i>
+                            General Changes (@Analysis.GeneralValueDifferences.Count)
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link @(ActiveTab == "order" ? "active" : "")" 
+                                @onclick="@(() => ActiveTab = "order")">
+                            <i class="bi bi-sort-down"></i>
+                            Element Order (@Analysis.ElementOrderDifferences.Count)
+                        </button>
+                    </li>
+                </ul>
+                
+                <div class="tab-content p-3 border border-top-0 rounded-bottom">
+                    @if (ActiveTab == "critical")
+                    {
+                        <h6><i class="bi bi-exclamation-triangle text-danger"></i> Critical Missing Elements</h6>
+                        <div class="small text-muted mb-3">
+                            High-priority elements that are consistently missing and require immediate attention.
+                        </div>
+                        
+                        @if (!Analysis.CriticalMissingElements.Any())
+                        {
+                            <div class="alert alert-success">
+                                <i class="bi bi-check-circle"></i>
+                                No critical missing elements detected. All essential properties are present.
+                            </div>
+                        }
+                        else
+                        {
+                            <EnhancedPatternListView Patterns="Analysis.CriticalMissingElements" 
+                                                   OnSelectPattern="SetSelectedPattern" 
+                                                   ShowPriority="true" />
+                        }
+                    }
+                    
+                    @if (ActiveTab == "missing")
+                    {
+                        <h6><i class="bi bi-collection text-warning"></i> Missing Collection Elements</h6>
+                        <div class="small text-muted mb-3">
+                            Collection elements that are consistently missing across multiple files.
+                        </div>
+                        
+                        @if (!Analysis.MissingCollectionElements.Any())
+                        {
+                            <div class="alert alert-info">No recurring missing collection elements detected.</div>
+                        }
+                        else
+                        {
+                            <EnhancedPatternListView Patterns="Analysis.MissingCollectionElements" 
+                                                   OnSelectPattern="SetSelectedPattern" />
+                        }
+                    }
+                    
+                    @if (ActiveTab == "properties")
+                    {
+                        <h6><i class="bi bi-list-ul text-info"></i> Consistently Missing Properties</h6>
+                        <div class="small text-muted mb-3">
+                            Properties that are consistently missing across files.
+                        </div>
+                        
+                        @if (!Analysis.ConsistentlyMissingProperties.Any())
+                        {
+                            <div class="alert alert-info">No consistently missing properties detected.</div>
+                        }
+                        else
+                        {
+                            <EnhancedPatternListView Patterns="Analysis.ConsistentlyMissingProperties" 
+                                                   OnSelectPattern="SetSelectedPattern" />
+                        }
+                    }
+                    
+                    @if (ActiveTab == "values")
+                    {
+                        <h6><i class="bi bi-arrow-left-right text-primary"></i> Consistent Value Differences</h6>
+                        <div class="small text-muted mb-3">
+                            Properties that consistently have different values across files.
+                        </div>
+                        
+                        @if (!Analysis.ConsistentValueDifferences.Any())
+                        {
+                            <div class="alert alert-info">No consistent value differences detected.</div>
+                        }
+                        else
+                        {
+                            <EnhancedPatternListView Patterns="Analysis.ConsistentValueDifferences" 
+                                                   OnSelectPattern="SetSelectedPattern" />
+                        }
+                    }
+                    
+                    @if (ActiveTab == "general")
+                    {
+                        <h6><i class="bi bi-bar-chart text-info"></i> General Value Changes</h6>
+                        <div class="small text-muted mb-3">
+                            Properties that show differences across files, regardless of specific values changed.
+                        </div>
+                        
+                        @if (!Analysis.GeneralValueDifferences.Any())
+                        {
+                            <div class="alert alert-info">No general value changes detected.</div>
+                        }
+                        else
+                        {
+                            <EnhancedPatternListView Patterns="Analysis.GeneralValueDifferences" 
+                                                   OnSelectPattern="SetSelectedPattern" />
+                        }
+                    }
+                    
+                    @if (ActiveTab == "order")
+                    {
+                        <h6><i class="bi bi-sort-down text-secondary"></i> Element Order Differences</h6>
+                        <div class="small text-muted mb-3">
+                            Collection elements that appear to be in different order.
+                        </div>
+                        
+                        @if (!Analysis.ElementOrderDifferences.Any())
+                        {
+                            <div class="alert alert-info">No element order differences detected.</div>
+                        }
+                        else
+                        {
+                            <EnhancedPatternListView Patterns="Analysis.ElementOrderDifferences" 
+                                                   OnSelectPattern="SetSelectedPattern" />
+                        }
+                    }
+                </div>
+            }
+            
+            @if (SelectedPattern != null)
+            {
+                <div class="mt-4 border rounded p-3 bg-light">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <h6>
+                                @if (SelectedPattern.IsCriticalProperty)
+                                {
+                                    <i class="bi bi-exclamation-triangle text-danger"></i>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-info-circle text-info"></i>
+                                }
+                                Pattern Details
+                            </h6>
+                        </div>
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => SelectedPattern = null">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- Human-readable description -->
+                    @if (!string.IsNullOrEmpty(SelectedPattern.HumanReadableDescription))
+                    {
+                        <div class="alert @(SelectedPattern.IsCriticalProperty ? "alert-danger" : "alert-info") mb-3">
+                            <h6 class="alert-heading">Description</h6>
+                            <p class="mb-0">@SelectedPattern.HumanReadableDescription</p>
+                        </div>
+                    }
+                    
+                    <!-- Recommended action -->
+                    @if (!string.IsNullOrEmpty(SelectedPattern.RecommendAction))
+                    {
+                        <div class="alert alert-warning mb-3">
+                            <h6 class="alert-heading"><i class="bi bi-lightbulb"></i> Recommended Action</h6>
+                            <p class="mb-0">@SelectedPattern.RecommendAction</p>
+                        </div>
+                    }
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <table class="table table-sm">
+                                <tr>
+                                    <th>Parent Path:</th>
+                                    <td><code>@SelectedPattern.ParentPath</code></td>
+                                </tr>
+                                <tr>
+                                    <th>Missing Property:</th>
+                                    <td><code>@SelectedPattern.MissingProperty</code></td>
+                                </tr>
+                                <tr>
+                                    <th>Category:</th>
+                                    <td>
+                                        <span class="badge @GetCategoryBadgeClass(SelectedPattern.Category)">
+                                            @SelectedPattern.Category
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th>Consistency:</th>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="progress flex-grow-1 me-2" style="height: 20px;">
+                                                <div class="progress-bar @GetConsistencyProgressClass(SelectedPattern.Consistency)" 
+                                                     style="width: @(SelectedPattern.Consistency)%">
+                                                    @SelectedPattern.Consistency.ToString("0.0")%
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th>Type:</th>
+                                    <td>
+                                        <span class="badge @(SelectedPattern.IsCollectionElement ? "bg-warning" : "bg-info")">
+                                            @(SelectedPattern.IsCollectionElement ? "Collection Element" : "Object Property")
+                                        </span>
+                                    </td>
+                                </tr>
+                                @if (SelectedPattern.IsCriticalProperty)
+                                {
+                                    <tr>
+                                        <th>Priority:</th>
+                                        <td><span class="badge bg-danger">Critical</span></td>
+                                    </tr>
+                                }
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-2">
+                                <strong>Pattern:</strong>
+                                <p class="mb-1"><code>@SelectedPattern.FullPattern</code></p>
+                            </div>
+                            <div class="mb-2">
+                                <strong>Collection:</strong>
+                                <p class="mb-1">@(string.IsNullOrEmpty(SelectedPattern.CollectionName) ? "N/A" : SelectedPattern.CollectionName)</p>
+                            </div>
+                            <div>
+                                <strong>Impact:</strong>
+                                <p class="mb-0">@SelectedPattern.FileCount files affected (@SelectedPattern.OccurenceCount total occurrences)</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <h6>Example Differences:</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Property</th>
+                                        <th>Expected</th>
+                                        <th>Actual</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var diff in SelectedPattern.Examples.Take(3))
+                                    {
+                                        <tr>
+                                            <td><code class="small">@diff.PropertyName</code></td>
+                                            <td>@FormatValue(diff.Object1Value)</td>
+                                            <td>@FormatValue(diff.Object2Value)</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0">Affected Files (@SelectedPattern.FileCount):</h6>
+                            @if (SelectedPattern.AffectedFiles.Count > 5)
+                            {
+                                <button class="btn btn-sm btn-outline-primary" @onclick="ToggleAllAffectedFiles">
+                                    @(ShowAllAffectedFiles ? "🔼 Show Less" : "🔽 View All")
+                                </button>
+                            }
+                        </div>
+                        <div class="affected-files-list">
+                            @if (ShowAllAffectedFiles)
+                            {
+                                <div class="border rounded p-2" style="max-height: 400px; overflow-y: auto;">
+                                    @foreach (var file in SelectedPattern.AffectedFiles)
+                                    {
+                                        <div class="d-flex justify-content-between align-items-center mb-1 p-1 border-bottom">
+                                            <div class="small">
+                                                <i class="bi bi-file-earmark me-1"></i> @file
+                                            </div>
+                                            <button class="btn btn-xs btn-outline-info" 
+                                                    @onclick="() => ShowFilePairDifferences(file)"
+                                                    title="View differences for this file pair">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                @foreach (var file in SelectedPattern.AffectedFiles.Take(5))
+                                {
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <div class="small">
+                                            <i class="bi bi-file-earmark me-1"></i> @file
+                                        </div>
+                                        <button class="btn btn-xs btn-outline-info" 
+                                                @onclick="() => ShowFilePairDifferences(file)"
+                                                title="View differences for this file pair">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                    </div>
+                                }
+                                @if (SelectedPattern.AffectedFiles.Count > 5)
+                                {
+                                    <div class="small text-muted">...and @(SelectedPattern.AffectedFiles.Count - 5) more files</div>
+                                }
+                            }
+                        </div>
+                        
+                        @if (ShowFileDifferences && SelectedFileDifferences.Any())
+                        {
+                            <div class="mt-3 border rounded p-3" style="background-color: #f8f9fa;">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h6 class="mb-0">
+                                        <i class="bi bi-zoom-in text-primary"></i> 
+                                        Differences in: @SelectedFilePair
+                                    </h6>
+                                    <button class="btn btn-sm btn-outline-secondary" 
+                                            @onclick="() => { ShowFileDifferences = false; SelectedFilePair = null; }"
+                                            title="Close differences view">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                </div>
+                                
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th style="width: 40%;">Property</th>
+                                                <th style="width: 30%;">Expected</th>
+                                                <th style="width: 30%;">Actual</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var diff in SelectedFileDifferences)
+                                            {
+                                                <tr>
+                                                    <td><code class="small">@diff.PropertyName</code></td>
+                                                    <td class="text-break small">@FormatValue(diff.Object1Value)</td>
+                                                    <td class="text-break small">@FormatValue(diff.Object2Value)</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                @if (SelectedFileDifferences.Count > 0)
+                                {
+                                    <div class="mt-2 text-muted small">
+                                        <i class="bi bi-info-circle"></i> 
+                                        Showing @SelectedFileDifferences.Count differences related to this pattern
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else if (ShowFileDifferences && !SelectedFileDifferences.Any())
+                        {
+                            <div class="mt-3 alert alert-info">
+                                <i class="bi bi-info-circle"></i> 
+                                No differences found for this pattern in the selected file pair.
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult Analysis { get; set; }
+    
+    [Parameter]
+    public MultiFolderComparisonResult FolderComparisonResult { get; set; }
+    
+    private bool ShowDetailedView { get; set; } = false;
+    private string ActiveTab { get; set; } = "critical";
+    private EnhancedStructuralDifferenceAnalyzer.StructuralPattern SelectedPattern { get; set; }
+    private bool ShowAllAffectedFiles { get; set; } = false;
+    private bool ShowFileDifferences { get; set; } = false;
+    private string SelectedFilePair { get; set; }
+    private List<Difference> SelectedFileDifferences { get; set; } = new();
+    
+    private void ToggleView()
+    {
+        ShowDetailedView = !ShowDetailedView;
+    }
+    
+    private void SetSelectedPattern(EnhancedStructuralDifferenceAnalyzer.StructuralPattern pattern)
+    {
+        SelectedPattern = pattern;
+        ShowAllAffectedFiles = false;
+        ShowFileDifferences = false;
+        SelectedFilePair = null;
+        SelectedFileDifferences.Clear();
+    }
+    
+    private void ToggleAllAffectedFiles()
+    {
+        ShowAllAffectedFiles = !ShowAllAffectedFiles;
+        if (!ShowAllAffectedFiles)
+        {
+            ShowFileDifferences = false;
+            SelectedFilePair = null;
+            SelectedFileDifferences.Clear();
+        }
+    }
+    
+    private void ShowFilePairDifferences(string filePair)
+    {
+        SelectedFilePair = filePair;
+        SelectedFileDifferences.Clear();
+        
+        if (FolderComparisonResult?.FilePairResults == null)
+        {
+            ShowFileDifferences = false;
+            return;
+        }
+        
+        // Find the matching file pair result
+        var matchingResult = FolderComparisonResult.FilePairResults
+            .FirstOrDefault(r => $"{r.File1Name} vs {r.File2Name}" == filePair);
+            
+        if (matchingResult?.Result?.Differences == null)
+        {
+            ShowFileDifferences = false;
+            return;
+        }
+        
+        // Filter differences to only those matching the selected pattern
+        var normalizedPattern = SelectedPattern.FullPattern.Replace("[*]", "");
+        var missingProperty = SelectedPattern.MissingProperty ?? "";
+        
+        SelectedFileDifferences = matchingResult.Result.Differences
+            .Where(d => {
+                // Check if this difference is related to the pattern
+                var propertyName = d.PropertyName;
+                
+                // Direct match with normalized pattern
+                if (propertyName.Contains(normalizedPattern))
+                    return true;
+                
+                // Check if this is the missing property we're looking for
+                if (!string.IsNullOrEmpty(missingProperty) && propertyName.EndsWith(missingProperty))
+                    return true;
+                    
+                // Check if the parent path matches
+                if (!string.IsNullOrEmpty(SelectedPattern.ParentPath) && propertyName.StartsWith(SelectedPattern.ParentPath))
+                    return true;
+                
+                return false;
+            })
+            .ToList();
+            
+        ShowFileDifferences = true;
+    }
+    
+    private string FormatValue(object value)
+    {
+        if (value == null) return "<null>";
+        
+        if (value is string str && str.Length > 50)
+            return str.Substring(0, 47) + "...";
+            
+        if (value is DateTime dt)
+            return dt.ToString("yyyy-MM-dd HH:mm:ss");
+            
+        return value.ToString();
+    }
+    
+    private string GetCategoryBadgeClass(DifferenceCategory category)
+    {
+        return category switch
+        {
+            DifferenceCategory.NullValueChange => "bg-warning",
+            DifferenceCategory.ItemRemoved => "bg-danger",
+            DifferenceCategory.CollectionItemChanged => "bg-info",
+            DifferenceCategory.ItemAdded => "bg-success",
+            DifferenceCategory.TextContentChanged => "bg-primary",
+            DifferenceCategory.NumericValueChanged => "bg-info",
+            DifferenceCategory.DateTimeChanged => "bg-secondary",
+            DifferenceCategory.BooleanValueChanged => "bg-warning",
+            DifferenceCategory.ValueChanged => "bg-primary",
+            DifferenceCategory.GeneralValueChanged => "bg-success",
+            _ => "bg-secondary"
+        };
+    }
+    
+    private string GetConsistencyProgressClass(double consistency)
+    {
+        return consistency switch
+        {
+            >= 80 => "bg-danger",
+            >= 60 => "bg-warning", 
+            >= 40 => "bg-info",
+            _ => "bg-success"
+        };
+    }
+}

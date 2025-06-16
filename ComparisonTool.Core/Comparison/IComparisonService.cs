@@ -52,4 +52,9 @@ public interface IComparisonService
         MultiFolderComparisonResult folderResult,
         ComparisonPatternAnalysis patternAnalysis,
         CancellationToken cancellationToken = default);
+
+    Task<EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult>
+        AnalyzeStructualPatternsAsync(
+            MultiFolderComparisonResult folderResult,
+            CancellationToken cancellationToken = default);
 }
