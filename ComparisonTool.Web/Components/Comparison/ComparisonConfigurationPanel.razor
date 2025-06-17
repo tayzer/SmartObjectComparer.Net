@@ -192,28 +192,40 @@
 
         <h6>Analysis Options</h6>
         <div class="form-check form-switch mb-2">
-            <input class="form-check-input" type="checkbox" id="enablePatternAnalysisSwitch" @bind="EnablePatternAnalysis" @bind:after="() => OnEnablePatternAnalysisChanged.InvokeAsync(EnablePatternAnalysis)" />
-            <label class="form-check-label" for="enablePatternAnalysisSwitch">Enable Pattern Analysis</label>
-        </div>
-        <div class="form-check form-switch mb-2">
             <input class="form-check-input" type="checkbox" id="enableSemanticAnalysisSwitch" @bind="EnableSemanticAnalysis" @bind:after="() => OnEnableSemanticAnalysisChanged.InvokeAsync(EnableSemanticAnalysis)" />
             <label class="form-check-label" for="enableSemanticAnalysisSwitch">Enable Semantic Analysis</label>
         </div>
-        <div class="form-check form-switch mb-2">
-            <input class="form-check-input" type="checkbox" id="enableStructuralAnalysisSwitch" @bind="EnableStructuralAnalysis" @bind:after="() => OnEnableStructuralAnalysisChanged.InvokeAsync(EnableStructuralAnalysis)" />
-            <label class="form-check-label" for="enableStructuralAnalysisSwitch">Enable Structural Analysis</label>
-        </div>
         <div class="form-check form-switch mb-3">
             <input class="form-check-input" type="checkbox" id="enableEnhancedStructuralAnalysisSwitch" @bind="EnableEnhancedStructuralAnalysis" @bind:after="() => OnEnableEnhancedStructuralAnalysisChanged.InvokeAsync(EnableEnhancedStructuralAnalysis)" />
-            <label class="form-check-label" for="enableEnhancedStructuralAnalysisSwitch">Enable Enhanced Structural Analysis</label>
+            <label class="form-check-label" for="enableEnhancedStructuralAnalysisSwitch">Enable Enhanced Structural Pattern Analysis</label>
         </div>
 
-        <!-- Smart Ignore Rules Section -->
-        <SmartIgnoreConfigurationPanel SmartIgnoreRules="@GetSmartIgnoreRules()"
-                                       OnRuleAdded="@HandleSmartIgnoreRuleAdded"
-                                       OnRuleRemoved="@HandleSmartIgnoreRuleRemoved"
-                                       OnPresetApplied="@HandleSmartIgnorePresetApplied"
-                                       OnRulesCleared="@HandleSmartIgnoreRulesCleared" />
+        <!-- Smart Ignore Rules Section - Collapsible -->
+        <div class="mt-3 mb-3">
+            <div class="d-flex align-items-center mb-2">
+                <h6 class="mb-0 me-2">Smart Ignore Rules</h6>
+                @{
+                    var smartRulesCount = GetSmartIgnoreRules().Count;
+                }
+                @if (smartRulesCount > 0)
+                {
+                    <span class="badge bg-secondary me-2">@smartRulesCount active</span>
+                }
+                <button class="btn btn-sm btn-outline-secondary" @onclick="() => IsSmartIgnoreCollapsed = !IsSmartIgnoreCollapsed">
+                    <i class="bi @(IsSmartIgnoreCollapsed ? "bi-chevron-down" : "bi-chevron-up")"></i>
+                    @(IsSmartIgnoreCollapsed ? "Show" : "Hide")
+                </button>
+            </div>
+            
+            @if (!IsSmartIgnoreCollapsed)
+            {
+                <SmartIgnoreConfigurationPanel SmartIgnoreRules="@GetSmartIgnoreRules()"
+                                               OnRuleAdded="@HandleSmartIgnoreRuleAdded"
+                                               OnRuleRemoved="@HandleSmartIgnoreRuleRemoved"
+                                               OnPresetApplied="@HandleSmartIgnorePresetApplied"
+                                               OnRulesCleared="@HandleSmartIgnoreRulesCleared" />
+            }
+        </div>
 
         <h6 class="mt-4">Tree Navigator (Visual Property Selection)</h6>
         <div class="d-flex gap-2 mb-2">
@@ -227,15 +239,6 @@
         @if (!IsModelSelected)
         {
             <small class="d-block text-muted">Select a model first to browse and ignore properties.</small>
-        }
-        else
-        {
-            <div class="alert alert-success py-2 px-3 mt-2">
-                <small>
-                    <i class="bi bi-check-circle"></i> 
-                    <strong>Fixed & Enhanced!</strong> The <strong>Tree Navigator</strong> now properly ignores selected properties. Browse your domain model visually with breadcrumbs, collection support ([*]), and advanced search.
-                </small>
-            </div>
         }
 
         @if (IgnoreRules.Any())
@@ -339,12 +342,8 @@
     [Parameter] public EventCallback<bool> OnIgnoreCollectionOrderChanged { get; set; }
     [Parameter] public bool IgnoreStringCase { get; set; } 
     [Parameter] public EventCallback<bool> OnIgnoreStringCaseChanged { get; set; }
-    [Parameter] public bool EnablePatternAnalysis { get; set; }
-    [Parameter] public EventCallback<bool> OnEnablePatternAnalysisChanged { get; set; }
     [Parameter] public bool EnableSemanticAnalysis { get; set; }
     [Parameter] public EventCallback<bool> OnEnableSemanticAnalysisChanged { get; set; }
-    [Parameter] public bool EnableStructuralAnalysis { get; set; }
-    [Parameter] public EventCallback<bool> OnEnableStructuralAnalysisChanged { get; set; }
     [Parameter] public bool EnableEnhancedStructuralAnalysis { get; set; }
     [Parameter] public EventCallback<bool> OnEnableEnhancedStructuralAnalysisChanged { get; set; }
     [Parameter] public List<IgnoreRule> IgnoreRules { get; set; } = new List<IgnoreRule>();
@@ -359,6 +358,7 @@
     private bool IsModelSelected => ModelType != null;
     private string importStatusMessage = string.Empty;
     private bool importStatusIsError = false;
+    private bool IsSmartIgnoreCollapsed = true; // Start collapsed to reduce visual noise
 
     private async Task OpenPropertySelector()
     {

@@ -16,7 +16,7 @@
             </button>
         </div>
         <div class="card-body">
-            <EnhancedDifferenceSummary Summary="DifferenceSummary" />
+            <EnhancedDifferenceSummary Summary="DifferenceSummary" FolderResult="FolderResult" />
         </div>
     </div>
 </div>
@@ -54,8 +54,8 @@
                                     <thead>
                                         <tr>
                                             <th>Property</th>
-                                            <th>V1 Value (@SelectedPair.File1Name)</th>
-                                            <th>V2 Value (@SelectedPair.File2Name)</th>
+                                            <th>A Value (@SelectedPair.File1Name)</th>
+                                            <th>B Value (@SelectedPair.File2Name)</th>
                                         </tr>
                                     </thead>
                                     @foreach (var diff in ShowAllDifferences ? group : group.Take(100))
@@ -102,6 +102,9 @@
 
     [Parameter]
     public EventCallback OnExportResults { get; set; }
+
+    [Parameter]
+    public MultiFolderComparisonResult FolderResult { get; set; }
 
     private Dictionary<string, bool> groupCollapsedStates = new Dictionary<string, bool>();
 

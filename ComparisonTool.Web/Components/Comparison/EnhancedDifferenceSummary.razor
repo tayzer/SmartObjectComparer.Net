@@ -1,260 +1,181 @@
 ﻿@using ComparisonTool.Core.Comparison.Analysis
-@using KellermanSoftware.CompareNetObjects
+@using ComparisonTool.Core.Comparison.Results
 @using KellermanSoftware.CompareNetObjects
 @inject IJSRuntime JSRuntime
 
 <div class="card">
     <div class="card-header">
-        <h4>Comparison Summary</h4>
+        <h4>Comparison Overview</h4>
     </div>
     <div class="card-body">
-        @if (Summary.AreEqual)
+        @if (AreAllEqual)
         {
-            <div class="alert alert-success">
-                <i class="bi bi-check-circle-fill me-2"></i>
-                No differences found. The objects are identical according to current comparison rules.
+            <div class="alert alert-success d-flex align-items-center">
+                <i class="bi bi-check-circle-fill me-3 fs-4"></i>
+                <div>
+                    <strong>@(FolderResult != null ? "All files are identical" : "Files are identical")</strong>
+                    <div class="text-muted">
+                        @if (FolderResult != null)
+                        {
+                            <span>No differences found in any of the @TotalFiles compared files.</span>
+                        }
+                        else
+                        {
+                            <span>No differences found according to current comparison rules.</span>
+                        }
+                    </div>
+                </div>
             </div>
         }
         else
         {
-            <div class="alert @(GetAlertClass())">
-                <i class="@(GetAlertIcon()) me-2"></i>
-                Found @Summary.TotalDifferenceCount differences between the objects.
+            <!-- Additional Context for Folder Comparisons -->
+            @if (FolderResult != null)
+            {
+                <div class="row mb-3">
+                    <div class="col-12">
+                        <div class="alert alert-light border-0 py-2">
+                            <div class="d-flex align-items-center justify-content-center">
+                                <i class="bi bi-folder2-open me-2 text-primary"></i>
+                                <span class="fw-medium">
+                                    Analyzing @TotalFiles files: 
+                                    <span class="text-success">@(TotalFiles - FilesWithDifferences) identical</span>, 
+                                    <span class="text-warning">@FilesWithDifferences with differences</span>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <!-- Key Metrics Row -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <div class="display-4 text-warning">@TotalDifferences</div>
+                        <div class="text-muted">Total Differences</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <div class="display-4 text-info">@AggregatedCategoryCount.Count</div>
+                        <div class="text-muted">Change Types</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <div class="display-4 text-primary">@AggregatedObjectCount.Count</div>
+                        <div class="text-muted">Affected Objects</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <div class="display-4 text-secondary">@TotalPatterns</div>
+                        <div class="text-muted">Patterns Found</div>
+                    </div>
+                </div>
             </div>
 
-            <!-- Tab Navigation -->
-            <ul class="nav nav-tabs mb-3" role="tablist">
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="overview-tab" data-bs-toggle="tab"
-                            data-bs-target="#overview" type="button" role="tab">
-                        Overview
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="patterns-tab" data-bs-toggle="tab"
-                            data-bs-target="#patterns" type="button" role="tab">
-                        Common Patterns
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="categories-tab" data-bs-toggle="tab"
-                            data-bs-target="#categories" type="button" role="tab">
-                        By Category
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="objects-tab" data-bs-toggle="tab"
-                            data-bs-target="#objects" type="button" role="tab">
-                        By Object
-                    </button>
-                </li>
-            </ul>
-
-            <!-- Tab Content -->
-            <div class="tab-content">
-                <!-- Overview Tab -->
-                <div class="tab-pane fade show active" id="overview" role="tabpanel">
-                    <div class="row">
-                        <div class="col-md-4">
-                            <div class="card mb-3">
-                                <div class="card-header">Difference Categories</div>
-                                <div class="card-body">
-                                    <div style="height: 250px;">
-                                        <canvas id="categoriesChart"></canvas>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="card mb-3">
-                                <div class="card-header">Affected Objects</div>
-                                <div class="card-body">
-                                    <div style="height: 250px;">
-                                        <canvas id="objectsChart"></canvas>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="card mb-3">
-                                <div class="card-header">Common Patterns</div>
-                                <div class="card-body">
-                                    <table class="table table-sm">
-                                        <thead>
-                                            <tr>
-                                                <th>Pattern</th>
-                                                <th>Count</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            @foreach (var pattern in Summary.CommonPatterns.Take(5))
-                                            {
-                                                <tr>
-                                                    <td title="@pattern.Pattern">@TruncateText(pattern.Pattern, 30)</td>
-                                                    <td>@pattern.OccurrenceCount</td>
-                                                </tr>
-                                            }
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="alert alert-info mt-3">
-                        <i class="bi bi-info-circle-fill me-2"></i>
-                        <strong>Testing Guidance:</strong> Based on the differences found, focus testing on
-                        @if (Summary.DifferencesByChangeType.Count > 0)
+            <!-- Top Categories Summary -->
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Most Common Change Types</h6>
+                    <div class="mb-3">
+                        @foreach (var category in AggregatedCategoryCount
+                        .OrderByDescending(c => c.Value)
+                        .Take(3))
                         {
-                            var topCategory = Summary.DifferencesByChangeType
-                            .OrderByDescending(c => c.Value.Count)
-                            .First();
-
-                            <span><strong>@FormatCategoryName(topCategory.Key)</strong> changes</span>
-                        }
-                        @if (Summary.DifferencesByRootObject.Count > 0)
-                        {
-                            var topObject = Summary.DifferencesByRootObject
-                            .OrderByDescending(o => o.Value.Count)
-                            .First();
-
-                            <span> in the <strong>@topObject.Key</strong> objects</span>
-                        }.
-                    </div>
-                </div>
-
-                <!-- Common Patterns Tab -->
-                <div class="tab-pane fade" id="patterns" role="tabpanel">
-                    <div class="accordion" id="patternAccordion">
-                        @for (int i = 0; i < Summary.CommonPatterns.Count; i++)
-                        {
-                            var pattern = Summary.CommonPatterns[i];
-                            <div class="accordion-item">
-                                <h2 class="accordion-header" id="pattern-heading-@i">
-                                    <button class="accordion-button @(i > 0 ? "collapsed" : "")" type="button"
-                                            data-bs-toggle="collapse" data-bs-target="#pattern-collapse-@i">
-                                        @pattern.Pattern (@pattern.OccurrenceCount occurrences)
-                                    </button>
-                                </h2>
-                                <div id="pattern-collapse-@i" class="accordion-collapse collapse @(i == 0 ? "show" : "")"
-                                     data-bs-parent="#patternAccordion">
-                                    <div class="accordion-body">
-                                        <h6>Example Differences:</h6>
-                                        <table class="table table-sm">
-                                            <thead>
-                                                <tr>
-                                                    <th>Property</th>
-                                                    <th>Old Value</th>
-                                                    <th>New Value</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                @foreach (var example in pattern.Examples)
-                                                {
-                                                    <tr>
-                                                        <td>@example.PropertyName</td>
-                                                        <td class="text-danger">@FormatValue(example.Object1Value)</td>
-                                                        <td class="text-success">@FormatValue(example.Object2Value)</td>
-                                                    </tr>
-                                                }
-                                            </tbody>
-                                        </table>
-                                        <p class="mb-0">
-                                            <em>These differences follow the same pattern and are likely related.</em>
-                                        </p>
+                            var percentage = TotalDifferences > 0 ? Math.Round((double)category.Value / TotalDifferences * 100, 1) : 0;
+                            
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="fw-medium">@FormatCategoryName(category.Key)</span>
+                                <div class="d-flex align-items-center">
+                                    <div class="progress me-2" style="width: 80px; height: 8px;">
+                                        <div class="progress-bar bg-warning" style="width: @(percentage)%"></div>
                                     </div>
+                                    <span class="text-muted">@category.Value (@percentage%)</span>
                                 </div>
                             </div>
                         }
                     </div>
                 </div>
-
-                <!-- Categories Tab -->
-                <div class="tab-pane fade" id="categories" role="tabpanel">
-                    <div class="table-responsive">
-                        <table class="table table-striped">
-                            <thead>
-                                <tr>
-                                    <th>Category</th>
-                                    <th>Count</th>
-                                    <th>Percentage</th>
-                                    <th>Example</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var category in Summary.DifferencesByChangeType.OrderByDescending(c => c.Value.Count))
-                                {
-                                    <tr>
-                                        <td>@FormatCategoryName(category.Key)</td>
-                                        <td>@category.Value.Count</td>
-                                        <td>@Summary.CategoryPercentages[category.Key]%</td>
-                                        <td>
-                                            @if (category.Value.Any())
-                                            {
-                                                var example = category.Value.First();
-                                                <span title="@example.PropertyName">
-                                                    @TruncateText(example.PropertyName, 30)
-                                                </span>
-                                            }
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Objects Tab -->
-                <div class="tab-pane fade" id="objects" role="tabpanel">
-                    <div class="accordion" id="objectAccordion">
-                        @foreach (var (rootObject, differences) in Summary.DifferencesByRootObject
-                       .OrderByDescending(x => x.Value.Count))
+                
+                <div class="col-md-6">
+                    <h6>Most Affected Objects</h6>
+                    <div class="mb-3">
+                        @foreach (var obj in AggregatedObjectCount
+                        .OrderByDescending(o => o.Value)
+                        .Take(3))
                         {
-                            var objId = rootObject.Replace(".", "-").Replace("[", "-").Replace("]", "-");
-                            <div class="accordion-item">
-                                <h2 class="accordion-header" id="object-heading-@objId">
-                                    <button class="accordion-button collapsed" type="button"
-                                            data-bs-toggle="collapse" data-bs-target="#object-collapse-@objId">
-                                        @rootObject (@differences.Count differences)
-                                    </button>
-                                </h2>
-                                <div id="object-collapse-@objId" class="accordion-collapse collapse"
-                                     data-bs-parent="#objectAccordion">
-                                    <div class="accordion-body">
-                                        <div class="table-responsive">
-                                            <table class="table table-sm">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Property</th>
-                                                        <th>Old Value</th>
-                                                        <th>New Value</th>
-                                                        <th>Category</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    @foreach (var diff in differences.Take(10)) // Show first 10
-                                                    {
-                                                        <tr>
-                                                            <td>@diff.PropertyName</td>
-                                                            <td class="text-danger">@FormatValue(diff.Object1Value)</td>
-                                                            <td class="text-success">@FormatValue(diff.Object2Value)</td>
-                                                            <td>@GetDifferenceCategory(diff)</td>
-                                                        </tr>
-                                                    }
-                                                    @if (differences.Count > 10)
-                                                    {
-                                                        <tr>
-                                                            <td colspan="4" class="text-center">
-                                                                <em>And @(differences.Count - 10) more differences...</em>
-                                                            </td>
-                                                        </tr>
-                                                    }
-                                                </tbody>
-                                            </table>
+                            var percentage = TotalDifferences > 0 ? Math.Round((double)obj.Value / TotalDifferences * 100, 1) : 0;
+                            
+                            <div class="mb-2">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="fw-medium text-break" style="max-width: 70%; word-break: break-all;" title="@obj.Key">@obj.Key</span>
+                                    <div class="d-flex align-items-center flex-shrink-0">
+                                        <div class="progress me-2" style="width: 60px; height: 8px;">
+                                            <div class="progress-bar bg-primary" style="width: @(percentage)%"></div>
                                         </div>
+                                        <span class="text-muted small">@obj.Value (@percentage%)</span>
                                     </div>
                                 </div>
                             </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Insights -->
+            @if (TotalPatterns > 0 && AggregatedCategoryCount.Any())
+            {
+                <div class="alert alert-light border">
+                    <div class="d-flex align-items-start">
+                        <i class="bi bi-lightbulb me-2 text-warning"></i>
+                        <div>
+                            <strong>Key Insight:</strong>
+                            @{
+                                var topCategory = AggregatedCategoryCount
+                                .OrderByDescending(c => c.Value)
+                                .First();
+                            }
+                            @if (FolderResult != null)
+                            {
+                                <span>Across @TotalFiles files, @TotalDifferences differences were found. </span>
+                            }
+                            Most changes are <strong>@FormatCategoryName(topCategory.Key)</strong> affecting 
+                            @topCategory.Value properties@(TotalPatterns > 0 ? $" with {TotalPatterns} distinct patterns identified" : "").
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <!-- Testing Guidance -->
+            <div class="alert alert-info border-0">
+                <div class="d-flex align-items-start">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <div>
+                        <strong>Testing Focus:</strong>
+                        @if (AggregatedCategoryCount.Any())
+                        {
+                            var topCategory = AggregatedCategoryCount
+                            .OrderByDescending(c => c.Value)
+                            .First();
+                            
+                            <span>Concentrate testing on <strong>@FormatCategoryName(topCategory.Key)</strong> changes</span>
+                            
+                            @if (AggregatedObjectCount.Any())
+                            {
+                                var topObject = AggregatedObjectCount
+                                .OrderByDescending(o => o.Value)
+                                .First();
+                                
+                                <span>, particularly in <strong style="word-break: break-all;">@topObject.Key</strong> objects</span>
+                            }
+                            @if (FolderResult != null)
+                            {
+                                <span> across the @FilesWithDifferences files that have differences</span>
+                            }
+                            <span>.</span>
                         }
                     </div>
                 </div>
@@ -267,105 +188,89 @@
     [Parameter]
     public DifferenceSummary Summary { get; set; }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    [Parameter]
+    public MultiFolderComparisonResult FolderResult { get; set; }
+
+    // Computed properties for aggregated folder statistics
+    private int TotalDifferences => FolderResult?.FilePairResults?.Sum(pair => pair.Summary?.TotalDifferenceCount ?? 0) ?? Summary.TotalDifferenceCount;
+
+    private int FilesWithDifferences => FolderResult?.FilePairResults?.Count(pair => pair.Summary != null && !pair.Summary.AreEqual) ?? (Summary.AreEqual ? 0 : 1);
+
+    private int TotalFiles => FolderResult?.FilePairResults?.Count ?? 1;
+
+    private Dictionary<DifferenceCategory, int> AggregatedCategoryCount
     {
-        if (firstRender && !Summary.AreEqual)
+        get
         {
-            await RenderChartsAsync();
+            if (FolderResult?.FilePairResults != null)
+            {
+                var aggregated = new Dictionary<DifferenceCategory, int>();
+                foreach (var pair in FolderResult.FilePairResults)
+                {
+                    if (pair.Summary?.DifferencesByChangeType != null)
+                    {
+                        foreach (var category in pair.Summary.DifferencesByChangeType)
+                        {
+                            aggregated[category.Key] = aggregated.GetValueOrDefault(category.Key, 0) + category.Value.Count;
+                        }
+                    }
+                }
+                return aggregated;
+            }
+            return Summary.DifferencesByChangeType.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Count);
         }
     }
 
-    private async Task RenderChartsAsync()
+    private Dictionary<string, int> AggregatedObjectCount
     {
-        // Using JS interop to render charts
-        // In a real implementation, you would use a JS library like Chart.js
-
-        // Example implementation would look like:
-        await JSRuntime.InvokeVoidAsync("renderPieChart", "categoriesChart",
-            Summary.CategoryPercentages.Keys.Select(k => FormatCategoryName(k)),
-            Summary.CategoryPercentages.Values);
-
-        await JSRuntime.InvokeVoidAsync("renderPieChart", "objectsChart",
-            Summary.RootObjectPercentages.Keys,
-            Summary.RootObjectPercentages.Values);
+        get
+        {
+            if (FolderResult?.FilePairResults != null)
+            {
+                var aggregated = new Dictionary<string, int>();
+                foreach (var pair in FolderResult.FilePairResults)
+                {
+                    if (pair.Summary?.DifferencesByRootObject != null)
+                    {
+                        foreach (var obj in pair.Summary.DifferencesByRootObject)
+                        {
+                            aggregated[obj.Key] = aggregated.GetValueOrDefault(obj.Key, 0) + obj.Value.Count;
+                        }
+                    }
+                }
+                return aggregated;
+            }
+            return Summary.DifferencesByRootObject.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Count);
+        }
     }
 
-    private string FormatValue(object value)
+    private int TotalPatterns => FolderResult?.FilePairResults?.Sum(pair => pair.Summary?.CommonPatterns?.Count ?? 0) ?? Summary.CommonPatterns.Count;
+
+    private bool AreAllEqual => FolderResult?.AllEqual ?? Summary.AreEqual;
+
+    private string FormatCategoryName(DifferenceCategory category)
     {
-        if (value == null)
-            return "null";
-
-        if (value is DateTime dt)
-            return dt.ToString("yyyy-MM-dd HH:mm:ss");
-
-        if (value is string str && str.Length > 50)
-            return str.Substring(0, 47) + "...";
-
-        return value.ToString();
+        return category switch
+        {
+            DifferenceCategory.TextContentChanged => "Text Changes",
+            DifferenceCategory.NumericValueChanged => "Numeric Changes",
+            DifferenceCategory.DateTimeChanged => "Date/Time Changes",
+            DifferenceCategory.BooleanValueChanged => "Boolean Changes",
+            DifferenceCategory.CollectionItemChanged => "Collection Structure Changes",
+            DifferenceCategory.ItemAdded => "Added Items",
+            DifferenceCategory.ItemRemoved => "Removed Items",
+            DifferenceCategory.NullValueChange => "Null Value Changes",
+            DifferenceCategory.ValueChanged => "Property Value Changes",
+            DifferenceCategory.GeneralValueChanged => "General Changes",
+            _ => "Other Changes"
+        };
     }
 
     private string TruncateText(string text, int maxLength)
     {
         if (string.IsNullOrEmpty(text) || text.Length <= maxLength)
-            return text;
+            return text ?? "";
 
         return text.Substring(0, maxLength - 3) + "...";
-    }
-
-    private string FormatCategoryName(DifferenceCategory category)
-    {
-        switch (category)
-        {
-            case DifferenceCategory.TextContentChanged:
-                return "Text Content";
-            case DifferenceCategory.NumericValueChanged:
-                return "Numeric Value";
-            case DifferenceCategory.DateTimeChanged:
-                return "Date/Time";
-            case DifferenceCategory.BooleanValueChanged:
-                return "Boolean Value";
-            case DifferenceCategory.CollectionItemChanged:
-                return "Collection Item";
-            case DifferenceCategory.ItemAdded:
-                return "Item Added";
-            case DifferenceCategory.ItemRemoved:
-                return "Item Removed";
-            case DifferenceCategory.NullValueChange:
-                return "Null Value";
-            default:
-                return "Other";
-        }
-    }
-
-    private string GetAlertClass()
-    {
-        return Summary.TotalDifferenceCount switch
-        {
-            <= 5 => "alert-warning",
-            <= 20 => "alert-warning",
-            _ => "alert-danger"
-        };
-    }
-
-    private string GetAlertIcon()
-    {
-        return Summary.TotalDifferenceCount switch
-        {
-            <= 5 => "bi bi-exclamation-triangle",
-            _ => "bi bi-exclamation-circle-fill"
-        };
-    }
-
-    private string GetDifferenceCategory(Difference diff)
-    {
-        foreach (var category in Summary.DifferencesByChangeType)
-        {
-            if (category.Value.Contains(diff))
-            {
-                return FormatCategoryName(category.Key);
-            }
-        }
-
-        return "Unknown";
     }
 }
