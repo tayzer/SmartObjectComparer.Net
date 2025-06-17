@@ -17,6 +17,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     private readonly List<IgnoreRule> ignoreRules = new();
     private readonly List<SmartIgnoreRule> smartIgnoreRules = new();
     private readonly SmartIgnoreProcessor smartIgnoreProcessor;
+    private ComparisonResultCacheService? _cacheService;
 
     public ComparisonConfigurationService(
         ILogger<ComparisonConfigurationService> logger,
@@ -49,6 +50,14 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     }
 
     /// <summary>
+    /// Set the cache service for invalidating cached results when configuration changes
+    /// </summary>
+    public void SetCacheService(ComparisonResultCacheService cacheService)
+    {
+        _cacheService = cacheService;
+    }
+
+    /// <summary>
     /// Get the current comparison configuration
     /// </summary>
     public ComparisonConfig GetCurrentConfig()
@@ -71,6 +80,13 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     {
         compareLogic.Config.IgnoreCollectionOrder = ignoreOrder;
         logger.LogDebug("Set IgnoreCollectionOrder to {Value}", ignoreOrder);
+        
+        // Invalidate cache when configuration changes
+        if (_cacheService != null)
+        {
+            var newFingerprint = _cacheService.GenerateConfigurationFingerprint(this);
+            _cacheService.InvalidateConfigurationChanges(newFingerprint);
+        }
     }
 
     /// <summary>
@@ -88,6 +104,13 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     {
         compareLogic.Config.CaseSensitive = !ignoreCase;
         logger.LogDebug("Set CaseSensitive to {Value} (IgnoreCase={IgnoreCase})", !ignoreCase, ignoreCase);
+        
+        // Invalidate cache when configuration changes
+        if (_cacheService != null)
+        {
+            var newFingerprint = _cacheService.GenerateConfigurationFingerprint(this);
+            _cacheService.InvalidateConfigurationChanges(newFingerprint);
+        }
     }
 
     /// <summary>
@@ -167,6 +190,13 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             
         logger.LogWarning("Current collection order ignore rules: {Rules}", 
             string.Join(", ", rulesWithIgnoreOrder));
+            
+        // Invalidate cache when ignore rules change
+        if (_cacheService != null)
+        {
+            var newFingerprint = _cacheService.GenerateConfigurationFingerprint(this);
+            _cacheService.InvalidateConfigurationChanges(newFingerprint);
+        }
     }
 
     private string GetRuleSettingsDescription(IgnoreRule rule)
@@ -203,9 +233,9 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     {
         try
         {
-            // Make sure global ignore collection order is OFF so our specific rules work
-            compareLogic.Config.IgnoreCollectionOrder = false;
-            logger.LogWarning("Setting global IgnoreCollectionOrder to FALSE to ensure property-specific rules work");
+            // Store the current global ignore collection order setting 
+            var globalIgnoreCollectionOrder = compareLogic.Config.IgnoreCollectionOrder;
+            logger.LogWarning("Current global IgnoreCollectionOrder setting: {GlobalSetting}", globalIgnoreCollectionOrder);
             
             // Clear any existing configuration
             compareLogic.Config.MembersToIgnore.Clear();
@@ -243,6 +273,11 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             {
                 try
                 {
+                    // We have property-specific collection order rules, so we need to disable global
+                    // collection order ignoring and use our custom comparer instead
+                    compareLogic.Config.IgnoreCollectionOrder = false;
+                    logger.LogWarning("Disabled global IgnoreCollectionOrder to enable property-specific collection order rules");
+                    
                     // Get the current comparers to inspect
                     var originalComparers = compareLogic.Config.CustomComparers.ToList();
                     
@@ -312,20 +347,17 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
                     // Verify our comparer is first
                     var firstComparerName = compareLogic.Config.CustomComparers.FirstOrDefault()?.GetType().Name ?? "none";
                     logger.LogWarning("First comparer is now: {FirstComparer}", firstComparerName);
-                    
-                    // Turn off the global ignore collection order to ensure our per-property comparer works
-                    var savedIgnoreOrder = compareLogic.Config.IgnoreCollectionOrder;
-                    if (savedIgnoreOrder) 
-                    {
-                        compareLogic.Config.IgnoreCollectionOrder = false;
-                        logger.LogWarning("Disabled global IgnoreCollectionOrder setting (was: {Original}) to ensure property-specific comparison works", 
-                            savedIgnoreOrder);
-                    }
                 }
                 catch (Exception ex)
                 {
                     logger.LogError(ex, "Error creating PropertySpecificCollectionOrderComparer");
                 }
+            }
+            else
+            {
+                // No property-specific collection order rules, so preserve the global setting
+                compareLogic.Config.IgnoreCollectionOrder = globalIgnoreCollectionOrder;
+                logger.LogWarning("No property-specific collection order rules found. Preserving global IgnoreCollectionOrder setting: {GlobalSetting}", globalIgnoreCollectionOrder);
             }
 
             // Apply smart ignore rules to configuration

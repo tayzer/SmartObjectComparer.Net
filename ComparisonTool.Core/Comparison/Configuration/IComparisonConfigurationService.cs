@@ -103,4 +103,9 @@ public interface IComparisonConfigurationService
     ComparisonResult FilterSmartIgnoredDifferences(ComparisonResult result, Type modelType = null);
 
     void NormalizePropertyValues(object obj, List<string> propertyNames);
+
+    /// <summary>
+    /// Set the cache service for configuration change invalidation
+    /// </summary>
+    void SetCacheService(ComparisonResultCacheService cacheService);
 }

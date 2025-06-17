@@ -23,8 +23,17 @@
 @inject ILogger<Home> Logger
 @inject PerformanceTracker PerformanceTracker
 @inject SystemResourceMonitor ResourceMonitor
+@inject ComparisonResultCacheService CacheService
 
-<h1>XML Comparison Tool</h1>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1>XML Comparison Tool</h1>
+    <div class="text-end">
+        <small class="text-muted">Cache: @GetCacheStatsDisplay()</small>
+        <button class="btn btn-sm btn-outline-secondary ms-2" @onclick="ClearCache" title="Clear all caches">
+            <i class="bi bi-trash3"></i> Clear Cache
+        </button>
+    </div>
+</div>
 
 <div class="mb-4">
     <div class="form-check form-switch">
@@ -586,11 +595,20 @@ else if (EnableEnhancedStructuralAnalysis && FolderComparisonResult != null && !
             }
             else
             {
-                // Use standard comparison service for smaller sets
-                FolderComparisonResult = await ComparisonService.CompareFoldersAsync(
+                // Create a simple progress reporter for the batch method
+                var batchProgressReporter = new Progress<(int Completed, int Total)>(progress =>
+                {
+                    Progress = new ComparisonProgress(progress.Completed, progress.Total, $"Compared {progress.Completed} of {progress.Total} files");
+                    StateHasChanged();
+                });
+
+                // Use batch comparison service with caching for smaller sets
+                FolderComparisonResult = await ComparisonService.CompareFoldersInBatchesAsync(
                     Folder1Files,
                     Folder2Files,
                     SelectedModelName,
+                    batchSize: 25,
+                    batchProgressReporter,
                     cancellationToken);
 
                 // Select the first result if there are differences
@@ -960,6 +978,42 @@ else if (EnableEnhancedStructuralAnalysis && FolderComparisonResult != null && !
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error clearing comparison results");
+        }
+    }
+
+    private string GetCacheStatsDisplay()
+    {
+        try
+        {
+            var stats = CacheService.GetCacheStatistics();
+            if (stats.Hits + stats.Misses == 0)
+                return "No activity";
+            
+            var hitRatio = stats.HitRatio * 100;
+            var memoryMB = stats.EstimatedMemory / (1024 * 1024);
+            
+            return $"{hitRatio:F0}% hit ratio, {stats.ComparisonEntries + stats.ObjectEntries} entries, {memoryMB}MB";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Error getting cache statistics");
+            return "Cache error";
+        }
+    }
+
+    private async Task ClearCache()
+    {
+        try
+        {
+            CacheService.ClearAllCaches();
+            Logger.LogInformation("All caches cleared by user");
+            await JSRuntime.InvokeVoidAsync("alert", "Cache cleared successfully!");
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error clearing cache");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error clearing cache: {ex.Message}");
         }
     }
 }

@@ -81,7 +81,7 @@ namespace ComparisonTool.Core.Comparison.Configuration
                 }
 
                 // Also add variations for collection items
-                AddCollectionVariations(config, PropertyPath);
+                AddCollectionVariationsOld(config, PropertyPath);
                 
                 // Add variations by removing path segments from the beginning (dynamic prefix removal)
                 // This makes it domain-agnostic by working with any path structure

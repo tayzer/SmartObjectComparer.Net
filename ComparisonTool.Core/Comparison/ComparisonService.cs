@@ -22,6 +22,7 @@ public class ComparisonService : IComparisonService
     private readonly IFileSystemService fileSystemService;
     private readonly PerformanceTracker _performanceTracker;
     private readonly SystemResourceMonitor _resourceMonitor;
+    private readonly ComparisonResultCacheService _cacheService;
 
     // Concurrency control
     private const int MaxConcurrentComparisons = 5;
@@ -32,7 +33,8 @@ public class ComparisonService : IComparisonService
         IComparisonConfigurationService configService,
         IFileSystemService fileSystemService,
         PerformanceTracker performanceTracker,
-        SystemResourceMonitor resourceMonitor)
+        SystemResourceMonitor resourceMonitor,
+        ComparisonResultCacheService cacheService)
     {
         this.logger = logger;
         this.deserializationService = deserializationService;
@@ -40,10 +42,239 @@ public class ComparisonService : IComparisonService
         this.fileSystemService = fileSystemService;
         this._performanceTracker = performanceTracker;
         this._resourceMonitor = resourceMonitor;
+        this._cacheService = cacheService;
     }
 
     /// <summary>
-    /// Compare two XML files using the specified domain model
+    /// Compare two XML files using the specified domain model with intelligent caching
+    /// </summary>
+    /// <param name="oldXmlStream">Stream containing the old/reference XML</param>
+    /// <param name="newXmlStream">Stream containing the new/comparison XML</param>
+    /// <param name="modelName">Name of the registered model to use for deserialization</param>
+    /// <param name="oldFilePath">Path to old file (for caching, optional)</param>
+    /// <param name="newFilePath">Path to new file (for caching, optional)</param>
+    /// <param name="cancellationToken">Cancellation token for async operations</param>
+    /// <returns>Comparison result with differences</returns>
+    public async Task<ComparisonResult> CompareXmlFilesWithCachingAsync(
+        Stream oldXmlStream,
+        Stream newXmlStream,
+        string modelName,
+        string oldFilePath = null,
+        string newFilePath = null,
+        CancellationToken cancellationToken = default)
+    {
+        return await _performanceTracker.TrackOperationAsync("CompareXmlFilesWithCaching", async () =>
+        {
+            try
+            {
+                // Generate configuration fingerprint for caching
+                var configFingerprint = _cacheService.GenerateConfigurationFingerprint(configService);
+                
+                // Generate file hashes for cache keys
+                var file1Hash = _cacheService.GenerateFileHash(oldXmlStream);
+                var file2Hash = _cacheService.GenerateFileHash(newXmlStream);
+                
+                // Try to get cached comparison result first
+                if (_cacheService.TryGetCachedComparison(file1Hash, file2Hash, configFingerprint, out var cachedResult))
+                {
+                    logger.LogInformation("Using cached comparison result for files with hashes {File1Hash}..{File2Hash}", 
+                        file1Hash[..8], file2Hash[..8]);
+                    return cachedResult;
+                }
+                
+                logger.LogInformation("Cache miss - performing fresh comparison for {ModelName}", modelName);
+                
+                // Check if model exists (will throw if not found)
+                var modelType = deserializationService.GetModelType(modelName);
+
+                var deserializeMethod = typeof(IXmlDeserializationService)
+                    .GetMethod(nameof(IXmlDeserializationService.DeserializeXml))
+                    .MakeGenericMethod(modelType);
+
+                var cloneMethod = typeof(IXmlDeserializationService)
+                    .GetMethod(nameof(IXmlDeserializationService.CloneObject))
+                    .MakeGenericMethod(modelType);
+
+                // Try to get cached deserialized objects first
+                object oldResponse = null;
+                object newResponse = null;
+                
+                // For file-based caching, we need file info
+                if (!string.IsNullOrEmpty(oldFilePath) && File.Exists(oldFilePath))
+                {
+                    var oldFileInfo = new FileInfo(oldFilePath);
+                    if (!_cacheService.TryGetCachedObject(oldFilePath, oldFileInfo.LastWriteTimeUtc, out oldResponse))
+                    {
+                        oldResponse = await _performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}", () => 
+                            Task.FromResult(deserializeMethod.Invoke(deserializationService, new object[] { oldXmlStream })));
+                        _cacheService.CacheObject(oldFilePath, oldFileInfo.LastWriteTimeUtc, oldResponse);
+                    }
+                    else
+                    {
+                        logger.LogDebug("Using cached deserialized object for old file: {FilePath}", oldFilePath);
+                    }
+                }
+                else
+                {
+                    oldResponse = await _performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}", () => 
+                        Task.FromResult(deserializeMethod.Invoke(deserializationService, new object[] { oldXmlStream })));
+                }
+                
+                if (!string.IsNullOrEmpty(newFilePath) && File.Exists(newFilePath))
+                {
+                    var newFileInfo = new FileInfo(newFilePath);
+                    if (!_cacheService.TryGetCachedObject(newFilePath, newFileInfo.LastWriteTimeUtc, out newResponse))
+                    {
+                        newResponse = await _performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}", () => 
+                            Task.FromResult(deserializeMethod.Invoke(deserializationService, new object[] { newXmlStream })));
+                        _cacheService.CacheObject(newFilePath, newFileInfo.LastWriteTimeUtc, newResponse);
+                    }
+                    else
+                    {
+                        logger.LogDebug("Using cached deserialized object for new file: {FilePath}", newFilePath);
+                    }
+                }
+                else
+                {
+                    newResponse = await _performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}", () => 
+                        Task.FromResult(deserializeMethod.Invoke(deserializationService, new object[] { newXmlStream })));
+                }
+
+                object oldResponseCopy = _performanceTracker.TrackOperation($"Clone_Old_{modelName}", () => 
+                    cloneMethod.Invoke(deserializationService, new object[] { oldResponse }));
+                    
+                object newResponseCopy = _performanceTracker.TrackOperation($"Clone_New_{modelName}", () => 
+                    cloneMethod.Invoke(deserializationService, new object[] { newResponse }));
+
+                // Get properties to ignore for normalization
+                var propertiesToIgnore = await _performanceTracker.TrackOperationAsync("Get_Ignore_Rules", () => Task.FromResult(
+                    configService.GetIgnoreRules()
+                        .Where(r => r.IgnoreCompletely)
+                        .Select(r => GetPropertyNameFromPath(r.PropertyPath))
+                        .Where(p => !string.IsNullOrEmpty(p))
+                        .Distinct()
+                        .ToList()));
+
+                // Normalize property values in both object graphs
+                if (propertiesToIgnore.Any())
+                {
+                    await _performanceTracker.TrackOperationAsync("Normalize_Properties", async () => 
+                    {
+                        await Task.Run(() =>
+                        {
+                            configService.NormalizePropertyValues(oldResponseCopy, propertiesToIgnore);
+                            configService.NormalizePropertyValues(newResponseCopy, propertiesToIgnore);
+                        }, cancellationToken);
+                    });
+                }
+
+                // Apply configured settings
+                await _performanceTracker.TrackOperationAsync("Apply_Config_Settings", async () => 
+                {
+                    configService.ApplyConfiguredSettings();
+                });
+
+                // Compare the normalized objects
+                var result = await _performanceTracker.TrackOperationAsync("Compare_Objects", async () => 
+                {
+                    return await Task.Run(() =>
+                    {
+                        // Use the existing CompareLogic instance from the configuration service
+                        var compareLogic = configService.GetCompareLogic();
+
+                        // We should compare the original cloned objects before normalization, 
+                        // as normalization might affect order or values needed by the specific comparer
+                        var oldClone = cloneMethod.Invoke(deserializationService, new[] { oldResponse }); 
+                        var newClone = cloneMethod.Invoke(deserializationService, new[] { newResponse });
+
+                        // Ensure the configuration is applied right before comparison
+                        configService.ApplyConfiguredSettings(); 
+
+                        logger.LogWarning("Performing comparison with {ComparerCount} custom comparers. First: {FirstComparer}",
+                            compareLogic.Config.CustomComparers.Count,
+                            compareLogic.Config.CustomComparers.FirstOrDefault()?.GetType().Name ?? "none");
+
+                        // Wrap the comparison in a try-catch to handle collection modification exceptions
+                        try
+                        {
+                            return compareLogic.Compare(oldClone, newClone);
+                        }
+                        catch (InvalidOperationException ex) when (ex.Message.Contains("Collection was modified"))
+                        {
+                            logger.LogWarning(ex, "Collection was modified during comparison. Trying defensive comparison approaches.");
+                            
+                            // First try: Create a new CompareLogic instance to avoid shared state issues
+                            try
+                            {
+                                logger.LogInformation("Attempting comparison with fresh CompareLogic instance");
+                                var freshCompareLogic = configService.GetCompareLogic();
+                                configService.ApplyConfiguredSettings();
+                                
+                                // Try with the fresh instance
+                                return freshCompareLogic.Compare(oldClone, newClone);
+                            }
+                            catch (InvalidOperationException ex2) when (ex2.Message.Contains("Collection was modified"))
+                            {
+                                logger.LogWarning(ex2, "Fresh CompareLogic instance also failed. Using JSON serialization approach.");
+                                
+                                // Fallback: Create a deep copy using JSON serialization
+                                var settings = new JsonSerializerOptions { 
+                                    WriteIndented = false,
+                                    PropertyNameCaseInsensitive = true,
+                                    ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles
+                                };
+                                
+                                try
+                                {
+                                    // Serialize and deserialize both objects
+                                    string oldJson = JsonSerializer.Serialize(oldClone, oldClone.GetType(), settings);
+                                    string newJson = JsonSerializer.Serialize(newClone, newClone.GetType(), settings);
+                                    
+                                    var oldCopy = JsonSerializer.Deserialize(oldJson, oldClone.GetType(), settings);
+                                    var newCopy = JsonSerializer.Deserialize(newJson, newClone.GetType(), settings);
+                                    
+                                    // Create a minimal CompareLogic configuration for final attempt
+                                    var simpleCompareLogic = new CompareLogic();
+                                    simpleCompareLogic.Config.IgnoreCollectionOrder = false;
+                                    simpleCompareLogic.Config.CustomComparers.Clear(); // Remove all custom comparers that might cause issues
+                                    
+                                    logger.LogInformation("Attempting comparison with simplified configuration and JSON-serialized copies");
+                                    return simpleCompareLogic.Compare(oldCopy, newCopy);
+                                }
+                                catch (Exception jsonEx)
+                                {
+                                    logger.LogError(jsonEx, "JSON serialization fallback also failed. This indicates a serious issue with the object structure.");
+                                    throw;
+                                }
+                            }
+                        }
+                    }, cancellationToken);
+                });
+
+                logger.LogInformation("Comparison completed. Found {DifferenceCount} differences",
+                    result.Differences.Count);
+
+                // Filter out ignored properties using smart rules and legacy pattern matching
+                result = configService.FilterSmartIgnoredDifferences(result, modelType);
+                result = configService.FilterIgnoredDifferences(result);
+
+                var filteredResult = FilterDuplicateDifferences(result);
+
+                // Cache the result for future use
+                _cacheService.CacheComparison(file1Hash, file2Hash, configFingerprint, filteredResult);
+
+                return filteredResult;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error occurred while comparing XML files with caching");
+                throw;
+            }
+        });
+    }
+
+    /// <summary>
+    /// Compare two XML files using the specified domain model (legacy method without caching)
     /// </summary>
     /// <param name="oldXmlStream">Stream containing the old/reference XML</param>
     /// <param name="newXmlStream">Stream containing the new/comparison XML</param>
@@ -141,23 +372,52 @@ public class ComparisonService : IComparisonService
                         }
                         catch (InvalidOperationException ex) when (ex.Message.Contains("Collection was modified"))
                         {
-                            logger.LogWarning(ex, "Collection was modified during comparison. Using defensive comparison approach.");
+                            logger.LogWarning(ex, "Collection was modified during comparison. Trying defensive comparison approaches.");
                             
-                            // Create a deep copy using JSON serialization as an alternative approach
-                            var settings = new JsonSerializerOptions { 
-                                WriteIndented = false,
-                                PropertyNameCaseInsensitive = true
-                            };
-                            
-                            // Serialize and deserialize both objects
-                            string oldJson = JsonSerializer.Serialize(oldClone, oldClone.GetType(), settings);
-                            string newJson = JsonSerializer.Serialize(newClone, newClone.GetType(), settings);
-                            
-                            var oldCopy = JsonSerializer.Deserialize(oldJson, oldClone.GetType(), settings);
-                            var newCopy = JsonSerializer.Deserialize(newJson, newClone.GetType(), settings);
-                            
-                            // Try comparison again with the JSON-based copies
-                            return compareLogic.Compare(oldCopy, newCopy);
+                            // First try: Create a new CompareLogic instance to avoid shared state issues
+                            try
+                            {
+                                logger.LogInformation("Attempting comparison with fresh CompareLogic instance");
+                                var freshCompareLogic = configService.GetCompareLogic();
+                                configService.ApplyConfiguredSettings();
+                                
+                                // Try with the fresh instance
+                                return freshCompareLogic.Compare(oldClone, newClone);
+                            }
+                            catch (InvalidOperationException ex2) when (ex2.Message.Contains("Collection was modified"))
+                            {
+                                logger.LogWarning(ex2, "Fresh CompareLogic instance also failed. Using JSON serialization approach.");
+                                
+                                // Fallback: Create a deep copy using JSON serialization
+                                var settings = new JsonSerializerOptions { 
+                                    WriteIndented = false,
+                                    PropertyNameCaseInsensitive = true,
+                                    ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles
+                                };
+                                
+                                try
+                                {
+                                    // Serialize and deserialize both objects
+                                    string oldJson = JsonSerializer.Serialize(oldClone, oldClone.GetType(), settings);
+                                    string newJson = JsonSerializer.Serialize(newClone, newClone.GetType(), settings);
+                                    
+                                    var oldCopy = JsonSerializer.Deserialize(oldJson, oldClone.GetType(), settings);
+                                    var newCopy = JsonSerializer.Deserialize(newJson, newClone.GetType(), settings);
+                                    
+                                    // Create a minimal CompareLogic configuration for final attempt
+                                    var simpleCompareLogic = new CompareLogic();
+                                    simpleCompareLogic.Config.IgnoreCollectionOrder = false;
+                                    simpleCompareLogic.Config.CustomComparers.Clear(); // Remove all custom comparers that might cause issues
+                                    
+                                    logger.LogInformation("Attempting comparison with simplified configuration and JSON-serialized copies");
+                                    return simpleCompareLogic.Compare(oldCopy, newCopy);
+                                }
+                                catch (Exception jsonEx)
+                                {
+                                    logger.LogError(jsonEx, "JSON serialization fallback also failed. This indicates a serious issue with the object structure.");
+                                    throw;
+                                }
+                            }
                         }
                     }, cancellationToken);
                 });
@@ -217,7 +477,7 @@ public class ComparisonService : IComparisonService
                 logger.LogInformation("Comparing pair {PairNumber}/{TotalPairs}: {File1} vs {File2}", i + 1, pairCount, file1Path, file2Path);
                 using var file1Stream = await fileSystemService.OpenFileStreamAsync(file1Path, cancellationToken);
                 using var file2Stream = await fileSystemService.OpenFileStreamAsync(file2Path, cancellationToken);
-                var pairResult = await CompareXmlFilesAsync(file1Stream, file2Stream, modelName, cancellationToken);
+                var pairResult = await CompareXmlFilesWithCachingAsync(file1Stream, file2Stream, modelName, file1Path, file2Path, cancellationToken);
                 var categorizer = new DifferenceCategorizer();
                 var summary = categorizer.CategorizeAndSummarize(pairResult);
                 var filePairResult = new FilePairComparisonResult
@@ -344,11 +604,13 @@ public class ComparisonService : IComparisonService
                                     using var file1Stream = await fileSystemService.OpenFileStreamAsync(file1Path, ct);
                                     using var file2Stream = await fileSystemService.OpenFileStreamAsync(file2Path, ct);
                                     
-                                    // Perform comparison
-                                    var comparisonResult = await CompareXmlFilesAsync(
+                                    // Perform comparison with caching
+                                    var comparisonResult = await CompareXmlFilesWithCachingAsync(
                                         file1Stream,
                                         file2Stream,
                                         modelName,
+                                        file1Path,
+                                        file2Path,
                                         ct);
                                     
                                     // Generate summary

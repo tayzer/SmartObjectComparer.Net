@@ -34,6 +34,9 @@ public static class ServiceCollectionExtensions
         // Add system resource monitor
         services.AddSingleton<SystemResourceMonitor>();
 
+        // Add comparison result cache service
+        services.AddSingleton<ComparisonResultCacheService>();
+
         services.AddSingleton<IXmlDeserializationService>(provider =>
         {
             var logger = provider.GetRequiredService<ILogger<XmlDeserializationService>>();
@@ -47,7 +50,17 @@ public static class ServiceCollectionExtensions
             return service;
         });
 
-        services.AddSingleton<IComparisonConfigurationService, ComparisonConfigurationService>();
+        services.AddSingleton<IComparisonConfigurationService>(provider =>
+        {
+            var logger = provider.GetRequiredService<ILogger<ComparisonConfigurationService>>();
+            var configurationService = new ComparisonConfigurationService(logger);
+            
+            // Wire up the cache service
+            var cacheService = provider.GetRequiredService<ComparisonResultCacheService>();
+            configurationService.SetCacheService(cacheService);
+            
+            return configurationService;
+        });
 
         services.AddScoped<IComparisonService, ComparisonService>();
 
