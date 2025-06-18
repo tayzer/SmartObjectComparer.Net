@@ -53,6 +53,12 @@ public interface IComparisonConfigurationService
     void AddIgnoreRule(IgnoreRule rule);
 
     /// <summary>
+    /// Add multiple ignore rules to the configuration in a batch operation
+    /// This is more efficient than calling AddIgnoreRule multiple times
+    /// </summary>
+    void AddIgnoreRulesBatch(IEnumerable<IgnoreRule> rules);
+
+    /// <summary>
     /// Get all currently ignored properties
     /// </summary>
     IReadOnlyList<string> GetIgnoredProperties();

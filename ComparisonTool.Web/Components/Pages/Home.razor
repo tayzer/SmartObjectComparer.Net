@@ -182,6 +182,8 @@ else
 
 @if (FolderComparisonResult != null)
 {
+    <EnhancedDifferenceSummary Summary="@DifferenceSummary" FolderResult="@FolderComparisonResult" />
+    
     <FileComparisonResults Result="@FolderComparisonResult"
                            SelectedPairIndex="@SelectedPairIndex"
                            OnPairSelected="@SelectPairResult"
@@ -227,12 +229,14 @@ else if (EnableEnhancedStructuralAnalysis && FolderComparisonResult != null && !
                               ModelType="@GetSelectedModelType()"
                               IgnoredProperties="IgnoreRules"
                               OnPropertyAdded="AddIgnoreRule"
+                              OnPropertiesBatchAdded="AddIgnoreRulesBatch"
                               OnPropertyRemoved="propertyPath => RemoveIgnoreRule(IgnoreRules.FirstOrDefault(r => r.PropertyPath == propertyPath))" />
 
 <ObjectTreePropertySelector @ref="treePropertySelector"
                            ModelType="@GetSelectedModelType()"
                            IgnoredProperties="IgnoreRules"
                            OnPropertyAdded="AddIgnoreRule"
+                           OnPropertiesBatchAdded="AddIgnoreRulesBatch"
                            OnPropertyRemoved="propertyPath => RemoveIgnoreRule(IgnoreRules.FirstOrDefault(r => r.PropertyPath == propertyPath))" />
 
 @code {
@@ -378,6 +382,27 @@ else if (EnableEnhancedStructuralAnalysis && FolderComparisonResult != null && !
         {
             ConfigService.AddIgnoreRule(rule);
         }
+    }
+
+    private void AddIgnoreRulesBatch(IEnumerable<IgnoreRule> rules)
+    {
+        if (rules == null || !rules.Any()) return;
+
+        var rulesList = rules.ToList();
+
+        // Remove existing rules and add new ones to local collection
+        foreach (var rule in rulesList)
+        {
+            var existingRule = IgnoreRules.FirstOrDefault(r => r.PropertyPath == rule.PropertyPath);
+            if (existingRule != null)
+            {
+                IgnoreRules.Remove(existingRule);
+            }
+            IgnoreRules.Add(rule);
+        }
+
+        // Use batch method for better performance
+        ConfigService.AddIgnoreRulesBatch(rulesList);
     }
 
     private void RemoveIgnoreRule(IgnoreRule rule)

@@ -199,6 +199,50 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         }
     }
 
+    /// <summary>
+    /// Add multiple ignore rules to the configuration in a batch operation
+    /// This is more efficient than calling AddIgnoreRule multiple times as it only invalidates cache once
+    /// </summary>
+    public void AddIgnoreRulesBatch(IEnumerable<IgnoreRule> rules)
+    {
+        if (rules == null || !rules.Any()) return;
+
+        var rulesList = rules.ToList();
+        logger.LogInformation("Adding {Count} ignore rules in batch operation", rulesList.Count);
+
+        foreach (var rule in rulesList)
+        {
+            if (rule == null) continue;
+
+            // Remove existing rule for this property first
+            RemoveIgnoredProperty(rule.PropertyPath);
+
+            // Create a new rule with our logger to ensure proper logging
+            var newRule = new IgnoreRule(logger)
+            {
+                PropertyPath = rule.PropertyPath,
+                IgnoreCompletely = rule.IgnoreCompletely,
+                IgnoreCollectionOrder = rule.IgnoreCollectionOrder
+            };
+            
+            ignoreRules.Add(newRule);
+        }
+
+        // Log summary instead of individual rules for performance
+        var ignoreCompletelyCount = rulesList.Count(r => r.IgnoreCompletely);
+        var ignoreCollectionOrderCount = rulesList.Count(r => r.IgnoreCollectionOrder);
+        
+        logger.LogInformation("Batch operation completed: {TotalRules} rules added, {IgnoreCompletelyCount} ignore completely, {IgnoreCollectionOrderCount} ignore collection order",
+            rulesList.Count, ignoreCompletelyCount, ignoreCollectionOrderCount);
+
+        // Single cache invalidation at the end for performance
+        if (_cacheService != null)
+        {
+            var newFingerprint = _cacheService.GenerateConfigurationFingerprint(this);
+            _cacheService.InvalidateConfigurationChanges(newFingerprint);
+        }
+    }
+
     private string GetRuleSettingsDescription(IgnoreRule rule)
     {
         var settings = new List<string>();
@@ -428,11 +472,15 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         if (!propertiesToIgnoreCompletely.Any())
             return result;
 
-        logger.LogInformation("Filtering differences using {Count} tree navigator ignore patterns: {Patterns}", 
-            propertiesToIgnoreCompletely.Count, string.Join(", ", propertiesToIgnoreCompletely));
+        if (logger.IsEnabled(LogLevel.Debug))
+        {
+            logger.LogDebug("Filtering differences using {Count} tree navigator ignore patterns", 
+                propertiesToIgnoreCompletely.Count);
+        }
 
         var originalCount = result.Differences.Count;
         var filteredDifferences = new List<Difference>();
+        var ignoredCount = 0;
 
         foreach (var difference in result.Differences)
         {
@@ -448,8 +496,11 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
                         difference.PropertyName.StartsWith(ignoredPath + ".", StringComparison.OrdinalIgnoreCase))
                     {
                         shouldIgnore = true;
-                        logger.LogInformation("FILTERING OUT difference for ignored property: {PropertyPath} (matched static MembersToIgnore: {MatchedPath})", 
-                            difference.PropertyName, ignoredPath);
+                        if (logger.IsEnabled(LogLevel.Debug))
+                        {
+                            logger.LogDebug("Filtering out property '{PropertyPath}' (matched static MembersToIgnore: '{MatchedPath}')", 
+                                difference.PropertyName, ignoredPath);
+                        }
                         break;
                     }
                 }
@@ -458,11 +509,10 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             if (!shouldIgnore)
             {
                 filteredDifferences.Add(difference);
-                logger.LogDebug("KEEPING difference for property: {PropertyPath}", difference.PropertyName);
             }
-            else if (!compareLogic.Config.MembersToIgnore.Contains(difference.PropertyName))
+            else
             {
-                logger.LogInformation("FILTERING OUT difference for ignored property: {PropertyPath} (matched tree navigator rule)", difference.PropertyName);
+                ignoredCount++;
             }
         }
 
@@ -470,12 +520,19 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         result.Differences.AddRange(filteredDifferences);
 
         var filteredCount = result.Differences.Count;
-        var removedCount = originalCount - filteredCount;
 
-        if (removedCount > 0)
+        if (ignoredCount > 0)
         {
-            logger.LogInformation("Tree Navigator filtering removed {RemovedCount} differences from {OriginalCount} total (kept {FilteredCount})", 
-                removedCount, originalCount, filteredCount);
+            logger.LogInformation("Ignore rule filtering removed {IgnoredCount} differences from {OriginalCount} total (kept {FilteredCount})", 
+                ignoredCount, originalCount, filteredCount);
+        }
+
+        // Log cache performance for monitoring
+        var (hits, misses, hitRatio) = PropertyIgnoreHelper.GetCacheStats();
+        if (hits + misses > 0)
+        {
+            logger.LogDebug("Pattern matching cache performance: {Hits} hits, {Misses} misses, {HitRatio:P1} hit ratio", 
+                hits, misses, hitRatio);
         }
 
         return result;
