@@ -128,14 +128,14 @@ public class FileUtilities : IFileUtilities
     {
         var sb = new StringBuilder();
 
-        sb.AppendLine("# V1 vs V2 Folder Comparison Report");
+                    sb.AppendLine("# A vs B Folder Comparison Report");
         sb.AppendLine();
         sb.AppendLine($"Date: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
         sb.AppendLine();
 
         sb.AppendLine("## Summary");
         sb.AppendLine();
-        sb.AppendLine("| V1 File | V2 File | Status | Differences |");
+                    sb.AppendLine("| A File | B File | Status | Differences |");
         sb.AppendLine("|---------|---------|--------|------------|");
 
         foreach (var result in folderResult.FilePairResults)
@@ -187,8 +187,8 @@ public class FileUtilities : IFileUtilities
                 foreach (var diff in sampleDiffs)
                 {
                     sb.AppendLine($"- Property: `{diff.PropertyName}`");
-                    sb.AppendLine($"  - V1: `{FormatValue(diff.Object1Value)}`");
-                    sb.AppendLine($"  - V2: `{FormatValue(diff.Object2Value)}`");
+                                    sb.AppendLine($"  - A: `{FormatValue(diff.Object1Value)}`");
+                sb.AppendLine($"  - B: `{FormatValue(diff.Object2Value)}`");
                     sb.AppendLine();
                 }
 

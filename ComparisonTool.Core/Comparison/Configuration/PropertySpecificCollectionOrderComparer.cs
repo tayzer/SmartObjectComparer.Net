@@ -17,20 +17,23 @@ namespace ComparisonTool.Core.Comparison.Configuration
     /// </summary>
     public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
     {
-        private readonly HashSet<string> _propertiesToIgnoreOrder;
-        private readonly ILogger _logger;
-        private static readonly HashSet<string> _debuggedPaths = new HashSet<string>(); // Track paths we've already debugged
-        private static readonly string DebugFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "collection_paths_debug.txt");
-        private static bool _isFirstInstance = true; // Track if this is the first instance created
-        
-        // Explicitly track if we have rules for Results or RelatedItems
-        private readonly bool _hasResultsRule;
-        private readonly bool _hasRelatedItemsRule;
-        private static int _comparisonCount = 0; // Track the number of comparisons performed
-        
-        // KEEP TRACK OF ACTUAL PATHS THAT MATCH FOR DEBUGGING
-        private readonly HashSet<string> _matchedPaths = new HashSet<string>(); 
-        private readonly HashSet<string> _unmatchedPaths = new HashSet<string>();
+            private readonly HashSet<string> _propertiesToIgnoreOrder;
+    private readonly ILogger _logger;
+    
+    // Use thread-safe concurrent collections for static members
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _debuggedPaths = new(); 
+    private static readonly string DebugFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "collection_paths_debug.txt");
+    private static volatile bool _isFirstInstance = true; // Track if this is the first instance created
+    private static readonly object _firstInstanceLock = new object();
+    
+    // Explicitly track if we have rules for Results or RelatedItems
+    private readonly bool _hasResultsRule;
+    private readonly bool _hasRelatedItemsRule;
+    private static int _comparisonCount = 0; // Track the number of comparisons performed
+    
+    // Use thread-safe concurrent collections for instance members
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _matchedPaths = new(); 
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _unmatchedPaths = new();
 
         /// <summary>
         /// Constructor that takes a list of property paths where order should be ignored
@@ -43,12 +46,10 @@ namespace ComparisonTool.Core.Comparison.Configuration
             IEnumerable<string> propertiesToIgnoreOrder,
             ILogger logger = null) : base(rootComparer)
         {
-            _propertiesToIgnoreOrder = new HashSet<string>(propertiesToIgnoreOrder ?? Enumerable.Empty<string>());
-            _logger = logger ?? NullLogger.Instance;
-            
-            // Reset matched/unmatched paths for this instance
-            _matchedPaths.Clear();
-            _unmatchedPaths.Clear();
+                    _propertiesToIgnoreOrder = new HashSet<string>(propertiesToIgnoreOrder ?? Enumerable.Empty<string>());
+        _logger = logger ?? NullLogger.Instance;
+        
+        // Note: No need to clear concurrent dictionaries as they're already empty when created
             
             // Check if we have rules for specific collections using simple IndexOf
             _hasResultsRule = _propertiesToIgnoreOrder.Any(p => 
@@ -57,7 +58,9 @@ namespace ComparisonTool.Core.Comparison.Configuration
             _hasRelatedItemsRule = _propertiesToIgnoreOrder.Any(p => 
                 p.IndexOf("RelatedItems", StringComparison.OrdinalIgnoreCase) >= 0);
             
-            // Only clear the file for the first instance
+                    // Only clear the file for the first instance (thread-safe)
+        lock (_firstInstanceLock)
+        {
             if (_isFirstInstance)
             {
                 // Create a fresh debug file (overwrite any existing file)
@@ -92,6 +95,7 @@ namespace ComparisonTool.Core.Comparison.Configuration
                 WriteDebugInfo($"ADDITIONAL INSTANCE: Properties configured to ignore order: {string.Join(", ", _propertiesToIgnoreOrder)}");
                 WriteDebugInfo($"(CTOR CHECK) Has Results rule: {_hasResultsRule}, Has RelatedItems rule: {_hasRelatedItemsRule}");
             }
+        }
             
             // Log the properties that will have their collection order ignored
             _logger.LogWarning("PropertySpecificCollectionOrderComparer initialized with {Count} properties to ignore order: {Properties}", 
@@ -132,11 +136,11 @@ namespace ComparisonTool.Core.Comparison.Configuration
         /// </summary>
         public override void CompareType(CompareParms parms)
         {
-            // Increment comparison counter for debugging
-            _comparisonCount++;
+            // Increment comparison counter for debugging (thread-safe)
+            int currentCount = System.Threading.Interlocked.Increment(ref _comparisonCount);
             
             // Detailed debug info including the current comparison count
-            string pathInfo = $"Comparison #{_comparisonCount} - Collection at path: '{parms.BreadCrumb}'";
+            string pathInfo = $"Comparison #{currentCount} - Collection at path: '{parms.BreadCrumb}'";
             if (parms.Object1 != null)
             {
                 pathInfo += $", Type: {parms.Object1.GetType().Name}";
@@ -152,11 +156,10 @@ namespace ComparisonTool.Core.Comparison.Configuration
             
             WriteDebugInfo(pathInfo);
             
-            // Log unique collection paths only once to reduce log spam for the user's log
-            if (!string.IsNullOrEmpty(parms.BreadCrumb) && !_debuggedPaths.Contains(parms.BreadCrumb))
+            // Log unique collection paths only once to reduce log spam for the user's log (thread-safe)
+            if (!string.IsNullOrEmpty(parms.BreadCrumb) && _debuggedPaths.TryAdd(parms.BreadCrumb, true))
             {
                 _logger.LogWarning(pathInfo);
-                _debuggedPaths.Add(parms.BreadCrumb);
             }
             
             // Don't bother with complex logic if the breadcrumb is empty
@@ -202,7 +205,7 @@ namespace ComparisonTool.Core.Comparison.Configuration
                 if (shouldIgnoreForResults)
                 {
                     WriteDebugInfo($"!!! DIRECT RESULTS MATCH FOUND: '{parms.BreadCrumb}' contains 'Results' and we have Results rules !!!");
-                    _matchedPaths.Add(parms.BreadCrumb);
+                    _matchedPaths.TryAdd(parms.BreadCrumb, true);
                     parms.Config.IgnoreCollectionOrder = true;
                     WriteDebugInfo($"*** IGNORING ORDER for Results collection: '{parms.BreadCrumb}' ***");
                     var resultsCollectionComparer = new CollectionComparer(RootComparer);
@@ -217,7 +220,7 @@ namespace ComparisonTool.Core.Comparison.Configuration
                 if (shouldIgnoreForRelatedItems)
                 {
                     WriteDebugInfo($"!!! DIRECT RELATEDITEMS MATCH FOUND: '{parms.BreadCrumb}' contains 'RelatedItems' and we have RelatedItems rules !!!");
-                    _matchedPaths.Add(parms.BreadCrumb);
+                    _matchedPaths.TryAdd(parms.BreadCrumb, true);
                     parms.Config.IgnoreCollectionOrder = true;
                     WriteDebugInfo($"*** IGNORING ORDER for RelatedItems collection: '{parms.BreadCrumb}' ***");
                     var relatedItemsCollectionComparer = new CollectionComparer(RootComparer);
@@ -229,7 +232,7 @@ namespace ComparisonTool.Core.Comparison.Configuration
                 // Currently, the complex logic isn't necessary because we handle Results/RelatedItems above.
                 // We simply fall through to the default behavior (keeping order).
                 WriteDebugInfo($"*** NO DIRECT MATCH for '{parms.BreadCrumb}', keeping default order. ***");
-                _unmatchedPaths.Add(parms.BreadCrumb);
+                _unmatchedPaths.TryAdd(parms.BreadCrumb, true);
 
                 // Use the standard collection comparer (keeping order, as IgnoreCollectionOrder is still false)
                 var collectionComparer = new CollectionComparer(RootComparer);
@@ -238,15 +241,15 @@ namespace ComparisonTool.Core.Comparison.Configuration
             finally
             {
                 // Always write debug info about matched/unmatched paths every 10 comparisons
-                if (_comparisonCount % 10 == 0)
+                if (currentCount % 10 == 0)
                 {
                     WriteDebugInfo("=== PATHS WHERE ORDER WAS IGNORED ===");
-                    foreach (var path in _matchedPaths)
+                    foreach (var path in _matchedPaths.Keys)
                     {
                         WriteDebugInfo($"IGNORED ORDER: {path}");
                     }
                     WriteDebugInfo("=== PATHS WHERE ORDER WAS KEPT ===");
-                    foreach (var path in _unmatchedPaths)
+                    foreach (var path in _unmatchedPaths.Keys)
                     {
                         WriteDebugInfo($"KEPT ORDER: {path}");
                     }
@@ -258,13 +261,17 @@ namespace ComparisonTool.Core.Comparison.Configuration
         }
 
         /// <summary>
-        /// Write debug information to a file
+        /// Write debug information to a file (thread-safe)
         /// </summary>
+        private static readonly object _debugFileLock = new object();
         private void WriteDebugInfo(string message)
         {
             try
             {
-                File.AppendAllText(DebugFilePath, $"{DateTime.Now:HH:mm:ss.fff}: {message}{Environment.NewLine}");
+                lock (_debugFileLock)
+                {
+                    File.AppendAllText(DebugFilePath, $"{DateTime.Now:HH:mm:ss.fff}: {message}{Environment.NewLine}");
+                }
             }
             catch
             {

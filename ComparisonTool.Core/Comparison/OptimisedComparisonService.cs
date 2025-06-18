@@ -89,6 +89,24 @@ public class OptimizedComparisonService : IComparisonService
     }
 
     /// <summary>
+    /// Compare two XML files using the specified domain model with caching support
+    /// Note: This optimized service delegates to the non-caching method since caching 
+    /// would interfere with its memory optimization strategies
+    /// </summary>
+    public async Task<ComparisonResult> CompareXmlFilesWithCachingAsync(
+        Stream oldXmlStream,
+        Stream newXmlStream,
+        string modelName,
+        string oldFilePath = null,
+        string newFilePath = null,
+        CancellationToken cancellationToken = default)
+    {
+        // For the optimized service, we delegate to the regular method
+        // as caching would interfere with memory optimization strategies
+        return await CompareXmlFilesAsync(oldXmlStream, newXmlStream, modelName, cancellationToken);
+    }
+
+    /// <summary>
     /// Compare multiple folder pairs of XML files with optimized memory usage
     /// </summary>
     public async Task<MultiFolderComparisonResult> CompareFoldersAsync(

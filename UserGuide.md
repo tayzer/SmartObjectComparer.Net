@@ -49,16 +49,16 @@ The application's interface is divided into several sections:
 ### Step 1: Select Files for Comparison
 
 1. **Select Domain Model**: Choose the appropriate XML schema model from the dropdown (typically "SoapEnvelope" for SOAP XML files)
-2. **Upload V1 Files**:
-   - Click the "Browse" button in the V1 Files section
+2. **Upload A Files**:
+   - Click the "Browse" button in the A Files section
    - Select one or more XML files representing your baseline/expected files
    - Files will be sorted by name automatically
-3. **Upload V2 Files**:
-   - Click the "Browse" button in the V2 Files section
+3. **Upload B Files**:
+   - Click the "Browse" button in the B Files section
    - Select one or more XML files representing your actual/current files
-   - These will be compared against the V1 files in order
+   - These will be compared against the A files in order
 
-> **Note**: Files are paired in order by filename. For example, the first V1 file will be compared with the first V2 file, and so on.
+> **Note**: Files are paired in order by filename. For example, the first A file will be compared with the first B file, and so on.
 
 ### Step 2: Configure Comparison Settings
 
@@ -126,8 +126,8 @@ To configure collection-specific settings:
 ### File Comparison Results
 
 After running the comparison, you'll see a table of file pairs with:
-- V1 filename
-- V2 filename
+- A filename
+- B filename
 - Status (Equal/Different)
 - Number of differences
 - View button to see details
@@ -149,8 +149,8 @@ When you select a file pair, you'll see:
 
 3. **Detailed Differences Table**:
    - Property paths showing exactly where differences occur
-   - V1 values (from baseline/expected files)
-   - V2 values (from actual/current files)
+   - A values (from baseline/expected files)
+- B values (from actual/current files)
    - Toggle between "Show Top 100" and "Show All" for large sets of differences
 
 ### Difference Categories

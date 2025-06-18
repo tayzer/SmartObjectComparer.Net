@@ -138,10 +138,12 @@ public class DirectoryComparisonService
                             using var file2Stream = await fileSystemService.OpenFileStreamAsync(file2Path, ct);
 
                             // Perform comparison
-                            var comparisonResult = await comparisonService.CompareXmlFilesAsync(
+                            var comparisonResult = await comparisonService.CompareXmlFilesWithCachingAsync(
                                 file1Stream,
                                 file2Stream,
                                 modelName,
+                                file1Path,
+                                file2Path,
                                 ct);
 
                             // Generate summary
@@ -315,7 +317,13 @@ public class DirectoryComparisonService
                                 using var file1Stream = await fileSystemService.OpenFileStreamAsync(file1Path, ct);
                                 using var file2Stream = await fileSystemService.OpenFileStreamAsync(file2Path, ct);
                                 
-                                var comparisonResult = await comparisonService.CompareXmlFilesAsync(file1Stream, file2Stream, modelName, ct);
+                                var comparisonResult = await comparisonService.CompareXmlFilesWithCachingAsync(
+                                    file1Stream, 
+                                    file2Stream, 
+                                    modelName, 
+                                    file1Path, 
+                                    file2Path, 
+                                    ct);
                                 var categorizer = new DifferenceCategorizer();
                                 var summary = categorizer.CategorizeAndSummarize(comparisonResult);
                                 

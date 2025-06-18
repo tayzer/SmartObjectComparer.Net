@@ -14,10 +14,10 @@
         border-bottom: 1px solid #dee2e6;
     }
 
-    .ignored-properties-header h6 {
-        color: #495057;
-        font-weight: 600;
-    }
+        .ignored-properties-header h6 {
+            color: #495057;
+            font-weight: 600;
+        }
 
     .ignored-properties-list {
         display: flex;
@@ -36,10 +36,10 @@
         transition: all 0.2s ease;
     }
 
-    .ignored-property-card:hover {
-        border-color: #007bff;
-        box-shadow: 0 2px 8px rgba(0, 123, 255, 0.1);
-    }
+        .ignored-property-card:hover {
+            border-color: #007bff;
+            box-shadow: 0 2px 8px rgba(0, 123, 255, 0.1);
+        }
 
     .property-info {
         flex: 1;
@@ -50,15 +50,15 @@
         margin-bottom: 0.5rem;
     }
 
-    .property-path code {
-        font-size: 0.875rem;
-        color: #6f42c1;
-        background: #f8f9fa;
-        padding: 0.2rem 0.4rem;
-        border-radius: 4px;
-        word-break: break-word;
-        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-    }
+        .property-path code {
+            font-size: 0.875rem;
+            color: #6f42c1;
+            background: #f8f9fa;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            word-break: break-word;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        }
 
     .property-settings {
         display: flex;
@@ -66,10 +66,10 @@
         flex-wrap: wrap;
     }
 
-    .property-settings .badge {
-        font-size: 0.7rem;
-        padding: 0.25rem 0.5rem;
-    }
+        .property-settings .badge {
+            font-size: 0.7rem;
+            padding: 0.25rem 0.5rem;
+        }
 
     .property-actions {
         margin-left: 1rem;
@@ -136,7 +136,7 @@
             flex-direction: column;
             align-items: stretch;
         }
-        
+
         .property-actions {
             margin-left: 0;
             margin-top: 0.75rem;
@@ -192,8 +192,8 @@
                             <thead class="sticky-top">
                                 <tr class="select-all-row">
                                     <th style="width: 40px;">
-                                        <input class="form-check-input" type="checkbox" 
-                                               checked="@selectAll" 
+                                        <input class="form-check-input" type="checkbox"
+                                               checked="@selectAll"
                                                @onchange="ToggleSelectAll"
                                                title="Select/Deselect All" />
                                     </th>
@@ -289,7 +289,7 @@
                                 </h6>
                                 <small class="text-muted">Properties that will be excluded from comparison</small>
                             </div>
-                            
+
                             <div class="ignored-properties-list">
                                 @foreach (var rule in IgnoredProperties.OrderBy(r => r.PropertyPath))
                                 {
@@ -315,7 +315,7 @@
                                             </div>
                                         </div>
                                         <div class="property-actions">
-                                            <button class="btn btn-sm btn-outline-danger" 
+                                            <button class="btn btn-sm btn-outline-danger"
                                                     @onclick="() => RemoveIgnoredProperty(rule.PropertyPath)"
                                                     title="Remove ignore rule">
                                                 <i class="bi bi-trash"></i>
@@ -353,7 +353,7 @@
             <strong>Bulk Ignore Confirmation</strong>
         </div>
         <p>You are about to ignore <strong>@selectedProperties.Count properties</strong> completely from comparison.</p>
-        
+
         @if (isProcessingBulkIgnore)
         {
             <div class="mb-3">
@@ -362,11 +362,11 @@
                     <span>@bulkIgnoreProgress%</span>
                 </div>
                 <div class="progress mb-2">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
-                         role="progressbar" 
-                         style="width: @(bulkIgnoreProgress)%" 
-                         aria-valuenow="@bulkIgnoreProgress" 
-                         aria-valuemin="0" 
+                    <div class="progress-bar progress-bar-striped progress-bar-animated"
+                         role="progressbar"
+                         style="width: @(bulkIgnoreProgress)%"
+                         aria-valuenow="@bulkIgnoreProgress"
+                         aria-valuemin="0"
                          aria-valuemax="100"></div>
                 </div>
                 <small class="text-muted">@bulkIgnoreStatus</small>
@@ -383,7 +383,7 @@
                     </label>
                 </div>
                 <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="bulkIgnoreCollectionOrder" 
+                    <input class="form-check-input" type="checkbox" id="bulkIgnoreCollectionOrder"
                            @bind="bulkIgnoreCollectionOrder" disabled="@bulkIgnoreCompletely">
                     <label class="form-check-label" for="bulkIgnoreCollectionOrder">
                         <i class="bi bi-arrow-down-up"></i> Ignore collection ordering (for collection properties)
@@ -473,10 +473,16 @@
 
     public async Task ShowAsync()
     {
-        if (ModelType != null && AllProperties.Count == 0)
+        if (ModelType != null)
         {
-            LoadAllProperties();
-            SearchProperties();
+            if (FilteredProperties.Count == 0)
+            {
+                LoadAllProperties();
+            }
+
+            searchTerm = "";
+
+            FilteredProperties = FilteredProperties.ToList();
         }
 
         ResetSelectionState();
@@ -485,20 +491,29 @@
 
     private void LoadAllProperties()
     {
-        var paths = GetAllPropertyPaths(ModelType);
-        FilteredProperties = paths.Select(p => new PropertyViewModel
-            {
-                Path = p.Key,
-                TypeName = GetFriendlyTypeName(p.Value)
-            }).ToList();
+        if (FilteredProperties.Count == 0)
+        {
+            var paths = GetAllPropertyPaths(ModelType);
+            FilteredProperties = paths.Select(p => new PropertyViewModel
+                {
+                    Path = p.Key,
+                    TypeName = GetFriendlyTypeName(p.Value)
+                }).ToList();
+        }
     }
 
-    private Dictionary<string, Type> GetAllPropertyPaths(Type type, string basePath = "", int depth = 0)
+    private Dictionary<string, Type> GetAllPropertyPaths(Type type, string basePath = "", int depth = 0, HashSet<Type> visitedTypes = null)
     {
         var result = new Dictionary<string, Type>();
 
-        if (depth > 10) // Increased recursion depth limit to handle deeper nesting
+        visitedTypes ??= new HashSet<Type>();
+
+        if (depth > 8 || visitedTypes.Contains(type))
+        {
             return result;
+        }
+
+        visitedTypes.Add(type);
 
         foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
@@ -529,33 +544,33 @@
                         elementType = prop.PropertyType.GetElementType();
                     }
 
-                    if (elementType != null &&
-                        // Process all element types (even primitive ones), just not strings directly
-                        // This ensures we include things like Summary.Id even if Id is primitive
-                        (elementType != typeof(string)))
+                    if (elementType != null && (elementType != typeof(string)))
                     {
                         // Add collection path
                         result[$"{path}[*]"] = prop.PropertyType;
 
-                        // Log collection path for debugging
-                        Console.WriteLine($"Adding collection path: {path}[*] of type {elementType.Name}");
-
-                        // Process element type properties
-                        // For complex element types, we need to go deeper to find all nested properties
-                        // This especially helps with nested objects inside collection items
-                        var childProps = GetAllPropertyPaths(elementType, $"{path}[*]", depth + 1);
-                        foreach (var childProp in childProps)
+                        if (!visitedTypes.Contains(elementType))
                         {
-                            // Log child property of collection for debugging
-                            Console.WriteLine($"  - Adding collection sub-property: {childProp.Key}");
-                            result[childProp.Key] = childProp.Value;
+                            // Log collection path for debugging
+                            Console.WriteLine($"Adding collection path: {path}[*] of type {elementType.Name}");
+
+                            // Process element type properties
+                            // For complex element types, we need to go deeper to find all nested properties
+                            // This especially helps with nested objects inside collection items
+                            var childProps = GetAllPropertyPaths(elementType, $"{path}[*]", depth + 1);
+                            foreach (var childProp in childProps)
+                            {
+                                // Log child property of collection for debugging
+                                Console.WriteLine($"  - Adding collection sub-property: {childProp.Key}");
+                                result[childProp.Key] = childProp.Value;
+                            }
                         }
                     }
                 }
                 else
                 {
                     // Process regular complex type
-                    var childProps = GetAllPropertyPaths(prop.PropertyType, path, depth + 1);
+                    var childProps = GetAllPropertyPaths(prop.PropertyType, path, depth + 1, visitedTypes);
                     foreach (var childProp in childProps)
                     {
                         result[childProp.Key] = childProp.Value;
@@ -571,16 +586,16 @@
     {
         Console.WriteLine($"Searching for: {searchTerm}");
 
-        var allPaths = GetAllPropertyPaths(ModelType);
-        var allProperties = allPaths.Select(p => new PropertyViewModel
+        if (FilteredProperties.Count == 0)
         {
-            Path = p.Key,
-            TypeName = GetFriendlyTypeName(p.Value)
-        }).ToList();
+            LoadAllProperties();
+        }
 
-        if (string.IsNullOrWhiteSpace(searchTerm))
+        var allProperties = FilteredProperties;
+
+        if (string.IsNullOrEmpty(searchTerm))
         {
-            FilteredProperties = allProperties;
+            // If search is empty, show all properties (already loaded)
         }
         else
         {
@@ -756,7 +771,7 @@
     private void ToggleSelectAll(ChangeEventArgs e)
     {
         selectAll = (bool)(e.Value ?? false);
-        
+
         if (selectAll)
         {
             // Select all filtered properties
@@ -791,7 +806,7 @@
         {
             selectedProperties.Add(propertyPath);
         }
-        
+
         UpdateSelectAllState();
         StateHasChanged();
     }
@@ -799,7 +814,7 @@
     private void TogglePropertySelectionFromCheckbox(ChangeEventArgs e, string propertyPath)
     {
         var isChecked = (bool)(e.Value ?? false);
-        
+
         if (isChecked && !selectedProperties.Contains(propertyPath))
         {
             selectedProperties.Add(propertyPath);
@@ -808,7 +823,7 @@
         {
             selectedProperties.Remove(propertyPath);
         }
-        
+
         UpdateSelectAllState();
         StateHasChanged();
     }
@@ -821,7 +836,7 @@
         // Reset bulk ignore settings to defaults
         bulkIgnoreCompletely = true;
         bulkIgnoreCollectionOrder = false;
-        
+
         await bulkIgnoreModal.ShowAsync();
     }
 
@@ -838,7 +853,7 @@
             var propertiesCount = selectedProperties.Count;
             bulkIgnoreStatus = $"Starting bulk ignore for {propertiesCount} properties...";
             StateHasChanged();
-            
+
             Console.WriteLine($"Starting bulk ignore for {propertiesCount} properties...");
 
             // Process in batches to avoid UI freezing
@@ -860,11 +875,11 @@
                 foreach (var propertyPath in batch)
                 {
                     var rule = new IgnoreRule
-                    {
-                        PropertyPath = propertyPath,
-                        IgnoreCompletely = bulkIgnoreCompletely,
-                        IgnoreCollectionOrder = !bulkIgnoreCompletely && bulkIgnoreCollectionOrder && IsCollectionProperty(propertyPath)
-                    };
+                        {
+                            PropertyPath = propertyPath,
+                            IgnoreCompletely = bulkIgnoreCompletely,
+                            IgnoreCollectionOrder = !bulkIgnoreCompletely && bulkIgnoreCollectionOrder && IsCollectionProperty(propertyPath)
+                        };
 
                     // Remove existing rule for this property if it exists
                     var existingRule = IgnoredProperties.FirstOrDefault(p => p.PropertyPath == propertyPath);
@@ -875,7 +890,7 @@
 
                     IgnoredProperties.Add(rule);
                     await OnPropertyAdded.InvokeAsync(rule);
-                    
+
                     processedCount++;
                     bulkIgnoreProgress = (int)((double)processedCount / propertiesCount * 100);
                 }

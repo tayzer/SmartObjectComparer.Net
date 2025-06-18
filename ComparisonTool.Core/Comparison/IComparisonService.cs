@@ -19,6 +19,17 @@ public interface IComparisonService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Compare two XML files using the specified domain model with caching support
+    /// </summary>
+    Task<ComparisonResult> CompareXmlFilesWithCachingAsync(
+        Stream oldXmlStream,
+        Stream newXmlStream,
+        string modelName,
+        string oldFilePath = null,
+        string newFilePath = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Compare multiple folder pairs of XML files
     /// </summary>
     Task<MultiFolderComparisonResult> CompareFoldersAsync(

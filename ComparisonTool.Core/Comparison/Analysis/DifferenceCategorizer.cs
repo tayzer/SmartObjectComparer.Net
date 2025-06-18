@@ -145,35 +145,30 @@ public class DifferenceCategorizer
 
     private string GetRootObjectName(string propertyPath)
     {
-        // Get the first segment of the property path
-        int dotIndex = propertyPath.IndexOf('.');
-        int bracketIndex = propertyPath.IndexOf('[');
-
-        if (dotIndex == -1 && bracketIndex == -1)
-            return propertyPath;
-
-        if (dotIndex == -1)
-            return propertyPath.Substring(0, bracketIndex);
-
-        if (bracketIndex == -1)
-            return propertyPath.Substring(0, dotIndex);
-
-        return propertyPath.Substring(0, Math.Min(dotIndex, bracketIndex));
+        // For paths with collections, include the full path with normalized indices for better specificity
+        // e.g., "Body.Response.Results[0].Details.Description" -> "Body.Response.Results[*].Details.Description"
+        if (propertyPath.Contains("["))
+        {
+            // Replace specific indices with [*] and return the complete path to show exactly what property is affected
+            var normalizedPath = Regex.Replace(propertyPath, @"\[\d+\]", "[*]");
+            return normalizedPath;
+        }
+        
+        // For simple paths without collections, return the full path to be precise about what's changing
+        // e.g., "Body.Response.SomeProperty" -> "Body.Response.SomeProperty"
+        return propertyPath;
     }
 
     private DifferenceCategory GetDifferenceCategory(Difference diff)
     {
-        // Check if it's a collection difference
-        if (diff.PropertyName.Contains("[") && diff.PropertyName.Contains("]"))
+        // First check for null value changes
+        if (diff.Object1Value == null || diff.Object2Value == null)
         {
-            if (diff.Object1Value == null && diff.Object2Value != null)
-                return DifferenceCategory.ItemAdded;
-            else if (diff.Object1Value != null && diff.Object2Value == null)
-                return DifferenceCategory.ItemRemoved;
-            else
-                return DifferenceCategory.CollectionItemChanged;
+            return DifferenceCategory.NullValueChange;
         }
-        else if (IsNumericDifference(diff.Object1Value, diff.Object2Value))
+        
+        // Then categorize based on the actual value types, regardless of path structure
+        if (IsNumericDifference(diff.Object1Value, diff.Object2Value))
         {
             return DifferenceCategory.NumericValueChanged;
         }
@@ -189,13 +184,32 @@ public class DifferenceCategorizer
         {
             return DifferenceCategory.BooleanValueChanged;
         }
-        else if (diff.Object1Value == null || diff.Object2Value == null)
+        
+        // Only categorize as collection changes if the path indicates actual collection structure changes
+        // (not property changes within collection items)
+        if (diff.PropertyName.Contains("[") && diff.PropertyName.Contains("]"))
         {
-            return DifferenceCategory.NullValueChange;
+            // Check if this is actually a collection structure change vs property change within collection
+            if (IsCollectionStructureChange(diff))
+            {
+                if (diff.Object1Value == null && diff.Object2Value != null)
+                    return DifferenceCategory.ItemAdded;
+                else if (diff.Object1Value != null && diff.Object2Value == null)
+                    return DifferenceCategory.ItemRemoved;
+                else
+                    return DifferenceCategory.CollectionItemChanged;
+            }
+            // If it's a property within a collection item, fall through to value-based categorization
         }
-        else
-        {
-            return DifferenceCategory.Other;
-        }
+        
+        return DifferenceCategory.ValueChanged;
+    }
+    
+    private bool IsCollectionStructureChange(Difference diff)
+    {
+        // This is a collection structure change if the property path ends with an index
+        // e.g., "Results[0]" vs "Results[0].Description"
+        var match = Regex.Match(diff.PropertyName, @"\[(\d+|\*)\]$");
+        return match.Success;
     }
 }

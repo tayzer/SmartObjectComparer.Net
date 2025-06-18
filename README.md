@@ -108,7 +108,7 @@ Tracks consistent value changes across properties, helping identify configuratio
 ### Example Workflow
 ```
 1. Enable Enhanced Structural Analysis
-2. Upload V1 and V2 result sets
+2. Upload A and B result sets
 3. Configure ignore rules for timestamps/IDs
 4. Run comparison
 5. Review Critical Elements first
