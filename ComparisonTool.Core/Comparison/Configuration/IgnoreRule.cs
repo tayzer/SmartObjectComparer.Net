@@ -81,7 +81,7 @@ namespace ComparisonTool.Core.Comparison.Configuration
                 }
 
                 // Also add variations for collection items
-                AddCollectionVariationsOld(config, PropertyPath);
+                AddCollectionVariations(config, PropertyPath);
                 
                 // Add variations by removing path segments from the beginning (dynamic prefix removal)
                 // This makes it domain-agnostic by working with any path structure
@@ -126,63 +126,86 @@ namespace ComparisonTool.Core.Comparison.Configuration
         }
 
         /// <summary>
-        /// Add variations of the property path to handle collection items (performance optimized)
+        /// Add collection variations for properties that may be inside collections
+        /// Performance optimized - reduced from 20 variations to 5 strategic ones
         /// </summary>
         private void AddCollectionVariations(ComparisonConfig config, string propertyPath)
         {
-            try
+            _logger.LogDebug("Adding optimized collection variations for: {PropertyPath}", propertyPath);
+
+            var segments = propertyPath.Split('.');
+
+            // Performance optimization: Only generate patterns for segments likely to be collections
+            var collectionIndicators = new[] { "Results", "Items", "List", "Array", "Collection", "Data", "Elements" };
+            
+            for (int i = 0; i < segments.Length; i++)
             {
-                _logger.LogDebug("Creating optimized collection variations for: {PropertyPath}", propertyPath);
+                var segment = segments[i];
+                
+                // Only process segments that are likely collections
+                bool isLikelyCollection = collectionIndicators.Any(indicator => 
+                    segment.Contains(indicator, StringComparison.OrdinalIgnoreCase));
 
-                // Handle paths that already contain [*] - add only essential variations
-                if (propertyPath.Contains("[*]"))
+                if (isLikelyCollection)
                 {
-                    _logger.LogDebug("Path contains [*], creating minimal essential variations");
-                    
-                    // Add only the original [*] pattern and a few numbered variations (reduced from 20 to 3)
-                    for (int idx = 0; idx < 3; idx++)
+                    // Create the path prefix up to this segment
+                    string prefix = string.Join(".", segments.Take(i + 1));
+
+                    // Create the path suffix from remaining segments
+                    string suffix = i < segments.Length - 1
+                        ? "." + string.Join(".", segments.Skip(i + 1))
+                        : string.Empty;
+
+                    // Add only essential indexed versions (reduced from 20 to 5)
+                    var essentialIndices = new[] { 0, 1, 2, 3, 4 }; // Cover most common use cases
+                    foreach (int idx in essentialIndices)
                     {
-                        string numberedPath = propertyPath.Replace("[*]", $"[{idx}]");
-                        if (!config.MembersToIgnore.Contains(numberedPath))
+                        string indexedPath = $"{prefix}[{idx}]{suffix}";
+                        if (!config.MembersToIgnore.Contains(indexedPath))
                         {
-                            config.MembersToIgnore.Add(numberedPath);
-                            _logger.LogDebug("Added numbered variation: {Path}", numberedPath);
+                            config.MembersToIgnore.Add(indexedPath);
+                            _logger.LogDebug("Adding indexed variation: {Path}", indexedPath);
                         }
                     }
 
-                    // Add only the regex pattern (most effective)
-                    string regexPattern = propertyPath.Replace("[*]", @"\[\d+\]");
-                    if (!config.MembersToIgnore.Contains(regexPattern))
+                    // Add wildcard version (most important)
+                    string wildcardPath = $"{prefix}[*]{suffix}";
+                    if (!config.MembersToIgnore.Contains(wildcardPath))
                     {
-                        config.MembersToIgnore.Add(regexPattern);
-                        _logger.LogDebug("Added regex pattern: {Pattern}", regexPattern);
-                    }
-                }
-                else
-                {
-                    // For simple property names, add minimal variations
-                    if (!propertyPath.Contains(".") && !propertyPath.Contains("["))
-                    {
-                        string propertyName = propertyPath;
-                        
-                        // Add only to the most critical collections
-                        string[] criticalCollections = { "T", "E" }; // Reduced from 7 to 2
-                        
-                        foreach (var collection in criticalCollections)
-                        {
-                            string wildcardPath = $"{collection}[*].{propertyName}";
-                            if (!config.MembersToIgnore.Contains(wildcardPath))
-                            {
-                                config.MembersToIgnore.Add(wildcardPath);
-                                _logger.LogDebug("Added essential collection path: {Path}", wildcardPath);
-                            }
-                        }
+                        config.MembersToIgnore.Add(wildcardPath);
+                        _logger.LogDebug("Adding wildcard variation: {Path}", wildcardPath);
                     }
                 }
             }
-            catch (Exception ex)
+
+            // Special handling for simple property names - but much more targeted
+            if (!propertyPath.Contains(".") && !propertyPath.Contains("["))
             {
-                _logger.LogError(ex, "Error adding collection variations for {PropertyPath}", propertyPath);
+                string propertyName = propertyPath;
+
+                // Use only the most common collections and reduce variations
+                var commonCollections = new[] { "Results", "Items" }; // Reduced from 7 to 2 most common
+                
+                foreach (var collection in commonCollections)
+                {
+                    // Add wildcard version (most important)
+                    string wildcardPath = $"{collection}[*].{propertyName}";
+                    if (!config.MembersToIgnore.Contains(wildcardPath))
+                    {
+                        config.MembersToIgnore.Add(wildcardPath);
+                        _logger.LogDebug("Added wildcard collection path: {Path}", wildcardPath);
+                    }
+
+                    // Add only first 3 numbered versions (reduced from 20 to 3)
+                    for (int idx = 0; idx < 3; idx++)
+                    {
+                        string numberedPath = $"{collection}[{idx}].{propertyName}";
+                        if (!config.MembersToIgnore.Contains(numberedPath))
+                        {
+                            config.MembersToIgnore.Add(numberedPath);
+                        }
+                    }
+                }
             }
         }
 
