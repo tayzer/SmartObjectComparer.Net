@@ -78,12 +78,12 @@ public class ComparisonService : IComparisonService
                 // Try to get cached comparison result first
                 if (_cacheService.TryGetCachedComparison(file1Hash, file2Hash, configFingerprint, out var cachedResult))
                 {
-                    logger.LogInformation("Using cached comparison result for files with hashes {File1Hash}..{File2Hash}", 
-                        file1Hash[..8], file2Hash[..8]);
+                                    logger.LogDebug("Using cached comparison result for files with hashes {File1Hash}..{File2Hash}", 
+                    file1Hash[..8], file2Hash[..8]);
                     return cachedResult;
                 }
                 
-                logger.LogInformation("Cache miss - performing fresh comparison for {ModelName}", modelName);
+                logger.LogDebug("Cache miss - performing fresh comparison for {ModelName}", modelName);
                 
                 // Check if model exists (will throw if not found)
                 var modelType = deserializationService.GetModelType(modelName);
@@ -188,7 +188,7 @@ public class ComparisonService : IComparisonService
                         var oldClone = cloneMethod.Invoke(deserializationService, new[] { oldResponse }); 
                         var newClone = cloneMethod.Invoke(deserializationService, new[] { newResponse });
 
-                        logger.LogWarning("Performing comparison with {ComparerCount} custom comparers. First: {FirstComparer}",
+                        logger.LogDebug("Performing comparison with {ComparerCount} custom comparers. First: {FirstComparer}",
                             compareLogic.Config.CustomComparers.Count,
                             compareLogic.Config.CustomComparers.FirstOrDefault()?.GetType().Name ?? "none");
 
@@ -259,7 +259,7 @@ public class ComparisonService : IComparisonService
                     }, cancellationToken);
                 });
 
-                logger.LogInformation("Comparison completed. Found {DifferenceCount} differences",
+                logger.LogDebug("Comparison completed. Found {DifferenceCount} differences",
                     result.Differences.Count);
 
                 // Filter out ignored properties using smart rules and legacy pattern matching
@@ -299,7 +299,7 @@ public class ComparisonService : IComparisonService
         {
             try
             {
-                logger.LogInformation("Starting comparison of XML files using model {ModelName}", modelName);
+                logger.LogDebug("Starting comparison of XML files using model {ModelName}", modelName);
 
                 // Check if model exists (will throw if not found)
                 var modelType = deserializationService.GetModelType(modelName);
@@ -366,7 +366,7 @@ public class ComparisonService : IComparisonService
                         var oldClone = cloneMethod.Invoke(deserializationService, new[] { oldResponse }); 
                         var newClone = cloneMethod.Invoke(deserializationService, new[] { newResponse });
 
-                        logger.LogWarning("Performing comparison with {ComparerCount} custom comparers. First: {FirstComparer}",
+                        logger.LogDebug("Performing comparison with {ComparerCount} custom comparers. First: {FirstComparer}",
                             compareLogic.Config.CustomComparers.Count,
                             compareLogic.Config.CustomComparers.FirstOrDefault()?.GetType().Name ?? "none");
 
@@ -437,7 +437,7 @@ public class ComparisonService : IComparisonService
                     }, cancellationToken);
                 });
 
-                logger.LogInformation("Comparison completed. Found {DifferenceCount} differences",
+                logger.LogDebug("Comparison completed. Found {DifferenceCount} differences",
                     result.Differences.Count);
 
                 // Filter out ignored properties using smart rules and legacy pattern matching
@@ -489,7 +489,11 @@ public class ComparisonService : IComparisonService
             var file2Path = folder2Files[i];
             try
             {
-                logger.LogInformation("Comparing pair {PairNumber}/{TotalPairs}: {File1} vs {File2}", i + 1, pairCount, file1Path, file2Path);
+                // Only log individual file pairs in debug mode to avoid spam with large comparisons
+            if (logger.IsEnabled(LogLevel.Debug))
+            {
+                logger.LogDebug("Comparing pair {PairNumber}/{TotalPairs}: {File1} vs {File2}", i + 1, pairCount, file1Path, file2Path);
+            }
                 using var file1Stream = await fileSystemService.OpenFileStreamAsync(file1Path, cancellationToken);
                 using var file2Stream = await fileSystemService.OpenFileStreamAsync(file2Path, cancellationToken);
                 var pairResult = await CompareXmlFilesWithCachingAsync(file1Stream, file2Stream, modelName, file1Path, file2Path, cancellationToken);
@@ -592,7 +596,7 @@ public class ComparisonService : IComparisonService
                 int batchParallelism = CalculateOptimalParallelism(batchFilePairs.Count, 
                     batchFilePairs.Select(p => p.file1Path));
                     
-                logger.LogInformation("Processing batch {BatchIndex}/{BatchCount} with {FileCount} files using parallelism of {Parallelism}",
+                logger.LogDebug("Processing batch {BatchIndex}/{BatchCount} with {FileCount} files using parallelism of {Parallelism}",
                     batchIndex + 1, batchCount, batchFilePairs.Count, batchParallelism);
                 
                 // Process this batch in parallel

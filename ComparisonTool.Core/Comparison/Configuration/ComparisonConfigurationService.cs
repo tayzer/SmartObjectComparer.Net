@@ -253,7 +253,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         if (rule == null) return;
 
         // Log the rule being added
-        logger.LogWarning("Adding rule for {PropertyPath} with settings: IgnoreCompletely={IgnoreCompletely}, IgnoreCollectionOrder={IgnoreOrder}",
+        logger.LogDebug("Adding rule for {PropertyPath} with settings: IgnoreCompletely={IgnoreCompletely}, IgnoreCollectionOrder={IgnoreOrder}",
             rule.PropertyPath,
             rule.IgnoreCompletely,
             rule.IgnoreCollectionOrder);
@@ -294,7 +294,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         if (rules == null || !rules.Any()) return;
 
         var rulesList = rules.ToList();
-        logger.LogInformation("Adding {Count} ignore rules in batch operation", rulesList.Count);
+        logger.LogDebug("Adding {Count} ignore rules in batch operation", rulesList.Count);
 
         foreach (var rule in rulesList)
         {
@@ -318,7 +318,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         var ignoreCompletelyCount = rulesList.Count(r => r.IgnoreCompletely);
         var ignoreCollectionOrderCount = rulesList.Count(r => r.IgnoreCollectionOrder);
         
-        logger.LogInformation("Batch operation completed: {TotalRules} rules added, {IgnoreCompletelyCount} ignore completely, {IgnoreCollectionOrderCount} ignore collection order",
+        logger.LogDebug("Batch operation completed: {TotalRules} rules added, {IgnoreCompletelyCount} ignore completely, {IgnoreCollectionOrderCount} ignore collection order",
             rulesList.Count, ignoreCompletelyCount, ignoreCollectionOrderCount);
 
         // Mark configuration as dirty to trigger rebuild
@@ -378,7 +378,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             }
 
             // Configuration has changed or cache is invalid, rebuild
-            logger.LogInformation("Rebuilding comparison configuration (fingerprint changed from {Old} to {New})", 
+            logger.LogDebug("Rebuilding comparison configuration (fingerprint changed from {Old} to {New})", 
                 _lastConfigurationFingerprint.Substring(0, Math.Min(8, _lastConfigurationFingerprint.Length)), 
                 currentFingerprint.Substring(0, 8));
                 
@@ -467,6 +467,9 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             var globalIgnoreCollectionOrder = compareLogic.Config.IgnoreCollectionOrder;
             logger.LogDebug("Building configuration with global IgnoreCollectionOrder: {GlobalSetting}", globalIgnoreCollectionOrder);
             
+                    // THREAD SAFETY: Use lock to prevent concurrent configuration changes
+        lock (_configurationLock)
+        {
             // Clear any existing configuration - ensure collections are not null first
             if (compareLogic.Config.MembersToIgnore == null)
                 compareLogic.Config.MembersToIgnore = new List<string>();
@@ -476,10 +479,15 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             // Ensure other critical collections are initialized
             if (compareLogic.Config.CustomComparers == null)
                 compareLogic.Config.CustomComparers = new List<BaseTypeComparer>();
+            else
+                compareLogic.Config.CustomComparers.Clear();
+                
             if (compareLogic.Config.AttributesToIgnore == null)
                 compareLogic.Config.AttributesToIgnore = new List<Type>();
+                
             if (compareLogic.Config.MembersToInclude == null)
                 compareLogic.Config.MembersToInclude = new List<string>();
+        }
             
             // Performance optimization: Check if we should use fast filtering
             bool useFastFiltering = ShouldUseFastFiltering();
@@ -681,8 +689,12 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             CustomComparers = new List<BaseTypeComparer>(compareLogic.Config.CustomComparers)
         };
         
-        logger.LogInformation("Configuration built and cached: {RuleCount} rules applied, {IgnoreCount} ignore patterns, {ComparerCount} custom comparers",
-            rulesApplied, finalCount, compareLogic.Config.CustomComparers.Count);
+        // Only log configuration summary in debug mode to reduce noise
+        if (logger.IsEnabled(LogLevel.Debug))
+        {
+            logger.LogDebug("Configuration built and cached: {RuleCount} rules applied, {IgnoreCount} ignore patterns, {ComparerCount} custom comparers",
+                rulesApplied, finalCount, compareLogic.Config.CustomComparers.Count);
+        }
     }
 
     /// <summary>
@@ -709,7 +721,13 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
 
         // CRITICAL FIX: Use the generated patterns from MembersToIgnore, not just the original rule paths
         // The patterns we generated (including System.Collections variations) are in compareLogic.Config.MembersToIgnore
-        var propertiesToIgnoreCompletely = new HashSet<string>(compareLogic.Config.MembersToIgnore);
+        // THREAD SAFETY FIX: Create thread-safe copy to avoid concurrent modification exceptions
+        HashSet<string> propertiesToIgnoreCompletely;
+        lock (_configurationLock)
+        {
+            var membersToIgnoreSnapshot = compareLogic.Config.MembersToIgnore?.ToList() ?? new List<string>();
+            propertiesToIgnoreCompletely = new HashSet<string>(membersToIgnoreSnapshot);
+        }
         
         // Also add the original rule paths for backward compatibility
         foreach (var rule in ignoreRules.Where(r => r.IgnoreCompletely))
@@ -799,8 +817,12 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             }
         }
 
-        result.Differences.Clear();
-        result.Differences.AddRange(filteredDifferences);
+        // THREAD SAFETY FIX: Lock when modifying the result collection
+        lock (result.Differences)
+        {
+            result.Differences.Clear();
+            result.Differences.AddRange(filteredDifferences);
+        }
 
         if (ignoredCount > 0)
         {
@@ -838,14 +860,71 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             logger.LogDebug("=== END OF ALL DIFFERENCES ===");
         }
 
-        foreach (var difference in result.Differences)
+        // THREAD SAFETY FIX: Use try-catch with multiple attempts to handle concurrent access
+        List<Difference> differencesToProcess = new List<Difference>();
+        int maxRetries = 3;
+        int retryCount = 0;
+        bool copySuccessful = false;
+        
+        while (retryCount < maxRetries && !copySuccessful)
+        {
+            try
+            {
+                // Attempt to create a safe copy of the differences collection
+                differencesToProcess.Clear();
+                foreach (var diff in result.Differences)
+                {
+                    differencesToProcess.Add(diff);
+                }
+                copySuccessful = true; // Success, exit retry loop
+            }
+            catch (InvalidOperationException)
+            {
+                retryCount++;
+                if (retryCount >= maxRetries)
+                {
+                    // Last resort: return original result without filtering
+                    logger.LogError("Failed to create thread-safe copy of differences after {MaxRetries} attempts. Skipping pattern filtering.", maxRetries);
+                    return result;
+                }
+                // Brief delay before retry
+                Thread.Sleep(10);
+            }
+            catch (ArgumentException)
+            {
+                retryCount++;
+                if (retryCount >= maxRetries)
+                {
+                    // Last resort: return original result without filtering
+                    logger.LogError("Failed to create thread-safe copy of differences after {MaxRetries} attempts. Skipping pattern filtering.", maxRetries);
+                    return result;
+                }
+                // Brief delay before retry
+                Thread.Sleep(10);
+            }
+        }
+        
+        if (!copySuccessful)
+        {
+            logger.LogError("Failed to create thread-safe copy of differences. Skipping pattern filtering.");
+            return result;
+        }
+        
+        foreach (var difference in differencesToProcess)
         {
             bool shouldIgnore = PropertyIgnoreHelper.ShouldIgnoreProperty(difference.PropertyName, propertiesToIgnore, logger);
             
             // Also check the static MembersToIgnore list (for System.Collections variations)
             if (!shouldIgnore)
             {
-                foreach (var ignoredPath in compareLogic.Config.MembersToIgnore)
+                // THREAD SAFETY FIX: Use lock to safely access shared configuration
+                List<string> membersToIgnoreSnapshot;
+                lock (_configurationLock)
+                {
+                    membersToIgnoreSnapshot = compareLogic.Config.MembersToIgnore?.ToList() ?? new List<string>();
+                }
+                
+                foreach (var ignoredPath in membersToIgnoreSnapshot)
                 {
                     if (difference.PropertyName.Equals(ignoredPath, StringComparison.OrdinalIgnoreCase) ||
                         difference.PropertyName.StartsWith(ignoredPath + ".", StringComparison.OrdinalIgnoreCase))
@@ -864,24 +943,36 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             
             if (!shouldIgnore)
             {
-                logger.LogTrace("Property '{PropertyName}' DOES NOT MATCH any ignore pattern - WILL BE KEPT AS DIFFERENCE", 
-                    difference.PropertyName);
+                if (logger.IsEnabled(LogLevel.Trace))
+                {
+                    logger.LogTrace("Property '{PropertyName}' DOES NOT MATCH any ignore pattern - WILL BE KEPT AS DIFFERENCE", 
+                        difference.PropertyName);
+                }
                 filteredDifferences.Add(difference);
             }
             else
             {
-                logger.LogInformation("Property '{PropertyName}' MATCHED ignore pattern - WILL BE IGNORED", 
-                    difference.PropertyName);
+                // Only log in debug mode to prevent spam in production with large comparisons
+                if (logger.IsEnabled(LogLevel.Debug))
+                {
+                    logger.LogDebug("Property '{PropertyName}' MATCHED ignore pattern - WILL BE IGNORED",
+                        difference.PropertyName);
+                }
                 ignoredCount++;
             }
         }
 
-        result.Differences.Clear();
-        result.Differences.AddRange(filteredDifferences);
-
-        if (ignoredCount > 0)
+        // THREAD SAFETY FIX: Lock when modifying the result collection
+        lock (result.Differences)
         {
-            logger.LogInformation("Pattern matching filtering removed {IgnoredCount} differences from {OriginalCount} total (kept {FilteredCount})", 
+            result.Differences.Clear();
+            result.Differences.AddRange(filteredDifferences);
+        }
+
+                // Only log filtering summary if significant differences were filtered and Information level is enabled
+        if (ignoredCount > 0 && logger.IsEnabled(LogLevel.Information))
+        {
+            logger.LogInformation("Pattern matching filtering removed {IgnoredCount} differences from {OriginalCount} total (kept {FilteredCount})",
                 ignoredCount, originalCount, filteredDifferences.Count);
         }
 
