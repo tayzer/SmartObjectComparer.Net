@@ -10,12 +10,12 @@ public class XmlSerializerFactory
     public XmlSerializerFactory()
     {
         // todo: we should ideally register this with DI.
-        RegisterType<SoapEnvelope>(() => new XmlSerializer(
-            typeof(SoapEnvelope),
+        RegisterType<ComplexOrderResponse>(() => new XmlSerializer(
+            typeof(ComplexOrderResponse),
             new XmlRootAttribute
             {
-                ElementName = "Envelope",
-                Namespace = "http://schemas.xmlsoap.org/soap/envelope/"
+                ElementName = "OrderManagementResponse",
+                Namespace = ""
             }));
     }
 

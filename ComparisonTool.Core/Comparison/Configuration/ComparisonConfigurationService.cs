@@ -49,6 +49,17 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             }
         };
 
+        // Ensure critical collections are initialized to prevent null reference exceptions
+        // in CompareNetObjects internal logic like ExcludedByWildcard
+        if (compareLogic.Config.MembersToIgnore == null)
+            compareLogic.Config.MembersToIgnore = new List<string>();
+        if (compareLogic.Config.CustomComparers == null)
+            compareLogic.Config.CustomComparers = new List<BaseTypeComparer>();
+        if (compareLogic.Config.AttributesToIgnore == null)
+            compareLogic.Config.AttributesToIgnore = new List<Type>();
+        if (compareLogic.Config.MembersToInclude == null)
+            compareLogic.Config.MembersToInclude = new List<string>();
+
         this.logger.LogInformation("Initialized ComparisonConfigurationService with MaxDifferences={MaxDiffs}, " +
                                    "IgnoreCollectionOrder={IgnoreOrder}, IgnoreCase={IgnoreCase}",
             configOptions.MaxDifferences,
@@ -77,7 +88,79 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// </summary>
     public CompareLogic GetCompareLogic()
     {
+        // Ensure critical collections are always initialized to prevent null reference exceptions
+        // This is defensive programming against CompareNetObjects internal assumptions
+        if (compareLogic.Config.MembersToIgnore == null)
+            compareLogic.Config.MembersToIgnore = new List<string>();
+        if (compareLogic.Config.CustomComparers == null)
+            compareLogic.Config.CustomComparers = new List<BaseTypeComparer>();
+        if (compareLogic.Config.AttributesToIgnore == null)
+            compareLogic.Config.AttributesToIgnore = new List<Type>();
+        if (compareLogic.Config.MembersToInclude == null)
+            compareLogic.Config.MembersToInclude = new List<string>();
+            
         return compareLogic;
+    }
+
+    /// <summary>
+    /// Get a thread-safe isolated CompareLogic instance for concurrent operations
+    /// This prevents collection modification exceptions when multiple comparisons run in parallel
+    /// </summary>
+    public CompareLogic GetThreadSafeCompareLogic()
+    {
+        lock (_configurationLock)
+        {
+            // Ensure configuration is up to date
+            ApplyConfiguredSettings();
+            
+            // Create a new CompareLogic instance with the current configuration
+            var isolatedCompareLogic = new CompareLogic();
+            
+            // Copy all configuration settings from the master instance
+            isolatedCompareLogic.Config.MaxDifferences = compareLogic.Config.MaxDifferences;
+            isolatedCompareLogic.Config.IgnoreObjectTypes = compareLogic.Config.IgnoreObjectTypes;
+            isolatedCompareLogic.Config.ComparePrivateFields = compareLogic.Config.ComparePrivateFields;
+            isolatedCompareLogic.Config.ComparePrivateProperties = compareLogic.Config.ComparePrivateProperties;
+            isolatedCompareLogic.Config.CompareReadOnly = compareLogic.Config.CompareReadOnly;
+            isolatedCompareLogic.Config.IgnoreCollectionOrder = compareLogic.Config.IgnoreCollectionOrder;
+            isolatedCompareLogic.Config.CaseSensitive = compareLogic.Config.CaseSensitive;
+            
+            // Initialize critical collections to prevent null reference exceptions
+            isolatedCompareLogic.Config.MembersToIgnore = new List<string>();
+            isolatedCompareLogic.Config.CustomComparers = new List<BaseTypeComparer>();
+            isolatedCompareLogic.Config.AttributesToIgnore = new List<Type>();
+            isolatedCompareLogic.Config.MembersToInclude = new List<string>();
+            
+            // Defensive copy of MembersToIgnore to prevent concurrent modification
+            foreach (var member in compareLogic.Config.MembersToIgnore ?? new List<string>())
+            {
+                isolatedCompareLogic.Config.MembersToIgnore.Add(member);
+            }
+            
+            // Defensive copy of CustomComparers
+            foreach (var comparer in compareLogic.Config.CustomComparers ?? new List<BaseTypeComparer>())
+            {
+                isolatedCompareLogic.Config.CustomComparers.Add(comparer);
+            }
+            
+            // Defensive copy of AttributesToIgnore
+            foreach (var attribute in compareLogic.Config.AttributesToIgnore ?? new List<Type>())
+            {
+                isolatedCompareLogic.Config.AttributesToIgnore.Add(attribute);
+            }
+            
+            // Defensive copy of MembersToInclude
+            foreach (var member in compareLogic.Config.MembersToInclude ?? new List<string>())
+            {
+                isolatedCompareLogic.Config.MembersToInclude.Add(member);
+            }
+            
+            logger.LogDebug("Created thread-safe CompareLogic instance with {IgnoreCount} ignore patterns, {ComparerCount} custom comparers",
+                isolatedCompareLogic.Config.MembersToIgnore.Count, 
+                isolatedCompareLogic.Config.CustomComparers.Count);
+                
+            return isolatedCompareLogic;
+        }
     }
 
     /// <summary>
@@ -361,11 +444,16 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// </summary>
     private bool ShouldUseFastFiltering()
     {
-        // If we have many ignore rules, use fast filtering to avoid MembersToIgnore explosion
+        // TEMPORARILY DISABLED: Fast filtering caused infinite recursion
+        // TODO: Implement proper fast filtering without recursion issues
+        return false;
+        
+        // If we have many ignore rules, use fast filtering to avoid MembersToIgnore pattern explosion
         var ignoreCompletelyCount = ignoreRules.Count(r => r.IgnoreCompletely);
         
-        // Threshold: if more than 5 properties are being ignored completely, use fast filtering
-        return ignoreCompletelyCount > 5;
+        // Threshold: if more than 10 properties are being ignored completely, use fast filtering
+        // For smaller numbers, the standard pattern matching is fine and more reliable
+        return ignoreCompletelyCount > 10;
     }
 
     /// <summary>
@@ -379,8 +467,19 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             var globalIgnoreCollectionOrder = compareLogic.Config.IgnoreCollectionOrder;
             logger.LogDebug("Building configuration with global IgnoreCollectionOrder: {GlobalSetting}", globalIgnoreCollectionOrder);
             
-            // Clear any existing configuration
-            compareLogic.Config.MembersToIgnore.Clear();
+            // Clear any existing configuration - ensure collections are not null first
+            if (compareLogic.Config.MembersToIgnore == null)
+                compareLogic.Config.MembersToIgnore = new List<string>();
+            else
+                compareLogic.Config.MembersToIgnore.Clear();
+                
+            // Ensure other critical collections are initialized
+            if (compareLogic.Config.CustomComparers == null)
+                compareLogic.Config.CustomComparers = new List<BaseTypeComparer>();
+            if (compareLogic.Config.AttributesToIgnore == null)
+                compareLogic.Config.AttributesToIgnore = new List<Type>();
+            if (compareLogic.Config.MembersToInclude == null)
+                compareLogic.Config.MembersToInclude = new List<string>();
             
             // Performance optimization: Check if we should use fast filtering
             bool useFastFiltering = ShouldUseFastFiltering();
@@ -608,10 +707,15 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         if (result == null || !result.Differences.Any())
             return result;
 
-        var propertiesToIgnoreCompletely = ignoreRules
-            .Where(r => r.IgnoreCompletely)
-            .Select(r => r.PropertyPath)
-            .ToHashSet();
+        // CRITICAL FIX: Use the generated patterns from MembersToIgnore, not just the original rule paths
+        // The patterns we generated (including System.Collections variations) are in compareLogic.Config.MembersToIgnore
+        var propertiesToIgnoreCompletely = new HashSet<string>(compareLogic.Config.MembersToIgnore);
+        
+        // Also add the original rule paths for backward compatibility
+        foreach (var rule in ignoreRules.Where(r => r.IgnoreCompletely))
+        {
+            propertiesToIgnoreCompletely.Add(rule.PropertyPath);
+        }
 
         if (!propertiesToIgnoreCompletely.Any())
             return result;
@@ -722,6 +826,15 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         var filteredDifferences = new List<Difference>();
         var ignoredCount = 0;
 
+        // DEBUG: Log ALL differences found by CompareNetObjects
+        logger.LogWarning("=== ALL DIFFERENCES FOUND BY COMPARENETOBJECTS ===");
+        foreach (var diff in result.Differences)
+        {
+            logger.LogWarning("DIFFERENCE: '{PropertyName}' | Value1: '{Value1}' | Value2: '{Value2}'", 
+                diff.PropertyName, diff.Object1Value, diff.Object2Value);
+        }
+        logger.LogWarning("=== END OF ALL DIFFERENCES ===");
+
         foreach (var difference in result.Differences)
         {
             bool shouldIgnore = PropertyIgnoreHelper.ShouldIgnoreProperty(difference.PropertyName, propertiesToIgnore, logger);
@@ -747,10 +860,14 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             
             if (!shouldIgnore)
             {
+                logger.LogTrace("Property '{PropertyName}' DOES NOT MATCH any ignore pattern - WILL BE KEPT AS DIFFERENCE", 
+                    difference.PropertyName);
                 filteredDifferences.Add(difference);
             }
             else
             {
+                logger.LogInformation("Property '{PropertyName}' MATCHED ignore pattern - WILL BE IGNORED", 
+                    difference.PropertyName);
                 ignoredCount++;
             }
         }
@@ -1066,10 +1183,9 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
                 return;
             }
             
-            // Let the default comparison continue
-            // Since we can't easily create a DefaultComparer, we'll just return early
-            // This effectively skips ignored properties, which is what we want
-            return;
+            // Property should NOT be ignored, so continue with normal comparison
+            // Use the root comparer to do the actual comparison
+            RootComparer.Compare(parms);
         }
 
         private bool ShouldIgnoreProperty(string propertyPath)

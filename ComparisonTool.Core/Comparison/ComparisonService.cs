@@ -6,6 +6,7 @@ using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.Serialization;
 using ComparisonTool.Core.Utilities;
 using KellermanSoftware.CompareNetObjects;
+using KellermanSoftware.CompareNetObjects.TypeComparers;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
@@ -179,16 +180,13 @@ public class ComparisonService : IComparisonService
                 {
                     return await Task.Run(() =>
                     {
-                        // Use the existing CompareLogic instance from the configuration service
-                        var compareLogic = configService.GetCompareLogic();
+                        // Use a thread-safe isolated CompareLogic instance to prevent concurrency issues
+                        var compareLogic = configService.GetThreadSafeCompareLogic();
 
                         // We should compare the original cloned objects before normalization, 
                         // as normalization might affect order or values needed by the specific comparer
                         var oldClone = cloneMethod.Invoke(deserializationService, new[] { oldResponse }); 
                         var newClone = cloneMethod.Invoke(deserializationService, new[] { newResponse });
-
-                        // Ensure the configuration is applied right before comparison
-                        configService.ApplyConfiguredSettings(); 
 
                         logger.LogWarning("Performing comparison with {ComparerCount} custom comparers. First: {FirstComparer}",
                             compareLogic.Config.CustomComparers.Count,
@@ -203,12 +201,11 @@ public class ComparisonService : IComparisonService
                         {
                             logger.LogWarning(ex, "Collection was modified during comparison. Trying defensive comparison approaches.");
                             
-                            // First try: Create a new CompareLogic instance to avoid shared state issues
+                            // First try: Create another thread-safe instance to avoid shared state issues
                             try
                             {
-                                logger.LogInformation("Attempting comparison with fresh CompareLogic instance");
-                                var freshCompareLogic = configService.GetCompareLogic();
-                                configService.ApplyConfiguredSettings();
+                                logger.LogInformation("Attempting comparison with fresh thread-safe CompareLogic instance");
+                                var freshCompareLogic = configService.GetThreadSafeCompareLogic();
                                 
                                 // Try with the fresh instance
                                 return freshCompareLogic.Compare(oldClone, newClone);
@@ -235,6 +232,17 @@ public class ComparisonService : IComparisonService
                                     
                                     // Create a minimal CompareLogic configuration for final attempt
                                     var simpleCompareLogic = new CompareLogic();
+                                    
+                                    // Ensure critical collections are initialized to prevent null reference exceptions
+                                    if (simpleCompareLogic.Config.MembersToIgnore == null)
+                                        simpleCompareLogic.Config.MembersToIgnore = new List<string>();
+                                    if (simpleCompareLogic.Config.CustomComparers == null)
+                                        simpleCompareLogic.Config.CustomComparers = new List<BaseTypeComparer>();
+                                    if (simpleCompareLogic.Config.AttributesToIgnore == null)
+                                        simpleCompareLogic.Config.AttributesToIgnore = new List<Type>();
+                                    if (simpleCompareLogic.Config.MembersToInclude == null)
+                                        simpleCompareLogic.Config.MembersToInclude = new List<string>();
+                                    
                                     simpleCompareLogic.Config.IgnoreCollectionOrder = false;
                                     simpleCompareLogic.Config.CustomComparers.Clear(); // Remove all custom comparers that might cause issues
                                     
@@ -350,16 +358,13 @@ public class ComparisonService : IComparisonService
                 {
                     return await Task.Run(() =>
                     {
-                        // Use the existing CompareLogic instance from the configuration service
-                        var compareLogic = configService.GetCompareLogic();
+                        // Use a thread-safe isolated CompareLogic instance to prevent concurrency issues
+                        var compareLogic = configService.GetThreadSafeCompareLogic();
 
                         // We should compare the original cloned objects before normalization, 
                         // as normalization might affect order or values needed by the specific comparer
                         var oldClone = cloneMethod.Invoke(deserializationService, new[] { oldResponse }); 
                         var newClone = cloneMethod.Invoke(deserializationService, new[] { newResponse });
-
-                        // Ensure the configuration is applied right before comparison
-                        configService.ApplyConfiguredSettings(); 
 
                         logger.LogWarning("Performing comparison with {ComparerCount} custom comparers. First: {FirstComparer}",
                             compareLogic.Config.CustomComparers.Count,
@@ -374,12 +379,11 @@ public class ComparisonService : IComparisonService
                         {
                             logger.LogWarning(ex, "Collection was modified during comparison. Trying defensive comparison approaches.");
                             
-                            // First try: Create a new CompareLogic instance to avoid shared state issues
+                            // First try: Create another thread-safe instance to avoid shared state issues
                             try
                             {
-                                logger.LogInformation("Attempting comparison with fresh CompareLogic instance");
-                                var freshCompareLogic = configService.GetCompareLogic();
-                                configService.ApplyConfiguredSettings();
+                                logger.LogInformation("Attempting comparison with fresh thread-safe CompareLogic instance");
+                                var freshCompareLogic = configService.GetThreadSafeCompareLogic();
                                 
                                 // Try with the fresh instance
                                 return freshCompareLogic.Compare(oldClone, newClone);
@@ -404,10 +408,21 @@ public class ComparisonService : IComparisonService
                                     var oldCopy = JsonSerializer.Deserialize(oldJson, oldClone.GetType(), settings);
                                     var newCopy = JsonSerializer.Deserialize(newJson, newClone.GetType(), settings);
                                     
-                                    // Create a minimal CompareLogic configuration for final attempt
-                                    var simpleCompareLogic = new CompareLogic();
-                                    simpleCompareLogic.Config.IgnoreCollectionOrder = false;
-                                    simpleCompareLogic.Config.CustomComparers.Clear(); // Remove all custom comparers that might cause issues
+                                                                    // Create a minimal CompareLogic configuration for final attempt
+                                var simpleCompareLogic = new CompareLogic();
+                                
+                                // Ensure critical collections are initialized to prevent null reference exceptions
+                                if (simpleCompareLogic.Config.MembersToIgnore == null)
+                                    simpleCompareLogic.Config.MembersToIgnore = new List<string>();
+                                if (simpleCompareLogic.Config.CustomComparers == null)
+                                    simpleCompareLogic.Config.CustomComparers = new List<BaseTypeComparer>();
+                                if (simpleCompareLogic.Config.AttributesToIgnore == null)
+                                    simpleCompareLogic.Config.AttributesToIgnore = new List<Type>();
+                                if (simpleCompareLogic.Config.MembersToInclude == null)
+                                    simpleCompareLogic.Config.MembersToInclude = new List<string>();
+                                
+                                simpleCompareLogic.Config.IgnoreCollectionOrder = false;
+                                simpleCompareLogic.Config.CustomComparers.Clear(); // Remove all custom comparers that might cause issues
                                     
                                     logger.LogInformation("Attempting comparison with simplified configuration and JSON-serialized copies");
                                     return simpleCompareLogic.Compare(oldCopy, newCopy);

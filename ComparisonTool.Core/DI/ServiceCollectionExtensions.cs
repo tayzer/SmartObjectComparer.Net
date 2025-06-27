@@ -45,7 +45,7 @@ public static class ServiceCollectionExtensions
             var service = new XmlDeserializationService(logger, serializerFactory);
 
             // todo: shouldnt be done here
-            service.RegisterDomainModel<SoapEnvelope>("SoapEnvelope");
+            service.RegisterDomainModel<ComplexOrderResponse>("ComplexOrderResponse");
 
             return service;
         });

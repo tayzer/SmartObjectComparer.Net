@@ -18,6 +18,12 @@ public interface IComparisonConfigurationService
     CompareLogic GetCompareLogic();
 
     /// <summary>
+    /// Get a thread-safe isolated CompareLogic instance for concurrent operations
+    /// This prevents collection modification exceptions when multiple comparisons run in parallel
+    /// </summary>
+    CompareLogic GetThreadSafeCompareLogic();
+
+    /// <summary>
     /// Configure whether to ignore collection order
     /// </summary>
     void SetIgnoreCollectionOrder(bool ignoreOrder);

@@ -56,7 +56,7 @@ namespace ComparisonTool.Core.Comparison.Configuration
                 _patternMatchCache.TryAdd(cacheKey, true);
                 if (logger.IsEnabled(LogLevel.Information))
                 {
-                    logger.LogInformation("Property '{PropertyPath}' found in exact match - WILL BE IGNORED", propertyPath);
+                    logger.LogDebug("Property '{PropertyPath}' found in exact match - WILL BE IGNORED", propertyPath);
                 }
                 return true;
             }
@@ -64,12 +64,15 @@ namespace ComparisonTool.Core.Comparison.Configuration
             // Check pattern matches (more expensive)
             foreach (var pattern in ignorePatterns)
             {
+                // Reduced logging for performance
+                logger.LogTrace("Testing pattern '{Pattern}' against property '{PropertyPath}'", pattern, propertyPath);
+                
                 if (DoesPropertyMatchPattern(propertyPath, pattern, logger))
                 {
                     _patternMatchCache.TryAdd(cacheKey, true);
                     if (logger.IsEnabled(LogLevel.Information))
                     {
-                        logger.LogInformation("Property '{PropertyPath}' MATCHES pattern '{Pattern}' - WILL BE IGNORED", propertyPath, pattern);
+                        logger.LogDebug("Property '{PropertyPath}' MATCHES pattern '{Pattern}' - WILL BE IGNORED", propertyPath, pattern);
                     }
                     return true;
                 }
@@ -181,10 +184,18 @@ namespace ComparisonTool.Core.Comparison.Configuration
                 // Add pattern for sub-properties: allow the pattern to match as prefix
                 regexPattern = $"^{regexPattern}($|\\.)";
 
+                // DEBUG: Log the generated regex pattern
+                logger.LogWarning("DEBUG: Generated regex pattern '{RegexPattern}' for ignore pattern '{IgnorePattern}'", 
+                    regexPattern, p);
+
                 return new Regex(regexPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
             });
 
             bool matches = regex.IsMatch(propertyPath);
+            
+            // DEBUG: Always log pattern matching attempts for debugging
+                            logger.LogTrace("Pattern matching - PropertyPath: '{PropertyPath}' | Pattern: '{Pattern}' | Matches: {Matches}", 
+                propertyPath, pattern, matches);
             
             if (matches && logger.IsEnabled(LogLevel.Debug))
             {

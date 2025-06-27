@@ -51,6 +51,7 @@ namespace ComparisonTool.Core.Comparison.Configuration
 
         /// <summary>
         /// Applies this rule to the comparison configuration
+        /// PERFORMANCE CRITICAL: Smart minimal pattern generation
         /// </summary>
         public void ApplyTo(ComparisonConfig config)
         {
@@ -58,40 +59,23 @@ namespace ComparisonTool.Core.Comparison.Configuration
 
             if (IgnoreCompletely)
             {
-                _logger.LogWarning("=== APPLYING IGNORE RULE FOR: {PropertyPath} ===", PropertyPath);
+                _logger.LogDebug("Applying ignore rule for: {PropertyPath}", PropertyPath);
                 
-                // Normalize the property path to handle variations in XML deserialization
-                string normalizedPath = NormalizePropertyPath(PropertyPath);
+                // SMART MINIMAL APPROACH: Add the exact pattern + essential collection patterns
                 
-                _logger.LogDebug("Applying complete ignore for property: {PropertyPath} (normalized: {NormalizedPath})", 
-                    PropertyPath, normalizedPath);
-                
-                // Add the property to be ignored
+                // 1. Add the original path exactly as specified
                 if (!config.MembersToIgnore.Contains(PropertyPath)) 
                 {
                     config.MembersToIgnore.Add(PropertyPath);
-                    _logger.LogWarning("Added original path to ignore: {PropertyPath}", PropertyPath);
+                    _logger.LogDebug("Added original path to ignore: {PropertyPath}", PropertyPath);
                 }
                 
-                // If the normalized path is different, add it too
-                if (normalizedPath != PropertyPath && !config.MembersToIgnore.Contains(normalizedPath))
-                {
-                    config.MembersToIgnore.Add(normalizedPath);
-                    _logger.LogWarning("Added normalized path to ignore: {NormalizedPath}", normalizedPath);
-                }
-
-                // Also add variations for collection items
-                AddCollectionVariations(config, PropertyPath);
+                // 2. Add ESSENTIAL collection variations for CompareNetObjects compatibility
+                // Only add patterns that are likely to exist based on the property name
+                AddSmartCollectionPatterns(config, PropertyPath);
                 
-                // Add variations by removing path segments from the beginning (dynamic prefix removal)
-                // This makes it domain-agnostic by working with any path structure
-                AddDynamicPrefixVariations(config, PropertyPath);
-                
-                _logger.LogWarning("=== FINAL IGNORE LIST CONTAINS {Count} ENTRIES ===", config.MembersToIgnore.Count);
-                foreach (var ignorePath in config.MembersToIgnore.OrderBy(p => p))
-                {
-                    _logger.LogWarning("  -> {IgnorePath}", ignorePath);
-                }
+                _logger.LogDebug("Final ignore list contains {Count} entries", config.MembersToIgnore.Count);
+                // Removed verbose logging for performance - patterns are logged at debug level only
             }
             else
             {
@@ -102,8 +86,86 @@ namespace ComparisonTool.Core.Comparison.Configuration
                 // Property-specific collection order is handled by PropertySpecificCollectionOrderComparer
                 if (IgnoreCollectionOrder)
                 {
-                    _logger.LogWarning("[IMPORTANT] Property {PropertyPath} has collection order ignoring enabled - this is handled ONLY by PropertySpecificCollectionOrderComparer", PropertyPath);
+                    _logger.LogDebug("Property {PropertyPath} has collection order ignoring enabled", PropertyPath);
                     // No direct config change here; the custom comparer handles it.
+                }
+            }
+        }
+
+        /// <summary>
+        /// Add COMPREHENSIVE collection patterns - catch ALL the ways CompareNetObjects accesses collections
+        /// PERFORMANCE OPTIMIZED: Still minimal but comprehensive coverage
+        /// </summary>
+        private void AddSmartCollectionPatterns(ComparisonConfig config, string propertyPath)
+        {
+            var patterns = new List<string>();
+            
+            // Extract the base collection path (everything before the first [)
+            var baseCollectionPath = propertyPath.Split('[')[0];
+            
+            // COMPREHENSIVE PATTERNS: Cover all the ways CompareNetObjects might access collections
+            
+            // 1. Basic System.Collections patterns
+            patterns.Add($"{baseCollectionPath}.System.Collections.IList.Item[*]");
+            patterns.Add($"{baseCollectionPath}.System.Collections.Generic.IList`1.Item[*]");
+            patterns.Add($"{baseCollectionPath}.System.Collections.ICollection.Item[*]");
+            patterns.Add($"{baseCollectionPath}.System.Collections.Generic.ICollection`1.Item[*]");
+            
+            // 2. If the original path has property access after collection, add those patterns too
+            if (propertyPath.Contains("]."))
+            {
+                // Extract the property part after the collection (e.g., ".ComponentName")
+                var propertyPart = propertyPath.Substring(propertyPath.IndexOf("].") + 1);
+                patterns.Add($"{baseCollectionPath}.System.Collections.IList.Item[*].{propertyPart}");
+                patterns.Add($"{baseCollectionPath}.System.Collections.Generic.IList`1.Item[*].{propertyPart}");
+                patterns.Add($"{baseCollectionPath}.System.Collections.ICollection.Item[*].{propertyPart}");
+                patterns.Add($"{baseCollectionPath}.System.Collections.Generic.ICollection`1.Item[*].{propertyPart}");
+                
+                // Also add without the extra dot if propertyPart already starts with dot
+                if (propertyPart.StartsWith("."))
+                {
+                    patterns.Add($"{baseCollectionPath}.System.Collections.IList.Item[*]{propertyPart}");
+                    patterns.Add($"{baseCollectionPath}.System.Collections.Generic.IList`1.Item[*]{propertyPart}");
+                    patterns.Add($"{baseCollectionPath}.System.Collections.ICollection.Item[*]{propertyPart}");
+                    patterns.Add($"{baseCollectionPath}.System.Collections.Generic.ICollection`1.Item[*]{propertyPart}");
+                }
+            }
+            
+            // 3. Add only first index pattern (most common case)
+            patterns.Add($"{baseCollectionPath}[0]");
+            
+            // 4. Add wildcard version (convert existing indices to wildcards)
+            var wildcardPath = propertyPath.Replace("[0]", "[*]").Replace("[1]", "[*]").Replace("[2]", "[*]");
+            if (wildcardPath != propertyPath && !wildcardPath.Contains("[*]"))
+            {
+                patterns.Add($"{propertyPath}[*]");
+            }
+            
+            // 5. CRITICAL FIX: Add the EXACT pattern we know CompareNetObjects uses
+            // Based on debug logs, we know CompareNetObjects generates paths like:
+            // "Metadata.Performance.ComponentTimings.System.Collections.IList.Item[0].ComponentName"
+            // when the user specifies: "Metadata.Performance.ComponentTimings[*].ComponentName"
+            if (propertyPath.Contains("[*]."))
+            {
+                var beforeBracket = propertyPath.Substring(0, propertyPath.IndexOf("[*]"));
+                var afterBracket = propertyPath.Substring(propertyPath.IndexOf("[*].") + 4);
+                
+                // Add the EXACT CompareNetObjects System.Collections access patterns
+                patterns.Add($"{beforeBracket}.System.Collections.IList.Item[*].{afterBracket}");
+                patterns.Add($"{beforeBracket}.System.Collections.Generic.IList`1.Item[*].{afterBracket}");
+                patterns.Add($"{beforeBracket}.System.Collections.ICollection.Item[*].{afterBracket}");
+                patterns.Add($"{beforeBracket}.System.Collections.Generic.ICollection`1.Item[*].{afterBracket}");
+            }
+            
+            // 6. PERFORMANCE: Removed wildcard catch-all pattern to reduce overhead
+            
+            // Add only the patterns that don't already exist
+            foreach (var pattern in patterns.Distinct())
+            {
+                if (!config.MembersToIgnore.Contains(pattern))
+                {
+                    config.MembersToIgnore.Add(pattern);
+                    _logger.LogDebug("Added comprehensive collection pattern: {Pattern}", pattern);
                 }
             }
         }
@@ -123,6 +185,54 @@ namespace ComparisonTool.Core.Comparison.Configuration
             normalizedPath = Regex.Replace(normalizedPath, @"\w+:", "");
             
             return normalizedPath;
+        }
+
+        /// <summary>
+        /// Add MINIMAL collection variations - only the most essential patterns
+        /// PERFORMANCE CRITICAL: This replaces the explosive pattern generation
+        /// </summary>
+        private void AddMinimalCollectionVariations(ComparisonConfig config, string propertyPath)
+        {
+            // Only add wildcard pattern if path doesn't already contain array notation
+            if (!propertyPath.Contains("[") && propertyPath.Contains("."))
+            {
+                // For complex paths like "Body.Response.Results.Description"
+                // Add just the wildcard version: "Body.Response.Results[*].Description"
+                var segments = propertyPath.Split('.');
+                for (int i = 0; i < segments.Length - 1; i++)
+                {
+                    var segment = segments[i];
+                    // Only for likely collection names
+                    if (segment.EndsWith("s") || segment.Contains("Results") || segment.Contains("Items"))
+                    {
+                        var prefix = string.Join(".", segments.Take(i + 1));
+                        var suffix = string.Join(".", segments.Skip(i + 1));
+                        var wildcardPath = $"{prefix}[*].{suffix}";
+                        
+                        if (!config.MembersToIgnore.Contains(wildcardPath))
+                        {
+                            config.MembersToIgnore.Add(wildcardPath);
+                            _logger.LogDebug("Added minimal wildcard: {Path}", wildcardPath);
+                        }
+                        break; // Only do this for the first likely collection
+                    }
+                }
+            }
+            
+            // For simple property names, add common collection patterns
+            if (!propertyPath.Contains(".") && !propertyPath.Contains("["))
+            {
+                var essentialCollections = new[] { "Results", "Items" };
+                foreach (var collection in essentialCollections)
+                {
+                    var pattern = $"{collection}[*].{propertyPath}";
+                    if (!config.MembersToIgnore.Contains(pattern))
+                    {
+                        config.MembersToIgnore.Add(pattern);
+                        _logger.LogDebug("Added minimal collection pattern: {Pattern}", pattern);
+                    }
+                }
+            }
         }
 
         /// <summary>
