@@ -826,14 +826,17 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         var filteredDifferences = new List<Difference>();
         var ignoredCount = 0;
 
-        // DEBUG: Log ALL differences found by CompareNetObjects
-        logger.LogWarning("=== ALL DIFFERENCES FOUND BY COMPARENETOBJECTS ===");
-        foreach (var diff in result.Differences)
+        // Performance: Only log detailed differences in debug mode to avoid overhead
+        if (logger.IsEnabled(LogLevel.Debug))
         {
-            logger.LogWarning("DIFFERENCE: '{PropertyName}' | Value1: '{Value1}' | Value2: '{Value2}'", 
-                diff.PropertyName, diff.Object1Value, diff.Object2Value);
+            logger.LogDebug("=== ALL DIFFERENCES FOUND BY COMPARENETOBJECTS ===");
+            foreach (var diff in result.Differences)
+            {
+                logger.LogDebug("DIFFERENCE: '{PropertyName}' | Value1: '{Value1}' | Value2: '{Value2}'", 
+                    diff.PropertyName, diff.Object1Value, diff.Object2Value);
+            }
+            logger.LogDebug("=== END OF ALL DIFFERENCES ===");
         }
-        logger.LogWarning("=== END OF ALL DIFFERENCES ===");
 
         foreach (var difference in result.Differences)
         {
@@ -848,9 +851,10 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
                         difference.PropertyName.StartsWith(ignoredPath + ".", StringComparison.OrdinalIgnoreCase))
                     {
                         shouldIgnore = true;
-                        if (logger.IsEnabled(LogLevel.Debug))
+                        // Performance: Only log filtering details in trace mode
+                        if (logger.IsEnabled(LogLevel.Trace))
                         {
-                            logger.LogDebug("Filtering out property '{PropertyPath}' (matched static MembersToIgnore: '{MatchedPath}')", 
+                            logger.LogTrace("Filtering out property '{PropertyPath}' (matched static MembersToIgnore: '{MatchedPath}')", 
                                 difference.PropertyName, ignoredPath);
                         }
                         break;

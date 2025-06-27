@@ -43,10 +43,11 @@ namespace ComparisonTool.Core.Comparison.Configuration
 
             Interlocked.Increment(ref _cacheMisses);
 
-            // Reduced logging - only log at debug level unless matches found
-            if (logger.IsEnabled(LogLevel.Debug))
+            // Performance optimization: Skip expensive logging operations in hot path
+            // Only log for debugging when explicitly enabled
+            if (logger.IsEnabled(LogLevel.Trace))
             {
-                logger.LogDebug("Checking if property '{PropertyPath}' matches any of {PatternCount} ignore patterns", 
+                logger.LogTrace("Checking if property '{PropertyPath}' matches any of {PatternCount} ignore patterns", 
                     propertyPath, ignorePatterns.Count);
             }
 
@@ -64,8 +65,11 @@ namespace ComparisonTool.Core.Comparison.Configuration
             // Check pattern matches (more expensive)
             foreach (var pattern in ignorePatterns)
             {
-                // Reduced logging for performance
-                logger.LogTrace("Testing pattern '{Pattern}' against property '{PropertyPath}'", pattern, propertyPath);
+                // Performance: Only log in trace mode to avoid overhead in production
+                if (logger.IsEnabled(LogLevel.Trace))
+                {
+                    logger.LogTrace("Testing pattern '{Pattern}' against property '{PropertyPath}'", pattern, propertyPath);
+                }
                 
                 if (DoesPropertyMatchPattern(propertyPath, pattern, logger))
                 {
