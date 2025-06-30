@@ -105,69 +105,116 @@ namespace ComparisonTool.Core.Comparison.Configuration
             
             // COMPREHENSIVE PATTERNS: Cover all the ways CompareNetObjects might access collections
             
-            // 1. Basic System.Collections patterns
-            patterns.Add($"{baseCollectionPath}.System.Collections.IList.Item[*]");
-            patterns.Add($"{baseCollectionPath}.System.Collections.Generic.IList`1.Item[*]");
-            patterns.Add($"{baseCollectionPath}.System.Collections.ICollection.Item[*]");
-            patterns.Add($"{baseCollectionPath}.System.Collections.Generic.ICollection`1.Item[*]");
+            // 1. REMOVED: Basic System.Collections patterns were too broad
+            // These patterns were accidentally matching ALL properties in collections
+            // Instead, we only add specific property patterns below
             
-            // 2. If the original path has property access after collection, add those patterns too
-            if (propertyPath.Contains("]."))
-            {
-                // Extract the property part after the collection (e.g., ".ComponentName")
-                var propertyPart = propertyPath.Substring(propertyPath.IndexOf("].") + 1);
-                patterns.Add($"{baseCollectionPath}.System.Collections.IList.Item[*].{propertyPart}");
-                patterns.Add($"{baseCollectionPath}.System.Collections.Generic.IList`1.Item[*].{propertyPart}");
-                patterns.Add($"{baseCollectionPath}.System.Collections.ICollection.Item[*].{propertyPart}");
-                patterns.Add($"{baseCollectionPath}.System.Collections.Generic.ICollection`1.Item[*].{propertyPart}");
-                
-                // Also add without the extra dot if propertyPart already starts with dot
-                if (propertyPart.StartsWith("."))
-                {
-                    patterns.Add($"{baseCollectionPath}.System.Collections.IList.Item[*]{propertyPart}");
-                    patterns.Add($"{baseCollectionPath}.System.Collections.Generic.IList`1.Item[*]{propertyPart}");
-                    patterns.Add($"{baseCollectionPath}.System.Collections.ICollection.Item[*]{propertyPart}");
-                    patterns.Add($"{baseCollectionPath}.System.Collections.Generic.ICollection`1.Item[*]{propertyPart}");
-                }
-            }
+            // 2. CLEANED UP: Only add specific property patterns, not broad collection patterns
+            // The old code was adding too many variations that could match unintended properties
             
-            // 3. Add only first index pattern (most common case)
-            patterns.Add($"{baseCollectionPath}[0]");
+            // 3. Always include the original pattern
+            patterns.Add(propertyPath);
             
-            // 4. Add wildcard version (convert existing indices to wildcards)
-            var wildcardPath = propertyPath.Replace("[0]", "[*]").Replace("[1]", "[*]").Replace("[2]", "[*]");
-            if (wildcardPath != propertyPath && !wildcardPath.Contains("[*]"))
-            {
-                patterns.Add($"{propertyPath}[*]");
-            }
-            
-            // 5. CRITICAL FIX: Add the EXACT pattern we know CompareNetObjects uses
-            // Based on debug logs, we know CompareNetObjects generates paths like:
-            // "Metadata.Performance.ComponentTimings.System.Collections.IList.Item[0].ComponentName"
-            // when the user specifies: "Metadata.Performance.ComponentTimings[*].ComponentName"
+            // 4. PRECISION FIX: Add EXACT patterns that CompareNetObjects uses
+            // CompareNetObjects generates paths like: "ResponseMetadata.Performance.ComponentTimings[0].CallCount"
             if (propertyPath.Contains("[*]."))
             {
+                // Handle specific property within collection: "Collection[*].Property"
                 var beforeBracket = propertyPath.Substring(0, propertyPath.IndexOf("[*]"));
                 var afterBracket = propertyPath.Substring(propertyPath.IndexOf("[*].") + 4);
                 
-                // Add the EXACT CompareNetObjects System.Collections access patterns
+                // CRITICAL: Add ONLY exact numbered index patterns for the specific property
+                // This prevents accidentally ignoring other properties in the same collection
+                for (int i = 0; i < 10; i++)
+                {
+                    patterns.Add($"{beforeBracket}[{i}].{afterBracket}");
+                }
+                
+                // Also add System.Collections patterns but ONLY for the exact property
                 patterns.Add($"{beforeBracket}.System.Collections.IList.Item[*].{afterBracket}");
                 patterns.Add($"{beforeBracket}.System.Collections.Generic.IList`1.Item[*].{afterBracket}");
-                patterns.Add($"{beforeBracket}.System.Collections.ICollection.Item[*].{afterBracket}");
-                patterns.Add($"{beforeBracket}.System.Collections.Generic.ICollection`1.Item[*].{afterBracket}");
+                
+                // PRECISION VALIDATION: Log what we're ignoring to prevent over-matching
+                _logger.LogInformation("Generated PRECISE patterns for {PropertyPath}: Will ignore ONLY '{SpecificProperty}', NOT other collection properties", 
+                    propertyPath, afterBracket);
+            }
+            else if (IsLikelyCollectionPath(propertyPath))
+            {
+                // COLLECTION-LEVEL IGNORE: Handle entire collection ignores like "Metadata.Performance.ComponentTimings"
+                // This should ignore ALL properties within the collection
+                _logger.LogInformation("Detected collection-level ignore for {PropertyPath}: Will ignore ALL properties within this collection", 
+                    propertyPath);
+                
+                // Add patterns to match ALL indexed access to this collection
+                for (int i = 0; i < 10; i++)
+                {
+                    patterns.Add($"{propertyPath}[{i}]");
+                }
+                
+                // Add System.Collections patterns for the entire collection
+                patterns.Add($"{propertyPath}.System.Collections.IList.Item[*]");
+                patterns.Add($"{propertyPath}.System.Collections.Generic.IList`1.Item[*]");
+                
+                // Add patterns for numbered System.Collections access
+                for (int i = 0; i < 10; i++)
+                {
+                    patterns.Add($"{propertyPath}.System.Collections.IList.Item[{i}]");
+                    patterns.Add($"{propertyPath}.System.Collections.Generic.IList`1.Item[{i}]");
+                }
             }
             
             // 6. PERFORMANCE: Removed wildcard catch-all pattern to reduce overhead
             
-            // Add only the patterns that don't already exist
+            // Add only the patterns that don't already exist with enhanced validation
+            var addedPatterns = new List<string>();
             foreach (var pattern in patterns.Distinct())
             {
                 if (!config.MembersToIgnore.Contains(pattern))
                 {
                     config.MembersToIgnore.Add(pattern);
-                    _logger.LogDebug("Added comprehensive collection pattern: {Pattern}", pattern);
+                    addedPatterns.Add(pattern);
+                    _logger.LogDebug("Added collection pattern: {Pattern} for rule: {OriginalRule}", pattern, PropertyPath);
                 }
             }
+            
+            // SAFETY CHECK: Warn if we're generating too many patterns for a single rule
+            if (addedPatterns.Count > 10)
+            {
+                _logger.LogWarning("Rule for {PropertyPath} generated {PatternCount} ignore patterns. This may be overly broad.", 
+                    PropertyPath, addedPatterns.Count);
+            }
+        }
+
+        /// <summary>
+        /// Determine if a property path is likely to be a collection that should support entire-collection ignoring
+        /// </summary>
+        private bool IsLikelyCollectionPath(string propertyPath)
+        {
+            if (string.IsNullOrEmpty(propertyPath) || propertyPath.Contains("["))
+                return false;
+                
+            // Common collection naming patterns
+            var collectionIndicators = new[] 
+            { 
+                "Timings", "Results", "Items", "List", "Array", "Collection", 
+                "Data", "Elements", "Entries", "Records", "Values", "Components"
+            };
+            
+            // Get the last segment of the path (the actual property name)
+            var segments = propertyPath.Split('.');
+            var lastSegment = segments[segments.Length - 1];
+            
+            // Check if it matches common collection naming patterns
+            bool isCollection = collectionIndicators.Any(indicator => 
+                lastSegment.EndsWith(indicator, StringComparison.OrdinalIgnoreCase));
+                
+            if (isCollection)
+            {
+                _logger.LogDebug("Path '{PropertyPath}' detected as collection based on naming pattern '{LastSegment}'", 
+                    propertyPath, lastSegment);
+            }
+            
+            return isCollection;
         }
 
         /// <summary>

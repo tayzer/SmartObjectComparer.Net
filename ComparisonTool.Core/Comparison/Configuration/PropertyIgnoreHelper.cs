@@ -145,6 +145,13 @@ namespace ComparisonTool.Core.Comparison.Configuration
                     logger.LogDebug("Prefix match: '{PropertyPath}' starts with '{Pattern}.'", propertyPath, pattern);
                     return true;
                 }
+                
+                // Handle collection-level ignores: pattern "Collection" should match "Collection[0].Property"
+                if (propertyPath.StartsWith(pattern + "[", StringComparison.OrdinalIgnoreCase))
+                {
+                    logger.LogDebug("Collection prefix match: '{PropertyPath}' starts with collection pattern '{Pattern}['", propertyPath, pattern);
+                    return true;
+                }
 
                 return false;
             }
@@ -185,17 +192,25 @@ namespace ComparisonTool.Core.Comparison.Configuration
                 // Replace placeholder with regex for any collection index
                 regexPattern = regexPattern.Replace("COLLECTION_INDEX_PLACEHOLDER", @"\[\d+\]");
                 
-                // Add pattern for sub-properties: allow the pattern to match as prefix
-                regexPattern = $"^{regexPattern}($|\\.)";
+                // PRECISION FIX: Match EXACT property only, not sub-properties
+                // This prevents "CallCount" pattern from matching "ComponentName"
+                regexPattern = $"^{regexPattern}$";
 
-                // DEBUG: Log the generated regex pattern
-                logger.LogWarning("DEBUG: Generated regex pattern '{RegexPattern}' for ignore pattern '{IgnorePattern}'", 
+                // PRECISION DEBUG: Log the generated regex pattern
+                logger.LogDebug("Generated EXACT regex '{RegexPattern}' for pattern '{IgnorePattern}'", 
                     regexPattern, p);
 
                 return new Regex(regexPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
             });
 
             bool matches = regex.IsMatch(propertyPath);
+            
+            // PRECISION DEBUG: Log the exact match result
+            if (logger.IsEnabled(LogLevel.Debug))
+            {
+                logger.LogDebug("Pattern '{Pattern}' vs Property '{PropertyPath}': {MatchResult}", 
+                    pattern, propertyPath, matches ? "MATCH (WILL IGNORE)" : "NO MATCH");
+            }
             
             // DEBUG: Always log pattern matching attempts for debugging
                             logger.LogTrace("Pattern matching - PropertyPath: '{PropertyPath}' | Pattern: '{Pattern}' | Matches: {Matches}", 
