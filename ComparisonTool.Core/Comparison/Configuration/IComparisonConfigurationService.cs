@@ -18,6 +18,12 @@ public interface IComparisonConfigurationService
     CompareLogic GetCompareLogic();
 
     /// <summary>
+    /// Get a thread-safe isolated CompareLogic instance for concurrent operations
+    /// This prevents collection modification exceptions when multiple comparisons run in parallel
+    /// </summary>
+    CompareLogic GetThreadSafeCompareLogic();
+
+    /// <summary>
     /// Configure whether to ignore collection order
     /// </summary>
     void SetIgnoreCollectionOrder(bool ignoreOrder);
@@ -51,6 +57,12 @@ public interface IComparisonConfigurationService
     /// Add an ignore rule to the configuration
     /// </summary>
     void AddIgnoreRule(IgnoreRule rule);
+
+    /// <summary>
+    /// Add multiple ignore rules to the configuration in a batch operation
+    /// This is more efficient than calling AddIgnoreRule multiple times
+    /// </summary>
+    void AddIgnoreRulesBatch(IEnumerable<IgnoreRule> rules);
 
     /// <summary>
     /// Get all currently ignored properties

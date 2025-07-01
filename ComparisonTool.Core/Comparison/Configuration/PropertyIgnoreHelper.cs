@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -9,11 +11,20 @@ namespace ComparisonTool.Core.Comparison.Configuration
 {
     /// <summary>
     /// Enhanced helper for property ignore pattern matching with full support for tree navigator patterns
+    /// Performance optimized with caching and reduced logging
     /// </summary>
     public static class PropertyIgnoreHelper
     {
+        // Performance optimization: Cache pattern matching results
+        private static readonly ConcurrentDictionary<string, bool> _patternMatchCache = new();
+        private static readonly ConcurrentDictionary<string, Regex> _compiledRegexCache = new();
+        
+        // Performance counters for monitoring
+        private static long _cacheHits = 0;
+        private static long _cacheMisses = 0;
         /// <summary>
         /// Check if a property should be ignored based on configured patterns
+        /// Performance optimized with caching and reduced logging
         /// </summary>
         public static bool ShouldIgnoreProperty(string propertyPath, HashSet<string> ignorePatterns, ILogger logger = null)
         {
@@ -22,26 +33,80 @@ namespace ComparisonTool.Core.Comparison.Configuration
 
             logger ??= NullLogger.Instance;
 
-            logger.LogInformation("🎯 Checking if property '{PropertyPath}' matches any of {PatternCount} ignore patterns: [{Patterns}]", 
-                propertyPath, ignorePatterns.Count, string.Join(", ", ignorePatterns));
+            // Performance optimization: Check cache first
+            var cacheKey = $"{propertyPath}|{string.Join(",", ignorePatterns.OrderBy(p => p))}";
+            if (_patternMatchCache.TryGetValue(cacheKey, out var cachedResult))
+            {
+                Interlocked.Increment(ref _cacheHits);
+                return cachedResult;
+            }
 
+            Interlocked.Increment(ref _cacheMisses);
+
+            // Performance optimization: Skip expensive logging operations in hot path
+            // Only log for debugging when explicitly enabled
+            if (logger.IsEnabled(LogLevel.Trace))
+            {
+                logger.LogTrace("Checking if property '{PropertyPath}' matches any of {PatternCount} ignore patterns", 
+                    propertyPath, ignorePatterns.Count);
+            }
+
+            // Performance optimization: Check for exact matches first (fastest path)
+            if (ignorePatterns.Contains(propertyPath))
+            {
+                _patternMatchCache.TryAdd(cacheKey, true);
+                if (logger.IsEnabled(LogLevel.Information))
+                {
+                    logger.LogDebug("Property '{PropertyPath}' found in exact match - WILL BE IGNORED", propertyPath);
+                }
+                return true;
+            }
+
+            // Check pattern matches (more expensive)
             foreach (var pattern in ignorePatterns)
             {
-                logger.LogInformation("🔍 Testing pattern: '{Pattern}' against property: '{PropertyPath}'", pattern, propertyPath);
+                // Performance: Only log in trace mode to avoid overhead in production
+                if (logger.IsEnabled(LogLevel.Trace))
+                {
+                    logger.LogTrace("Testing pattern '{Pattern}' against property '{PropertyPath}'", pattern, propertyPath);
+                }
                 
                 if (DoesPropertyMatchPattern(propertyPath, pattern, logger))
                 {
-                    logger.LogWarning("✅ MATCH FOUND! Property '{PropertyPath}' MATCHES pattern '{Pattern}' - WILL BE IGNORED", propertyPath, pattern);
+                    _patternMatchCache.TryAdd(cacheKey, true);
+                    if (logger.IsEnabled(LogLevel.Information))
+                    {
+                        logger.LogDebug("Property '{PropertyPath}' MATCHES pattern '{Pattern}' - WILL BE IGNORED", propertyPath, pattern);
+                    }
                     return true;
-                }
-                else
-                {
-                    logger.LogInformation("❌ No match for pattern: '{Pattern}'", pattern);
                 }
             }
 
-            logger.LogWarning("❌ Property '{PropertyPath}' does NOT match any ignore patterns - WILL BE KEPT", propertyPath);
+            _patternMatchCache.TryAdd(cacheKey, false);
             return false;
+        }
+
+        /// <summary>
+        /// Get cache statistics for monitoring performance
+        /// </summary>
+        public static (long hits, long misses, double hitRatio) GetCacheStats()
+        {
+            var hits = _cacheHits;
+            var misses = _cacheMisses;
+            var total = hits + misses;
+            var hitRatio = total > 0 ? (double)hits / total : 0.0;
+            return (hits, misses, hitRatio);
+        }
+
+        /// <summary>
+        /// Clear the pattern matching cache (useful for testing or memory management)
+        /// </summary>
+        public static void ClearCache()
+        {
+            _patternMatchCache.Clear();
+            _compiledRegexCache.Clear();
+            _cacheHits = 0;
+            _cacheMisses = 0;
         }
 
         /// <summary>
@@ -80,6 +145,13 @@ namespace ComparisonTool.Core.Comparison.Configuration
                     logger.LogDebug("Prefix match: '{PropertyPath}' starts with '{Pattern}.'", propertyPath, pattern);
                     return true;
                 }
+                
+                // Handle collection-level ignores: pattern "Collection" should match "Collection[0].Property"
+                if (propertyPath.StartsWith(pattern + "[", StringComparison.OrdinalIgnoreCase))
+                {
+                    logger.LogDebug("Collection prefix match: '{PropertyPath}' starts with collection pattern '{Pattern}['", propertyPath, pattern);
+                    return true;
+                }
 
                 return false;
             }
@@ -93,41 +165,60 @@ namespace ComparisonTool.Core.Comparison.Configuration
 
         /// <summary>
         /// Match collection patterns with [*] notation from tree navigator
+        /// Performance optimized with compiled regex caching
         /// </summary>
         private static bool MatchesCollectionPattern(string propertyPath, string pattern, ILogger logger)
         {
-            logger.LogInformation("🔍 Checking collection pattern '{Pattern}' against '{PropertyPath}'", pattern, propertyPath);
-
-            // Convert the pattern to a regex
-            // Pattern with [*] should match both exact paths and sub-properties:
-            // - Collection[0].Property (exact)
-            // - Collection[1].Property (exact)  
-            // - Collection[2].Property.SubProperty (sub-property)
-
-            // First replace [*] with a placeholder before escaping
-            string tempPattern = pattern.Replace("[*]", "COLLECTION_INDEX_PLACEHOLDER");
-            
-            // Escape regex special characters 
-            string regexPattern = Regex.Escape(tempPattern);
-            logger.LogInformation("📝 After escaping: '{RegexPattern}'", regexPattern);
-            
-            // Replace placeholder with regex for any collection index
-            regexPattern = regexPattern.Replace("COLLECTION_INDEX_PLACEHOLDER", @"\[\d+\]");
-            logger.LogInformation("🔄 After [*] replacement: '{RegexPattern}'", regexPattern);
-            
-            // Add pattern for sub-properties: allow the pattern to match as prefix
-            regexPattern = $"^{regexPattern}($|\\.)";
-            logger.LogInformation("✅ Final regex pattern: '{RegexPattern}'", regexPattern);
-
-            bool matches = Regex.IsMatch(propertyPath, regexPattern, RegexOptions.IgnoreCase);
-            
-            if (matches)
+            if (logger.IsEnabled(LogLevel.Debug))
             {
-                logger.LogWarning("✅ Property '{PropertyPath}' MATCHES collection pattern '{Pattern}' - SHOULD BE IGNORED", propertyPath, pattern);
+                logger.LogDebug("Checking collection pattern '{Pattern}' against '{PropertyPath}'", pattern, propertyPath);
             }
-            else
+
+            // Performance optimization: Get or create compiled regex
+            var regex = _compiledRegexCache.GetOrAdd(pattern, p => 
             {
-                logger.LogWarning("❌ Property '{PropertyPath}' does NOT match collection pattern '{Pattern}'", propertyPath, pattern);
+                // Convert the pattern to a regex
+                // Pattern with [*] should match both exact paths and sub-properties:
+                // - Collection[0].Property (exact)
+                // - Collection[1].Property (exact)  
+                // - Collection[2].Property.SubProperty (sub-property)
+
+                // First replace [*] with a placeholder before escaping
+                string tempPattern = p.Replace("[*]", "COLLECTION_INDEX_PLACEHOLDER");
+                
+                // Escape regex special characters 
+                string regexPattern = Regex.Escape(tempPattern);
+                
+                // Replace placeholder with regex for any collection index
+                regexPattern = regexPattern.Replace("COLLECTION_INDEX_PLACEHOLDER", @"\[\d+\]");
+                
+                // PRECISION FIX: Match EXACT property only, not sub-properties
+                // This prevents "CallCount" pattern from matching "ComponentName"
+                regexPattern = $"^{regexPattern}$";
+
+                // PRECISION DEBUG: Log the generated regex pattern
+                logger.LogDebug("Generated EXACT regex '{RegexPattern}' for pattern '{IgnorePattern}'", 
+                    regexPattern, p);
+
+                return new Regex(regexPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            });
+
+            bool matches = regex.IsMatch(propertyPath);
+            
+            // PRECISION DEBUG: Log the exact match result
+            if (logger.IsEnabled(LogLevel.Debug))
+            {
+                logger.LogDebug("Pattern '{Pattern}' vs Property '{PropertyPath}': {MatchResult}", 
+                    pattern, propertyPath, matches ? "MATCH (WILL IGNORE)" : "NO MATCH");
+            }
+            
+            // DEBUG: Always log pattern matching attempts for debugging
+                            logger.LogTrace("Pattern matching - PropertyPath: '{PropertyPath}' | Pattern: '{Pattern}' | Matches: {Matches}", 
+                propertyPath, pattern, matches);
+            
+            if (matches && logger.IsEnabled(LogLevel.Debug))
+            {
+                logger.LogDebug("Property '{PropertyPath}' MATCHES collection pattern '{Pattern}'", propertyPath, pattern);
             }
 
             return matches;
@@ -135,25 +226,29 @@ namespace ComparisonTool.Core.Comparison.Configuration
 
         /// <summary>
         /// Match wildcard patterns with * notation
+        /// Performance optimized with compiled regex caching
         /// </summary>
         private static bool MatchesWildcardPattern(string propertyPath, string pattern, ILogger logger)
         {
-            logger.LogDebug("Checking wildcard pattern '{Pattern}' against '{PropertyPath}'", pattern, propertyPath);
+            if (logger.IsEnabled(LogLevel.Debug))
+            {
+                logger.LogDebug("Checking wildcard pattern '{Pattern}' against '{PropertyPath}'", pattern, propertyPath);
+            }
 
-            // Convert wildcard pattern to regex
-            string regexPattern = "^" + Regex.Escape(pattern).Replace("\\*", ".*") + "($|\\.)";
-            
-            logger.LogDebug("Converted wildcard pattern '{Pattern}' to regex '{RegexPattern}'", pattern, regexPattern);
+            // Performance optimization: Get or create compiled regex
+            var regex = _compiledRegexCache.GetOrAdd($"wildcard:{pattern}", p => 
+            {
+                // Convert wildcard pattern to regex
+                string regexPattern = "^" + Regex.Escape(pattern).Replace("\\*", ".*") + "($|\\.)";
+                
+                return new Regex(regexPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
+            });
 
-            bool matches = Regex.IsMatch(propertyPath, regexPattern, RegexOptions.IgnoreCase);
+            bool matches = regex.IsMatch(propertyPath);
             
-            if (matches)
+            if (matches && logger.IsEnabled(LogLevel.Debug))
             {
                 logger.LogDebug("Property '{PropertyPath}' MATCHES wildcard pattern '{Pattern}'", propertyPath, pattern);
-            }
-            else
-            {
-                logger.LogDebug("Property '{PropertyPath}' does NOT match wildcard pattern '{Pattern}'", propertyPath, pattern);
             }
 
             return matches;

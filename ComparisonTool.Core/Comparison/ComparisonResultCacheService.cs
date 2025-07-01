@@ -319,7 +319,7 @@ namespace ComparisonTool.Core.Comparison
         public void InvalidateConfigurationChanges(string newConfigFingerprint)
         {
             var toRemove = _comparisonCache
-                .Where(kvp => kvp.Value.ConfigurationFingerprint != newConfigFingerprint)
+                .Where(kvp => kvp.Value != null && kvp.Value.ConfigurationFingerprint != newConfigFingerprint)
                 .Select(kvp => kvp.Key)
                 .ToList();
             
@@ -342,7 +342,7 @@ namespace ComparisonTool.Core.Comparison
         {
             var cutoff = DateTime.UtcNow - _comparisonCacheExpiration;
             var toRemove = _comparisonCache
-                .Where(kvp => kvp.Value.CachedAt < cutoff)
+                .Where(kvp => kvp.Value != null && kvp.Value.CachedAt < cutoff)
                 .Select(kvp => kvp.Key)
                 .ToList();
             
@@ -350,6 +350,7 @@ namespace ComparisonTool.Core.Comparison
             if (toRemove.Count < _comparisonCache.Count / 4)
             {
                 var oldestEntries = _comparisonCache
+                    .Where(kvp => kvp.Value != null)
                     .OrderBy(kvp => kvp.Value.CachedAt)
                     .Take(_comparisonCache.Count / 4)
                     .Select(kvp => kvp.Key);
@@ -373,7 +374,7 @@ namespace ComparisonTool.Core.Comparison
         {
             var cutoff = DateTime.UtcNow - _objectCacheExpiration;
             var toRemove = _objectCache
-                .Where(kvp => kvp.Value.CachedAt < cutoff)
+                .Where(kvp => kvp.Value != null && kvp.Value.CachedAt < cutoff)
                 .Select(kvp => kvp.Key)
                 .ToList();
             
@@ -381,6 +382,7 @@ namespace ComparisonTool.Core.Comparison
             if (toRemove.Count < _objectCache.Count / 4)
             {
                 var oldestEntries = _objectCache
+                    .Where(kvp => kvp.Value != null)
                     .OrderBy(kvp => kvp.Value.CachedAt)
                     .Take(_objectCache.Count / 4)
                     .Select(kvp => kvp.Key);
@@ -410,8 +412,8 @@ namespace ComparisonTool.Core.Comparison
                 CleanupObjectCache();
                 
                 // Check memory usage and clean more aggressively if needed
-                var estimatedMemory = _comparisonCache.Values.Sum(c => c.ApproximateMemorySize) +
-                                    _objectCache.Values.Sum(o => o.ApproximateMemorySize);
+                var estimatedMemory = _comparisonCache.Values.Where(c => c != null).Sum(c => c.ApproximateMemorySize) +
+                                    _objectCache.Values.Where(o => o != null).Sum(o => o.ApproximateMemorySize);
                 
                 if (estimatedMemory > _maxCacheMemoryBytes)
                 {
@@ -420,6 +422,7 @@ namespace ComparisonTool.Core.Comparison
                     
                     // Remove half the entries, starting with largest and oldest
                     var comparisonToRemove = _comparisonCache
+                        .Where(kvp => kvp.Value != null)
                         .OrderByDescending(kvp => kvp.Value.ApproximateMemorySize)
                         .ThenBy(kvp => kvp.Value.CachedAt)
                         .Take(_comparisonCache.Count / 2)
@@ -432,6 +435,7 @@ namespace ComparisonTool.Core.Comparison
                     }
                     
                     var objectToRemove = _objectCache
+                        .Where(kvp => kvp.Value != null)
                         .OrderByDescending(kvp => kvp.Value.ApproximateMemorySize)
                         .ThenBy(kvp => kvp.Value.CachedAt)
                         .Take(_objectCache.Count / 2)

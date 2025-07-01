@@ -446,6 +446,9 @@
     public EventCallback<IgnoreRule> OnPropertyAdded { get; set; }
 
     [Parameter]
+    public EventCallback<IEnumerable<IgnoreRule>> OnPropertiesBatchAdded { get; set; }
+
+    [Parameter]
     public EventCallback<string> OnPropertyRemoved { get; set; }
 
     private Modal propertyModal;
@@ -872,6 +875,8 @@
                 bulkIgnoreStatus = $"Processing batch {batchIndex + 1}/{batches.Count} ({batch.Count} properties)";
                 Console.WriteLine(bulkIgnoreStatus);
 
+                                var batchRules = new List<IgnoreRule>();
+                
                 foreach (var propertyPath in batch)
                 {
                     var rule = new IgnoreRule
@@ -889,10 +894,24 @@
                     }
 
                     IgnoredProperties.Add(rule);
-                    await OnPropertyAdded.InvokeAsync(rule);
-
+                    batchRules.Add(rule);
+                    
                     processedCount++;
                     bulkIgnoreProgress = (int)((double)processedCount / propertiesCount * 100);
+                }
+
+                // Process entire batch at once for better performance
+                if (OnPropertiesBatchAdded.HasDelegate)
+                {
+                    await OnPropertiesBatchAdded.InvokeAsync(batchRules);
+                }
+                else
+                {
+                    // Fallback to individual processing if batch method not available
+                    foreach (var rule in batchRules)
+                    {
+                        await OnPropertyAdded.InvokeAsync(rule);
+                    }
                 }
 
                 // Allow UI to update between batches
