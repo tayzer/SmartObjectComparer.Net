@@ -58,7 +58,7 @@
                 
                 <!-- Summary Statistics -->
                 <div class="row mb-3">
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <div class="card bg-light">
                             <div class="card-body text-center py-2">
                                 <h6 class="card-title mb-1 text-muted">Files Analyzed</h6>
@@ -66,7 +66,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <div class="card bg-light">
                             <div class="card-body text-center py-2">
                                 <h6 class="card-title mb-1 text-muted">Files with Differences</h6>
@@ -74,7 +74,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <div class="card bg-light">
                             <div class="card-body text-center py-2">
                                 <h6 class="card-title mb-1 text-muted">Total Differences</h6>
@@ -82,11 +82,27 @@
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-2">
                         <div class="card bg-light">
                             <div class="card-body text-center py-2">
                                 <h6 class="card-title mb-1 text-muted">Critical Issues</h6>
                                 <h4 class="mb-0 text-danger">@Analysis.CriticalDifferencesFound</h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="card bg-light">
+                            <div class="card-body text-center py-2">
+                                <h6 class="card-title mb-1 text-muted">Categorized</h6>
+                                <h4 class="mb-0 text-success">@(Analysis.TotalDifferencesFound - Analysis.UncategorizedDifferencesFound)</h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2">
+                        <div class="card bg-light">
+                            <div class="card-body text-center py-2">
+                                <h6 class="card-title mb-1 text-muted">Uncategorized</h6>
+                                <h4 class="mb-0 text-secondary">@Analysis.UncategorizedDifferencesFound</h4>
                             </div>
                         </div>
                     </div>
@@ -178,6 +194,13 @@
                                 @onclick="@(() => ActiveTab = "order")">
                             <i class="bi bi-sort-down"></i>
                             Element Order (@Analysis.ElementOrderDifferences.Count)
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link @(ActiveTab == "uncategorized" ? "active" : "")" 
+                                @onclick="@(() => ActiveTab = "uncategorized")">
+                            <i class="bi bi-question-circle"></i>
+                            Uncategorized (@Analysis.UncategorizedDifferences.Count)
                         </button>
                     </li>
                 </ul>
@@ -291,6 +314,36 @@
                         else
                         {
                             <EnhancedPatternListView Patterns="Analysis.ElementOrderDifferences" 
+                                                   OnSelectPattern="SetSelectedPattern" />
+                        }
+                    }
+                    
+                    @if (ActiveTab == "uncategorized")
+                    {
+                        <h6><i class="bi bi-question-circle text-secondary"></i> Uncategorized Differences</h6>
+                        <div class="small text-muted mb-3">
+                            Differences that don't fit into any specific pattern category. These may include:
+                            <ul class="mt-2">
+                                <li>Value changes that appear in only one file</li>
+                                <li>Property differences that don't meet pattern thresholds</li>
+                                <li>Unique or irregular differences that need individual review</li>
+                            </ul>
+                        </div>
+                        
+                        @if (!Analysis.UncategorizedDifferences.Any())
+                        {
+                            <div class="alert alert-success">
+                                <i class="bi bi-check-circle"></i>
+                                All differences have been successfully categorized into patterns. This indicates strong consistency in your data differences.
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="alert alert-warning">
+                                <strong>@Analysis.UncategorizedDifferencesFound uncategorized differences found</strong> across @Analysis.UncategorizedDifferences.Sum(p => p.FileCount) files.
+                                These differences may require individual investigation as they don't fit established patterns.
+                            </div>
+                            <EnhancedPatternListView Patterns="Analysis.UncategorizedDifferences" 
                                                    OnSelectPattern="SetSelectedPattern" />
                         }
                     }

@@ -73,6 +73,11 @@ namespace ComparisonTool.Core.Comparison.Analysis
 
             public List<StructuralPattern> GeneralValueDifferences { get; set; } = new List<StructuralPattern>();
 
+            /// <summary>
+            /// Differences that don't fit into any specific pattern category.
+            /// </summary>
+            public List<StructuralPattern> UncategorizedDifferences { get; set; } = new List<StructuralPattern>();
+
             public List<StructuralPattern> AllPatterns { get; set; } = new List<StructuralPattern>();
 
             // Summary statistics
@@ -80,6 +85,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
             public int FilesWithDifferences { get; set; }
             public int TotalDifferencesFound { get; set; }
             public int CriticalDifferencesFound { get; set; }
+            public int UncategorizedDifferencesFound { get; set; }
         }
 
 
@@ -97,6 +103,9 @@ namespace ComparisonTool.Core.Comparison.Analysis
             var pathSegmentCounts = new Dictionary<string, Dictionary<string, int>>();
             var missingElementTotals = new Dictionary<string, int>();
             var valueDifferences = new Dictionary<string, Dictionary<(string OldValue, string NewValue), int>>();
+
+            // Track which differences have been categorized into patterns
+            var categorizedDifferences = new HashSet<Difference>();
 
             // First pass: collect all differences with file pair context
             foreach (var filePairResult in folderResults.FilePairResults)
@@ -178,12 +187,15 @@ namespace ComparisonTool.Core.Comparison.Analysis
             // Second pass: identify consistent patterns
             var structuralPatterns = new Dictionary<string, StructuralPattern>();
 
-            AnalyzeCriticalMissingProperties(allDifferences, structuralPatterns);
-            AnalyzeMissingProperties(allDifferences, structuralPatterns);
-            AnalyzeCollectionElements(allDifferences, structuralPatterns);
-            AnalyzeOrderDifferences(allDifferences, structuralPatterns);
-            AnalyzeValueDifferences(allDifferences, valueDifferences, structuralPatterns);
-            AnalyzeGeneralValueDifferences(allDifferences, structuralPatterns);
+            AnalyzeCriticalMissingProperties(allDifferences, structuralPatterns, categorizedDifferences);
+            AnalyzeMissingProperties(allDifferences, structuralPatterns, categorizedDifferences);
+            AnalyzeCollectionElements(allDifferences, structuralPatterns, categorizedDifferences);
+            AnalyzeOrderDifferences(allDifferences, structuralPatterns, categorizedDifferences);
+            AnalyzeValueDifferences(allDifferences, valueDifferences, structuralPatterns, categorizedDifferences);
+            AnalyzeGeneralValueDifferences(allDifferences, structuralPatterns, categorizedDifferences);
+
+            // Identify uncategorized differences
+            AnalyzeUncategorizedDifferences(allDifferences, categorizedDifferences, structuralPatterns);
 
             // Calculate consistency percentages and organise patterns
             foreach (var pattern in structuralPatterns.Values)
@@ -204,6 +216,9 @@ namespace ComparisonTool.Core.Comparison.Analysis
                         break;
                     case false when pattern.Category is DifferenceCategory.GeneralValueChanged:
                         result.GeneralValueDifferences.Add(pattern);
+                        break;
+                    case false when pattern.Category is DifferenceCategory.UncategorizedDifference:
+                        result.UncategorizedDifferences.Add(pattern);
                         break;
                     default:
                         if (pattern.Category == DifferenceCategory.CollectionItemChanged)
@@ -226,6 +241,10 @@ namespace ComparisonTool.Core.Comparison.Analysis
             result.AllPatterns.AddRange(result.ElementOrderDifferences);
             result.AllPatterns.AddRange(result.ConsistentValueDifferences);
             result.AllPatterns.AddRange(result.GeneralValueDifferences);
+            result.AllPatterns.AddRange(result.UncategorizedDifferences);
+
+            // Set uncategorized count
+            result.UncategorizedDifferencesFound = result.UncategorizedDifferences.Sum(p => p.OccurenceCount);
 
             // Sort by criticality, then consistency
             result.ConsistentValueDifferences = result.ConsistentValueDifferences
@@ -238,15 +257,21 @@ namespace ComparisonTool.Core.Comparison.Analysis
                 .ThenByDescending(p => p.FileCount)
                 .ToList();
 
-            logger?.LogInformation("Enhanced structural analysis complete. Found {CriticalCount} critical missing elements, {MissingProps} consistently missing properties, and {OrderDiffs} element order differences",
-                result.CriticalMissingElements.Count, result.ConsistentlyMissingProperties.Count, result.ElementOrderDifferences.Count);
+            result.UncategorizedDifferences = result.UncategorizedDifferences
+                .OrderByDescending(p => p.FileCount)
+                .ThenByDescending(p => p.OccurenceCount)
+                .ToList();
+
+            logger?.LogInformation("Enhanced structural analysis complete. Found {CriticalCount} critical missing elements, {MissingProps} consistently missing properties, {OrderDiffs} element order differences, and {UncategorizedCount} uncategorized differences",
+                result.CriticalMissingElements.Count, result.ConsistentlyMissingProperties.Count, result.ElementOrderDifferences.Count, result.UncategorizedDifferences.Count);
 
             return result;
         }
 
         private void AnalyzeCriticalMissingProperties(
             List<(Difference Difference, string FilePair, FilePairComparisonResult Result)> allDifferences,
-            Dictionary<string, StructuralPattern> patterns)
+            Dictionary<string, StructuralPattern> patterns,
+            HashSet<Difference> categorizedDifferences)
         {
             var criticalDifferences = allDifferences
                 .Where(c => IsCriticalProperty(c.Difference.PropertyName) && IsPropertyMissing(c.Difference))
@@ -289,12 +314,18 @@ namespace ComparisonTool.Core.Comparison.Analysis
                             HumanReadableDescription = description,
                             RecommendAction = action
                         };
+
+                        // Mark all differences in this group as categorized
+                        foreach (var difference in group)
+                        {
+                            categorizedDifferences.Add(difference.Difference);
+                        }
                     }
                 }
             }
         }
 
-        private void AnalyzeMissingProperties(List<(Difference difference, string FilePair, FilePairComparisonResult Result)> allDifferences, Dictionary<string, StructuralPattern> structuralPatterns)
+        private void AnalyzeMissingProperties(List<(Difference difference, string FilePair, FilePairComparisonResult Result)> allDifferences, Dictionary<string, StructuralPattern> structuralPatterns, HashSet<Difference> categorizedDifferences)
         {
             foreach (var (diff, filePair, _) in allDifferences)
             {
@@ -328,6 +359,9 @@ namespace ComparisonTool.Core.Comparison.Analysis
                                 HumanReadableDescription = description,
                                 RecommendAction = action
                             };
+
+                            // Mark this difference as categorized
+                            categorizedDifferences.Add(diff);
                         }
                         else
                         {
@@ -343,13 +377,16 @@ namespace ComparisonTool.Core.Comparison.Analysis
                             {
                                 existingPattern.Examples.Add(diff);
                             }
+
+                            // Mark this difference as categorized
+                            categorizedDifferences.Add(diff);
                         }
                     }
                 }
             }
         }
 
-        private void AnalyzeValueDifferences(List<(Difference Difference, string FilePair, FilePairComparisonResult Result)> allDifferences, Dictionary<string, Dictionary<(string OldValue, string NewValue), int>> valueDifferences, Dictionary<string, StructuralPattern> structuralPatterns)
+        private void AnalyzeValueDifferences(List<(Difference Difference, string FilePair, FilePairComparisonResult Result)> allDifferences, Dictionary<string, Dictionary<(string OldValue, string NewValue), int>> valueDifferences, Dictionary<string, StructuralPattern> structuralPatterns, HashSet<Difference> categorizedDifferences)
         {
             // Find paths with consistent value changes across multiple files
             foreach (var pathEntry in valueDifferences)
@@ -389,8 +426,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
 
                             var category = DetermineValueChangeCategory(oldValue, newValue);
 
-                            var description =
-                                $"The value of '{propertyName}' consistently changes from '{TruncateValue(oldValue)}' to '{TruncateValue(newValue)}'";
+                            var description = GenerateValueChangeDescription(propertyName, oldValue, newValue);
                             var action =
                                 $"Verify if this value change is expected. This appears in {affectedFiles.Count} files";
 
@@ -410,13 +446,19 @@ namespace ComparisonTool.Core.Comparison.Analysis
                                 HumanReadableDescription = description,
                                 RecommendAction = action
                             };
+
+                            // Mark all matching differences as categorized
+                            foreach (var diff in matchingDiffs)
+                            {
+                                categorizedDifferences.Add(diff.Difference);
+                            }
                         }
                     }
                 }
             }
         }
 
-        private void AnalyzeOrderDifferences(List<(Difference Difference, string FilePair, FilePairComparisonResult Result)> allDifferences, Dictionary<string, StructuralPattern> structuralPatterns)
+        private void AnalyzeOrderDifferences(List<(Difference Difference, string FilePair, FilePairComparisonResult Result)> allDifferences, Dictionary<string, StructuralPattern> structuralPatterns, HashSet<Difference> categorizedDifferences)
         {
             var fileGroups = allDifferences.GroupBy(d => d.FilePair);
 
@@ -475,6 +517,12 @@ namespace ComparisonTool.Core.Comparison.Analysis
                                 HumanReadableDescription = description,
                                 RecommendAction = action
                             };
+
+                            // Mark all differences in this collection group as categorized
+                            foreach (var diff in collectionGroup)
+                            {
+                                categorizedDifferences.Add(diff.Difference);
+                            }
                         }
                         else
                         {
@@ -493,13 +541,19 @@ namespace ComparisonTool.Core.Comparison.Analysis
                                     existingPattern.Examples.Add(example);
                                 }
                             }
+
+                            // Mark all differences in this collection group as categorized
+                            foreach (var diff in collectionGroup)
+                            {
+                                categorizedDifferences.Add(diff.Difference);
+                            }
                         }
                     }
                 }
             }
         }
 
-        private void AnalyzeCollectionElements(List<(Difference Difference, string FilePair, FilePairComparisonResult Result)> allDifferences, Dictionary<string, StructuralPattern> structuralPatterns)
+        private void AnalyzeCollectionElements(List<(Difference Difference, string FilePair, FilePairComparisonResult Result)> allDifferences, Dictionary<string, StructuralPattern> structuralPatterns, HashSet<Difference> categorizedDifferences)
         {
             foreach (var (difference, filePair, _) in allDifferences)
             {
@@ -531,6 +585,9 @@ namespace ComparisonTool.Core.Comparison.Analysis
                             HumanReadableDescription = description,
                             RecommendAction = action
                         };
+
+                        // Mark this difference as categorized
+                        categorizedDifferences.Add(difference);
                     }
                     else
                     {
@@ -546,6 +603,9 @@ namespace ComparisonTool.Core.Comparison.Analysis
                         {
                             existingPattern.Examples.Add(difference);
                         }
+
+                        // Mark this difference as categorized
+                        categorizedDifferences.Add(difference);
                     }
                 }
             }
@@ -620,6 +680,27 @@ namespace ComparisonTool.Core.Comparison.Analysis
             }
 
             return value;
+        }
+
+        private string GenerateValueChangeDescription(string propertyName, string oldValue, string newValue)
+        {
+            var segments = ExtractPathSegments(propertyName);
+            var lastSegment = segments.Last();
+
+            // Handle null to value changes (property becoming present)
+            if (string.IsNullOrEmpty(oldValue) || oldValue == "null")
+            {
+                return $"A new property '{lastSegment}' is now present";
+            }
+
+            // Handle value to null changes (property becoming absent)
+            if (string.IsNullOrEmpty(newValue) || newValue == "null")
+            {
+                return $"The property '{lastSegment}' is no longer present";
+            }
+
+            // Handle regular value-to-value changes (keep existing detailed behavior)
+            return $"The value of '{propertyName}' consistently changes from '{TruncateValue(oldValue)}' to '{TruncateValue(newValue)}'";
         }
 
         private string ExtractCollectionName(string path)
@@ -729,7 +810,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
             }
         }
 
-        private void AnalyzeGeneralValueDifferences(List<(Difference Difference, string FilePair, FilePairComparisonResult Result)> allDifferences, Dictionary<string, StructuralPattern> structuralPatterns)
+        private void AnalyzeGeneralValueDifferences(List<(Difference Difference, string FilePair, FilePairComparisonResult Result)> allDifferences, Dictionary<string, StructuralPattern> structuralPatterns, HashSet<Difference> categorizedDifferences)
         {
             // Track general change frequency regardless of specific values
             var generalChangeCounts = new Dictionary<string, Dictionary<string, int>>();
@@ -777,10 +858,14 @@ namespace ComparisonTool.Core.Comparison.Analysis
                         var affectedFiles = fileCounts.Keys.ToList();
                         var totalOccurrences = fileCounts.Values.Sum();
 
-                        // Find examples of differences for this path
-                        var examples = allDifferences
+                        // Find all matching differences for this path
+                        var matchingDifferences = allDifferences
                             .Where(d => NormalizePropertyPath(d.Difference.PropertyName) == path && 
                                        !IsPropertyMissing(d.Difference))
+                            .ToList();
+
+                        // Find examples from the matching differences
+                        var examples = matchingDifferences
                             .Take(3)
                             .Select(d => d.Difference)
                             .ToList();
@@ -804,7 +889,51 @@ namespace ComparisonTool.Core.Comparison.Analysis
                             HumanReadableDescription = description,
                             RecommendAction = action
                         };
+
+                        // Mark all matching differences as categorized
+                        foreach (var diff in matchingDifferences)
+                        {
+                            categorizedDifferences.Add(diff.Difference);
+                        }
                     }
+                }
+            }
+        }
+
+        private void AnalyzeUncategorizedDifferences(List<(Difference Difference, string FilePair, FilePairComparisonResult Result)> allDifferences, HashSet<Difference> categorizedDifferences, Dictionary<string, StructuralPattern> structuralPatterns)
+        {
+            var uncategorizedDifferences = allDifferences
+                .Where(d => !categorizedDifferences.Contains(d.Difference))
+                .ToList();
+
+            if (uncategorizedDifferences.Count > 0)
+            {
+                var pattern = "Uncategorized Differences";
+
+                if (!structuralPatterns.ContainsKey(pattern))
+                {
+                    var affectedFiles = uncategorizedDifferences.Select(d => d.FilePair).Distinct().ToList();
+                    var examples = uncategorizedDifferences.Take(3).Select(d => d.Difference).ToList();
+
+                    var description = "Differences that don't fit into any specific pattern category";
+                    var action = $"Review these differences as they may indicate issues that need further investigation";
+
+                    structuralPatterns[pattern] = new StructuralPattern()
+                    {
+                        ParentPath = string.Empty,
+                        MissingProperty = string.Empty,
+                        FullPattern = pattern,
+                        Category = DifferenceCategory.UncategorizedDifference,
+                        IsCollectionElement = false,
+                        CollectionName = string.Empty,
+                        AffectedFiles = affectedFiles,
+                        Examples = examples,
+                        OccurenceCount = uncategorizedDifferences.Count,
+                        FileCount = affectedFiles.Count,
+                        IsCriticalProperty = false,
+                        HumanReadableDescription = description,
+                        RecommendAction = action
+                    };
                 }
             }
         }

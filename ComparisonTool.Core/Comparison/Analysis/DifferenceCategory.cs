@@ -15,5 +15,6 @@ public enum DifferenceCategory
     NullValueChange,
     ValueChanged,
     GeneralValueChanged,
+    UncategorizedDifference,
     Other
 }
