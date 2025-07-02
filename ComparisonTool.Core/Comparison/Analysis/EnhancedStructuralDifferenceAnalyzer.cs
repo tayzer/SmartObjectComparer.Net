@@ -121,9 +121,11 @@ namespace ComparisonTool.Core.Comparison.Analysis
 
                     // Extract parent path for this difference
                     var segments = ExtractPathSegments(difference.PropertyName);
+                    
+                    // Process both top-level and nested properties
                     if (segments.Count > 1)
                     {
-                        // Track occurances of child elements under parents
+                        // Track occurances of child elements under parents (nested properties)
                         var parentPath = string.Join(".", segments.Take(segments.Count - 1));
                         var childElement = segments.Last();
 
@@ -138,48 +140,66 @@ namespace ComparisonTool.Core.Comparison.Analysis
                         }
 
                         pathSegmentCounts[parentPath][childElement]++;
+                    }
+                    else if (segments.Count == 1)
+                    {
+                        // Track top-level properties under a special "Root" parent
+                        var parentPath = "Root";
+                        var childElement = segments.First();
 
-                        // Track missing elements if this is a null value change
-                        if (IsPropertyMissing(difference))
+                        if (!pathSegmentCounts.ContainsKey(parentPath))
                         {
-                            var missingPath = difference.PropertyName;
-
-                            if (!missingElementTotals.ContainsKey(missingPath))
-                            {
-                                missingElementTotals[missingPath] = 0;
-                            }
-
-                            missingElementTotals[missingPath]++;
-
-                            // Check if this is a critical property
-                            if (IsCriticalProperty(difference.PropertyName))
-                            {
-                                result.CriticalDifferencesFound++;
-                            }
+                            pathSegmentCounts[parentPath] = new Dictionary<string, int>();
                         }
 
-                        // Track value differences
-                        if (!IsPropertyMissing(difference) && difference.Object1Value != null &&
-                            difference.Object2Value != null)
+                        if (!pathSegmentCounts[parentPath].ContainsKey(childElement))
                         {
-                            var normalizedPath = NormalizePropertyPath(difference.PropertyName);
-                            var oldValue = difference.Object1Value.ToString() ?? "null";
-                            var newValue = difference.Object2Value.ToString() ?? "null";
-
-                            if (!valueDifferences.ContainsKey(normalizedPath))
-                            {
-                                valueDifferences[normalizedPath] = new Dictionary<(string, string), int>();
-                            }
-
-                            var valuePair = (oldValue,  newValue);
-
-                            if (!valueDifferences[normalizedPath].ContainsKey(valuePair))
-                            {
-                                valueDifferences[normalizedPath][valuePair] = 0;
-                            }
-
-                            valueDifferences[normalizedPath][valuePair]++;
+                            pathSegmentCounts[parentPath][childElement] = 0;
                         }
+
+                        pathSegmentCounts[parentPath][childElement]++;
+                    }
+
+                    // Track missing elements if this is a null value change (all properties)
+                    if (IsPropertyMissing(difference))
+                    {
+                        var missingPath = difference.PropertyName;
+
+                        if (!missingElementTotals.ContainsKey(missingPath))
+                        {
+                            missingElementTotals[missingPath] = 0;
+                        }
+
+                        missingElementTotals[missingPath]++;
+
+                        // Check if this is a critical property
+                        if (IsCriticalProperty(difference.PropertyName))
+                        {
+                            result.CriticalDifferencesFound++;
+                        }
+                    }
+
+                    // Track value differences (all properties)
+                    if (!IsPropertyMissing(difference) && difference.Object1Value != null &&
+                        difference.Object2Value != null)
+                    {
+                        var normalizedPath = NormalizePropertyPath(difference.PropertyName);
+                        var oldValue = difference.Object1Value.ToString() ?? "null";
+                        var newValue = difference.Object2Value.ToString() ?? "null";
+
+                        if (!valueDifferences.ContainsKey(normalizedPath))
+                        {
+                            valueDifferences[normalizedPath] = new Dictionary<(string, string), int>();
+                        }
+
+                        var valuePair = (oldValue,  newValue);
+
+                        if (!valueDifferences[normalizedPath].ContainsKey(valuePair))
+                        {
+                            valueDifferences[normalizedPath][valuePair] = 0;
+                        }
+
+                        valueDifferences[normalizedPath][valuePair]++;
                     }
                 }
             }
@@ -333,54 +353,70 @@ namespace ComparisonTool.Core.Comparison.Analysis
                     !IsCriticalProperty(diff.PropertyName))
                 {
                     var segments = ExtractPathSegments(diff.PropertyName);
+                    string parentPath;
+                    string missingProperty;
+                    string pattern;
+
                     if (segments.Count > 1)
                     {
-                        var parentPath = string.Join(".", segments.Take(segments.Count - 1));
-                        var missingProperty = segments.Last();
+                        // Nested property
+                        parentPath = string.Join(".", segments.Take(segments.Count - 1));
+                        missingProperty = segments.Last();
+                        pattern = $"{parentPath}.{missingProperty}";
+                    }
+                    else if (segments.Count == 1)
+                    {
+                        // Top-level property
+                        parentPath = "Root";
+                        missingProperty = segments.First();
+                        pattern = missingProperty; // Use just the property name for top-level
+                    }
+                    else
+                    {
+                        continue; // Skip if no valid segments
+                    }
 
-                        var pattern = $"{parentPath}.{missingProperty}";
-                        if (!structuralPatterns.ContainsKey(pattern))
+                    if (!structuralPatterns.ContainsKey(pattern))
+                    {
+                        var description = GetHumanReadableDescription(pattern, missingProperty, false);
+                        var action = GetRecommendedAction(pattern, missingProperty, false);
+
+                        structuralPatterns[pattern] = new StructuralPattern()
                         {
-                            var description = GetHumanReadableDescription(pattern, missingProperty, false);
-                            var action = GetRecommendedAction(pattern, missingProperty, false);
+                            ParentPath = parentPath,
+                            MissingProperty = missingProperty,
+                            FullPattern = pattern,
+                            Category = DifferenceCategory.NullValueChange,
+                            IsCollectionElement = false,
+                            AffectedFiles = new List<string>(){filePair},
+                            Examples = new List<Difference>(){diff},
+                            OccurenceCount = 1,
+                            FileCount = 1,
+                            IsCriticalProperty = false,
+                            HumanReadableDescription = description,
+                            RecommendAction = action
+                        };
 
-                            structuralPatterns[pattern] = new StructuralPattern()
-                            {
-                                ParentPath = parentPath,
-                                MissingProperty = missingProperty,
-                                FullPattern = pattern,
-                                Category = DifferenceCategory.NullValueChange,
-                                IsCollectionElement = false,
-                                AffectedFiles = new List<string>(){filePair},
-                                Examples = new List<Difference>(){diff},
-                                OccurenceCount = 1,
-                                FileCount = 1,
-                                IsCriticalProperty = false,
-                                HumanReadableDescription = description,
-                                RecommendAction = action
-                            };
-
-                            // Mark this difference as categorized
-                            categorizedDifferences.Add(diff);
-                        }
-                        else
+                        // Mark this difference as categorized
+                        categorizedDifferences.Add(diff);
+                    }
+                    else
+                    {
+                        var existingPattern = structuralPatterns[pattern];
+                        existingPattern.OccurenceCount++;
+                        if (!existingPattern.AffectedFiles.Contains(filePair))
                         {
-                            var existingPattern = structuralPatterns[pattern];
-                            existingPattern.OccurenceCount++;
-                            if (!existingPattern.AffectedFiles.Contains(filePair))
-                            {
-                                existingPattern.AffectedFiles.Add(filePair);
-                                existingPattern.FileCount++;
-                            }
-
-                            if (existingPattern.Examples.Count < 3)
-                            {
-                                existingPattern.Examples.Add(diff);
-                            }
-
-                            // Mark this difference as categorized
-                            categorizedDifferences.Add(diff);
+                            existingPattern.AffectedFiles.Add(filePair);
+                            existingPattern.FileCount++;
                         }
+
+                        if (existingPattern.Examples.Count < 3)
+                        {
+                            existingPattern.Examples.Add(diff);
+                        }
+
+                        // Mark this difference as categorized
+                        categorizedDifferences.Add(diff);
                     }
                 }
             }
