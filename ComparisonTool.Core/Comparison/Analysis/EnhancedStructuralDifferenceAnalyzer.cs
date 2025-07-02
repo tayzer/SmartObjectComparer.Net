@@ -96,7 +96,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
             var result = new EnhancedStructuralAnalysisResult()
             {
                 TotalFilesAnalyzed = folderResults.FilePairResults.Count,
-                FilesWithDifferences = folderResults.FilePairResults.Count(r => r.AreEqual == false)
+                FilesWithDifferences = folderResults.FilePairResults.Count(r => r.Summary != null && !r.Summary.AreEqual)
             };
 
             var allDifferences = new List<(Difference difference, string FilePair, FilePairComparisonResult Result)>();
@@ -110,7 +110,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
             // First pass: collect all differences with file pair context
             foreach (var filePairResult in folderResults.FilePairResults)
             {
-                if(filePairResult.AreEqual) continue;
+                if(filePairResult.Summary == null || filePairResult.Summary.AreEqual) continue;
 
                 var pairIdentifier = $"{filePairResult.File1Name} vs {filePairResult.File2Name}";
 
