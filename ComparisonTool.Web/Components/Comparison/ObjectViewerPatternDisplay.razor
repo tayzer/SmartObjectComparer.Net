@@ -110,6 +110,29 @@
         font-size: 0.75rem;
         font-weight: 500;
     }
+
+    .nested-object-group {
+        margin-left: 1rem;
+        border-left: 2px solid #e9ecef !important;
+        padding-left: 1rem;
+    }
+
+    .nested-object-header {
+        cursor: pointer;
+        padding: 0.5rem;
+        border-radius: 0.25rem;
+        transition: background-color 0.15s ease-in-out;
+        background-color: #fff8e1;
+        border: 1px solid #ffcc02;
+    }
+
+    .nested-object-header:hover {
+        background-color: #fff3c4;
+    }
+
+    .nested-object-indicator {
+        font-size: 0.9em;
+    }
 </style>
 
 <div class="object-viewer-container">
@@ -164,6 +187,7 @@
     private RenderFragment<HierarchicalGroup>? RenderCollectionGroup;
     private RenderFragment<HierarchicalGroup>? RenderCollectionItem;
     private RenderFragment<HierarchicalGroup>? RenderObjectGroup;
+    private RenderFragment<HierarchicalGroup>? RenderNestedObjectGroup;
 
     public enum HierarchicalGroupType
     {
@@ -285,9 +309,16 @@
                         </div>
                     }
 
-                    @foreach (var childGroup in group.Children.OrderBy(c => c.ItemIndex))
+                    @foreach (var childGroup in group.Children.OrderBy(c => c.ItemIndex ?? ""))
                     {
-                        @RenderCollectionItem!(childGroup)
+                        @if (childGroup.Type == HierarchicalGroupType.CollectionItem)
+                        {
+                            @RenderCollectionItem!(childGroup)
+                        }
+                        else
+                        {
+                            @RenderNestedObjectGroup!(childGroup)
+                        }
                     }
                 </div>
             }
@@ -371,6 +402,12 @@
                                 </div>
                             </div>
                         </div>
+                    }
+
+                    @* Nested objects within collection items *@
+                    @foreach (var nestedGroup in group.Children.OrderBy(c => c.DisplayName))
+                    {
+                        @RenderNestedObjectGroup!(nestedGroup)
                     }
                 </div>
             }
@@ -462,6 +499,97 @@
                     }
                 </div>
             }
+        };
+
+        RenderNestedObjectGroup = (group) => __builder =>
+        {
+            <div class="nested-object-group ms-3 border-start border-2 border-light ps-3 mb-2">
+                <div class="nested-object-header" @onclick="() => ToggleGroup(group.Path)">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-chevron-right expand-icon me-2 @(IsGroupExpanded(group.Path) ? "expanded" : "")" style="font-size: 0.8em;"></i>
+                            <div>
+                                <div class="d-flex align-items-center">
+                                    <span class="nested-object-indicator me-2">📁</span>
+                                    <strong class="text-primary">@group.DisplayName</strong>
+                                </div>
+                                <small class="text-muted">
+                                    @group.DirectPatterns.Count pattern@(group.DirectPatterns.Count != 1 ? "s" : "") • 
+                                    @group.TotalOccurrences occurrence@(group.TotalOccurrences != 1 ? "s" : "")
+                                </small>
+                            </div>
+                        </div>
+                        @if (group.HasCriticalPatterns)
+                        {
+                            <span class="badge bg-danger">Critical</span>
+                        }
+                    </div>
+                </div>
+
+                @if (IsGroupExpanded(group.Path))
+                {
+                    <div class="nested-object-content mt-2">
+                        @foreach (var pattern in group.DirectPatterns)
+                        {
+                            <div class="child-pattern-row @GetPatternRowClass(pattern)" @onclick="() => OnSelectPattern.InvokeAsync(pattern)">
+                                <div class="row align-items-center">
+                                    <div class="col-md-1">
+                                        @if (pattern.IsCriticalProperty)
+                                        {
+                                            <i class="bi bi-exclamation-triangle text-danger"></i>
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-info-circle text-info"></i>
+                                        }
+                                    </div>
+                                    <div class="col-md-3">
+                                        <code class="small">@GetRelativePropertyName(pattern.FullPattern, group.Path)</code>
+                                    </div>
+                                    <div class="col-md-4">
+                                        @if (!string.IsNullOrEmpty(pattern.HumanReadableDescription))
+                                        {
+                                            <small>@pattern.HumanReadableDescription</small>
+                                        }
+                                        else
+                                        {
+                                            <small class="text-muted">Property difference</small>
+                                        }
+                                    </div>
+                                    <div class="col-md-1">
+                                        <span class="badge bg-info">@pattern.FileCount</span>
+                                    </div>
+                                    <div class="col-md-1">
+                                        <span class="badge bg-primary">@pattern.OccurenceCount</span>
+                                    </div>
+                                    <div class="col-md-1">
+                                        <div class="d-flex align-items-center">
+                                            <div class="progress flex-grow-1 me-1" style="height: 12px; width: 40px;">
+                                                <div class="progress-bar @GetConsistencyProgressClass(pattern.Consistency)" 
+                                                     style="width: @(pattern.Consistency)%">
+                                                </div>
+                                            </div>
+                                            <small>@pattern.Consistency.ToString("0.0")%</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-1">
+                                        @if (!string.IsNullOrEmpty(pattern.RecommendAction))
+                                        {
+                                            <i class="bi bi-lightbulb text-warning" title="@pattern.RecommendAction"></i>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        }
+
+                        @* Recursively render further nested objects *@
+                        @foreach (var nestedGroup in group.Children.OrderBy(c => c.DisplayName))
+                        {
+                            @RenderNestedObjectGroup!(nestedGroup)
+                        }
+                    </div>
+                }
+            </div>
         };
     }
 
@@ -558,18 +686,64 @@
                     collectionGroup.Children.Add(itemGroup);
                 }
 
-                // Create a pattern with the property name relative to the item
+                // Create nested object structure within the collection item
                 if (!string.IsNullOrEmpty(pathInfo.PropertyAfterCollection))
                 {
-                    itemGroup.DirectPatterns.Add(pattern);
+                    AddPatternToCollectionHierarchy(pattern, pathInfo.PropertyAfterCollection, itemGroup);
                 }
             }
         }
         else
         {
-            // This is a [*] pattern, add it directly to the collection group
-            collectionGroup.DirectPatterns.Add(pattern);
+            // This is a [*] pattern - create nested object structure directly under collection
+            if (!string.IsNullOrEmpty(pathInfo.PropertyAfterCollection))
+            {
+                AddPatternToCollectionHierarchy(pattern, pathInfo.PropertyAfterCollection, collectionGroup);
+            }
+            else
+            {
+                // Direct collection property (no nested object)
+                collectionGroup.DirectPatterns.Add(pattern);
+            }
         }
+    }
+
+    private void AddPatternToCollectionHierarchy(EnhancedStructuralDifferenceAnalyzer.StructuralPattern pattern, string propertyPath, HierarchicalGroup parentGroup)
+    {
+        var pathSegments = propertyPath.Split('.');
+        
+        if (pathSegments.Length == 1)
+        {
+            // Direct property - add to current group
+            parentGroup.DirectPatterns.Add(pattern);
+            return;
+        }
+
+        // Create nested object groups for intermediate path segments
+        var currentGroup = parentGroup;
+        for (int i = 0; i < pathSegments.Length - 1; i++)
+        {
+            var segment = pathSegments[i];
+            var nestedGroupPath = $"{currentGroup.Path}.{segment}";
+            
+            var nestedGroup = currentGroup.Children.FirstOrDefault(c => c.Path == nestedGroupPath);
+            if (nestedGroup == null)
+            {
+                nestedGroup = new HierarchicalGroup
+                {
+                    Path = nestedGroupPath,
+                    DisplayName = segment,
+                    Type = HierarchicalGroupType.Object,
+                    CollectionName = currentGroup.CollectionName
+                };
+                currentGroup.Children.Add(nestedGroup);
+            }
+            
+            currentGroup = nestedGroup;
+        }
+
+        // Add the pattern to the final nested group
+        currentGroup.DirectPatterns.Add(pattern);
     }
 
     private void AddObjectPattern(EnhancedStructuralDifferenceAnalyzer.StructuralPattern pattern, PathInfo pathInfo, Dictionary<string, HierarchicalGroup> rootGroups)
@@ -714,18 +888,21 @@
         foreach (var group in HierarchicalGroups.Where(g => g.HasCriticalPatterns))
         {
             ExpandedGroups.Add(group.Path);
+            AutoExpandChildGroups(group);
         }
 
         // Auto-expand if there's only one root group
         if (HierarchicalGroups.Count == 1)
         {
             ExpandedGroups.Add(HierarchicalGroups.First().Path);
+            AutoExpandChildGroups(HierarchicalGroups.First());
         }
 
         // Auto-expand object groups (non-collections) by default to show the patterns
         foreach (var group in HierarchicalGroups.Where(g => g.Type == HierarchicalGroupType.Object))
         {
             ExpandedGroups.Add(group.Path);
+            AutoExpandChildGroups(group);
         }
 
         // Auto-expand collection groups with few items
@@ -733,11 +910,22 @@
         {
             ExpandedGroups.Add(group.Path);
             
-            // Also expand the collection items
+            // Also expand the collection items and their nested objects
             foreach (var child in group.Children)
             {
                 ExpandedGroups.Add(child.Path);
+                AutoExpandChildGroups(child);
             }
+        }
+    }
+
+    private void AutoExpandChildGroups(HierarchicalGroup group)
+    {
+        // Recursively auto-expand nested object groups with few patterns
+        foreach (var child in group.Children.Where(c => c.DirectPatterns.Count <= 3))
+        {
+            ExpandedGroups.Add(child.Path);
+            AutoExpandChildGroups(child);
         }
     }
 
