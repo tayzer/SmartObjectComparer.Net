@@ -873,64 +873,74 @@ namespace ComparisonTool.Core.Comparison.Analysis
                 }
             }
 
-            // Second pass: create patterns for paths with changes in multiple files
+            // Second pass: create patterns for paths with changes (including single-file changes)
             foreach (var pathEntry in generalChangeCounts)
             {
                 var path = pathEntry.Key;
                 var fileCounts = pathEntry.Value;
 
-                // Only consider paths that have changes in multiple files
-                if (fileCounts.Count > 1)
+                // Process both multi-file and single-file changes
+                var segments = ExtractPathSegments(path);
+                var propertyName = segments.Last();
+                var parentPath = segments.Count > 1 ? string.Join(".", segments.Take(segments.Count - 1)) : string.Empty;
+
+                // Use a pattern key that won't conflict with specific value change patterns
+                var pattern = $"{path}_GENERAL_CHANGE";
+
+                if (!structuralPatterns.ContainsKey(pattern))
                 {
-                    var segments = ExtractPathSegments(path);
-                    var propertyName = segments.Last();
-                    var parentPath = segments.Count > 1 ? string.Join(".", segments.Take(segments.Count - 1)) : string.Empty;
+                    var affectedFiles = fileCounts.Keys.ToList();
+                    var totalOccurrences = fileCounts.Values.Sum();
 
-                    // Use a pattern key that won't conflict with specific value change patterns
-                    var pattern = $"{path}_GENERAL_CHANGE";
+                    // Find all matching differences for this path
+                    var matchingDifferences = allDifferences
+                        .Where(d => NormalizePropertyPath(d.Difference.PropertyName) == path && 
+                                   !IsPropertyMissing(d.Difference))
+                        .ToList();
 
-                    if (!structuralPatterns.ContainsKey(pattern))
+                    // Find examples from the matching differences
+                    var examples = matchingDifferences
+                        .Take(3)
+                        .Select(d => d.Difference)
+                        .ToList();
+
+                    string description;
+                    string action;
+
+                    if (fileCounts.Count > 1)
                     {
-                        var affectedFiles = fileCounts.Keys.ToList();
-                        var totalOccurrences = fileCounts.Values.Sum();
+                        // Multi-file changes
+                        description = $"The value of '{propertyName}' changes frequently across files (regardless of specific values)";
+                        action = $"Review why '{propertyName}' varies across files. This property shows differences in {affectedFiles.Count} files with {totalOccurrences} total changes";
+                    }
+                    else
+                    {
+                        // Single-file changes
+                        description = $"The value of '{propertyName}' has differences in individual files";
+                        action = $"Review the differences in '{propertyName}' for the affected file. This property shows {totalOccurrences} change(s) in 1 file";
+                    }
 
-                        // Find all matching differences for this path
-                        var matchingDifferences = allDifferences
-                            .Where(d => NormalizePropertyPath(d.Difference.PropertyName) == path && 
-                                       !IsPropertyMissing(d.Difference))
-                            .ToList();
+                    structuralPatterns[pattern] = new StructuralPattern()
+                    {
+                        ParentPath = parentPath,
+                        MissingProperty = propertyName,
+                        FullPattern = path,
+                        Category = DifferenceCategory.GeneralValueChanged,
+                        IsCollectionElement = path.Contains("[*]"),
+                        CollectionName = path.Contains("[*]") ? ExtractCollectionName(path) : string.Empty,
+                        AffectedFiles = affectedFiles,
+                        Examples = examples,
+                        OccurenceCount = totalOccurrences,
+                        FileCount = affectedFiles.Count,
+                        IsCriticalProperty = false,
+                        HumanReadableDescription = description,
+                        RecommendAction = action
+                    };
 
-                        // Find examples from the matching differences
-                        var examples = matchingDifferences
-                            .Take(3)
-                            .Select(d => d.Difference)
-                            .ToList();
-
-                        var description = $"The value of '{propertyName}' changes frequently across files (regardless of specific values)";
-                        var action = $"Review why '{propertyName}' varies across files. This property shows differences in {affectedFiles.Count} files with {totalOccurrences} total changes";
-
-                        structuralPatterns[pattern] = new StructuralPattern()
-                        {
-                            ParentPath = parentPath,
-                            MissingProperty = propertyName,
-                            FullPattern = path,
-                            Category = DifferenceCategory.GeneralValueChanged,
-                            IsCollectionElement = path.Contains("[*]"),
-                            CollectionName = path.Contains("[*]") ? ExtractCollectionName(path) : string.Empty,
-                            AffectedFiles = affectedFiles,
-                            Examples = examples,
-                            OccurenceCount = totalOccurrences,
-                            FileCount = affectedFiles.Count,
-                            IsCriticalProperty = false,
-                            HumanReadableDescription = description,
-                            RecommendAction = action
-                        };
-
-                        // Mark all matching differences as categorized
-                        foreach (var diff in matchingDifferences)
-                        {
-                            categorizedDifferences.Add(diff.Difference);
-                        }
+                    // Mark all matching differences as categorized
+                    foreach (var diff in matchingDifferences)
+                    {
+                        categorizedDifferences.Add(diff.Difference);
                     }
                 }
             }
