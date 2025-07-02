@@ -86,6 +86,38 @@ namespace ComparisonTool.Core.Comparison.Analysis
             public int TotalDifferencesFound { get; set; }
             public int CriticalDifferencesFound { get; set; }
             public int UncategorizedDifferencesFound { get; set; }
+
+            // Unique file counts for each category (prevents double-counting)
+            public int UniqueValueDifferenceFiles => 
+                ConsistentValueDifferences.Concat(GeneralValueDifferences)
+                .SelectMany(p => p.AffectedFiles)
+                .Distinct()
+                .Count();
+
+            public int UniqueMissingPropertyFiles =>
+                CriticalMissingElements.Concat(ConsistentlyMissingProperties).Concat(MissingCollectionElements)
+                .SelectMany(p => p.AffectedFiles)
+                .Distinct()
+                .Count();
+
+            public int UniqueUncategorizedFiles =>
+                UncategorizedDifferences
+                .SelectMany(p => p.AffectedFiles)
+                .Distinct()
+                .Count();
+
+            public int UniqueOrderDifferenceFiles =>
+                ElementOrderDifferences
+                .SelectMany(p => p.AffectedFiles)
+                .Distinct()
+                .Count();
+
+            // Total unique files covered by ALL patterns (should match FilesWithDifferences)
+            public int TotalUniqueFilesCovered =>
+                AllPatterns
+                .SelectMany(p => p.AffectedFiles)
+                .Distinct()
+                .Count();
         }
 
 
