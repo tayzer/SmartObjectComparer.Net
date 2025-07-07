@@ -121,6 +121,15 @@ namespace ComparisonTool.Core.Comparison.Analysis
 
             // Add a ValueDifferences list for all value-difference-related categories
             public List<StructuralPattern> ValueDifferences { get; set; } = new List<StructuralPattern>();
+
+            /// <summary>
+            /// List of file pairs with differences that are not covered by any pattern (for diagnostics/UI)
+            /// </summary>
+            public List<string> UnaccountedFilesWithDifferences { get; set; } = new List<string>();
+            /// <summary>
+            /// Count of unaccounted files with differences
+            /// </summary>
+            public int UnaccountedFilesWithDifferencesCount => UnaccountedFilesWithDifferences.Count;
         }
 
 
@@ -300,6 +309,16 @@ namespace ComparisonTool.Core.Comparison.Analysis
 
             // Set uncategorized count
             result.UncategorizedDifferencesFound = result.UncategorizedDifferences.Sum(p => p.OccurenceCount);
+
+            // --- DIAGNOSTIC: Compute unaccounted files with differences ---
+            var filesWithDifferences = new HashSet<string>(
+                folderResults.FilePairResults
+                    .Where(r => r.Summary != null && !r.Summary.AreEqual)
+                    .Select(r => $"{r.File1Name} vs {r.File2Name}"));
+            var filesCoveredByPatterns = new HashSet<string>(
+                result.AllPatterns.SelectMany(p => p.AffectedFiles));
+            result.UnaccountedFilesWithDifferences = filesWithDifferences.Except(filesCoveredByPatterns).ToList();
+            // -----------------------------------------------------------
 
             // Sort by criticality, then consistency
             result.ConsistentValueDifferences = result.ConsistentValueDifferences
