@@ -298,20 +298,15 @@
                     
                     @if (ActiveTab == "values")
                     {
-                        <h6><i class="bi bi-arrow-left-right text-primary"></i> Consistent Value Differences</h6>
-                        <div class="small text-muted mb-3">
-                            Properties that consistently have different values across files.
+                        <h6><i class="bi bi-pencil-square text-primary"></i> Value Differences</h6>
+                        <div class="mb-2">
+                            <span class="me-2">Filter by type:</span>
+                            @foreach (var label in ValueDiffFilters)
+                            {
+                                <button class="btn btn-xs @(ActiveValueDiffFilter == label ? "btn-primary" : "btn-outline-primary") me-1" @onclick="() => ActiveValueDiffFilter = label">@label</button>
+                            }
                         </div>
-                        
-                        @if (!Analysis.ConsistentValueDifferences.Any())
-                        {
-                            <div class="alert alert-info">No consistent value differences detected.</div>
-                        }
-                        else
-                        {
-                            <EnhancedPatternListView Patterns="Analysis.ConsistentValueDifferences" 
-                                                   OnSelectPattern="SetSelectedPattern" />
-                        }
+                        <EnhancedPatternListView Patterns="FilteredValueDifferences.ToList()" OnSelectPattern="SetSelectedPattern" />
                     }
                     
                     @if (ActiveTab == "general")
@@ -633,6 +628,25 @@
     private bool ShowFileDifferences { get; set; } = false;
     private string SelectedFilePair { get; set; }
     private List<Difference> SelectedFileDifferences { get; set; } = new();
+    private string ActiveValueDiffFilter { get; set; } = "All";
+    private static readonly string[] ValueDiffFilters = new[]
+    {
+        "All",
+        "Text",
+        "Numeric",
+        "Boolean",
+        "Date/Time",
+        "Generic"
+    };
+    private IEnumerable<EnhancedStructuralDifferenceAnalyzer.StructuralPattern> FilteredValueDifferences =>
+        ActiveValueDiffFilter == "All"
+            ? Analysis.ValueDifferences
+            : Analysis.ValueDifferences.Where(p =>
+                (ActiveValueDiffFilter == "Text" && p.Category == DifferenceCategory.TextContentChanged) ||
+                (ActiveValueDiffFilter == "Numeric" && p.Category == DifferenceCategory.NumericValueChanged) ||
+                (ActiveValueDiffFilter == "Boolean" && p.Category == DifferenceCategory.BooleanValueChanged) ||
+                (ActiveValueDiffFilter == "Date/Time" && p.Category == DifferenceCategory.DateTimeChanged) ||
+                (ActiveValueDiffFilter == "Generic" && p.Category == DifferenceCategory.ValueChanged));
     
     private void ToggleView()
     {

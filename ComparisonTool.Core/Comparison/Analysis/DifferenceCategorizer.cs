@@ -178,7 +178,7 @@ public class DifferenceCategorizer
         }
         else if (IsStringDifference(diff.Object1Value, diff.Object2Value))
         {
-            return DifferenceCategory.ValueChanged;
+            return DifferenceCategory.TextContentChanged;
         }
         else if (IsBooleanDifference(diff.Object1Value, diff.Object2Value))
         {

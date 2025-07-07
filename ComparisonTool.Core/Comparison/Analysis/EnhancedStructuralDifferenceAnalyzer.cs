@@ -118,6 +118,9 @@ namespace ComparisonTool.Core.Comparison.Analysis
                 .SelectMany(p => p.AffectedFiles)
                 .Distinct()
                 .Count();
+
+            // Add a ValueDifferences list for all value-difference-related categories
+            public List<StructuralPattern> ValueDifferences { get; set; } = new List<StructuralPattern>();
         }
 
 
@@ -312,6 +315,17 @@ namespace ComparisonTool.Core.Comparison.Analysis
             result.UncategorizedDifferences = result.UncategorizedDifferences
                 .OrderByDescending(p => p.FileCount)
                 .ThenByDescending(p => p.OccurenceCount)
+                .ToList();
+
+            // Add a ValueDifferences list for all value-difference-related categories
+            result.ValueDifferences = result.AllPatterns
+                .Where(p => p.Category == DifferenceCategory.TextContentChanged
+                         || p.Category == DifferenceCategory.NumericValueChanged
+                         || p.Category == DifferenceCategory.BooleanValueChanged
+                         || p.Category == DifferenceCategory.DateTimeChanged
+                         || p.Category == DifferenceCategory.ValueChanged)
+                .OrderByDescending(p => p.Consistency)
+                .ThenByDescending(p => p.FileCount)
                 .ToList();
 
             logger?.LogInformation("Enhanced structural analysis complete. Found {CriticalCount} critical missing elements, {MissingProps} consistently missing properties, {OrderDiffs} element order differences, and {UncategorizedCount} uncategorized differences",
@@ -731,8 +745,8 @@ namespace ComparisonTool.Core.Comparison.Analysis
                 return DifferenceCategory.DateTimeChanged;
             }
 
-            // Default to value changed (for strings and any other types)
-            return DifferenceCategory.ValueChanged;
+            // Default to text content
+            return DifferenceCategory.TextContentChanged;
         }
 
         private string TruncateValue(string value)
