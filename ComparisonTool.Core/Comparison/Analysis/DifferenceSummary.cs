@@ -110,8 +110,6 @@ public class DifferenceSummary
     {
         switch (category)
         {
-            case DifferenceCategory.TextContentChanged:
-                return "Text Content Changed";
             case DifferenceCategory.NumericValueChanged:
                 return "Numeric Value Changed";
             case DifferenceCategory.DateTimeChanged:
@@ -126,6 +124,8 @@ public class DifferenceSummary
                 return "Item Removed";
             case DifferenceCategory.NullValueChange:
                 return "Null Value Change";
+            case DifferenceCategory.ValueChanged:
+                return "Value Changed";
             default:
                 return "Other";
         }

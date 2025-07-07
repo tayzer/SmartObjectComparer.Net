@@ -731,8 +731,8 @@ namespace ComparisonTool.Core.Comparison.Analysis
                 return DifferenceCategory.DateTimeChanged;
             }
 
-            // Default to text content
-            return DifferenceCategory.TextContentChanged;
+            // Default to value changed (for strings and any other types)
+            return DifferenceCategory.ValueChanged;
         }
 
         private string TruncateValue(string value)

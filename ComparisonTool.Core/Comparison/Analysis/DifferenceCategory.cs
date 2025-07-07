@@ -5,7 +5,6 @@
 /// </summary>
 public enum DifferenceCategory
 {
-    TextContentChanged,
     NumericValueChanged,
     DateTimeChanged,
     BooleanValueChanged,
