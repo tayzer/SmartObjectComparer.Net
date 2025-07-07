@@ -178,32 +178,34 @@
                         <div class="alert alert-info">
                             <h6><i class="bi bi-bug"></i> Diagnostics: Pattern Coverage Details</h6>
                             <div>
-                                <strong>Patterns and AffectedFiles counts:</strong>
-                                <ul class="list-group list-group-flush mb-2">
-                                    @foreach (var pattern in Analysis.AllPatterns)
-                                    {
-                                        <li class="list-group-item small">
-                                            <strong>@pattern.FullPattern</strong> — @pattern.AffectedFiles.Count files
-                                        </li>
-                                    }
-                                </ul>
-                                <div class="mb-2">
-                                    <strong>Union of all AffectedFiles (@AllPatternFiles.Count):</strong>
-                                    <ul class="list-group list-group-flush">
-                                        @foreach (var file in AllPatternFiles)
+                                <strong>Patterns summary:</strong>
+                                <table class="table table-sm table-bordered table-striped mb-2">
+                                    <thead>
+                                        <tr>
+                                            <th>Pattern</th>
+                                            <th>Category</th>
+                                            <th>Files</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var pattern in Analysis.AllPatterns)
                                         {
-                                            <li class="list-group-item small">@file</li>
+                                            <tr>
+                                                <td class="small">@pattern.FullPattern</td>
+                                                <td class="small">@pattern.Category</td>
+                                                <td>@pattern.AffectedFiles.Count</td>
+                                            </tr>
                                         }
-                                    </ul>
+                                    </tbody>
+                                </table>
+                                <div class="mb-2">
+                                    <strong>Union of all AffectedFiles:</strong> @AllPatternFiles.Count
                                 </div>
                                 <div class="mb-2">
-                                    <strong>FilesWithDifferences (@FilesWithDifferences.Count):</strong>
-                                    <ul class="list-group list-group-flush">
-                                        @foreach (var file in FilesWithDifferences)
-                                        {
-                                            <li class="list-group-item small">@file</li>
-                                        }
-                                    </ul>
+                                    <strong>FilesWithDifferences:</strong> @FilesWithDifferences.Count
+                                </div>
+                                <div class="text-muted small">
+                                    If you see patterns with files that are not shown in the main UI tabs, their category may not be handled by the UI. This can explain 'missing' files.
                                 </div>
                             </div>
                         </div>
