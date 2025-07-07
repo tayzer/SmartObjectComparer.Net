@@ -168,6 +168,47 @@
                         }
                     </div>
                 }
+
+                <div class="mt-3">
+                    <button class="btn btn-sm btn-outline-info mb-2" @onclick="() => ShowDiagnostics = !ShowDiagnostics">
+                        @(ShowDiagnostics ? "Hide Diagnostics" : "Show Diagnostics")
+                    </button>
+                    @if (ShowDiagnostics)
+                    {
+                        <div class="alert alert-info">
+                            <h6><i class="bi bi-bug"></i> Diagnostics: Pattern Coverage Details</h6>
+                            <div>
+                                <strong>Patterns and AffectedFiles counts:</strong>
+                                <ul class="list-group list-group-flush mb-2">
+                                    @foreach (var pattern in Analysis.AllPatterns)
+                                    {
+                                        <li class="list-group-item small">
+                                            <strong>@pattern.FullPattern</strong> — @pattern.AffectedFiles.Count files
+                                        </li>
+                                    }
+                                </ul>
+                                <div class="mb-2">
+                                    <strong>Union of all AffectedFiles (@AllPatternFiles.Count):</strong>
+                                    <ul class="list-group list-group-flush">
+                                        @foreach (var file in AllPatternFiles)
+                                        {
+                                            <li class="list-group-item small">@file</li>
+                                        }
+                                    </ul>
+                                </div>
+                                <div class="mb-2">
+                                    <strong>FilesWithDifferences (@FilesWithDifferences.Count):</strong>
+                                    <ul class="list-group list-group-flush">
+                                        @foreach (var file in FilesWithDifferences)
+                                        {
+                                            <li class="list-group-item small">@file</li>
+                                        }
+                                    }
+                                </ul>
+                            </div>
+                        </div>
+                    }
+                </div>
             </div>
             
             @if (!ShowDetailedView)
@@ -677,6 +718,12 @@
                 (ActiveValueDiffFilter == "Date/Time" && p.Category == DifferenceCategory.DateTimeChanged) ||
                 (ActiveValueDiffFilter == "Generic" && p.Category == DifferenceCategory.ValueChanged));
     private bool ShowUnaccountedFiles { get; set; } = false;
+    private bool ShowDiagnostics { get; set; } = false;
+    private HashSet<string> AllPatternFiles => Analysis.AllPatterns.SelectMany(p => p.AffectedFiles).ToHashSet();
+    private HashSet<string> FilesWithDifferences => FolderComparisonResult?.FilePairResults
+        ?.Where(r => r.Summary != null && !r.Summary.AreEqual)
+        .Select(r => $"{r.File1Name} vs {r.File2Name}")
+        .ToHashSet() ?? new HashSet<string>();
     
     private void ToggleView()
     {
