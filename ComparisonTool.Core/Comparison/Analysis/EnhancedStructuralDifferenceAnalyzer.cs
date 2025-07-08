@@ -342,7 +342,8 @@ namespace ComparisonTool.Core.Comparison.Analysis
                          || p.Category == DifferenceCategory.NumericValueChanged
                          || p.Category == DifferenceCategory.BooleanValueChanged
                          || p.Category == DifferenceCategory.DateTimeChanged
-                         || p.Category == DifferenceCategory.ValueChanged)
+                         || p.Category == DifferenceCategory.ValueChanged
+                         || p.Category == DifferenceCategory.GeneralValueChanged)
                 .OrderByDescending(p => p.Consistency)
                 .ThenByDescending(p => p.FileCount)
                 .ToList();

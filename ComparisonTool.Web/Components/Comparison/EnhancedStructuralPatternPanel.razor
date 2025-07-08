@@ -743,7 +743,7 @@
                 (ActiveValueDiffFilter == "Numeric" && p.Category == DifferenceCategory.NumericValueChanged) ||
                 (ActiveValueDiffFilter == "Boolean" && p.Category == DifferenceCategory.BooleanValueChanged) ||
                 (ActiveValueDiffFilter == "Date/Time" && p.Category == DifferenceCategory.DateTimeChanged) ||
-                (ActiveValueDiffFilter == "Generic" && p.Category == DifferenceCategory.ValueChanged));
+                (ActiveValueDiffFilter == "Generic" && (p.Category == DifferenceCategory.ValueChanged || p.Category == DifferenceCategory.GeneralValueChanged)));
     private bool ShowUnaccountedFiles { get; set; } = false;
     private bool ShowDiagnostics { get; set; } = false;
     private HashSet<string> AllPatternFiles => Analysis.AllPatterns.SelectMany(p => p.AffectedFiles).ToHashSet();
@@ -876,7 +876,7 @@
             "Numeric" => Analysis.ValueDifferences.Count(p => p.Category == DifferenceCategory.NumericValueChanged),
             "Boolean" => Analysis.ValueDifferences.Count(p => p.Category == DifferenceCategory.BooleanValueChanged),
             "Date/Time" => Analysis.ValueDifferences.Count(p => p.Category == DifferenceCategory.DateTimeChanged),
-            "Generic" => Analysis.ValueDifferences.Count(p => p.Category == DifferenceCategory.ValueChanged),
+            "Generic" => Analysis.ValueDifferences.Count(p => p.Category == DifferenceCategory.ValueChanged || p.Category == DifferenceCategory.GeneralValueChanged),
             _ => 0
         };
     }
