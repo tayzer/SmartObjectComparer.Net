@@ -205,8 +205,8 @@ else
 
 @if (EnhancedStructuralAnalysis != null && EnableEnhancedStructuralAnalysis)
 {
-                                    <EnhancedStructuralPatternPanel Analysis="@EnhancedStructuralAnalysis" 
-                                                              FolderComparisonResult="@FolderComparisonResult" />
+                                                <ComparisonRunDetails Analysis="@EnhancedStructuralAnalysis"
+                                  FolderComparisonResult="@FolderComparisonResult" />
 }
 else if (EnableEnhancedStructuralAnalysis && FolderComparisonResult != null && !FolderComparisonResult.AllEqual)
 {
