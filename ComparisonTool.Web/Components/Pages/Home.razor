@@ -182,7 +182,55 @@ else
 
 @if (FolderComparisonResult != null)
 {
-    <EnhancedDifferenceSummary Summary="@DifferenceSummary" FolderResult="@FolderComparisonResult" />
+    @if (EnableEnhancedStructuralAnalysis)
+    {
+        @if (EnhancedStructuralAnalysis != null)
+        {
+            <ComparisonRunDetails Analysis="@EnhancedStructuralAnalysis"
+                                  FolderComparisonResult="@FolderComparisonResult" />
+        }
+        else if (!FolderComparisonResult.AllEqual)
+        {
+            <!-- Loading state for Enhanced Structural Analysis -->
+            <div class="card">
+                <div class="card-header">
+                    <h4>Comparison Overview</h4>
+                </div>
+                <div class="card-body text-center py-5">
+                    <div class="spinner-border text-primary mb-3" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <h5>Generating Enhanced Analysis...</h5>
+                    <p class="text-muted">Please wait while we analyze structural patterns and categorize differences.</p>
+                </div>
+            </div>
+        }
+        else
+        {
+            <!-- All files are equal - show simple success message -->
+            <div class="card">
+                <div class="card-header">
+                    <h4>Comparison Overview</h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-success d-flex align-items-center">
+                        <i class="bi bi-check-circle-fill me-3 fs-4"></i>
+                        <div>
+                            <strong>All files are identical</strong>
+                            <div class="text-muted">
+                                No differences found in any of the @FolderComparisonResult.FilePairResults.Count compared files.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <!-- Enhanced Structural Analysis is disabled - show traditional summary -->
+        <EnhancedDifferenceSummary Summary="@DifferenceSummary" FolderResult="@FolderComparisonResult" />
+    }
     
     <FileComparisonResults Result="@FolderComparisonResult"
                            SelectedPairIndex="@SelectedPairIndex"
@@ -203,12 +251,7 @@ else
 
 
 
-@if (EnhancedStructuralAnalysis != null && EnableEnhancedStructuralAnalysis)
-{
-                                                <ComparisonRunDetails Analysis="@EnhancedStructuralAnalysis"
-                                  FolderComparisonResult="@FolderComparisonResult" />
-}
-else if (EnableEnhancedStructuralAnalysis && FolderComparisonResult != null && !FolderComparisonResult.AllEqual)
+@if (EnableEnhancedStructuralAnalysis && FolderComparisonResult != null && !FolderComparisonResult.AllEqual && EnhancedStructuralAnalysis == null)
 {
     <div class="alert alert-info mt-3">
         <h5>Enhanced Structural Analysis</h5>
@@ -493,11 +536,12 @@ else if (EnableEnhancedStructuralAnalysis && FolderComparisonResult != null && !
                 SemanticAnalysis = semanticAnalysisObj as SemanticDifferenceAnalysis;
             }
             
-
-            
-            // Generate enhanced structural analysis if needed
-            if (EnableEnhancedStructuralAnalysis && !FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 1)
+            // Generate enhanced structural analysis if enabled and there are differences
+            if (EnableEnhancedStructuralAnalysis && !FolderComparisonResult.AllEqual)
             {
+                Progress = new ComparisonProgress(0, 0, "Starting enhanced structural analysis...");
+                StateHasChanged();
+                await Task.Delay(100); // Ensure UI updates
                 await GenerateEnhancedStructuralAnalysis();
             }
         }
@@ -567,6 +611,21 @@ else if (EnableEnhancedStructuralAnalysis && FolderComparisonResult != null && !
                 if (FolderComparisonResult.Metadata.TryGetValue("SemanticAnalysis", out var semanticAnalysisObj))
                 {
                     SemanticAnalysis = semanticAnalysisObj as SemanticDifferenceAnalysis;
+                }
+                
+                // Select the first result if there are differences
+                if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 0)
+                {
+                    SelectPairResult(0);
+                }
+                
+                // Generate enhanced structural analysis if enabled
+                if (EnableEnhancedStructuralAnalysis && !FolderComparisonResult.AllEqual)
+                {
+                    Progress = new ComparisonProgress(0, 0, "Starting enhanced structural analysis...");
+                    StateHasChanged();
+                    await Task.Delay(100); // Ensure UI updates
+                    await GenerateEnhancedStructuralAnalysis();
                 }
             }
             else
