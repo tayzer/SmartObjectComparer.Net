@@ -212,17 +212,59 @@
                                                 <th>Category</th>
                                                 <th>Count</th>
                                                 <th>Total Files</th>
+                                                <th>Unique Files</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             @foreach (var categoryGroup in Analysis.AllPatterns.GroupBy(p => p.Category).OrderByDescending(g => g.Sum(p => p.FileCount)))
                                             {
+                                                var uniqueFiles = categoryGroup.SelectMany(p => p.AffectedFiles).Distinct().Count();
                                                 <tr>
                                                     <td class="small">@categoryGroup.Key</td>
                                                     <td>@categoryGroup.Count()</td>
                                                     <td>@categoryGroup.Sum(p => p.FileCount)</td>
+                                                    <td>@uniqueFiles</td>
                                                 </tr>
                                             }
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="mb-3">
+                                    <strong>File Overlap Analysis:</strong>
+                                    <table class="table table-sm table-bordered table-striped mb-2">
+                                        <thead>
+                                            <tr>
+                                                <th>Analysis Section</th>
+                                                <th>Unique Files</th>
+                                                <th>Sum of Individual Counts</th>
+                                                <th>Difference</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td>Value Differences</td>
+                                                <td>@Analysis.UniqueValueDifferenceFiles</td>
+                                                <td>@(Analysis.ConsistentValueDifferences.Sum(p => p.FileCount) + Analysis.GeneralValueDifferences.Sum(p => p.FileCount))</td>
+                                                <td>@((Analysis.ConsistentValueDifferences.Sum(p => p.FileCount) + Analysis.GeneralValueDifferences.Sum(p => p.FileCount)) - Analysis.UniqueValueDifferenceFiles)</td>
+                                            </tr>
+                                            <tr>
+                                                <td>Missing Properties</td>
+                                                <td>@Analysis.UniqueMissingPropertyFiles</td>
+                                                <td>@(Analysis.CriticalMissingElements.Sum(p => p.FileCount) + Analysis.ConsistentlyMissingProperties.Sum(p => p.FileCount) + Analysis.MissingCollectionElements.Sum(p => p.FileCount))</td>
+                                                <td>@((Analysis.CriticalMissingElements.Sum(p => p.FileCount) + Analysis.ConsistentlyMissingProperties.Sum(p => p.FileCount) + Analysis.MissingCollectionElements.Sum(p => p.FileCount)) - Analysis.UniqueMissingPropertyFiles)</td>
+                                            </tr>
+                                            <tr>
+                                                <td>Uncategorized</td>
+                                                <td>@Analysis.UniqueUncategorizedFiles</td>
+                                                <td>@Analysis.UncategorizedDifferences.Sum(p => p.FileCount)</td>
+                                                <td>@(Analysis.UncategorizedDifferences.Sum(p => p.FileCount) - Analysis.UniqueUncategorizedFiles)</td>
+                                            </tr>
+                                            <tr class="table-info">
+                                                <td><strong>ALL PATTERNS</strong></td>
+                                                <td><strong>@Analysis.TotalUniqueFilesCovered</strong></td>
+                                                <td><strong>@Analysis.AllPatterns.Sum(p => p.FileCount)</strong></td>
+                                                <td><strong>@(Analysis.AllPatterns.Sum(p => p.FileCount) - Analysis.TotalUniqueFilesCovered)</strong></td>
+                                            </tr>
                                         </tbody>
                                     </table>
                                 </div>
