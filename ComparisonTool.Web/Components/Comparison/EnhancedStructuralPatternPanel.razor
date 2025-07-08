@@ -368,8 +368,8 @@
                     <li class="nav-item" role="presentation">
                         <button class="nav-link @(ActiveTab == "values" ? "active" : "")" 
                                 @onclick="@(() => ActiveTab = "values")">
-                            <i class="bi bi-arrow-left-right"></i>
-                            Value Differences (@Analysis.ConsistentValueDifferences.Count)
+                            <i class="bi bi-pencil-square text-primary"></i>
+                            Value Differences
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
@@ -457,18 +457,69 @@
                     @if (ActiveTab == "values")
                     {
                         <h6><i class="bi bi-pencil-square text-primary"></i> Value Differences</h6>
-                        <div class="alert alert-info small mb-3">
-                            <i class="bi bi-info-circle"></i>
-                            <strong>Note:</strong> Files may appear in multiple value difference patterns. 
-                            Filter counts show unique files for each category. Total unique files with value differences: @Analysis.UniqueValueDifferenceFiles
+                        <div class="alert alert-success small mb-3">
+                            <i class="bi bi-check-circle"></i>
+                            <strong>Clear Breakdown:</strong> Files are categorized by value difference types. Each file is counted exactly once within this category.
                         </div>
+                        
+                        <!-- Value Subcategory Breakdown -->
+                        <div class="alert alert-info mt-3">
+                            <h6><i class="bi bi-bar-chart"></i> Value Difference Type Breakdown</h6>
+                            <div class="row">
+                                <div class="col-md-2">
+                                    <strong>Text Only:</strong> @Analysis.ExclusiveTextContentFiles files
+                                </div>
+                                <div class="col-md-2">
+                                    <strong>Numeric Only:</strong> @Analysis.ExclusiveNumericValueFiles files
+                                </div>
+                                <div class="col-md-2">
+                                    <strong>Boolean Only:</strong> @Analysis.ExclusiveBooleanValueFiles files
+                                </div>
+                                <div class="col-md-2">
+                                    <strong>DateTime Only:</strong> @Analysis.ExclusiveDateTimeFiles files
+                                </div>
+                                <div class="col-md-2">
+                                    <strong>General Only:</strong> @Analysis.ExclusiveGeneralValueFiles files
+                                </div>
+                                <div class="col-md-2">
+                                    <strong>Multiple Types:</strong> @Analysis.MultiValueCategoryFiles files
+                                </div>
+                            </div>
+                            <div class="mt-2">
+                                @{
+                                    var valueTotal = Analysis.ExclusiveTextContentFiles + Analysis.ExclusiveNumericValueFiles + Analysis.ExclusiveBooleanValueFiles + Analysis.ExclusiveDateTimeFiles + Analysis.ExclusiveGeneralValueFiles + Analysis.MultiValueCategoryFiles;
+                                }
+                                <strong>Total Value Files:</strong> @valueTotal 
+                                @if (valueTotal == Analysis.ExclusiveValueDifferenceFiles)
+                                {
+                                    <span class="text-success">✅ (matches exclusive value difference files)</span>
+                                }
+                                else
+                                {
+                                    <span class="text-danger">⚠️ (should match @Analysis.ExclusiveValueDifferenceFiles exclusive value files)</span>
+                                }
+                            </div>
+                            @if (Analysis.ValueCategoryCombinations.Any())
+                            {
+                                <div class="mt-3">
+                                    <h6 class="small"><i class="bi bi-diagram-3"></i> Multi-Type Value Breakdown</h6>
+                                    <div class="small">
+                                        @foreach (var combo in Analysis.ValueCategoryCombinations.OrderByDescending(c => c.Value))
+                                        {
+                                            <span class="badge bg-secondary me-1">@combo.Key: @combo.Value files</span>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                        
                         <div class="mb-2">
                             <span class="me-2">Filter by type:</span>
                             @foreach (var label in ValueDiffFilters)
                             {
                                 var count = GetValueDiffFilterCount(label);
                                 <button class="btn btn-xs @(ActiveValueDiffFilter == label ? "btn-primary" : "btn-outline-primary") me-1" @onclick="() => ActiveValueDiffFilter = label">
-                                    @label (@count)
+                                    @label (@count patterns)
                                 </button>
                             }
                         </div>

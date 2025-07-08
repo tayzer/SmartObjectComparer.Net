@@ -156,6 +156,36 @@ namespace ComparisonTool.Core.Comparison.Analysis
             /// Breakdown of which combinations of categories appear together
             /// </summary>
             public Dictionary<string, int> CategoryCombinations { get; set; } = new Dictionary<string, int>();
+
+            // Value difference subcategory breakdowns
+            /// <summary>
+            /// Files that have ONLY text content value differences
+            /// </summary>
+            public int ExclusiveTextContentFiles { get; set; }
+            /// <summary>
+            /// Files that have ONLY numeric value differences
+            /// </summary>
+            public int ExclusiveNumericValueFiles { get; set; }
+            /// <summary>
+            /// Files that have ONLY boolean value differences
+            /// </summary>
+            public int ExclusiveBooleanValueFiles { get; set; }
+            /// <summary>
+            /// Files that have ONLY date/time value differences
+            /// </summary>
+            public int ExclusiveDateTimeFiles { get; set; }
+            /// <summary>
+            /// Files that have ONLY general value differences
+            /// </summary>
+            public int ExclusiveGeneralValueFiles { get; set; }
+            /// <summary>
+            /// Files that appear in multiple value difference subcategories
+            /// </summary>
+            public int MultiValueCategoryFiles { get; set; }
+            /// <summary>
+            /// Breakdown of which value subcategories appear together
+            /// </summary>
+            public Dictionary<string, int> ValueCategoryCombinations { get; set; } = new Dictionary<string, int>();
         }
 
 
@@ -1126,6 +1156,75 @@ namespace ComparisonTool.Core.Comparison.Analysis
                 categoryCombinations[combination]++;
             }
             result.CategoryCombinations = categoryCombinations;
+
+            // Calculate value subcategory breakdowns
+            CalculateValueSubcategoryBreakdowns(result);
+        }
+
+        private void CalculateValueSubcategoryBreakdowns(EnhancedStructuralAnalysisResult result)
+        {
+            // Get files that have value differences (from the main category calculation)
+            var valueFiles = result.AllPatterns
+                .Where(p => GetCategoryGroup(p.Category) == "Value")
+                .SelectMany(p => p.AffectedFiles)
+                .Distinct()
+                .ToHashSet();
+
+            // Group value files by which value subcategories they appear in
+            var valueFileCategoryMap = new Dictionary<string, HashSet<string>>();
+            
+            foreach (var file in valueFiles)
+            {
+                valueFileCategoryMap[file] = new HashSet<string>();
+            }
+
+            // Determine which value subcategories each file appears in
+            foreach (var pattern in result.AllPatterns.Where(p => GetCategoryGroup(p.Category) == "Value"))
+            {
+                string valueSubcategory = GetValueSubcategory(pattern.Category);
+                foreach (var file in pattern.AffectedFiles)
+                {
+                    if (valueFileCategoryMap.ContainsKey(file))
+                    {
+                        valueFileCategoryMap[file].Add(valueSubcategory);
+                    }
+                }
+            }
+
+            // Calculate exclusive value subcategory counts
+            result.ExclusiveTextContentFiles = valueFileCategoryMap.Count(f => f.Value.Count == 1 && f.Value.Contains("Text"));
+            result.ExclusiveNumericValueFiles = valueFileCategoryMap.Count(f => f.Value.Count == 1 && f.Value.Contains("Numeric"));
+            result.ExclusiveBooleanValueFiles = valueFileCategoryMap.Count(f => f.Value.Count == 1 && f.Value.Contains("Boolean"));
+            result.ExclusiveDateTimeFiles = valueFileCategoryMap.Count(f => f.Value.Count == 1 && f.Value.Contains("DateTime"));
+            result.ExclusiveGeneralValueFiles = valueFileCategoryMap.Count(f => f.Value.Count == 1 && f.Value.Contains("General"));
+            result.MultiValueCategoryFiles = valueFileCategoryMap.Count(f => f.Value.Count > 1);
+
+            // Calculate value subcategory combinations
+            var valueCategoryCombinations = new Dictionary<string, int>();
+            foreach (var file in valueFileCategoryMap.Where(f => f.Value.Count > 1))
+            {
+                var combination = string.Join(" + ", file.Value.OrderBy(c => c));
+                if (!valueCategoryCombinations.ContainsKey(combination))
+                {
+                    valueCategoryCombinations[combination] = 0;
+                }
+                valueCategoryCombinations[combination]++;
+            }
+            result.ValueCategoryCombinations = valueCategoryCombinations;
+        }
+
+        private string GetValueSubcategory(DifferenceCategory category)
+        {
+            return category switch
+            {
+                DifferenceCategory.TextContentChanged => "Text",
+                DifferenceCategory.NumericValueChanged => "Numeric",
+                DifferenceCategory.BooleanValueChanged => "Boolean",
+                DifferenceCategory.DateTimeChanged => "DateTime",
+                DifferenceCategory.ValueChanged => "General",
+                DifferenceCategory.GeneralValueChanged => "General",
+                _ => "Other"
+            };
         }
 
         private string GetCategoryGroup(DifferenceCategory category)
