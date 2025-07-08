@@ -204,6 +204,28 @@
                                 <div class="mb-2">
                                     <strong>FilesWithDifferences:</strong> @FilesWithDifferences.Count
                                 </div>
+                                <div class="mb-3">
+                                    <strong>Patterns by Category:</strong>
+                                    <table class="table table-sm table-bordered table-striped mb-2">
+                                        <thead>
+                                            <tr>
+                                                <th>Category</th>
+                                                <th>Count</th>
+                                                <th>Total Files</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var categoryGroup in Analysis.AllPatterns.GroupBy(p => p.Category).OrderByDescending(g => g.Sum(p => p.FileCount)))
+                                            {
+                                                <tr>
+                                                    <td class="small">@categoryGroup.Key</td>
+                                                    <td>@categoryGroup.Count()</td>
+                                                    <td>@categoryGroup.Sum(p => p.FileCount)</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
                                 <div class="text-muted small">
                                     If you see patterns with files that are not shown in the main UI tabs, their category may not be handled by the UI. This can explain 'missing' files.
                                 </div>
@@ -375,7 +397,10 @@
                             <span class="me-2">Filter by type:</span>
                             @foreach (var label in ValueDiffFilters)
                             {
-                                <button class="btn btn-xs @(ActiveValueDiffFilter == label ? "btn-primary" : "btn-outline-primary") me-1" @onclick="() => ActiveValueDiffFilter = label">@label</button>
+                                var count = GetValueDiffFilterCount(label);
+                                <button class="btn btn-xs @(ActiveValueDiffFilter == label ? "btn-primary" : "btn-outline-primary") me-1" @onclick="() => ActiveValueDiffFilter = label">
+                                    @label (@count)
+                                </button>
                             }
                         </div>
                         <EnhancedPatternListView Patterns="FilteredValueDifferences.ToList()" OnSelectPattern="SetSelectedPattern" />
@@ -714,10 +739,10 @@
         ActiveValueDiffFilter == "All"
             ? Analysis.ValueDifferences
             : Analysis.ValueDifferences.Where(p =>
-                (ActiveValueDiffFilter == "Text" && (p.Category == DifferenceCategory.TextContentChanged || p.Category == DifferenceCategory.GeneralValueChanged)) ||
-                (ActiveValueDiffFilter == "Numeric" && (p.Category == DifferenceCategory.NumericValueChanged || p.Category == DifferenceCategory.GeneralValueChanged)) ||
-                (ActiveValueDiffFilter == "Boolean" && (p.Category == DifferenceCategory.BooleanValueChanged || p.Category == DifferenceCategory.GeneralValueChanged)) ||
-                (ActiveValueDiffFilter == "Date/Time" && (p.Category == DifferenceCategory.DateTimeChanged || p.Category == DifferenceCategory.GeneralValueChanged)) ||
+                (ActiveValueDiffFilter == "Text" && p.Category == DifferenceCategory.TextContentChanged) ||
+                (ActiveValueDiffFilter == "Numeric" && p.Category == DifferenceCategory.NumericValueChanged) ||
+                (ActiveValueDiffFilter == "Boolean" && p.Category == DifferenceCategory.BooleanValueChanged) ||
+                (ActiveValueDiffFilter == "Date/Time" && p.Category == DifferenceCategory.DateTimeChanged) ||
                 (ActiveValueDiffFilter == "Generic" && p.Category == DifferenceCategory.ValueChanged));
     private bool ShowUnaccountedFiles { get; set; } = false;
     private bool ShowDiagnostics { get; set; } = false;
@@ -839,6 +864,20 @@
             >= 60 => "bg-warning", 
             >= 40 => "bg-info",
             _ => "bg-success"
+        };
+    }
+    
+    private int GetValueDiffFilterCount(string filter)
+    {
+        return filter switch
+        {
+            "All" => Analysis.ValueDifferences.Count,
+            "Text" => Analysis.ValueDifferences.Count(p => p.Category == DifferenceCategory.TextContentChanged),
+            "Numeric" => Analysis.ValueDifferences.Count(p => p.Category == DifferenceCategory.NumericValueChanged),
+            "Boolean" => Analysis.ValueDifferences.Count(p => p.Category == DifferenceCategory.BooleanValueChanged),
+            "Date/Time" => Analysis.ValueDifferences.Count(p => p.Category == DifferenceCategory.DateTimeChanged),
+            "Generic" => Analysis.ValueDifferences.Count(p => p.Category == DifferenceCategory.ValueChanged),
+            _ => 0
         };
     }
 }
