@@ -523,7 +523,9 @@
                                 </button>
                             }
                         </div>
-                        <EnhancedPatternListView Patterns="FilteredValueDifferences.ToList()" OnSelectPattern="SetSelectedPattern" />
+                        <EnhancedPatternListView Patterns="FilteredValueDifferences.ToList()" 
+                                               OnSelectPattern="SetSelectedPattern"
+                                               CategoryFileCountMap="@ValueDifferenceCategoryFileCountMap" />
                     }
                     
                     @if (ActiveTab == "general")
@@ -871,6 +873,15 @@
         ?.Where(r => r.Summary != null && !r.Summary.AreEqual)
         .Select(r => $"{r.File1Name} vs {r.File2Name}")
         .ToHashSet() ?? new HashSet<string>();
+    
+    private Dictionary<string, int> ValueDifferenceCategoryFileCountMap => new Dictionary<string, int>
+    {
+        ["Text"] = Analysis?.ExclusiveTextContentFiles ?? 0,
+        ["Numeric"] = Analysis?.ExclusiveNumericValueFiles ?? 0,
+        ["Boolean"] = Analysis?.ExclusiveBooleanValueFiles ?? 0,
+        ["DateTime"] = Analysis?.ExclusiveDateTimeFiles ?? 0,
+        ["General"] = Analysis?.ExclusiveGeneralValueFiles ?? 0
+    };
     
     private void ToggleView()
     {

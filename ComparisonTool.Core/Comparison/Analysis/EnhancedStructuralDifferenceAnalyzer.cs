@@ -409,6 +409,9 @@ namespace ComparisonTool.Core.Comparison.Analysis
                 .ThenByDescending(p => p.FileCount)
                 .ToList();
 
+            // Calculate mutually exclusive file counts for clear reporting
+            CalculateExclusiveFileCounts(result);
+
             return result;
         }
 
