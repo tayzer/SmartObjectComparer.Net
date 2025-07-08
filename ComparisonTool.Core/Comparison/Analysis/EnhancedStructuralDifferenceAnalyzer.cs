@@ -56,6 +56,29 @@ namespace ComparisonTool.Core.Comparison.Analysis
             public string RecommendAction { get; set; }
         }
 
+        public class FileCoverageAnalysis
+        {
+            /// <summary>
+            /// Files categorized by their primary difference type - each file appears exactly once
+            /// </summary>
+            public Dictionary<string, List<string>> FilesByCategory { get; set; } = new Dictionary<string, List<string>>();
+            
+            /// <summary>
+            /// Count of files in each category
+            /// </summary>
+            public Dictionary<string, int> FileCounts { get; set; } = new Dictionary<string, int>();
+            
+            /// <summary>
+            /// Total files processed (should equal sum of all categories)
+            /// </summary>
+            public int TotalFiles { get; set; }
+            
+            /// <summary>
+            /// Validation: does the sum of categories equal total files?
+            /// </summary>
+            public bool IsComplete => FileCounts.Values.Sum() == TotalFiles;
+        }
+
         public class EnhancedStructuralAnalysisResult
         {
             /// <summary>
@@ -182,12 +205,16 @@ namespace ComparisonTool.Core.Comparison.Analysis
             /// Files that appear in multiple value difference subcategories
             /// </summary>
             public int MultiValueCategoryFiles { get; set; }
-            /// <summary>
-            /// Breakdown of which value subcategories appear together
-            /// </summary>
-            public Dictionary<string, int> ValueCategoryCombinations { get; set; } = new Dictionary<string, int>();
-        }
+                    /// <summary>
+        /// Dictionary mapping value category combinations to file counts
+        /// </summary>
+        public Dictionary<string, int> ValueCategoryCombinations { get; set; } = new Dictionary<string, int>();
 
+        /// <summary>
+        /// File-first classification that ensures complete coverage
+        /// </summary>
+        public FileCoverageAnalysis FileClassification { get; set; } = new FileCoverageAnalysis();
+        }
 
         public EnhancedStructuralAnalysisResult AnalyzeStructuralPatterns()
         {
@@ -411,6 +438,9 @@ namespace ComparisonTool.Core.Comparison.Analysis
 
             // Calculate mutually exclusive file counts for clear reporting
             CalculateExclusiveFileCounts(result);
+
+            // Create file classification breakdown for complete coverage
+            result.FileClassification = CreateFileClassificationBreakdown();
 
             return result;
         }
@@ -1247,6 +1277,138 @@ namespace ComparisonTool.Core.Comparison.Analysis
                 DifferenceCategory.UncategorizedDifference => "Uncategorized",
                 _ => "Other"
             };
+        }
+
+        private FileCoverageAnalysis CreateFileClassificationBreakdown()
+        {
+            var result = new FileCoverageAnalysis();
+            
+            // Initialize file lists and counts for each category
+            result.FilesByCategory["Value"] = new List<string>();
+            result.FilesByCategory["Missing"] = new List<string>();
+            result.FilesByCategory["Order"] = new List<string>();
+            result.FilesByCategory["Uncategorized"] = new List<string>();
+            result.FilesByCategory["Mixed"] = new List<string>();
+            
+            result.FileCounts["Value"] = 0;
+            result.FileCounts["Missing"] = 0;
+            result.FileCounts["Order"] = 0;
+            result.FileCounts["Uncategorized"] = 0;
+            result.FileCounts["Mixed"] = 0;
+            
+            // Get all files with differences
+            var filesWithDifferences = folderResults.FilePairResults
+                ?.Where(r => r.Summary != null && !r.Summary.AreEqual)
+                .ToList() ?? new List<FilePairComparisonResult>();
+                
+            result.TotalFiles = filesWithDifferences.Count;
+            
+            foreach (var filePair in filesWithDifferences)
+            {
+                var fileName = $"{filePair.File1Name} vs {filePair.File2Name}";
+                var primaryCategory = ClassifyFilePrimaryDifferenceType(filePair);
+                
+                switch (primaryCategory)
+                {
+                    case "Value":
+                        result.FileCounts["Value"]++;
+                        result.FilesByCategory["Value"].Add(fileName);
+                        break;
+                    case "Missing":
+                        result.FileCounts["Missing"]++;
+                        result.FilesByCategory["Missing"].Add(fileName);
+                        break;
+                    case "Order":
+                        result.FileCounts["Order"]++;
+                        result.FilesByCategory["Order"].Add(fileName);
+                        break;
+                    case "Mixed":
+                        result.FileCounts["Mixed"]++;
+                        result.FilesByCategory["Mixed"].Add(fileName);
+                        break;
+                    default:
+                        result.FileCounts["Uncategorized"]++;
+                        result.FilesByCategory["Uncategorized"].Add(fileName);
+                        break;
+                }
+            }
+            
+            return result;
+        }
+        
+        private string ClassifyFilePrimaryDifferenceType(FilePairComparisonResult filePair)
+        {
+            if (filePair.Result?.Differences == null || !filePair.Result.Differences.Any())
+                return "Uncategorized";
+                
+            var differences = filePair.Result.Differences;
+            
+            // Count different types of differences in this file
+            var valueCount = 0;
+            var missingCount = 0;
+            var orderCount = 0;
+            var uncategorizedCount = 0;
+            
+            foreach (var diff in differences)
+            {
+                // Determine the type of this specific difference
+                if (IsPropertyMissing(diff))
+                {
+                    missingCount++;
+                }
+                else if (IsOrderDifference(diff))
+                {
+                    orderCount++;
+                }
+                else if (IsValueDifference(diff))
+                {
+                    valueCount++;
+                }
+                else
+                {
+                    uncategorizedCount++;
+                }
+            }
+            
+            // Determine primary category based on counts
+            var totalDifferences = valueCount + missingCount + orderCount + uncategorizedCount;
+            
+            // If multiple categories with significant counts (>20% each), it's mixed
+            var significantCategories = 0;
+            if (valueCount > totalDifferences * 0.2) significantCategories++;
+            if (missingCount > totalDifferences * 0.2) significantCategories++;
+            if (orderCount > totalDifferences * 0.2) significantCategories++;
+            
+            if (significantCategories > 1)
+                return "Mixed";
+                
+            // Otherwise, return the category with the most differences
+            if (valueCount >= missingCount && valueCount >= orderCount && valueCount >= uncategorizedCount)
+                return "Value";
+            if (missingCount >= orderCount && missingCount >= uncategorizedCount)
+                return "Missing";
+            if (orderCount >= uncategorizedCount)
+                return "Order";
+                
+            return "Uncategorized";
+        }
+        
+        private bool IsOrderDifference(Difference diff)
+        {
+            // Simplified order detection - you can enhance this
+            return diff.PropertyName.Contains("[") && 
+                   (diff.PropertyName.Contains("Order") || 
+                    diff.PropertyName.Contains("Index") ||
+                    diff.PropertyName.Contains("Position"));
+        }
+        
+        private bool IsValueDifference(Difference diff)
+        {
+            // This is a value difference if both objects have values but they're different
+            return !IsPropertyMissing(diff) && 
+                   diff.Object1Value != null && 
+                   diff.Object2Value != null &&
+                   !diff.Object1Value.Equals(diff.Object2Value);
         }
     }
 }
