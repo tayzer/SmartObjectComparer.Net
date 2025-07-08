@@ -261,8 +261,43 @@
                                     Value Difference Patterns
                                 </h6>
                                 <p class="mb-2">Common patterns where property values differ between expected and actual results.</p>
+                                
+                                <!-- FILE BREAKDOWN SUMMARY -->
                                 @if (GetValuePatterns().Any())
                                 {
+                                    <div class="alert alert-info mb-3">
+                                        <h6 class="mb-2">
+                                            <i class="bi bi-files"></i>
+                                            File Breakdown: @GetCategoryCount("Value") Value Difference Files
+                                        </h6>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <strong>Files in Patterns:</strong> @GetValuePatterns().SelectMany(p => p.AffectedFiles).Distinct().Count() files<br/>
+                                                <strong>Total Patterns:</strong> @GetValuePatterns().Count patterns<br/>
+                                                <strong>Total Occurrences:</strong> @GetValuePatterns().Sum(p => p.OccurenceCount) occurrences
+                                            </div>
+                                            <div class="col-md-6">
+                                                @{
+                                                    var totalFilesInPatterns = GetValuePatterns().SelectMany(p => p.AffectedFiles).Distinct().Count();
+                                                    var totalCategoryFiles = GetCategoryCount("Value");
+                                                    var missingFiles = totalCategoryFiles - totalFilesInPatterns;
+                                                }
+                                                @if (missingFiles > 0)
+                                                {
+                                                    <div class="text-danger">
+                                                        <strong>⚠️ Missing Coverage:</strong> @missingFiles files with value differences are not captured in patterns
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="text-success">
+                                                        <strong>✅ Complete Coverage:</strong> All value difference files are captured in patterns
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
                                     <EnhancedPatternListView Patterns="GetValuePatterns()" OnSelectPattern="SetSelectedPattern" />
                                 }
                                 else
@@ -283,8 +318,43 @@
                                     Missing Element Patterns
                                 </h6>
                                 <p class="mb-2">Common patterns where properties or objects are missing from the actual results.</p>
+                                
+                                <!-- FILE BREAKDOWN SUMMARY -->
                                 @if (GetMissingPatterns().Any())
                                 {
+                                    <div class="alert alert-warning mb-3">
+                                        <h6 class="mb-2">
+                                            <i class="bi bi-files"></i>
+                                            File Breakdown: @GetCategoryCount("Missing") Missing Element Files
+                                        </h6>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <strong>Files in Patterns:</strong> @GetMissingPatterns().SelectMany(p => p.AffectedFiles).Distinct().Count() files<br/>
+                                                <strong>Total Patterns:</strong> @GetMissingPatterns().Count patterns<br/>
+                                                <strong>Total Occurrences:</strong> @GetMissingPatterns().Sum(p => p.OccurenceCount) occurrences
+                                            </div>
+                                            <div class="col-md-6">
+                                                @{
+                                                    var totalFilesInPatterns = GetMissingPatterns().SelectMany(p => p.AffectedFiles).Distinct().Count();
+                                                    var totalCategoryFiles = GetCategoryCount("Missing");
+                                                    var missingFiles = totalCategoryFiles - totalFilesInPatterns;
+                                                }
+                                                @if (missingFiles > 0)
+                                                {
+                                                    <div class="text-danger">
+                                                        <strong>⚠️ Missing Coverage:</strong> @missingFiles files with missing elements are not captured in patterns
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="text-success">
+                                                        <strong>✅ Complete Coverage:</strong> All missing element files are captured in patterns
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
                                     <EnhancedPatternListView Patterns="GetMissingPatterns()" OnSelectPattern="SetSelectedPattern" ShowPriority="true" />
                                 }
                                 else
@@ -305,8 +375,43 @@
                                     Collection Order Patterns
                                 </h6>
                                 <p class="mb-2">Patterns where collections have the same elements but in different order.</p>
+                                
+                                <!-- FILE BREAKDOWN SUMMARY -->
                                 @if (GetOrderPatterns().Any())
                                 {
+                                    <div class="alert alert-info mb-3">
+                                        <h6 class="mb-2">
+                                            <i class="bi bi-files"></i>
+                                            File Breakdown: @GetCategoryCount("Order") Order Difference Files
+                                        </h6>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <strong>Files in Patterns:</strong> @GetOrderPatterns().SelectMany(p => p.AffectedFiles).Distinct().Count() files<br/>
+                                                <strong>Total Patterns:</strong> @GetOrderPatterns().Count patterns<br/>
+                                                <strong>Total Occurrences:</strong> @GetOrderPatterns().Sum(p => p.OccurenceCount) occurrences
+                                            </div>
+                                            <div class="col-md-6">
+                                                @{
+                                                    var totalFilesInPatterns = GetOrderPatterns().SelectMany(p => p.AffectedFiles).Distinct().Count();
+                                                    var totalCategoryFiles = GetCategoryCount("Order");
+                                                    var missingFiles = totalCategoryFiles - totalFilesInPatterns;
+                                                }
+                                                @if (missingFiles > 0)
+                                                {
+                                                    <div class="text-danger">
+                                                        <strong>⚠️ Missing Coverage:</strong> @missingFiles files with order differences are not captured in patterns
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="text-success">
+                                                        <strong>✅ Complete Coverage:</strong> All order difference files are captured in patterns
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
                                     <EnhancedPatternListView Patterns="GetOrderPatterns()" OnSelectPattern="SetSelectedPattern" />
                                 }
                                 else
@@ -327,8 +432,43 @@
                                     Mixed Issue Patterns
                                 </h6>
                                 <p class="mb-2">Files with multiple types of differences that don't fit into a single category.</p>
+                                
+                                <!-- FILE BREAKDOWN SUMMARY -->
                                 @if (GetMixedPatterns().Any())
                                 {
+                                    <div class="alert alert-danger mb-3">
+                                        <h6 class="mb-2">
+                                            <i class="bi bi-files"></i>
+                                            File Breakdown: @GetCategoryCount("Mixed") Mixed Issue Files
+                                        </h6>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <strong>Files in Patterns:</strong> @GetMixedPatterns().SelectMany(p => p.AffectedFiles).Distinct().Count() files<br/>
+                                                <strong>Total Patterns:</strong> @GetMixedPatterns().Count patterns<br/>
+                                                <strong>Total Occurrences:</strong> @GetMixedPatterns().Sum(p => p.OccurenceCount) occurrences
+                                            </div>
+                                            <div class="col-md-6">
+                                                @{
+                                                    var totalFilesInPatterns = GetMixedPatterns().SelectMany(p => p.AffectedFiles).Distinct().Count();
+                                                    var totalCategoryFiles = GetCategoryCount("Mixed");
+                                                    var missingFiles = totalCategoryFiles - totalFilesInPatterns;
+                                                }
+                                                @if (missingFiles > 0)
+                                                {
+                                                    <div class="text-danger">
+                                                        <strong>⚠️ Missing Coverage:</strong> @missingFiles files with mixed issues are not captured in patterns
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="text-success">
+                                                        <strong>✅ Complete Coverage:</strong> All mixed issue files are captured in patterns
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
                                     <EnhancedPatternListView Patterns="GetMixedPatterns()" OnSelectPattern="SetSelectedPattern" />
                                 }
                                 else
