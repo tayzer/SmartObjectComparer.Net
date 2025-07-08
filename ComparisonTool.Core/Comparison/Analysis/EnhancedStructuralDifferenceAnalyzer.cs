@@ -130,6 +130,32 @@ namespace ComparisonTool.Core.Comparison.Analysis
             /// Count of unaccounted files with differences
             /// </summary>
             public int UnaccountedFilesWithDifferencesCount => UnaccountedFilesWithDifferences.Count;
+
+            // Mutually exclusive file counts for clear reporting
+            /// <summary>
+            /// Files that have ONLY value differences (no other categories)
+            /// </summary>
+            public int ExclusiveValueDifferenceFiles { get; set; }
+            /// <summary>
+            /// Files that have ONLY missing property differences (no other categories)
+            /// </summary>
+            public int ExclusiveMissingPropertyFiles { get; set; }
+            /// <summary>
+            /// Files that have ONLY order differences (no other categories)
+            /// </summary>
+            public int ExclusiveOrderDifferenceFiles { get; set; }
+            /// <summary>
+            /// Files that have ONLY uncategorized differences (no other categories)
+            /// </summary>
+            public int ExclusiveUncategorizedFiles { get; set; }
+            /// <summary>
+            /// Files that appear in multiple categories
+            /// </summary>
+            public int MultiCategoryFiles { get; set; }
+            /// <summary>
+            /// Breakdown of which combinations of categories appear together
+            /// </summary>
+            public Dictionary<string, int> CategoryCombinations { get; set; } = new Dictionary<string, int>();
         }
 
 
@@ -310,15 +336,20 @@ namespace ComparisonTool.Core.Comparison.Analysis
             // Set uncategorized count
             result.UncategorizedDifferencesFound = result.UncategorizedDifferences.Sum(p => p.OccurenceCount);
 
-            // --- DIAGNOSTIC: Compute unaccounted files with differences ---
-            var filesWithDifferences = new HashSet<string>(
-                folderResults.FilePairResults
-                    .Where(r => r.Summary != null && !r.Summary.AreEqual)
-                    .Select(r => $"{r.File1Name} vs {r.File2Name}"));
-            var filesCoveredByPatterns = new HashSet<string>(
-                result.AllPatterns.SelectMany(p => p.AffectedFiles));
-            result.UnaccountedFilesWithDifferences = filesWithDifferences.Except(filesCoveredByPatterns).ToList();
-            // -----------------------------------------------------------
+            // Calculate mutually exclusive file counts for clear reporting
+            CalculateExclusiveFileCounts(result);
+
+            // Calculate unaccounted files (those with differences but not covered by any pattern)
+            var allPatternFiles = result.AllPatterns.SelectMany(p => p.AffectedFiles).ToHashSet();
+            var filesWithDifferences = folderResults.FilePairResults
+                ?.Where(r => r.Summary != null && !r.Summary.AreEqual)
+                .Select(r => $"{r.File1Name} vs {r.File2Name}")
+                .ToHashSet() ?? new HashSet<string>();
+            
+            result.UnaccountedFilesWithDifferences = filesWithDifferences.Except(allPatternFiles).ToList();
+
+            logger?.LogInformation("Enhanced structural analysis complete. Found {CriticalCount} critical missing elements, {MissingProps} consistently missing properties, {OrderDiffs} element order differences, and {UncategorizedCount} uncategorized differences",
+                result.CriticalMissingElements.Count, result.ConsistentlyMissingProperties.Count, result.ElementOrderDifferences.Count, result.UncategorizedDifferences.Count);
 
             // Sort by criticality, then consistency
             result.ConsistentValueDifferences = result.ConsistentValueDifferences
@@ -347,9 +378,6 @@ namespace ComparisonTool.Core.Comparison.Analysis
                 .OrderByDescending(p => p.Consistency)
                 .ThenByDescending(p => p.FileCount)
                 .ToList();
-
-            logger?.LogInformation("Enhanced structural analysis complete. Found {CriticalCount} critical missing elements, {MissingProps} consistently missing properties, {OrderDiffs} element order differences, and {UncategorizedCount} uncategorized differences",
-                result.CriticalMissingElements.Count, result.ConsistentlyMissingProperties.Count, result.ElementOrderDifferences.Count, result.UncategorizedDifferences.Count);
 
             return result;
         }
@@ -1048,6 +1076,75 @@ namespace ComparisonTool.Core.Comparison.Analysis
                     };
                 }
             }
+        }
+
+        private void CalculateExclusiveFileCounts(EnhancedStructuralAnalysisResult result)
+        {
+            // Get all files with differences
+            var allFilesWithDifferences = folderResults.FilePairResults
+                ?.Where(r => r.Summary != null && !r.Summary.AreEqual)
+                .Select(r => $"{r.File1Name} vs {r.File2Name}")
+                .ToHashSet() ?? new HashSet<string>();
+
+            // Group files by which categories they appear in
+            var fileCategoryMap = new Dictionary<string, HashSet<string>>();
+            
+            foreach (var file in allFilesWithDifferences)
+            {
+                fileCategoryMap[file] = new HashSet<string>();
+            }
+
+            // Determine which categories each file appears in
+            foreach (var pattern in result.AllPatterns)
+            {
+                string categoryGroup = GetCategoryGroup(pattern.Category);
+                foreach (var file in pattern.AffectedFiles)
+                {
+                    if (fileCategoryMap.ContainsKey(file))
+                    {
+                        fileCategoryMap[file].Add(categoryGroup);
+                    }
+                }
+            }
+
+            // Calculate exclusive counts
+            result.ExclusiveValueDifferenceFiles = fileCategoryMap.Count(f => f.Value.Count == 1 && f.Value.Contains("Value"));
+            result.ExclusiveMissingPropertyFiles = fileCategoryMap.Count(f => f.Value.Count == 1 && f.Value.Contains("Missing"));
+            result.ExclusiveOrderDifferenceFiles = fileCategoryMap.Count(f => f.Value.Count == 1 && f.Value.Contains("Order"));
+            result.ExclusiveUncategorizedFiles = fileCategoryMap.Count(f => f.Value.Count == 1 && f.Value.Contains("Uncategorized"));
+            result.MultiCategoryFiles = fileCategoryMap.Count(f => f.Value.Count > 1);
+
+            // Calculate category combinations
+            var categoryCombinations = new Dictionary<string, int>();
+            foreach (var file in fileCategoryMap.Where(f => f.Value.Count > 1))
+            {
+                var combination = string.Join(" + ", file.Value.OrderBy(c => c));
+                if (!categoryCombinations.ContainsKey(combination))
+                {
+                    categoryCombinations[combination] = 0;
+                }
+                categoryCombinations[combination]++;
+            }
+            result.CategoryCombinations = categoryCombinations;
+        }
+
+        private string GetCategoryGroup(DifferenceCategory category)
+        {
+            return category switch
+            {
+                DifferenceCategory.TextContentChanged => "Value",
+                DifferenceCategory.NumericValueChanged => "Value",
+                DifferenceCategory.BooleanValueChanged => "Value",
+                DifferenceCategory.DateTimeChanged => "Value",
+                DifferenceCategory.ValueChanged => "Value",
+                DifferenceCategory.GeneralValueChanged => "Value",
+                DifferenceCategory.NullValueChange => "Missing",
+                DifferenceCategory.ItemRemoved => "Missing",
+                DifferenceCategory.ItemAdded => "Missing",
+                DifferenceCategory.CollectionItemChanged => "Order",
+                DifferenceCategory.UncategorizedDifference => "Uncategorized",
+                _ => "Other"
+            };
         }
     }
 }

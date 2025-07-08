@@ -108,36 +108,58 @@
                     </div>
                 </div>
 
-                <!-- File Category Breakdown (Unique Files) -->
+                <!-- File Category Breakdown (Mutually Exclusive) -->
                 <div class="alert alert-info mt-3">
-                    <h6><i class="bi bi-info-circle"></i> File Coverage Analysis (Unique Files)</h6>
+                    <h6><i class="bi bi-pie-chart"></i> File Distribution by Category</h6>
+                    <div class="alert alert-success small mb-2">
+                        <i class="bi bi-check-circle"></i>
+                        <strong>Clear Breakdown:</strong> Each file is counted exactly once. Categories are mutually exclusive for accurate reporting.
+                    </div>
                     <div class="row">
-                        <div class="col-md-3">
-                            <strong>Value Differences:</strong> @Analysis.UniqueValueDifferenceFiles files
+                        <div class="col-md-2">
+                            <strong>Value Only:</strong> @Analysis.ExclusiveValueDifferenceFiles files
                         </div>
-                        <div class="col-md-3">
-                            <strong>Missing Properties:</strong> @Analysis.UniqueMissingPropertyFiles files  
+                        <div class="col-md-2">
+                            <strong>Missing Only:</strong> @Analysis.ExclusiveMissingPropertyFiles files  
                         </div>
-                        <div class="col-md-3">
-                            <strong>Order Issues:</strong> @Analysis.UniqueOrderDifferenceFiles files
+                        <div class="col-md-2">
+                            <strong>Order Only:</strong> @Analysis.ExclusiveOrderDifferenceFiles files
                         </div>
-                        <div class="col-md-3">
-                            <strong>Uncategorized:</strong> @Analysis.UniqueUncategorizedFiles files
+                        <div class="col-md-2">
+                            <strong>Uncategorized Only:</strong> @Analysis.ExclusiveUncategorizedFiles files
+                        </div>
+                        <div class="col-md-2">
+                            <strong>Multiple Categories:</strong> @Analysis.MultiCategoryFiles files
+                        </div>
+                        <div class="col-md-2">
+                            <strong>Total:</strong> @(Analysis.ExclusiveValueDifferenceFiles + Analysis.ExclusiveMissingPropertyFiles + Analysis.ExclusiveOrderDifferenceFiles + Analysis.ExclusiveUncategorizedFiles + Analysis.MultiCategoryFiles) files
                         </div>
                     </div>
                     <div class="mt-2">
-                        <strong>Total Pattern Coverage:</strong> @Analysis.TotalUniqueFilesCovered files 
-                        @if (Analysis.TotalUniqueFilesCovered != Analysis.FilesWithDifferences)
+                        @{
+                            var calculatedTotal = Analysis.ExclusiveValueDifferenceFiles + Analysis.ExclusiveMissingPropertyFiles + Analysis.ExclusiveOrderDifferenceFiles + Analysis.ExclusiveUncategorizedFiles + Analysis.MultiCategoryFiles;
+                        }
+                        @if (calculatedTotal == Analysis.FilesWithDifferences)
                         {
-                            <span class="text-danger">
-                                ⚠️ (@(Analysis.FilesWithDifferences - Analysis.TotalUniqueFilesCovered) files unaccounted for)
-                            </span>
+                            <span class="text-success">✅ Total matches files with differences (@Analysis.FilesWithDifferences)</span>
                         }
                         else
                         {
-                            <span class="text-success">✅ (matches total files with differences)</span>
+                            <span class="text-danger">⚠️ Total (@calculatedTotal) does not match files with differences (@Analysis.FilesWithDifferences)</span>
                         }
                     </div>
+                    @if (Analysis.CategoryCombinations.Any())
+                    {
+                        <div class="mt-3">
+                            <h6 class="small"><i class="bi bi-diagram-3"></i> Multi-Category Breakdown</h6>
+                            <div class="small">
+                                @foreach (var combo in Analysis.CategoryCombinations.OrderByDescending(c => c.Value))
+                                {
+                                    <span class="badge bg-secondary me-1">@combo.Key: @combo.Value files</span>
+                                }
+                            </div>
+                        </div>
+                    }
                 </div>
 
                 @if (Analysis.UnaccountedFilesWithDifferencesCount > 0)
@@ -435,6 +457,11 @@
                     @if (ActiveTab == "values")
                     {
                         <h6><i class="bi bi-pencil-square text-primary"></i> Value Differences</h6>
+                        <div class="alert alert-info small mb-3">
+                            <i class="bi bi-info-circle"></i>
+                            <strong>Note:</strong> Files may appear in multiple value difference patterns. 
+                            Filter counts show unique files for each category. Total unique files with value differences: @Analysis.UniqueValueDifferenceFiles
+                        </div>
                         <div class="mb-2">
                             <span class="me-2">Filter by type:</span>
                             @foreach (var label in ValueDiffFilters)
