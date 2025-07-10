@@ -161,10 +161,24 @@ public class DifferenceCategorizer
 
     private DifferenceCategory GetDifferenceCategory(Difference diff)
     {
+        // Enhanced debugging for null value categorization
+        if (logger?.IsEnabled(LogLevel.Debug) == true && (diff.Object1Value == null || diff.Object2Value == null))
+        {
+            logger.LogDebug("CATEGORIZING NULL DIFF: Property='{PropertyName}' | Object1Value='{Object1Value}' | Object2Value='{Object2Value}' | Object1Type='{Object1Type}' | Object2Type='{Object2Type}'",
+                diff.PropertyName,
+                diff.Object1Value?.ToString() ?? "null",
+                diff.Object2Value?.ToString() ?? "null",
+                diff.Object1Value?.GetType().Name ?? "null",
+                diff.Object2Value?.GetType().Name ?? "null");
+        }
+
         // First check for null value changes
         if (diff.Object1Value == null || diff.Object2Value == null)
         {
-            return DifferenceCategory.NullValueChange;
+            var category = DifferenceCategory.NullValueChange;
+            logger?.LogDebug("CATEGORIZED AS NULL VALUE CHANGE: Property='{PropertyName}' | Category='{Category}'",
+                diff.PropertyName, category);
+            return category;
         }
         
         // Then categorize based on the actual value types, regardless of path structure

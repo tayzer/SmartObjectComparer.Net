@@ -3,6 +3,7 @@
 @using ComparisonTool.Core.Comparison.Results
 @using KellermanSoftware.CompareNetObjects
 @using Microsoft.AspNetCore.Components.Rendering
+@using ComparisonTool.Web.Components.Comparison
 
 <style>
     /* Main Dashboard Styles */
@@ -357,6 +358,16 @@
         </div>
     </div>
 </div>
+
+<!-- Null Value Debug Panel -->
+@if (GetNullValueDifferences().Any())
+{
+    <div class="mb-4">
+        <NullValueDebugPanel 
+            NullValueDifferences="GetNullValueDifferences()" 
+            AllDifferences="GetAllDifferences()" />
+    </div>
+}
 
 <!-- Value Differences Inspector -->
 <div class="inspector-section">
@@ -1397,5 +1408,25 @@
     {
         // TODO: Implement export functionality
         Console.WriteLine("Export functionality to be implemented");
+    }
+
+    private List<Difference> GetNullValueDifferences()
+    {
+        if (Analysis?.AllPatterns == null) return new List<Difference>();
+
+        return Analysis.AllPatterns
+            .Where(p => p.Category == DifferenceCategory.NullValueChange)
+            .SelectMany(p => p.Examples)
+            .Where(d => d.Object1Value == null || d.Object2Value == null)
+            .ToList();
+    }
+
+    private List<Difference> GetAllDifferences()
+    {
+        if (Analysis?.AllPatterns == null) return new List<Difference>();
+
+        return Analysis.AllPatterns
+            .SelectMany(p => p.Examples)
+            .ToList();
     }
 } 

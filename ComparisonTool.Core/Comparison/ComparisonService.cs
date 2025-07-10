@@ -262,6 +262,29 @@ public class ComparisonService : IComparisonService
                 logger.LogDebug("Comparison completed. Found {DifferenceCount} differences",
                     result.Differences.Count);
 
+                // Enhanced debugging for null value differences
+                if (logger.IsEnabled(LogLevel.Debug))
+                {
+                    var nullValueDifferences = result.Differences
+                        .Where(d => d.Object1Value == null || d.Object2Value == null)
+                        .ToList();
+                    
+                    if (nullValueDifferences.Any())
+                    {
+                        logger.LogDebug("=== NULL VALUE DIFFERENCES DEBUG ===");
+                        foreach (var diff in nullValueDifferences)
+                        {
+                            logger.LogDebug("NULL DIFF: Property='{PropertyName}' | Object1Value='{Object1Value}' | Object2Value='{Object2Value}' | Object1Type='{Object1Type}' | Object2Type='{Object2Type}'",
+                                diff.PropertyName,
+                                diff.Object1Value?.ToString() ?? "null",
+                                diff.Object2Value?.ToString() ?? "null",
+                                diff.Object1Value?.GetType().Name ?? "null",
+                                diff.Object2Value?.GetType().Name ?? "null");
+                        }
+                        logger.LogDebug("=== END NULL VALUE DIFFERENCES DEBUG ===");
+                    }
+                }
+
                 // Filter out ignored properties using smart rules and legacy pattern matching
                 result = configService.FilterSmartIgnoredDifferences(result, modelType);
                 result = configService.FilterIgnoredDifferences(result);
@@ -439,6 +462,29 @@ public class ComparisonService : IComparisonService
 
                 logger.LogDebug("Comparison completed. Found {DifferenceCount} differences",
                     result.Differences.Count);
+
+                // Enhanced debugging for null value differences
+                if (logger.IsEnabled(LogLevel.Debug))
+                {
+                    var nullValueDifferences = result.Differences
+                        .Where(d => d.Object1Value == null || d.Object2Value == null)
+                        .ToList();
+                    
+                    if (nullValueDifferences.Any())
+                    {
+                        logger.LogDebug("=== NULL VALUE DIFFERENCES DEBUG ===");
+                        foreach (var diff in nullValueDifferences)
+                        {
+                            logger.LogDebug("NULL DIFF: Property='{PropertyName}' | Object1Value='{Object1Value}' | Object2Value='{Object2Value}' | Object1Type='{Object1Type}' | Object2Type='{Object2Type}'",
+                                diff.PropertyName,
+                                diff.Object1Value?.ToString() ?? "null",
+                                diff.Object2Value?.ToString() ?? "null",
+                                diff.Object1Value?.GetType().Name ?? "null",
+                                diff.Object2Value?.GetType().Name ?? "null");
+                        }
+                        logger.LogDebug("=== END NULL VALUE DIFFERENCES DEBUG ===");
+                    }
+                }
 
                 // Filter out ignored properties using smart rules and legacy pattern matching
                 result = configService.FilterSmartIgnoredDifferences(result, modelType);

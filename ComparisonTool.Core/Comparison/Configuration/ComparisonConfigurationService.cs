@@ -854,8 +854,16 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             logger.LogDebug("=== ALL DIFFERENCES FOUND BY COMPARENETOBJECTS ===");
             foreach (var diff in result.Differences)
             {
-                logger.LogDebug("DIFFERENCE: '{PropertyName}' | Value1: '{Value1}' | Value2: '{Value2}'", 
-                    diff.PropertyName, diff.Object1Value, diff.Object2Value);
+                var isNullDiff = diff.Object1Value == null || diff.Object2Value == null;
+                var logLevel = isNullDiff ? LogLevel.Warning : LogLevel.Debug;
+                
+                logger.Log(logLevel, "DIFFERENCE: '{PropertyName}' | Value1: '{Value1}' | Value2: '{Value2}' | IsNullDiff: {IsNullDiff} | Type1: '{Type1}' | Type2: '{Type2}'", 
+                    diff.PropertyName, 
+                    diff.Object1Value?.ToString() ?? "null", 
+                    diff.Object2Value?.ToString() ?? "null",
+                    isNullDiff,
+                    diff.Object1Value?.GetType().Name ?? "null",
+                    diff.Object2Value?.GetType().Name ?? "null");
             }
             logger.LogDebug("=== END OF ALL DIFFERENCES ===");
         }

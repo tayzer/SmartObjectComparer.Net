@@ -1,0 +1,204 @@
+@namespace ComparisonTool.Web.Components.Comparison
+@using ComparisonTool.Core.Comparison.Analysis
+@using ComparisonTool.Core.Comparison.Results
+@using KellermanSoftware.CompareNetObjects
+
+<div class="card border-warning">
+    <div class="card-header bg-warning text-dark">
+        <h6 class="mb-0">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            Null Value Debug Panel
+        </h6>
+    </div>
+    <div class="card-body">
+        @if (NullValueDifferences?.Any() == true)
+        {
+            <div class="alert alert-warning">
+                <strong>Found @NullValueDifferences.Count null value differences</strong>
+                <br />
+                <small>These are cases where one side is null and the other has a value</small>
+            </div>
+            
+            <div class="table-responsive">
+                <table class="table table-sm table-striped">
+                    <thead>
+                        <tr>
+                            <th>Property Path</th>
+                            <th>Expected (A)</th>
+                            <th>Actual (B)</th>
+                            <th>Expected Type</th>
+                            <th>Actual Type</th>
+                            <th>Analysis</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var diff in NullValueDifferences.Take(50))
+                        {
+                            <tr class="@(IsSuspiciousNullDiff(diff) ? "table-danger" : "")">
+                                <td>
+                                    <code>@diff.PropertyName</code>
+                                    @if (IsSuspiciousNullDiff(diff))
+                                    {
+                                        <span class="badge bg-danger ms-2">Suspicious</span>
+                                    }
+                                </td>
+                                <td class="text-muted">
+                                    @if (diff.Object1Value == null)
+                                    {
+                                        <span class="text-danger">null</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-success">@FormatValue(diff.Object1Value)</span>
+                                    }
+                                </td>
+                                <td class="text-muted">
+                                    @if (diff.Object2Value == null)
+                                    {
+                                        <span class="text-danger">null</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-success">@FormatValue(diff.Object2Value)</span>
+                                    }
+                                </td>
+                                <td>
+                                    <small class="text-muted">@(diff.Object1Value?.GetType().Name ?? "null")</small>
+                                </td>
+                                <td>
+                                    <small class="text-muted">@(diff.Object2Value?.GetType().Name ?? "null")</small>
+                                </td>
+                                <td>
+                                    @if (IsSuspiciousNullDiff(diff))
+                                    {
+                                        <span class="text-danger">
+                                            <i class="bi bi-exclamation-triangle me-1"></i>
+                                            Tool reports getting value when expecting null
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-success">
+                                            <i class="bi bi-check-circle me-1"></i>
+                                            Normal null difference
+                                        </span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            
+            @if (NullValueDifferences.Count > 50)
+            {
+                <div class="text-center mt-3">
+                    <small class="text-muted">Showing first 50 of @NullValueDifferences.Count null value differences</small>
+                </div>
+            }
+        }
+        else
+        {
+            <div class="text-center text-muted">
+                <i class="bi bi-check-circle fs-1 mb-3"></i>
+                <h6>No Null Value Differences Found</h6>
+                <p>All differences involve non-null values on both sides.</p>
+            </div>
+        }
+        
+        @if (SuspiciousNullDiffs?.Any() == true)
+        {
+            <div class="mt-4">
+                <h6 class="text-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Suspicious Null Differences (@SuspiciousNullDiffs.Count)
+                </h6>
+                <div class="alert alert-danger">
+                    <p><strong>These differences may indicate the tool is incorrectly reporting getting a value when it expects null:</strong></p>
+                    <ul>
+                        @foreach (var diff in SuspiciousNullDiffs.Take(10))
+                        {
+                            <li>
+                                <code>@diff.PropertyName</code>: 
+                                Expected <span class="text-danger">null</span> but got 
+                                <span class="text-success">@FormatValue(diff.Object2Value)</span>
+                                (@diff.Object2Value?.GetType().Name)
+                            </li>
+                        }
+                    </ul>
+                    @if (SuspiciousNullDiffs.Count > 10)
+                    {
+                        <p><small>... and @(SuspiciousNullDiffs.Count - 10) more suspicious differences</small></p>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public List<Difference> NullValueDifferences { get; set; } = new List<Difference>();
+    
+    [Parameter]
+    public List<Difference> AllDifferences { get; set; } = new List<Difference>();
+    
+    private List<Difference> SuspiciousNullDiffs => 
+        NullValueDifferences?.Where(d => IsSuspiciousNullDiff(d)).ToList() ?? new List<Difference>();
+    
+    private bool IsSuspiciousNullDiff(Difference diff)
+    {
+        // A suspicious null diff is when:
+        // 1. Object1Value (expected) is null
+        // 2. Object2Value (actual) is NOT null
+        // 3. The actual value is not an empty string, empty collection, or other "null-like" values
+        return diff.Object1Value == null && 
+               diff.Object2Value != null &&
+               !IsNullLikeValue(diff.Object2Value);
+    }
+    
+    private bool IsNullLikeValue(object value)
+    {
+        if (value == null) return true;
+        
+        // Empty string
+        if (value is string str && string.IsNullOrEmpty(str)) return true;
+        
+        // Empty collections
+        if (value is System.Collections.ICollection collection && collection.Count == 0) return true;
+        
+        // Default values for common types
+        if (value is int intVal && intVal == 0) return true;
+        if (value is double doubleVal && doubleVal == 0.0) return true;
+        if (value is bool boolVal && !boolVal) return true;
+        
+        // Empty arrays
+        if (value is Array array && array.Length == 0) return true;
+        
+        return false;
+    }
+    
+    private string FormatValue(object value)
+    {
+        if (value == null) return "null";
+        
+        if (value is string str)
+        {
+            if (str.Length > 50)
+                return $"\"{str.Substring(0, 47)}...\"";
+            return $"\"{str}\"";
+        }
+        
+        if (value is DateTime dt)
+            return dt.ToString("yyyy-MM-dd HH:mm:ss");
+        
+        if (value is System.Collections.ICollection collection)
+            return $"[{collection.Count} items]";
+        
+        var strValue = value.ToString();
+        if (strValue.Length > 50)
+            return strValue.Substring(0, 47) + "...";
+        
+        return strValue;
+    }
+} 

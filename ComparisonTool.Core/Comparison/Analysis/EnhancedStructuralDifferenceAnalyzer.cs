@@ -960,7 +960,21 @@ namespace ComparisonTool.Core.Comparison.Analysis
 
         private bool IsPropertyMissing(Difference diff)
         {
-            return (diff.Object1Value == null && diff.Object2Value != null) || (diff.Object1Value != null && diff.Object2Value == null);
+            var isMissing = (diff.Object1Value == null && diff.Object2Value != null) || (diff.Object1Value != null && diff.Object2Value == null);
+            
+            // Enhanced debugging for property missing detection
+            if (logger?.IsEnabled(LogLevel.Debug) == true && (diff.Object1Value == null || diff.Object2Value == null))
+            {
+                logger.LogDebug("PROPERTY MISSING CHECK: Property='{PropertyName}' | Object1Value='{Object1Value}' | Object2Value='{Object2Value}' | IsMissing='{IsMissing}' | Object1Type='{Object1Type}' | Object2Type='{Object2Type}'",
+                    diff.PropertyName,
+                    diff.Object1Value?.ToString() ?? "null",
+                    diff.Object2Value?.ToString() ?? "null",
+                    isMissing,
+                    diff.Object1Value?.GetType().Name ?? "null",
+                    diff.Object2Value?.GetType().Name ?? "null");
+            }
+            
+            return isMissing;
         }
 
         private string GetHumanReadableDescription(string pattern, string propertyName, bool isCritical)
