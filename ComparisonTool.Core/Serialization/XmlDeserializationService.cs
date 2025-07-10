@@ -214,7 +214,7 @@ public class XmlDeserializationService : IXmlDeserializationService
     }
 
     /// <summary>
-    /// Get optimized XML reader settings
+    /// Get optimized XML reader settings that are forgiving of XML variations
     /// </summary>
     private XmlReaderSettings GetOptimizedReaderSettings()
     {
@@ -225,7 +225,11 @@ public class XmlDeserializationService : IXmlDeserializationService
             IgnoreProcessingInstructions = true,
             DtdProcessing = DtdProcessing.Prohibit,
             MaxCharactersInDocument = 50 * 1024 * 1024, // 50MB limit
-            CloseInput = false // Don't close the underlying stream
+            CloseInput = false, // Don't close the underlying stream
+            CheckCharacters = false, // More lenient character checking
+            ConformanceLevel = ConformanceLevel.Fragment, // Allow fragments
+            ValidationFlags = System.Xml.Schema.XmlSchemaValidationFlags.None, // No validation
+            ValidationType = ValidationType.None // No validation
         };
     }
 

@@ -26,7 +26,11 @@ public static class ServiceCollectionExtensions
             services.Configure<ComparisonConfigurationOptions>(configuration.GetSection("ComparisonSettings"));
         }
 
-        services.AddSingleton<XmlSerializerFactory>();
+        services.AddSingleton<XmlSerializerFactory>(provider =>
+        {
+            var logger = provider.GetRequiredService<ILogger<XmlSerializerFactory>>();
+            return new XmlSerializerFactory(logger);
+        });
 
         // Add performance tracking service
         services.AddSingleton<PerformanceTracker>();
