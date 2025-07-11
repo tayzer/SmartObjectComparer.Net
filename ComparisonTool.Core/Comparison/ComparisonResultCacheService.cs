@@ -60,6 +60,9 @@ namespace ComparisonTool.Core.Comparison
         private readonly ILogger _logger;
         private readonly PerformanceTracker _performanceTracker;
         
+        // Application session identifier to invalidate cache on restart
+        private static readonly string AppSessionId = Guid.NewGuid().ToString("N")[..8];
+        
         // Cache for comparison results: key = fileHash1 + fileHash2 + configHash
         private readonly ConcurrentDictionary<string, CachedComparisonResult> _comparisonCache = new();
         
@@ -248,7 +251,7 @@ namespace ComparisonTool.Core.Comparison
         {
             cachedObject = null;
             
-            var cacheKey = $"{filePath}_{fileLastModified.Ticks}";
+            var cacheKey = $"{filePath}_{fileLastModified.Ticks}_{AppSessionId}";
             
             if (_objectCache.TryGetValue(cacheKey, out var cached))
             {
@@ -284,7 +287,7 @@ namespace ComparisonTool.Core.Comparison
         {
             if (obj == null) return;
             
-            var cacheKey = $"{filePath}_{fileLastModified.Ticks}";
+            var cacheKey = $"{filePath}_{fileLastModified.Ticks}_{AppSessionId}";
             var cachedObject = new CachedDeserializedObject(obj, fileLastModified, "", estimatedSize);
             
             // Check cache size limits before adding
@@ -311,6 +314,17 @@ namespace ComparisonTool.Core.Comparison
             
             _logger.LogInformation("Cleared all caches: {ComparisonEntries} comparison entries, {ObjectEntries} object entries", 
                 comparisonCount, objectCount);
+        }
+
+        /// <summary>
+        /// Clear all cached objects - useful when XML serialization logic has been updated
+        /// or when encountering inconsistent results between single file and folder comparisons
+        /// </summary>
+        public void ClearObjectCache()
+        {
+            _objectCache.Clear();
+            Interlocked.Exchange(ref _totalCacheEvictions, _objectCache.Count);
+            _logger.LogInformation("Cleared all cached deserialized objects");
         }
 
         /// <summary>
