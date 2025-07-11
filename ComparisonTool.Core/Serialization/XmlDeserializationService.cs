@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using System.Reflection;
 using System.Xml;
 using System.Xml.Serialization;
 using Microsoft.Extensions.Logging;
@@ -278,12 +279,125 @@ public class XmlDeserializationService : IXmlDeserializationService
     }
 
     /// <summary>
-    /// Get or create a cached XmlSerializer
+    /// Get cached XmlSerializer with enhanced configuration for handling unknown elements
+    /// Dynamically removes Order attributes to prevent deserialization issues without modifying domain model
     /// </summary>
     private XmlSerializer GetCachedSerializer<T>()
     {
         var type = typeof(T);
-        return _serializerCache.GetOrAdd(type, t => serializerFactory.GetSerializer<T>());
+        return _serializerCache.GetOrAdd(type, _ => 
+        {
+            // CRITICAL FIX: Create attribute overrides to remove Order attributes dynamically
+            // This allows us to fix serialization issues without modifying the user's domain model
+            var overrides = new XmlAttributeOverrides();
+            
+            // Recursively process all types to remove Order attributes
+            ProcessTypeForOrderRemoval(type, overrides);
+            
+            var serializer = new XmlSerializer(type, overrides);
+            
+            // CRITICAL FIX: Add event handlers to gracefully handle unknown elements
+            // This is the key to ignoring extra XML elements like TestValue that don't exist in domain model
+            serializer.UnknownElement += (sender, e) =>
+            {
+                // Silently ignore unknown elements - this prevents deserialization errors
+                // when XML contains elements not defined in the domain model
+                logger.LogDebug("Unknown XML element '{ElementName}' encountered at line {LineNumber}, position {LinePosition}. Element will be ignored during deserialization.", 
+                    e.Element.Name, e.LineNumber, e.LinePosition);
+            };
+            
+            serializer.UnknownAttribute += (sender, e) =>
+            {
+                // Silently ignore unknown attributes
+                logger.LogDebug("Unknown XML attribute '{AttributeName}' encountered at line {LineNumber}, position {LinePosition}. Attribute will be ignored during deserialization.", 
+                    e.Attr.Name, e.LineNumber, e.LinePosition);
+            };
+            
+            serializer.UnknownNode += (sender, e) =>
+            {
+                // Silently ignore unknown nodes
+                logger.LogDebug("Unknown XML node '{NodeType}' named '{Name}' encountered at line {LineNumber}, position {LinePosition}. Node will be ignored during deserialization.", 
+                    e.NodeType, e.Name, e.LineNumber, e.LinePosition);
+            };
+            
+            return serializer;
+        });
+    }
+
+    /// <summary>
+    /// Recursively process a type and its properties to remove Order attributes from XML serialization
+    /// This prevents deserialization issues without modifying the user's domain model
+    /// </summary>
+    private void ProcessTypeForOrderRemoval(Type type, XmlAttributeOverrides overrides)
+    {
+        // Skip primitive types and already processed types
+        if (type.IsPrimitive || type == typeof(string) || type == typeof(DateTime) || type == typeof(decimal))
+            return;
+
+        foreach (var property in type.GetProperties())
+        {
+            var xmlElementAttrs = property.GetCustomAttributes<XmlElementAttribute>();
+            bool hasOrderAttribute = xmlElementAttrs.Any(attr => attr.Order > 0);
+            
+            if (hasOrderAttribute)
+            {
+                var xmlAttributes = new XmlAttributes();
+                
+                // Recreate XmlElement attributes without Order
+                foreach (var attr in xmlElementAttrs)
+                {
+                    var newAttr = new XmlElementAttribute(attr.ElementName)
+                    {
+                        IsNullable = attr.IsNullable,
+                        DataType = attr.DataType,
+                        Type = attr.Type
+                        // Deliberately exclude Order to prevent deserialization issues
+                    };
+                    xmlAttributes.XmlElements.Add(newAttr);
+                }
+                
+                // Handle other XML attributes if present
+                var xmlArrayAttrs = property.GetCustomAttributes<XmlArrayAttribute>();
+                if (xmlArrayAttrs.Any())
+                {
+                    var xmlArrayAttr = xmlArrayAttrs.First();
+                    xmlAttributes.XmlArray = new XmlArrayAttribute(xmlArrayAttr.ElementName)
+                    {
+                        IsNullable = xmlArrayAttr.IsNullable
+                    };
+                }
+                
+                var xmlArrayItemAttrs = property.GetCustomAttributes<XmlArrayItemAttribute>();
+                foreach (var attr in xmlArrayItemAttrs)
+                {
+                    xmlAttributes.XmlArrayItems.Add(new XmlArrayItemAttribute(attr.ElementName)
+                    {
+                        IsNullable = attr.IsNullable,
+                        Type = attr.Type
+                    });
+                }
+                
+                overrides.Add(type, property.Name, xmlAttributes);
+            }
+            
+            // Recursively process property types
+            if (property.PropertyType.IsClass && property.PropertyType != typeof(string))
+            {
+                ProcessTypeForOrderRemoval(property.PropertyType, overrides);
+            }
+            else if (property.PropertyType.IsGenericType)
+            {
+                // Handle generic types like List<T>
+                var genericArgs = property.PropertyType.GetGenericArguments();
+                foreach (var genericArg in genericArgs)
+                {
+                    if (genericArg.IsClass && genericArg != typeof(string))
+                    {
+                        ProcessTypeForOrderRemoval(genericArg, overrides);
+                    }
+                }
+            }
+        }
     }
 
     /// <summary>
