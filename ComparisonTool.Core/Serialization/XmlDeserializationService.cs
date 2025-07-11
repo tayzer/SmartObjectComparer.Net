@@ -161,13 +161,20 @@ public class XmlDeserializationService : IXmlDeserializationService
             serializer.Serialize(stream, source);
             stream.Position = 0;
             
-            // Use optimized reader settings for cloning to ensure unknown elements are handled consistently
-            using var reader = XmlReader.Create(stream, GetOptimizedReaderSettings());
-            return (T)serializer.Deserialize(reader);
+            // CRITICAL FIX: Use conservative reader settings for cloning to preserve data fidelity
+            // The aggressive GetOptimizedReaderSettings() was causing data loss during round-trip
+            using var reader = XmlReader.Create(stream, GetConservativeCloneReaderSettings());
+            var clonedResult = (T)serializer.Deserialize(reader);
+            
+            // DIAGNOSTIC: Log cloning operation for debugging serialization issues
+            logger.LogDebug("Successfully cloned object of type {Type}. Stream size: {StreamSize} bytes", 
+                typeof(T).Name, stream.Length);
+            
+            return clonedResult;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error cloning object of type {Type}", typeof(T).Name);
+            logger.LogError(ex, "Error cloning object of type {Type}. This could indicate XML serialization round-trip issues.", typeof(T).Name);
             throw;
         }
     }
@@ -235,6 +242,38 @@ public class XmlDeserializationService : IXmlDeserializationService
             
             // Character encoding handling
             XmlResolver = null // Disable external resource resolution for security and consistency
+        };
+    }
+
+    /// <summary>
+    /// Get conservative XML reader settings for cloning to preserve data fidelity
+    /// These settings prioritize preserving all data over performance optimizations
+    /// </summary>
+    private XmlReaderSettings GetConservativeCloneReaderSettings()
+    {
+        return new XmlReaderSettings
+        {
+            // CONSERVATIVE: Preserve whitespace to avoid data loss during cloning
+            IgnoreWhitespace = false,  // CRITICAL FIX: Don't ignore whitespace during cloning
+            IgnoreComments = false,    // Preserve comments
+            IgnoreProcessingInstructions = false, // Preserve processing instructions
+            
+            // Security settings (keep these strict)
+            DtdProcessing = DtdProcessing.Prohibit,
+            MaxCharactersInDocument = 50 * 1024 * 1024,
+            CloseInput = false,
+            
+            // Conservative parsing settings for fidelity
+            CheckCharacters = true,    // Strict character checking for data integrity
+            ConformanceLevel = ConformanceLevel.Document,
+            ValidationFlags = System.Xml.Schema.XmlSchemaValidationFlags.None,
+            ValidationType = ValidationType.None,
+            
+            // Synchronous processing for consistency
+            Async = false,
+            
+            // Disable external resources for security
+            XmlResolver = null
         };
     }
 
