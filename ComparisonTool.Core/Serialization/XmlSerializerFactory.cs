@@ -1,4 +1,5 @@
-﻿using System.Xml.Serialization;
+﻿using System.Reflection;
+using System.Xml.Serialization;
 using ComparisonTool.Core.Models;
 using Microsoft.Extensions.Logging;
 
@@ -46,6 +47,7 @@ public class XmlSerializerFactory
     {
         var serializer = new XmlSerializer(
             typeof(ComplexOrderResponse),
+            root:
             new XmlRootAttribute
             {
                 ElementName = "OrderManagementResponse",
@@ -62,8 +64,13 @@ public class XmlSerializerFactory
 
     private XmlSerializer CreateDefaultSerializer<T>()
     {
-        var serializer = new XmlSerializer(typeof(T));
-        
+        var overrides = new XmlAttributeOverrides();
+
+        // Recursively process all types to remove Order attributes
+        ProcessTypeForOrderRemoval(typeof(T), overrides);
+
+        var serializer = new XmlSerializer(typeof(T), overrides);
+
         // Add event handlers for unknown elements/attributes
         serializer.UnknownElement += OnUnknownElement;
         serializer.UnknownAttribute += OnUnknownAttribute;
@@ -91,5 +98,77 @@ public class XmlSerializerFactory
         // Log but don't throw - this allows deserialization to continue
         _logger?.LogDebug("Unknown XML node encountered: {NodeType} '{NodeName}' at line {LineNumber}, column {LinePosition}. Ignoring node.",
             e.NodeType, e.Name, e.LineNumber, e.LinePosition);
+    }
+
+    private void ProcessTypeForOrderRemoval(Type type, XmlAttributeOverrides overrides)
+    {
+        // Skip primitive types and already processed types
+        if (type.IsPrimitive || type == typeof(string) || type == typeof(DateTime) || type == typeof(decimal))
+            return;
+
+        foreach (var property in type.GetProperties())
+        {
+            var xmlElementAttrs = property.GetCustomAttributes<XmlElementAttribute>();
+            bool hasOrderAttribute = xmlElementAttrs.Any(attr => attr.Order > 0);
+
+            if (hasOrderAttribute)
+            {
+                var xmlAttributes = new XmlAttributes();
+
+                // Recreate XmlElement attributes without Order
+                foreach (var attr in xmlElementAttrs)
+                {
+                    var newAttr = new XmlElementAttribute(attr.ElementName)
+                    {
+                        IsNullable = attr.IsNullable,
+                        DataType = attr.DataType,
+                        Type = attr.Type
+                        // Deliberately exclude Order to prevent deserialization issues
+                    };
+                    xmlAttributes.XmlElements.Add(newAttr);
+                }
+
+                // Handle other XML attributes if present
+                var xmlArrayAttrs = property.GetCustomAttributes<XmlArrayAttribute>();
+                if (xmlArrayAttrs.Any())
+                {
+                    var xmlArrayAttr = xmlArrayAttrs.First();
+                    xmlAttributes.XmlArray = new XmlArrayAttribute(xmlArrayAttr.ElementName)
+                    {
+                        IsNullable = xmlArrayAttr.IsNullable
+                    };
+                }
+
+                var xmlArrayItemAttrs = property.GetCustomAttributes<XmlArrayItemAttribute>();
+                foreach (var attr in xmlArrayItemAttrs)
+                {
+                    xmlAttributes.XmlArrayItems.Add(new XmlArrayItemAttribute(attr.ElementName)
+                    {
+                        IsNullable = attr.IsNullable,
+                        Type = attr.Type
+                    });
+                }
+
+                overrides.Add(type, property.Name, xmlAttributes);
+            }
+
+            // Recursively process property types
+            if (property.PropertyType.IsClass && property.PropertyType != typeof(string))
+            {
+                ProcessTypeForOrderRemoval(property.PropertyType, overrides);
+            }
+            else if (property.PropertyType.IsGenericType)
+            {
+                // Handle generic types like List<T>
+                var genericArgs = property.PropertyType.GetGenericArguments();
+                foreach (var genericArg in genericArgs)
+                {
+                    if (genericArg.IsClass && genericArg != typeof(string))
+                    {
+                        ProcessTypeForOrderRemoval(genericArg, overrides);
+                    }
+                }
+            }
+        }
     }
 }
