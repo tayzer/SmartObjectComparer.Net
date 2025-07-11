@@ -50,6 +50,11 @@ public interface IComparisonService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Force clear all caches for debugging batch processing issues
+    /// </summary>
+    void ForceClearAllCaches();
+
+    /// <summary>
     /// Analyze patterns across multiple file comparison results
     /// </summary>
     Task<ComparisonPatternAnalysis> AnalyzePatternsAsync(
