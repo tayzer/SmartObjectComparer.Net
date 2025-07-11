@@ -20,7 +20,15 @@ public interface IXmlDeserializationService
     /// </summary>
     Type GetModelType(string modelName);
 
+    /// <summary>
+    /// Deserialize XML stream to object with efficient reader pooling and caching
+    /// </summary>
     T DeserializeXml<T>(Stream xmlStream) where T : class;
+
+    /// <summary>
+    /// Tolerant XML deserialization using XDocument that ignores extra elements and order
+    /// </summary>
+    T DeserializeXmlTolerant<T>(Stream xmlStream) where T : class;
 
     T CloneObject<T>(T source);
     

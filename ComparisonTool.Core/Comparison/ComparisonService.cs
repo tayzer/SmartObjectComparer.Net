@@ -89,7 +89,7 @@ public class ComparisonService : IComparisonService
                 var modelType = deserializationService.GetModelType(modelName);
 
                 var deserializeMethod = typeof(IXmlDeserializationService)
-                    .GetMethod(nameof(IXmlDeserializationService.DeserializeXml))
+                    .GetMethod(nameof(IXmlDeserializationService.DeserializeXmlTolerant))
                     .MakeGenericMethod(modelType);
 
                 // CRITICAL FIX: Eliminate cloning entirely - use original deserialized objects

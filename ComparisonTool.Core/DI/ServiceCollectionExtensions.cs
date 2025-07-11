@@ -41,20 +41,18 @@ public static class ServiceCollectionExtensions
         // Add comparison result cache service
         services.AddSingleton<ComparisonResultCacheService>();
 
-        services.AddSingleton<IXmlDeserializationService>(provider =>
+        services.AddScoped<IXmlDeserializationService>(provider =>
         {
             var logger = provider.GetRequiredService<ILogger<XmlDeserializationService>>();
             var serializerFactory = provider.GetRequiredService<XmlSerializerFactory>();
 
             var service = new XmlDeserializationService(logger, serializerFactory);
-
             // todo: shouldnt be done here
             service.RegisterDomainModel<ComplexOrderResponse>("ComplexOrderResponse");
-
             return service;
         });
 
-        services.AddSingleton<IComparisonConfigurationService>(provider =>
+        services.AddScoped<IComparisonConfigurationService>(provider =>
         {
             var logger = provider.GetRequiredService<ILogger<ComparisonConfigurationService>>();
             var configurationService = new ComparisonConfigurationService(logger);
@@ -74,6 +72,23 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<DirectoryComparisonService>();
 
+        var provider = services.BuildServiceProvider();
+        var serializerFactory = provider.GetRequiredService<XmlSerializerFactory>();
+        serializerFactory.RegisterUserModel<ComplexOrderResponse>("ComplexOrderResponse", "OrderManagementResponse");
+
+        return services;
+    }
+
+    /// <summary>
+    /// Overload to allow user to register their own domain model and root element for robust XML deserialization
+    /// </summary>
+    public static IServiceCollection AddXmlComparisonServices<TModel>(this IServiceCollection services, string modelName, string rootElementName, IConfiguration configuration = null) where TModel : class
+    {
+        services.AddXmlComparisonServices(configuration);
+        // Register the user model with the serializer factory
+        var provider = services.BuildServiceProvider();
+        var serializerFactory = provider.GetRequiredService<XmlSerializerFactory>();
+        serializerFactory.RegisterUserModel<TModel>(modelName, rootElementName);
         return services;
     }
 }

@@ -1,6 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using System.Reflection;
 using System.Xml;
+using System.Xml.Linq;
 using System.Xml.Serialization;
 using Microsoft.Extensions.Logging;
 
@@ -90,63 +91,260 @@ public class XmlDeserializationService : IXmlDeserializationService
 
         try
         {
+            // DIAGNOSTIC: Log the start of deserialization
+            logger.LogDebug("Starting XML deserialization for type {Type}", typeof(T).Name);
+
             // Try to determine if we've seen this exact XML before
             string cacheKey = null;
 
-            if (xmlStream.CanSeek && xmlStream.Length < 1024 * 1024) // Only for reasonably sized files
+            if (xmlStream.CanSeek && xmlStream.Length < 1024 * 1024) // Only cache small files
             {
-                // Generate a simple hash as cache key
-                using (var ms = new MemoryStream())
+                var position = xmlStream.Position;
+                xmlStream.Position = 0;
+                using var reader = new StreamReader(xmlStream, leaveOpen: true);
+                var content = reader.ReadToEnd();
+                xmlStream.Position = position;
+
+                // Create a simple hash for caching
+                var hash = System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(content));
+                cacheKey = Convert.ToBase64String(hash).Substring(0, 8);
+                logger.LogDebug("MD5-based cache {CacheResult} for XML content hash: {Hash} (SessionId: {SessionId})",
+                    _deserializationCache.ContainsKey(cacheKey) ? "HIT" : "MISS", cacheKey, Guid.NewGuid().ToString("N")[..8]);
+
+                if (_deserializationCache.TryGetValue(cacheKey, out var cachedResult))
                 {
-                    xmlStream.Position = 0;
-                    xmlStream.CopyTo(ms);
-                    byte[] bytes = ms.ToArray();
-                    var contentHash = Convert.ToBase64String(System.Security.Cryptography.MD5.HashData(bytes));
-                    cacheKey = $"{contentHash}_{SessionId}"; // Include session ID for cache invalidation
-
-                    // Check cache first
-                    if (_deserializationCache.TryGetValue(cacheKey, out var cached))
-                    {
-                        _deserializationCache[cacheKey] = (DateTime.Now, cached.Data);
-                        logger.LogDebug("MD5-based cache HIT for XML content hash: {CacheKey} (SessionId: {SessionId})", 
-                            contentHash[..8], SessionId);
-                        return (T)cached.Data;
-                    }
-                    else
-                    {
-                        logger.LogDebug("MD5-based cache MISS for XML content hash: {CacheKey} (SessionId: {SessionId})", 
-                            contentHash[..8], SessionId);
-                    }
-
-                    // Reset position for deserialization
-                    xmlStream.Position = 0;
+                    logger.LogDebug("Using cached deserialization result for {Type}", typeof(T).Name);
+                    return (T)cachedResult.Data;
                 }
             }
 
-            // CRITICAL FIX: Always create fresh XmlReader to avoid state corruption
-            // The pooling was causing inconsistent behavior between single and batch processing
+            // Get the appropriate serializer
             var serializer = GetCachedSerializer<T>();
-            xmlStream.Position = 0;
 
-            // Create a fresh XmlReader with consistent settings for every deserialization
-            using var reader = XmlReader.Create(xmlStream, GetOptimizedReaderSettings());
-            
-            // Deserialize using the fresh reader
-            var result = (T)serializer.Deserialize(reader);
+            // Create optimized XML reader settings
+            var readerSettings = GetOptimizedReaderSettings();
 
-            // Cache result if needed
-            if (cacheKey != null && _deserializationCache.Count < _maxCacheSize)
+            // Reset stream position
+            if (xmlStream.CanSeek)
+            {
+                xmlStream.Position = 0;
+            }
+
+            // Create XML reader with optimized settings
+            using var xmlReader = XmlReader.Create(xmlStream, readerSettings);
+            logger.LogDebug("Created XmlReader with IgnoreWhitespace: {IgnoreWhitespace}", readerSettings.IgnoreWhitespace);
+
+            // Perform deserialization
+            var result = serializer.Deserialize(xmlReader) as T;
+
+            // DIAGNOSTIC: Log deserialization result
+            if (result == null)
+            {
+                logger.LogError("Deserialization returned NULL for type {Type}", typeof(T).Name);
+            }
+            else
+            {
+                logger.LogDebug("Deserialization successful for type {Type}. Result type: {ResultType}", 
+                    typeof(T).Name, result.GetType().Name);
+                
+                // DIAGNOSTIC: Check if key properties are null
+                logger.LogDebug("Deserialization completed successfully");
+            }
+
+            // Cache the result if we have a cache key
+            if (cacheKey != null)
             {
                 _deserializationCache[cacheKey] = (DateTime.Now, result);
-                CleanupCacheIfNeeded();
             }
 
             return result;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error deserializing XML to type {Type}", typeof(T).Name);
+            logger.LogError(ex, "Error deserializing XML for type {Type}", typeof(T).Name);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Tolerant XML deserialization using XDocument that ignores extra elements and order
+    /// </summary>
+    public T DeserializeXmlTolerant<T>(Stream xmlStream) where T : class
+    {
+        if (xmlStream == null)
+        {
+            logger.LogError("XML stream cannot be null");
+            throw new ArgumentNullException(nameof(xmlStream));
+        }
+
+        try
+        {
+            logger.LogDebug("Starting tolerant XML deserialization for type {Type}", typeof(T).Name);
+
+            // Reset stream position
+            if (xmlStream.CanSeek)
+            {
+                xmlStream.Position = 0;
+            }
+
+            // Load XML document
+            var doc = XDocument.Load(xmlStream);
+            var root = doc.Root;
+            
+            if (root == null)
+            {
+                throw new InvalidOperationException("XML document has no root element");
+            }
+
+            // Create instance of target type
+            var result = Activator.CreateInstance<T>();
+            
+            // Map XML elements to object properties
+            MapXmlToObject(root, result, typeof(T));
+
+            logger.LogDebug("Tolerant deserialization completed successfully for type {Type}", typeof(T).Name);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error in tolerant XML deserialization for type {Type}", typeof(T).Name);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Recursively map XML elements to object properties, ignoring extra elements and order
+    /// </summary>
+    private void MapXmlToObject(XElement element, object target, Type targetType)
+    {
+        foreach (var childElement in element.Elements())
+        {
+            var propertyName = GetPropertyNameForElement(childElement.Name.LocalName, targetType);
+            
+            if (propertyName != null)
+            {
+                var property = targetType.GetProperty(propertyName);
+                if (property != null)
+                {
+                    SetPropertyValue(target, property, childElement);
+                }
+                else
+                {
+                    logger.LogDebug("Unknown XML element encountered: {ElementName}. Ignoring element.",
+                        childElement.Name.LocalName);
+                }
+            }
+            else
+            {
+                logger.LogDebug("Unknown XML element encountered: {ElementName}. Ignoring element.",
+                    childElement.Name.LocalName);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Get the property name for an XML element, considering XmlElement attributes
+    /// </summary>
+    private string GetPropertyNameForElement(string elementName, Type targetType)
+    {
+        foreach (var property in targetType.GetProperties())
+        {
+            var xmlElementAttr = property.GetCustomAttribute<XmlElementAttribute>();
+            if (xmlElementAttr != null && xmlElementAttr.ElementName == elementName)
+            {
+                return property.Name;
+            }
+            
+            var xmlArrayAttr = property.GetCustomAttribute<XmlArrayAttribute>();
+            if (xmlArrayAttr != null && xmlArrayAttr.ElementName == elementName)
+            {
+                return property.Name;
+            }
+
+            // If no attribute, check if property name matches element name (case-insensitive)
+            if (string.Equals(property.Name, elementName, StringComparison.OrdinalIgnoreCase))
+            {
+                return property.Name;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Set property value from XML element
+    /// </summary>
+    private void SetPropertyValue(object target, PropertyInfo property, XElement element)
+    {
+        try
+        {
+            if (property.PropertyType == typeof(string))
+            {
+                property.SetValue(target, element.Value);
+            }
+            else if (property.PropertyType == typeof(int) || property.PropertyType == typeof(int?))
+            {
+                if (int.TryParse(element.Value, out var intValue))
+                {
+                    property.SetValue(target, intValue);
+                }
+            }
+            else if (property.PropertyType == typeof(double) || property.PropertyType == typeof(double?))
+            {
+                if (double.TryParse(element.Value, out var doubleValue))
+                {
+                    property.SetValue(target, doubleValue);
+                }
+            }
+            else if (property.PropertyType == typeof(decimal) || property.PropertyType == typeof(decimal?))
+            {
+                if (decimal.TryParse(element.Value, out var decimalValue))
+                {
+                    property.SetValue(target, decimalValue);
+                }
+            }
+            else if (property.PropertyType == typeof(bool) || property.PropertyType == typeof(bool?))
+            {
+                if (bool.TryParse(element.Value, out var boolValue))
+                {
+                    property.SetValue(target, boolValue);
+                }
+            }
+            else if (property.PropertyType == typeof(DateTime) || property.PropertyType == typeof(DateTime?))
+            {
+                if (DateTime.TryParse(element.Value, out var dateTimeValue))
+                {
+                    property.SetValue(target, dateTimeValue);
+                }
+            }
+            else if (property.PropertyType.IsGenericType && property.PropertyType.GetGenericTypeDefinition() == typeof(List<>))
+            {
+                // Handle collections
+                var listType = property.PropertyType.GetGenericArguments()[0];
+                var list = property.GetValue(target) ?? Activator.CreateInstance(property.PropertyType);
+                
+                foreach (var childElement in element.Elements())
+                {
+                    var item = Activator.CreateInstance(listType);
+                    MapXmlToObject(childElement, item, listType);
+                    
+                    var addMethod = property.PropertyType.GetMethod("Add");
+                    addMethod?.Invoke(list, new[] { item });
+                }
+                
+                property.SetValue(target, list);
+            }
+            else if (property.PropertyType.IsClass && property.PropertyType != typeof(string))
+            {
+                // Handle complex objects
+                var complexObject = property.GetValue(target) ?? Activator.CreateInstance(property.PropertyType);
+                MapXmlToObject(element, complexObject, property.PropertyType);
+                property.SetValue(target, complexObject);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Error setting property {PropertyName} from XML element {ElementName}", 
+                property.Name, element.Name.LocalName);
         }
     }
 
@@ -294,25 +492,10 @@ public class XmlDeserializationService : IXmlDeserializationService
         
         return threadLocalCache.GetOrAdd(type, _ => 
         {
-            // CRITICAL FIX: Use the public GetSerializer method instead of private CreateComplexOrderResponseSerializer
-            var serializer = serializerFactory.GetSerializer<T>();
-            
-            // CRITICAL FIX: Add event handlers to gracefully handle unknown elements
-            serializer.UnknownElement += (sender, e) =>
-            {
-                // Log unknown elements for debugging but don't throw exceptions
-                logger.LogDebug("Unknown XML element encountered: {ElementName} at line {LineNumber}, position {LinePosition}. This element will be ignored during deserialization.", 
-                    e.Element.Name, e.LineNumber, e.LinePosition);
-            };
-            
-            serializer.UnknownAttribute += (sender, e) =>
-            {
-                // Log unknown attributes for debugging but don't throw exceptions
-                logger.LogDebug("Unknown XML attribute encountered: {AttributeName} at line {LineNumber}, position {LinePosition}. This attribute will be ignored during deserialization.", 
-                    e.Attr.Name, e.LineNumber, e.LinePosition);
-            };
-            
-            return serializer;
+            // CRITICAL FIX: Use the factory which already has event handlers configured
+            // The XmlSerializerFactory.CreateDefaultSerializer and CreateComplexOrderResponseSerializer
+            // already have UnknownElement, UnknownAttribute, and UnknownNode event handlers
+            return serializerFactory.GetSerializer<T>();
         });
     }
 
