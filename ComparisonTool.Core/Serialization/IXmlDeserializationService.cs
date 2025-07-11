@@ -23,4 +23,9 @@ public interface IXmlDeserializationService
     T DeserializeXml<T>(Stream xmlStream) where T : class;
 
     T CloneObject<T>(T source);
+    
+    /// <summary>
+    /// Clear the internal deserialization cache
+    /// </summary>
+    void ClearDeserializationCache();
 }

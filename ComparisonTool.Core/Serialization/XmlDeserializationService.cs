@@ -25,6 +25,9 @@ public class XmlDeserializationService : IXmlDeserializationService
     private readonly TimeSpan _cacheExpiration = TimeSpan.FromMinutes(10);
     private readonly int _maxCacheSize = 100;
     private DateTime _lastCacheCleanup = DateTime.Now;
+    
+    // Application session identifier to invalidate cache on restart
+    private static readonly string SessionId = Guid.NewGuid().ToString("N")[..8];
 
     public XmlDeserializationService(
         ILogger<XmlDeserializationService> logger,
@@ -103,7 +106,8 @@ public class XmlDeserializationService : IXmlDeserializationService
                     xmlStream.Position = 0;
                     xmlStream.CopyTo(ms);
                     byte[] bytes = ms.ToArray();
-                    cacheKey = Convert.ToBase64String(System.Security.Cryptography.MD5.HashData(bytes));
+                    var contentHash = Convert.ToBase64String(System.Security.Cryptography.MD5.HashData(bytes));
+                    cacheKey = $"{contentHash}_{SessionId}"; // Include session ID for cache invalidation
 
                     // Check cache first
                     if (_deserializationCache.TryGetValue(cacheKey, out var cached))
@@ -211,6 +215,16 @@ public class XmlDeserializationService : IXmlDeserializationService
             logger.LogError(ex, "Error cloning object of type {Type}", typeof(T).Name);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Clear the internal deserialization cache - useful for testing or when serialization logic changes
+    /// </summary>
+    public void ClearDeserializationCache()
+    {
+        var count = _deserializationCache.Count;
+        _deserializationCache.Clear();
+        logger.LogInformation("Cleared internal deserialization cache: {Count} entries removed", count);
     }
 
     /// <summary>
