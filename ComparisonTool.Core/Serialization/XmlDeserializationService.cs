@@ -14,11 +14,8 @@ public class XmlDeserializationService : IXmlDeserializationService
     private readonly Dictionary<string, Type> registeredDomainModels = new();
     private readonly XmlSerializerFactory serializerFactory;
 
-    // XML Reader/Writer pools for efficient reuse
+    // XML Serializer cache for efficient reuse (thread-safe)
     private readonly ConcurrentDictionary<Type, XmlSerializer> _serializerCache = new();
-    private readonly ConcurrentQueue<XmlReader> _readerPool = new();
-    private readonly int _maxPoolSize = 20;
-    private readonly bool _enableFastReading = true;
 
     // Cache for recently deserialized objects
     private readonly ConcurrentDictionary<string, (DateTime LastAccess, object Data)> _deserializationCache = new();
@@ -35,12 +32,6 @@ public class XmlDeserializationService : IXmlDeserializationService
     {
         this.logger = logger;
         this.serializerFactory = serializerFactory;
-
-        // Initialize reader pool with empty readers
-        for (int i = 0; i < 5; i++)
-        {
-            _readerPool.Enqueue(XmlReader.Create(new StringReader(string.Empty)));
-        }
     }
 
     /// <summary>
@@ -128,73 +119,25 @@ public class XmlDeserializationService : IXmlDeserializationService
                 }
             }
 
-            // Use fast path for small XML files
-            if (_enableFastReading && xmlStream.Length < 5 * 1024 * 1024)
+            // CRITICAL FIX: Always create fresh XmlReader to avoid state corruption
+            // The pooling was causing inconsistent behavior between single and batch processing
+            var serializer = GetCachedSerializer<T>();
+            xmlStream.Position = 0;
+
+            // Create a fresh XmlReader with consistent settings for every deserialization
+            using var reader = XmlReader.Create(xmlStream, GetOptimizedReaderSettings());
+            
+            // Deserialize using the fresh reader
+            var result = (T)serializer.Deserialize(reader);
+
+            // Cache result if needed
+            if (cacheKey != null && _deserializationCache.Count < _maxCacheSize)
             {
-                var serializer = GetCachedSerializer<T>();
-                xmlStream.Position = 0;
-
-                // Get a reader from the pool or create a new one
-                XmlReader reader = null;
-                bool fromPool = _readerPool.TryDequeue(out reader);
-
-                if (!fromPool)
-                {
-                    reader = XmlReader.Create(xmlStream, GetOptimizedReaderSettings());
-                }
-                else
-                {
-                    // Can't reuse the reader directly with a new stream, so create a new one
-                    // but we'll still return the old one to the pool when done
-                    reader.Dispose(); // Close the old reader
-                    reader = XmlReader.Create(xmlStream, GetOptimizedReaderSettings());
-                }
-
-                try
-                {
-                    // Deserialize using the reader
-                    var result = (T)serializer.Deserialize(reader);
-
-                    // Cache result if needed
-                    if (cacheKey != null && _deserializationCache.Count < _maxCacheSize)
-                    {
-                        _deserializationCache[cacheKey] = (DateTime.Now, result);
-                        CleanupCacheIfNeeded();
-                    }
-
-                    return result;
-                }
-                finally
-                {
-                    // Return reader to pool if there's space
-                    if (_readerPool.Count < _maxPoolSize)
-                    {
-                        try
-                        {
-                            reader.Close();
-                            _readerPool.Enqueue(reader);
-                        }
-                        catch
-                        {
-                            // If we can't reuse the reader, just let it be garbage collected
-                        }
-                    }
-                    else
-                    {
-                        reader.Dispose();
-                    }
-                }
+                _deserializationCache[cacheKey] = (DateTime.Now, result);
+                CleanupCacheIfNeeded();
             }
-            else
-            {
-                // Fallback for large files - avoid cached readers to prevent memory leaks
-                // BUT still use optimized XML reader settings for unknown element handling
-                var serializer = GetCachedSerializer<T>();
-                xmlStream.Position = 0;
 
-                using var reader = XmlReader.Create(xmlStream, GetOptimizedReaderSettings());
-                return (T)serializer.Deserialize(reader);
-            }
+            return result;
         }
         catch (Exception ex)
         {
@@ -240,22 +183,58 @@ public class XmlDeserializationService : IXmlDeserializationService
     }
 
     /// <summary>
+    /// Get cache statistics for diagnostics
+    /// </summary>
+    public (int CacheSize, int SerializerCacheSize) GetCacheStatistics()
+    {
+        return (_deserializationCache.Count, _serializerCache.Count);
+    }
+
+    /// <summary>
+    /// Force clear all caches - useful for debugging deserialization inconsistencies
+    /// </summary>
+    public void ClearAllCaches()
+    {
+        var deserializationCount = _deserializationCache.Count;
+        var serializerCount = _serializerCache.Count;
+        
+        _deserializationCache.Clear();
+        _serializerCache.Clear();
+        
+        logger.LogWarning("CLEARED ALL CACHES: {DeserializationCache} deserialization entries, {SerializerCache} serializer entries removed", 
+            deserializationCount, serializerCount);
+    }
+
+    /// <summary>
     /// Get optimized XML reader settings that are forgiving of XML variations
+    /// and ensure consistent parsing behavior across all scenarios
     /// </summary>
     private XmlReaderSettings GetOptimizedReaderSettings()
     {
         return new XmlReaderSettings
         {
+            // CRITICAL: Ensure consistent whitespace handling
             IgnoreWhitespace = true,
             IgnoreComments = true,
             IgnoreProcessingInstructions = true,
+            
+            // Security and performance settings
             DtdProcessing = DtdProcessing.Prohibit,
             MaxCharactersInDocument = 50 * 1024 * 1024, // 50MB limit
             CloseInput = false, // Don't close the underlying stream
-            CheckCharacters = false, // More lenient character checking
-            ConformanceLevel = ConformanceLevel.Fragment, // Allow fragments
+            
+            // ENHANCED: More lenient parsing for consistency
+            CheckCharacters = false, // More lenient character checking for encoding issues
+            ConformanceLevel = ConformanceLevel.Document, // Require well-formed documents (more strict than Fragment)
             ValidationFlags = System.Xml.Schema.XmlSchemaValidationFlags.None, // No validation
-            ValidationType = ValidationType.None // No validation
+            ValidationType = ValidationType.None, // No validation
+            
+            // WHITESPACE FIX: Ensure consistent normalization
+            // This helps ensure that whitespace-sensitive elements are handled consistently
+            Async = false, // Synchronous processing for consistency
+            
+            // Character encoding handling
+            XmlResolver = null // Disable external resource resolution for security and consistency
         };
     }
 

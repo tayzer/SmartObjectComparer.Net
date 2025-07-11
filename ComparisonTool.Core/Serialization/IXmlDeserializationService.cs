@@ -28,4 +28,14 @@ public interface IXmlDeserializationService
     /// Clear the internal deserialization cache
     /// </summary>
     void ClearDeserializationCache();
+    
+    /// <summary>
+    /// Get cache statistics for diagnostics
+    /// </summary>
+    (int CacheSize, int SerializerCacheSize) GetCacheStatistics();
+    
+    /// <summary>
+    /// Force clear all caches - useful for debugging deserialization inconsistencies
+    /// </summary>
+    void ClearAllCaches();
 }
