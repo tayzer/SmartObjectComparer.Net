@@ -217,7 +217,10 @@ public class XmlDeserializationService : IXmlDeserializationService
             using var stream = new MemoryStream();
             serializer.Serialize(stream, source);
             stream.Position = 0;
-            return (T)serializer.Deserialize(stream);
+            
+            // Use optimized reader settings for cloning to ensure unknown elements are handled consistently
+            using var reader = XmlReader.Create(stream, GetOptimizedReaderSettings());
+            return (T)serializer.Deserialize(reader);
         }
         catch (Exception ex)
         {
