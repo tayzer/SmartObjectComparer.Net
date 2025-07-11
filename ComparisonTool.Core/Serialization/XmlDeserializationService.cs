@@ -14,9 +14,10 @@ public class XmlDeserializationService : IXmlDeserializationService
     private readonly ILogger<XmlDeserializationService> logger;
     private readonly Dictionary<string, Type> registeredDomainModels = new();
     private readonly XmlSerializerFactory serializerFactory;
-
-    // XML Serializer cache for efficient reuse (thread-safe)
-    private readonly ConcurrentDictionary<Type, XmlSerializer> _serializerCache = new();
+    
+    // CRITICAL FIX: Use thread-local storage to prevent shared state corruption during parallel processing
+    private readonly ThreadLocal<ConcurrentDictionary<Type, XmlSerializer>> _threadLocalSerializerCache;
+    private readonly ConcurrentDictionary<Type, XmlSerializer> _serializerCache;
 
     // Cache for recently deserialized objects
     private readonly ConcurrentDictionary<string, (DateTime LastAccess, object Data)> _deserializationCache = new();
@@ -27,12 +28,14 @@ public class XmlDeserializationService : IXmlDeserializationService
     // Application session identifier to invalidate cache on restart
     private static readonly string SessionId = Guid.NewGuid().ToString("N")[..8];
 
-    public XmlDeserializationService(
-        ILogger<XmlDeserializationService> logger,
-        XmlSerializerFactory serializerFactory)
+    public XmlDeserializationService(ILogger<XmlDeserializationService> logger, XmlSerializerFactory serializerFactory)
     {
         this.logger = logger;
         this.serializerFactory = serializerFactory;
+        
+        // CRITICAL FIX: Initialize thread-local storage for serializer cache
+        _threadLocalSerializerCache = new ThreadLocal<ConcurrentDictionary<Type, XmlSerializer>>(() => new ConcurrentDictionary<Type, XmlSerializer>());
+        _serializerCache = new ConcurrentDictionary<Type, XmlSerializer>();
     }
 
     /// <summary>
@@ -279,16 +282,37 @@ public class XmlDeserializationService : IXmlDeserializationService
     }
 
     /// <summary>
-    /// Get cached XmlSerializer using the XmlSerializerFactory for consistent handling of unknown elements
+    /// Get cached XmlSerializer with enhanced configuration for handling unknown elements
     /// </summary>
     private XmlSerializer GetCachedSerializer<T>()
     {
         var type = typeof(T);
-        return _serializerCache.GetOrAdd(type, _ => 
+        
+        // CRITICAL FIX: Use thread-local storage to prevent shared state corruption
+        // Each thread gets its own serializer cache to avoid parallel processing issues
+        var threadLocalCache = _threadLocalSerializerCache.Value;
+        
+        return threadLocalCache.GetOrAdd(type, _ => 
         {
-            // CRITICAL FIX: Use the XmlSerializerFactory which already has proper event handlers
-            // for ignoring unknown elements like TestValue that don't exist in the domain model
-            return serializerFactory.GetSerializer<T>();
+            // CRITICAL FIX: Use the public GetSerializer method instead of private CreateComplexOrderResponseSerializer
+            var serializer = serializerFactory.GetSerializer<T>();
+            
+            // CRITICAL FIX: Add event handlers to gracefully handle unknown elements
+            serializer.UnknownElement += (sender, e) =>
+            {
+                // Log unknown elements for debugging but don't throw exceptions
+                logger.LogDebug("Unknown XML element encountered: {ElementName} at line {LineNumber}, position {LinePosition}. This element will be ignored during deserialization.", 
+                    e.Element.Name, e.LineNumber, e.LinePosition);
+            };
+            
+            serializer.UnknownAttribute += (sender, e) =>
+            {
+                // Log unknown attributes for debugging but don't throw exceptions
+                logger.LogDebug("Unknown XML attribute encountered: {AttributeName} at line {LineNumber}, position {LinePosition}. This attribute will be ignored during deserialization.", 
+                    e.Attr.Name, e.LineNumber, e.LinePosition);
+            };
+            
+            return serializer;
         });
     }
 
