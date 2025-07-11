@@ -113,7 +113,14 @@ public class XmlDeserializationService : IXmlDeserializationService
                     if (_deserializationCache.TryGetValue(cacheKey, out var cached))
                     {
                         _deserializationCache[cacheKey] = (DateTime.Now, cached.Data);
+                        logger.LogDebug("MD5-based cache HIT for XML content hash: {CacheKey} (SessionId: {SessionId})", 
+                            contentHash[..8], SessionId);
                         return (T)cached.Data;
+                    }
+                    else
+                    {
+                        logger.LogDebug("MD5-based cache MISS for XML content hash: {CacheKey} (SessionId: {SessionId})", 
+                            contentHash[..8], SessionId);
                     }
 
                     // Reset position for deserialization
@@ -181,10 +188,12 @@ public class XmlDeserializationService : IXmlDeserializationService
             else
             {
                 // Fallback for large files - avoid cached readers to prevent memory leaks
+                // BUT still use optimized XML reader settings for unknown element handling
                 var serializer = GetCachedSerializer<T>();
                 xmlStream.Position = 0;
 
-                return (T)serializer.Deserialize(xmlStream);
+                using var reader = XmlReader.Create(xmlStream, GetOptimizedReaderSettings());
+                return (T)serializer.Deserialize(reader);
             }
         }
         catch (Exception ex)
