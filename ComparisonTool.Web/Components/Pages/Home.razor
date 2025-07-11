@@ -926,9 +926,17 @@ else
     {
         try
         {
+            // Clear all caches
             CacheService.ClearAllCaches();
-            Logger.LogInformation("All caches cleared by user");
-            await JSRuntime.InvokeVoidAsync("alert", "Cache cleared successfully!");
+            
+            // Also clear the internal XML deserialization cache
+            if (DeserializationService is XmlDeserializationService xmlService)
+            {
+                xmlService.ClearDeserializationCache();
+            }
+            
+            Logger.LogInformation("All caches cleared by user - both object cache and XML deserialization cache");
+            await JSRuntime.InvokeVoidAsync("alert", "All caches cleared successfully! Both object cache and XML deserialization cache have been reset.");
             StateHasChanged();
         }
         catch (Exception ex)
