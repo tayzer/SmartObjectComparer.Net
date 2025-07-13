@@ -9,8 +9,8 @@ namespace ComparisonTool.Core.Serialization;
 
 public class XmlSerializerFactory
 {
-    // Thread-safe cache.  Each entry lazily builds exactly one XmlSerializer instance for the type.
-    private readonly ConcurrentDictionary<Type, Lazy<XmlSerializer>> _serializerCache = new();
+    // Thread-safe mapping from model type ⇒ factory that can build a *new* serializer instance on demand.
+    private readonly ConcurrentDictionary<Type, Func<XmlSerializer>> _factoryCache = new();
     private readonly ILogger<XmlSerializerFactory> _logger;
 
     public XmlSerializerFactory(ILogger<XmlSerializerFactory> logger = null)
@@ -23,25 +23,28 @@ public class XmlSerializerFactory
 
     public void RegisterType<T>(Func<XmlSerializer> factory)
     {
-        // Store a Lazy wrapper so the serializer is created once, even under heavy concurrency
-        _serializerCache[typeof(T)] = new Lazy<XmlSerializer>(factory, LazyThreadSafetyMode.ExecutionAndPublication);
+        _factoryCache[typeof(T)] = factory;
     }
 
     public XmlSerializer GetSerializer<T>()
     {
-        // Fast path: return existing cached serializer
-        var lazy = _serializerCache.GetOrAdd(typeof(T), _ =>
-            new Lazy<XmlSerializer>(() => CreateFlexibleSerializer<T>(), LazyThreadSafetyMode.ExecutionAndPublication));
+        if (_factoryCache.TryGetValue(typeof(T), out var factory))
+        {
+            // Always build a fresh serializer – caller (XmlDeserializationService) caches one per-thread.
+            return factory();
+        }
 
-        return lazy.Value;
+        return CreateFlexibleSerializer<T>();
     }
 
     public XmlSerializer GetSerializer(Type type)
     {
-        var lazy = _serializerCache.GetOrAdd(type, t =>
-            new Lazy<XmlSerializer>(() => CreateFlexibleSerializer(t), LazyThreadSafetyMode.ExecutionAndPublication));
+        if (_factoryCache.TryGetValue(type, out var factory))
+        {
+            return factory();
+        }
 
-        return lazy.Value;
+        return CreateFlexibleSerializer(type);
     }
 
     /// <summary>
