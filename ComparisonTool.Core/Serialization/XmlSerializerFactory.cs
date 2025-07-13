@@ -9,9 +9,12 @@ namespace ComparisonTool.Core.Serialization;
 
 public class XmlSerializerFactory
 {
-    // Thread-safe mapping from model type ⇒ factory that can build a *new* serializer instance on demand.
-    private readonly ConcurrentDictionary<Type, Func<XmlSerializer>> _factoryCache = new();
+    // Thread-safe mapping from model type ⇒ Lazy<XmlSerializer>.  Ensures serializer is compiled exactly once.
+    private readonly ConcurrentDictionary<Type, Lazy<XmlSerializer>> _factoryCache = new();
     private readonly ILogger<XmlSerializerFactory> _logger;
+
+    // Per-type locks to ensure only one thread builds a serializer for a given type at a time.
+    private static readonly ConcurrentDictionary<Type, object> _buildLocks = new();
 
     public XmlSerializerFactory(ILogger<XmlSerializerFactory> logger = null)
     {
@@ -23,28 +26,33 @@ public class XmlSerializerFactory
 
     public void RegisterType<T>(Func<XmlSerializer> factory)
     {
-        _factoryCache[typeof(T)] = factory;
+        _factoryCache[typeof(T)] = new Lazy<XmlSerializer>(factory, LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     public XmlSerializer GetSerializer<T>()
     {
-        if (_factoryCache.TryGetValue(typeof(T), out var factory))
-        {
-            // Always build a fresh serializer – caller (XmlDeserializationService) caches one per-thread.
-            return factory();
-        }
-
-        return CreateFlexibleSerializer<T>();
+        return GetSerializer(typeof(T));
     }
 
     public XmlSerializer GetSerializer(Type type)
     {
-        if (_factoryCache.TryGetValue(type, out var factory))
+        if (_factoryCache.TryGetValue(type, out var lazySerializer))
         {
-            return factory();
+            return lazySerializer.Value; // Already compiled (or compiles once lazily)
         }
 
-        return CreateFlexibleSerializer(type);
+        // Ensure single-threaded build for this type to avoid race conditions inside XmlSerializer
+        var lockObj = _buildLocks.GetOrAdd(type, _ => new object());
+        lock (lockObj)
+        {
+            // Double-check after acquiring lock
+            if (_factoryCache.TryGetValue(type, out lazySerializer))
+                return lazySerializer.Value;
+
+            var serializer = CreateFlexibleSerializer(type);
+            _factoryCache[type] = new Lazy<XmlSerializer>(() => serializer, LazyThreadSafetyMode.ExecutionAndPublication);
+            return serializer;
+        }
     }
 
     /// <summary>
@@ -102,7 +110,7 @@ public class XmlSerializerFactory
                     if (orderProperty != null && orderProperty.PropertyType == typeof(int))
                     {
                         var orderValue = (int)orderProperty.GetValue(attr);
-                        if (orderValue > 0)
+                        if (orderValue >= 0)
                         {
                             hasAnyOrderAttribute = true;
                             break;
@@ -125,7 +133,7 @@ public class XmlSerializerFactory
                     if (orderProperty != null && orderProperty.PropertyType == typeof(int))
                     {
                         var orderValue = (int)orderProperty.GetValue(attr);
-                        if (orderValue > 0)
+                        if (orderValue >= 0)
                         {
                             hasAnyOrderAttribute = true;
                             break;
@@ -148,7 +156,7 @@ public class XmlSerializerFactory
                     if (orderProperty != null && orderProperty.PropertyType == typeof(int))
                     {
                         var orderValue = (int)orderProperty.GetValue(attr);
-                        if (orderValue > 0)
+                        if (orderValue >= 0)
                         {
                             hasAnyOrderAttribute = true;
                             break;
