@@ -12,8 +12,8 @@ namespace ComparisonTool.Core.Serialization;
 
 public class XmlSerializerFactory
 {
-    // Thread-safe mapping from model type ⇒ Lazy<XmlSerializer>.  Ensures serializer is compiled exactly once.
-    private readonly ConcurrentDictionary<Type, Lazy<XmlSerializer>> _factoryCache = new();
+    // Thread-safe mapping from model type ⇒ factory delegate that builds a NEW serializer each call.
+    private readonly ConcurrentDictionary<Type, Func<XmlSerializer>> _factoryCache = new();
     private readonly ILogger<XmlSerializerFactory> _logger;
 
     // Per-type locks to ensure only one thread builds a serializer for a given type at a time.
@@ -29,7 +29,7 @@ public class XmlSerializerFactory
 
     public void RegisterType<T>(Func<XmlSerializer> factory)
     {
-        _factoryCache[typeof(T)] = new Lazy<XmlSerializer>(factory, LazyThreadSafetyMode.ExecutionAndPublication);
+        _factoryCache[typeof(T)] = factory;
     }
 
     public XmlSerializer GetSerializer<T>()
@@ -39,9 +39,9 @@ public class XmlSerializerFactory
 
     public XmlSerializer GetSerializer(Type type)
     {
-        if (_factoryCache.TryGetValue(type, out var lazySerializer))
+        if (_factoryCache.TryGetValue(type, out var factory))
         {
-            return lazySerializer.Value; // Already compiled (or compiles once lazily)
+            return factory(); // Always new instance
         }
 
         // Ensure single-threaded build for this type to avoid race conditions inside XmlSerializer
@@ -49,12 +49,12 @@ public class XmlSerializerFactory
         lock (lockObj)
         {
             // Double-check after acquiring lock
-            if (_factoryCache.TryGetValue(type, out lazySerializer))
-                return lazySerializer.Value;
+            if (_factoryCache.TryGetValue(type, out factory))
+                return factory();
 
-            var serializer = CreateFlexibleSerializer(type);
-            _factoryCache[type] = new Lazy<XmlSerializer>(() => serializer, LazyThreadSafetyMode.ExecutionAndPublication);
-            return serializer;
+            var newSerializer = CreateFlexibleSerializer(type);
+            _factoryCache[type] = () => CreateFlexibleSerializer(type); // factory for future calls
+            return newSerializer;
         }
     }
 
