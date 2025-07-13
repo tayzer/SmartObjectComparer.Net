@@ -2,350 +2,85 @@
 using System.Xml.Serialization;
 using ComparisonTool.Core.Models;
 using Microsoft.Extensions.Logging;
-using System.Collections.Concurrent;
-using System.Threading;
-using System.Linq;
-using System;
-using System.Collections.Generic;
 
 namespace ComparisonTool.Core.Serialization;
 
 public class XmlSerializerFactory
 {
-    // Thread-safe mapping from model type ⇒ factory delegate that builds a NEW serializer each call.
-    private readonly ConcurrentDictionary<Type, Func<XmlSerializer>> _factoryCache = new();
+    private readonly Dictionary<Type, Func<XmlSerializer>> serializerFactories = new();
     private readonly ILogger<XmlSerializerFactory> _logger;
-
-    // Per-type locks to ensure only one thread builds a serializer for a given type at a time.
-    private static readonly ConcurrentDictionary<Type, object> _buildLocks = new();
 
     public XmlSerializerFactory(ILogger<XmlSerializerFactory> logger = null)
     {
         _logger = logger;
         
-        // Pre-register ComplexOrderResponse with its custom root handling
+        // Register the ComplexOrderResponse with custom configuration
         RegisterType<ComplexOrderResponse>(() => CreateComplexOrderResponseSerializer());
     }
 
     public void RegisterType<T>(Func<XmlSerializer> factory)
     {
-        _factoryCache[typeof(T)] = factory;
+        serializerFactories[typeof(T)] = factory;
     }
 
     public XmlSerializer GetSerializer<T>()
     {
-        return GetSerializer(typeof(T));
+        if (serializerFactories.TryGetValue(typeof(T), out var factory))
+        {
+            return factory();
+        }
+
+        return CreateComplexOrderResponseSerializer();
     }
 
     public XmlSerializer GetSerializer(Type type)
     {
-        if (_factoryCache.TryGetValue(type, out var factory))
+        if (serializerFactories.TryGetValue(type, out var factory))
         {
-            return factory(); // Always new instance
+            return factory();
         }
 
-        // Ensure single-threaded build for this type to avoid race conditions inside XmlSerializer
-        var lockObj = _buildLocks.GetOrAdd(type, _ => new object());
-        lock (lockObj)
-        {
-            // Double-check after acquiring lock
-            if (_factoryCache.TryGetValue(type, out factory))
-                return factory();
-
-            var newSerializer = CreateFlexibleSerializer(type);
-            _factoryCache[type] = () => CreateFlexibleSerializer(type); // factory for future calls
-            return newSerializer;
-        }
-    }
-
-    /// <summary>
-    /// Creates a flexible XmlSerializer that ignores Order attributes entirely
-    /// This is the new standard method for creating serializers in the factory
-    /// </summary>
-    public XmlSerializer CreateFlexibleSerializer<T>()
-    {
-        return CreateFlexibleSerializer(typeof(T));
-    }
-
-    private XmlSerializer CreateFlexibleSerializer(Type type)
-    {
-        // Use the fully-recursive removal so every referenced type also has its Order attributes stripped.
-        return ProcessTypeForOrderRemoval(type);
-    }
-
-    private XmlSerializer ProcessTypeForOrderRemoval(Type type)
-    {
-        var overrides = new XmlAttributeOverrides();
-        var visited = new HashSet<Type>();
-        ProcessTypeForOrderRemoval(type, overrides, visited);
-        var serializer = new XmlSerializer(type, overrides);
-        serializer.UnknownElement += (sender, e) => { };
-        serializer.UnknownAttribute += (sender, e) => { };
-        return serializer;
-    }
-
-    private void ProcessTypeForOrderRemoval(Type type, XmlAttributeOverrides overrides)
-    {
-        var visited = new HashSet<Type>();
-        ProcessTypeForOrderRemoval(type, overrides, visited);
-    }
-
-    private void ProcessTypeForOrderRemoval(Type type, XmlAttributeOverrides overrides, HashSet<Type> visited)
-    {
-        if (type == null || type.IsPrimitive || type == typeof(string) || type == typeof(DateTime))
-            return;
-        if (!visited.Add(type))
-            return; // Already processed
-
-        // Check if any property has an Order attribute
-        bool hasAnyOrderAttribute = false;
-        // Use deterministic ordering to avoid variability between runs
-        foreach (var prop in type.GetProperties().OrderBy(p => p.Name, StringComparer.Ordinal))
-        {
-            var xmlElementAttrs = prop.GetCustomAttributes<XmlElementAttribute>();
-            var xmlArrayAttrs = prop.GetCustomAttributes<XmlArrayAttribute>();
-            var xmlArrayItemAttrs = prop.GetCustomAttributes<XmlArrayItemAttribute>();
-            
-            foreach (var attr in xmlElementAttrs)
-            {
-                try
-                {
-                    var orderProperty = attr.GetType().GetProperty("Order");
-                    if (orderProperty != null && orderProperty.PropertyType == typeof(int))
-                    {
-                        var orderValue = (int)orderProperty.GetValue(attr);
-                        if (orderValue >= 0)
-                        {
-                            hasAnyOrderAttribute = true;
-                            break;
-                        }
-                    }
-                }
-                catch
-                {
-                    // Ignore any reflection errors
-                }
-            }
-            
-            if (hasAnyOrderAttribute) break;
-            
-            foreach (var attr in xmlArrayAttrs)
-            {
-                try
-                {
-                    var orderProperty = attr.GetType().GetProperty("Order");
-                    if (orderProperty != null && orderProperty.PropertyType == typeof(int))
-                    {
-                        var orderValue = (int)orderProperty.GetValue(attr);
-                        if (orderValue >= 0)
-                        {
-                            hasAnyOrderAttribute = true;
-                            break;
-                        }
-                    }
-                }
-                catch
-                {
-                    // Ignore any reflection errors
-                }
-            }
-            
-            if (hasAnyOrderAttribute) break;
-            
-            foreach (var attr in xmlArrayItemAttrs)
-            {
-                try
-                {
-                    var orderProperty = attr.GetType().GetProperty("Order");
-                    if (orderProperty != null && orderProperty.PropertyType == typeof(int))
-                    {
-                        var orderValue = (int)orderProperty.GetValue(attr);
-                        if (orderValue >= 0)
-                        {
-                            hasAnyOrderAttribute = true;
-                            break;
-                        }
-                    }
-                }
-                catch
-                {
-                    // Ignore any reflection errors
-                }
-            }
-            
-            if (hasAnyOrderAttribute) break;
-        }
-
-        if (hasAnyOrderAttribute)
-        {
-            // Override ALL particle-like members to remove Order
-            foreach (var property in type.GetProperties().OrderBy(p => p.Name, StringComparer.Ordinal))
-            {
-                var xmlElementAttrs = property.GetCustomAttributes<XmlElementAttribute>();
-                var xmlArrayAttrs = property.GetCustomAttributes<XmlArrayAttribute>();
-                var xmlArrayItemAttrs = property.GetCustomAttributes<XmlArrayItemAttribute>();
-
-                // Only process if this property is a particle-like member (element or array)
-                if (xmlElementAttrs.Any() || xmlArrayAttrs.Any())
-                {
-                    var xmlAttributes = new XmlAttributes();
-
-                    // Override XmlElement attributes
-                    foreach (var attr in xmlElementAttrs)
-                    {
-                        var newAttr = new XmlElementAttribute(attr.ElementName ?? property.Name)
-                        {
-                            IsNullable = attr.IsNullable,
-                            DataType = attr.DataType,
-                            Type = attr.Type
-                            // Deliberately exclude Order
-                        };
-                        xmlAttributes.XmlElements.Add(newAttr);
-                    }
-
-                    // Override XmlArray attributes
-                    if (xmlArrayAttrs.Any())
-                    {
-                        var xmlArrayAttr = xmlArrayAttrs.First();
-                        xmlAttributes.XmlArray = new XmlArrayAttribute(xmlArrayAttr.ElementName)
-                        {
-                            IsNullable = xmlArrayAttr.IsNullable
-                            // Deliberately exclude Order
-                        };
-                    }
-
-                    // Override XmlArrayItem attributes
-                    foreach (var attr in xmlArrayItemAttrs)
-                    {
-                        xmlAttributes.XmlArrayItems.Add(new XmlArrayItemAttribute(attr.ElementName)
-                        {
-                            IsNullable = attr.IsNullable,
-                            Type = attr.Type
-                            // Deliberately exclude Order
-                        });
-                    }
-
-                    try
-                    {
-                        overrides.Add(type, property.Name, xmlAttributes);
-                    }
-                    catch (InvalidOperationException)
-                    {
-                        // Duplicate entry – log and continue.  Duplicate means this property loses its mapping.
-                        _logger?.LogError("Duplicate XmlAttributeOverride ignored for {Type}.{Property}", type.FullName, property.Name);
-                    }
-                }
-            }
-        }
-
-        // Recursively process property types
-        foreach (var property in type.GetProperties())
-        {
-            if (property.PropertyType.IsClass && property.PropertyType != typeof(string))
-            {
-                ProcessTypeForOrderRemoval(property.PropertyType, overrides, visited);
-            }
-            else if (property.PropertyType.IsGenericType)
-            {
-                var genericArgs = property.PropertyType.GetGenericArguments();
-                foreach (var genericArg in genericArgs)
-                {
-                    if (genericArg.IsClass && genericArg != typeof(string))
-                    {
-                        ProcessTypeForOrderRemoval(genericArg, overrides, visited);
-                    }
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// Build XmlAttributeOverrides for a single type only (no recursion).
-    /// Removes Order attribute but keeps all other mapping info.
-    /// </summary>
-    private XmlAttributeOverrides BuildOverridesForType(Type type)
-    {
-        var overrides = new XmlAttributeOverrides();
-
-        foreach (var property in type.GetProperties().OrderBy(p => p.Name, StringComparer.Ordinal))
-        {
-            var xmlElementAttrs = property.GetCustomAttributes<XmlElementAttribute>();
-            var xmlArrayAttrs = property.GetCustomAttributes<XmlArrayAttribute>();
-            var xmlArrayItemAttrs = property.GetCustomAttributes<XmlArrayItemAttribute>();
-
-            if (!xmlElementAttrs.Any() && !xmlArrayAttrs.Any() && !xmlArrayItemAttrs.Any())
-                continue; // nothing to override
-
-            var xmlAttributes = new XmlAttributes();
-
-            // Copy XmlElement attributes without Order
-            foreach (var attr in xmlElementAttrs)
-            {
-                var copy = new XmlElementAttribute(attr.ElementName ?? property.Name)
-                {
-                    IsNullable = attr.IsNullable,
-                    DataType = attr.DataType,
-                    Type = attr.Type
-                    // Order intentionally omitted
-                };
-                xmlAttributes.XmlElements.Add(copy);
-            }
-
-            // Copy XmlArray attribute without Order
-            if (xmlArrayAttrs.Any())
-            {
-                var arr = xmlArrayAttrs.First();
-                xmlAttributes.XmlArray = new XmlArrayAttribute(arr.ElementName)
-                {
-                    IsNullable = arr.IsNullable
-                };
-            }
-
-            // Copy XmlArrayItem attributes without Order
-            foreach (var item in xmlArrayItemAttrs)
-            {
-                var copyItem = new XmlArrayItemAttribute(item.ElementName)
-                {
-                    IsNullable = item.IsNullable,
-                    Type = item.Type
-                };
-                xmlAttributes.XmlArrayItems.Add(copyItem);
-            }
-
-            try
-            {
-                overrides.Add(type, property.Name, xmlAttributes);
-            }
-            catch (InvalidOperationException)
-            {
-                _logger?.LogError("Duplicate override ignored for {Type}.{Property}", type.FullName, property.Name);
-            }
-        }
-
-        return overrides;
+        return CreateComplexOrderResponseSerializer();
     }
 
     private XmlSerializer CreateComplexOrderResponseSerializer()
     {
         var type = typeof(ComplexOrderResponse);
         var overrides = new XmlAttributeOverrides();
-        // Apply the 'ignore Order' logic to all properties
         ProcessTypeForOrderRemoval(type, overrides);
-        // Set the custom root attribute
-        var attrs = new XmlAttributes();
-        attrs.XmlRoot = new XmlRootAttribute("OrderManagementResponse");
-        overrides.Add(type, attrs);
+
+        // Add custom root attribute
+        var rootAttrs = new XmlAttributes
+        {
+            XmlRoot = new XmlRootAttribute("OrderManagementResponse")
+        };
+        overrides.Add(type, rootAttrs);
+
         var serializer = new XmlSerializer(type, overrides);
-        serializer.UnknownElement += (sender, e) => { };
-        serializer.UnknownAttribute += (sender, e) => { };
+
+        // Event handlers to gracefully handle unknown elements and attributes
+        serializer.UnknownElement += OnUnknownElement;
+        serializer.UnknownAttribute += OnUnknownAttribute;
+        serializer.UnknownNode += OnUnknownNode;
+
         return serializer;
     }
 
     private XmlSerializer CreateDefaultSerializer<T>()
     {
-        // DEPRECATED: Use CreateFlexibleSerializer instead
-        // This method is kept for backward compatibility but now delegates to the new approach
-        return CreateFlexibleSerializer<T>();
+        var overrides = new XmlAttributeOverrides();
+
+        // Recursively process all types to remove Order attributes
+        ProcessTypeForOrderRemoval(typeof(T), overrides);
+
+        var serializer = new XmlSerializer(typeof(T), overrides);
+
+        // Add event handlers for unknown elements/attributes
+        serializer.UnknownElement += OnUnknownElement;
+        serializer.UnknownAttribute += OnUnknownAttribute;
+        serializer.UnknownNode += OnUnknownNode;
+
+        return serializer;
     }
 
     private void OnUnknownElement(object sender, XmlElementEventArgs e)
@@ -367,5 +102,79 @@ public class XmlSerializerFactory
         // Log but don't throw - this allows deserialization to continue
         _logger?.LogDebug("Unknown XML node encountered: {NodeType} '{NodeName}' at line {LineNumber}, column {LinePosition}. Ignoring node.",
             e.NodeType, e.Name, e.LineNumber, e.LinePosition);
+    }
+
+    private void ProcessTypeForOrderRemoval(Type type, XmlAttributeOverrides overrides)
+    {
+        // Skip primitive types and already processed types
+        if (type.IsPrimitive || type == typeof(string) || type == typeof(DateTime) || type == typeof(decimal))
+            return;
+
+        foreach (var property in type.GetProperties())
+        {
+            var xmlElementAttrs = property.GetCustomAttributes<XmlElementAttribute>();
+            bool hasOrderAttribute = xmlElementAttrs.Any(attr => attr.Order > 0);
+
+            if (hasOrderAttribute)
+            {
+                var xmlAttributes = new XmlAttributes();
+
+                // Recreate XmlElement attributes without Order
+                foreach (var attr in xmlElementAttrs)
+                {
+                    var newAttr = new XmlElementAttribute(attr.ElementName)
+                    {
+                        IsNullable = attr.IsNullable,
+                        DataType = attr.DataType,
+                        Type = attr.Type,
+                      
+                    };
+                    xmlAttributes.XmlElements.Add(newAttr);
+                }
+
+                // Handle other XML attributes if present
+                var xmlArrayAttrs = property.GetCustomAttributes<XmlArrayAttribute>();
+                if (xmlArrayAttrs.Any())
+                {
+                    var xmlArrayAttr = xmlArrayAttrs.First();
+                    xmlAttributes.XmlArray = new XmlArrayAttribute(xmlArrayAttr.ElementName)
+                    {
+                        IsNullable = xmlArrayAttr.IsNullable,
+                   
+                    };
+                }
+
+                var xmlArrayItemAttrs = property.GetCustomAttributes<XmlArrayItemAttribute>();
+                foreach (var attr in xmlArrayItemAttrs)
+                {
+                    xmlAttributes.XmlArrayItems.Add(new XmlArrayItemAttribute(attr.ElementName)
+                    {
+                        IsNullable = attr.IsNullable,
+                        Type = attr.Type,
+                   
+                    });
+                }
+
+                overrides.Add(type, property.Name, xmlAttributes);
+            }
+
+            // Recursively process property types
+            if (property.PropertyType.IsClass && property.PropertyType != typeof(string))
+            {
+                ProcessTypeForOrderRemoval(property.PropertyType, overrides);
+            }
+            else if (property.PropertyType.IsGenericType)
+            {
+                // Handle generic types like List<T>
+                var genericArgs = property.PropertyType.GetGenericArguments();
+                foreach (var genericArg in genericArgs)
+                {
+                    if (genericArg.IsClass && genericArg != typeof(string))
+                    {
+                        ProcessTypeForOrderRemoval(genericArg, overrides);
+                    }
+                }
+            }
+        }
     }
 }
