@@ -2,45 +2,46 @@
 using System.Xml.Serialization;
 using ComparisonTool.Core.Models;
 using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
+using System.Threading;
 
 namespace ComparisonTool.Core.Serialization;
 
 public class XmlSerializerFactory
 {
-    private readonly Dictionary<Type, Func<XmlSerializer>> serializerFactories = new();
+    // Thread-safe cache.  Each entry lazily builds exactly one XmlSerializer instance for the type.
+    private readonly ConcurrentDictionary<Type, Lazy<XmlSerializer>> _serializerCache = new();
     private readonly ILogger<XmlSerializerFactory> _logger;
 
     public XmlSerializerFactory(ILogger<XmlSerializerFactory> logger = null)
     {
         _logger = logger;
         
-        // Register ComplexOrderResponse with flexible serializer approach
+        // Pre-register ComplexOrderResponse with its custom root handling
         RegisterType<ComplexOrderResponse>(() => CreateComplexOrderResponseSerializer());
     }
 
     public void RegisterType<T>(Func<XmlSerializer> factory)
     {
-        serializerFactories[typeof(T)] = factory;
+        // Store a Lazy wrapper so the serializer is created once, even under heavy concurrency
+        _serializerCache[typeof(T)] = new Lazy<XmlSerializer>(factory, LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     public XmlSerializer GetSerializer<T>()
     {
-        if (serializerFactories.TryGetValue(typeof(T), out var factory))
-        {
-            return factory();
-        }
+        // Fast path: return existing cached serializer
+        var lazy = _serializerCache.GetOrAdd(typeof(T), _ =>
+            new Lazy<XmlSerializer>(() => CreateFlexibleSerializer<T>(), LazyThreadSafetyMode.ExecutionAndPublication));
 
-        return CreateFlexibleSerializer<T>();
+        return lazy.Value;
     }
 
     public XmlSerializer GetSerializer(Type type)
     {
-        if (serializerFactories.TryGetValue(type, out var factory))
-        {
-            return factory();
-        }
+        var lazy = _serializerCache.GetOrAdd(type, t =>
+            new Lazy<XmlSerializer>(() => CreateFlexibleSerializer(t), LazyThreadSafetyMode.ExecutionAndPublication));
 
-        return CreateFlexibleSerializer(type);
+        return lazy.Value;
     }
 
     /// <summary>
