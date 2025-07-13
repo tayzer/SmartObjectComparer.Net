@@ -4,6 +4,9 @@ using ComparisonTool.Core.Models;
 using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 using System.Threading;
+using System.Linq;
+using System;
+using System.Collections.Generic;
 
 namespace ComparisonTool.Core.Serialization;
 
@@ -96,7 +99,8 @@ public class XmlSerializerFactory
 
         // Check if any property has an Order attribute
         bool hasAnyOrderAttribute = false;
-        foreach (var prop in type.GetProperties())
+        // Use deterministic ordering to avoid variability between runs
+        foreach (var prop in type.GetProperties().OrderBy(p => p.Name, StringComparer.Ordinal))
         {
             var xmlElementAttrs = prop.GetCustomAttributes<XmlElementAttribute>();
             var xmlArrayAttrs = prop.GetCustomAttributes<XmlArrayAttribute>();
@@ -175,7 +179,7 @@ public class XmlSerializerFactory
         if (hasAnyOrderAttribute)
         {
             // Override ALL particle-like members to remove Order
-            foreach (var property in type.GetProperties())
+            foreach (var property in type.GetProperties().OrderBy(p => p.Name, StringComparer.Ordinal))
             {
                 var xmlElementAttrs = property.GetCustomAttributes<XmlElementAttribute>();
                 var xmlArrayAttrs = property.GetCustomAttributes<XmlArrayAttribute>();
@@ -221,7 +225,15 @@ public class XmlSerializerFactory
                         });
                     }
 
-                    overrides.Add(type, property.Name, xmlAttributes);
+                    try
+                    {
+                        overrides.Add(type, property.Name, xmlAttributes);
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // Duplicate entry – log and continue.  Duplicate means this property loses its mapping.
+                        _logger?.LogError("Duplicate XmlAttributeOverride ignored for {Type}.{Property}", type.FullName, property.Name);
+                    }
                 }
             }
         }

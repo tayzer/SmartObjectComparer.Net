@@ -88,6 +88,12 @@ public class XmlDeserializationService : IXmlDeserializationService
             // Deserialize using the fresh reader
             var result = (T)serializer.Deserialize(reader);
 
+            // DIAGNOSTIC: log key fields to detect early nulls (enabled only for ComplexOrderResponse)
+            if (result is ComparisonTool.Core.Models.ComplexOrderResponse diagResp)
+            {
+                logger.LogDebug("DESER CHECK: Region={Region} Environment={Env}", diagResp.ResponseMetadata?.Region, diagResp.ResponseMetadata?.Environment);
+            }
+
             return result;
         }
         catch (Exception ex)
