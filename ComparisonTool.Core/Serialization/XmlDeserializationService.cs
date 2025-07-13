@@ -15,9 +15,7 @@ public class XmlDeserializationService : IXmlDeserializationService
     private readonly Dictionary<string, Type> registeredDomainModels = new();
     private readonly XmlSerializerFactory serializerFactory;
     
-    // CRITICAL FIX: Use thread-local storage to prevent shared state corruption during parallel processing
-    private readonly ThreadLocal<ConcurrentDictionary<Type, XmlSerializer>> _threadLocalSerializerCache;
-    private readonly ConcurrentDictionary<Type, XmlSerializer> _serializerCache;
+    // Serializer caching removed – we now create a fresh serializer per operation to avoid hidden state issues.
 
     // Cache for recently deserialized objects
     private readonly ConcurrentDictionary<string, (DateTime LastAccess, object Data)> _deserializationCache = new();
@@ -33,9 +31,7 @@ public class XmlDeserializationService : IXmlDeserializationService
         this.logger = logger;
         this.serializerFactory = serializerFactory;
         
-        // CRITICAL FIX: Initialize thread-local storage for serializer cache
-        _threadLocalSerializerCache = new ThreadLocal<ConcurrentDictionary<Type, XmlSerializer>>(() => new ConcurrentDictionary<Type, XmlSerializer>());
-        _serializerCache = new ConcurrentDictionary<Type, XmlSerializer>();
+
     }
 
     /// <summary>
@@ -48,8 +44,7 @@ public class XmlDeserializationService : IXmlDeserializationService
         registeredDomainModels[modelName] = typeof(T);
         logger.LogInformation("Registered model {ModelName} as {ModelType}", modelName, typeof(T).Name);
 
-        // Pre-cache the serializer for this type to avoid creation during comparison
-        GetCachedSerializer<T>();
+        // No pre-caching – we build fresh serializers on demand to ensure clean state.
     }
 
     /// <summary>
@@ -125,7 +120,7 @@ public class XmlDeserializationService : IXmlDeserializationService
 
             // CRITICAL FIX: Always create fresh XmlReader to avoid state corruption
             // The pooling was causing inconsistent behavior between single and batch processing
-            var serializer = GetCachedSerializer<T>();
+            var serializer = serializerFactory.GetSerializer<T>();
             xmlStream.Position = 0;
 
             // Create a fresh XmlReader with consistent settings for every deserialization
@@ -160,7 +155,7 @@ public class XmlDeserializationService : IXmlDeserializationService
 
         try
         {
-            var serializer = GetCachedSerializer<T>();
+            var serializer = serializerFactory.GetSerializer<T>();
             using var stream = new MemoryStream();
             serializer.Serialize(stream, source);
             stream.Position = 0;
@@ -198,7 +193,7 @@ public class XmlDeserializationService : IXmlDeserializationService
     /// </summary>
     public (int CacheSize, int SerializerCacheSize) GetCacheStatistics()
     {
-        return (_deserializationCache.Count, _serializerCache.Count);
+        return (_deserializationCache.Count, 0); // No per-thread serializer cache, so return 0
     }
 
     /// <summary>
@@ -207,13 +202,11 @@ public class XmlDeserializationService : IXmlDeserializationService
     public void ClearAllCaches()
     {
         var deserializationCount = _deserializationCache.Count;
-        var serializerCount = _serializerCache.Count;
         
         _deserializationCache.Clear();
-        _serializerCache.Clear();
         
         logger.LogWarning("CLEARED ALL CACHES: {DeserializationCache} deserialization entries, {SerializerCache} serializer entries removed", 
-            deserializationCount, serializerCount);
+            deserializationCount, 0);
     }
 
     /// <summary>
@@ -281,41 +274,7 @@ public class XmlDeserializationService : IXmlDeserializationService
         };
     }
 
-    /// <summary>
-    /// Get cached XmlSerializer with enhanced configuration for handling unknown elements
-    /// </summary>
-    private XmlSerializer GetCachedSerializer<T>()
-    {
-        var type = typeof(T);
-        
-        // CRITICAL FIX: Use thread-local storage to prevent shared state corruption
-        // Each thread gets its own serializer cache to avoid parallel processing issues
-        var threadLocalCache = _threadLocalSerializerCache.Value;
-        
-        return threadLocalCache.GetOrAdd(type, _ => 
-        {
-            // CRITICAL FIX: Use the public GetSerializer method instead of private CreateComplexOrderResponseSerializer
-            var serializer = serializerFactory.GetSerializer<T>();
-            
-            // CRITICAL FIX: Add event handlers to gracefully handle unknown elements
-            serializer.UnknownElement += (sender, e) =>
-            {
-                // Log unknown elements for debugging but don't throw exceptions
-                logger.LogDebug("Unknown XML element encountered: {ElementName} at line {LineNumber}, position {LinePosition}. This element will be ignored during deserialization.", 
-                    e.Element.Name, e.LineNumber, e.LinePosition);
-            };
-            
-            serializer.UnknownAttribute += (sender, e) =>
-            {
-                // Log unknown attributes for debugging but don't throw exceptions
-                logger.LogDebug("Unknown XML attribute encountered: {AttributeName} at line {LineNumber}, position {LinePosition}. This attribute will be ignored during deserialization.", 
-                    e.Attr.Name, e.LineNumber, e.LinePosition);
-            };
-            
-            return serializer;
-        });
-    }
-
+    // Removed per-thread serializer caching – fresh serializer instances are obtained via factory as needed.
 
 
     /// <summary>
