@@ -69,8 +69,8 @@ public class XmlSerializerFactory
 
     private XmlSerializer CreateFlexibleSerializer(Type type)
     {
-        // Use the original approach but with Order removal
-        return ProcessTypeForOrderRemoval(type);
+        var overrides = BuildOverridesForType(type);
+        return new XmlSerializer(type, overrides);
     }
 
     private XmlSerializer ProcessTypeForOrderRemoval(Type type)
@@ -257,6 +257,72 @@ public class XmlSerializerFactory
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Build XmlAttributeOverrides for a single type only (no recursion).
+    /// Removes Order attribute but keeps all other mapping info.
+    /// </summary>
+    private XmlAttributeOverrides BuildOverridesForType(Type type)
+    {
+        var overrides = new XmlAttributeOverrides();
+
+        foreach (var property in type.GetProperties().OrderBy(p => p.Name, StringComparer.Ordinal))
+        {
+            var xmlElementAttrs = property.GetCustomAttributes<XmlElementAttribute>();
+            var xmlArrayAttrs = property.GetCustomAttributes<XmlArrayAttribute>();
+            var xmlArrayItemAttrs = property.GetCustomAttributes<XmlArrayItemAttribute>();
+
+            if (!xmlElementAttrs.Any() && !xmlArrayAttrs.Any() && !xmlArrayItemAttrs.Any())
+                continue; // nothing to override
+
+            var xmlAttributes = new XmlAttributes();
+
+            // Copy XmlElement attributes without Order
+            foreach (var attr in xmlElementAttrs)
+            {
+                var copy = new XmlElementAttribute(attr.ElementName ?? property.Name)
+                {
+                    IsNullable = attr.IsNullable,
+                    DataType = attr.DataType,
+                    Type = attr.Type
+                    // Order intentionally omitted
+                };
+                xmlAttributes.XmlElements.Add(copy);
+            }
+
+            // Copy XmlArray attribute without Order
+            if (xmlArrayAttrs.Any())
+            {
+                var arr = xmlArrayAttrs.First();
+                xmlAttributes.XmlArray = new XmlArrayAttribute(arr.ElementName)
+                {
+                    IsNullable = arr.IsNullable
+                };
+            }
+
+            // Copy XmlArrayItem attributes without Order
+            foreach (var item in xmlArrayItemAttrs)
+            {
+                var copyItem = new XmlArrayItemAttribute(item.ElementName)
+                {
+                    IsNullable = item.IsNullable,
+                    Type = item.Type
+                };
+                xmlAttributes.XmlArrayItems.Add(copyItem);
+            }
+
+            try
+            {
+                overrides.Add(type, property.Name, xmlAttributes);
+            }
+            catch (InvalidOperationException)
+            {
+                _logger?.LogError("Duplicate override ignored for {Type}.{Property}", type.FullName, property.Name);
+            }
+        }
+
+        return overrides;
     }
 
     private XmlSerializer CreateComplexOrderResponseSerializer()
