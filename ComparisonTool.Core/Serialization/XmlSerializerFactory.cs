@@ -69,8 +69,8 @@ public class XmlSerializerFactory
 
     private XmlSerializer CreateFlexibleSerializer(Type type)
     {
-        var overrides = BuildOverridesForType(type);
-        return new XmlSerializer(type, overrides);
+        // Use the fully-recursive removal so every referenced type also has its Order attributes stripped.
+        return ProcessTypeForOrderRemoval(type);
     }
 
     private XmlSerializer ProcessTypeForOrderRemoval(Type type)
