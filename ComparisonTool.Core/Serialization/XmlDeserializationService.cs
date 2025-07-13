@@ -17,14 +17,7 @@ public class XmlDeserializationService : IXmlDeserializationService
     
     // Serializer caching removed – we now create a fresh serializer per operation to avoid hidden state issues.
 
-    // Cache for recently deserialized objects
-    private readonly ConcurrentDictionary<string, (DateTime LastAccess, object Data)> _deserializationCache = new();
-    private readonly TimeSpan _cacheExpiration = TimeSpan.FromMinutes(10);
-    private readonly int _maxCacheSize = 100;
-    private DateTime _lastCacheCleanup = DateTime.Now;
-    
-    // Application session identifier to invalidate cache on restart
-    private static readonly string SessionId = Guid.NewGuid().ToString("N")[..8];
+    // Object-level caching disabled – caused shared state issues under concurrency.
 
     public XmlDeserializationService(ILogger<XmlDeserializationService> logger, XmlSerializerFactory serializerFactory)
     {
@@ -85,41 +78,7 @@ public class XmlDeserializationService : IXmlDeserializationService
 
         try
         {
-            // Try to determine if we've seen this exact XML before
-            string cacheKey = null;
-
-            if (xmlStream.CanSeek && xmlStream.Length < 1024 * 1024) // Only for reasonably sized files
-            {
-                // Generate a simple hash as cache key
-                using (var ms = new MemoryStream())
-                {
-                    xmlStream.Position = 0;
-                    xmlStream.CopyTo(ms);
-                    byte[] bytes = ms.ToArray();
-                    var contentHash = Convert.ToBase64String(System.Security.Cryptography.MD5.HashData(bytes));
-                    cacheKey = $"{contentHash}_{SessionId}"; // Include session ID for cache invalidation
-
-                    // Check cache first
-                    if (_deserializationCache.TryGetValue(cacheKey, out var cached))
-                    {
-                        _deserializationCache[cacheKey] = (DateTime.Now, cached.Data);
-                        logger.LogDebug("MD5-based cache HIT for XML content hash: {CacheKey} (SessionId: {SessionId})", 
-                            contentHash[..8], SessionId);
-                        return (T)cached.Data;
-                    }
-                    else
-                    {
-                        logger.LogDebug("MD5-based cache MISS for XML content hash: {CacheKey} (SessionId: {SessionId})", 
-                            contentHash[..8], SessionId);
-                    }
-
-                    // Reset position for deserialization
-                    xmlStream.Position = 0;
-                }
-            }
-
-            // CRITICAL FIX: Always create fresh XmlReader to avoid state corruption
-            // The pooling was causing inconsistent behavior between single and batch processing
+            // Always use a fresh serializer (factory supplies new instance)
             var serializer = serializerFactory.GetSerializer<T>();
             xmlStream.Position = 0;
 
@@ -128,13 +87,6 @@ public class XmlDeserializationService : IXmlDeserializationService
             
             // Deserialize using the fresh reader
             var result = (T)serializer.Deserialize(reader);
-
-            // Cache result if needed
-            if (cacheKey != null && _deserializationCache.Count < _maxCacheSize)
-            {
-                _deserializationCache[cacheKey] = (DateTime.Now, result);
-                CleanupCacheIfNeeded();
-            }
 
             return result;
         }
@@ -183,30 +135,20 @@ public class XmlDeserializationService : IXmlDeserializationService
     /// </summary>
     public void ClearDeserializationCache()
     {
-        var count = _deserializationCache.Count;
-        _deserializationCache.Clear();
-        logger.LogInformation("Cleared internal deserialization cache: {Count} entries removed", count);
+        logger.LogWarning("Deserialization cache disabled – nothing to clear.");
     }
 
     /// <summary>
     /// Get cache statistics for diagnostics
     /// </summary>
-    public (int CacheSize, int SerializerCacheSize) GetCacheStatistics()
-    {
-        return (_deserializationCache.Count, 0); // No per-thread serializer cache, so return 0
-    }
+    public (int CacheSize, int SerializerCacheSize) GetCacheStatistics() => (0, 0);
 
     /// <summary>
     /// Force clear all caches - useful for debugging deserialization inconsistencies
     /// </summary>
     public void ClearAllCaches()
     {
-        var deserializationCount = _deserializationCache.Count;
-        
-        _deserializationCache.Clear();
-        
-        logger.LogWarning("CLEARED ALL CACHES: {DeserializationCache} deserialization entries, {SerializerCache} serializer entries removed", 
-            deserializationCount, 0);
+        logger.LogWarning("Deserialization cache disabled – nothing to clear.");
     }
 
     /// <summary>
@@ -277,37 +219,5 @@ public class XmlDeserializationService : IXmlDeserializationService
     // Removed per-thread serializer caching – fresh serializer instances are obtained via factory as needed.
 
 
-    /// <summary>
-    /// Clean up expired cache entries
-    /// </summary>
-    private void CleanupCacheIfNeeded()
-    {
-        // Only clean up occasionally
-        if ((DateTime.Now - _lastCacheCleanup).TotalMinutes < 5)
-            return;
-
-        _lastCacheCleanup = DateTime.Now;
-
-        // Remove expired items
-        foreach (var entry in _deserializationCache.ToArray())
-        {
-            if ((DateTime.Now - entry.Value.LastAccess) > _cacheExpiration)
-            {
-                _deserializationCache.TryRemove(entry.Key, out _);
-            }
-        }
-
-        // If still too many entries, remove oldest ones
-        if (_deserializationCache.Count > _maxCacheSize)
-        {
-            var oldestEntries = _deserializationCache
-                .OrderBy(x => x.Value.LastAccess)
-                .Take(_deserializationCache.Count - _maxCacheSize / 2);
-
-            foreach (var entry in oldestEntries)
-            {
-                _deserializationCache.TryRemove(entry.Key, out _);
-            }
-        }
-    }
+    // Cleanup cache method removed – caching disabled.
 }
