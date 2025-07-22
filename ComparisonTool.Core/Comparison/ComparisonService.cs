@@ -838,18 +838,24 @@ public class ComparisonService : IComparisonService
         if (result.Differences.Count <= 1)
             return result;
 
-        // Group differences by their actual values that changed
+        // Group differences by their actual values that changed AND normalized property paths
+        // This ensures that System.Collections paths are treated as duplicates of their standard equivalents
         var uniqueDiffs = result.Differences
             .GroupBy(d => new
             {
+                PropertyName = d.PropertyName,
                 OldValue = d.Object1Value?.ToString() ?? "null",
-                NewValue = d.Object2Value?.ToString() ?? "null"
+                NewValue = d.Object2Value?.ToString() ?? "null",
+                NormalizedPath = NormalizePropertyPath(d.PropertyName)
             })
             .Select(group =>
             {
-                // From each group, pick the simplest property path (one without backing fields)
+                // From each group, pick the best property path
+                // Prefer standard array notation over System.Collections notation
                 var bestMatch = group
                     .OrderBy(d => d.PropertyName.Contains("k__BackingField") ? 1 : 0)
+                    .ThenBy(d => d.PropertyName.Contains("System.Collections.IList.Item") ? 1 : 0)
+                    .ThenBy(d => d.PropertyName.Contains("System.Collections.Generic.IList`1.Item") ? 1 : 0)
                     .ThenBy(d => d.PropertyName.Length)
                     .First();
 
@@ -885,6 +891,11 @@ public class ComparisonService : IComparisonService
 
         // Remove backing fields
         normalized = Regex.Replace(normalized, @"<(\w+)>k__BackingField", "$1");
+
+        // Normalize System.Collections paths to standard array notation
+        // Convert System.Collections.IList.Item[*] to [*]
+        normalized = Regex.Replace(normalized, @"\.System\.Collections\.IList\.Item\[", "[");
+        normalized = Regex.Replace(normalized, @"\.System\.Collections\.Generic\.IList`1\.Item\[", "[");
 
         return normalized;
     }

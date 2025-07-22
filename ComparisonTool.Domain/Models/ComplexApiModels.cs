@@ -42,9 +42,6 @@ public class ResponseMetadata
     [XmlElement(ElementName = "Region", Order = 1)]
     public string Region { get; set; } = "US-EAST-1";
 
-    [XmlElement(ElementName = "TestValue", Order = 2)]
-    public int? TestValue { get; set; }
-
     [XmlElement(ElementName = "Environment", Order = 3)]
     public string Environment { get; set; } = "Production";
 

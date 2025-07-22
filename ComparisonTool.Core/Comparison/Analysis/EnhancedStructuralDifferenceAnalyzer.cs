@@ -832,7 +832,14 @@ namespace ComparisonTool.Core.Comparison.Analysis
 
         private string NormalizePropertyPath(string differencePropertyName)
         {
-            return Regex.Replace(differencePropertyName ?? string.Empty, @"\[\d+\]", "[*]");
+            var normalized = Regex.Replace(differencePropertyName ?? string.Empty, @"\[\d+\]", "[*]");
+            
+            // Normalize System.Collections paths to standard array notation
+            // Convert System.Collections.IList.Item[*] to [*]
+            normalized = Regex.Replace(normalized, @"\.System\.Collections\.IList\.Item\[", "[");
+            normalized = Regex.Replace(normalized, @"\.System\.Collections\.Generic\.IList`1\.Item\[", "[");
+            
+            return normalized;
         }
 
         private DifferenceCategory DetermineValueChangeCategory(string oldValue, string newValue)

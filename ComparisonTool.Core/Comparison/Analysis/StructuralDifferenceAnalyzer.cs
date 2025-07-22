@@ -350,7 +350,14 @@ namespace ComparisonTool.Core.Comparison.Analysis
         /// </summary>
         private string NormalizePropertyPath(string propertyPath)
         {
-            return Regex.Replace(propertyPath ?? string.Empty, @"\[\d+\]", "[*]");
+            var normalized = Regex.Replace(propertyPath ?? string.Empty, @"\[\d+\]", "[*]");
+            
+            // Normalize System.Collections paths to standard array notation
+            // Convert System.Collections.IList.Item[*] to [*]
+            normalized = Regex.Replace(normalized, @"\.System\.Collections\.IList\.Item\[", "[");
+            normalized = Regex.Replace(normalized, @"\.System\.Collections\.Generic\.IList`1\.Item\[", "[");
+            
+            return normalized;
         }
         
         /// <summary>

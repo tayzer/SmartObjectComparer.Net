@@ -231,6 +231,11 @@ namespace ComparisonTool.Core.Comparison.Configuration
             // Remove any XML namespace prefixes (like soap:)
             normalizedPath = Regex.Replace(normalizedPath, @"\w+:", "");
             
+            // Normalize System.Collections paths to standard array notation
+            // Convert System.Collections.IList.Item[*] to [*]
+            normalizedPath = Regex.Replace(normalizedPath, @"\.System\.Collections\.IList\.Item\[", "[");
+            normalizedPath = Regex.Replace(normalizedPath, @"\.System\.Collections\.Generic\.IList`1\.Item\[", "[");
+            
             return normalizedPath;
         }
 
