@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using System.Reflection;
 using System.Xml;
 using System.Xml.Serialization;
 using Microsoft.Extensions.Logging;
@@ -13,31 +14,28 @@ public class XmlDeserializationService : IXmlDeserializationService
     private readonly ILogger<XmlDeserializationService> logger;
     private readonly Dictionary<string, Type> registeredDomainModels = new();
     private readonly XmlSerializerFactory serializerFactory;
-
-    // XML Reader/Writer pools for efficient reuse
-    private readonly ConcurrentDictionary<Type, XmlSerializer> _serializerCache = new();
-    private readonly ConcurrentQueue<XmlReader> _readerPool = new();
-    private readonly int _maxPoolSize = 20;
-    private readonly bool _enableFastReading = true;
+    
+    // CRITICAL FIX: Use thread-local storage to prevent shared state corruption during parallel processing
+    private readonly ThreadLocal<ConcurrentDictionary<Type, XmlSerializer>> _threadLocalSerializerCache;
+    private readonly ConcurrentDictionary<Type, XmlSerializer> _serializerCache;
 
     // Cache for recently deserialized objects
     private readonly ConcurrentDictionary<string, (DateTime LastAccess, object Data)> _deserializationCache = new();
     private readonly TimeSpan _cacheExpiration = TimeSpan.FromMinutes(10);
     private readonly int _maxCacheSize = 100;
     private DateTime _lastCacheCleanup = DateTime.Now;
+    
+    // Application session identifier to invalidate cache on restart
+    private static readonly string SessionId = Guid.NewGuid().ToString("N")[..8];
 
-    public XmlDeserializationService(
-        ILogger<XmlDeserializationService> logger,
-        XmlSerializerFactory serializerFactory)
+    public XmlDeserializationService(ILogger<XmlDeserializationService> logger, XmlSerializerFactory serializerFactory)
     {
         this.logger = logger;
         this.serializerFactory = serializerFactory;
-
-        // Initialize reader pool with empty readers
-        for (int i = 0; i < 5; i++)
-        {
-            _readerPool.Enqueue(XmlReader.Create(new StringReader(string.Empty)));
-        }
+        
+        // CRITICAL FIX: Initialize thread-local storage for serializer cache
+        _threadLocalSerializerCache = new ThreadLocal<ConcurrentDictionary<Type, XmlSerializer>>(() => new ConcurrentDictionary<Type, XmlSerializer>());
+        _serializerCache = new ConcurrentDictionary<Type, XmlSerializer>();
     }
 
     /// <summary>
@@ -103,13 +101,21 @@ public class XmlDeserializationService : IXmlDeserializationService
                     xmlStream.Position = 0;
                     xmlStream.CopyTo(ms);
                     byte[] bytes = ms.ToArray();
-                    cacheKey = Convert.ToBase64String(System.Security.Cryptography.MD5.HashData(bytes));
+                    var contentHash = Convert.ToBase64String(System.Security.Cryptography.MD5.HashData(bytes));
+                    cacheKey = $"{contentHash}_{SessionId}"; // Include session ID for cache invalidation
 
                     // Check cache first
                     if (_deserializationCache.TryGetValue(cacheKey, out var cached))
                     {
                         _deserializationCache[cacheKey] = (DateTime.Now, cached.Data);
+                        logger.LogDebug("MD5-based cache HIT for XML content hash: {CacheKey} (SessionId: {SessionId})", 
+                            contentHash[..8], SessionId);
                         return (T)cached.Data;
+                    }
+                    else
+                    {
+                        logger.LogDebug("MD5-based cache MISS for XML content hash: {CacheKey} (SessionId: {SessionId})", 
+                            contentHash[..8], SessionId);
                     }
 
                     // Reset position for deserialization
@@ -117,71 +123,25 @@ public class XmlDeserializationService : IXmlDeserializationService
                 }
             }
 
-            // Use fast path for small XML files
-            if (_enableFastReading && xmlStream.Length < 5 * 1024 * 1024)
+            // CRITICAL FIX: Always create fresh XmlReader to avoid state corruption
+            // The pooling was causing inconsistent behavior between single and batch processing
+            var serializer = GetCachedSerializer<T>();
+            xmlStream.Position = 0;
+
+            // Create a fresh XmlReader with consistent settings for every deserialization
+            using var reader = XmlReader.Create(xmlStream, GetOptimizedReaderSettings());
+            
+            // Deserialize using the fresh reader
+            var result = (T)serializer.Deserialize(reader);
+
+            // Cache result if needed
+            if (cacheKey != null && _deserializationCache.Count < _maxCacheSize)
             {
-                var serializer = GetCachedSerializer<T>();
-                xmlStream.Position = 0;
-
-                // Get a reader from the pool or create a new one
-                XmlReader reader = null;
-                bool fromPool = _readerPool.TryDequeue(out reader);
-
-                if (!fromPool)
-                {
-                    reader = XmlReader.Create(xmlStream, GetOptimizedReaderSettings());
-                }
-                else
-                {
-                    // Can't reuse the reader directly with a new stream, so create a new one
-                    // but we'll still return the old one to the pool when done
-                    reader.Dispose(); // Close the old reader
-                    reader = XmlReader.Create(xmlStream, GetOptimizedReaderSettings());
-                }
-
-                try
-                {
-                    // Deserialize using the reader
-                    var result = (T)serializer.Deserialize(reader);
-
-                    // Cache result if needed
-                    if (cacheKey != null && _deserializationCache.Count < _maxCacheSize)
-                    {
-                        _deserializationCache[cacheKey] = (DateTime.Now, result);
-                        CleanupCacheIfNeeded();
-                    }
-
-                    return result;
-                }
-                finally
-                {
-                    // Return reader to pool if there's space
-                    if (_readerPool.Count < _maxPoolSize)
-                    {
-                        try
-                        {
-                            reader.Close();
-                            _readerPool.Enqueue(reader);
-                        }
-                        catch
-                        {
-                            // If we can't reuse the reader, just let it be garbage collected
-                        }
-                    }
-                    else
-                    {
-                        reader.Dispose();
-                    }
-                }
+                _deserializationCache[cacheKey] = (DateTime.Now, result);
+                CleanupCacheIfNeeded();
             }
-            else
-            {
-                // Fallback for large files - avoid cached readers to prevent memory leaks
-                var serializer = GetCachedSerializer<T>();
-                xmlStream.Position = 0;
 
-                return (T)serializer.Deserialize(xmlStream);
-            }
+            return result;
         }
         catch (Exception ex)
         {
@@ -204,39 +164,159 @@ public class XmlDeserializationService : IXmlDeserializationService
             using var stream = new MemoryStream();
             serializer.Serialize(stream, source);
             stream.Position = 0;
-            return (T)serializer.Deserialize(stream);
+            
+            // CRITICAL FIX: Use conservative reader settings for cloning to preserve data fidelity
+            // The aggressive GetOptimizedReaderSettings() was causing data loss during round-trip
+            using var reader = XmlReader.Create(stream, GetConservativeCloneReaderSettings());
+            var clonedResult = (T)serializer.Deserialize(reader);
+            
+            // DIAGNOSTIC: Log cloning operation for debugging serialization issues
+            logger.LogDebug("Successfully cloned object of type {Type}. Stream size: {StreamSize} bytes", 
+                typeof(T).Name, stream.Length);
+            
+            return clonedResult;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error cloning object of type {Type}", typeof(T).Name);
+            logger.LogError(ex, "Error cloning object of type {Type}. This could indicate XML serialization round-trip issues.", typeof(T).Name);
             throw;
         }
     }
 
     /// <summary>
-    /// Get optimized XML reader settings
+    /// Clear the internal deserialization cache - useful for testing or when serialization logic changes
+    /// </summary>
+    public void ClearDeserializationCache()
+    {
+        var count = _deserializationCache.Count;
+        _deserializationCache.Clear();
+        logger.LogInformation("Cleared internal deserialization cache: {Count} entries removed", count);
+    }
+
+    /// <summary>
+    /// Get cache statistics for diagnostics
+    /// </summary>
+    public (int CacheSize, int SerializerCacheSize) GetCacheStatistics()
+    {
+        return (_deserializationCache.Count, _serializerCache.Count);
+    }
+
+    /// <summary>
+    /// Force clear all caches - useful for debugging deserialization inconsistencies
+    /// </summary>
+    public void ClearAllCaches()
+    {
+        var deserializationCount = _deserializationCache.Count;
+        var serializerCount = _serializerCache.Count;
+        
+        _deserializationCache.Clear();
+        _serializerCache.Clear();
+        
+        logger.LogWarning("CLEARED ALL CACHES: {DeserializationCache} deserialization entries, {SerializerCache} serializer entries removed", 
+            deserializationCount, serializerCount);
+    }
+
+    /// <summary>
+    /// Get optimized XML reader settings that are forgiving of XML variations
+    /// and ensure consistent parsing behavior across all scenarios
     /// </summary>
     private XmlReaderSettings GetOptimizedReaderSettings()
     {
         return new XmlReaderSettings
         {
+            // CRITICAL: Ensure consistent whitespace handling
             IgnoreWhitespace = true,
             IgnoreComments = true,
             IgnoreProcessingInstructions = true,
+            
+            // Security and performance settings
             DtdProcessing = DtdProcessing.Prohibit,
             MaxCharactersInDocument = 50 * 1024 * 1024, // 50MB limit
-            CloseInput = false // Don't close the underlying stream
+            CloseInput = false, // Don't close the underlying stream
+            
+            // ENHANCED: More lenient parsing for consistency
+            CheckCharacters = false, // More lenient character checking for encoding issues
+            ConformanceLevel = ConformanceLevel.Document, // Require well-formed documents (more strict than Fragment)
+            ValidationFlags = System.Xml.Schema.XmlSchemaValidationFlags.None, // No validation
+            ValidationType = ValidationType.None, // No validation
+            
+            // WHITESPACE FIX: Ensure consistent normalization
+            // This helps ensure that whitespace-sensitive elements are handled consistently
+            Async = false, // Synchronous processing for consistency
+            
+            // Character encoding handling
+            XmlResolver = null // Disable external resource resolution for security and consistency
         };
     }
 
     /// <summary>
-    /// Get or create a cached XmlSerializer
+    /// Get conservative XML reader settings for cloning to preserve data fidelity
+    /// These settings prioritize preserving all data over performance optimizations
+    /// </summary>
+    private XmlReaderSettings GetConservativeCloneReaderSettings()
+    {
+        return new XmlReaderSettings
+        {
+            // CONSERVATIVE: Preserve whitespace to avoid data loss during cloning
+            IgnoreWhitespace = false,  // CRITICAL FIX: Don't ignore whitespace during cloning
+            IgnoreComments = false,    // Preserve comments
+            IgnoreProcessingInstructions = false, // Preserve processing instructions
+            
+            // Security settings (keep these strict)
+            DtdProcessing = DtdProcessing.Prohibit,
+            MaxCharactersInDocument = 50 * 1024 * 1024,
+            CloseInput = false,
+            
+            // Conservative parsing settings for fidelity
+            CheckCharacters = true,    // Strict character checking for data integrity
+            ConformanceLevel = ConformanceLevel.Document,
+            ValidationFlags = System.Xml.Schema.XmlSchemaValidationFlags.None,
+            ValidationType = ValidationType.None,
+            
+            // Synchronous processing for consistency
+            Async = false,
+            
+            // Disable external resources for security
+            XmlResolver = null
+        };
+    }
+
+    /// <summary>
+    /// Get cached XmlSerializer with enhanced configuration for handling unknown elements
     /// </summary>
     private XmlSerializer GetCachedSerializer<T>()
     {
         var type = typeof(T);
-        return _serializerCache.GetOrAdd(type, t => serializerFactory.GetSerializer<T>());
+        
+        // CRITICAL FIX: Use thread-local storage to prevent shared state corruption
+        // Each thread gets its own serializer cache to avoid parallel processing issues
+        var threadLocalCache = _threadLocalSerializerCache.Value;
+        
+        return threadLocalCache.GetOrAdd(type, _ => 
+        {
+            // CRITICAL FIX: Use the public GetSerializer method instead of private CreateComplexOrderResponseSerializer
+            var serializer = serializerFactory.GetSerializer<T>();
+            
+            // CRITICAL FIX: Add event handlers to gracefully handle unknown elements
+            serializer.UnknownElement += (sender, e) =>
+            {
+                // Log unknown elements for debugging but don't throw exceptions
+                logger.LogDebug("Unknown XML element encountered: {ElementName} at line {LineNumber}, position {LinePosition}. This element will be ignored during deserialization.", 
+                    e.Element.Name, e.LineNumber, e.LinePosition);
+            };
+            
+            serializer.UnknownAttribute += (sender, e) =>
+            {
+                // Log unknown attributes for debugging but don't throw exceptions
+                logger.LogDebug("Unknown XML attribute encountered: {AttributeName} at line {LineNumber}, position {LinePosition}. This attribute will be ignored during deserialization.", 
+                    e.Attr.Name, e.LineNumber, e.LinePosition);
+            };
+            
+            return serializer;
+        });
     }
+
+
 
     /// <summary>
     /// Clean up expired cache entries

@@ -1,0 +1,1384 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<OrderManagementResponse>
+  <RequestId>REQ-20250711-002257</RequestId>
+  <Timestamp>2025-07-11T09:15:59.9505115Z</Timestamp>
+  <ProcessingTime>PT0.104S</ProcessingTime>
+  <ApiVersion>2.1.4</ApiVersion>
+  <ResponseMetadata>
+    <Region>US-EAST-1</Region>
+    <TestValue p3:nil="true" xmlns:p3="http://www.w3.org/2001/XMLSchema-instance" />
+    <Environment>Production</Environment>
+    <ServerInfo>
+      <ServerId>srv-007</ServerId>
+      <LoadBalancerGroup>Primary</LoadBalancerGroup>
+      <DeploymentVersion>v2.1.4-hotfix.3</DeploymentVersion>
+      <MemoryUsage>1945823</MemoryUsage>
+      <CpuUsage>86.19144716588382</CpuUsage>
+    </ServerInfo>
+    <Performance>
+      <DatabaseQueryTime>PT0.056S</DatabaseQueryTime>
+      <ExternalApiCalls>13</ExternalApiCalls>
+      <CacheHitRatio>0.9509128406415288</CacheHitRatio>
+      <ComponentTimings>
+        <Timing>
+          <ComponentName>Database</ComponentName>
+          <ExecutionTime>PT0.078S</ExecutionTime>
+          <CallCount>9</CallCount>
+        </Timing>
+        <Timing>
+          <ComponentName>Cache</ComponentName>
+          <ExecutionTime>PT0.072S</ExecutionTime>
+          <CallCount>2</CallCount>
+        </Timing>
+        <Timing>
+          <ComponentName>ExternalAPI</ComponentName>
+          <ExecutionTime>PT0.058S</ExecutionTime>
+          <CallCount>3</CallCount>
+        </Timing>
+      </ComponentTimings>
+    </Performance>
+    <Features>
+      <Feature>
+        <Name>Feature0</Name>
+        <Enabled>false</Enabled>
+        <Percentage>97.38630503294353</Percentage>
+      </Feature>
+      <Feature>
+        <Name>Feature1</Name>
+        <Enabled>true</Enabled>
+        <Percentage>86.10347508737047</Percentage>
+      </Feature>
+      <Feature>
+        <Name>Feature2</Name>
+        <Enabled>true</Enabled>
+        <Percentage>52.305642726042144</Percentage>
+      </Feature>
+      <Feature>
+        <Name>Feature3</Name>
+        <Enabled>false</Enabled>
+        <Percentage>51.14509936009771</Percentage>
+      </Feature>
+      <Feature>
+        <Name>Feature4</Name>
+        <Enabled>false</Enabled>
+        <Percentage>54.16221132230117</Percentage>
+      </Feature>
+    </Features>
+  </ResponseMetadata>
+  <OrderData>
+    <OrderId>ORD-002257</OrderId>
+    <OrderNumber>ON202507112257</OrderNumber>
+    <Status>Processing</Status>
+    <Customer>
+      <CustomerId>CUST-000257</CustomerId>
+      <Profile>
+        <FirstName>Customer57</FirstName>
+        <LastName>User57</LastName>
+        <Email>customer257@example.com</Email>
+        <Phone>+15553500198</Phone>
+        <DateOfBirth>1993-07-11T00:00:00+01:00</DateOfBirth>
+        <CustomerSince>2024-09-20T00:00:00+01:00</CustomerSince>
+        <TierLevel>Gold</TierLevel>
+        <Demographics>
+          <AgeGroup>25-34</AgeGroup>
+          <Gender>Female</Gender>
+          <IncomeRange>$50K-$75K</IncomeRange>
+          <MaritalStatus>Single</MaritalStatus>
+          <EducationLevel>Bachelor's</EducationLevel>
+        </Demographics>
+      </Profile>
+      <Preferences>
+        <CommunicationPreferences>
+          <EmailNotifications>true</EmailNotifications>
+          <SmsNotifications>false</SmsNotifications>
+          <PushNotifications>true</PushNotifications>
+          <MarketingEmails>false</MarketingEmails>
+          <PreferredLanguage>en-US</PreferredLanguage>
+        </CommunicationPreferences>
+        <DeliveryPreferences>
+          <PreferredTimeSlot>9AM-5PM</PreferredTimeSlot>
+          <DeliveryInstructions>Leave at door</DeliveryInstructions>
+          <AuthorityToLeave>true</AuthorityToLeave>
+          <SignatureRequired>false</SignatureRequired>
+        </DeliveryPreferences>
+        <InterestCategories>
+          <Category>Electronics</Category>
+          <Category>Books</Category>
+          <Category>Clothing</Category>
+        </InterestCategories>
+        <PreviousPurchases>
+          <Purchase>
+            <ProductId>PROD-000257</ProductId>
+            <PurchaseDate>2024-09-15T15:41:59.9505287Z</PurchaseDate>
+            <Amount>47.2372469106862</Amount>
+            <Rating>2</Rating>
+          </Purchase>
+          <Purchase>
+            <ProductId>PROD-000258</ProductId>
+            <PurchaseDate>2024-09-07T15:41:59.9505295Z</PurchaseDate>
+            <Amount>185.862684555288</Amount>
+            <Rating>2</Rating>
+          </Purchase>
+          <Purchase>
+            <ProductId>PROD-000259</ProductId>
+            <PurchaseDate>2024-11-23T15:41:59.9505297Z</PurchaseDate>
+            <Amount>141.061608312215</Amount>
+            <Rating>1</Rating>
+          </Purchase>
+          <Purchase>
+            <ProductId>PROD-000260</ProductId>
+            <PurchaseDate>2024-09-26T15:41:59.9505299Z</PurchaseDate>
+            <Amount>154.30569258719</Amount>
+            <Rating>3</Rating>
+          </Purchase>
+        </PreviousPurchases>
+      </Preferences>
+      <Addresses>
+        <Address>
+          <AddressId>ADDR-002257-0</AddressId>
+          <Type>Home</Type>
+          <Line1>2874 Main St</Line1>
+          <Line2>Apt 7</Line2>
+          <City>City7</City>
+          <StateProvince>CA</StateProvince>
+          <PostalCode>70061</PostalCode>
+          <Country>USA</Country>
+          <Coordinates>
+            <Latitude>5.166441376864185</Latitude>
+            <Longitude>-104.68356814453544</Longitude>
+            <Accuracy>8.16275489431003</Accuracy>
+          </Coordinates>
+          <IsDefault>true</IsDefault>
+          <IsValidated>true</IsValidated>
+        </Address>
+        <Address>
+          <AddressId>ADDR-002257-1</AddressId>
+          <Type>Work</Type>
+          <Line1>8584 Main St</Line1>
+          <Line2 />
+          <City>City7</City>
+          <StateProvince>CA</StateProvince>
+          <PostalCode>38213</PostalCode>
+          <Country>USA</Country>
+          <Coordinates>
+            <Latitude>-63.95736296379816</Latitude>
+            <Longitude>145.02332672710685</Longitude>
+            <Accuracy>7.032459884431427</Accuracy>
+          </Coordinates>
+          <IsDefault>false</IsDefault>
+          <IsValidated>true</IsValidated>
+        </Address>
+      </Addresses>
+      <PaymentMethods>
+        <PaymentMethod>
+          <PaymentMethodId>PM-002257-0</PaymentMethodId>
+          <Type>CreditCard</Type>
+          <IsDefault>true</IsDefault>
+          <CardInfo>
+            <Last4Digits>6653</Last4Digits>
+            <Brand>Visa</Brand>
+            <ExpiryMonth>7</ExpiryMonth>
+            <ExpiryYear>2027</ExpiryYear>
+            <BillingAddress>
+              <AddressId />
+              <Type>Home</Type>
+              <Line1 />
+              <Line2 />
+              <City />
+              <StateProvince />
+              <PostalCode />
+              <Country />
+              <Coordinates>
+                <Latitude>0</Latitude>
+                <Longitude>0</Longitude>
+                <Accuracy>0</Accuracy>
+              </Coordinates>
+              <IsDefault>false</IsDefault>
+              <IsValidated>false</IsValidated>
+            </BillingAddress>
+          </CardInfo>
+          <BankAccount>
+            <RoutingNumber />
+            <Last4Digits />
+            <AccountType />
+            <BankName />
+          </BankAccount>
+          <DigitalWallet>
+            <Provider />
+            <WalletId />
+            <IsVerified>false</IsVerified>
+          </DigitalWallet>
+        </PaymentMethod>
+      </PaymentMethods>
+      <LoyaltyProgram>
+        <MembershipNumber>LP00002257</MembershipNumber>
+        <CurrentPoints>314</CurrentPoints>
+        <TierStatus>Gold</TierStatus>
+        <NextTierRequirement>1023</NextTierRequirement>
+        <RewardHistory>
+          <Reward>
+            <TransactionId>RT-002257-00</TransactionId>
+            <Date>2025-02-27T15:41:59.9505361Z</Date>
+            <Points>-477</Points>
+            <Type>Earned</Type>
+            <Description>Transaction 1</Description>
+          </Reward>
+          <Reward>
+            <TransactionId>RT-002257-01</TransactionId>
+            <Date>2025-04-08T15:41:59.9505365Z</Date>
+            <Points>314</Points>
+            <Type>Redeemed</Type>
+            <Description>Transaction 2</Description>
+          </Reward>
+          <Reward>
+            <TransactionId>RT-002257-02</TransactionId>
+            <Date>2025-05-29T15:41:59.9505367Z</Date>
+            <Points>-95</Points>
+            <Type>Expired</Type>
+            <Description>Transaction 3</Description>
+          </Reward>
+          <Reward>
+            <TransactionId>RT-002257-03</TransactionId>
+            <Date>2025-01-04T15:41:59.9505369Z</Date>
+            <Points>-199</Points>
+            <Type>Adjusted</Type>
+            <Description>Transaction 4</Description>
+          </Reward>
+          <Reward>
+            <TransactionId>RT-002257-04</TransactionId>
+            <Date>2024-10-20T15:41:59.9505371Z</Date>
+            <Points>479</Points>
+            <Type>Earned</Type>
+            <Description>Transaction 5</Description>
+          </Reward>
+          <Reward>
+            <TransactionId>RT-002257-05</TransactionId>
+            <Date>2025-03-10T15:41:59.9505374Z</Date>
+            <Points>-429</Points>
+            <Type>Redeemed</Type>
+            <Description>Transaction 6</Description>
+          </Reward>
+        </RewardHistory>
+        <AvailableRewards>
+          <Reward>
+            <RewardId>RWD-000</RewardId>
+            <Name>Reward 1</Name>
+            <Description>Description for reward 1</Description>
+            <PointsCost>586</PointsCost>
+            <ExpiryDate>2025-09-04T15:41:59.9505382Z</ExpiryDate>
+            <Category>General</Category>
+          </Reward>
+          <Reward>
+            <RewardId>RWD-001</RewardId>
+            <Name>Reward 2</Name>
+            <Description>Description for reward 2</Description>
+            <PointsCost>962</PointsCost>
+            <ExpiryDate>2025-08-30T15:41:59.9505386Z</ExpiryDate>
+            <Category>General</Category>
+          </Reward>
+          <Reward>
+            <RewardId>RWD-002</RewardId>
+            <Name>Reward 3</Name>
+            <Description>Description for reward 3</Description>
+            <PointsCost>345</PointsCost>
+            <ExpiryDate>2025-08-24T15:41:59.9505388Z</ExpiryDate>
+            <Category>General</Category>
+          </Reward>
+          <Reward>
+            <RewardId>RWD-003</RewardId>
+            <Name>Reward 4</Name>
+            <Description>Description for reward 4</Description>
+            <PointsCost>124</PointsCost>
+            <ExpiryDate>2026-06-10T15:41:59.950539Z</ExpiryDate>
+            <Category>General</Category>
+          </Reward>
+          <Reward>
+            <RewardId>RWD-004</RewardId>
+            <Name>Reward 5</Name>
+            <Description>Description for reward 5</Description>
+            <PointsCost>286</PointsCost>
+            <ExpiryDate>2026-05-30T15:41:59.9505392Z</ExpiryDate>
+            <Category>General</Category>
+          </Reward>
+          <Reward>
+            <RewardId>RWD-005</RewardId>
+            <Name>Reward 6</Name>
+            <Description>Description for reward 6</Description>
+            <PointsCost>695</PointsCost>
+            <ExpiryDate>2026-03-28T15:41:59.9505395Z</ExpiryDate>
+            <Category>General</Category>
+          </Reward>
+          <Reward>
+            <RewardId>RWD-006</RewardId>
+            <Name>Reward 7</Name>
+            <Description>Description for reward 7</Description>
+            <PointsCost>802</PointsCost>
+            <ExpiryDate>2026-05-15T15:41:59.9505397Z</ExpiryDate>
+            <Category>General</Category>
+          </Reward>
+          <Reward>
+            <RewardId>RWD-007</RewardId>
+            <Name>Reward 8</Name>
+            <Description>Description for reward 8</Description>
+            <PointsCost>575</PointsCost>
+            <ExpiryDate>2025-09-30T15:41:59.95054Z</ExpiryDate>
+            <Category>General</Category>
+          </Reward>
+          <Reward>
+            <RewardId>RWD-008</RewardId>
+            <Name>Reward 9</Name>
+            <Description>Description for reward 9</Description>
+            <PointsCost>443</PointsCost>
+            <ExpiryDate>2025-11-06T15:41:59.9505402Z</ExpiryDate>
+            <Category>General</Category>
+          </Reward>
+          <Reward>
+            <RewardId>RWD-009</RewardId>
+            <Name>Reward 10</Name>
+            <Description>Description for reward 10</Description>
+            <PointsCost>625</PointsCost>
+            <ExpiryDate>2025-08-30T15:41:59.9505405Z</ExpiryDate>
+            <Category>General</Category>
+          </Reward>
+          <Reward>
+            <RewardId>RWD-010</RewardId>
+            <Name>Reward 11</Name>
+            <Description>Description for reward 11</Description>
+            <PointsCost>308</PointsCost>
+            <ExpiryDate>2026-03-14T15:41:59.9505407Z</ExpiryDate>
+            <Category>General</Category>
+          </Reward>
+          <Reward>
+            <RewardId>RWD-011</RewardId>
+            <Name>Reward 12</Name>
+            <Description>Description for reward 12</Description>
+            <PointsCost>581</PointsCost>
+            <ExpiryDate>2026-01-03T15:41:59.950541Z</ExpiryDate>
+            <Category>General</Category>
+          </Reward>
+          <Reward>
+            <RewardId>RWD-012</RewardId>
+            <Name>Reward 13</Name>
+            <Description>Description for reward 13</Description>
+            <PointsCost>106</PointsCost>
+            <ExpiryDate>2025-09-09T15:41:59.9505412Z</ExpiryDate>
+            <Category>General</Category>
+          </Reward>
+          <Reward>
+            <RewardId>RWD-013</RewardId>
+            <Name>Reward 14</Name>
+            <Description>Description for reward 14</Description>
+            <PointsCost>676</PointsCost>
+            <ExpiryDate>2026-03-05T15:41:59.9505414Z</ExpiryDate>
+            <Category>General</Category>
+          </Reward>
+        </AvailableRewards>
+      </LoyaltyProgram>
+    </Customer>
+    <OrderItems>
+      <Item>
+        <ItemId>ITEM-002257-00</ItemId>
+        <Product>
+          <ProductId>PROD-000257</ProductId>
+          <SKU>SKU000257</SKU>
+          <Name>Product 57</Name>
+          <Description>Description for product 2257</Description>
+          <Brand>
+            <BrandId>BRAND-017</BrandId>
+            <Name>Brand 17</Name>
+            <LogoUrl>https://example.com/logos/brand17.png</LogoUrl>
+            <CountryOfOrigin>USA</CountryOfOrigin>
+            <EstablishedYear>1997</EstablishedYear>
+          </Brand>
+          <Category>
+            <CategoryId>CAT-007</CategoryId>
+            <Name>Category 7</Name>
+            <SubCategories />
+            <Attributes>
+              <Attribute>
+                <Name>Attribute 1</Name>
+                <Value>Value 1</Value>
+                <Unit>unit</Unit>
+                <IsRequired>true</IsRequired>
+              </Attribute>
+              <Attribute>
+                <Name>Attribute 2</Name>
+                <Value>Value 2</Value>
+                <Unit>unit</Unit>
+                <IsRequired>true</IsRequired>
+              </Attribute>
+              <Attribute>
+                <Name>Attribute 3</Name>
+                <Value>Value 3</Value>
+                <Unit>unit</Unit>
+                <IsRequired>false</IsRequired>
+              </Attribute>
+              <Attribute>
+                <Name>Attribute 4</Name>
+                <Value>Value 4</Value>
+                <Unit>unit</Unit>
+                <IsRequired>false</IsRequired>
+              </Attribute>
+              <Attribute>
+                <Name>Attribute 5</Name>
+                <Value>Value 5</Value>
+                <Unit>unit</Unit>
+                <IsRequired>false</IsRequired>
+              </Attribute>
+            </Attributes>
+          </Category>
+          <Specifications>
+            <Weight>
+              <Value>2.0564529796859494</Value>
+              <Unit>kg</Unit>
+            </Weight>
+            <Dimensions>
+              <Length>36.33878967787083</Length>
+              <Width>13.923520322387816</Width>
+              <Height>3.411436005221417</Height>
+              <Unit>cm</Unit>
+            </Dimensions>
+            <Material>Plastic</Material>
+            <Color>Color7</Color>
+            <Model>Model-7</Model>
+            <TechnicalSpecs>
+              <Spec>
+                <Name>Spec 1</Name>
+                <Value>Value 1</Value>
+                <Category>Technical</Category>
+              </Spec>
+              <Spec>
+                <Name>Spec 2</Name>
+                <Value>Value 2</Value>
+                <Category>Technical</Category>
+              </Spec>
+              <Spec>
+                <Name>Spec 3</Name>
+                <Value>Value 3</Value>
+                <Category>Technical</Category>
+              </Spec>
+            </TechnicalSpecs>
+            <Certifications>
+              <Certification>
+                <Name>Certification 1</Name>
+                <IssuingAuthority>Authority</IssuingAuthority>
+                <CertificationNumber>CERT-000000</CertificationNumber>
+                <ValidUntil>2026-07-11T15:41:59.9505494Z</ValidUntil>
+              </Certification>
+            </Certifications>
+          </Specifications>
+          <Images>
+            <Image>
+              <ImageId>IMG-002257-00</ImageId>
+              <Url>https://example.com/images/product2257_0.jpg</Url>
+              <AltText>Product image 1</AltText>
+              <Type>Primary</Type>
+              <SortOrder>0</SortOrder>
+              <Size>
+                <Width>846</Width>
+                <Height>342</Height>
+                <FileSizeBytes>67718</FileSizeBytes>
+              </Size>
+            </Image>
+            <Image>
+              <ImageId>IMG-002257-01</ImageId>
+              <Url>https://example.com/images/product2257_1.jpg</Url>
+              <AltText>Product image 2</AltText>
+              <Type>Gallery</Type>
+              <SortOrder>1</SortOrder>
+              <Size>
+                <Width>896</Width>
+                <Height>866</Height>
+                <FileSizeBytes>297370</FileSizeBytes>
+              </Size>
+            </Image>
+            <Image>
+              <ImageId>IMG-002257-02</ImageId>
+              <Url>https://example.com/images/product2257_2.jpg</Url>
+              <AltText>Product image 3</AltText>
+              <Type>Thumbnail</Type>
+              <SortOrder>2</SortOrder>
+              <Size>
+                <Width>400</Width>
+                <Height>777</Height>
+                <FileSizeBytes>243908</FileSizeBytes>
+              </Size>
+            </Image>
+            <Image>
+              <ImageId>IMG-002257-03</ImageId>
+              <Url>https://example.com/images/product2257_3.jpg</Url>
+              <AltText>Product image 4</AltText>
+              <Type>Zoom</Type>
+              <SortOrder>3</SortOrder>
+              <Size>
+                <Width>829</Width>
+                <Height>610</Height>
+                <FileSizeBytes>186964</FileSizeBytes>
+              </Size>
+            </Image>
+          </Images>
+          <Reviews>
+            <Review>
+              <ReviewId>REV-002257-00</ReviewId>
+              <ReviewerName>Reviewer 1</ReviewerName>
+              <Rating>2</Rating>
+              <Title>Review title 1</Title>
+              <Content>Review content 1</Content>
+              <ReviewDate>2024-07-21T15:41:59.9505531Z</ReviewDate>
+              <VerifiedPurchase>false</VerifiedPurchase>
+              <HelpfulCount>39</HelpfulCount>
+              <Images />
+            </Review>
+            <Review>
+              <ReviewId>REV-002257-01</ReviewId>
+              <ReviewerName>Reviewer 2</ReviewerName>
+              <Rating>2</Rating>
+              <Title>Review title 2</Title>
+              <Content>Review content 2</Content>
+              <ReviewDate>2024-09-11T15:41:59.9505537Z</ReviewDate>
+              <VerifiedPurchase>true</VerifiedPurchase>
+              <HelpfulCount>12</HelpfulCount>
+              <Images />
+            </Review>
+            <Review>
+              <ReviewId>REV-002257-02</ReviewId>
+              <ReviewerName>Reviewer 3</ReviewerName>
+              <Rating>1</Rating>
+              <Title>Review title 3</Title>
+              <Content>Review content 3</Content>
+              <ReviewDate>2024-08-07T15:41:59.950554Z</ReviewDate>
+              <VerifiedPurchase>false</VerifiedPurchase>
+              <HelpfulCount>3</HelpfulCount>
+              <Images />
+            </Review>
+            <Review>
+              <ReviewId>REV-002257-03</ReviewId>
+              <ReviewerName>Reviewer 4</ReviewerName>
+              <Rating>4</Rating>
+              <Title>Review title 4</Title>
+              <Content>Review content 4</Content>
+              <ReviewDate>2024-11-25T15:41:59.9505543Z</ReviewDate>
+              <VerifiedPurchase>true</VerifiedPurchase>
+              <HelpfulCount>10</HelpfulCount>
+              <Images />
+            </Review>
+            <Review>
+              <ReviewId>REV-002257-04</ReviewId>
+              <ReviewerName>Reviewer 5</ReviewerName>
+              <Rating>5</Rating>
+              <Title>Review title 5</Title>
+              <Content>Review content 5</Content>
+              <ReviewDate>2025-03-16T15:41:59.9505547Z</ReviewDate>
+              <VerifiedPurchase>false</VerifiedPurchase>
+              <HelpfulCount>31</HelpfulCount>
+              <Images />
+            </Review>
+            <Review>
+              <ReviewId>REV-002257-05</ReviewId>
+              <ReviewerName>Reviewer 6</ReviewerName>
+              <Rating>1</Rating>
+              <Title>Review title 6</Title>
+              <Content>Review content 6</Content>
+              <ReviewDate>2025-03-27T15:41:59.9505551Z</ReviewDate>
+              <VerifiedPurchase>true</VerifiedPurchase>
+              <HelpfulCount>13</HelpfulCount>
+              <Images />
+            </Review>
+            <Review>
+              <ReviewId>REV-002257-06</ReviewId>
+              <ReviewerName>Reviewer 7</ReviewerName>
+              <Rating>5</Rating>
+              <Title>Review title 7</Title>
+              <Content>Review content 7</Content>
+              <ReviewDate>2024-09-17T15:41:59.9505554Z</ReviewDate>
+              <VerifiedPurchase>true</VerifiedPurchase>
+              <HelpfulCount>9</HelpfulCount>
+              <Images />
+            </Review>
+            <Review>
+              <ReviewId>REV-002257-07</ReviewId>
+              <ReviewerName>Reviewer 8</ReviewerName>
+              <Rating>5</Rating>
+              <Title>Review title 8</Title>
+              <Content>Review content 8</Content>
+              <ReviewDate>2025-05-11T15:41:59.9505558Z</ReviewDate>
+              <VerifiedPurchase>false</VerifiedPurchase>
+              <HelpfulCount>27</HelpfulCount>
+              <Images />
+            </Review>
+            <Review>
+              <ReviewId>REV-002257-08</ReviewId>
+              <ReviewerName>Reviewer 9</ReviewerName>
+              <Rating>2</Rating>
+              <Title>Review title 9</Title>
+              <Content>Review content 9</Content>
+              <ReviewDate>2025-03-18T15:41:59.9505561Z</ReviewDate>
+              <VerifiedPurchase>false</VerifiedPurchase>
+              <HelpfulCount>20</HelpfulCount>
+              <Images />
+            </Review>
+            <Review>
+              <ReviewId>REV-002257-09</ReviewId>
+              <ReviewerName>Reviewer 10</ReviewerName>
+              <Rating>2</Rating>
+              <Title>Review title 10</Title>
+              <Content>Review content 10</Content>
+              <ReviewDate>2024-10-10T15:41:59.9505565Z</ReviewDate>
+              <VerifiedPurchase>false</VerifiedPurchase>
+              <HelpfulCount>26</HelpfulCount>
+              <Images />
+            </Review>
+          </Reviews>
+          <Ratings>
+            <AverageRating>3.437449122051452</AverageRating>
+            <TotalReviews>15</TotalReviews>
+            <RatingDistribution>
+              <Distribution>
+                <Stars>1</Stars>
+                <Count>23</Count>
+                <Percentage>91.16720743066035</Percentage>
+              </Distribution>
+              <Distribution>
+                <Stars>2</Stars>
+                <Count>26</Count>
+                <Percentage>5.5014764915692975</Percentage>
+              </Distribution>
+              <Distribution>
+                <Stars>3</Stars>
+                <Count>95</Count>
+                <Percentage>40.054381843681625</Percentage>
+              </Distribution>
+              <Distribution>
+                <Stars>4</Stars>
+                <Count>34</Count>
+                <Percentage>55.619287982405766</Percentage>
+              </Distribution>
+              <Distribution>
+                <Stars>5</Stars>
+                <Count>99</Count>
+                <Percentage>24.455728626090906</Percentage>
+              </Distribution>
+            </RatingDistribution>
+          </Ratings>
+        </Product>
+        <Quantity>1</Quantity>
+        <Pricing>
+          <UnitPrice>33.3084596802054</UnitPrice>
+          <DiscountAmount>0</DiscountAmount>
+          <TaxAmount>13.6366076132453</TaxAmount>
+          <TotalPrice>424.187990265986</TotalPrice>
+          <AppliedDiscounts>
+            <Discount>
+              <DiscountId>DISC-000</DiscountId>
+              <Name>Discount 1</Name>
+              <Type>Percentage</Type>
+              <Amount>12.4788304383302</Amount>
+              <Percentage>15.709883233397212</Percentage>
+            </Discount>
+          </AppliedDiscounts>
+          <TaxBreakdown>
+            <Tax>
+              <TaxName>Tax 1</TaxName>
+              <Rate>0.09164693862742136</Rate>
+              <Amount>12.9094708864156</Amount>
+              <Jurisdiction>State</Jurisdiction>
+            </Tax>
+            <Tax>
+              <TaxName>Tax 2</TaxName>
+              <Rate>0.004029924261397646</Rate>
+              <Amount>3.6670486552953</Amount>
+              <Jurisdiction>State</Jurisdiction>
+            </Tax>
+          </TaxBreakdown>
+        </Pricing>
+        <Customizations>
+          <Options>
+            <Option>
+              <OptionId>OPT-000</OptionId>
+              <Name>Option 1</Name>
+              <Value>Value 1</Value>
+              <AdditionalCost>2.03122069222444</AdditionalCost>
+            </Option>
+          </Options>
+          <PersonalizationText />
+          <GiftWrap>
+            <IsGiftWrap>true</IsGiftWrap>
+            <WrapType>Standard</WrapType>
+            <GiftMessage />
+            <Cost>5.99</Cost>
+          </GiftWrap>
+        </Customizations>
+        <FulfillmentOptions>
+          <Option>
+            <OptionId>FO-000</OptionId>
+            <Type>StandardDelivery</Type>
+            <EstimatedDelivery>2025-07-15T15:41:59.9505619Z</EstimatedDelivery>
+            <Cost>19.1563577480411</Cost>
+            <Carrier>Carrier 1</Carrier>
+            <ServiceLevel>Standard</ServiceLevel>
+          </Option>
+          <Option>
+            <OptionId>FO-001</OptionId>
+            <Type>ExpressDelivery</Type>
+            <EstimatedDelivery>2025-07-14T15:41:59.9505623Z</EstimatedDelivery>
+            <Cost>37.4688224342972</Cost>
+            <Carrier>Carrier 2</Carrier>
+            <ServiceLevel>Standard</ServiceLevel>
+          </Option>
+        </FulfillmentOptions>
+        <InventoryInfo>
+          <AvailableQuantity>26</AvailableQuantity>
+          <ReservedQuantity>1</ReservedQuantity>
+          <WarehouseLocation>WH-2</WarehouseLocation>
+          <LastUpdated>2025-07-11T15:20:59.9505628Z</LastUpdated>
+          <RestockDate>2025-07-14T15:41:59.9505629Z</RestockDate>
+          <Supplier>
+            <SupplierId>SUP-007</SupplierId>
+            <Name>Supplier 4</Name>
+            <LeadTime>P7D</LeadTime>
+            <ReliabilityScore>0.020350428307592136</ReliabilityScore>
+          </Supplier>
+        </InventoryInfo>
+        <Warranties />
+      </Item>
+      <Item>
+        <ItemId>ITEM-002257-01</ItemId>
+        <Product>
+          <ProductId>PROD-000258</ProductId>
+          <SKU>SKU000258</SKU>
+          <Name>Product 58</Name>
+          <Description>Description for product 2258</Description>
+          <Brand>
+            <BrandId>BRAND-018</BrandId>
+            <Name>Brand 18</Name>
+            <LogoUrl>https://example.com/logos/brand18.png</LogoUrl>
+            <CountryOfOrigin>USA</CountryOfOrigin>
+            <EstablishedYear>1998</EstablishedYear>
+          </Brand>
+          <Category>
+            <CategoryId>CAT-008</CategoryId>
+            <Name>Category 8</Name>
+            <SubCategories />
+            <Attributes>
+              <Attribute>
+                <Name>Attribute 1</Name>
+                <Value>Value 1</Value>
+                <Unit>unit</Unit>
+                <IsRequired>true</IsRequired>
+              </Attribute>
+              <Attribute>
+                <Name>Attribute 2</Name>
+                <Value>Value 2</Value>
+                <Unit>unit</Unit>
+                <IsRequired>true</IsRequired>
+              </Attribute>
+            </Attributes>
+          </Category>
+          <Specifications>
+            <Weight>
+              <Value>1.6906139144630237</Value>
+              <Unit>kg</Unit>
+            </Weight>
+            <Dimensions>
+              <Length>41.44768872132883</Length>
+              <Width>18.0436602928879</Width>
+              <Height>9.650433344603718</Height>
+              <Unit>cm</Unit>
+            </Dimensions>
+            <Material>Plastic</Material>
+            <Color>Color8</Color>
+            <Model>Model-8</Model>
+            <TechnicalSpecs>
+              <Spec>
+                <Name>Spec 1</Name>
+                <Value>Value 1</Value>
+                <Category>Technical</Category>
+              </Spec>
+              <Spec>
+                <Name>Spec 2</Name>
+                <Value>Value 2</Value>
+                <Category>Technical</Category>
+              </Spec>
+              <Spec>
+                <Name>Spec 3</Name>
+                <Value>Value 3</Value>
+                <Category>Technical</Category>
+              </Spec>
+              <Spec>
+                <Name>Spec 4</Name>
+                <Value>Value 4</Value>
+                <Category>Technical</Category>
+              </Spec>
+              <Spec>
+                <Name>Spec 5</Name>
+                <Value>Value 5</Value>
+                <Category>Technical</Category>
+              </Spec>
+            </TechnicalSpecs>
+            <Certifications>
+              <Certification>
+                <Name>Certification 1</Name>
+                <IssuingAuthority>Authority</IssuingAuthority>
+                <CertificationNumber>CERT-000000</CertificationNumber>
+                <ValidUntil>2026-07-11T15:41:59.9505667Z</ValidUntil>
+              </Certification>
+            </Certifications>
+          </Specifications>
+          <Images>
+            <Image>
+              <ImageId>IMG-002258-00</ImageId>
+              <Url>https://example.com/images/product2258_0.jpg</Url>
+              <AltText>Product image 1</AltText>
+              <Type>Primary</Type>
+              <SortOrder>0</SortOrder>
+              <Size>
+                <Width>361</Width>
+                <Height>696</Height>
+                <FileSizeBytes>285628</FileSizeBytes>
+              </Size>
+            </Image>
+            <Image>
+              <ImageId>IMG-002258-01</ImageId>
+              <Url>https://example.com/images/product2258_1.jpg</Url>
+              <AltText>Product image 2</AltText>
+              <Type>Gallery</Type>
+              <SortOrder>1</SortOrder>
+              <Size>
+                <Width>910</Width>
+                <Height>349</Height>
+                <FileSizeBytes>71692</FileSizeBytes>
+              </Size>
+            </Image>
+            <Image>
+              <ImageId>IMG-002258-02</ImageId>
+              <Url>https://example.com/images/product2258_2.jpg</Url>
+              <AltText>Product image 3</AltText>
+              <Type>Thumbnail</Type>
+              <SortOrder>2</SortOrder>
+              <Size>
+                <Width>458</Width>
+                <Height>912</Height>
+                <FileSizeBytes>221123</FileSizeBytes>
+              </Size>
+            </Image>
+            <Image>
+              <ImageId>IMG-002258-03</ImageId>
+              <Url>https://example.com/images/product2258_3.jpg</Url>
+              <AltText>Product image 4</AltText>
+              <Type>Zoom</Type>
+              <SortOrder>3</SortOrder>
+              <Size>
+                <Width>393</Width>
+                <Height>880</Height>
+                <FileSizeBytes>363467</FileSizeBytes>
+              </Size>
+            </Image>
+            <Image>
+              <ImageId>IMG-002258-04</ImageId>
+              <Url>https://example.com/images/product2258_4.jpg</Url>
+              <AltText>Product image 5</AltText>
+              <Type>Lifestyle</Type>
+              <SortOrder>4</SortOrder>
+              <Size>
+                <Width>393</Width>
+                <Height>687</Height>
+                <FileSizeBytes>36821</FileSizeBytes>
+              </Size>
+            </Image>
+            <Image>
+              <ImageId>IMG-002258-05</ImageId>
+              <Url>https://example.com/images/product2258_5.jpg</Url>
+              <AltText>Product image 6</AltText>
+              <Type>Technical</Type>
+              <SortOrder>5</SortOrder>
+              <Size>
+                <Width>688</Width>
+                <Height>860</Height>
+                <FileSizeBytes>485450</FileSizeBytes>
+              </Size>
+            </Image>
+            <Image>
+              <ImageId>IMG-002258-06</ImageId>
+              <Url>https://example.com/images/product2258_6.jpg</Url>
+              <AltText>Product image 7</AltText>
+              <Type>Primary</Type>
+              <SortOrder>6</SortOrder>
+              <Size>
+                <Width>215</Width>
+                <Height>519</Height>
+                <FileSizeBytes>369711</FileSizeBytes>
+              </Size>
+            </Image>
+          </Images>
+          <Reviews>
+            <Review>
+              <ReviewId>REV-002258-00</ReviewId>
+              <ReviewerName>Reviewer 1</ReviewerName>
+              <Rating>4</Rating>
+              <Title>Review title 1</Title>
+              <Content>Review content 1</Content>
+              <ReviewDate>2024-08-18T15:41:59.95057Z</ReviewDate>
+              <VerifiedPurchase>true</VerifiedPurchase>
+              <HelpfulCount>24</HelpfulCount>
+              <Images />
+            </Review>
+            <Review>
+              <ReviewId>REV-002258-01</ReviewId>
+              <ReviewerName>Reviewer 2</ReviewerName>
+              <Rating>2</Rating>
+              <Title>Review title 2</Title>
+              <Content>Review content 2</Content>
+              <ReviewDate>2025-05-22T15:41:59.9505704Z</ReviewDate>
+              <VerifiedPurchase>true</VerifiedPurchase>
+              <HelpfulCount>21</HelpfulCount>
+              <Images />
+            </Review>
+            <Review>
+              <ReviewId>REV-002258-02</ReviewId>
+              <ReviewerName>Reviewer 3</ReviewerName>
+              <Rating>2</Rating>
+              <Title>Review title 3</Title>
+              <Content>Review content 3</Content>
+              <ReviewDate>2025-02-14T15:41:59.9505707Z</ReviewDate>
+              <VerifiedPurchase>true</VerifiedPurchase>
+              <HelpfulCount>33</HelpfulCount>
+              <Images />
+            </Review>
+            <Review>
+              <ReviewId>REV-002258-03</ReviewId>
+              <ReviewerName>Reviewer 4</ReviewerName>
+              <Rating>2</Rating>
+              <Title>Review title 4</Title>
+              <Content>Review content 4</Content>
+              <ReviewDate>2024-12-02T15:41:59.9505711Z</ReviewDate>
+              <VerifiedPurchase>true</VerifiedPurchase>
+              <HelpfulCount>10</HelpfulCount>
+              <Images />
+            </Review>
+            <Review>
+              <ReviewId>REV-002258-04</ReviewId>
+              <ReviewerName>Reviewer 5</ReviewerName>
+              <Rating>1</Rating>
+              <Title>Review title 5</Title>
+              <Content>Review content 5</Content>
+              <ReviewDate>2024-07-29T15:41:59.9505714Z</ReviewDate>
+              <VerifiedPurchase>false</VerifiedPurchase>
+              <HelpfulCount>35</HelpfulCount>
+              <Images />
+            </Review>
+            <Review>
+              <ReviewId>REV-002258-05</ReviewId>
+              <ReviewerName>Reviewer 6</ReviewerName>
+              <Rating>4</Rating>
+              <Title>Review title 6</Title>
+              <Content>Review content 6</Content>
+              <ReviewDate>2024-12-10T15:41:59.9505718Z</ReviewDate>
+              <VerifiedPurchase>false</VerifiedPurchase>
+              <HelpfulCount>35</HelpfulCount>
+              <Images />
+            </Review>
+            <Review>
+              <ReviewId>REV-002258-06</ReviewId>
+              <ReviewerName>Reviewer 7</ReviewerName>
+              <Rating>5</Rating>
+              <Title>Review title 7</Title>
+              <Content>Review content 7</Content>
+              <ReviewDate>2025-07-02T15:41:59.9505722Z</ReviewDate>
+              <VerifiedPurchase>true</VerifiedPurchase>
+              <HelpfulCount>3</HelpfulCount>
+              <Images />
+            </Review>
+            <Review>
+              <ReviewId>REV-002258-07</ReviewId>
+              <ReviewerName>Reviewer 8</ReviewerName>
+              <Rating>1</Rating>
+              <Title>Review title 8</Title>
+              <Content>Review content 8</Content>
+              <ReviewDate>2025-07-04T15:41:59.9505725Z</ReviewDate>
+              <VerifiedPurchase>false</VerifiedPurchase>
+              <HelpfulCount>17</HelpfulCount>
+              <Images />
+            </Review>
+            <Review>
+              <ReviewId>REV-002258-08</ReviewId>
+              <ReviewerName>Reviewer 9</ReviewerName>
+              <Rating>3</Rating>
+              <Title>Review title 9</Title>
+              <Content>Review content 9</Content>
+              <ReviewDate>2024-12-06T15:41:59.9505728Z</ReviewDate>
+              <VerifiedPurchase>true</VerifiedPurchase>
+              <HelpfulCount>17</HelpfulCount>
+              <Images />
+            </Review>
+            <Review>
+              <ReviewId>REV-002258-09</ReviewId>
+              <ReviewerName>Reviewer 10</ReviewerName>
+              <Rating>4</Rating>
+              <Title>Review title 10</Title>
+              <Content>Review content 10</Content>
+              <ReviewDate>2025-04-16T15:41:59.9505732Z</ReviewDate>
+              <VerifiedPurchase>true</VerifiedPurchase>
+              <HelpfulCount>30</HelpfulCount>
+              <Images />
+            </Review>
+            <Review>
+              <ReviewId>REV-002258-10</ReviewId>
+              <ReviewerName>Reviewer 11</ReviewerName>
+              <Rating>2</Rating>
+              <Title>Review title 11</Title>
+              <Content>Review content 11</Content>
+              <ReviewDate>2024-09-05T15:41:59.9505736Z</ReviewDate>
+              <VerifiedPurchase>true</VerifiedPurchase>
+              <HelpfulCount>6</HelpfulCount>
+              <Images />
+            </Review>
+            <Review>
+              <ReviewId>REV-002258-11</ReviewId>
+              <ReviewerName>Reviewer 12</ReviewerName>
+              <Rating>5</Rating>
+              <Title>Review title 12</Title>
+              <Content>Review content 12</Content>
+              <ReviewDate>2025-04-22T15:41:59.9505739Z</ReviewDate>
+              <VerifiedPurchase>true</VerifiedPurchase>
+              <HelpfulCount>48</HelpfulCount>
+              <Images />
+            </Review>
+            <Review>
+              <ReviewId>REV-002258-12</ReviewId>
+              <ReviewerName>Reviewer 13</ReviewerName>
+              <Rating>3</Rating>
+              <Title>Review title 13</Title>
+              <Content>Review content 13</Content>
+              <ReviewDate>2024-09-20T15:41:59.9505742Z</ReviewDate>
+              <VerifiedPurchase>true</VerifiedPurchase>
+              <HelpfulCount>33</HelpfulCount>
+              <Images />
+            </Review>
+            <Review>
+              <ReviewId>REV-002258-13</ReviewId>
+              <ReviewerName>Reviewer 14</ReviewerName>
+              <Rating>5</Rating>
+              <Title>Review title 14</Title>
+              <Content>Review content 14</Content>
+              <ReviewDate>2025-05-21T15:41:59.9505746Z</ReviewDate>
+              <VerifiedPurchase>false</VerifiedPurchase>
+              <HelpfulCount>17</HelpfulCount>
+              <Images />
+            </Review>
+          </Reviews>
+          <Ratings>
+            <AverageRating>3.218367053297519</AverageRating>
+            <TotalReviews>213</TotalReviews>
+            <RatingDistribution>
+              <Distribution>
+                <Stars>1</Stars>
+                <Count>72</Count>
+                <Percentage>70.5014715765144</Percentage>
+              </Distribution>
+              <Distribution>
+                <Stars>2</Stars>
+                <Count>89</Count>
+                <Percentage>90.55301914482983</Percentage>
+              </Distribution>
+              <Distribution>
+                <Stars>3</Stars>
+                <Count>55</Count>
+                <Percentage>11.882892256548113</Percentage>
+              </Distribution>
+              <Distribution>
+                <Stars>4</Stars>
+                <Count>59</Count>
+                <Percentage>75.98602379485314</Percentage>
+              </Distribution>
+              <Distribution>
+                <Stars>5</Stars>
+                <Count>5</Count>
+                <Percentage>35.224587114166745</Percentage>
+              </Distribution>
+            </RatingDistribution>
+          </Ratings>
+        </Product>
+        <Quantity>1</Quantity>
+        <Pricing>
+          <UnitPrice>68.7642193114218</UnitPrice>
+          <DiscountAmount>0</DiscountAmount>
+          <TaxAmount>21.5025727737241</TaxAmount>
+          <TotalPrice>222.543721167624</TotalPrice>
+          <AppliedDiscounts />
+          <TaxBreakdown>
+            <Tax>
+              <TaxName>Tax 1</TaxName>
+              <Rate>0.06320037968140113</Rate>
+              <Amount>6.09146712631521</Amount>
+              <Jurisdiction>State</Jurisdiction>
+            </Tax>
+          </TaxBreakdown>
+        </Pricing>
+        <Customizations>
+          <Options>
+            <Option>
+              <OptionId>OPT-000</OptionId>
+              <Name>Option 1</Name>
+              <Value>Value 1</Value>
+              <AdditionalCost>19.1484212312607</AdditionalCost>
+            </Option>
+          </Options>
+          <PersonalizationText />
+          <GiftWrap>
+            <IsGiftWrap>true</IsGiftWrap>
+            <WrapType>Standard</WrapType>
+            <GiftMessage />
+            <Cost>5.99</Cost>
+          </GiftWrap>
+        </Customizations>
+        <FulfillmentOptions>
+          <Option>
+            <OptionId>FO-000</OptionId>
+            <Type>StandardDelivery</Type>
+            <EstimatedDelivery>2025-07-13T15:41:59.9505761Z</EstimatedDelivery>
+            <Cost>3.54675983709598</Cost>
+            <Carrier>Carrier 1</Carrier>
+            <ServiceLevel>Standard</ServiceLevel>
+          </Option>
+          <Option>
+            <OptionId>FO-001</OptionId>
+            <Type>ExpressDelivery</Type>
+            <EstimatedDelivery>2025-07-18T15:41:59.9505764Z</EstimatedDelivery>
+            <Cost>0.651092757774094</Cost>
+            <Carrier>Carrier 2</Carrier>
+            <ServiceLevel>Standard</ServiceLevel>
+          </Option>
+        </FulfillmentOptions>
+        <InventoryInfo>
+          <AvailableQuantity>48</AvailableQuantity>
+          <ReservedQuantity>4</ReservedQuantity>
+          <WarehouseLocation>WH-2</WarehouseLocation>
+          <LastUpdated>2025-07-11T15:23:59.9505767Z</LastUpdated>
+          <RestockDate>2025-07-17T15:41:59.9505767Z</RestockDate>
+          <Supplier>
+            <SupplierId>SUP-005</SupplierId>
+            <Name>Supplier 6</Name>
+            <LeadTime>P12D</LeadTime>
+            <ReliabilityScore>0.3563593464700316</ReliabilityScore>
+          </Supplier>
+        </InventoryInfo>
+        <Warranties />
+      </Item>
+    </OrderItems>
+    <Pricing>
+      <Subtotal>373.256312950168</Subtotal>
+      <TotalDiscount>0</TotalDiscount>
+      <TotalTax>9.7848162566241</TotalTax>
+      <ShippingCost>23.7730999937156</ShippingCost>
+      <HandlingFee>3.72235869696474</HandlingFee>
+      <Total>564.8808901966</Total>
+      <Currency>USD</Currency>
+      <PaymentBreakdown>
+        <Payment>
+          <Method>Credit Card</Method>
+          <Amount>252.273553261661</Amount>
+          <Status>Captured</Status>
+        </Payment>
+      </PaymentBreakdown>
+    </Pricing>
+    <Fulfillment>
+      <FulfillmentId>FUL-002257</FulfillmentId>
+      <Status>Processing</Status>
+      <Method>StandardShipping</Method>
+      <ShippingAddress>
+        <AddressId />
+        <Type>Home</Type>
+        <Line1 />
+        <Line2 />
+        <City />
+        <StateProvince />
+        <PostalCode />
+        <Country />
+        <Coordinates>
+          <Latitude>0</Latitude>
+          <Longitude>0</Longitude>
+          <Accuracy>0</Accuracy>
+        </Coordinates>
+        <IsDefault>false</IsDefault>
+        <IsValidated>false</IsValidated>
+      </ShippingAddress>
+      <EstimatedDelivery>2025-07-18T15:41:59.9505793Z</EstimatedDelivery>
+      <ActualDelivery p4:nil="true" xmlns:p4="http://www.w3.org/2001/XMLSchema-instance" />
+      <TrackingInfo>
+        <Tracking>
+          <TrackingNumber>TRK0000002257</TrackingNumber>
+          <Carrier>UPS</Carrier>
+          <ServiceType>Ground</ServiceType>
+          <EstimatedDelivery>2025-07-14T15:41:59.9505798Z</EstimatedDelivery>
+          <TrackingEvents />
+        </Tracking>
+      </TrackingInfo>
+      <Shipments />
+    </Fulfillment>
+    <Payment>
+      <PaymentId>PAY-002257</PaymentId>
+      <Status>Authorized</Status>
+      <Method>
+        <PaymentMethodId />
+        <Type>CreditCard</Type>
+        <IsDefault>false</IsDefault>
+        <CardInfo>
+          <Last4Digits />
+          <Brand />
+          <ExpiryMonth>0</ExpiryMonth>
+          <ExpiryYear>0</ExpiryYear>
+          <BillingAddress>
+            <AddressId />
+            <Type>Home</Type>
+            <Line1 />
+            <Line2 />
+            <City />
+            <StateProvince />
+            <PostalCode />
+            <Country />
+            <Coordinates>
+              <Latitude>0</Latitude>
+              <Longitude>0</Longitude>
+              <Accuracy>0</Accuracy>
+            </Coordinates>
+            <IsDefault>false</IsDefault>
+            <IsValidated>false</IsValidated>
+          </BillingAddress>
+        </CardInfo>
+        <BankAccount>
+          <RoutingNumber />
+          <Last4Digits />
+          <AccountType />
+          <BankName />
+        </BankAccount>
+        <DigitalWallet>
+          <Provider />
+          <WalletId />
+          <IsVerified>false</IsVerified>
+        </DigitalWallet>
+      </Method>
+      <AuthorizationCode>AUTH605830</AuthorizationCode>
+      <TransactionId>TXN-00002257</TransactionId>
+      <PaymentHistory />
+      <FraudCheck>
+        <Score>0.4507882238602211</Score>
+        <RiskLevel>Low</RiskLevel>
+        <Decision>Approve</Decision>
+        <Flags />
+      </FraudCheck>
+    </Payment>
+    <Promotions>
+      <Promotion>
+        <PromotionId>PROMO-000</PromotionId>
+        <Name>Promotion 1</Name>
+        <Type>PercentageDiscount</Type>
+        <Code>SAVE1</Code>
+        <Description>Description for promotion 1</Description>
+        <DiscountAmount>18.9645248087889</DiscountAmount>
+        <DiscountPercentage>7.311296997271151</DiscountPercentage>
+        <ValidFrom>2025-06-11T15:41:59.9505826Z</ValidFrom>
+        <ValidUntil>2025-08-10T15:41:59.9505826Z</ValidUntil>
+        <Terms>
+          <MinOrderValue>86.4540185483424</MinOrderValue>
+          <MaxDiscount>66.2162935203949</MaxDiscount>
+          <UsageLimit>701</UsageLimit>
+          <CustomerUsageLimit>1</CustomerUsageLimit>
+          <EligibleProducts />
+          <ExcludedProducts />
+        </Terms>
+      </Promotion>
+    </Promotions>
+    <OrderHistory>
+      <Event>
+        <EventId>EVT-002257-00</EventId>
+        <Type>Created</Type>
+        <Timestamp>2025-07-10T08:41:59.9505836Z</Timestamp>
+        <Description>Order event 1</Description>
+        <UserId>user7</UserId>
+        <Details>Event details 1</Details>
+        <SystemGenerated>true</SystemGenerated>
+      </Event>
+      <Event>
+        <EventId>EVT-002257-01</EventId>
+        <Type>Modified</Type>
+        <Timestamp>2025-07-09T09:41:59.9505844Z</Timestamp>
+        <Description>Order event 2</Description>
+        <UserId>user7</UserId>
+        <Details>Event details 2</Details>
+        <SystemGenerated>false</SystemGenerated>
+      </Event>
+      <Event>
+        <EventId>EVT-002257-02</EventId>
+        <Type>Confirmed</Type>
+        <Timestamp>2025-07-10T19:41:59.9505847Z</Timestamp>
+        <Description>Order event 3</Description>
+        <UserId>user7</UserId>
+        <Details>Event details 3</Details>
+        <SystemGenerated>true</SystemGenerated>
+      </Event>
+      <Event>
+        <EventId>EVT-002257-03</EventId>
+        <Type>PaymentProcessed</Type>
+        <Timestamp>2025-07-11T02:41:59.9505851Z</Timestamp>
+        <Description>Order event 4</Description>
+        <UserId>user7</UserId>
+        <Details>Event details 4</Details>
+        <SystemGenerated>false</SystemGenerated>
+      </Event>
+      <Event>
+        <EventId>EVT-002257-04</EventId>
+        <Type>Shipped</Type>
+        <Timestamp>2025-07-10T02:41:59.9505854Z</Timestamp>
+        <Description>Order event 5</Description>
+        <UserId>user7</UserId>
+        <Details>Event details 5</Details>
+        <SystemGenerated>true</SystemGenerated>
+      </Event>
+      <Event>
+        <EventId>EVT-002257-05</EventId>
+        <Type>Delivered</Type>
+        <Timestamp>2025-07-08T19:41:59.9505857Z</Timestamp>
+        <Description>Order event 6</Description>
+        <UserId>user7</UserId>
+        <Details>Event details 6</Details>
+        <SystemGenerated>false</SystemGenerated>
+      </Event>
+    </OrderHistory>
+  </OrderData>
+  <ValidationMessages />
+  <AuditTrail>
+    <AuditEntry>
+      <EntryId>AUD-002257-00</EntryId>
+      <Timestamp>2025-07-11T00:18:59.9505865Z</Timestamp>
+      <UserId>user7</UserId>
+      <Action>Action1</Action>
+      <EntityType>Order</EntityType>
+      <EntityId>ORD-002257</EntityId>
+      <Changes>Changes 1</Changes>
+      <IPAddress>192.168.1.251</IPAddress>
+      <UserAgent>ComparisonTool/2.1</UserAgent>
+    </AuditEntry>
+    <AuditEntry>
+      <EntryId>AUD-002257-01</EntryId>
+      <Timestamp>2025-07-10T23:36:59.9505873Z</Timestamp>
+      <UserId>user7</UserId>
+      <Action>Action2</Action>
+      <EntityType>Order</EntityType>
+      <EntityId>ORD-002257</EntityId>
+      <Changes>Changes 2</Changes>
+      <IPAddress>192.168.1.123</IPAddress>
+      <UserAgent>ComparisonTool/2.1</UserAgent>
+    </AuditEntry>
+    <AuditEntry>
+      <EntryId>AUD-002257-02</EntryId>
+      <Timestamp>2025-07-10T23:50:59.9505878Z</Timestamp>
+      <UserId>user7</UserId>
+      <Action>Action3</Action>
+      <EntityType>Order</EntityType>
+      <EntityId>ORD-002257</EntityId>
+      <Changes>Changes 3</Changes>
+      <IPAddress>192.168.1.188</IPAddress>
+      <UserAgent>ComparisonTool/2.1</UserAgent>
+    </AuditEntry>
+  </AuditTrail>
+</OrderManagementResponse>

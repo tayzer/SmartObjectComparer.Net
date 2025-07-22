@@ -98,6 +98,14 @@ namespace ComparisonTool.Core.Comparison.Configuration
             var propertyName = GetPropertyName(difference.PropertyName);
             var propertyType = GetPropertyType(difference, modelType);
 
+            // Special handling for unknown element scenarios - ignore differences where one side has default values
+            // and the other side has null, which often indicates unknown elements not being deserialized
+            if (IsUnknownElementScenario(difference))
+            {
+                _logger.LogDebug("Ignoring potential unknown element difference for property: {PropertyName}", propertyName);
+                return true;
+            }
+
             foreach (var rule in rules)
             {
                 if (MatchesRule(propertyName, propertyType, rule))
@@ -107,6 +115,55 @@ namespace ComparisonTool.Core.Comparison.Configuration
                     return true;
                 }
             }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Check if this difference represents an unknown element scenario (null vs default value)
+        /// </summary>
+        private bool IsUnknownElementScenario(Difference difference)
+        {
+            var value1 = difference.Object1Value;
+            var value2 = difference.Object2Value;
+
+            // Check for null vs default value scenarios
+            if ((value1 == null && IsDefaultValue(value2)) || 
+                (value2 == null && IsDefaultValue(value1)))
+            {
+                return true;
+            }
+
+            // Check for collection count differences where one is 0 (empty/default) and other is null
+            if (difference.PropertyName?.Contains("Count") == true)
+            {
+                if ((value1?.Equals(0) == true && value2 == null) ||
+                    (value2?.Equals(0) == true && value1 == null))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Check if a value represents a default value for its type
+        /// </summary>
+        private bool IsDefaultValue(object value)
+        {
+            if (value == null) return true;
+
+            var type = value.GetType();
+
+            if (type == typeof(int) && value.Equals(0)) return true;
+            if (type == typeof(double) && value.Equals(0.0)) return true;
+            if (type == typeof(decimal) && value.Equals(0m)) return true;
+            if (type == typeof(bool) && value.Equals(false)) return true;
+            if (type == typeof(string) && string.IsNullOrEmpty((string)value)) return true;
+            if (type == typeof(DateTime) && value.Equals(DateTime.MinValue)) return true;
+            if (type == typeof(Guid) && value.Equals(Guid.Empty)) return true;
+            if (type == typeof(TimeSpan) && value.Equals(TimeSpan.Zero)) return true;
 
             return false;
         }

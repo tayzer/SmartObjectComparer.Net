@@ -472,7 +472,6 @@ public class FileUtilities : IFileUtilities
     {
         return category switch
         {
-            DifferenceCategory.TextContentChanged => "Text Content Changed",
             DifferenceCategory.NumericValueChanged => "Numeric Value Changed",
             DifferenceCategory.DateTimeChanged => "Date/Time Changed",
             DifferenceCategory.BooleanValueChanged => "Boolean Value Changed",
@@ -480,6 +479,7 @@ public class FileUtilities : IFileUtilities
             DifferenceCategory.ItemAdded => "Item Added",
             DifferenceCategory.ItemRemoved => "Item Removed",
             DifferenceCategory.NullValueChange => "Null Value Change",
+            DifferenceCategory.ValueChanged => "Value Changed",
             _ => "Other"
         };
     }

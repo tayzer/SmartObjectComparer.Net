@@ -39,19 +39,22 @@ public class ComplexOrderResponse
 
 public class ResponseMetadata
 {
-    [XmlElement(ElementName = "Region")]
+    [XmlElement(ElementName = "Region", Order = 1)]
     public string Region { get; set; } = "US-EAST-1";
 
-    [XmlElement(ElementName = "Environment")]
+    [XmlElement(ElementName = "TestValue", Order = 2)]
+    public int? TestValue { get; set; }
+
+    [XmlElement(ElementName = "Environment", Order = 3)]
     public string Environment { get; set; } = "Production";
 
-    [XmlElement(ElementName = "ServerInfo")]
+    [XmlElement(ElementName = "ServerInfo", Order = 4)]
     public ServerInfo ServerInfo { get; set; } = new();
 
-    [XmlElement(ElementName = "Performance")]
+    [XmlElement(ElementName = "Performance", Order = 5)]
     public PerformanceMetrics Performance { get; set; } = new();
 
-    [XmlArray(ElementName = "Features")]
+    [XmlArray(ElementName = "Features", Order = 6)]
     [XmlArrayItem(ElementName = "Feature")]
     public List<FeatureFlag> EnabledFeatures { get; set; } = new();
 }

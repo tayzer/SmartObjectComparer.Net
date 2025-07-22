@@ -1,5 +1,6 @@
 @namespace ComparisonTool.Web.Components.Comparison
 @using ComparisonTool.Core.Comparison.Analysis
+@using System.Text.RegularExpressions
 
 <style>
     .object-viewer-container {
@@ -19,9 +20,44 @@
         background-color: #e9ecef;
     }
     
+    .collection-group-header {
+        background-color: #e3f2fd;
+        border-bottom: 1px solid #bbdefb;
+        padding: 0.75rem 1rem;
+        cursor: pointer;
+        transition: background-color 0.15s ease-in-out;
+    }
+    
+    .collection-group-header:hover {
+        background-color: #bbdefb;
+    }
+    
+    .collection-item-header {
+        background-color: #f3e5f5;
+        border-bottom: 1px solid #ce93d8;
+        padding: 0.5rem 1rem;
+        cursor: pointer;
+        transition: background-color 0.15s ease-in-out;
+        margin-left: 1rem;
+    }
+    
+    .collection-item-header:hover {
+        background-color: #ce93d8;
+    }
+    
     .object-group-content {
         border-left: 3px solid #007bff;
         margin-left: 1rem;
+    }
+    
+    .collection-group-content {
+        border-left: 3px solid #2196f3;
+        margin-left: 1rem;
+    }
+    
+    .collection-item-content {
+        border-left: 3px solid #9c27b0;
+        margin-left: 2rem;
     }
     
     .child-pattern-row {
@@ -56,87 +92,462 @@
         border-radius: 0.25rem;
         margin-bottom: 0.5rem;
     }
+    
+    .collection-indicator {
+        background-color: #e3f2fd;
+        color: #0d47a1;
+        padding: 0.1rem 0.3rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+    
+    .item-indicator {
+        background-color: #f3e5f5;
+        color: #4a148c;
+        padding: 0.1rem 0.3rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+
+    .nested-object-group {
+        margin-left: 1rem;
+        border-left: 2px solid #e9ecef !important;
+        padding-left: 1rem;
+    }
+
+    .nested-object-header {
+        cursor: pointer;
+        padding: 0.5rem;
+        border-radius: 0.25rem;
+        transition: background-color 0.15s ease-in-out;
+        background-color: #fff8e1;
+        border: 1px solid #ffcc02;
+    }
+
+    .nested-object-header:hover {
+        background-color: #fff3c4;
+    }
+
+    .nested-object-indicator {
+        font-size: 0.9em;
+    }
 </style>
 
 <div class="object-viewer-container">
-    @if (!PatternGroups.Any())
+    @if (!HierarchicalGroups.Any())
     {
         <div class="text-center py-4 text-muted">
             <i class="bi bi-info-circle"></i>
             No patterns available for object view.
+            @if (Patterns.Any())
+            {
+                <br /><small>(@Patterns.Count patterns provided but couldn't be grouped)</small>
+            }
         </div>
     }
     else
     {
-        @foreach (var group in PatternGroups.OrderBy(g => g.CommonAncestorPath))
+        <!-- Temporary Debug Info -->
+        <div class="alert alert-info">
+            <small><strong>Debug:</strong> Found @HierarchicalGroups.Count groups: @string.Join(", ", HierarchicalGroups.Select(g => $"'{g.DisplayName}' ({g.DirectPatterns.Count})"))</small>
+        </div>
+        
+        @foreach (var rootGroup in HierarchicalGroups.OrderBy(g => g.Path))
         {
             <div class="individual-pattern">
-                <!-- Group Header -->
-                <div class="object-group-header" @onclick="() => ToggleGroup(group.CommonAncestorPath)">
+                @if (rootGroup.Type == HierarchicalGroupType.Collection)
+                {
+                    @RenderCollectionGroup!(rootGroup)
+                }
+                else
+                {
+                    @RenderObjectGroup!(rootGroup)
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter]
+    public List<EnhancedStructuralDifferenceAnalyzer.StructuralPattern> Patterns { get; set; } = new();
+    
+    [Parameter]
+    public EventCallback<EnhancedStructuralDifferenceAnalyzer.StructuralPattern> OnSelectPattern { get; set; }
+    
+    [Parameter]
+    public bool ShowPriority { get; set; } = false;
+
+    [Parameter]
+    public Dictionary<string, int>? CategoryFileCountMap { get; set; }
+
+    private List<HierarchicalGroup> HierarchicalGroups = new();
+    private HashSet<string> ExpandedGroups = new();
+
+    // Define RenderFragments early in the @code block
+    private RenderFragment<HierarchicalGroup>? RenderCollectionGroup;
+    private RenderFragment<HierarchicalGroup>? RenderCollectionItem;
+    private RenderFragment<HierarchicalGroup>? RenderObjectGroup;
+    private RenderFragment<HierarchicalGroup>? RenderNestedObjectGroup;
+
+    public enum HierarchicalGroupType
+    {
+        Object,
+        Collection,
+        CollectionItem
+    }
+
+    public class HierarchicalGroup
+    {
+        public string Path { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public HierarchicalGroupType Type { get; set; }
+        public List<EnhancedStructuralDifferenceAnalyzer.StructuralPattern> DirectPatterns { get; set; } = new();
+        public List<HierarchicalGroup> Children { get; set; } = new();
+        public int TotalOccurrences => DirectPatterns.Sum(p => p.OccurenceCount) + Children.Sum(c => c.TotalOccurrences);
+        public int TotalFileCount => DirectPatterns.SelectMany(p => p.AffectedFiles).Concat(Children.SelectMany(c => c.DirectPatterns.SelectMany(p => p.AffectedFiles))).Distinct().Count();
+        public double AverageConsistency => DirectPatterns.Any() ? DirectPatterns.Average(p => p.Consistency) : 0;
+        public bool HasCriticalPatterns => DirectPatterns.Any(p => p.IsCriticalProperty) || Children.Any(c => c.HasCriticalPatterns);
+        public string CollectionName { get; set; } = string.Empty;
+        public string ItemIndex { get; set; } = string.Empty;
+    }
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        InitializeRenderFragments();
+    }
+
+    protected override void OnParametersSet()
+    {
+        base.OnParametersSet();
+        BuildHierarchicalStructure();
+    }
+
+    private void InitializeRenderFragments()
+    {
+        RenderCollectionGroup = (group) => __builder =>
+        {
+            <div class="collection-group-header" @onclick="() => ToggleGroup(group.Path)">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-chevron-right expand-icon me-2 @(IsGroupExpanded(group.Path) ? "expanded" : "")"></i>
+                        <div>
+                            <div class="d-flex align-items-center">
+                                <span class="collection-indicator me-2">COLLECTION</span>
+                                <strong>@group.CollectionName</strong>
+                            </div>
+                            <small class="text-muted mt-1 d-block">
+                                @if (group.Children.Any())
+                                {
+                                    <span>@group.Children.Count item@(group.Children.Count != 1 ? "s" : "") • </span>
+                                }
+                                @group.TotalOccurrences total occurrence@(group.TotalOccurrences != 1 ? "s" : "") •
+                                @GetDisplayFileCount(group) file@(GetDisplayFileCount(group) != 1 ? "s" : "")
+                            </small>
+                        </div>
+                    </div>
+                    @if (group.HasCriticalPatterns)
+                    {
+                        <span class="badge bg-danger">Critical</span>
+                    }
+                </div>
+            </div>
+
+            @if (IsGroupExpanded(group.Path))
+            {
+                <div class="collection-group-content">
+                    @foreach (var pattern in group.DirectPatterns)
+                    {
+                        <div class="child-pattern-row @GetPatternRowClass(pattern)" @onclick="() => OnSelectPattern.InvokeAsync(pattern)">
+                            <div class="row align-items-center">
+                                <div class="col-md-1">
+                                    @if (pattern.IsCriticalProperty)
+                                    {
+                                        <i class="bi bi-exclamation-triangle text-danger"></i>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-info-circle text-info"></i>
+                                    }
+                                </div>
+                                <div class="col-md-3">
+                                    <code class="small">@GetRelativePropertyName(pattern.FullPattern, group.Path)</code>
+                                </div>
+                                <div class="col-md-4">
+                                    @if (!string.IsNullOrEmpty(pattern.HumanReadableDescription))
+                                    {
+                                        <small>@pattern.HumanReadableDescription</small>
+                                    }
+                                    else
+                                    {
+                                        <small class="text-muted">Collection-level pattern</small>
+                                    }
+                                </div>
+                                <div class="col-md-1">
+                                    <span class="badge bg-info">@pattern.FileCount</span>
+                                </div>
+                                <div class="col-md-1">
+                                    <span class="badge bg-primary">@pattern.OccurenceCount</span>
+                                </div>
+                                <div class="col-md-1">
+                                    <div class="d-flex align-items-center">
+                                        <div class="progress flex-grow-1 me-1" style="height: 12px; width: 40px;">
+                                            <div class="progress-bar @GetConsistencyProgressClass(pattern.Consistency)" 
+                                                 style="width: @(pattern.Consistency)%">
+                                            </div>
+                                        </div>
+                                        <small>@pattern.Consistency.ToString("0.0")%</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-1">
+                                    @if (!string.IsNullOrEmpty(pattern.RecommendAction))
+                                    {
+                                        <i class="bi bi-lightbulb text-warning" title="@pattern.RecommendAction"></i>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    @foreach (var childGroup in group.Children.OrderBy(c => c.ItemIndex ?? ""))
+                    {
+                        @if (childGroup.Type == HierarchicalGroupType.CollectionItem)
+                        {
+                            @RenderCollectionItem!(childGroup)
+                        }
+                        else
+                        {
+                            @RenderNestedObjectGroup!(childGroup)
+                        }
+                    }
+                </div>
+            }
+        };
+
+        RenderCollectionItem = (group) => __builder =>
+        {
+            <div class="collection-item-header" @onclick="() => ToggleGroup(group.Path)">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-chevron-right expand-icon me-2 @(IsGroupExpanded(group.Path) ? "expanded" : "")"></i>
+                        <div>
+                            <div class="d-flex align-items-center">
+                                <span class="item-indicator me-2">ITEM</span>
+                                <strong>@group.DisplayName</strong>
+                            </div>
+                            <small class="text-muted mt-1 d-block">
+                                @group.DirectPatterns.Count pattern@(group.DirectPatterns.Count != 1 ? "s" : "") • 
+                                @group.TotalOccurrences occurrence@(group.TotalOccurrences != 1 ? "s" : "")
+                            </small>
+                        </div>
+                    </div>
+                    @if (group.HasCriticalPatterns)
+                    {
+                        <span class="badge bg-danger">Critical</span>
+                    }
+                </div>
+            </div>
+
+            @if (IsGroupExpanded(group.Path))
+            {
+                <div class="collection-item-content">
+                    @foreach (var pattern in group.DirectPatterns)
+                    {
+                        <div class="child-pattern-row @GetPatternRowClass(pattern)" @onclick="() => OnSelectPattern.InvokeAsync(pattern)">
+                            <div class="row align-items-center">
+                                <div class="col-md-1">
+                                    @if (pattern.IsCriticalProperty)
+                                    {
+                                        <i class="bi bi-exclamation-triangle text-danger"></i>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-info-circle text-info"></i>
+                                    }
+                                </div>
+                                <div class="col-md-3">
+                                    <code class="small">@GetRelativePropertyName(pattern.FullPattern, group.Path.Split('[')[0])</code>
+                                </div>
+                                <div class="col-md-4">
+                                    @if (!string.IsNullOrEmpty(pattern.HumanReadableDescription))
+                                    {
+                                        <small>@pattern.HumanReadableDescription</small>
+                                    }
+                                    else
+                                    {
+                                        <small class="text-muted">Property difference</small>
+                                    }
+                                </div>
+                                <div class="col-md-1">
+                                    <span class="badge bg-info">@pattern.FileCount</span>
+                                </div>
+                                <div class="col-md-1">
+                                    <span class="badge bg-primary">@pattern.OccurenceCount</span>
+                                </div>
+                                <div class="col-md-1">
+                                    <div class="d-flex align-items-center">
+                                        <div class="progress flex-grow-1 me-1" style="height: 12px; width: 40px;">
+                                            <div class="progress-bar @GetConsistencyProgressClass(pattern.Consistency)" 
+                                                 style="width: @(pattern.Consistency)%">
+                                            </div>
+                                        </div>
+                                        <small>@pattern.Consistency.ToString("0.0")%</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-1">
+                                    @if (!string.IsNullOrEmpty(pattern.RecommendAction))
+                                    {
+                                        <i class="bi bi-lightbulb text-warning" title="@pattern.RecommendAction"></i>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    @* Nested objects within collection items *@
+                    @foreach (var nestedGroup in group.Children.OrderBy(c => c.DisplayName))
+                    {
+                        @RenderNestedObjectGroup!(nestedGroup)
+                    }
+                </div>
+            }
+        };
+
+        RenderObjectGroup = (group) => __builder =>
+        {
+            <div class="object-group-header" @onclick="() => ToggleGroup(group.Path)">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-chevron-right expand-icon me-2 @(IsGroupExpanded(group.Path) ? "expanded" : "")"></i>
+                        <div>
+                            <div class="pattern-path-hierarchy">
+                                <strong>@group.DisplayName</strong>
+                            </div>
+                            <small class="text-muted mt-1 d-block">
+                                @group.DirectPatterns.Count pattern@(group.DirectPatterns.Count != 1 ? "s" : "") • 
+                                @group.TotalOccurrences total occurrence@(group.TotalOccurrences != 1 ? "s" : "") •
+                                @GetDisplayFileCount(group) file@(GetDisplayFileCount(group) != 1 ? "s" : "")
+                            </small>
+                        </div>
+                    </div>
+                    @if (group.HasCriticalPatterns)
+                    {
+                        <span class="badge bg-danger">Critical</span>
+                    }
+                </div>
+            </div>
+
+            @if (IsGroupExpanded(group.Path))
+            {
+                <div class="object-group-content">
+                    @foreach (var pattern in group.DirectPatterns)
+                    {
+                        <div class="child-pattern-row @GetPatternRowClass(pattern)" @onclick="() => OnSelectPattern.InvokeAsync(pattern)">
+                            <div class="row align-items-center">
+                                <div class="col-md-1">
+                                    @if (pattern.IsCriticalProperty)
+                                    {
+                                        <i class="bi bi-exclamation-triangle text-danger"></i>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-info-circle text-info"></i>
+                                    }
+                                </div>
+                                <div class="col-md-3">
+                                    <code class="small">@GetRelativePropertyName(pattern.FullPattern, group.Path)</code>
+                                    @if (pattern.IsCollectionElement)
+                                    {
+                                        <br />
+                                        <small class="text-muted">Collection: @pattern.CollectionName</small>
+                                    }
+                                </div>
+                                <div class="col-md-4">
+                                    @if (!string.IsNullOrEmpty(pattern.HumanReadableDescription))
+                                    {
+                                        <small>@pattern.HumanReadableDescription</small>
+                                    }
+                                    else
+                                    {
+                                        <small class="text-muted">@(pattern.IsCollectionElement ? "Collection Element" : "Property")</small>
+                                    }
+                                </div>
+                                <div class="col-md-1">
+                                    <span class="badge bg-info">@pattern.FileCount</span>
+                                </div>
+                                <div class="col-md-1">
+                                    <span class="badge bg-primary">@pattern.OccurenceCount</span>
+                                </div>
+                                <div class="col-md-1">
+                                    <div class="d-flex align-items-center">
+                                        <div class="progress flex-grow-1 me-1" style="height: 12px; width: 40px;">
+                                            <div class="progress-bar @GetConsistencyProgressClass(pattern.Consistency)" 
+                                                 style="width: @(pattern.Consistency)%">
+                                            </div>
+                                        </div>
+                                        <small>@pattern.Consistency.ToString("0.0")%</small>
+                                    </div>
+                                </div>
+                                <div class="col-md-1">
+                                    @if (!string.IsNullOrEmpty(pattern.RecommendAction))
+                                    {
+                                        <i class="bi bi-lightbulb text-warning" title="@pattern.RecommendAction"></i>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        };
+
+        RenderNestedObjectGroup = (group) => __builder =>
+        {
+            <div class="nested-object-group ms-3 border-start border-2 border-light ps-3 mb-2">
+                <div class="nested-object-header" @onclick="() => ToggleGroup(group.Path)">
                     <div class="d-flex justify-content-between align-items-center">
                         <div class="d-flex align-items-center">
-                            <i class="bi bi-chevron-right expand-icon me-2 @(IsGroupExpanded(group.CommonAncestorPath) ? "expanded" : "")"></i>
+                            <i class="bi bi-chevron-right expand-icon me-2 @(IsGroupExpanded(group.Path) ? "expanded" : "")" style="font-size: 0.8em;"></i>
                             <div>
-                                <div class="pattern-path-hierarchy">
-                                    <strong>@group.CommonAncestorPath</strong>
+                                <div class="d-flex align-items-center">
+                                    <span class="nested-object-indicator me-2">📁</span>
+                                    <strong class="text-primary">@group.DisplayName</strong>
                                 </div>
-                                <small class="text-muted mt-1 d-block">
-                                    @group.Patterns.Count pattern@(group.Patterns.Count != 1 ? "s" : "") • 
-                                    @group.TotalOccurrences total occurrence@(group.TotalOccurrences != 1 ? "s" : "") •
-                                    @group.AffectedFileCount file@(group.AffectedFileCount != 1 ? "s" : "")
+                                <small class="text-muted">
+                                    @group.DirectPatterns.Count pattern@(group.DirectPatterns.Count != 1 ? "s" : "") • 
+                                    @group.TotalOccurrences occurrence@(group.TotalOccurrences != 1 ? "s" : "")
                                 </small>
                             </div>
                         </div>
-                        <div class="d-flex align-items-center">
-                            @if (group.HasCriticalPatterns)
-                            {
-                                <span class="badge bg-danger me-2">
-                                    <i class="bi bi-exclamation-triangle"></i>
-                                    Critical
-                                </span>
-                            }
-                            <div class="d-flex align-items-center">
-                                <div class="progress me-2" style="height: 15px; width: 80px;">
-                                    <div class="progress-bar @GetGroupConsistencyClass(group.AverageConsistency)" 
-                                         style="width: @(group.AverageConsistency)%">
-                                    </div>
-                                </div>
-                                <small>@group.AverageConsistency.ToString("0.0")%</small>
-                            </div>
-                        </div>
+                        @if (group.HasCriticalPatterns)
+                        {
+                            <span class="badge bg-danger">Critical</span>
+                        }
                     </div>
                 </div>
 
-                <!-- Expanded Content -->
-                @if (IsGroupExpanded(group.CommonAncestorPath))
+                @if (IsGroupExpanded(group.Path))
                 {
-                    <div class="object-group-content">
-                        @foreach (var pattern in group.Patterns.OrderByDescending(p => p.IsCriticalProperty).ThenByDescending(p => p.Consistency))
+                    <div class="nested-object-content mt-2">
+                        @foreach (var pattern in group.DirectPatterns)
                         {
                             <div class="child-pattern-row @GetPatternRowClass(pattern)" @onclick="() => OnSelectPattern.InvokeAsync(pattern)">
                                 <div class="row align-items-center">
                                     <div class="col-md-1">
-                                        @if (ShowPriority)
+                                        @if (pattern.IsCriticalProperty)
                                         {
-                                            @if (pattern.IsCriticalProperty)
-                                            {
-                                                <span class="badge bg-danger">
-                                                    <i class="bi bi-exclamation-triangle"></i>
-                                                </span>
-                                            }
-                                            else
-                                            {
-                                                <span class="badge bg-secondary">Normal</span>
-                                            }
+                                            <i class="bi bi-exclamation-triangle text-danger"></i>
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-info-circle text-info"></i>
                                         }
                                     </div>
                                     <div class="col-md-3">
-                                        <code class="small">@GetRelativePattern(pattern.FullPattern, group.CommonAncestorPath)</code>
-                                        @if (pattern.IsCollectionElement)
-                                        {
-                                            <br />
-                                            <small class="text-muted">Collection: @pattern.CollectionName</small>
-                                        }
+                                        <code class="small">@GetRelativePropertyName(pattern.FullPattern, group.Path)</code>
                                     </div>
                                     <div class="col-md-4">
                                         @if (!string.IsNullOrEmpty(pattern.HumanReadableDescription))
@@ -145,7 +556,7 @@
                                         }
                                         else
                                         {
-                                            <small class="text-muted">@(pattern.IsCollectionElement ? "Collection Element" : "Property")</small>
+                                            <small class="text-muted">Property difference</small>
                                         }
                                     </div>
                                     <div class="col-md-1">
@@ -173,197 +584,352 @@
                                 </div>
                             </div>
                         }
+
+                        @* Recursively render further nested objects *@
+                        @foreach (var nestedGroup in group.Children.OrderBy(c => c.DisplayName))
+                        {
+                            @RenderNestedObjectGroup!(nestedGroup)
+                        }
                     </div>
                 }
             </div>
-        }
-    }
-</div>
-
-@code {
-    [Parameter]
-    public List<EnhancedStructuralDifferenceAnalyzer.StructuralPattern> Patterns { get; set; } = new();
-    
-    [Parameter]
-    public EventCallback<EnhancedStructuralDifferenceAnalyzer.StructuralPattern> OnSelectPattern { get; set; }
-    
-    [Parameter]
-    public bool ShowPriority { get; set; } = false;
-
-    private List<PatternGroup> PatternGroups = new();
-    private HashSet<string> ExpandedGroups = new();
-
-    public class PatternGroup
-    {
-        public string CommonAncestorPath { get; set; } = string.Empty;
-        public List<EnhancedStructuralDifferenceAnalyzer.StructuralPattern> Patterns { get; set; } = new();
-        public int TotalOccurrences => Patterns.Sum(p => p.OccurenceCount);
-        public int AffectedFileCount => Patterns.Select(p => p.FileCount).Max();
-        public double AverageConsistency => Patterns.Any() ? Patterns.Average(p => p.Consistency) : 0;
-        public bool HasCriticalPatterns => Patterns.Any(p => p.IsCriticalProperty);
+        };
     }
 
-    protected override void OnParametersSet()
+    private void BuildHierarchicalStructure()
     {
-        base.OnParametersSet();
-        GroupPatternsByCommonAncestor();
-    }
-
-    private void GroupPatternsByCommonAncestor()
-    {
-        PatternGroups.Clear();
+        HierarchicalGroups.Clear();
         
         if (!Patterns.Any())
             return;
 
-        // Group patterns by their highest common ancestor path
-        var groups = new Dictionary<string, List<EnhancedStructuralDifferenceAnalyzer.StructuralPattern>>();
+        // Group patterns by their hierarchical structure
+        var rootGroups = new Dictionary<string, HierarchicalGroup>();
 
         foreach (var pattern in Patterns)
         {
-            var ancestorPath = FindHighestCommonAncestor(pattern.FullPattern, Patterns);
-            
-            if (!groups.ContainsKey(ancestorPath))
+            try
             {
-                groups[ancestorPath] = new List<EnhancedStructuralDifferenceAnalyzer.StructuralPattern>();
+                AddPatternToHierarchy(pattern, rootGroups);
             }
-            
-            groups[ancestorPath].Add(pattern);
+            catch (Exception ex)
+            {
+                // For debugging: log pattern that failed
+                System.Diagnostics.Debug.WriteLine($"Failed to process pattern: {pattern.FullPattern} - {ex.Message}");
+            }
         }
 
-        // Convert to PatternGroup objects
-        PatternGroups = groups.Select(kvp => new PatternGroup
+        HierarchicalGroups = rootGroups.Values.ToList();
+        
+        System.Diagnostics.Debug.WriteLine($"Built {HierarchicalGroups.Count} hierarchical groups from {Patterns.Count} patterns");
+        
+        // Debug: log what groups were created
+        foreach (var group in HierarchicalGroups)
         {
-            CommonAncestorPath = kvp.Key,
-            Patterns = kvp.Value
-        }).ToList();
+            System.Diagnostics.Debug.WriteLine($"Group: '{group.Path}' -> '{group.DisplayName}' ({group.DirectPatterns.Count} patterns)");
+            foreach (var pattern in group.DirectPatterns.Take(3))
+            {
+                System.Diagnostics.Debug.WriteLine($"  - {pattern.FullPattern}");
+            }
+        }
 
         // Auto-expand groups with critical patterns or single groups
-        if (PatternGroups.Count == 1)
+        AutoExpandImportantGroups();
+    }
+
+    private void AddPatternToHierarchy(EnhancedStructuralDifferenceAnalyzer.StructuralPattern pattern, Dictionary<string, HierarchicalGroup> rootGroups)
+    {
+        var pathInfo = AnalyzePath(pattern.FullPattern);
+        
+        if (pathInfo.IsCollectionPattern)
         {
-            ExpandedGroups.Add(PatternGroups.First().CommonAncestorPath);
+            AddCollectionPattern(pattern, pathInfo, rootGroups);
         }
         else
         {
-            foreach (var group in PatternGroups.Where(g => g.HasCriticalPatterns))
+            AddObjectPattern(pattern, pathInfo, rootGroups);
+        }
+    }
+
+    private void AddCollectionPattern(EnhancedStructuralDifferenceAnalyzer.StructuralPattern pattern, PathInfo pathInfo, Dictionary<string, HierarchicalGroup> rootGroups)
+    {
+        // Create or get the collection group
+        var collectionKey = pathInfo.CollectionBasePath;
+        if (!rootGroups.ContainsKey(collectionKey))
+        {
+            rootGroups[collectionKey] = new HierarchicalGroup
             {
-                ExpandedGroups.Add(group.CommonAncestorPath);
+                Path = collectionKey,
+                DisplayName = pathInfo.CollectionName,
+                Type = HierarchicalGroupType.Collection,
+                CollectionName = pathInfo.CollectionName
+            };
+        }
+
+        var collectionGroup = rootGroups[collectionKey];
+
+        // If this pattern has specific indices (not [*]), create item groups
+        if (pathInfo.HasSpecificIndices)
+        {
+            foreach (var index in pathInfo.CollectionIndices)
+            {
+                var itemKey = $"{collectionKey}[{index}]";
+                var itemGroup = collectionGroup.Children.FirstOrDefault(c => c.Path == itemKey);
+                
+                if (itemGroup == null)
+                {
+                    itemGroup = new HierarchicalGroup
+                    {
+                        Path = itemKey,
+                        DisplayName = $"[{index}] {pathInfo.CollectionName} Item",
+                        Type = HierarchicalGroupType.CollectionItem,
+                        CollectionName = pathInfo.CollectionName,
+                        ItemIndex = index
+                    };
+                    collectionGroup.Children.Add(itemGroup);
+                }
+
+                // Create nested object structure within the collection item
+                if (!string.IsNullOrEmpty(pathInfo.PropertyAfterCollection))
+                {
+                    AddPatternToCollectionHierarchy(pattern, pathInfo.PropertyAfterCollection, itemGroup);
+                }
+            }
+        }
+        else
+        {
+            // This is a [*] pattern - create nested object structure directly under collection
+            if (!string.IsNullOrEmpty(pathInfo.PropertyAfterCollection))
+            {
+                AddPatternToCollectionHierarchy(pattern, pathInfo.PropertyAfterCollection, collectionGroup);
+            }
+            else
+            {
+                // Direct collection property (no nested object)
+                collectionGroup.DirectPatterns.Add(pattern);
             }
         }
     }
 
-    private string FindHighestCommonAncestor(string patternPath, List<EnhancedStructuralDifferenceAnalyzer.StructuralPattern> allPatterns)
+    private void AddPatternToCollectionHierarchy(EnhancedStructuralDifferenceAnalyzer.StructuralPattern pattern, string propertyPath, HierarchicalGroup parentGroup)
     {
-        // First, check for array patterns like Body.Response.Results[*].Score
-        var arrayBasePath = ExtractArrayBasePath(patternPath);
-        if (!string.IsNullOrEmpty(arrayBasePath))
-        {
-            // See if other patterns share this array base path
-            var arrayRelatedPatterns = allPatterns
-                .Where(p => p.FullPattern != patternPath && ExtractArrayBasePath(p.FullPattern) == arrayBasePath)
-                .ToList();
-                
-            if (arrayRelatedPatterns.Any())
-            {
-                return arrayBasePath;
-            }
-        }
+        var pathSegments = propertyPath.Split('.');
         
-        var pathSegments = patternPath.Split('.').ToList();
-        
-        // Find other patterns that share path segments with this one
-        var relatedPatterns = allPatterns
-            .Where(p => p.FullPattern != patternPath && SharesPathPrefix(p.FullPattern, patternPath))
-            .ToList();
-
-        if (!relatedPatterns.Any())
+        if (pathSegments.Length == 1)
         {
-            // If no related patterns, try to find a meaningful parent by removing the last segment
-            if (pathSegments.Count > 1)
-            {
-                return string.Join(".", pathSegments.Take(pathSegments.Count - 1));
-            }
-            return patternPath;
+            // Direct property - add to current group
+            parentGroup.DirectPatterns.Add(pattern);
+            return;
         }
 
-        // Find the longest common prefix among all related patterns
-        var commonSegments = pathSegments.ToList();
-        
-        foreach (var relatedPattern in relatedPatterns)
+        // Create nested object groups for intermediate path segments
+        var currentGroup = parentGroup;
+        for (int i = 0; i < pathSegments.Length - 1; i++)
         {
-            var relatedSegments = relatedPattern.FullPattern.Split('.').ToList();
-            var maxCommonLength = Math.Min(commonSegments.Count, relatedSegments.Count);
+            var segment = pathSegments[i];
+            var nestedGroupPath = $"{currentGroup.Path}.{segment}";
             
-            for (int i = 0; i < maxCommonLength; i++)
+            var nestedGroup = currentGroup.Children.FirstOrDefault(c => c.Path == nestedGroupPath);
+            if (nestedGroup == null)
             {
-                if (i >= commonSegments.Count || !NormalizeSegment(commonSegments[i]).Equals(NormalizeSegment(relatedSegments[i]), StringComparison.OrdinalIgnoreCase))
+                nestedGroup = new HierarchicalGroup
                 {
-                    commonSegments = commonSegments.Take(i).ToList();
-                    break;
+                    Path = nestedGroupPath,
+                    DisplayName = segment,
+                    Type = HierarchicalGroupType.Object,
+                    CollectionName = currentGroup.CollectionName
+                };
+                currentGroup.Children.Add(nestedGroup);
+            }
+            
+            currentGroup = nestedGroup;
+        }
+
+        // Add the pattern to the final nested group
+        currentGroup.DirectPatterns.Add(pattern);
+    }
+
+    private void AddObjectPattern(EnhancedStructuralDifferenceAnalyzer.StructuralPattern pattern, PathInfo pathInfo, Dictionary<string, HierarchicalGroup> rootGroups)
+    {
+        var ancestorPath = FindMeaningfulAncestor(pattern.FullPattern);
+        
+        if (!rootGroups.ContainsKey(ancestorPath))
+        {
+            rootGroups[ancestorPath] = new HierarchicalGroup
+            {
+                Path = ancestorPath,
+                DisplayName = GetDisplayName(ancestorPath),
+                Type = HierarchicalGroupType.Object
+            };
+        }
+
+        rootGroups[ancestorPath].DirectPatterns.Add(pattern);
+    }
+
+    private PathInfo AnalyzePath(string fullPath)
+    {
+        var pathInfo = new PathInfo
+        {
+            OriginalPath = fullPath
+        };
+
+        // Check if this is a collection pattern
+        var collectionMatch = System.Text.RegularExpressions.Regex.Match(fullPath, @"^(.+?)(\[(?:\d+|\*)\])(.*)$");
+        if (collectionMatch.Success)
+        {
+            pathInfo.IsCollectionPattern = true;
+            pathInfo.CollectionBasePath = collectionMatch.Groups[1].Value;
+            pathInfo.CollectionName = GetCollectionName(pathInfo.CollectionBasePath);
+            pathInfo.PropertyAfterCollection = collectionMatch.Groups[3].Value.TrimStart('.');
+
+            var indexPart = collectionMatch.Groups[2].Value;
+            if (indexPart != "[*]")
+            {
+                pathInfo.HasSpecificIndices = true;
+                // Extract all indices from the path
+                var indices = System.Text.RegularExpressions.Regex.Matches(fullPath, @"\[(\d+)\]")
+                    .Cast<Match>()
+                    .Select(m => m.Groups[1].Value)
+                    .Distinct()
+                    .ToList();
+                pathInfo.CollectionIndices = indices;
+            }
+            
+            System.Diagnostics.Debug.WriteLine($"Collection pattern: {fullPath} -> Base: {pathInfo.CollectionBasePath}, Property: {pathInfo.PropertyAfterCollection}");
+        }
+        else
+        {
+            System.Diagnostics.Debug.WriteLine($"Non-collection pattern: {fullPath}");
+        }
+
+        return pathInfo;
+    }
+
+    private class PathInfo
+    {
+        public string OriginalPath { get; set; } = string.Empty;
+        public bool IsCollectionPattern { get; set; }
+        public string CollectionBasePath { get; set; } = string.Empty;
+        public string CollectionName { get; set; } = string.Empty;
+        public string PropertyAfterCollection { get; set; } = string.Empty;
+        public bool HasSpecificIndices { get; set; }
+        public List<string> CollectionIndices { get; set; } = new();
+    }
+
+    private string GetCollectionName(string basePath)
+    {
+        var segments = basePath.Split('.');
+        return segments.LastOrDefault() ?? basePath;
+    }
+
+    private string FindMeaningfulAncestor(string path)
+    {
+        var segments = path.Split('.');
+        
+        // For single-level properties (like "ProcessingTime", "AuditTrail"), group them under "Root Properties"
+        if (segments.Length == 1)
+        {
+            // Check if there are multiple single-level properties to group together
+            var otherRootProperties = Patterns.Count(p => !p.FullPattern.Contains('.') && p.FullPattern != path);
+            if (otherRootProperties > 0)
+            {
+                return "Root Properties";
+            }
+            return path; // If it's the only root property, keep it as its own group
+        }
+
+        // For multi-level properties, try to find a meaningful grouping level
+        if (segments.Length >= 2)
+        {
+            // Always try the immediate parent first (for "Metadata.Region" -> "Metadata")
+            var potentialParent = string.Join(".", segments.Take(segments.Length - 1));
+            var relatedCount = Patterns.Count(p => p.FullPattern.StartsWith(potentialParent + ".") && p.FullPattern != path);
+            
+            if (relatedCount > 0)
+            {
+                return potentialParent;
+            }
+            
+            // If no siblings found at immediate parent level, try going up one more level
+            if (segments.Length > 2)
+            {
+                var higherParent = string.Join(".", segments.Take(segments.Length - 2));
+                var higherRelatedCount = Patterns.Count(p => p.FullPattern.StartsWith(higherParent + ".") && p.FullPattern != path);
+                
+                if (higherRelatedCount > 0)
+                {
+                    return higherParent;
                 }
             }
         }
 
-        // Ensure we have at least one segment for grouping
-        if (!commonSegments.Any())
-        {
-            return pathSegments.FirstOrDefault() ?? patternPath;
-        }
-
-        return string.Join(".", commonSegments);
-    }
-    
-    private string ExtractArrayBasePath(string path)
-    {
-        // Extract base path from patterns like "Body.Response.Results[*].Score"
-        // Should return "Body.Response.Results"
-        var match = System.Text.RegularExpressions.Regex.Match(path, @"^(.+?)\[\*\]");
-        if (match.Success)
-        {
-            return match.Groups[1].Value;
-        }
-        
-        // Also handle patterns like "Body.Response.Results[Order]"
-        if (path.Contains("[Order]"))
-        {
-            return path.Replace("[Order]", "").TrimEnd('.');
-        }
-        
-        return "";
-    }
-    
-    private string NormalizeSegment(string segment)
-    {
-        // Normalize segments to handle array indices
-        return System.Text.RegularExpressions.Regex.Replace(segment, @"\[\*\]|\[Order\]|\[\d+\]", "");
+        return path; // Fallback to individual grouping
     }
 
-    private bool SharesPathPrefix(string path1, string path2)
+    private string GetDisplayName(string path)
     {
-        var segments1 = path1.Split('.');
-        var segments2 = path2.Split('.');
-        var minLength = Math.Min(segments1.Length, segments2.Length);
-        
-        // Require at least 2 common segments to be considered related
-        var commonCount = 0;
-        for (int i = 0; i < minLength; i++)
+        // Handle special group names
+        if (path == "Root Properties")
         {
-            if (segments1[i] == segments2[i])
-                commonCount++;
-            else
-                break;
+            return "Root Properties";
         }
         
-        return commonCount >= 2;
+        var segments = path.Split('.');
+        
+        // For multi-level paths, use a more descriptive name
+        if (segments.Length > 1)
+        {
+            return $"{segments.LastOrDefault()} Properties";
+        }
+        
+        return segments.LastOrDefault() ?? path;
     }
 
-    private string GetRelativePattern(string fullPattern, string ancestorPath)
+    private void AutoExpandImportantGroups()
     {
-        if (fullPattern.StartsWith(ancestorPath + "."))
+        // Auto-expand groups with critical patterns
+        foreach (var group in HierarchicalGroups.Where(g => g.HasCriticalPatterns))
         {
-            return fullPattern.Substring(ancestorPath.Length + 1);
+            ExpandedGroups.Add(group.Path);
+            AutoExpandChildGroups(group);
         }
-        return fullPattern;
+
+        // Auto-expand if there's only one root group
+        if (HierarchicalGroups.Count == 1)
+        {
+            ExpandedGroups.Add(HierarchicalGroups.First().Path);
+            AutoExpandChildGroups(HierarchicalGroups.First());
+        }
+
+        // Auto-expand object groups (non-collections) by default to show the patterns
+        foreach (var group in HierarchicalGroups.Where(g => g.Type == HierarchicalGroupType.Object))
+        {
+            ExpandedGroups.Add(group.Path);
+            AutoExpandChildGroups(group);
+        }
+
+        // Auto-expand collection groups with few items
+        foreach (var group in HierarchicalGroups.Where(g => g.Type == HierarchicalGroupType.Collection && g.Children.Count <= 3))
+        {
+            ExpandedGroups.Add(group.Path);
+            
+            // Also expand the collection items and their nested objects
+            foreach (var child in group.Children)
+            {
+                ExpandedGroups.Add(child.Path);
+                AutoExpandChildGroups(child);
+            }
+        }
+    }
+
+    private void AutoExpandChildGroups(HierarchicalGroup group)
+    {
+        // Recursively auto-expand nested object groups with few patterns
+        foreach (var child in group.Children.Where(c => c.DirectPatterns.Count <= 3))
+        {
+            ExpandedGroups.Add(child.Path);
+            AutoExpandChildGroups(child);
+        }
     }
 
     private void ToggleGroup(string groupPath)
@@ -406,14 +972,37 @@
         };
     }
 
-    private string GetGroupConsistencyClass(double consistency)
+    private string GetRelativePropertyName(string fullPattern, string basePath)
     {
-        return consistency switch
+        if (fullPattern.StartsWith(basePath + "."))
         {
-            >= 80 => "bg-danger",
-            >= 60 => "bg-warning", 
-            >= 40 => "bg-info",
-            _ => "bg-success"
-        };
+            return fullPattern.Substring(basePath.Length + 1);
+        }
+        return fullPattern.Split('.').LastOrDefault() ?? fullPattern;
     }
-} 
+
+    private int GetDisplayFileCount(HierarchicalGroup group)
+    {
+        // If we have category file count mapping and this group represents a value difference category
+        if (CategoryFileCountMap != null)
+        {
+            // Try to match the group display name to value difference categories
+            var groupKey = group.DisplayName.ToLower();
+            if (groupKey.Contains("text") && CategoryFileCountMap.ContainsKey("Text"))
+                return CategoryFileCountMap["Text"];
+            if (groupKey.Contains("numeric") && CategoryFileCountMap.ContainsKey("Numeric"))
+                return CategoryFileCountMap["Numeric"];
+            if (groupKey.Contains("boolean") && CategoryFileCountMap.ContainsKey("Boolean"))
+                return CategoryFileCountMap["Boolean"];
+            if (groupKey.Contains("datetime") && CategoryFileCountMap.ContainsKey("DateTime"))
+                return CategoryFileCountMap["DateTime"];
+            if (groupKey.Contains("general") && CategoryFileCountMap.ContainsKey("General"))
+                return CategoryFileCountMap["General"];
+        }
+        
+        // Fallback to the original overlapping count
+        return group.TotalFileCount;
+    }
+}
+
+ 

@@ -34,7 +34,8 @@
 {
     <ObjectViewerPatternDisplay Patterns="Patterns" 
                                 OnSelectPattern="OnSelectPattern" 
-                                ShowPriority="ShowPriority" />
+                                ShowPriority="ShowPriority" 
+                                CategoryFileCountMap="CategoryFileCountMap" />
 }
 else
 {
@@ -141,6 +142,9 @@ else
     
     [Parameter]
     public bool ShowPriority { get; set; } = false;
+    
+    [Parameter]
+    public Dictionary<string, int>? CategoryFileCountMap { get; set; }
     
     private string ViewMode { get; set; } = "list";
     
