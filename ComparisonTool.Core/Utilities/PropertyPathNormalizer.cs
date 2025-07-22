@@ -68,10 +68,12 @@ namespace ComparisonTool.Core.Utilities
         /// <returns>True if the path contains System.Collections notation</returns>
         public static bool ContainsSystemCollections(string propertyPath)
         {
-            return !string.IsNullOrEmpty(propertyPath) && 
-                   (propertyPath.Contains("System.Collections.IList.Item") || 
-                    propertyPath.Contains("System.Collections.Generic.IList`1.Item") ||
-                    propertyPath.Contains("System.Collections."));
+            var result = !string.IsNullOrEmpty(propertyPath) && 
+                        (propertyPath.Contains("System.Collections.IList.Item") || 
+                         propertyPath.Contains("System.Collections.Generic.IList`1.Item") ||
+                         propertyPath.Contains("System.Collections."));
+            
+            return result;
         }
     }
 } 
