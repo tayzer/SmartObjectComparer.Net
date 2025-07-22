@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using ComparisonTool.Core.Comparison.Results;
+using ComparisonTool.Core.Utilities;
 using KellermanSoftware.CompareNetObjects;
 
 namespace ComparisonTool.Core.Comparison.Analysis
@@ -57,15 +58,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
 
         private string NormalizePropertyPath(string propertyPath)
         {
-            // Replace specific array indices with [*]
-            var normalized = Regex.Replace(propertyPath ?? string.Empty, "\\[\\d+\\]", "[*]");
-            
-            // Normalize System.Collections paths to standard array notation
-            // Convert System.Collections.IList.Item[*] to [*]
-            normalized = Regex.Replace(normalized, @"\.System\.Collections\.IList\.Item\[", "[");
-            normalized = Regex.Replace(normalized, @"\.System\.Collections\.Generic\.IList`1\.Item\[", "[");
-            
-            return normalized;
+            return PropertyPathNormalizer.NormalizePropertyPath(propertyPath);
         }
 
         private DifferenceCategory GetDifferenceCategory(Difference diff)

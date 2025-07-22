@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using KellermanSoftware.CompareNetObjects;
 using ComparisonTool.Core.Comparison.Results;
+using ComparisonTool.Core.Utilities;
 using Microsoft.Extensions.Logging;
 
 namespace ComparisonTool.Core.Comparison.Analysis
@@ -473,7 +474,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
         /// </summary>
         private string NormalizeXmlPath(string xmlPath)
         {
-            return Regex.Replace(xmlPath ?? string.Empty, @"\[\d+\]", "[*]");
+            return PropertyPathNormalizer.NormalizeArrayIndices(xmlPath);
         }
         
         /// <summary>

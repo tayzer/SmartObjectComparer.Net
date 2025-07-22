@@ -838,16 +838,12 @@ public class ComparisonService : IComparisonService
         if (result.Differences.Count <= 1)
             return result;
 
-        // Group differences by their actual values that changed AND normalized property paths
-        // This ensures that System.Collections paths are treated as duplicates of their standard equivalents
+        var originalCount = result.Differences.Count;
+        logger.LogDebug("Filtering duplicate differences. Original count: {OriginalCount}", originalCount);
+
+        // Group differences using the new grouping key that handles System.Collections paths properly
         var uniqueDiffs = result.Differences
-            .GroupBy(d => new
-            {
-                PropertyName = d.PropertyName,
-                OldValue = d.Object1Value?.ToString() ?? "null",
-                NewValue = d.Object2Value?.ToString() ?? "null",
-                NormalizedPath = NormalizePropertyPath(d.PropertyName)
-            })
+            .GroupBy(d => CreateGroupingKey(d))
             .Select(group =>
             {
                 // From each group, pick the best property path
@@ -859,9 +855,29 @@ public class ComparisonService : IComparisonService
                     .ThenBy(d => d.PropertyName.Length)
                     .First();
 
+                if (group.Count() > 1)
+                {
+                    logger.LogDebug("Found duplicate group with {Count} items. Property path: {PropertyPath}. Selected: {SelectedPath}", 
+                        group.Count(), group.Key.PropertyPath, bestMatch.PropertyName);
+                    foreach (var item in group)
+                    {
+                        logger.LogDebug("  - {PropertyName} (Old: {OldValue}, New: {NewValue})", 
+                            item.PropertyName, item.Object1Value, item.Object2Value);
+                    }
+                }
+                else if (group.Key.PropertyPath.Contains("Residents"))
+                {
+                    logger.LogDebug("Single Residents difference: {PropertyName} (Old: {OldValue}, New: {NewValue})", 
+                        bestMatch.PropertyName, group.Key.OldValue, group.Key.NewValue);
+                }
+
                 return bestMatch;
             })
             .ToList();
+
+        var filteredCount = uniqueDiffs.Count;
+        logger.LogDebug("Duplicate filtering complete. Original: {OriginalCount}, Filtered: {FilteredCount}, Removed: {RemovedCount}", 
+            originalCount, filteredCount, originalCount - filteredCount);
 
         // Clear and replace the differences
         result.Differences.Clear();
@@ -880,24 +896,56 @@ public class ComparisonService : IComparisonService
         GC.Collect();
     }
 
-    /// <summary>
+        /// <summary>
     /// Normalize a property path by replacing array indices with wildcards
     /// and removing backing field notation
     /// </summary>
     private string NormalizePropertyPath(string propertyPath)
     {
-        // Replace array indices with [*]
-        var normalized = Regex.Replace(propertyPath, @"\[\d+\]", "[*]");
-
-        // Remove backing fields
-        normalized = Regex.Replace(normalized, @"<(\w+)>k__BackingField", "$1");
-
-        // Normalize System.Collections paths to standard array notation
-        // Convert System.Collections.IList.Item[*] to [*]
-        normalized = Regex.Replace(normalized, @"\.System\.Collections\.IList\.Item\[", "[");
-        normalized = Regex.Replace(normalized, @"\.System\.Collections\.Generic\.IList`1\.Item\[", "[");
-
+        var normalized = PropertyPathNormalizer.NormalizePropertyPath(propertyPath, logger);
+        
+        // Special debug logging for the specific paths mentioned in the issue
+        if (propertyPath.Contains("System.Collections.IList.Item") || propertyPath.Contains("Residents"))
+        {
+            logger.LogDebug("Processing path with System.Collections or Residents: '{Original}' -> '{Normalized}'", propertyPath, normalized);
+        }
+        
+        // Test normalization for the specific case mentioned in the issue
+        if (propertyPath.Contains("Result.Report.Applicant") && propertyPath.Contains("Residents"))
+        {
+            logger.LogDebug("Found Residents path: '{Original}' -> '{Normalized}'", propertyPath, normalized);
+        }
+        
         return normalized;
+    }
+
+    /// <summary>
+    /// Create a grouping key that normalizes System.Collections paths but preserves property distinctions
+    /// </summary>
+    private DifferenceGroupingKey CreateGroupingKey(Difference diff)
+    {
+        var normalizedPath = NormalizePropertyPath(diff.PropertyName);
+        
+        // For System.Collections paths, we want to group them with their standard equivalents
+        // But for other paths, we want to preserve the original property name to avoid grouping different properties
+        var groupingPath = PropertyPathNormalizer.ContainsSystemCollections(diff.PropertyName) ? normalizedPath : diff.PropertyName;
+        
+        return new DifferenceGroupingKey
+        {
+            OldValue = diff.Object1Value?.ToString() ?? "null",
+            NewValue = diff.Object2Value?.ToString() ?? "null",
+            PropertyPath = groupingPath
+        };
+    }
+
+    /// <summary>
+    /// Represents a key for grouping differences
+    /// </summary>
+    private class DifferenceGroupingKey
+    {
+        public string OldValue { get; set; }
+        public string NewValue { get; set; }
+        public string PropertyPath { get; set; }
     }
 
     /// <summary>
