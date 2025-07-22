@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using KellermanSoftware.CompareNetObjects;
 using ComparisonTool.Core.Comparison.Results;
+using ComparisonTool.Core.Utilities;
 using Microsoft.Extensions.Logging;
 
 namespace ComparisonTool.Core.Comparison.Analysis
@@ -350,7 +351,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
         /// </summary>
         private string NormalizePropertyPath(string propertyPath)
         {
-            return Regex.Replace(propertyPath ?? string.Empty, @"\[\d+\]", "[*]");
+            return PropertyPathNormalizer.NormalizePropertyPath(propertyPath, logger);
         }
         
         /// <summary>

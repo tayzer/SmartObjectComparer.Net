@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using System;
 using System.Text.Json.Serialization;
 using System.Linq;
+using ComparisonTool.Core.Utilities;
 
 namespace ComparisonTool.Core.Comparison.Configuration
 {
@@ -222,16 +223,7 @@ namespace ComparisonTool.Core.Comparison.Configuration
         /// </summary>
         private string NormalizePropertyPath(string propertyPath)
         {
-            if (string.IsNullOrEmpty(propertyPath))
-                return propertyPath;
-                
-            // Replace numeric array indices with [*]
-            var normalizedPath = Regex.Replace(propertyPath, @"\[\d+\]", "[*]");
-            
-            // Remove any XML namespace prefixes (like soap:)
-            normalizedPath = Regex.Replace(normalizedPath, @"\w+:", "");
-            
-            return normalizedPath;
+            return PropertyPathNormalizer.NormalizePropertyPath(propertyPath, _logger);
         }
 
         /// <summary>

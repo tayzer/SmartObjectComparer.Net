@@ -838,24 +838,85 @@ public class ComparisonService : IComparisonService
         if (result.Differences.Count <= 1)
             return result;
 
-        // Group differences by their actual values that changed
-        var uniqueDiffs = result.Differences
-            .GroupBy(d => new
+        var originalCount = result.Differences.Count;
+        logger.LogDebug("Filtering duplicate differences. Original count: {OriginalCount}", originalCount);
+        
+        // Log all differences for debugging
+        foreach (var diff in result.Differences)
+        {
+            if (diff.PropertyName.Contains("Residents"))
             {
-                OldValue = d.Object1Value?.ToString() ?? "null",
-                NewValue = d.Object2Value?.ToString() ?? "null"
-            })
+                logger.LogDebug("Found Residents difference: '{PropertyName}' (Old: '{OldValue}', New: '{NewValue}')", 
+                    diff.PropertyName, diff.Object1Value, diff.Object2Value);
+            }
+        }
+        
+        // Log all differences for debugging (all of them)
+        logger.LogDebug("=== ALL DIFFERENCES ===");
+        foreach (var diff in result.Differences)
+        {
+            logger.LogDebug("DIFFERENCE: '{PropertyName}' (Old: '{OldValue}', New: '{NewValue}')", 
+                diff.PropertyName, diff.Object1Value, diff.Object2Value);
+        }
+        logger.LogDebug("=== END ALL DIFFERENCES ===");
+
+        // Group differences using the new grouping key that handles System.Collections paths properly
+        var groups = result.Differences.GroupBy(d => CreateGroupingKey(d)).ToList();
+        
+        logger.LogDebug("=== GROUPING RESULTS ===");
+        foreach (var group in groups)
+        {
+            logger.LogDebug("GROUP: Path='{PropertyPath}', OldValue='{OldValue}', NewValue='{NewValue}', Count={Count}", 
+                group.Key.PropertyPath, group.Key.OldValue, group.Key.NewValue, group.Count());
+            foreach (var item in group)
+            {
+                logger.LogDebug("  - {PropertyName}", item.PropertyName);
+            }
+        }
+        logger.LogDebug("=== END GROUPING RESULTS ===");
+        
+        var uniqueDiffs = groups
             .Select(group =>
             {
-                // From each group, pick the simplest property path (one without backing fields)
+                // From each group, pick the best property path
+                // Prefer standard array notation over System.Collections notation
                 var bestMatch = group
                     .OrderBy(d => d.PropertyName.Contains("k__BackingField") ? 1 : 0)
+                    .ThenBy(d => d.PropertyName.Contains("System.Collections.IList.Item") ? 1 : 0)
+                    .ThenBy(d => d.PropertyName.Contains("System.Collections.Generic.IList`1.Item") ? 1 : 0)
                     .ThenBy(d => d.PropertyName.Length)
                     .First();
+
+                if (group.Count() > 1)
+                {
+                    logger.LogDebug("Found duplicate group with {Count} items. Property path: {PropertyPath}. Selected: {SelectedPath}", 
+                        group.Count(), group.Key.PropertyPath, bestMatch.PropertyName);
+                    foreach (var item in group)
+                    {
+                        logger.LogDebug("  - {PropertyName} (Old: {OldValue}, New: {NewValue})", 
+                            item.PropertyName, item.Object1Value, item.Object2Value);
+                    }
+                }
+                else if (group.Key.PropertyPath.Contains("Residents"))
+                {
+                    logger.LogDebug("Single Residents difference: {PropertyName} (Old: {OldValue}, New: {NewValue})", 
+                        bestMatch.PropertyName, group.Key.OldValue, group.Key.NewValue);
+                }
+                
+                // Log all Residents groups for debugging
+                if (group.Key.PropertyPath.Contains("Residents"))
+                {
+                    logger.LogDebug("Residents group: {Count} items, Path: {PropertyPath}", 
+                        group.Count(), group.Key.PropertyPath);
+                }
 
                 return bestMatch;
             })
             .ToList();
+
+        var filteredCount = uniqueDiffs.Count;
+        logger.LogDebug("Duplicate filtering complete. Original: {OriginalCount}, Filtered: {FilteredCount}, Removed: {RemovedCount}", 
+            originalCount, filteredCount, originalCount - filteredCount);
 
         // Clear and replace the differences
         result.Differences.Clear();
@@ -874,19 +935,99 @@ public class ComparisonService : IComparisonService
         GC.Collect();
     }
 
-    /// <summary>
+        /// <summary>
     /// Normalize a property path by replacing array indices with wildcards
     /// and removing backing field notation
     /// </summary>
     private string NormalizePropertyPath(string propertyPath)
     {
-        // Replace array indices with [*]
-        var normalized = Regex.Replace(propertyPath, @"\[\d+\]", "[*]");
-
-        // Remove backing fields
-        normalized = Regex.Replace(normalized, @"<(\w+)>k__BackingField", "$1");
-
+        var normalized = PropertyPathNormalizer.NormalizePropertyPath(propertyPath, logger);
+        
+        // Special debug logging for the specific paths mentioned in the issue
+        if (propertyPath.Contains("System.Collections.IList.Item") || propertyPath.Contains("Residents"))
+        {
+            logger.LogDebug("Processing path with System.Collections or Residents: '{Original}' -> '{Normalized}'", propertyPath, normalized);
+        }
+        
+        // Test normalization for the specific case mentioned in the issue
+        if (propertyPath.Contains("Result.Report.Applicant") && propertyPath.Contains("Residents"))
+        {
+            logger.LogDebug("Found Residents path: '{Original}' -> '{Normalized}'", propertyPath, normalized);
+        }
+        
+        // Test the specific paths mentioned in the issue
+        if (propertyPath == "Result.Report.Applicant[0].Addresses[1].Residents.System.Collections.IList.Item[0]")
+        {
+            logger.LogDebug("TESTING: System.Collections path: '{Original}' -> '{Normalized}'", propertyPath, normalized);
+        }
+        else if (propertyPath == "Result.Report.Applicant[0].Addresses[1].Residents[0]")
+        {
+            logger.LogDebug("TESTING: Standard path: '{Original}' -> '{Normalized}'", propertyPath, normalized);
+        }
+        
+        // Test the paths from the actual issue
+        if (propertyPath.Contains("TestThisThing") && propertyPath.Contains("TestObjects") && !propertyPath.Contains("System.Collections"))
+        {
+            logger.LogDebug("TESTING: Standard TestObjects path: '{Original}' -> '{Normalized}'", propertyPath, normalized);
+        }
+        
         return normalized;
+    }
+
+    /// <summary>
+    /// Create a grouping key that normalizes System.Collections paths but preserves property distinctions
+    /// </summary>
+    private DifferenceGroupingKey CreateGroupingKey(Difference diff)
+    {
+        var normalizedPath = NormalizePropertyPath(diff.PropertyName);
+        
+        // Always use the normalized path for grouping to ensure System.Collections paths are grouped with their standard equivalents
+        // The normalization handles both System.Collections paths and standard array paths consistently
+        var groupingPath = normalizedPath;
+        
+        // Add debug logging for the specific case mentioned in the issue
+        if (diff.PropertyName.Contains("Residents"))
+        {
+            var isSystemCollections = PropertyPathNormalizer.ContainsSystemCollections(diff.PropertyName);
+            logger.LogDebug("Creating grouping key for Residents path: '{Original}' -> '{Normalized}' -> '{GroupingPath}' (IsSystemCollections: {IsSystemCollections})", 
+                diff.PropertyName, normalizedPath, groupingPath, isSystemCollections);
+        }
+        
+        return new DifferenceGroupingKey
+        {
+            OldValue = diff.Object1Value?.ToString() ?? "null",
+            NewValue = diff.Object2Value?.ToString() ?? "null",
+            PropertyPath = groupingPath
+        };
+    }
+
+    /// <summary>
+    /// Represents a key for grouping differences
+    /// </summary>
+    private class DifferenceGroupingKey
+    {
+        public string OldValue { get; set; }
+        public string NewValue { get; set; }
+        public string PropertyPath { get; set; }
+
+        public override bool Equals(object obj)
+        {
+            if (obj is not DifferenceGroupingKey other)
+                return false;
+
+            return string.Equals(OldValue, other.OldValue, StringComparison.Ordinal) &&
+                   string.Equals(NewValue, other.NewValue, StringComparison.Ordinal) &&
+                   string.Equals(PropertyPath, other.PropertyPath, StringComparison.Ordinal);
+        }
+
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(
+                OldValue?.GetHashCode() ?? 0,
+                NewValue?.GetHashCode() ?? 0,
+                PropertyPath?.GetHashCode() ?? 0
+            );
+        }
     }
 
     /// <summary>

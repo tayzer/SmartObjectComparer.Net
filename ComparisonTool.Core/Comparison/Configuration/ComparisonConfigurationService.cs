@@ -360,6 +360,26 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     }
 
     /// <summary>
+    /// Clear all ignore rules
+    /// </summary>
+    public void ClearIgnoreRules()
+    {
+        var count = ignoreRules.Count;
+        ignoreRules.Clear();
+        logger.LogInformation("Cleared {Count} ignore rules", count);
+        
+        // Mark configuration as dirty to trigger rebuild
+        MarkConfigurationDirty();
+        
+        // Invalidate cache when ignore rules change
+        if (_cacheService != null)
+        {
+            var newFingerprint = _cacheService.GenerateConfigurationFingerprint(this);
+            _cacheService.InvalidateConfigurationChanges(newFingerprint);
+        }
+    }
+
+    /// <summary>
     /// Apply all configured settings from ignore rules
     /// </summary>
     public void ApplyConfiguredSettings()

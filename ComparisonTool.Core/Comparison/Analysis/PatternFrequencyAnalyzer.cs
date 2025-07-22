@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using ComparisonTool.Core.Comparison.Results;
+using ComparisonTool.Core.Utilities;
 using KellermanSoftware.CompareNetObjects;
 
 namespace ComparisonTool.Core.Comparison.Analysis
@@ -57,8 +58,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
 
         private string NormalizePropertyPath(string propertyPath)
         {
-            // Replace specific array indices with [*]
-            return Regex.Replace(propertyPath ?? string.Empty, "\\[\\d+\\]", "[*]");
+            return PropertyPathNormalizer.NormalizePropertyPath(propertyPath);
         }
 
         private DifferenceCategory GetDifferenceCategory(Difference diff)

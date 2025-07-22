@@ -1,6 +1,7 @@
 ﻿using System.Text;
 using System.Text.RegularExpressions;
 using ComparisonTool.Core.Comparison.Results;
+using ComparisonTool.Core.Utilities;
 using KellermanSoftware.CompareNetObjects;
 using Microsoft.Extensions.Logging;
 
@@ -832,7 +833,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
 
         private string NormalizePropertyPath(string differencePropertyName)
         {
-            return Regex.Replace(differencePropertyName ?? string.Empty, @"\[\d+\]", "[*]");
+            return PropertyPathNormalizer.NormalizePropertyPath(differencePropertyName, logger);
         }
 
         private DifferenceCategory DetermineValueChangeCategory(string oldValue, string newValue)

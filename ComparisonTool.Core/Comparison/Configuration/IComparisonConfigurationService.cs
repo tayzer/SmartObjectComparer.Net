@@ -75,6 +75,11 @@ public interface IComparisonConfigurationService
     IReadOnlyList<IgnoreRule> GetIgnoreRules();
 
     /// <summary>
+    /// Clear all ignore rules
+    /// </summary>
+    void ClearIgnoreRules();
+
+    /// <summary>
     /// Apply all configured settings from ignore rules
     /// </summary>
     void ApplyConfiguredSettings();

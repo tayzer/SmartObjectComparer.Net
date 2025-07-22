@@ -6,8 +6,7 @@
   <ApiVersion>2.1.5</ApiVersion>
   <ResponseMetadata>
     <Region>US-WEST-2</Region>
-    <TestValue>1</TestValue>
-    <Environment>Test</Environment>
+    <Environment>Production</Environment>
     <ServerInfo>
       <ServerId>srv-001</ServerId>
       <LoadBalancerGroup>Primary</LoadBalancerGroup>
@@ -18,7 +17,7 @@
     <Performance>
       <DatabaseQueryTime>PT0.074S</DatabaseQueryTime>
       <ExternalApiCalls>5</ExternalApiCalls>
-      <CacheHitRatio>1.03305217625249744</CacheHitRatio>
+      <CacheHitRatio>0.03305217625249744</CacheHitRatio>
       <ComponentTimings>
         <Timing>
           <ComponentName>Database</ComponentName>
@@ -2913,4 +2912,16 @@
       <UserAgent>ComparisonTool/2.1</UserAgent>
     </AuditEntry>
   </AuditTrail>
+  <TestThisThing>
+    <Tests>
+      <Test>
+        <TestObject>
+          <Id>1</Id>
+          <Name>Yo</Name>
+          <Description>Test</Description>
+          <Type>Ting</Type>
+        </TestObject>
+      </Test>
+    </Tests>
+  </TestThisThing>
 </OrderManagementResponse>

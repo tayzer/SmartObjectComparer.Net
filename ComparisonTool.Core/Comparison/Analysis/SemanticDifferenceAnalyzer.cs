@@ -3,6 +3,7 @@ using KellermanSoftware.CompareNetObjects;
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Results;
 using System.Text;
+using ComparisonTool.Core.Utilities;
 using Microsoft.Extensions.Logging;
 
 namespace ComparisonTool.Core.Comparison.Analysis
@@ -187,8 +188,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
 
         private string NormalizePropertyPath(string propertyPath)
         {
-            // Replace specific array indices with [*]
-            return Regex.Replace(propertyPath, @"\\[\\d+\\]", "[*]");
+            return PropertyPathNormalizer.NormalizePropertyPath(propertyPath);
         }
 
         private bool IsInDocumentSection(Difference diff, HashSet<string> sectionKeys)
