@@ -114,6 +114,7 @@
                                           IgnoreRules="@IgnoreRules"
                                           OnIgnoreRuleAdded="@AddIgnoreRule"
                                           OnIgnoreRuleRemoved="@RemoveIgnoreRule"
+                                          OnIgnoreRulesCleared="@ClearAllIgnoreRules"
                                           ModelType="@GetSelectedModelType()"
                                           OnPropertySelectorOpened="@OpenPropertySelector"
                                           OnTreePropertySelectorOpened="@OpenTreePropertySelector"
@@ -147,6 +148,7 @@ else
                                           IgnoreRules="@IgnoreRules"
                                           OnIgnoreRuleAdded="@AddIgnoreRule"
                                           OnIgnoreRuleRemoved="@RemoveIgnoreRule"
+                                          OnIgnoreRulesCleared="@ClearAllIgnoreRules"
                                           ModelType="@GetSelectedModelType()"
                                           OnPropertySelectorOpened="@OpenPropertySelector"
                                           OnTreePropertySelectorOpened="@OpenTreePropertySelector"
@@ -459,6 +461,12 @@ else
         {
             ConfigService.RemoveIgnoredProperty(rule.PropertyPath);
         }
+    }
+
+    private void ClearAllIgnoreRules()
+    {
+        IgnoreRules.Clear();
+        ConfigService.ClearIgnoreRules();
     }
     
     private async Task BrowseDirectory1()

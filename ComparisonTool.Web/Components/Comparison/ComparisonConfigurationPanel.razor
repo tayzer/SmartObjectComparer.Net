@@ -249,10 +249,15 @@
                         <i class="bi bi-shield-x me-1"></i>
                         @IgnoreRules.Count Ignore Rules
                     </span>
-                    @if (IgnoreRules.Count > 10)
-                    {
-                        <small class="text-muted">Showing all rules in compact view</small>
-                    }
+                    <div class="d-flex align-items-center gap-2">
+                        @if (IgnoreRules.Count > 10)
+                        {
+                            <small class="text-muted">Showing all rules in compact view</small>
+                        }
+                        <button class="btn btn-sm btn-outline-danger" @onclick="HandleClearAllIgnoreRules" title="Clear all ignore rules">
+                            <i class="bi bi-trash me-1"></i> Clear All
+                        </button>
+                    </div>
                 </div>
                 
                 <div class="compact-rules-table">
@@ -349,6 +354,7 @@
     [Parameter] public List<IgnoreRule> IgnoreRules { get; set; } = new List<IgnoreRule>();
     [Parameter] public EventCallback<IgnoreRule> OnIgnoreRuleAdded { get; set; }
     [Parameter] public EventCallback<IgnoreRule> OnIgnoreRuleRemoved { get; set; }
+    [Parameter] public EventCallback OnIgnoreRulesCleared { get; set; }
     [Parameter] public Type ModelType { get; set; }
     [Parameter] public EventCallback OnPropertySelectorOpened { get; set; }
     [Parameter] public EventCallback OnTreePropertySelectorOpened { get; set; }
@@ -397,6 +403,13 @@
     private async Task HandleSmartIgnoreRulesCleared()
     {
         ConfigService.ClearSmartIgnoreRules();
+        StateHasChanged();
+    }
+
+    private async Task HandleClearAllIgnoreRules()
+    {
+        ConfigService.ClearIgnoreRules();
+        await OnIgnoreRulesCleared.InvokeAsync();
         StateHasChanged();
     }
 
