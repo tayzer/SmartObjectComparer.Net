@@ -2912,4 +2912,16 @@
       <UserAgent>ComparisonTool/2.1</UserAgent>
     </AuditEntry>
   </AuditTrail>
+  <TestThisThing>
+    <Tests>
+      <Test>
+        <TestObject>
+          <Id>1</Id>
+          <Name>Tt</Name>
+          <Description>TTT</Description>
+          <Type>Ting</Type>
+        </TestObject>
+      </Test>
+    </Tests>
+  </TestThisThing>
 </OrderManagementResponse>

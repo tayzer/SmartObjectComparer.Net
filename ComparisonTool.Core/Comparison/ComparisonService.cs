@@ -965,6 +965,12 @@ public class ComparisonService : IComparisonService
             logger.LogDebug("TESTING: Standard path: '{Original}' -> '{Normalized}'", propertyPath, normalized);
         }
         
+        // Test the paths from the actual issue
+        if (propertyPath.Contains("TestThisThing") && propertyPath.Contains("TestObjects") && !propertyPath.Contains("System.Collections"))
+        {
+            logger.LogDebug("TESTING: Standard TestObjects path: '{Original}' -> '{Normalized}'", propertyPath, normalized);
+        }
+        
         return normalized;
     }
 
@@ -975,9 +981,9 @@ public class ComparisonService : IComparisonService
     {
         var normalizedPath = NormalizePropertyPath(diff.PropertyName);
         
-        // For System.Collections paths, use the normalized path to group with standard equivalents
-        // For other paths, use the original property name to avoid grouping different properties with same values
-        var groupingPath = PropertyPathNormalizer.ContainsSystemCollections(diff.PropertyName) ? normalizedPath : diff.PropertyName;
+        // Always use the normalized path for grouping to ensure System.Collections paths are grouped with their standard equivalents
+        // The normalization handles both System.Collections paths and standard array paths consistently
+        var groupingPath = normalizedPath;
         
         // Add debug logging for the specific case mentioned in the issue
         if (diff.PropertyName.Contains("Residents"))
@@ -1003,6 +1009,25 @@ public class ComparisonService : IComparisonService
         public string OldValue { get; set; }
         public string NewValue { get; set; }
         public string PropertyPath { get; set; }
+
+        public override bool Equals(object obj)
+        {
+            if (obj is not DifferenceGroupingKey other)
+                return false;
+
+            return string.Equals(OldValue, other.OldValue, StringComparison.Ordinal) &&
+                   string.Equals(NewValue, other.NewValue, StringComparison.Ordinal) &&
+                   string.Equals(PropertyPath, other.PropertyPath, StringComparison.Ordinal);
+        }
+
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(
+                OldValue?.GetHashCode() ?? 0,
+                NewValue?.GetHashCode() ?? 0,
+                PropertyPath?.GetHashCode() ?? 0
+            );
+        }
     }
 
     /// <summary>

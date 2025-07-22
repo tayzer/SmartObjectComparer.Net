@@ -35,6 +35,37 @@ public class ComplexOrderResponse
     [XmlArray(ElementName = "AuditTrail")]
     [XmlArrayItem(ElementName = "AuditEntry")]
     public List<AuditEntry> AuditTrail { get; set; } = new();
+
+    [XmlElement(ElementName = "TestThisThing")]
+    public TestThisThing[]? TestThisThing { get; set; }
+}
+
+public class TestThisThing
+{
+    [XmlArray(ElementName = "Tests")]
+    [XmlArrayItem(ElementName = "Test")]
+    public List<Test>? Tests { get; set; }
+}
+
+public class Test
+{
+    [XmlElement(ElementName = "TestObject")]
+    public List<TestObject>? TestObjects { get; set; }
+}
+
+public class TestObject
+{
+    [XmlElement(ElementName = "Id")]
+    public string Id { get; set; }
+
+    [XmlElement(ElementName = "Name")]
+    public string Name { get; set; }
+
+    [XmlElement(ElementName = "Description")]
+    public string Description { get; set; }
+
+    [XmlElement(ElementName = "Type")]
+    public string Type { get; set; }
 }
 
 public class ResponseMetadata
