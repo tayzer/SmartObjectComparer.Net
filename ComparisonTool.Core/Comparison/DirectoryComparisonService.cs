@@ -137,8 +137,8 @@ public class DirectoryComparisonService
                             using var file1Stream = await fileSystemService.OpenFileStreamAsync(file1Path, ct);
                             using var file2Stream = await fileSystemService.OpenFileStreamAsync(file2Path, ct);
 
-                            // Perform comparison
-                            var comparisonResult = await comparisonService.CompareXmlFilesWithCachingAsync(
+                            // Perform comparison using format-agnostic method
+                            var comparisonResult = await comparisonService.CompareFilesWithCachingAsync(
                                 file1Stream,
                                 file2Stream,
                                 modelName,
@@ -317,7 +317,7 @@ public class DirectoryComparisonService
                                 using var file1Stream = await fileSystemService.OpenFileStreamAsync(file1Path, ct);
                                 using var file2Stream = await fileSystemService.OpenFileStreamAsync(file2Path, ct);
                                 
-                                var comparisonResult = await comparisonService.CompareXmlFilesWithCachingAsync(
+                                var comparisonResult = await comparisonService.CompareFilesWithCachingAsync(
                                     file1Stream, 
                                     file2Stream, 
                                     modelName, 

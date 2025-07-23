@@ -50,6 +50,9 @@ public static class ServiceCollectionExtensions
 
             // todo: shouldnt be done here
             service.RegisterDomainModel<ComplexOrderResponse>("ComplexOrderResponse");
+            
+            // Register test domain model for JSON/XML comparison testing
+            service.RegisterDomainModel<ComparisonTool.Domain.Models.CustomerOrder>("CustomerOrder");
 
             return service;
         });
@@ -73,6 +76,78 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IFileSystemService, FileSystemService>();
 
         services.AddScoped<DirectoryComparisonService>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Add JSON comparison services with proper dependency injection
+    /// </summary>
+    public static IServiceCollection AddJsonComparisonServices(this IServiceCollection services)
+    {
+        // Add JSON deserialization service
+        services.AddSingleton<JsonDeserializationService>(provider =>
+        {
+            var logger = provider.GetRequiredService<ILogger<JsonDeserializationService>>();
+            var service = new JsonDeserializationService(logger);
+            
+            // Register test domain model for JSON/XML comparison testing
+            service.RegisterDomainModel<ComparisonTool.Domain.Models.CustomerOrder>("CustomerOrder");
+            
+            return service;
+        });
+
+        return services;
+    }
+
+    /// <summary>
+    /// Add unified comparison services that support both XML and JSON formats
+    /// </summary>
+    public static IServiceCollection AddUnifiedComparisonServices(this IServiceCollection services, IConfiguration configuration = null)
+    {
+        // Add both XML and JSON services
+        services.AddXmlComparisonServices(configuration);
+        services.AddJsonComparisonServices();
+
+        // Add the factory for choosing appropriate services
+        services.AddSingleton<DeserializationServiceFactory>(provider =>
+        {
+            var logger = provider.GetRequiredService<ILogger<DeserializationServiceFactory>>();
+            return new DeserializationServiceFactory(provider, logger);
+        });
+
+        // Add unified deserialization service that can handle both formats
+        services.AddSingleton<IDeserializationService>(provider =>
+        {
+            var factory = provider.GetRequiredService<DeserializationServiceFactory>();
+            return factory.GetUnifiedService();
+        });
+
+        return services;
+    }
+
+    /// <summary>
+    /// Register domain models with all deserialization services
+    /// </summary>
+    public static IServiceCollection RegisterDomainModel<T>(this IServiceCollection services, string modelName) where T : class
+    {
+        services.AddSingleton<Action<IServiceProvider>>(provider => serviceProvider =>
+        {
+            // Register with unified service if available
+            var unifiedService = serviceProvider.GetService<IDeserializationService>();
+            if (unifiedService != null)
+            {
+                unifiedService.RegisterDomainModel<T>(modelName);
+                return;
+            }
+
+            // Fallback to individual services
+            var xmlService = serviceProvider.GetService<IXmlDeserializationService>();
+            xmlService?.RegisterDomainModel<T>(modelName);
+
+            var jsonService = serviceProvider.GetService<JsonDeserializationService>();
+            jsonService?.RegisterDomainModel<T>(modelName);
+        });
 
         return services;
     }

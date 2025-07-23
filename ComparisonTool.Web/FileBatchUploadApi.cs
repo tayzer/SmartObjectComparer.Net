@@ -52,8 +52,9 @@ namespace ComparisonTool.Web
 
                 foreach (var file in files)
                 {
-                    // Only accept XML files
-                    if (!file.FileName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
+                    // Only accept supported files (XML and JSON)
+                    if (!file.FileName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) && 
+                        !file.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
                         continue;
 
                     try 

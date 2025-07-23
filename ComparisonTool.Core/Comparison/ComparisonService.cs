@@ -19,6 +19,7 @@ public class ComparisonService : IComparisonService
 {
     private readonly ILogger<ComparisonService> logger;
     private readonly IXmlDeserializationService deserializationService;
+    private readonly DeserializationServiceFactory _deserializationFactory;
     private readonly IComparisonConfigurationService configService;
     private readonly IFileSystemService fileSystemService;
     private readonly PerformanceTracker _performanceTracker;
@@ -35,7 +36,8 @@ public class ComparisonService : IComparisonService
         IFileSystemService fileSystemService,
         PerformanceTracker performanceTracker,
         SystemResourceMonitor resourceMonitor,
-        ComparisonResultCacheService cacheService)
+        ComparisonResultCacheService cacheService,
+        DeserializationServiceFactory deserializationFactory = null)
     {
         this.logger = logger;
         this.deserializationService = deserializationService;
@@ -44,6 +46,7 @@ public class ComparisonService : IComparisonService
         this._performanceTracker = performanceTracker;
         this._resourceMonitor = resourceMonitor;
         this._cacheService = cacheService;
+        this._deserializationFactory = deserializationFactory;
     }
 
     /// <summary>
@@ -249,6 +252,233 @@ public class ComparisonService : IComparisonService
     }
 
     /// <summary>
+    /// Compare two files with auto-format detection (supports XML and JSON)
+    /// </summary>
+    /// <param name="oldFileStream">Stream containing the old/reference file</param>
+    /// <param name="newFileStream">Stream containing the new/comparison file</param>
+    /// <param name="modelName">Name of the registered model to use for deserialization</param>
+    /// <param name="oldFilePath">Path to the old file (for logging and format detection)</param>
+    /// <param name="newFilePath">Path to the new file (for logging and format detection)</param>
+    /// <param name="cancellationToken">Cancellation token for async operations</param>
+    /// <returns>Comparison result with differences</returns>
+    public async Task<ComparisonResult> CompareFilesWithCachingAsync(
+        Stream oldFileStream,
+        Stream newFileStream,
+        string modelName,
+        string oldFilePath,
+        string newFilePath,
+        CancellationToken cancellationToken = default)
+    {
+        if (_deserializationFactory == null)
+        {
+            // Fallback to XML-only comparison for backward compatibility
+            logger.LogDebug("DeserializationFactory not available, falling back to XML-only comparison");
+            return await CompareXmlFilesWithCachingAsync(oldFileStream, newFileStream, modelName, oldFilePath, newFilePath, cancellationToken);
+        }
+
+        return await _performanceTracker.TrackOperationAsync("CompareFilesWithCaching", async () =>
+        {
+            try
+            {
+                // Detect file formats
+                var oldFormat = FileTypeDetector.DetectFormat(oldFilePath);
+                var newFormat = FileTypeDetector.DetectFormat(newFilePath);
+
+                if (oldFormat != newFormat)
+                {
+                    throw new InvalidOperationException($"Cannot compare files of different formats: {oldFormat} vs {newFormat}");
+                }
+
+                logger.LogDebug("Comparing files in {Format} format: {OldFile} vs {NewFile}", oldFormat, oldFilePath, newFilePath);
+
+                // Get appropriate deserialization service
+                var deserializationService = _deserializationFactory.GetService(oldFormat);
+
+                // Generate configuration fingerprint for caching
+                var configFingerprint = _cacheService.GenerateConfigurationFingerprint(configService);
+                
+                // Generate file hashes for cache keys
+                var file1Hash = _cacheService.GenerateFileHash(oldFileStream);
+                var file2Hash = _cacheService.GenerateFileHash(newFileStream);
+                
+                // Try to get cached comparison result first
+                if (_cacheService.TryGetCachedComparison(file1Hash, file2Hash, configFingerprint, out var cachedResult))
+                {
+                    logger.LogDebug("Using cached comparison result for files with hashes {File1Hash}..{File2Hash}", 
+                        file1Hash[..8], file2Hash[..8]);
+                    return cachedResult;
+                }
+                
+                logger.LogDebug("Cache miss - performing fresh comparison for {ModelName} in {Format} format", modelName, oldFormat);
+                
+                // Check if model exists (will throw if not found)
+                var modelType = deserializationService.GetModelType(modelName);
+
+                // Deserialize both files using the proper domain type
+                var oldResponse = await _performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}_{oldFormat}", async () =>
+                {
+                    return await Task.Run(() =>
+                    {
+                        oldFileStream.Position = 0;
+                        // Use the proper domain type instead of object to avoid JsonElement issues
+                        var deserializeMethod = deserializationService.GetType().GetMethod("Deserialize").MakeGenericMethod(modelType);
+                        return deserializeMethod.Invoke(deserializationService, new object[] { oldFileStream, oldFormat });
+                    }, cancellationToken);
+                });
+
+                var newResponse = await _performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}_{newFormat}", async () =>
+                {
+                    return await Task.Run(() =>
+                    {
+                        newFileStream.Position = 0;
+                        // Use the proper domain type instead of object to avoid JsonElement issues
+                        var deserializeMethod = deserializationService.GetType().GetMethod("Deserialize").MakeGenericMethod(modelType);
+                        return deserializeMethod.Invoke(deserializationService, new object[] { newFileStream, newFormat });
+                    }, cancellationToken);
+                });
+
+                // Perform comparison using the same logic as XML comparison
+                var result = await PerformObjectComparison(oldResponse, newResponse, modelType, cancellationToken);
+
+                // Cache the result for future use
+                _cacheService.CacheComparison(file1Hash, file2Hash, configFingerprint, result);
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error occurred while comparing files with caching");
+                throw;
+            }
+        });
+    }
+
+    /// <summary>
+    /// Compare two files with auto-format detection (supports XML and JSON) - legacy method without caching
+    /// </summary>
+    /// <param name="oldFileStream">Stream containing the old/reference file</param>
+    /// <param name="newFileStream">Stream containing the new/comparison file</param>
+    /// <param name="modelName">Name of the registered model to use for deserialization</param>
+    /// <param name="oldFilePath">Path to the old file (for format detection)</param>
+    /// <param name="newFilePath">Path to the new file (for format detection)</param>
+    /// <param name="cancellationToken">Cancellation token for async operations</param>
+    /// <returns>Comparison result with differences</returns>
+    public async Task<ComparisonResult> CompareFilesAsync(
+        Stream oldFileStream,
+        Stream newFileStream,
+        string modelName,
+        string oldFilePath,
+        string newFilePath,
+        CancellationToken cancellationToken = default)
+    {
+        if (_deserializationFactory == null)
+        {
+            // Fallback to XML-only comparison for backward compatibility
+            logger.LogDebug("DeserializationFactory not available, falling back to XML-only comparison");
+            return await CompareXmlFilesAsync(oldFileStream, newFileStream, modelName, cancellationToken);
+        }
+
+        return await _performanceTracker.TrackOperationAsync("CompareFilesAsync", async () =>
+        {
+            try
+            {
+                // Detect file formats
+                var oldFormat = FileTypeDetector.DetectFormat(oldFilePath);
+                var newFormat = FileTypeDetector.DetectFormat(newFilePath);
+
+                if (oldFormat != newFormat)
+                {
+                    throw new InvalidOperationException($"Cannot compare files of different formats: {oldFormat} vs {newFormat}");
+                }
+
+                logger.LogDebug("Starting comparison of files in {Format} format using model {ModelName}", oldFormat, modelName);
+
+                // Get appropriate deserialization service
+                var deserializationService = _deserializationFactory.GetService(oldFormat);
+
+                // Check if model exists (will throw if not found)
+                var modelType = deserializationService.GetModelType(modelName);
+
+                // Deserialize both files using the proper domain type
+                var oldResponse = await _performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}_{oldFormat}", async () =>
+                {
+                    return await Task.Run(() =>
+                    {
+                        oldFileStream.Position = 0;
+                        // Use the proper domain type instead of object to avoid JsonElement issues
+                        var deserializeMethod = deserializationService.GetType().GetMethod("Deserialize").MakeGenericMethod(modelType);
+                        return deserializeMethod.Invoke(deserializationService, new object[] { oldFileStream, oldFormat });
+                    }, cancellationToken);
+                });
+
+                var newResponse = await _performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}_{newFormat}", async () =>
+                {
+                    return await Task.Run(() =>
+                    {
+                        newFileStream.Position = 0;
+                        // Use the proper domain type instead of object to avoid JsonElement issues
+                        var deserializeMethod = deserializationService.GetType().GetMethod("Deserialize").MakeGenericMethod(modelType);
+                        return deserializeMethod.Invoke(deserializationService, new object[] { newFileStream, newFormat });
+                    }, cancellationToken);
+                });
+
+                // Perform comparison using the same logic as XML comparison
+                return await PerformObjectComparison(oldResponse, newResponse, modelType, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error occurred while comparing files");
+                throw;
+            }
+        });
+    }
+
+    /// <summary>
+    /// Shared comparison logic extracted from XML-specific methods
+    /// </summary>
+    private async Task<ComparisonResult> PerformObjectComparison(
+        object oldResponse, 
+        object newResponse, 
+        Type modelType, 
+        CancellationToken cancellationToken)
+    {
+        // PERFORMANCE OPTIMIZATION: Get ignore rules once and reuse
+        var propertiesToIgnore = await _performanceTracker.TrackOperationAsync("Get_Ignore_Rules", () => Task.FromResult(
+            configService.GetIgnoreRules()
+                .Where(r => r.IgnoreCompletely)
+                .Select(r => GetPropertyNameFromPath(r.PropertyPath))
+                .Where(p => !string.IsNullOrEmpty(p))
+                .Distinct()
+                .ToList()));
+
+        // THREAD-SAFE COMPARISON: Create completely isolated configuration
+        var result = await _performanceTracker.TrackOperationAsync("Compare_Objects", async () => 
+        {
+            return await Task.Run(() =>
+            {
+                // CRITICAL FIX: Create truly isolated CompareLogic with no shared state
+                var isolatedCompareLogic = CreateIsolatedCompareLogic();
+                
+                logger.LogDebug("Performing comparison with {ComparerCount} custom comparers. First: {FirstComparer}",
+                    isolatedCompareLogic.Config.CustomComparers.Count,
+                    isolatedCompareLogic.Config.CustomComparers.FirstOrDefault()?.GetType().Name ?? "none");
+
+                // Direct comparison without cloning - this eliminates serialization corruption
+                return isolatedCompareLogic.Compare(oldResponse, newResponse);
+            }, cancellationToken);
+        });
+
+        logger.LogDebug("Comparison completed. Found {DifferenceCount} differences",
+            result.Differences.Count);
+
+        // Filter out ignored properties using smart rules and legacy pattern matching
+        result = configService.FilterSmartIgnoredDifferences(result, modelType);
+        result = configService.FilterIgnoredDifferences(result);
+
+        return FilterDuplicateDifferences(result);
+    }
+
+    /// <summary>
     /// Compare multiple folder pairs of XML files
     /// </summary>
     /// <param name="folder1Files">List of files from the first folder</param>
@@ -288,7 +518,7 @@ public class ComparisonService : IComparisonService
             }
                 using var file1Stream = await fileSystemService.OpenFileStreamAsync(file1Path, cancellationToken);
                 using var file2Stream = await fileSystemService.OpenFileStreamAsync(file2Path, cancellationToken);
-                var pairResult = await CompareXmlFilesWithCachingAsync(file1Stream, file2Stream, modelName, file1Path, file2Path, cancellationToken);
+                var pairResult = await CompareFilesWithCachingAsync(file1Stream, file2Stream, modelName, file1Path, file2Path, cancellationToken);
                 var categorizer = new DifferenceCategorizer();
                 var summary = categorizer.CategorizeAndSummarize(pairResult);
                 var filePairResult = new FilePairComparisonResult
@@ -415,8 +645,8 @@ public class ComparisonService : IComparisonService
                                     using var file1Stream = await fileSystemService.OpenFileStreamAsync(file1Path, ct);
                                     using var file2Stream = await fileSystemService.OpenFileStreamAsync(file2Path, ct);
                                     
-                                    // Perform comparison with caching
-                                    var comparisonResult = await CompareXmlFilesWithCachingAsync(
+                                    // Perform comparison with caching using format-agnostic method
+                                    var comparisonResult = await CompareFilesWithCachingAsync(
                                         file1Stream,
                                         file2Stream,
                                         modelName,
@@ -860,8 +1090,14 @@ public class ComparisonService : IComparisonService
         }
         logger.LogDebug("=== END ALL DIFFERENCES ===");
 
+        // Filter out confusing collection count differences and improve null element differences
+        var filteredDifferences = result.Differences.Where(diff => !IsConfusingCollectionDifference(diff)).ToList();
+        
+        // Improve null element differences to be more descriptive
+        var improvedDifferences = filteredDifferences.Select(diff => ImproveDifferenceDescription(diff)).ToList();
+
         // Group differences using the new grouping key that handles System.Collections paths properly
-        var groups = result.Differences.GroupBy(d => CreateGroupingKey(d)).ToList();
+        var groups = improvedDifferences.GroupBy(d => CreateGroupingKey(d)).ToList();
         
         logger.LogDebug("=== GROUPING RESULTS ===");
         foreach (var group in groups)
@@ -1060,6 +1296,63 @@ public class ComparisonService : IComparisonService
         // For paths like Body.Response.Results.Score, extract Score
         var parts = propertyPath.Split('.');
         return parts.Length > 0 ? parts[parts.Length - 1] : string.Empty;
+    }
+
+    /// <summary>
+    /// Check if a difference represents a confusing collection count difference that should be filtered out
+    /// </summary>
+    private bool IsConfusingCollectionDifference(Difference diff)
+    {
+        // Filter out collection count differences that just show the count without context
+        if (diff.PropertyName.EndsWith(".System.Collections.IList.Item") || 
+            diff.PropertyName.EndsWith(".System.Collections.Generic.IList`1.Item"))
+        {
+            // Check if this is just a count difference (old and new values are numbers)
+            if (int.TryParse(diff.Object1Value?.ToString(), out _) && 
+                int.TryParse(diff.Object2Value?.ToString(), out _))
+            {
+                logger.LogDebug("Filtering out confusing collection count difference: '{PropertyName}' (Old: '{OldValue}', New: '{NewValue}')",
+                    diff.PropertyName, diff.Object1Value, diff.Object2Value);
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    /// <summary>
+    /// Improve the description of differences to be more user-friendly
+    /// </summary>
+    private Difference ImproveDifferenceDescription(Difference diff)
+    {
+        // Handle null element differences to be more descriptive
+        if (diff.PropertyName.Contains(".System.Collections.IList.Item[") && 
+            diff.Object1Value?.ToString() == "(null)" && 
+            diff.Object2Value?.ToString()?.Contains(".") == true)
+        {
+            // Extract the index from the property path
+            var indexMatch = System.Text.RegularExpressions.Regex.Match(diff.PropertyName, @"\[(\d+)\]$");
+            if (indexMatch.Success)
+            {
+                var index = indexMatch.Groups[1].Value;
+                var basePath = diff.PropertyName.Replace($".System.Collections.IList.Item[{index}]", "");
+                
+                // Create a more descriptive property name
+                var improvedPropertyName = $"{basePath}[{index}] (New Element)";
+                
+                logger.LogDebug("Improving null element difference: '{Original}' -> '{Improved}'",
+                    diff.PropertyName, improvedPropertyName);
+                
+                return new Difference
+                {
+                    PropertyName = improvedPropertyName,
+                    Object1Value = diff.Object1Value,
+                    Object2Value = diff.Object2Value
+                };
+            }
+        }
+        
+        return diff;
     }
 
     /// <summary>

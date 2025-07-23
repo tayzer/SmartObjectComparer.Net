@@ -30,6 +30,28 @@ public interface IComparisonService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Compare two files with auto-format detection (supports XML and JSON)
+    /// </summary>
+    Task<ComparisonResult> CompareFilesAsync(
+        Stream oldFileStream,
+        Stream newFileStream,
+        string modelName,
+        string oldFilePath,
+        string newFilePath,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Compare two files with auto-format detection (supports XML and JSON) with caching support
+    /// </summary>
+    Task<ComparisonResult> CompareFilesWithCachingAsync(
+        Stream oldFileStream,
+        Stream newFileStream,
+        string modelName,
+        string oldFilePath,
+        string newFilePath,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Compare multiple folder pairs of XML files
     /// </summary>
     Task<MultiFolderComparisonResult> CompareFoldersAsync(

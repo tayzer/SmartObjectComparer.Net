@@ -211,8 +211,9 @@
                         skippedFiles++;
                         continue;
                     }
-                    bool isXmlFile = file.Name.EndsWith(".xml", StringComparison.OrdinalIgnoreCase);
-                    if (!isXmlFile)
+                    bool isSupportedFile = file.Name.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) || 
+                                           file.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase);
+                    if (!isSupportedFile)
                     {
                         skippedFiles++;
                         continue;
@@ -229,14 +230,16 @@
 
             // Update file list with just the file names (not streams)
             Files = selectedFiles
-                .Where(f => f.Name.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) && f.Size <= maxFileSize)
+                .Where(f => (f.Name.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) || 
+                            f.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) && 
+                            f.Size <= maxFileSize)
                 .Select(f => isFolder ? f.Name : GetFileNameOnly(f.Name))
                 .ToList();
             await OnFilesChanged.InvokeAsync(Files);
 
             if (skippedFiles > 0)
             {
-                await JSRuntime.InvokeVoidAsync("alert", $"Loaded {xmlFileCount} XML files. Skipped {skippedFiles} non-XML or too large files.");
+                await JSRuntime.InvokeVoidAsync("alert", $"Loaded {xmlFileCount} supported files (XML/JSON). Skipped {skippedFiles} unsupported or too large files.");
             }
         }
         catch (Exception ex)
