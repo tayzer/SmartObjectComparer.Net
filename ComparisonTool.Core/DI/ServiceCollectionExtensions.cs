@@ -50,9 +50,6 @@ public static class ServiceCollectionExtensions
 
             // todo: shouldnt be done here
             service.RegisterDomainModel<ComplexOrderResponse>("ComplexOrderResponse");
-            
-            // Register test domain model for JSON/XML comparison testing
-            service.RegisterDomainModel<ComparisonTool.Domain.Models.CustomerOrder>("CustomerOrder");
 
             return service;
         });

@@ -149,7 +149,7 @@ public class DeserializationServiceFactory
         return new UnifiedDeserializationService(this, _logger);
     }
 
-    private IDeserializationService GetXmlService()
+    internal IDeserializationService GetXmlService()
     {
         var xmlService = _serviceProvider.GetService(typeof(IXmlDeserializationService)) as IXmlDeserializationService;
         if (xmlService == null)
@@ -161,7 +161,7 @@ public class DeserializationServiceFactory
         return new XmlDeserializationServiceAdapter(xmlService);
     }
 
-    private IDeserializationService GetJsonService()
+    internal IDeserializationService GetJsonService()
     {
         var jsonService = _serviceProvider.GetService(typeof(JsonDeserializationService)) as JsonDeserializationService;
         if (jsonService == null)
@@ -259,7 +259,44 @@ internal class UnifiedDeserializationService : IDeserializationService
 
     public IEnumerable<string> GetRegisteredModelNames()
     {
-        return _registeredModels.Keys;
+        // Get models from all services, not just the unified service's internal dictionary
+        var allModels = new HashSet<string>();
+        
+        // Add models from XML service
+        try
+        {
+            var xmlModels = _factory.GetXmlService().GetRegisteredModelNames();
+            foreach (var model in xmlModels)
+            {
+                allModels.Add(model);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get registered models from XML service");
+        }
+        
+        // Add models from JSON service
+        try
+        {
+            var jsonModels = _factory.GetJsonService().GetRegisteredModelNames();
+            foreach (var model in jsonModels)
+            {
+                allModels.Add(model);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get registered models from JSON service");
+        }
+        
+        // Add models registered directly with this unified service
+        foreach (var model in _registeredModels.Keys)
+        {
+            allModels.Add(model);
+        }
+        
+        return allModels;
     }
 
     public Type GetModelType(string modelName)
