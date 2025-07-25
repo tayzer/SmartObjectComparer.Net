@@ -661,8 +661,8 @@ public class ComparisonService : IComparisonService
                                     // Create result
                                     var pairResult = new FilePairComparisonResult
                                     {
-                                        File1Name = relativePath,
-                                        File2Name = relativePath,
+                                        File1Name = Path.GetFileName(file1Path),
+                                        File2Name = Path.GetFileName(file2Path),
                                         Result = comparisonResult,
                                         Summary = summary
                                     };

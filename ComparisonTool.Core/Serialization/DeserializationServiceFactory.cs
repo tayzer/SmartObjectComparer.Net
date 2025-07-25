@@ -301,12 +301,33 @@ internal class UnifiedDeserializationService : IDeserializationService
 
     public Type GetModelType(string modelName)
     {
-        if (!_registeredModels.ContainsKey(modelName))
+        // Check internal models first
+        if (_registeredModels.ContainsKey(modelName))
         {
-            throw new ArgumentException($"No model registered with name: {modelName}");
+            return _registeredModels[modelName];
         }
 
-        return _registeredModels[modelName];
+        // Check XML service
+        try
+        {
+            return _factory.GetXmlService().GetModelType(modelName);
+        }
+        catch (ArgumentException)
+        {
+            // Model not found in XML service, continue to JSON service
+        }
+
+        // Check JSON service
+        try
+        {
+            return _factory.GetJsonService().GetModelType(modelName);
+        }
+        catch (ArgumentException)
+        {
+            // Model not found in JSON service
+        }
+
+        throw new ArgumentException($"No model registered with name: {modelName}");
     }
 
     public T Deserialize<T>(Stream stream, SerializationFormat? format = null) where T : class
