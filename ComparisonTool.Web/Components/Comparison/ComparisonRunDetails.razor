@@ -456,11 +456,11 @@
                                     </div>
                                     <div class="value-comparison">
                                         <div class="value-side expected">
-                                            <div class="fw-medium text-muted mb-2">Expected (A)</div>
+                                            <div class="fw-medium text-muted mb-2">Expected</div>
                                             <code>@file.ExpectedValue</code>
                                         </div>
                                         <div class="value-side actual">
-                                            <div class="fw-medium text-warning mb-2">Actual (B)</div>
+                                            <div class="fw-medium text-warning mb-2">Actual</div>
                                             <code>@file.ActualValue</code>
                                         </div>
                                     </div>
@@ -674,14 +674,14 @@
                                     @if (file.IsValueDifference)
                                     {
                                         <div class="value-comparison">
-                                            <div class="value-side expected">
-                                                <div class="fw-medium text-muted mb-2">Expected (A)</div>
-                                                <code>@file.ExpectedValue</code>
-                                            </div>
-                                            <div class="value-side actual">
-                                                <div class="fw-medium text-danger mb-2">Actual (B)</div>
-                                                <code>@file.ActualValue</code>
-                                            </div>
+                                                                                    <div class="value-side expected">
+                                            <div class="fw-medium text-muted mb-2">Expected</div>
+                                            <code>@file.ExpectedValue</code>
+                                        </div>
+                                        <div class="value-side actual">
+                                            <div class="fw-medium text-danger mb-2">Actual</div>
+                                            <code>@file.ActualValue</code>
+                                        </div>
                                         </div>
                                     }
                                     else
@@ -689,7 +689,7 @@
                                         <div class="order-visualization">
                                             <div class="row">
                                                 <div class="col-md-6">
-                                                    <h6 class="mb-3 text-muted">Expected Order (A)</h6>
+                                                    <h6 class="mb-3 text-muted">Expected Order</h6>
                                                     <div class="order-list">
                                                         @for (int i = 0; i < file.ExpectedOrder.Count; i++)
                                                         {
@@ -701,7 +701,7 @@
                                                     </div>
                                                 </div>
                                                 <div class="col-md-6">
-                                                    <h6 class="mb-3 text-danger">Actual Order (B)</h6>
+                                                    <h6 class="mb-3 text-danger">Actual Order</h6>
                                                     <div class="order-list">
                                                         @for (int i = 0; i < file.ActualOrder.Count; i++)
                                                         {

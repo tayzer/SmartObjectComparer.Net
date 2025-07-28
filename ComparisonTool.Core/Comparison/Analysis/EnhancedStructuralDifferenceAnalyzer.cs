@@ -9,7 +9,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
 {
     /// <summary>
     /// Enhanced analzer that identifies structural patterns in differences,
-    /// with improved detection of missing elements, common patterns, and better categorisation for testers reviewing A/B comparisons.
+    /// with improved detection of missing elements, common patterns, and better categorisation for testers reviewing Expected/Actual comparisons.
     /// </summary>
     public class EnhancedStructuralDifferenceAnalyzer
     {

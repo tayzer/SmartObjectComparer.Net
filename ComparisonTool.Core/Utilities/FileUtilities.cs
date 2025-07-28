@@ -128,14 +128,14 @@ public class FileUtilities : IFileUtilities
     {
         var sb = new StringBuilder();
 
-                    sb.AppendLine("# A vs B Folder Comparison Report");
+                    sb.AppendLine("# Expected vs Actual Folder Comparison Report");
         sb.AppendLine();
         sb.AppendLine($"Date: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
         sb.AppendLine();
 
         sb.AppendLine("## Summary");
         sb.AppendLine();
-                    sb.AppendLine("| A File | B File | Status | Differences |");
+                    sb.AppendLine("| Expected File | Actual File | Status | Differences |");
         sb.AppendLine("|---------|---------|--------|------------|");
 
         foreach (var result in folderResult.FilePairResults)
