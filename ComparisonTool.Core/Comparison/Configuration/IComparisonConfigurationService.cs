@@ -122,6 +122,11 @@ public interface IComparisonConfigurationService
     void NormalizePropertyValues(object obj, List<string> propertyNames);
 
     /// <summary>
+    /// Automatically add properties with XmlIgnore attributes to the ignore list
+    /// </summary>
+    void AddXmlIgnorePropertiesToIgnoreList(Type modelType);
+
+    /// <summary>
     /// Set the cache service for configuration change invalidation
     /// </summary>
     void SetCacheService(ComparisonResultCacheService cacheService);

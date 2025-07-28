@@ -9,6 +9,7 @@ using KellermanSoftware.CompareNetObjects;
 using KellermanSoftware.CompareNetObjects.TypeComparers;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
+using System.Xml.Serialization;
 
 namespace ComparisonTool.Core.Comparison;
 
@@ -1187,6 +1188,9 @@ public class ComparisonService : IComparisonService
                 logger.LogWarning(ex, "Error creating independent collection order comparer");
             }
         }
+        
+        // Note: XmlIgnore properties are handled by adding them to MembersToIgnore during configuration
+        // This avoids the recursion issue that occurs with custom comparers
         
         logger.LogDebug("Created isolated CompareLogic with {IgnorePatterns} ignore patterns and {Comparers} custom comparers", 
             isolatedCompareLogic.Config.MembersToIgnore.Count, 

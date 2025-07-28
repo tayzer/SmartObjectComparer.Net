@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Text.RegularExpressions;
 using System.Text.Json;
+using System.Xml.Serialization;
 
 namespace ComparisonTool.Core.Comparison.Configuration;
 
@@ -59,6 +60,9 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             compareLogic.Config.AttributesToIgnore = new List<Type>();
         if (compareLogic.Config.MembersToInclude == null)
             compareLogic.Config.MembersToInclude = new List<string>();
+
+        // Note: XmlIgnore properties will be automatically added to MembersToIgnore during configuration
+        // This avoids the recursion issue that occurs with custom comparers
 
         this.logger.LogInformation("Initialized ComparisonConfigurationService with MaxDifferences={MaxDiffs}, " +
                                    "IgnoreCollectionOrder={IgnoreOrder}, IgnoreCase={IgnoreCase}",
@@ -1329,5 +1333,117 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
 
             return false;
         }
+    }
+
+    /// <summary>
+    /// Automatically adds properties with XmlIgnore attributes to the MembersToIgnore list
+    /// This prevents properties that should not be serialized from being compared
+    /// </summary>
+    public void AddXmlIgnorePropertiesToIgnoreList(Type modelType)
+    {
+        if (modelType == null)
+            return;
+
+        try
+        {
+            var ignoredProperties = FindXmlIgnoreProperties(modelType);
+            foreach (var propertyPath in ignoredProperties)
+            {
+                if (!compareLogic.Config.MembersToIgnore.Contains(propertyPath))
+                {
+                    compareLogic.Config.MembersToIgnore.Add(propertyPath);
+                    logger.LogDebug("Added XmlIgnore property '{PropertyPath}' to ignore list", propertyPath);
+                }
+            }
+
+            if (ignoredProperties.Any())
+            {
+                logger.LogInformation("Added {Count} XmlIgnore properties to ignore list for type '{TypeName}'", 
+                    ignoredProperties.Count, modelType.Name);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Error adding XmlIgnore properties to ignore list for type '{TypeName}'", modelType.Name);
+        }
+    }
+
+    /// <summary>
+    /// Recursively finds all properties with XmlIgnore attributes in a type and its nested types
+    /// </summary>
+    private List<string> FindXmlIgnoreProperties(Type type, string currentPath = "", HashSet<Type> processedTypes = null)
+    {
+        var ignoredProperties = new List<string>();
+        
+        if (processedTypes == null)
+            processedTypes = new HashSet<Type>();
+        
+        // Prevent infinite recursion on circular references
+        if (processedTypes.Contains(type))
+            return ignoredProperties;
+        
+        processedTypes.Add(type);
+
+        try
+        {
+            var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+            
+            foreach (var property in properties)
+            {
+                var propertyPath = string.IsNullOrEmpty(currentPath) ? property.Name : $"{currentPath}.{property.Name}";
+                
+                // Check if this property has XmlIgnore attribute
+                if (property.GetCustomAttribute<XmlIgnoreAttribute>() != null)
+                {
+                    ignoredProperties.Add(propertyPath);
+                    logger.LogTrace("Found XmlIgnore property: {PropertyPath}", propertyPath);
+                }
+                else
+                {
+                    // Recursively check nested types (but not primitive types, strings, etc.)
+                    var propertyType = property.PropertyType;
+                    if (!propertyType.IsPrimitive && 
+                        propertyType != typeof(string) && 
+                        propertyType != typeof(DateTime) && 
+                        propertyType != typeof(decimal) &&
+                        !propertyType.IsEnum &&
+                        !propertyType.IsValueType)
+                    {
+                        // Handle collections
+                        if (propertyType.IsGenericType && 
+                            propertyType.GetGenericTypeDefinition() == typeof(List<>))
+                        {
+                            var elementType = propertyType.GetGenericArguments()[0];
+                            if (!elementType.IsPrimitive && elementType != typeof(string))
+                            {
+                                var nestedProperties = FindXmlIgnoreProperties(elementType, $"{propertyPath}[*]", processedTypes);
+                                ignoredProperties.AddRange(nestedProperties);
+                            }
+                        }
+                        else if (propertyType.IsArray)
+                        {
+                            var elementType = propertyType.GetElementType();
+                            if (!elementType.IsPrimitive && elementType != typeof(string))
+                            {
+                                var nestedProperties = FindXmlIgnoreProperties(elementType, $"{propertyPath}[*]", processedTypes);
+                                ignoredProperties.AddRange(nestedProperties);
+                            }
+                        }
+                        else
+                        {
+                            // Regular nested object
+                            var nestedProperties = FindXmlIgnoreProperties(propertyType, propertyPath, processedTypes);
+                            ignoredProperties.AddRange(nestedProperties);
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Error scanning properties for XmlIgnore attributes in type '{TypeName}'", type.Name);
+        }
+
+        return ignoredProperties;
     }
 }

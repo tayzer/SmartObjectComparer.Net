@@ -187,8 +187,8 @@ public class FileUtilities : IFileUtilities
                 foreach (var diff in sampleDiffs)
                 {
                     sb.AppendLine($"- Property: `{diff.PropertyName}`");
-                                    sb.AppendLine($"  - A: `{FormatValue(diff.Object1Value)}`");
-                sb.AppendLine($"  - B: `{FormatValue(diff.Object2Value)}`");
+                    sb.AppendLine($"  - Expected: `{FormatValue(diff.Object1Value)}`");
+                    sb.AppendLine($"  - Actual: `{FormatValue(diff.Object2Value)}`");
                     sb.AppendLine();
                 }
 
