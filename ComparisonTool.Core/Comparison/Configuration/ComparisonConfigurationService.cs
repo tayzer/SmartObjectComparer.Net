@@ -19,6 +19,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     private readonly List<IgnoreRule> ignoreRules = new();
     private readonly List<SmartIgnoreRule> smartIgnoreRules = new();
     private readonly SmartIgnoreProcessor smartIgnoreProcessor;
+    private readonly List<IgnoreRule> xmlIgnoreRules = new();
+    private IEnumerable<IgnoreRule> AllIgnoreRules => ignoreRules.Concat(xmlIgnoreRules);
     private ComparisonResultCacheService? _cacheService;
 
     // Performance optimization: Cache compiled configuration to avoid rebuilding for every file
@@ -349,7 +351,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// </summary>
     public IReadOnlyList<string> GetIgnoredProperties()
     {
-        return ignoreRules
+        return AllIgnoreRules
             .Where(r => r.IgnoreCompletely)
             .Select(r => r.PropertyPath)
             .ToList();
@@ -360,7 +362,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// </summary>
     public IReadOnlyList<IgnoreRule> GetIgnoreRules()
     {
-        return ignoreRules.ToList();
+        return AllIgnoreRules.ToList();
     }
 
     /// <summary>
@@ -421,7 +423,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         {
             GlobalIgnoreCollectionOrder = compareLogic.Config.IgnoreCollectionOrder,
             GlobalIgnoreStringCase = !compareLogic.Config.CaseSensitive,
-            IgnoreRules = ignoreRules
+            IgnoreRules = AllIgnoreRules
                 .OrderBy(r => r.PropertyPath)
                 .Select(r => new { r.PropertyPath, r.IgnoreCompletely, r.IgnoreCollectionOrder })
                 .ToList(),
@@ -473,7 +475,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         return false;
         
         // If we have many ignore rules, use fast filtering to avoid MembersToIgnore pattern explosion
-        var ignoreCompletelyCount = ignoreRules.Count(r => r.IgnoreCompletely);
+        var ignoreCompletelyCount = AllIgnoreRules.Count(r => r.IgnoreCompletely);
         
         // Threshold: if more than 10 properties are being ignored completely, use fast filtering
         // For smaller numbers, the standard pattern matching is fine and more reliable
@@ -518,14 +520,14 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             if (useFastFiltering)
             {
                 logger.LogInformation("Using fast property filtering optimization for {Count} ignore rules (avoiding MembersToIgnore pattern explosion)", 
-                    ignoreRules.Count(r => r.IgnoreCompletely));
+                    AllIgnoreRules.Count(r => r.IgnoreCompletely));
                 
                 // Apply collection order rules
                 ApplyCollectionOrderRulesOnly();
                 
                 // Add the fast property filter comparer
                 var rootComparer = RootComparerFactory.GetRootComparer();
-                var fastFilterComparer = new FastPropertyFilterComparer(rootComparer, ignoreRules, logger);
+                var fastFilterComparer = new FastPropertyFilterComparer(rootComparer, AllIgnoreRules, logger);
                 compareLogic.Config.CustomComparers.Insert(0, fastFilterComparer); // Insert at beginning for priority
                 
                 // Cache the configuration
@@ -557,8 +559,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     private void ApplyCollectionOrderRulesOnly()
     {
         // Check all the rules to make sure we have both Results and RelatedItems
-        var resultsRule = ignoreRules.Any(r => r.PropertyPath.Contains("Results") && r.IgnoreCollectionOrder);
-        var relatedItemsRule = ignoreRules.Any(r => r.PropertyPath.Contains("RelatedItems") && r.IgnoreCollectionOrder);
+        var resultsRule = AllIgnoreRules.Any(r => r.PropertyPath.Contains("Results") && r.IgnoreCollectionOrder);
+        var relatedItemsRule = AllIgnoreRules.Any(r => r.PropertyPath.Contains("RelatedItems") && r.IgnoreCollectionOrder);
         
         logger.LogDebug("Rules check - Have Results rule: {HasResults}, Have RelatedItems rule: {HasRelatedItems}",
             resultsRule, relatedItemsRule);
@@ -571,7 +573,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         }
         
         // Get all properties that need to ignore collection order
-        var propertiesWithIgnoreOrder = ignoreRules
+        var propertiesWithIgnoreOrder = AllIgnoreRules
             .Where(r => r.IgnoreCollectionOrder && !r.IgnoreCompletely)
             .Select(r => r.PropertyPath)
             .ToList();
@@ -617,8 +619,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     private void ApplyAllRulesWithPatternGeneration(bool globalIgnoreCollectionOrder)
     {
         // Check all the rules to make sure we have both Results and RelatedItems
-        var resultsRule = ignoreRules.Any(r => r.PropertyPath.Contains("Results") && r.IgnoreCollectionOrder);
-        var relatedItemsRule = ignoreRules.Any(r => r.PropertyPath.Contains("RelatedItems") && r.IgnoreCollectionOrder);
+        var resultsRule = AllIgnoreRules.Any(r => r.PropertyPath.Contains("Results") && r.IgnoreCollectionOrder);
+        var relatedItemsRule = AllIgnoreRules.Any(r => r.PropertyPath.Contains("RelatedItems") && r.IgnoreCollectionOrder);
         
         logger.LogDebug("Rules check - Have Results rule: {HasResults}, Have RelatedItems rule: {HasRelatedItems}",
             resultsRule, relatedItemsRule);
@@ -631,7 +633,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         }
         
         // Get all properties that need to ignore collection order
-        var propertiesWithIgnoreOrder = ignoreRules
+        var propertiesWithIgnoreOrder = AllIgnoreRules
             .Where(r => r.IgnoreCollectionOrder && !r.IgnoreCompletely)
             .Select(r => r.PropertyPath)
             .ToList();
@@ -680,7 +682,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         int rulesApplied = 0;
         int beforeCount = compareLogic.Config.MembersToIgnore.Count;
         
-        foreach (var rule in ignoreRules)
+        foreach (var rule in AllIgnoreRules)
         {
             try 
             {
@@ -754,7 +756,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         }
         
         // Also add the original rule paths for backward compatibility
-        foreach (var rule in ignoreRules.Where(r => r.IgnoreCompletely))
+        foreach (var rule in AllIgnoreRules.Where(r => r.IgnoreCompletely))
         {
             propertiesToIgnoreCompletely.Add(rule.PropertyPath);
         }
@@ -1347,20 +1349,23 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         try
         {
             var ignoredProperties = FindXmlIgnoreProperties(modelType);
-            foreach (var propertyPath in ignoredProperties)
+            if (!ignoredProperties.Any())
             {
-                if (!compareLogic.Config.MembersToIgnore.Contains(propertyPath))
-                {
-                    compareLogic.Config.MembersToIgnore.Add(propertyPath);
-                    logger.LogDebug("Added XmlIgnore property '{PropertyPath}' to ignore list", propertyPath);
-                }
+                return;
             }
 
-            if (ignoredProperties.Any())
-            {
-                logger.LogInformation("Added {Count} XmlIgnore properties to ignore list for type '{TypeName}'", 
-                    ignoredProperties.Count, modelType.Name);
-            }
+            var newRules = ignoredProperties
+                .Select(p => new IgnoreRule(logger)
+                {
+                    PropertyPath = p,
+                    IgnoreCompletely = true
+                })
+                .ToList();
+
+            xmlIgnoreRules.Clear();
+            xmlIgnoreRules.AddRange(newRules);
+
+            logger.LogInformation("Added {Count} XmlIgnore properties as ignore rules for type '{TypeName}'", ignoredProperties.Count, modelType.Name);
         }
         catch (Exception ex)
         {
