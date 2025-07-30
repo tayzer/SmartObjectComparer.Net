@@ -64,7 +64,7 @@
                     </div>
 
                     <div class="form-group mt-3">
-                        <label>A Directory:</label>
+                        <label>Expected Directory:</label>
                         <div class="input-group">
                             <input type="text" class="form-control" @bind="Directory1Path" placeholder="Enter path to first directory" />
                             <button class="btn btn-outline-secondary" type="button" @onclick="BrowseDirectory1">
@@ -82,7 +82,7 @@
                     </div>
 
                     <div class="form-group mt-3">
-                        <label>B Directory:</label>
+                        <label>Actual Directory:</label>
                         <div class="input-group">
                             <input type="text" class="form-control" @bind="Directory2Path" placeholder="Enter path to second directory" />
                             <button class="btn btn-outline-secondary" type="button" @onclick="BrowseDirectory2">
@@ -471,7 +471,7 @@ else
     
     private async Task BrowseDirectory1()
     {
-                    var result = await JSRuntime.InvokeAsync<string>("browseFolder", "Select A Directory");
+                    var result = await JSRuntime.InvokeAsync<string>("browseFolder", "Select Expected Directory");
         if (!string.IsNullOrEmpty(result))
         {
             Directory1Path = result;
@@ -481,7 +481,7 @@ else
     
     private async Task BrowseDirectory2()
     {
-                    var result = await JSRuntime.InvokeAsync<string>("browseFolder", "Select B Directory");
+                    var result = await JSRuntime.InvokeAsync<string>("browseFolder", "Select Actual Directory");
         if (!string.IsNullOrEmpty(result))
         {
             Directory2Path = result;
@@ -821,8 +821,8 @@ else
             var file2Name = Path.GetFileNameWithoutExtension(selectedPair.File2Name);
 
             var headerInfo = $"# Comparison Report\n\n" +
-                                          $"A file: **{selectedPair.File1Name}**\n\n" +
-                $"B file: **{selectedPair.File2Name}**\n\n" +
+                                                                  $"Expected file: **{selectedPair.File1Name}**\n\n" +
+                        $"Actual file: **{selectedPair.File2Name}**\n\n" +
                           $"---\n\n";
 
             var report = FileUtilities.GenerateReportMarkdown(selectedPair.Summary, headerInfo);

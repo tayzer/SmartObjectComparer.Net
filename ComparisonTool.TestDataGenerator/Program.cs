@@ -11,7 +11,7 @@ namespace ComparisonTool.TestDataGenerator
 
         static void Main(string[] args)
         {
-            Console.WriteLine("🚀 Generating 4000 A and B files with ComplexOrderResponse model...");
+            Console.WriteLine("🚀 Generating 4000 Expected and Actual files with ComplexOrderResponse model...");
             Console.WriteLine("This will thoroughly test performance optimizations with large file sets and ignore rules.");
 
             // Find the solution root

@@ -9,6 +9,7 @@ using KellermanSoftware.CompareNetObjects;
 using KellermanSoftware.CompareNetObjects.TypeComparers;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
+using System.Xml.Serialization;
 
 namespace ComparisonTool.Core.Comparison;
 
@@ -1163,6 +1164,12 @@ public class ComparisonService : IComparisonService
             }
         }
         
+        // Ensure array Length and LongLength properties are always ignored
+        if (!isolatedCompareLogic.Config.MembersToIgnore.Contains("Length"))
+            isolatedCompareLogic.Config.MembersToIgnore.Add("Length");
+        if (!isolatedCompareLogic.Config.MembersToIgnore.Contains("LongLength"))
+            isolatedCompareLogic.Config.MembersToIgnore.Add("LongLength");
+        
         // Apply collection order rules by creating new, independent custom comparers
         var collectionOrderRules = ignoreRules.Where(r => r.IgnoreCollectionOrder && !r.IgnoreCompletely).ToList();
         if (collectionOrderRules.Any())
@@ -1187,6 +1194,9 @@ public class ComparisonService : IComparisonService
                 logger.LogWarning(ex, "Error creating independent collection order comparer");
             }
         }
+        
+        // Note: XmlIgnore properties are handled by adding them to MembersToIgnore during configuration
+        // This avoids the recursion issue that occurs with custom comparers
         
         logger.LogDebug("Created isolated CompareLogic with {IgnorePatterns} ignore patterns and {Comparers} custom comparers", 
             isolatedCompareLogic.Config.MembersToIgnore.Count, 
