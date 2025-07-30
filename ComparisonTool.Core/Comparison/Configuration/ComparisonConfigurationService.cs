@@ -63,6 +63,12 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         if (compareLogic.Config.MembersToInclude == null)
             compareLogic.Config.MembersToInclude = new List<string>();
 
+        // Add array Length and LongLength properties to ignore list to prevent false differences
+        // when arrays have different lengths but same content
+        // Todo: this might cause issues for domains with the same property names
+        compareLogic.Config.MembersToIgnore.Add("Length");
+        compareLogic.Config.MembersToIgnore.Add("LongLength");
+
         // Note: XmlIgnore properties will be automatically added to MembersToIgnore during configuration
         // This avoids the recursion issue that occurs with custom comparers
 
