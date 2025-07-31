@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Xml;
 using System.Xml.Serialization;
 using Microsoft.Extensions.Logging;
+using ComparisonTool.Core.Comparison.Configuration;
 
 namespace ComparisonTool.Core.Serialization;
 
@@ -28,10 +29,13 @@ public class XmlDeserializationService : IXmlDeserializationService
     // Application session identifier to invalidate cache on restart
     private static readonly string SessionId = Guid.NewGuid().ToString("N")[..8];
 
-    public XmlDeserializationService(ILogger<XmlDeserializationService> logger, XmlSerializerFactory serializerFactory)
+    private readonly IComparisonConfigurationService? configService;
+
+    public XmlDeserializationService(ILogger<XmlDeserializationService> logger, XmlSerializerFactory serializerFactory, IComparisonConfigurationService? configService = null)
     {
         this.logger = logger;
         this.serializerFactory = serializerFactory;
+        this.configService = configService;
         
         // CRITICAL FIX: Initialize thread-local storage for serializer cache
         _threadLocalSerializerCache = new ThreadLocal<ConcurrentDictionary<Type, XmlSerializer>>(() => new ConcurrentDictionary<Type, XmlSerializer>());
@@ -50,6 +54,19 @@ public class XmlDeserializationService : IXmlDeserializationService
 
         // Pre-cache the serializer for this type to avoid creation during comparison
         GetCachedSerializer<T>();
+
+        // Automatically add XmlIgnore properties to the ignore list if config service is available
+        if (configService != null)
+        {
+            try
+            {
+                configService.AddXmlIgnorePropertiesToIgnoreList(typeof(T));
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Error adding XmlIgnore properties to ignore list for model {ModelName}", modelName);
+            }
+        }
     }
 
     /// <summary>

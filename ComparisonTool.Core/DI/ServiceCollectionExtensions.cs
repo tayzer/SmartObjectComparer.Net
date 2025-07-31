@@ -41,19 +41,6 @@ public static class ServiceCollectionExtensions
         // Add comparison result cache service
         services.AddSingleton<ComparisonResultCacheService>();
 
-        services.AddSingleton<IXmlDeserializationService>(provider =>
-        {
-            var logger = provider.GetRequiredService<ILogger<XmlDeserializationService>>();
-            var serializerFactory = provider.GetRequiredService<XmlSerializerFactory>();
-
-            var service = new XmlDeserializationService(logger, serializerFactory);
-
-            // todo: shouldnt be done here
-            service.RegisterDomainModel<ComplexOrderResponse>("ComplexOrderResponse");
-
-            return service;
-        });
-
         services.AddSingleton<IComparisonConfigurationService>(provider =>
         {
             var logger = provider.GetRequiredService<ILogger<ComparisonConfigurationService>>();
@@ -64,6 +51,21 @@ public static class ServiceCollectionExtensions
             configurationService.SetCacheService(cacheService);
             
             return configurationService;
+        });
+
+        services.AddSingleton<IXmlDeserializationService>(provider =>
+        {
+            var logger = provider.GetRequiredService<ILogger<XmlDeserializationService>>();
+            var serializerFactory = provider.GetRequiredService<XmlSerializerFactory>();
+            var configService = provider.GetRequiredService<IComparisonConfigurationService>();
+
+            var service = new XmlDeserializationService(logger, serializerFactory, configService);
+
+            // todo: shouldnt be done here
+            service.RegisterDomainModel<ComplexOrderResponse>("ComplexOrderResponse");
+            service.RegisterDomainModel<TestModelWithXmlIgnore>("TestModelWithXmlIgnore");
+
+            return service;
         });
 
         services.AddScoped<IComparisonService, ComparisonService>();

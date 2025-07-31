@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Comparison Tool is an advanced A/B testing platform designed to intelligently compare two sets of results, enabling testers to efficiently categorize, analyze, and identify common differences across large datasets. Unlike traditional JSON or XML comparison utilities, this tool leverages in-memory processing based on domain models, providing significantly more sophisticated analysis capabilities and actionable insights.
+The Comparison Tool is an advanced Expected/Actual testing platform designed to intelligently compare two sets of results, enabling testers to efficiently categorize, analyze, and identify common differences across large datasets. Unlike traditional JSON or XML comparison utilities, this tool leverages in-memory processing based on domain models, providing significantly more sophisticated analysis capabilities and actionable insights.
 
 ## Key Features
 
@@ -61,7 +61,7 @@ The Comparison Tool is an advanced A/B testing platform designed to intelligentl
 ### **Quality Assurance Testing**
 - Compare API response sets before and after code changes
 - Validate data migration results across large datasets
-- A/B test different algorithm implementations
+- Expected/Actual test different algorithm implementations
 
 ### **Release Validation**
 - Ensure system behavior consistency across versions
@@ -108,7 +108,7 @@ Tracks consistent value changes across properties, helping identify configuratio
 ### Example Workflow
 ```
 1. Enable Enhanced Structural Analysis
-2. Upload A and B result sets
+2. Upload Expected and Actual result sets
 3. Configure ignore rules for timestamps/IDs
 4. Run comparison
 5. Review Critical Elements first
@@ -147,4 +147,4 @@ Tracks consistent value changes across properties, helping identify configuratio
 
 ---
 
-*The Comparison Tool transforms the tedious process of A/B testing large datasets into an efficient, intelligent analysis workflow that provides actionable insights for development and QA teams.* 
+*The Comparison Tool transforms the tedious process of Expected/Actual testing large datasets into an efficient, intelligent analysis workflow that provides actionable insights for development and QA teams.* 
