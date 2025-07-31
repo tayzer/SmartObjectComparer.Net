@@ -63,7 +63,6 @@ public static class ServiceCollectionExtensions
 
             // todo: shouldnt be done here
             service.RegisterDomainModel<ComplexOrderResponse>("ComplexOrderResponse");
-            service.RegisterDomainModel<TestModelWithXmlIgnore>("TestModelWithXmlIgnore");
 
             return service;
         });
