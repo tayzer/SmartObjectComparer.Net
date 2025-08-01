@@ -1166,10 +1166,20 @@ public class ComparisonService : IComparisonService
         
         // Ensure array Length and LongLength properties are always ignored
         if (!isolatedCompareLogic.Config.MembersToIgnore.Contains("Length"))
+        {
             isolatedCompareLogic.Config.MembersToIgnore.Add("Length");
+        }
+
         if (!isolatedCompareLogic.Config.MembersToIgnore.Contains("LongLength"))
+        {
             isolatedCompareLogic.Config.MembersToIgnore.Add("LongLength");
-        
+        }
+
+        if (!isolatedCompareLogic.Config.MembersToIgnore.Contains("NativeLength"))
+        {
+            isolatedCompareLogic.Config.MembersToIgnore.Add("NativeLength");
+        }
+
         // Apply collection order rules by creating new, independent custom comparers
         var collectionOrderRules = ignoreRules.Where(r => r.IgnoreCollectionOrder && !r.IgnoreCompletely).ToList();
         if (collectionOrderRules.Any())

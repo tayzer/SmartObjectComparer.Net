@@ -68,6 +68,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         // Todo: this might cause issues for domains with the same property names
         compareLogic.Config.MembersToIgnore.Add("Length");
         compareLogic.Config.MembersToIgnore.Add("LongLength");
+        compareLogic.Config.MembersToIgnore.Add("NativeLength");
 
         // Note: XmlIgnore properties will be automatically added to MembersToIgnore during configuration
         // This avoids the recursion issue that occurs with custom comparers
