@@ -249,9 +249,15 @@ function releaseMemory() {
     }
 }
 
-// Filter function to check if a file is XML
+// Filter function to check if a file is supported (XML or JSON)
+function isSupportedFile(file) {
+    const name = file.name.toLowerCase();
+    return name.endsWith('.xml') || name.endsWith('.json');
+}
+
+// Legacy function name for backward compatibility
 function isXmlFile(file) {
-    return file.name.toLowerCase().endsWith('.xml');
+    return isSupportedFile(file);
 }
 
 // Read a file from disk as an ArrayBuffer (works better for binary files)
@@ -477,12 +483,12 @@ async function processFolderContents(files, processor, batchSize = 50) {
  */
 function estimateMemoryUsage(files) {
     let totalSize = 0;
-    let xmlCount = 0;
+    let supportedFileCount = 0;
 
     for (const file of files) {
-        if (file.name.toLowerCase().endsWith('.xml')) {
+        if (isSupportedFile(file)) {
             totalSize += file.size;
-            xmlCount++;
+            supportedFileCount++;
         }
     }
 
@@ -507,8 +513,8 @@ window.uploadFolderInBatches = async function (inputId, batchSize, dotNetRef) {
         return;
     }
     
-    // Filter for XML files only
-    const files = Array.from(input.files).filter(f => f.name.endsWith('.xml'));
+    // Filter for supported files (XML and JSON)
+    const files = Array.from(input.files).filter(f => isSupportedFile(f));
     const totalFiles = files.length;
     let uploaded = 0;
     let uploadedFileNames = [];

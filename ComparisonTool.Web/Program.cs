@@ -16,7 +16,7 @@ builder.Host.UseSerilog();
 
 // Add services to the container with proper configuration
 builder.Services
-    .AddXmlComparisonServices(builder.Configuration)
+    .AddUnifiedComparisonServices(builder.Configuration)
     .AddRazorComponents()
     .AddInteractiveServerComponents(options =>
     {

@@ -1,0 +1,77 @@
+{
+  "orderId": "ORD-2024-001",
+  "orderDate": "2024-01-15T10:30:00Z",
+  "customer": {
+    "id": 12345,
+    "firstName": "John",
+    "lastName": "Smith",
+    "email": "john.smith@email.com",
+    "phone": "+1-555-0123",
+    "isVip": false,
+    "loyaltyPoints": 250
+  },
+  "items": [
+    {
+      "productId": "LAPTOP-001",
+      "productName": "Gaming Laptop Pro",
+      "category": "Electronics",
+      "quantity": 1,
+      "unitPrice": 1299.99,
+      "discount": 50.00,
+      "total": 1249.99,
+      "attributes": [
+        {
+          "name": "Color",
+          "value": "Black"
+        },
+        {
+          "name": "RAM",
+          "value": "16GB"
+        }
+      ]
+    },
+    {
+      "productId": "MOUSE-001",
+      "productName": "Wireless Gaming Mouse",
+      "category": "Electronics",
+      "quantity": 1,
+      "unitPrice": 79.99,
+      "discount": 0.00,
+      "total": 79.99,
+      "attributes": [
+        {
+          "name": "Color",
+          "value": "Black"
+        }
+      ]
+    }
+  ],
+  "shippingAddress": {
+    "street": "123 Main Street",
+    "city": "Springfield",
+    "state": "IL",
+    "postalCode": "62701",
+    "country": "USA"
+  },
+  "billingAddress": {
+    "street": "123 Main Street",
+    "city": "Springfield",
+    "state": "IL",
+    "postalCode": "62701",
+    "country": "USA"
+  },
+  "payment": {
+    "method": "CreditCard",
+    "cardLastFour": "1234",
+    "transactionId": "TXN-2024-001-ABC",
+    "processedDate": "2024-01-15T10:35:00Z"
+  },
+  "status": "Processing",
+  "totalAmount": 1329.98,
+  "notes": "Customer requested expedited shipping",
+  "tags": [
+    "electronics",
+    "gaming",
+    "new-customer"
+  ]
+} 

@@ -1,0 +1,101 @@
+{
+  "orderId": "ORD-2024-001",
+  "orderDate": "2024-01-15T10:30:00Z",
+  "customer": {
+    "id": 12345,
+    "firstName": "John",
+    "lastName": "Johnson",
+    "email": "john.johnson@email.com",
+    "phone": "+1-555-0123",
+    "isVip": true,
+    "loyaltyPoints": 350
+  },
+  "items": [
+    {
+      "productId": "LAPTOP-001",
+      "productName": "Gaming Laptop Pro",
+      "category": "Electronics",
+      "quantity": 2,
+      "unitPrice": 1299.99,
+      "discount": 100.00,
+      "total": 2499.98,
+      "attributes": [
+        {
+          "name": "Color",
+          "value": "Silver"
+        },
+        {
+          "name": "RAM",
+          "value": "32GB"
+        },
+        {
+          "name": "Storage",
+          "value": "1TB SSD"
+        }
+      ]
+    },
+    {
+      "productId": "MOUSE-001",
+      "productName": "Wireless Gaming Mouse",
+      "category": "Electronics",
+      "quantity": 1,
+      "unitPrice": 79.99,
+      "discount": 0.00,
+      "total": 79.99,
+      "attributes": [
+        {
+          "name": "Color",
+          "value": "Black"
+        }
+      ]
+    },
+    {
+      "productId": "KEYBOARD-001",
+      "productName": "Mechanical Gaming Keyboard",
+      "category": "Electronics",
+      "quantity": 1,
+      "unitPrice": 149.99,
+      "discount": 15.00,
+      "total": 134.99,
+      "attributes": [
+        {
+          "name": "Color",
+          "value": "Black"
+        },
+        {
+          "name": "Switch Type",
+          "value": "Cherry MX Blue"
+        }
+      ]
+    }
+  ],
+  "shippingAddress": {
+    "street": "456 Oak Avenue",
+    "city": "Springfield",
+    "state": "IL",
+    "postalCode": "62702",
+    "country": "USA"
+  },
+  "billingAddress": {
+    "street": "123 Main Street",
+    "city": "Springfield",
+    "state": "IL",
+    "postalCode": "62701",
+    "country": "USA"
+  },
+  "payment": {
+    "method": "PayPal",
+    "cardLastFour": null,
+    "transactionId": "TXN-2024-001-XYZ",
+    "processedDate": "2024-01-15T10:40:00Z"
+  },
+  "status": "Shipped",
+  "totalAmount": 2714.96,
+  "notes": "Customer upgraded to premium shipping",
+  "tags": [
+    "electronics",
+    "gaming",
+    "vip-customer",
+    "bulk-order"
+  ]
+} 
