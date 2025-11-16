@@ -7,6 +7,7 @@ namespace ComparisonTool.Web
     using System;
     using System.Collections.Generic;
     using System.IO;
+    using System.Text.Json;
     using System.Threading.Tasks;
     using Microsoft.AspNetCore.Builder;
     using Microsoft.AspNetCore.Http;
@@ -25,8 +26,6 @@ namespace ComparisonTool.Web
                 var form = await request.ReadFormAsync();
                 var files = form.Files;
                 var uploadedFiles = new List<string>();
-                var processedCount = 0;
-                var batchSize = 25;
                 var tempPath = Path.Combine(Path.GetTempPath(), "ComparisonToolUploads");
 
                 // Clear old temp files (optional, but helps manage disk space)
@@ -67,7 +66,7 @@ namespace ComparisonTool.Web
                         // Preserve folder structure by creating subdirectories
                         var filePath = file.FileName.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
                         var destPath = Path.Combine(batchPath, filePath);
-                        var destDir = Path.GetDirectoryName(destPath);
+                        var destDir = Path.GetDirectoryName(destPath) ?? batchPath;
 
                         if (!Directory.Exists(destDir))
                         {
@@ -81,7 +80,6 @@ namespace ComparisonTool.Web
 
                         // Store the full path for later use (with batch ID prefix for identification)
                         uploadedFiles.Add(destPath);
-                        processedCount++;
                     }
                     catch (Exception)
                     {
@@ -95,7 +93,7 @@ namespace ComparisonTool.Web
                 if (uploadedFiles.Count > 100)
                 {
                     var fileListPath = Path.Combine(batchPath, "_filelist.json");
-                    await File.WriteAllTextAsync(fileListPath, System.Text.Json.JsonSerializer.Serialize(uploadedFiles));
+                    await File.WriteAllTextAsync(fileListPath, JsonSerializer.Serialize(uploadedFiles));
 
                     return Results.Ok(new
                     {
@@ -127,8 +125,8 @@ namespace ComparisonTool.Web
                     return Results.NotFound($"Batch {batchId} not found");
                 }
 
-                var fileList = System.Text.Json.JsonSerializer.Deserialize<List<string>>(
-                    File.ReadAllText(fileListPath));
+                var fileList = JsonSerializer.Deserialize<List<string>>(
+                    File.ReadAllText(fileListPath)) ?? new List<string>();
 
                 return Results.Ok(new { files = fileList });
             });
