@@ -1,13 +1,17 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text.RegularExpressions;
-using ComparisonTool.Core.Comparison.Results;
-using ComparisonTool.Core.Utilities;
-using KellermanSoftware.CompareNetObjects;
+// <copyright file="PatternFrequencyAnalyzer.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
 
 namespace ComparisonTool.Core.Comparison.Analysis
 {
+    using System;
+    using System.Collections.Generic;
+    using System.Linq;
+    using System.Text.RegularExpressions;
+    using ComparisonTool.Core.Comparison.Results;
+    using ComparisonTool.Core.Utilities;
+    using KellermanSoftware.CompareNetObjects;
+
     /// <summary>
     /// Analyzes frequency of recurring difference patterns (e.g., missing/added elements, value changes) across all file pairs.
     /// Groups by normalized property path and difference category.
@@ -17,23 +21,29 @@ namespace ComparisonTool.Core.Comparison.Analysis
         public class PatternFrequencyGroup
         {
             public string NormalizedPath { get; set; }
+
             public DifferenceCategory Category { get; set; }
+
             public int OccurrenceCount { get; set; }
+
             public int FileCount { get; set; }
-            public List<string> AffectedFiles { get; set; } = new();
-            public List<Difference> Examples { get; set; } = new();
+
+            public List<string> AffectedFiles { get; set; } = new ();
+
+            public List<Difference> Examples { get; set; } = new ();
         }
 
         /// <summary>
         /// Analyze all differences and group by normalized property path and category.
         /// </summary>
-        /// <param name="allDifferences">All differences from all file pairs</param>
-        /// <param name="differencesToFilePairMap">Dictionary mapping differences to their file pair identifiers</param>
-        /// <param name="totalFiles">Total number of file pairs analyzed</param>
+        /// <param name="allDifferences">All differences from all file pairs.</param>
+        /// <param name="differencesToFilePairMap">Dictionary mapping differences to their file pair identifiers.</param>
+        /// <param name="totalFiles">Total number of file pairs analyzed.</param>
+        /// <returns></returns>
         public List<PatternFrequencyGroup> Analyze(IEnumerable<Difference> allDifferences, Dictionary<Difference, string> differencesToFilePairMap, int totalFiles)
         {
             var groups = allDifferences
-                .GroupBy(d => (NormalizedPath: NormalizePropertyPath(d.PropertyName), Category: GetDifferenceCategory(d)))
+                .GroupBy(d => (NormalizedPath: this.NormalizePropertyPath(d.PropertyName), Category: this.GetDifferenceCategory(d)))
                 .Select(g => new PatternFrequencyGroup
                 {
                     NormalizedPath = g.Key.NormalizedPath,
@@ -41,7 +51,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
                     OccurrenceCount = g.Count(),
                     FileCount = g.Select(d => differencesToFilePairMap.ContainsKey(d) ? differencesToFilePairMap[d] : "unknown").Distinct().Count(),
                     AffectedFiles = g.Select(d => differencesToFilePairMap.ContainsKey(d) ? differencesToFilePairMap[d] : "unknown").Distinct().ToList(),
-                    Examples = g.Take(3).ToList()
+                    Examples = g.Take(3).ToList(),
                 })
                 .OrderByDescending(g => g.FileCount)
                 .ThenByDescending(g => g.OccurrenceCount)
@@ -53,7 +63,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
         public List<PatternFrequencyGroup> Analyze(IEnumerable<Difference> allDifferences, int totalFiles)
         {
             // Create an empty mapping if none is provided - this won't be used but maintains API compatibility
-            return Analyze(allDifferences, new Dictionary<Difference, string>(), totalFiles);
+            return this.Analyze(allDifferences, new Dictionary<Difference, string>(), totalFiles);
         }
 
         private string NormalizePropertyPath(string propertyPath)
@@ -66,26 +76,29 @@ namespace ComparisonTool.Core.Comparison.Analysis
             // Use the same logic as DifferenceCategorizer.GetDifferenceCategory
             if (diff.PropertyName.Contains("[") && diff.PropertyName.Contains("]"))
             {
-                if (diff.Object1Value == null && diff.Object2Value != null)
+                if (diff.Object1Value == null && diff.Object2Value != null) {
                     return DifferenceCategory.ItemAdded;
-                else if (diff.Object1Value != null && diff.Object2Value == null)
+                }
+                else if (diff.Object1Value != null && diff.Object2Value == null) {
                     return DifferenceCategory.ItemRemoved;
-                else
+                }
+                else {
                     return DifferenceCategory.CollectionItemChanged;
+                }
             }
-            else if (IsNumericDifference(diff.Object1Value, diff.Object2Value))
+            else if (this.IsNumericDifference(diff.Object1Value, diff.Object2Value))
             {
                 return DifferenceCategory.NumericValueChanged;
             }
-            else if (IsDateTimeDifference(diff.Object1Value, diff.Object2Value))
+            else if (this.IsDateTimeDifference(diff.Object1Value, diff.Object2Value))
             {
                 return DifferenceCategory.DateTimeChanged;
             }
-            else if (IsStringDifference(diff.Object1Value, diff.Object2Value))
+            else if (this.IsStringDifference(diff.Object1Value, diff.Object2Value))
             {
                 return DifferenceCategory.TextContentChanged;
             }
-            else if (IsBooleanDifference(diff.Object1Value, diff.Object2Value))
+            else if (this.IsBooleanDifference(diff.Object1Value, diff.Object2Value))
             {
                 return DifferenceCategory.BooleanValueChanged;
             }

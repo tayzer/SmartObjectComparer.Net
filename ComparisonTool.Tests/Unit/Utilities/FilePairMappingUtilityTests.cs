@@ -1,15 +1,20 @@
+// <copyright file="FilePairMappingUtilityTests.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using ComparisonTool.Core.Utilities;
 using FluentAssertions;
-using Xunit;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace ComparisonTool.Tests.Unit.Utilities;
 
+[TestClass]
 public class FilePairMappingUtilityTests
 {
-    [Fact]
+    [TestMethod]
     public void CreateFilePairMappings_WithValidInputs_ShouldReturnCorrectMappings()
     {
         // Arrange
@@ -17,13 +22,13 @@ public class FilePairMappingUtilityTests
         {
             @"C:\Folder1\file1.xml",
             @"C:\Folder1\file2.xml",
-            @"C:\Folder1\file3.xml"
+            @"C:\Folder1\file3.xml",
         };
         var folder2Files = new List<string>
         {
             @"C:\Folder2\file1.xml",
             @"C:\Folder2\file2.xml",
-            @"C:\Folder2\file3.xml"
+            @"C:\Folder2\file3.xml",
         };
 
         // Act
@@ -36,7 +41,7 @@ public class FilePairMappingUtilityTests
         result[2].Should().Be(("C:\\Folder1\\file3.xml", "C:\\Folder2\\file3.xml", "file3.xml"));
     }
 
-    [Fact]
+    [TestMethod]
     public void CreateFilePairMappings_WithUnorderedFiles_ShouldSortByName()
     {
         // Arrange
@@ -44,13 +49,13 @@ public class FilePairMappingUtilityTests
         {
             @"C:\Folder1\file3.xml",
             @"C:\Folder1\file1.xml",
-            @"C:\Folder1\file2.xml"
+            @"C:\Folder1\file2.xml",
         };
         var folder2Files = new List<string>
         {
             @"C:\Folder2\file2.xml",
             @"C:\Folder2\file1.xml",
-            @"C:\Folder2\file3.xml"
+            @"C:\Folder2\file3.xml",
         };
 
         // Act
@@ -63,20 +68,20 @@ public class FilePairMappingUtilityTests
         result[2].Should().Be(("C:\\Folder1\\file3.xml", "C:\\Folder2\\file3.xml", "file3.xml"));
     }
 
-    [Fact]
+    [TestMethod]
     public void CreateFilePairMappings_WithDifferentCounts_ShouldUseMinimumCount()
     {
         // Arrange
         var folder1Files = new List<string>
         {
             @"C:\Folder1\file1.xml",
-            @"C:\Folder1\file2.xml"
+            @"C:\Folder1\file2.xml",
         };
         var folder2Files = new List<string>
         {
             @"C:\Folder2\file1.xml",
             @"C:\Folder2\file2.xml",
-            @"C:\Folder2\file3.xml"
+            @"C:\Folder2\file3.xml",
         };
 
         // Act
@@ -88,7 +93,7 @@ public class FilePairMappingUtilityTests
         result[1].Should().Be(("C:\\Folder1\\file2.xml", "C:\\Folder2\\file2.xml", "file2.xml"));
     }
 
-    [Fact]
+    [TestMethod]
     public void CreateFilePairMappings_WithEmptyLists_ShouldReturnEmptyList()
     {
         // Arrange
@@ -102,7 +107,7 @@ public class FilePairMappingUtilityTests
         result.Should().BeEmpty();
     }
 
-    [Fact]
+    [TestMethod]
     public void CreateFilePairMappings_WithNullFolder1Files_ShouldThrowArgumentNullException()
     {
         // Arrange
@@ -114,7 +119,7 @@ public class FilePairMappingUtilityTests
         action.Should().Throw<ArgumentNullException>().WithParameterName("folder1Files");
     }
 
-    [Fact]
+    [TestMethod]
     public void CreateFilePairMappings_WithNullFolder2Files_ShouldThrowArgumentNullException()
     {
         // Arrange
@@ -126,7 +131,7 @@ public class FilePairMappingUtilityTests
         action.Should().Throw<ArgumentNullException>().WithParameterName("folder2Files");
     }
 
-    [Fact]
+    [TestMethod]
     public void CreateFilePairMappings_WithComplexFileNames_ShouldHandleCorrectly()
     {
         // Arrange
@@ -134,13 +139,13 @@ public class FilePairMappingUtilityTests
         {
             @"C:\Folder1\file with spaces.xml",
             @"C:\Folder1\file-with-dashes.xml",
-            @"C:\Folder1\file_with_underscores.xml"
+            @"C:\Folder1\file_with_underscores.xml",
         };
         var folder2Files = new List<string>
         {
             @"C:\Folder2\file with spaces.xml",
             @"C:\Folder2\file-with-dashes.xml",
-            @"C:\Folder2\file_with_underscores.xml"
+            @"C:\Folder2\file_with_underscores.xml",
         };
 
         // Act
@@ -148,6 +153,7 @@ public class FilePairMappingUtilityTests
 
         // Assert
         result.Should().HaveCount(3);
+
         // Files are sorted alphabetically by filename, so the order is:
         // 1. "file with spaces.xml" (space comes first in ASCII)
         // 2. "file_with_underscores.xml" (underscore comes before dash in ASCII)
@@ -156,4 +162,4 @@ public class FilePairMappingUtilityTests
         result[1].Should().Be(("C:\\Folder1\\file_with_underscores.xml", "C:\\Folder2\\file_with_underscores.xml", "file_with_underscores.xml"));
         result[2].Should().Be(("C:\\Folder1\\file-with-dashes.xml", "C:\\Folder2\\file-with-dashes.xml", "file-with-dashes.xml"));
     }
-} 
+}

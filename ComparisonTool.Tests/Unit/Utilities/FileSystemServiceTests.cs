@@ -1,77 +1,82 @@
+// <copyright file="FileSystemServiceTests.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using System.IO;
 using ComparisonTool.Core.Utilities;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
-using Xunit;
 
 namespace ComparisonTool.Tests.Unit.Utilities;
 
+[TestClass]
 public class FileSystemServiceTests : IDisposable
 {
-    private readonly Mock<ILogger<FileSystemService>> _mockLogger;
-    private readonly FileSystemService _service;
-    private readonly string _testDirectory;
+    private readonly Mock<ILogger<FileSystemService>> mockLogger;
+    private readonly FileSystemService service;
+    private readonly string testDirectory;
 
     public FileSystemServiceTests()
     {
-        _mockLogger = new Mock<ILogger<FileSystemService>>();
-        _service = new FileSystemService(_mockLogger.Object);
-        _testDirectory = Path.Combine(Path.GetTempPath(), "ComparisonToolTests", Guid.NewGuid().ToString());
-        Directory.CreateDirectory(_testDirectory);
+        this.mockLogger = new Mock<ILogger<FileSystemService>>();
+        this.service = new FileSystemService(this.mockLogger.Object);
+        this.testDirectory = Path.Combine(Path.GetTempPath(), "ComparisonToolTests", Guid.NewGuid().ToString());
+        Directory.CreateDirectory(this.testDirectory);
     }
 
     public void Dispose()
     {
-        if (Directory.Exists(_testDirectory))
+        if (Directory.Exists(this.testDirectory))
         {
-            Directory.Delete(_testDirectory, true);
+            Directory.Delete(this.testDirectory, true);
         }
     }
 
-    [Fact]
+    [TestMethod]
     public void Constructor_ShouldInitializeCorrectly()
     {
         // Act & Assert
-        _service.Should().NotBeNull();
+        this.service.Should().NotBeNull();
     }
 
-    [Fact]
+    [TestMethod]
     public async Task GetXmlFilesFromDirectoryAsync_WithValidDirectory_ShouldReturnFiles()
     {
         // Arrange
-        var testFile = Path.Combine(_testDirectory, "testfile.xml");
+        var testFile = Path.Combine(this.testDirectory, "testfile.xml");
         File.WriteAllText(testFile, "<test>content</test>");
 
         // Act
-        var files = await _service.GetXmlFilesFromDirectoryAsync(_testDirectory);
+        var files = await this.service.GetXmlFilesFromDirectoryAsync(this.testDirectory);
 
         // Assert
         files.Should().NotBeNull();
         files.Should().Contain(f => Path.GetFileName(f.FilePath) == "testfile.xml");
     }
 
-    [Fact]
+    [TestMethod]
     public async Task GetXmlFilesFromDirectoryAsync_WithNonExistentDirectory_ShouldThrowException()
     {
         // Arrange
-        var nonExistentDir = Path.Combine(_testDirectory, "NonExistentDirectory");
+        var nonExistentDir = Path.Combine(this.testDirectory, "NonExistentDirectory");
 
         // Act & Assert
-        var action = () => _service.GetXmlFilesFromDirectoryAsync(nonExistentDir);
+        var action = () => this.service.GetXmlFilesFromDirectoryAsync(nonExistentDir);
         await action.Should().ThrowAsync<DirectoryNotFoundException>();
     }
 
-    [Fact]
+    [TestMethod]
     public async Task GetFileAsMemoryStreamAsync_WithExistingFile_ShouldReturnStream()
     {
         // Arrange
-        var testFile = Path.Combine(_testDirectory, "testfile.txt");
+        var testFile = Path.Combine(this.testDirectory, "testfile.txt");
         var content = "test content";
         File.WriteAllText(testFile, content);
 
         // Act
-        using var stream = await _service.GetFileAsMemoryStreamAsync(testFile);
+        using var stream = await this.service.GetFileAsMemoryStreamAsync(testFile);
 
         // Assert
         stream.Should().NotBeNull();
@@ -80,27 +85,27 @@ public class FileSystemServiceTests : IDisposable
         result.Should().Be(content);
     }
 
-    [Fact]
+    [TestMethod]
     public async Task GetFileAsMemoryStreamAsync_WithNonExistentFile_ShouldThrowException()
     {
         // Arrange
-        var nonExistentFile = Path.Combine(_testDirectory, "NonExistentFile.txt");
+        var nonExistentFile = Path.Combine(this.testDirectory, "NonExistentFile.txt");
 
         // Act & Assert
-        var action = () => _service.GetFileAsMemoryStreamAsync(nonExistentFile);
+        var action = () => this.service.GetFileAsMemoryStreamAsync(nonExistentFile);
         await action.Should().ThrowAsync<FileNotFoundException>();
     }
 
-    [Fact]
+    [TestMethod]
     public async Task OpenFileStreamAsync_WithExistingFile_ShouldReturnStream()
     {
         // Arrange
-        var testFile = Path.Combine(_testDirectory, "testfile.txt");
+        var testFile = Path.Combine(this.testDirectory, "testfile.txt");
         var content = "test content";
         File.WriteAllText(testFile, content);
 
         // Act
-        using var stream = await _service.OpenFileStreamAsync(testFile);
+        using var stream = await this.service.OpenFileStreamAsync(testFile);
 
         // Assert
         stream.Should().NotBeNull();
@@ -109,35 +114,35 @@ public class FileSystemServiceTests : IDisposable
         result.Should().Be(content);
     }
 
-    [Fact]
+    [TestMethod]
     public async Task OpenFileStreamAsync_WithNonExistentFile_ShouldThrowException()
     {
         // Arrange
-        var nonExistentFile = Path.Combine(_testDirectory, "NonExistentFile.txt");
+        var nonExistentFile = Path.Combine(this.testDirectory, "NonExistentFile.txt");
 
         // Act & Assert
-        var action = () => _service.OpenFileStreamAsync(nonExistentFile);
+        var action = () => this.service.OpenFileStreamAsync(nonExistentFile);
         await action.Should().ThrowAsync<FileNotFoundException>();
     }
 
-    [Fact]
+    [TestMethod]
     public async Task CreateFilePairsAsync_WithMatchingFiles_ShouldCreatePairs()
     {
         // Arrange
-        var tempDir1 = Path.Combine(_testDirectory, "TestDir1");
-        var tempDir2 = Path.Combine(_testDirectory, "TestDir2");
-        
+        var tempDir1 = Path.Combine(this.testDirectory, "TestDir1");
+        var tempDir2 = Path.Combine(this.testDirectory, "TestDir2");
+
         Directory.CreateDirectory(tempDir1);
         Directory.CreateDirectory(tempDir2);
-        
+
         var file1 = Path.Combine(tempDir1, "test.xml");
         var file2 = Path.Combine(tempDir2, "test.xml");
-        
+
         File.WriteAllText(file1, "<test>content1</test>");
         File.WriteAllText(file2, "<test>content2</test>");
 
         // Act
-        var pairs = await _service.CreateFilePairsAsync(tempDir1, tempDir2);
+        var pairs = await this.service.CreateFilePairsAsync(tempDir1, tempDir2);
 
         // Assert
         pairs.Should().NotBeNull();
@@ -147,20 +152,20 @@ public class FileSystemServiceTests : IDisposable
         pairs[0].RelativePath.Should().Be("test.xml");
     }
 
-    [Fact]
+    [TestMethod]
     public async Task CreateFilePairsAsync_WithNonExistentDirectory_ShouldThrowException()
     {
         // Arrange
-        var nonExistentDir = Path.Combine(_testDirectory, "NonExistentDirectory");
-        var tempDir = Path.Combine(_testDirectory, "ExistingDir");
+        var nonExistentDir = Path.Combine(this.testDirectory, "NonExistentDirectory");
+        var tempDir = Path.Combine(this.testDirectory, "ExistingDir");
         Directory.CreateDirectory(tempDir);
 
         // Act & Assert
-        var action = () => _service.CreateFilePairsAsync(nonExistentDir, tempDir);
+        var action = () => this.service.CreateFilePairsAsync(nonExistentDir, tempDir);
         await action.Should().ThrowAsync<DirectoryNotFoundException>();
     }
 
-    [Fact]
+    [TestMethod]
     public async Task MapFilesByFolderAsync_WithValidFiles_ShouldMapCorrectly()
     {
         // Arrange
@@ -168,21 +173,21 @@ public class FileSystemServiceTests : IDisposable
         {
             (new MemoryStream(System.Text.Encoding.UTF8.GetBytes("content1")), "file1.xml"),
             (new MemoryStream(System.Text.Encoding.UTF8.GetBytes("content2")), "folder/file2.xml"),
-            (new MemoryStream(System.Text.Encoding.UTF8.GetBytes("content3")), "folder/subfolder/file3.xml")
+            (new MemoryStream(System.Text.Encoding.UTF8.GetBytes("content3")), "folder/subfolder/file3.xml"),
         };
 
         try
         {
             // Act
-            var result = await _service.MapFilesByFolderAsync(files);
+            var result = await this.service.MapFilesByFolderAsync(files);
 
             // Assert
             result.Should().NotBeNull();
-            result.Should().ContainKey("");
+            result.Should().ContainKey(string.Empty);
             result.Should().ContainKey("folder");
             result.Should().ContainKey("folder/subfolder");
-            
-            result[""].Should().HaveCount(1);
+
+            result[string.Empty].Should().HaveCount(1);
             result["folder"].Should().HaveCount(1);
             result["folder/subfolder"].Should().HaveCount(1);
         }
@@ -196,17 +201,17 @@ public class FileSystemServiceTests : IDisposable
         }
     }
 
-    [Fact]
+    [TestMethod]
     public async Task MapFilesByFolderAsync_WithEmptyList_ShouldReturnEmptyDictionary()
     {
         // Arrange
         var files = new List<(MemoryStream Stream, string FileName)>();
 
         // Act
-        var result = await _service.MapFilesByFolderAsync(files);
+        var result = await this.service.MapFilesByFolderAsync(files);
 
         // Assert
         result.Should().NotBeNull();
         result.Should().BeEmpty();
     }
-} 
+}

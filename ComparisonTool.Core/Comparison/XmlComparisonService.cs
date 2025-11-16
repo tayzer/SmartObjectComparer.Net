@@ -1,25 +1,20 @@
-//using ComparisonTool.Core.Comparison.Configuration;
-//using ComparisonTool.Core.Comparison.Results;
-//using ComparisonTool.Core.Serialization;
-//using KellermanSoftware.CompareNetObjects;
-//using Microsoft.Extensions.Logging;
-//using System.Collections.Generic;
-//using System.Threading;
-
-//namespace ComparisonTool.Core.Comparison;
+// <copyright file="XmlComparisonService.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+// namespace ComparisonTool.Core.Comparison;
 
 ///// <summary>
 ///// Legacy XML comparison service that delegates to the new services for backward compatibility
 ///// </summary>
-//public class XmlComparisonService
-//{
+// public class XmlComparisonService
+// {
 //    private readonly ILogger<XmlComparisonService> logger;
 //    private readonly IXmlDeserializationService deserializationService;
 //    private readonly IComparisonConfigurationService configService;
 //    private readonly IComparisonService comparisonService;
 //    private readonly object comparisonLock = new object();
 
-//    public XmlComparisonService(
+// public XmlComparisonService(
 //        ILogger<XmlComparisonService> logger,
 //        IXmlDeserializationService deserializationService,
 //        IComparisonConfigurationService configService,
@@ -30,10 +25,10 @@
 //        this.configService = configService;
 //        this.comparisonService = comparisonService;
 
-//        this.logger.LogInformation("XmlComparisonService initialized (Legacy facade)");
+// this.logger.LogInformation("XmlComparisonService initialized (Legacy facade)");
 //    }
 
-//    /// <summary>
+// /// <summary>
 //    /// Register a domain model for XML deserialization
 //    /// </summary>
 //    public void RegisterDomainModel<T>(string modelName) where T : class
@@ -41,7 +36,7 @@
 //        deserializationService.RegisterDomainModel<T>(modelName);
 //    }
 
-//    /// <summary>
+// /// <summary>
 //    /// Get all registered domain model names
 //    /// </summary>
 //    public IEnumerable<string> GetRegisteredModelNames()
@@ -49,7 +44,7 @@
 //        return deserializationService.GetRegisteredModelNames();
 //    }
 
-//    /// <summary>
+// /// <summary>
 //    /// Get type for a registered model name
 //    /// </summary>
 //    public Type GetModelType(string modelName)
@@ -57,7 +52,7 @@
 //        return deserializationService.GetModelType(modelName);
 //    }
 
-//    /// <summary>
+// /// <summary>
 //    /// Compare two XML files using the specified domain model
 //    /// </summary>
 //    public async Task<ComparisonResult> CompareXmlFilesAsync(
@@ -74,16 +69,16 @@
 //                    "XML stream cannot be null");
 //            }
 
-//            var oldClone = DeepClone(await deserializationService.DeserializeAsync(oldXmlStream, modelName));
+// var oldClone = DeepClone(await deserializationService.DeserializeAsync(oldXmlStream, modelName));
 //            var newClone = DeepClone(await deserializationService.DeserializeAsync(newXmlStream, modelName));
 
-//            // Create snapshots of collections to prevent modification during comparison
+// // Create snapshots of collections to prevent modification during comparison
 //            if (oldClone.Items != null)
 //                oldClone.Items = new List<Item>(oldClone.Items);
 //            if (newClone.Items != null)
 //                newClone.Items = new List<Item>(newClone.Items);
 
-//            lock (comparisonLock)
+// lock (comparisonLock)
 //            {
 //                return await comparisonService.CompareAsync(oldClone, newClone);
 //            }
@@ -95,7 +90,7 @@
 //        }
 //    }
 
-//    /// <summary>
+// /// <summary>
 //    /// Compare multiple file pairs
 //    /// </summary>
 //    public async Task<MultiFolderComparisonResult> CompareFoldersAsync(
@@ -118,7 +113,7 @@
 //        }
 //    }
 
-//    /// <summary>
+// /// <summary>
 //    /// Configure the comparer to ignore specific properties
 //    /// </summary>
 //    public void IgnoreProperty(string propertyPath)
@@ -126,7 +121,7 @@
 //        configService.IgnoreProperty(propertyPath);
 //    }
 
-//    /// <summary>
+// /// <summary>
 //    /// Remove a property from the ignore list
 //    /// </summary>
 //    public void RemoveIgnoredProperty(string propertyPath)
@@ -134,7 +129,7 @@
 //        configService.RemoveIgnoredProperty(propertyPath);
 //    }
 
-//    /// <summary>
+// /// <summary>
 //    /// Get all currently ignored properties
 //    /// </summary>
 //    public IReadOnlyList<string> GetIgnoredProperties()
@@ -142,7 +137,7 @@
 //        return configService.GetIgnoredProperties();
 //    }
 
-//    /// <summary>
+// /// <summary>
 //    /// Configure whether to ignore collection order
 //    /// </summary>
 //    public void SetIgnoreCollectionOrder(bool ignoreOrder)
@@ -150,7 +145,7 @@
 //        configService.SetIgnoreCollectionOrder(ignoreOrder);
 //    }
 
-//    /// <summary>
+// /// <summary>
 //    /// Get whether collection order is being ignored
 //    /// </summary>
 //    public bool GetIgnoreCollectionOrder()
@@ -158,7 +153,7 @@
 //        return configService.GetIgnoreCollectionOrder();
 //    }
 
-//    /// <summary>
+// /// <summary>
 //    /// Configure whether to ignore string case
 //    /// </summary>
 //    public void SetIgnoreStringCase(bool ignoreCase)
@@ -166,7 +161,7 @@
 //        configService.SetIgnoreStringCase(ignoreCase);
 //    }
 
-//    /// <summary>
+// /// <summary>
 //    /// Get whether string case is being ignored
 //    /// </summary>
 //    public bool GetIgnoreStringCase()
@@ -174,7 +169,7 @@
 //        return configService.GetIgnoreStringCase();
 //    }
 
-//    /// <summary>
+// /// <summary>
 //    /// Get the current comparison configuration
 //    /// </summary>
 //    public ComparisonConfig GetCurrentConfig()
@@ -182,7 +177,7 @@
 //        return configService.GetCurrentConfig();
 //    }
 
-//    private T DeepClone<T>(T obj)
+// private T DeepClone<T>(T obj)
 //    {
 //        using (var ms = new MemoryStream())
 //        {
@@ -190,7 +185,7 @@
 //            formatter.Serialize(ms, obj);
 //            ms.Position = 0;
 
-//            return (T)formatter.Deserialize(ms);
+// return (T)formatter.Deserialize(ms);
 //        }
 //    }
-//}
+// }

@@ -1,14 +1,21 @@
-﻿using KellermanSoftware.CompareNetObjects;
+// <copyright file="DifferencePattern.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
+using KellermanSoftware.CompareNetObjects;
 
 namespace ComparisonTool.Core.Comparison.Analysis;
 
 /// <summary>
-/// Represents a pattern of differences
+/// Represents a pattern of differences.
 /// </summary>
 public class DifferencePattern
 {
     public string Pattern { get; set; }
+
     public string PropertyPath { get; set; }
+
     public int OccurrenceCount { get; set; }
-    public List<Difference> Examples { get; set; } = new();
+
+    public List<Difference> Examples { get; set; } = new ();
 }

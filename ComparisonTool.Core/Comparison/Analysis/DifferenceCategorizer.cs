@@ -1,3 +1,7 @@
+// <copyright file="DifferenceCategorizer.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using System.Text.RegularExpressions;
 using KellermanSoftware.CompareNetObjects;
 using Microsoft.Extensions.Logging;
@@ -5,22 +9,25 @@ using Microsoft.Extensions.Logging;
 namespace ComparisonTool.Core.Comparison.Analysis;
 
 /// <summary>
-/// Categorizes and summarizes differences from CompareNETObjects
+/// Categorizes and summarizes differences from CompareNETObjects.
 /// </summary>
 public class DifferenceCategorizer
 {
     private readonly ILogger logger;
+
     public DifferenceCategorizer(ILogger logger = null)
     {
         this.logger = logger;
     }
 
     /// <summary>
-    /// Creates a structured summary from CompareNETObjects comparison result
+    /// Creates a structured summary from CompareNETObjects comparison result.
     /// </summary>
+    /// <returns></returns>
     public DifferenceSummary CategorizeAndSummarize(ComparisonResult comparisonResult)
     {
-        logger?.LogInformation("Starting difference summary. AreEqual={AreEqual}, DifferenceCount={Count}",
+        this.logger?.LogInformation(
+            "Starting difference summary. AreEqual={AreEqual}, DifferenceCount={Count}",
             comparisonResult.AreEqual, comparisonResult.Differences?.Count ?? 0);
 
         var summary = new DifferenceSummary();
@@ -28,7 +35,7 @@ public class DifferenceCategorizer
         if (comparisonResult.AreEqual)
         {
             summary.AreEqual = true;
-            logger?.LogInformation("Objects are equal. No differences to categorize.");
+            this.logger?.LogInformation("Objects are equal. No differences to categorize.");
             return summary;
         }
 
@@ -40,33 +47,43 @@ public class DifferenceCategorizer
         foreach (var diff in comparisonResult.Differences)
         {
             // Change type grouping
-            var category = GetDifferenceCategory(diff);
-            if (!summary.DifferencesByChangeType.TryGetValue(category, out var catList))
+            var category = this.GetDifferenceCategory(diff);
+            if (!summary.DifferencesByChangeType.TryGetValue(category, out var catList)) {
                 summary.DifferencesByChangeType[category] = catList = new List<Difference>();
+            }
+
             catList.Add(diff);
 
             // Path pattern grouping
-            var pattern = GetPathPattern(diff.PropertyName);
-            if (!patternGroups.TryGetValue(pattern, out var patList))
+            var pattern = this.GetPathPattern(diff.PropertyName);
+            if (!patternGroups.TryGetValue(pattern, out var patList)) {
                 patternGroups[pattern] = patList = new List<Difference>();
+            }
+
             patList.Add(diff);
 
             // Root object grouping
-            var rootObject = GetRootObjectName(diff.PropertyName);
-            if (!summary.DifferencesByRootObject.TryGetValue(rootObject, out var rootList))
+            var rootObject = this.GetRootObjectName(diff.PropertyName);
+            if (!summary.DifferencesByRootObject.TryGetValue(rootObject, out var rootList)) {
                 summary.DifferencesByRootObject[rootObject] = rootList = new List<Difference>();
+            }
+
             rootList.Add(diff);
 
             // Root object + category grouping
-            if (!summary.DifferencesByRootObjectAndCategory.TryGetValue(rootObject, out var rootCatDict))
+            if (!summary.DifferencesByRootObjectAndCategory.TryGetValue(rootObject, out var rootCatDict)) {
                 summary.DifferencesByRootObjectAndCategory[rootObject] = rootCatDict = new Dictionary<DifferenceCategory, List<Difference>>();
-            if (!rootCatDict.TryGetValue(category, out var rootCatList))
+            }
+
+            if (!rootCatDict.TryGetValue(category, out var rootCatList)) {
                 rootCatDict[category] = rootCatList = new List<Difference>();
+            }
+
             rootCatList.Add(diff);
         }
 
-        logger?.LogDebug("Categorized differences into {CategoryCount} categories.", summary.DifferencesByChangeType.Count);
-        logger?.LogDebug("Categorized differences into {RootObjectCount} root objects.", summary.DifferencesByRootObject.Count);
+        this.logger?.LogDebug("Categorized differences into {CategoryCount} categories.", summary.DifferencesByChangeType.Count);
+        this.logger?.LogDebug("Categorized differences into {RootObjectCount} root objects.", summary.DifferencesByRootObject.Count);
 
         // --- Pattern grouping post-processing ---
         foreach (var group in patternGroups)
@@ -78,20 +95,22 @@ public class DifferenceCategorizer
                     Pattern = group.Key,
                     PropertyPath = group.Key,
                     OccurrenceCount = group.Value.Count,
-                    Examples = group.Value.Take(3).ToList()
+                    Examples = group.Value.Take(3).ToList(),
                 });
             }
         }
+
         summary.CommonPatterns = summary.CommonPatterns
             .OrderByDescending(p => p.OccurrenceCount)
             .ToList();
-        logger?.LogDebug("Identified {PatternCount} common property path patterns.", summary.CommonPatterns.Count);
+        this.logger?.LogDebug("Identified {PatternCount} common property path patterns.", summary.CommonPatterns.Count);
 
         // --- Statistics ---
-        CalculateStatistics(summary);
-        logger?.LogDebug("Calculated statistics for {CategoryCount} categories and {RootObjectCount} root objects.", summary.CategoryPercentages.Count, summary.RootObjectPercentages.Count);
+        this.CalculateStatistics(summary);
+        this.logger?.LogDebug("Calculated statistics for {CategoryCount} categories and {RootObjectCount} root objects.", summary.CategoryPercentages.Count, summary.RootObjectPercentages.Count);
 
-        logger?.LogInformation("Completed difference summary. Categories: {CategoryCount}, Patterns: {PatternCount}, RootObjects: {RootObjectCount}",
+        this.logger?.LogInformation(
+            "Completed difference summary. Categories: {CategoryCount}, Patterns: {PatternCount}, RootObjects: {RootObjectCount}",
             summary.DifferencesByChangeType.Count,
             summary.CommonPatterns?.Count ?? 0,
             summary.DifferencesByRootObject.Count);
@@ -104,14 +123,14 @@ public class DifferenceCategorizer
         // Calculate percentages for each category
         foreach (var category in summary.DifferencesByChangeType)
         {
-            double percentage = (double)category.Value.Count / summary.TotalDifferenceCount * 100;
+            var percentage = (double)category.Value.Count / summary.TotalDifferenceCount * 100;
             summary.CategoryPercentages[category.Key] = Math.Round(percentage, 1);
         }
 
         // Calculate percentages for each root object
         foreach (var rootObj in summary.DifferencesByRootObject)
         {
-            double percentage = (double)rootObj.Value.Count / summary.TotalDifferenceCount * 100;
+            var percentage = (double)rootObj.Value.Count / summary.TotalDifferenceCount * 100;
             summary.RootObjectPercentages[rootObj.Key] = Math.Round(percentage, 1);
         }
     }
@@ -153,7 +172,7 @@ public class DifferenceCategorizer
             var normalizedPath = Regex.Replace(propertyPath, @"\[\d+\]", "[*]");
             return normalizedPath;
         }
-        
+
         // For simple paths without collections, return the full path to be precise about what's changing
         // e.g., "Body.Response.SomeProperty" -> "Body.Response.SomeProperty"
         return propertyPath;
@@ -166,45 +185,49 @@ public class DifferenceCategorizer
         {
             return DifferenceCategory.NullValueChange;
         }
-        
+
         // Then categorize based on the actual value types, regardless of path structure
-        if (IsNumericDifference(diff.Object1Value, diff.Object2Value))
+        if (this.IsNumericDifference(diff.Object1Value, diff.Object2Value))
         {
             return DifferenceCategory.NumericValueChanged;
         }
-        else if (IsDateTimeDifference(diff.Object1Value, diff.Object2Value))
+        else if (this.IsDateTimeDifference(diff.Object1Value, diff.Object2Value))
         {
             return DifferenceCategory.DateTimeChanged;
         }
-        else if (IsStringDifference(diff.Object1Value, diff.Object2Value))
+        else if (this.IsStringDifference(diff.Object1Value, diff.Object2Value))
         {
             return DifferenceCategory.TextContentChanged;
         }
-        else if (IsBooleanDifference(diff.Object1Value, diff.Object2Value))
+        else if (this.IsBooleanDifference(diff.Object1Value, diff.Object2Value))
         {
             return DifferenceCategory.BooleanValueChanged;
         }
-        
+
         // Only categorize as collection changes if the path indicates actual collection structure changes
         // (not property changes within collection items)
         if (diff.PropertyName.Contains("[") && diff.PropertyName.Contains("]"))
         {
             // Check if this is actually a collection structure change vs property change within collection
-            if (IsCollectionStructureChange(diff))
+            if (this.IsCollectionStructureChange(diff))
             {
-                if (diff.Object1Value == null && diff.Object2Value != null)
+                if (diff.Object1Value == null && diff.Object2Value != null) {
                     return DifferenceCategory.ItemAdded;
-                else if (diff.Object1Value != null && diff.Object2Value == null)
+                }
+                else if (diff.Object1Value != null && diff.Object2Value == null) {
                     return DifferenceCategory.ItemRemoved;
-                else
+                }
+                else {
                     return DifferenceCategory.CollectionItemChanged;
+                }
             }
+
             // If it's a property within a collection item, fall through to value-based categorization
         }
-        
+
         return DifferenceCategory.ValueChanged;
     }
-    
+
     private bool IsCollectionStructureChange(Difference diff)
     {
         // This is a collection structure change if the property path ends with an index

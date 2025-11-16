@@ -1,54 +1,58 @@
-﻿using KellermanSoftware.CompareNetObjects;
+﻿// <copyright file="SemanticDifferenceGroup.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
+using KellermanSoftware.CompareNetObjects;
 
 namespace ComparisonTool.Core.Comparison.Analysis;
 
 /// <summary>
-/// Represents a group of semantically related differences
+/// Represents a group of semantically related differences.
 /// </summary>
 public class SemanticDifferenceGroup
 {
     /// <summary>
-    /// A descriptive name for this group of differences
+    /// Gets or sets a descriptive name for this group of differences.
     /// </summary>
     public string GroupName { get; set; }
 
     /// <summary>
-    /// A semantic description of what these differences represent
+    /// Gets or sets a semantic description of what these differences represent.
     /// </summary>
     public string SemanticDescription { get; set; }
 
     /// <summary>
-    /// Confidence level (0-100) that this grouping is accurate
+    /// Gets or sets confidence level (0-100) that this grouping is accurate.
     /// </summary>
     public int ConfidenceLevel { get; set; }
 
     /// <summary>
-    /// Count of differences in this group
+    /// Gets count of differences in this group.
     /// </summary>
-    public int DifferenceCount => Differences.Count;
+    public int DifferenceCount => this.Differences.Count;
 
     /// <summary>
-    /// Count of affected files
+    /// Gets count of affected files.
     /// </summary>
-    public int FileCount => AffectedFiles.Count;
+    public int FileCount => this.AffectedFiles.Count;
 
     /// <summary>
-    /// The list of differences in this semantic group
+    /// Gets or sets the list of differences in this semantic group.
     /// </summary>
     public List<Difference> Differences { get; set; } = new List<Difference>();
 
     /// <summary>
-    /// The files affected by this semantic group
+    /// Gets or sets the files affected by this semantic group.
     /// </summary>
     public HashSet<string> AffectedFiles { get; set; } = new HashSet<string>();
 
     /// <summary>
-    /// Common property paths that are part of this semantic group
+    /// Gets or sets common property paths that are part of this semantic group.
     /// </summary>
     public HashSet<string> RelatedProperties { get; set; } = new HashSet<string>();
 
     /// <summary>
-    /// A representative change that exemplifies this group
+    /// Gets a representative change that exemplifies this group.
     /// </summary>
-    public Difference RepresentativeDifference => Differences.FirstOrDefault();
+    public Difference RepresentativeDifference => this.Differences.FirstOrDefault();
 }

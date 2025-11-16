@@ -11,4 +11,8 @@
     <ProjectReference Include="..\ComparisonTool.Domain\ComparisonTool.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="StyleCop.Analyzers" Version="1.1.118" PrivateAssets="all" />
+  </ItemGroup>
+
 </Project>

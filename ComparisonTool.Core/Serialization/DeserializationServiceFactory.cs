@@ -1,157 +1,163 @@
+// <copyright file="DeserializationServiceFactory.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using ComparisonTool.Core.Utilities;
 using Microsoft.Extensions.Logging;
 
 namespace ComparisonTool.Core.Serialization;
 
 /// <summary>
-/// Factory for creating appropriate deserialization services based on file format
+/// Factory for creating appropriate deserialization services based on file format.
 /// </summary>
 public class DeserializationServiceFactory
 {
-    private readonly IServiceProvider _serviceProvider;
-    private readonly ILogger<DeserializationServiceFactory> _logger;
+    private readonly IServiceProvider serviceProvider;
+    private readonly ILogger<DeserializationServiceFactory> logger;
 
     public DeserializationServiceFactory(IServiceProvider serviceProvider, ILogger<DeserializationServiceFactory> logger)
     {
-        _serviceProvider = serviceProvider;
-        _logger = logger;
+        this.serviceProvider = serviceProvider;
+        this.logger = logger;
     }
 
     /// <summary>
-    /// Get the appropriate deserialization service for a specific format
+    /// Get the appropriate deserialization service for a specific format.
     /// </summary>
-    /// <param name="format">Serialization format</param>
-    /// <returns>Deserialization service for the specified format</returns>
+    /// <param name="format">Serialization format.</param>
+    /// <returns>Deserialization service for the specified format.</returns>
     public IDeserializationService GetService(SerializationFormat format)
     {
-        return format switch
-        {
-            SerializationFormat.Xml => GetXmlService(),
-            SerializationFormat.Json => GetJsonService(),
+        return format switch {
+            SerializationFormat.Xml => this.GetXmlService(),
+            SerializationFormat.Json => this.GetJsonService(),
             _ => throw new NotSupportedException($"Unsupported serialization format: {format}")
         };
     }
 
     /// <summary>
-    /// Get the appropriate deserialization service based on file path
+    /// Get the appropriate deserialization service based on file path.
     /// </summary>
-    /// <param name="filePath">Path to the file</param>
-    /// <returns>Deserialization service for the detected file format</returns>
+    /// <param name="filePath">Path to the file.</param>
+    /// <returns>Deserialization service for the detected file format.</returns>
     public IDeserializationService GetService(string filePath)
     {
-        if (string.IsNullOrEmpty(filePath))
+        if (string.IsNullOrEmpty(filePath)) {
             throw new ArgumentException("File path cannot be null or empty", nameof(filePath));
+        }
 
         var format = FileTypeDetector.DetectFormat(filePath);
-        _logger.LogDebug("Detected format {Format} for file {FilePath}", format, filePath);
-        
-        return GetService(format);
+        this.logger.LogDebug("Detected format {Format} for file {FilePath}", format, filePath);
+
+        return this.GetService(format);
     }
 
     /// <summary>
-    /// Get the appropriate deserialization service based on stream content
+    /// Get the appropriate deserialization service based on stream content.
     /// </summary>
-    /// <param name="stream">Stream to analyze</param>
-    /// <param name="fallbackFilePath">Optional file path for fallback format detection</param>
-    /// <returns>Deserialization service for the detected format</returns>
+    /// <param name="stream">Stream to analyze.</param>
+    /// <param name="fallbackFilePath">Optional file path for fallback format detection.</param>
+    /// <returns>Deserialization service for the detected format.</returns>
     public IDeserializationService GetServiceFromContent(Stream stream, string fallbackFilePath = null)
     {
-        if (stream == null)
+        if (stream == null) {
             throw new ArgumentNullException(nameof(stream));
+        }
 
         // Try to detect format from content first
-        var detectedFormat = FileTypeDetector.DetectFormatFromContent(stream, _logger);
-        
+        var detectedFormat = FileTypeDetector.DetectFormatFromContent(stream, this.logger);
+
         if (detectedFormat.HasValue)
         {
-            _logger.LogDebug("Detected format {Format} from stream content", detectedFormat.Value);
-            return GetService(detectedFormat.Value);
+            this.logger.LogDebug("Detected format {Format} from stream content", detectedFormat.Value);
+            return this.GetService(detectedFormat.Value);
         }
 
         // Fallback to file path if content detection fails
         if (!string.IsNullOrEmpty(fallbackFilePath))
         {
-            _logger.LogDebug("Content detection failed, falling back to file path detection for {FilePath}", fallbackFilePath);
-            return GetService(fallbackFilePath);
+            this.logger.LogDebug("Content detection failed, falling back to file path detection for {FilePath}", fallbackFilePath);
+            return this.GetService(fallbackFilePath);
         }
 
         // Default to XML if all detection methods fail (maintain backward compatibility)
-        _logger.LogWarning("Could not detect format from content or file path, defaulting to XML format");
-        return GetXmlService();
+        this.logger.LogWarning("Could not detect format from content or file path, defaulting to XML format");
+        return this.GetXmlService();
     }
 
     /// <summary>
-    /// Get all available deserialization services
+    /// Get all available deserialization services.
     /// </summary>
-    /// <returns>Dictionary of format to service mappings</returns>
+    /// <returns>Dictionary of format to service mappings.</returns>
     public Dictionary<SerializationFormat, IDeserializationService> GetAllServices()
     {
         return new Dictionary<SerializationFormat, IDeserializationService>
         {
-            { SerializationFormat.Xml, GetXmlService() },
-            { SerializationFormat.Json, GetJsonService() }
+            { SerializationFormat.Xml, this.GetXmlService() },
+            { SerializationFormat.Json, this.GetJsonService() },
         };
     }
 
     /// <summary>
-    /// Get all supported formats across all services
+    /// Get all supported formats across all services.
     /// </summary>
-    /// <returns>List of all supported serialization formats</returns>
+    /// <returns>List of all supported serialization formats.</returns>
     public IEnumerable<SerializationFormat> GetSupportedFormats()
     {
         return new[] { SerializationFormat.Xml, SerializationFormat.Json };
     }
 
     /// <summary>
-    /// Check if a specific format is supported
+    /// Check if a specific format is supported.
     /// </summary>
-    /// <param name="format">Format to check</param>
-    /// <returns>True if the format is supported</returns>
+    /// <param name="format">Format to check.</param>
+    /// <returns>True if the format is supported.</returns>
     public bool IsFormatSupported(SerializationFormat format)
     {
-        return GetSupportedFormats().Contains(format);
+        return this.GetSupportedFormats().Contains(format);
     }
 
     /// <summary>
-    /// Register a domain model across all deserialization services
+    /// Register a domain model across all deserialization services.
     /// </summary>
-    /// <typeparam name="T">Type to register</typeparam>
-    /// <param name="modelName">Name to identify this model type</param>
-    public void RegisterDomainModelAcrossAllServices<T>(string modelName) where T : class
+    /// <typeparam name="T">Type to register.</typeparam>
+    /// <param name="modelName">Name to identify this model type.</param>
+    public void RegisterDomainModelAcrossAllServices<T>(string modelName)
+        where T : class
     {
-        _logger.LogInformation("Registering domain model {ModelName} across all deserialization services", modelName);
-        
+        this.logger.LogInformation("Registering domain model {ModelName} across all deserialization services", modelName);
+
         try
         {
-            GetXmlService().RegisterDomainModel<T>(modelName);
+            this.GetXmlService().RegisterDomainModel<T>(modelName);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to register model {ModelName} with XML service", modelName);
+            this.logger.LogError(ex, "Failed to register model {ModelName} with XML service", modelName);
         }
 
         try
         {
-            GetJsonService().RegisterDomainModel<T>(modelName);
+            this.GetJsonService().RegisterDomainModel<T>(modelName);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to register model {ModelName} with JSON service", modelName);
+            this.logger.LogError(ex, "Failed to register model {ModelName} with JSON service", modelName);
         }
     }
 
     /// <summary>
-    /// Get unified deserialization service that can handle multiple formats
+    /// Get unified deserialization service that can handle multiple formats.
     /// </summary>
-    /// <returns>Unified service that delegates to appropriate format-specific services</returns>
+    /// <returns>Unified service that delegates to appropriate format-specific services.</returns>
     public IDeserializationService GetUnifiedService()
     {
-        return new UnifiedDeserializationService(this, _logger);
+        return new UnifiedDeserializationService(this, this.logger);
     }
 
     internal IDeserializationService GetXmlService()
     {
-        var xmlService = _serviceProvider.GetService(typeof(IXmlDeserializationService)) as IXmlDeserializationService;
+        var xmlService = this.serviceProvider.GetService(typeof(IXmlDeserializationService)) as IXmlDeserializationService;
         if (xmlService == null)
         {
             throw new InvalidOperationException("XML deserialization service is not registered. Ensure AddXmlComparisonServices() is called during service registration.");
@@ -163,7 +169,7 @@ public class DeserializationServiceFactory
 
     internal IDeserializationService GetJsonService()
     {
-        var jsonService = _serviceProvider.GetService(typeof(JsonDeserializationService)) as JsonDeserializationService;
+        var jsonService = this.serviceProvider.GetService(typeof(JsonDeserializationService)) as JsonDeserializationService;
         if (jsonService == null)
         {
             throw new InvalidOperationException("JSON deserialization service is not registered. Ensure AddJsonComparisonServices() is called during service registration.");
@@ -174,35 +180,37 @@ public class DeserializationServiceFactory
 }
 
 /// <summary>
-/// Adapter to make existing IXmlDeserializationService compatible with IDeserializationService
+/// Adapter to make existing IXmlDeserializationService compatible with IDeserializationService.
 /// </summary>
 internal class XmlDeserializationServiceAdapter : IDeserializationService
 {
-    private readonly IXmlDeserializationService _xmlService;
+    private readonly IXmlDeserializationService xmlService;
 
     public XmlDeserializationServiceAdapter(IXmlDeserializationService xmlService)
     {
-        _xmlService = xmlService;
+        this.xmlService = xmlService;
     }
 
     public IEnumerable<SerializationFormat> SupportedFormats => new[] { SerializationFormat.Xml };
 
-    public void RegisterDomainModel<T>(string modelName) where T : class
+    public void RegisterDomainModel<T>(string modelName)
+        where T : class
     {
-        _xmlService.RegisterDomainModel<T>(modelName);
+        this.xmlService.RegisterDomainModel<T>(modelName);
     }
 
     public IEnumerable<string> GetRegisteredModelNames()
     {
-        return _xmlService.GetRegisteredModelNames();
+        return this.xmlService.GetRegisteredModelNames();
     }
 
     public Type GetModelType(string modelName)
     {
-        return _xmlService.GetModelType(modelName);
+        return this.xmlService.GetModelType(modelName);
     }
 
-    public T Deserialize<T>(Stream stream, SerializationFormat? format = null) where T : class
+    public T Deserialize<T>(Stream stream, SerializationFormat? format = null)
+        where T : class
     {
         // Validate format if specified
         if (format.HasValue && format.Value != SerializationFormat.Xml)
@@ -210,62 +218,63 @@ internal class XmlDeserializationServiceAdapter : IDeserializationService
             throw new ArgumentException($"XmlDeserializationService only supports XML format, but {format.Value} was specified");
         }
 
-        return _xmlService.DeserializeXml<T>(stream);
+        return this.xmlService.DeserializeXml<T>(stream);
     }
 
     public T CloneObject<T>(T source)
     {
-        return _xmlService.CloneObject<T>(source);
+        return this.xmlService.CloneObject<T>(source);
     }
 
     public void ClearDeserializationCache()
     {
-        _xmlService.ClearDeserializationCache();
+        this.xmlService.ClearDeserializationCache();
     }
 
     public (int CacheSize, int SerializerCacheSize) GetCacheStatistics()
     {
-        return _xmlService.GetCacheStatistics();
+        return this.xmlService.GetCacheStatistics();
     }
 
     public void ClearAllCaches()
     {
-        _xmlService.ClearAllCaches();
+        this.xmlService.ClearAllCaches();
     }
 }
 
 /// <summary>
-/// Unified deserialization service that can handle multiple formats
+/// Unified deserialization service that can handle multiple formats.
 /// </summary>
 internal class UnifiedDeserializationService : IDeserializationService
 {
-    private readonly DeserializationServiceFactory _factory;
-    private readonly ILogger _logger;
-    private readonly Dictionary<string, Type> _registeredModels = new();
+    private readonly DeserializationServiceFactory factory;
+    private readonly ILogger logger;
+    private readonly Dictionary<string, Type> registeredModels = new ();
 
     public UnifiedDeserializationService(DeserializationServiceFactory factory, ILogger logger)
     {
-        _factory = factory;
-        _logger = logger;
+        this.factory = factory;
+        this.logger = logger;
     }
 
-    public IEnumerable<SerializationFormat> SupportedFormats => _factory.GetSupportedFormats();
+    public IEnumerable<SerializationFormat> SupportedFormats => this.factory.GetSupportedFormats();
 
-    public void RegisterDomainModel<T>(string modelName) where T : class
+    public void RegisterDomainModel<T>(string modelName)
+        where T : class
     {
-        _registeredModels[modelName] = typeof(T);
-        _factory.RegisterDomainModelAcrossAllServices<T>(modelName);
+        this.registeredModels[modelName] = typeof(T);
+        this.factory.RegisterDomainModelAcrossAllServices<T>(modelName);
     }
 
     public IEnumerable<string> GetRegisteredModelNames()
     {
         // Get models from all services, not just the unified service's internal dictionary
         var allModels = new HashSet<string>();
-        
+
         // Add models from XML service
         try
         {
-            var xmlModels = _factory.GetXmlService().GetRegisteredModelNames();
+            var xmlModels = this.factory.GetXmlService().GetRegisteredModelNames();
             foreach (var model in xmlModels)
             {
                 allModels.Add(model);
@@ -273,13 +282,13 @@ internal class UnifiedDeserializationService : IDeserializationService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to get registered models from XML service");
+            this.logger.LogWarning(ex, "Failed to get registered models from XML service");
         }
-        
+
         // Add models from JSON service
         try
         {
-            var jsonModels = _factory.GetJsonService().GetRegisteredModelNames();
+            var jsonModels = this.factory.GetJsonService().GetRegisteredModelNames();
             foreach (var model in jsonModels)
             {
                 allModels.Add(model);
@@ -287,30 +296,30 @@ internal class UnifiedDeserializationService : IDeserializationService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to get registered models from JSON service");
+            this.logger.LogWarning(ex, "Failed to get registered models from JSON service");
         }
-        
+
         // Add models registered directly with this unified service
-        foreach (var model in _registeredModels.Keys)
+        foreach (var model in this.registeredModels.Keys)
         {
             allModels.Add(model);
         }
-        
+
         return allModels;
     }
 
     public Type GetModelType(string modelName)
     {
         // Check internal models first
-        if (_registeredModels.ContainsKey(modelName))
+        if (this.registeredModels.ContainsKey(modelName))
         {
-            return _registeredModels[modelName];
+            return this.registeredModels[modelName];
         }
 
         // Check XML service
         try
         {
-            return _factory.GetXmlService().GetModelType(modelName);
+            return this.factory.GetXmlService().GetModelType(modelName);
         }
         catch (ArgumentException)
         {
@@ -320,7 +329,7 @@ internal class UnifiedDeserializationService : IDeserializationService
         // Check JSON service
         try
         {
-            return _factory.GetJsonService().GetModelType(modelName);
+            return this.factory.GetJsonService().GetModelType(modelName);
         }
         catch (ArgumentException)
         {
@@ -330,18 +339,19 @@ internal class UnifiedDeserializationService : IDeserializationService
         throw new ArgumentException($"No model registered with name: {modelName}");
     }
 
-    public T Deserialize<T>(Stream stream, SerializationFormat? format = null) where T : class
+    public T Deserialize<T>(Stream stream, SerializationFormat? format = null)
+        where T : class
     {
         IDeserializationService service;
-        
+
         if (format.HasValue)
         {
-            service = _factory.GetService(format.Value);
+            service = this.factory.GetService(format.Value);
         }
         else
         {
             // Auto-detect format from content
-            service = _factory.GetServiceFromContent(stream);
+            service = this.factory.GetServiceFromContent(stream);
         }
 
         return service.Deserialize<T>(stream, format);
@@ -350,13 +360,13 @@ internal class UnifiedDeserializationService : IDeserializationService
     public T CloneObject<T>(T source)
     {
         // For cloning, use JSON as it's typically more reliable for round-trip serialization
-        var jsonService = _factory.GetService(SerializationFormat.Json);
+        var jsonService = this.factory.GetService(SerializationFormat.Json);
         return jsonService.CloneObject<T>(source);
     }
 
     public void ClearDeserializationCache()
     {
-        foreach (var service in _factory.GetAllServices().Values)
+        foreach (var service in this.factory.GetAllServices().Values)
         {
             service.ClearDeserializationCache();
         }
@@ -364,18 +374,18 @@ internal class UnifiedDeserializationService : IDeserializationService
 
     public (int CacheSize, int SerializerCacheSize) GetCacheStatistics()
     {
-        var allServices = _factory.GetAllServices().Values;
+        var allServices = this.factory.GetAllServices().Values;
         var totalCacheSize = allServices.Sum(s => s.GetCacheStatistics().CacheSize);
         var totalSerializerCacheSize = allServices.Sum(s => s.GetCacheStatistics().SerializerCacheSize);
-        
+
         return (totalCacheSize, totalSerializerCacheSize);
     }
 
     public void ClearAllCaches()
     {
-        foreach (var service in _factory.GetAllServices().Values)
+        foreach (var service in this.factory.GetAllServices().Values)
         {
             service.ClearAllCaches();
         }
     }
-} 
+}

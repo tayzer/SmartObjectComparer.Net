@@ -1,4 +1,8 @@
-﻿using System.Xml.Serialization;
+﻿// <copyright file="Models.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
+using System.Xml.Serialization;
 
 namespace ComparisonTool.Core.Models;
 
@@ -25,17 +29,17 @@ public class SearchResponse
 
     // A summary object with aggregated data.
     [XmlElement(ElementName = "Summary")]
-    public Summary Summary { get; set; } = new();
+    public Summary Summary { get; set; } = new ();
 
     // A collection of detailed result items.
     [XmlArray(ElementName = "Results")]
     [XmlArrayItem(ElementName = "Result")]
-    public List<ResultItem> Results { get; set; } = new();
-    
+    public List<ResultItem> Results { get; set; } = new ();
+
     // A new collection of related items to test property-specific collection order ignoring.
     [XmlArray(ElementName = "RelatedItems")]
     [XmlArrayItem(ElementName = "Item")]
-    public List<RelatedItem> RelatedItems { get; set; } = new();
+    public List<RelatedItem> RelatedItems { get; set; } = new ();
 }
 
 public class Summary
@@ -63,12 +67,12 @@ public class ResultItem
 
     // A nested object with further details.
     [XmlElement(ElementName = "Details")]
-    public Details Details { get; set; } = new();
+    public Details Details { get; set; } = new ();
 
     // A list to represent tags or categories associated with this result.
     [XmlArray(ElementName = "Tags")]
     [XmlArrayItem(ElementName = "Tag")]
-    public List<string> Tags { get; set; } = new();
+    public List<string> Tags { get; set; } = new ();
 }
 
 // A new class for related items
@@ -76,10 +80,10 @@ public class RelatedItem
 {
     [XmlElement(ElementName = "ItemId")]
     public int ItemId { get; set; }
-    
+
     [XmlElement(ElementName = "ItemName")]
     public string ItemName { get; set; } = string.Empty;
-    
+
     [XmlElement(ElementName = "Relevance")]
     public double Relevance { get; set; }
 }

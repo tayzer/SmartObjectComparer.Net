@@ -1,7 +1,11 @@
-﻿namespace ComparisonTool.Core.Comparison.Analysis;
+// <copyright file="DifferenceCategory.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
+namespace ComparisonTool.Core.Comparison.Analysis;
 
 /// <summary>
-/// Categories of differences for better organization
+/// Categories of differences for better organization.
 /// </summary>
 public enum DifferenceCategory
 {
@@ -16,5 +20,5 @@ public enum DifferenceCategory
     ValueChanged,
     GeneralValueChanged,
     UncategorizedDifference,
-    Other
+    Other,
 }

@@ -1,3 +1,7 @@
+// <copyright file="XmlDeserializationServiceTests.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using System.Text;
 using System.Xml;
 using System.Xml.Serialization;
@@ -5,79 +9,80 @@ using ComparisonTool.Core.Serialization;
 using ComparisonTool.Domain.Models;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
-using Xunit;
 
 namespace ComparisonTool.Tests.Unit.Serialization;
 
+[TestClass]
 public class XmlDeserializationServiceTests
 {
-    private readonly Mock<ILogger<XmlDeserializationService>> _mockLogger;
-    private readonly ComparisonTool.Core.Serialization.XmlSerializerFactory _serializerFactory;
-    private readonly XmlDeserializationService _service;
+    private readonly Mock<ILogger<XmlDeserializationService>> mockLogger;
+    private readonly ComparisonTool.Core.Serialization.XmlSerializerFactory serializerFactory;
+    private readonly XmlDeserializationService service;
 
     public XmlDeserializationServiceTests()
     {
-        _mockLogger = new Mock<ILogger<XmlDeserializationService>>();
-        _serializerFactory = new ComparisonTool.Core.Serialization.XmlSerializerFactory();
-        _service = new XmlDeserializationService(_mockLogger.Object, _serializerFactory);
+        this.mockLogger = new Mock<ILogger<XmlDeserializationService>>();
+        this.serializerFactory = new ComparisonTool.Core.Serialization.XmlSerializerFactory();
+        this.service = new XmlDeserializationService(this.mockLogger.Object, this.serializerFactory);
     }
 
-    [Fact]
+    [TestMethod]
     public void Constructor_ShouldInitializeCorrectly()
     {
         // Act & Assert
-        _service.Should().NotBeNull();
+        this.service.Should().NotBeNull();
     }
 
-    [Fact]
+    [TestMethod]
     public void RegisterDomainModel_WithValidType_ShouldRegisterSuccessfully()
     {
         // Arrange
         var modelName = "TestModel";
 
         // Act
-        _service.RegisterDomainModel<TestModel>(modelName);
+        this.service.RegisterDomainModel<TestModel>(modelName);
 
         // Assert
-        var registeredType = _service.GetModelType(modelName);
+        var registeredType = this.service.GetModelType(modelName);
         registeredType.Should().Be(typeof(TestModel));
     }
 
-    [Fact]
+    [TestMethod]
     public void RegisterDomainModel_WithDuplicateName_ShouldOverwritePreviousRegistration()
     {
         // Arrange
         var modelName = "TestModel";
-        _service.RegisterDomainModel<TestModel>(modelName);
+        this.service.RegisterDomainModel<TestModel>(modelName);
 
         // Act
-        _service.RegisterDomainModel<AnotherTestModel>(modelName);
+        this.service.RegisterDomainModel<AnotherTestModel>(modelName);
 
         // Assert
-        var registeredType = _service.GetModelType(modelName);
+        var registeredType = this.service.GetModelType(modelName);
         registeredType.Should().Be(typeof(AnotherTestModel));
     }
 
-    [Fact]
+    [TestMethod]
     public void GetModelType_WithUnregisteredModel_ShouldThrowException()
     {
         // Arrange
         var modelName = "UnregisteredModel";
 
         // Act & Assert
-        var action = () => _service.GetModelType(modelName);
+        var action = () => this.service.GetModelType(modelName);
         action.Should().Throw<ArgumentException>()
             .WithMessage("*No model registered with name*");
     }
 
-    [Fact]
+    [TestMethod]
     public void DeserializeXml_WithValidXml_ShouldDeserializeCorrectly()
     {
         // Arrange
         var modelName = "TestModel";
-        _service.RegisterDomainModel<TestModel>(modelName);
-        
+        this.service.RegisterDomainModel<TestModel>(modelName);
+
         var xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TestModel>
     <StringProperty>Test Value</StringProperty>
@@ -87,7 +92,7 @@ public class XmlDeserializationServiceTests
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
 
         // Act
-        var result = _service.DeserializeXml<TestModel>(stream);
+        var result = this.service.DeserializeXml<TestModel>(stream);
 
         // Assert
         result.Should().NotBeNull();
@@ -95,13 +100,13 @@ public class XmlDeserializationServiceTests
         result.IntProperty.Should().Be(42);
     }
 
-    [Fact]
+    [TestMethod]
     public void DeserializeXml_WithMalformedXml_ShouldThrowException()
     {
         // Arrange
         var modelName = "TestModel";
-        _service.RegisterDomainModel<TestModel>(modelName);
-        
+        this.service.RegisterDomainModel<TestModel>(modelName);
+
         var malformedXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TestModel>
     <StringProperty>Test Value</StringProperty>
@@ -110,31 +115,31 @@ public class XmlDeserializationServiceTests
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(malformedXml));
 
         // Act & Assert
-        var action = () => _service.DeserializeXml<TestModel>(stream);
+        var action = () => this.service.DeserializeXml<TestModel>(stream);
         action.Should().Throw<InvalidOperationException>(); // XmlSerializer throws InvalidOperationException, not XmlException
     }
 
-    [Fact]
+    [TestMethod]
     public void DeserializeXml_WithEmptyStream_ShouldThrowException()
     {
         // Arrange
         var modelName = "TestModel";
-        _service.RegisterDomainModel<TestModel>(modelName);
-        
+        this.service.RegisterDomainModel<TestModel>(modelName);
+
         using var stream = new MemoryStream();
 
         // Act & Assert
-        var action = () => _service.DeserializeXml<TestModel>(stream);
+        var action = () => this.service.DeserializeXml<TestModel>(stream);
         action.Should().Throw<InvalidOperationException>();
     }
 
-    [Fact]
+    [TestMethod]
     public void DeserializeXml_WithComplexModel_ShouldDeserializeCorrectly()
     {
         // Arrange
         var modelName = "ComplexTestModel";
-        _service.RegisterDomainModel<ComplexTestModel>(modelName);
-        
+        this.service.RegisterDomainModel<ComplexTestModel>(modelName);
+
         var xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <ComplexTestModel>
     <Name>Test Complex Model</Name>
@@ -153,7 +158,7 @@ public class XmlDeserializationServiceTests
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
 
         // Act
-        var result = _service.DeserializeXml<ComplexTestModel>(stream);
+        var result = this.service.DeserializeXml<ComplexTestModel>(stream);
 
         // Assert
         result.Should().NotBeNull();
@@ -165,13 +170,13 @@ public class XmlDeserializationServiceTests
         result.Items[1].Value.Should().Be("Item 2");
     }
 
-    [Fact]
+    [TestMethod]
     public void DeserializeXml_WithNullValues_ShouldHandleCorrectly()
     {
         // Arrange
         var modelName = "TestModel";
-        _service.RegisterDomainModel<TestModel>(modelName);
-        
+        this.service.RegisterDomainModel<TestModel>(modelName);
+
         var xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TestModel>
     <StringProperty></StringProperty>
@@ -181,21 +186,21 @@ public class XmlDeserializationServiceTests
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
 
         // Act
-        var result = _service.DeserializeXml<TestModel>(stream);
+        var result = this.service.DeserializeXml<TestModel>(stream);
 
         // Assert
         result.Should().NotBeNull();
-        result.StringProperty.Should().Be("");
+        result.StringProperty.Should().Be(string.Empty);
         result.IntProperty.Should().Be(0);
     }
 
-    [Fact]
+    [TestMethod]
     public void DeserializeXml_WithMissingProperties_ShouldUseDefaultValues()
     {
         // Arrange
         var modelName = "TestModel";
-        _service.RegisterDomainModel<TestModel>(modelName);
-        
+        this.service.RegisterDomainModel<TestModel>(modelName);
+
         var xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TestModel>
     <StringProperty>Only This Property</StringProperty>
@@ -204,7 +209,7 @@ public class XmlDeserializationServiceTests
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
 
         // Act
-        var result = _service.DeserializeXml<TestModel>(stream);
+        var result = this.service.DeserializeXml<TestModel>(stream);
 
         // Assert
         result.Should().NotBeNull();
@@ -212,13 +217,13 @@ public class XmlDeserializationServiceTests
         result.IntProperty.Should().Be(0); // Default value
     }
 
-    [Fact]
+    [TestMethod]
     public void DeserializeXml_WithXmlNamespaces_ShouldHandleCorrectly()
     {
         // Arrange
         var modelName = "TestModel";
-        _service.RegisterDomainModel<TestModel>(modelName);
-        
+        this.service.RegisterDomainModel<TestModel>(modelName);
+
         // Note: XML serialization with namespaces requires proper namespace handling
         // This test demonstrates that namespaces can cause issues if not properly configured
         var xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
@@ -230,7 +235,7 @@ public class XmlDeserializationServiceTests
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
 
         // Act
-        var result = _service.DeserializeXml<TestModel>(stream);
+        var result = this.service.DeserializeXml<TestModel>(stream);
 
         // Assert
         result.Should().NotBeNull();
@@ -238,28 +243,28 @@ public class XmlDeserializationServiceTests
         result.IntProperty.Should().Be(123);
     }
 
-    [Fact]
+    [TestMethod]
     public void GetRegisteredModelNames_ShouldReturnAllRegisteredModels()
     {
         // Arrange
-        _service.RegisterDomainModel<TestModel>("Model1");
-        _service.RegisterDomainModel<ComplexTestModel>("Model2");
+        this.service.RegisterDomainModel<TestModel>("Model1");
+        this.service.RegisterDomainModel<ComplexTestModel>("Model2");
 
         // Act
-        var registeredModels = _service.GetRegisteredModelNames();
+        var registeredModels = this.service.GetRegisteredModelNames();
 
         // Assert
         registeredModels.Should().Contain("Model1");
         registeredModels.Should().Contain("Model2");
     }
 
-    [Fact]
+    [TestMethod]
     public void ClearDeserializationCache_ShouldClearCache()
     {
         // Arrange
         var modelName = "TestModel";
-        _service.RegisterDomainModel<TestModel>(modelName);
-        
+        this.service.RegisterDomainModel<TestModel>(modelName);
+
         var xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TestModel>
     <StringProperty>Test Value</StringProperty>
@@ -269,14 +274,14 @@ public class XmlDeserializationServiceTests
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
 
         // Act - First deserialization (should cache)
-        var result1 = _service.DeserializeXml<TestModel>(stream);
-        
+        var result1 = this.service.DeserializeXml<TestModel>(stream);
+
         // Clear cache
-        _service.ClearDeserializationCache();
-        
+        this.service.ClearDeserializationCache();
+
         // Reset stream for second deserialization
         stream.Position = 0;
-        var result2 = _service.DeserializeXml<TestModel>(stream);
+        var result2 = this.service.DeserializeXml<TestModel>(stream);
 
         // Assert
         result1.Should().NotBeNull();
@@ -284,11 +289,11 @@ public class XmlDeserializationServiceTests
         result1.StringProperty.Should().Be(result2.StringProperty);
     }
 
-    [Fact]
+    [TestMethod]
     public void GetCacheStatistics_ShouldReturnValidStatistics()
     {
         // Act
-        var stats = _service.GetCacheStatistics();
+        var stats = this.service.GetCacheStatistics();
 
         // Assert
         stats.Should().NotBeNull();
@@ -315,7 +320,7 @@ public class XmlDeserializationServiceTests
 
         [XmlArray("Items")]
         [XmlArrayItem("ComplexTestModelItem")]
-        public List<ComplexTestModelItem> Items { get; set; } = new();
+        public List<ComplexTestModelItem> Items { get; set; } = new ();
     }
 
     public class ComplexTestModelItem
@@ -333,4 +338,4 @@ public class XmlDeserializationServiceTests
         [XmlElement("Property")]
         public string? Property { get; set; }
     }
-} 
+}

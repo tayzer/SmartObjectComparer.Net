@@ -1,3 +1,7 @@
+// <copyright file="ServiceCollectionExtensions.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using ComparisonTool.Core.Comparison;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Models;
@@ -11,13 +15,14 @@ using Microsoft.Extensions.Logging;
 namespace ComparisonTool.Core.DI;
 
 /// <summary>
-/// Extension methods for registering services
+/// Extension methods for registering services.
 /// </summary>
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Add XML comparison services with proper dependency injection
+    /// Add XML comparison services with proper dependency injection.
     /// </summary>
+    /// <returns></returns>
     public static IServiceCollection AddXmlComparisonServices(this IServiceCollection services, IConfiguration configuration = null)
     {
         if (configuration != null)
@@ -34,7 +39,7 @@ public static class ServiceCollectionExtensions
 
         // Add performance tracking service
         services.AddSingleton<PerformanceTracker>();
-        
+
         // Add system resource monitor
         services.AddSingleton<SystemResourceMonitor>();
 
@@ -45,11 +50,11 @@ public static class ServiceCollectionExtensions
         {
             var logger = provider.GetRequiredService<ILogger<ComparisonConfigurationService>>();
             var configurationService = new ComparisonConfigurationService(logger);
-            
+
             // Wire up the cache service
             var cacheService = provider.GetRequiredService<ComparisonResultCacheService>();
             configurationService.SetCacheService(cacheService);
-            
+
             return configurationService;
         });
 
@@ -67,9 +72,9 @@ public static class ServiceCollectionExtensions
             return service;
         });
 
-                services.AddScoped<IComparisonEngine, ComparisonEngine>();
+        services.AddScoped<IComparisonEngine, ComparisonEngine>();
         services.AddScoped<IComparisonOrchestrator, ComparisonOrchestrator>();
-        
+
         services.AddScoped<IComparisonService, ComparisonService>();
 
         services.AddScoped<IFileUtilities, FileUtilities>();
@@ -82,8 +87,9 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Add JSON comparison services with proper dependency injection
+    /// Add JSON comparison services with proper dependency injection.
     /// </summary>
+    /// <returns></returns>
     public static IServiceCollection AddJsonComparisonServices(this IServiceCollection services)
     {
         // Add JSON deserialization service
@@ -91,10 +97,10 @@ public static class ServiceCollectionExtensions
         {
             var logger = provider.GetRequiredService<ILogger<JsonDeserializationService>>();
             var service = new JsonDeserializationService(logger);
-            
+
             // Register test domain model for JSON/XML comparison testing
             service.RegisterDomainModel<ComparisonTool.Domain.Models.CustomerOrder>("CustomerOrder");
-            
+
             return service;
         });
 
@@ -102,8 +108,9 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Add unified comparison services that support both XML and JSON formats
+    /// Add unified comparison services that support both XML and JSON formats.
     /// </summary>
+    /// <returns></returns>
     public static IServiceCollection AddUnifiedComparisonServices(this IServiceCollection services, IConfiguration configuration = null)
     {
         // Add both XML and JSON services
@@ -128,9 +135,11 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Register domain models with all deserialization services
+    /// Register domain models with all deserialization services.
     /// </summary>
-    public static IServiceCollection RegisterDomainModel<T>(this IServiceCollection services, string modelName) where T : class
+    /// <returns></returns>
+    public static IServiceCollection RegisterDomainModel<T>(this IServiceCollection services, string modelName)
+        where T : class
     {
         services.AddSingleton<Action<IServiceProvider>>(provider => serviceProvider =>
         {

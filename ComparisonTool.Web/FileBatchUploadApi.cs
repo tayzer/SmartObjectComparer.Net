@@ -1,12 +1,16 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
+// <copyright file="FileBatchUploadApi.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
 
 namespace ComparisonTool.Web
 {
+    using System;
+    using System.Collections.Generic;
+    using System.IO;
+    using System.Threading.Tasks;
+    using Microsoft.AspNetCore.Builder;
+    using Microsoft.AspNetCore.Http;
+
     public static class FileBatchUploadApi
     {
         public static void MapFileBatchUploadApi(this WebApplication app)
@@ -21,18 +25,18 @@ namespace ComparisonTool.Web
                 var form = await request.ReadFormAsync();
                 var files = form.Files;
                 var uploadedFiles = new List<string>();
-                int processedCount = 0;
-                int batchSize = 25;
+                var processedCount = 0;
+                var batchSize = 25;
                 var tempPath = Path.Combine(Path.GetTempPath(), "ComparisonToolUploads");
-                
+
                 // Clear old temp files (optional, but helps manage disk space)
-                if (Directory.Exists(tempPath) && 
+                if (Directory.Exists(tempPath) &&
                     Directory.GetCreationTime(tempPath) < DateTime.Now.AddDays(-1))
-                {
+                    {
                     try
                     {
                         Directory.Delete(tempPath, true);
-                    } 
+                    }
                     catch
                     {
                         // Ignore errors when cleaning up temp
@@ -53,27 +57,28 @@ namespace ComparisonTool.Web
                 foreach (var file in files)
                 {
                     // Only accept supported files (XML and JSON)
-                    if (!file.FileName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) && 
-                        !file.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                    if (!file.FileName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) &&
+                        !file.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) {
                         continue;
+                    }
 
-                    try 
+                    try
                     {
                         // Preserve folder structure by creating subdirectories
                         var filePath = file.FileName.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
                         var destPath = Path.Combine(batchPath, filePath);
                         var destDir = Path.GetDirectoryName(destPath);
-                        
+
                         if (!Directory.Exists(destDir))
                         {
                             Directory.CreateDirectory(destDir);
                         }
-                        
+
                         await using (var stream = new FileStream(destPath, FileMode.Create, FileAccess.Write))
                         {
                             await file.CopyToAsync(stream);
                         }
-                        
+
                         // Store the full path for later use (with batch ID prefix for identification)
                         uploadedFiles.Add(destPath);
                         processedCount++;
@@ -91,12 +96,12 @@ namespace ComparisonTool.Web
                 {
                     var fileListPath = Path.Combine(batchPath, "_filelist.json");
                     await File.WriteAllTextAsync(fileListPath, System.Text.Json.JsonSerializer.Serialize(uploadedFiles));
-                    
+
                     return Results.Ok(new
                     {
                         uploaded = uploadedFiles.Count,
                         batchId = batchId,
-                        fileListPath = fileListPath
+                        fileListPath = fileListPath,
                     });
                 }
                 else
@@ -105,26 +110,26 @@ namespace ComparisonTool.Web
                     return Results.Ok(new
                     {
                         uploaded = uploadedFiles.Count,
-                        files = uploadedFiles
+                        files = uploadedFiles,
                     });
                 }
             });
-            
+
             // Add an endpoint to get the file list for a specific batch
             app.MapGet("/api/upload/batch/{batchId}", (string batchId) =>
             {
                 var tempPath = Path.Combine(Path.GetTempPath(), "ComparisonToolUploads");
                 var batchPath = Path.Combine(tempPath, batchId);
                 var fileListPath = Path.Combine(batchPath, "_filelist.json");
-                
+
                 if (!File.Exists(fileListPath))
                 {
                     return Results.NotFound($"Batch {batchId} not found");
                 }
-                
+
                 var fileList = System.Text.Json.JsonSerializer.Deserialize<List<string>>(
                     File.ReadAllText(fileListPath));
-                    
+
                 return Results.Ok(new { files = fileList });
             });
         }

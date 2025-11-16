@@ -1,15 +1,20 @@
-﻿using System.Reflection;
+// <copyright file="ModelReflectionService.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
+using System.Reflection;
 
 namespace ComparisonTool.Core.Utilities;
 
 /// <summary>
-/// Service to discover properties in domain models using reflection
+/// Service to discover properties in domain models using reflection.
 /// </summary>
 public static class ModelReflectionService
 {
     /// <summary>
-    /// Get all property paths for a given type
+    /// Get all property paths for a given type.
     /// </summary>
+    /// <returns></returns>
     public static List<string> GetPropertyPaths(Type type, int maxDepth = 5)
     {
         var paths = new List<string>();
@@ -23,14 +28,16 @@ public static class ModelReflectionService
         List<string> paths,
         int currentDepth,
         int maxDepth)
-    {
-        if (currentDepth >= maxDepth)
+        {
+        if (currentDepth >= maxDepth) {
             return;
+        }
 
         // Skip primitives and strings
         if (type.IsPrimitive || type == typeof(string) || type == typeof(decimal) ||
-            type == typeof(DateTime) || type == typeof(Guid))
+            type == typeof(DateTime) || type == typeof(Guid)) {
             return;
+        }
 
         var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
 
@@ -44,13 +51,14 @@ public static class ModelReflectionService
 
             if (typeof(System.Collections.IEnumerable).IsAssignableFrom(property.PropertyType) &&
                 property.PropertyType != typeof(string))
-            {
+                {
                 Type elementType = null;
                 if (property.PropertyType.IsGenericType)
                 {
                     var genericArgs = property.PropertyType.GetGenericArguments();
-                    if (genericArgs.Length > 0)
+                    if (genericArgs.Length > 0) {
                         elementType = genericArgs[0];
+                    }
                 }
                 else if (property.PropertyType.IsArray)
                 {
@@ -69,13 +77,14 @@ public static class ModelReflectionService
                         maxDepth);
                 }
             }
+
             // Recurse into complex properties
             else if (!property.PropertyType.IsPrimitive &&
                      property.PropertyType != typeof(string) &&
                      property.PropertyType != typeof(decimal) &&
                      property.PropertyType != typeof(DateTime) &&
                      property.PropertyType != typeof(Guid))
-            {
+                    {
                 GetPropertyPathsRecursive(
                     property.PropertyType,
                     propertyPath,
@@ -87,12 +96,13 @@ public static class ModelReflectionService
     }
 
     /// <summary>
-    /// Get property info from a path
+    /// Get property info from a path.
     /// </summary>
+    /// <returns></returns>
     public static PropertyInfo GetPropertyFromPath(Type type, string propertyPath)
     {
         var parts = propertyPath.Split('.');
-        Type currentType = type;
+        var currentType = type;
         PropertyInfo property = null;
 
         foreach (var part in parts)
@@ -109,8 +119,9 @@ public static class ModelReflectionService
                     if (property.PropertyType.IsGenericType)
                     {
                         var genericArgs = property.PropertyType.GetGenericArguments();
-                        if (genericArgs.Length > 0)
+                        if (genericArgs.Length > 0) {
                             currentType = genericArgs[0];
+                        }
                     }
                     else if (property.PropertyType.IsArray)
                     {
@@ -121,12 +132,14 @@ public static class ModelReflectionService
             else
             {
                 property = currentType.GetProperty(part);
-                if (property != null)
+                if (property != null) {
                     currentType = property.PropertyType;
+                }
             }
 
-            if (property == null)
+            if (property == null) {
                 return null;
+            }
         }
 
         return property;

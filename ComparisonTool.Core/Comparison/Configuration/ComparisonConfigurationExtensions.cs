@@ -1,4 +1,8 @@
-﻿using KellermanSoftware.CompareNetObjects;
+// <copyright file="ComparisonConfigurationExtensions.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
+using KellermanSoftware.CompareNetObjects;
 
 namespace ComparisonTool.Core.Comparison.Configuration;
 
@@ -22,7 +26,7 @@ public static class ComparisonConfigurationExtensions
             ComparePrivateProperties = config.ComparePrivateProperties,
             CompareReadOnly = config.CompareReadOnly,
             IgnoreCollectionOrder = config.IgnoreCollectionOrder,
-            CaseSensitive = config.CaseSensitive
+            CaseSensitive = config.CaseSensitive,
         };
 
         foreach (var variable in config.MembersToIgnore)

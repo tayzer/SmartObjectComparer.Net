@@ -1,4 +1,8 @@
-﻿using System.Text;
+﻿// <copyright file="FileUtilities.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
+using System.Text;
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Results;
 using Microsoft.Extensions.Logging;
@@ -6,7 +10,7 @@ using Microsoft.Extensions.Logging;
 namespace ComparisonTool.Core.Utilities;
 
 /// <summary>
-/// Utility methods for file operations used in the comparison tool
+/// Utility methods for file operations used in the comparison tool.
 /// </summary>
 public class FileUtilities : IFileUtilities
 {
@@ -18,11 +22,11 @@ public class FileUtilities : IFileUtilities
     }
 
     /// <summary>
-    /// Creates a memory stream from a file stream
+    /// Creates a memory stream from a file stream.
     /// </summary>
-    /// <param name="fileStream">The source file stream</param>
-    /// <param name="cancellationToken">Cancellation token for async operations</param>
-    /// <returns>A memory stream containing the file contents</returns>
+    /// <param name="fileStream">The source file stream.</param>
+    /// <param name="cancellationToken">Cancellation token for async operations.</param>
+    /// <returns>A memory stream containing the file contents.</returns>
     public async Task<MemoryStream> CreateMemoryStreamFromFileAsync(Stream fileStream, CancellationToken cancellationToken = default)
     {
         try
@@ -34,17 +38,17 @@ public class FileUtilities : IFileUtilities
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error creating memory stream from file");
+            this.logger.LogError(ex, "Error creating memory stream from file");
             throw;
         }
     }
 
     /// <summary>
-    /// Generates a report markdown file
+    /// Generates a report markdown file.
     /// </summary>
-    /// <param name="summary">The difference summary to generate report from</param>
-    /// <param name="additionalInfo">Optional additional information to include at the top of the report</param>
-    /// <returns>Markdown content as a string</returns>
+    /// <param name="summary">The difference summary to generate report from.</param>
+    /// <param name="additionalInfo">Optional additional information to include at the top of the report.</param>
+    /// <returns>Markdown content as a string.</returns>
     public string GenerateReportMarkdown(DifferenceSummary summary, string additionalInfo = null)
     {
         var sb = new StringBuilder();
@@ -78,7 +82,7 @@ public class FileUtilities : IFileUtilities
 
         foreach (var category in summary.DifferencesByChangeType.OrderByDescending(c => c.Value.Count))
         {
-            sb.AppendLine($"| {FormatCategoryName(category.Key)} | {category.Value.Count} | {summary.CategoryPercentages[category.Key]}% |");
+            sb.AppendLine($"| {this.FormatCategoryName(category.Key)} | {category.Value.Count} | {summary.CategoryPercentages[category.Key]}% |");
         }
 
         sb.AppendLine();
@@ -110,8 +114,8 @@ public class FileUtilities : IFileUtilities
             foreach (var example in pattern.Examples)
             {
                 sb.AppendLine($"- Property: `{example.PropertyName}`");
-                sb.AppendLine($"  - Old: `{FormatValue(example.Object1Value)}`");
-                sb.AppendLine($"  - New: `{FormatValue(example.Object2Value)}`");
+                sb.AppendLine($"  - Old: `{this.FormatValue(example.Object1Value)}`");
+                sb.AppendLine($"  - New: `{this.FormatValue(example.Object2Value)}`");
                 sb.AppendLine();
             }
         }
@@ -120,22 +124,22 @@ public class FileUtilities : IFileUtilities
     }
 
     /// <summary>
-    /// Generates a report for folder comparisons
+    /// Generates a report for folder comparisons.
     /// </summary>
-    /// <param name="folderResult">The folder comparison result</param>
-    /// <returns>Markdown content as a string</returns>
+    /// <param name="folderResult">The folder comparison result.</param>
+    /// <returns>Markdown content as a string.</returns>
     public string GenerateFolderComparisonReport(MultiFolderComparisonResult folderResult)
     {
         var sb = new StringBuilder();
 
-                    sb.AppendLine("# Expected vs Actual Folder Comparison Report");
+        sb.AppendLine("# Expected vs Actual Folder Comparison Report");
         sb.AppendLine();
         sb.AppendLine($"Date: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
         sb.AppendLine();
 
         sb.AppendLine("## Summary");
         sb.AppendLine();
-                    sb.AppendLine("| Expected File | Actual File | Status | Differences |");
+        sb.AppendLine("| Expected File | Actual File | Status | Differences |");
         sb.AppendLine("|---------|---------|--------|------------|");
 
         foreach (var result in folderResult.FilePairResults)
@@ -149,7 +153,7 @@ public class FileUtilities : IFileUtilities
         sb.AppendLine();
 
         // Add detailed comparison for each file pair
-        for (int i = 0; i < folderResult.FilePairResults.Count; i++)
+        for (var i = 0; i < folderResult.FilePairResults.Count; i++)
         {
             var result = folderResult.FilePairResults[i];
 
@@ -174,7 +178,7 @@ public class FileUtilities : IFileUtilities
 
                 foreach (var category in result.Summary.DifferencesByChangeType.OrderByDescending(c => c.Value.Count).Take(5))
                 {
-                    sb.AppendLine($"| {FormatCategoryName(category.Key)} | {category.Value.Count} | {result.Summary.CategoryPercentages[category.Key]}% |");
+                    sb.AppendLine($"| {this.FormatCategoryName(category.Key)} | {category.Value.Count} | {result.Summary.CategoryPercentages[category.Key]}% |");
                 }
 
                 sb.AppendLine();
@@ -187,8 +191,8 @@ public class FileUtilities : IFileUtilities
                 foreach (var diff in sampleDiffs)
                 {
                     sb.AppendLine($"- Property: `{diff.PropertyName}`");
-                    sb.AppendLine($"  - Expected: `{FormatValue(diff.Object1Value)}`");
-                    sb.AppendLine($"  - Actual: `{FormatValue(diff.Object2Value)}`");
+                    sb.AppendLine($"  - Expected: `{this.FormatValue(diff.Object1Value)}`");
+                    sb.AppendLine($"  - Actual: `{this.FormatValue(diff.Object2Value)}`");
                     sb.AppendLine();
                 }
 
@@ -207,10 +211,10 @@ public class FileUtilities : IFileUtilities
     }
 
     /// <summary>
-    /// Generates a pattern analysis report
+    /// Generates a pattern analysis report.
     /// </summary>
-    /// <param name="analysis">The pattern analysis data</param>
-    /// <returns>Markdown content as a string</returns>
+    /// <param name="analysis">The pattern analysis data.</param>
+    /// <returns>Markdown content as a string.</returns>
     public string GeneratePatternAnalysisReport(ComparisonPatternAnalysis analysis)
     {
         var sb = new StringBuilder();
@@ -234,10 +238,11 @@ public class FileUtilities : IFileUtilities
         {
             if (category.Value > 0)
             {
-                double percentage = (double)category.Value / analysis.TotalDifferences * 100;
-                sb.AppendLine($"| {FormatCategoryName(category.Key)} | {category.Value} | {percentage:F1}% |");
+                var percentage = (double)category.Value / analysis.TotalDifferences * 100;
+                sb.AppendLine($"| {this.FormatCategoryName(category.Key)} | {category.Value} | {percentage:F1}% |");
             }
         }
+
         sb.AppendLine();
 
         // Common patterns across files
@@ -252,6 +257,7 @@ public class FileUtilities : IFileUtilities
         {
             sb.AppendLine($"| `{pattern.PatternPath}` | {pattern.FileCount} | {pattern.OccurrenceCount} |");
         }
+
         sb.AppendLine();
 
         // Common value changes
@@ -269,8 +275,9 @@ public class FileUtilities : IFileUtilities
 
             foreach (var valueChange in change.CommonChanges)
             {
-                sb.AppendLine($"- From: `{TruncateText(valueChange.Key, 50)}` → To: `{TruncateText(valueChange.Value, 50)}`");
+                sb.AppendLine($"- From: `{this.TruncateText(valueChange.Key, 50)}` → To: `{this.TruncateText(valueChange.Value, 50)}`");
             }
+
             sb.AppendLine();
             sb.AppendLine("Affected files:");
             sb.AppendLine();
@@ -317,10 +324,10 @@ public class FileUtilities : IFileUtilities
     }
 
     /// <summary>
-    /// Generates a semantic difference analysis report
+    /// Generates a semantic difference analysis report.
     /// </summary>
-    /// <param name="analysis">The semantic difference analysis</param>
-    /// <returns>Markdown content as a string</returns>
+    /// <param name="analysis">The semantic difference analysis.</param>
+    /// <returns>Markdown content as a string.</returns>
     public string GenerateSemanticAnalysisReport(SemanticDifferenceAnalysis analysis)
     {
         var sb = new StringBuilder();
@@ -343,6 +350,7 @@ public class FileUtilities : IFileUtilities
         {
             sb.AppendLine($"| **{group.GroupName}** | {group.SemanticDescription} | {group.DifferenceCount} | {group.FileCount} | {group.ConfidenceLevel}% |");
         }
+
         sb.AppendLine();
 
         foreach (var group in analysis.SemanticGroups)
@@ -362,10 +370,12 @@ public class FileUtilities : IFileUtilities
             {
                 sb.AppendLine($"- `{prop}`");
             }
+
             if (group.RelatedProperties.Count > 10)
             {
                 sb.AppendLine($"- *...and {group.RelatedProperties.Count - 10} more properties*");
             }
+
             sb.AppendLine();
 
             // Example differences
@@ -376,8 +386,9 @@ public class FileUtilities : IFileUtilities
 
             foreach (var diff in group.Differences.Take(5))
             {
-                sb.AppendLine($"| `{diff.PropertyName}` | {TruncateText(FormatValue(diff.Object1Value), 50)} | {TruncateText(FormatValue(diff.Object2Value), 50)} |");
+                sb.AppendLine($"| `{diff.PropertyName}` | {this.TruncateText(this.FormatValue(diff.Object1Value), 50)} | {this.TruncateText(this.FormatValue(diff.Object2Value), 50)} |");
             }
+
             sb.AppendLine();
 
             if (group.Differences.Count > 5)
@@ -470,8 +481,7 @@ public class FileUtilities : IFileUtilities
 
     private string FormatCategoryName(DifferenceCategory category)
     {
-        return category switch
-        {
+        return category switch {
             DifferenceCategory.NumericValueChanged => "Numeric Value Changed",
             DifferenceCategory.DateTimeChanged => "Date/Time Changed",
             DifferenceCategory.BooleanValueChanged => "Boolean Value Changed",
@@ -486,16 +496,19 @@ public class FileUtilities : IFileUtilities
 
     private string FormatValue(object value, int maxLength = 100)
     {
-        if (value == null)
+        if (value == null) {
             return "null";
+        }
 
-        if (value is DateTime dt)
+        if (value is DateTime dt) {
             return dt.ToString("yyyy-MM-dd HH:mm:ss");
+        }
 
         if (value is string str)
         {
-            if (str.Length <= maxLength)
+            if (str.Length <= maxLength) {
                 return str;
+            }
 
             return str.Substring(0, maxLength - 3) + "...";
         }
@@ -505,8 +518,9 @@ public class FileUtilities : IFileUtilities
 
     private string TruncateText(string text, int maxLength)
     {
-        if (string.IsNullOrEmpty(text) || text.Length <= maxLength)
+        if (string.IsNullOrEmpty(text) || text.Length <= maxLength) {
             return text;
+        }
 
         return text.Substring(0, maxLength - 3) + "...";
     }

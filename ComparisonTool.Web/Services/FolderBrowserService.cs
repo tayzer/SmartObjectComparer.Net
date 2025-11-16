@@ -1,18 +1,23 @@
-﻿using Microsoft.AspNetCore.Components;
-using Microsoft.JSInterop;
+// <copyright file="FolderBrowserService.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using System.Runtime.InteropServices;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Logging;
+using Microsoft.JSInterop;
 
 namespace ComparisonTool.Web.Services;
 
 /// <summary>
-/// Service that provides folder browsing capabilities for the desktop environment
+/// Service that provides folder browsing capabilities for the desktop environment.
 /// </summary>
 public static class FolderBrowserService
 {
     /// <summary>
-    /// Opens a native folder browser dialog
+    /// Opens a native folder browser dialog.
     /// </summary>
+    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
     [JSInvokable]
     public static async Task<string> BrowseFolderAsync(string title)
     {
@@ -20,7 +25,7 @@ public static class FolderBrowserService
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) &&
             !RuntimeInformation.IsOSPlatform(OSPlatform.OSX) &&
             !RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-        {
+            {
             return null;
         }
 
@@ -48,7 +53,7 @@ public static class FolderBrowserService
     }
 
     /// <summary>
-    /// Opens a Windows folder browser dialog
+    /// Opens a Windows folder browser dialog.
     /// </summary>
     private static async Task<string> BrowseFolderWindowsAsync(string title)
     {
@@ -62,7 +67,7 @@ public static class FolderBrowserService
                 {
                     Description = title,
                     UseDescriptionForTitle = true,
-                    ShowNewFolderButton = true
+                    ShowNewFolderButton = true,
                 };
 
                 // Show the dialog
@@ -83,7 +88,7 @@ public static class FolderBrowserService
     }
 
     /// <summary>
-    /// Opens a macOS folder browser dialog
+    /// Opens a macOS folder browser dialog.
     /// </summary>
     private static async Task<string> BrowseFolderMacAsync(string title)
     {
@@ -105,7 +110,7 @@ public static class FolderBrowserService
                     Arguments = scriptArguments,
                     RedirectStandardOutput = true,
                     UseShellExecute = false,
-                    CreateNoWindow = true
+                    CreateNoWindow = true,
                 };
 
                 using var process = System.Diagnostics.Process.Start(processInfo);
@@ -130,7 +135,7 @@ public static class FolderBrowserService
     }
 
     /// <summary>
-    /// Opens a Linux folder browser dialog
+    /// Opens a Linux folder browser dialog.
     /// </summary>
     private static async Task<string> BrowseFolderLinuxAsync(string title)
     {
@@ -146,7 +151,7 @@ public static class FolderBrowserService
                     Arguments = $"--file-selection --directory --title=\"{title}\"",
                     RedirectStandardOutput = true,
                     UseShellExecute = false,
-                    CreateNoWindow = true
+                    CreateNoWindow = true,
                 };
 
                 using var process = System.Diagnostics.Process.Start(processInfo);
@@ -171,8 +176,9 @@ public static class FolderBrowserService
     }
 
     /// <summary>
-    /// Checks if the application is running in a desktop environment
+    /// Checks if the application is running in a desktop environment.
     /// </summary>
+    /// <returns></returns>
     [JSInvokable]
     public static bool IsDesktopEnvironment()
     {
