@@ -67,6 +67,9 @@ public static class ServiceCollectionExtensions
             return service;
         });
 
+                services.AddScoped<IComparisonEngine, ComparisonEngine>();
+        services.AddScoped<IComparisonOrchestrator, ComparisonOrchestrator>();
+        
         services.AddScoped<IComparisonService, ComparisonService>();
 
         services.AddScoped<IFileUtilities, FileUtilities>();

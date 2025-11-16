@@ -56,6 +56,20 @@ public class ComparisonServiceIntegrationTests
         _resourceMonitor = new SystemResourceMonitor(_mockResourceLogger.Object);
         _cacheService = new ComparisonResultCacheService(_mockLogger.Object);
 
+        var mockComparisonEngineLogger = new Mock<ILogger<ComparisonEngine>>();
+        var comparisonEngine = new ComparisonEngine(mockComparisonEngineLogger.Object, _configService, _performanceTracker);
+        
+        var mockComparisonOrchestratorLogger = new Mock<ILogger<ComparisonOrchestrator>>();
+        var comparisonOrchestrator = new ComparisonOrchestrator(
+            mockComparisonOrchestratorLogger.Object,
+            _xmlService,
+            _configService,
+            _fileService,
+            _performanceTracker,
+            _resourceMonitor,
+            _cacheService,
+            comparisonEngine);
+        
         _comparisonService = new ComparisonService(
             _mockLogger.Object,
             _xmlService,
@@ -63,7 +77,9 @@ public class ComparisonServiceIntegrationTests
             _fileService,
             _performanceTracker,
             _resourceMonitor,
-            _cacheService);
+            _cacheService,
+            comparisonEngine,
+            comparisonOrchestrator);
 
         // Register test models
         _xmlService.RegisterDomainModel<TestModel>("TestModel");

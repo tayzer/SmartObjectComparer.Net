@@ -26,6 +26,8 @@ public class ComparisonService : IComparisonService
     private readonly PerformanceTracker _performanceTracker;
     private readonly SystemResourceMonitor _resourceMonitor;
     private readonly ComparisonResultCacheService _cacheService;
+    private readonly IComparisonEngine _comparisonEngine;
+    private readonly IComparisonOrchestrator _comparisonOrchestrator;
 
     // Concurrency control
     private const int MaxConcurrentComparisons = 5;
@@ -38,6 +40,8 @@ public class ComparisonService : IComparisonService
         PerformanceTracker performanceTracker,
         SystemResourceMonitor resourceMonitor,
         ComparisonResultCacheService cacheService,
+        IComparisonEngine comparisonEngine,
+        IComparisonOrchestrator comparisonOrchestrator,
         DeserializationServiceFactory deserializationFactory = null)
     {
         this.logger = logger;
@@ -47,6 +51,8 @@ public class ComparisonService : IComparisonService
         this._performanceTracker = performanceTracker;
         this._resourceMonitor = resourceMonitor;
         this._cacheService = cacheService;
+        this._comparisonEngine = comparisonEngine;
+        this._comparisonOrchestrator = comparisonOrchestrator;
         this._deserializationFactory = deserializationFactory;
     }
 
@@ -68,99 +74,7 @@ public class ComparisonService : IComparisonService
         string newFilePath,
         CancellationToken cancellationToken = default)
     {
-        return await _performanceTracker.TrackOperationAsync("CompareXmlFilesWithCaching", async () =>
-        {
-            try
-            {
-                // Generate configuration fingerprint for caching
-                var configFingerprint = _cacheService.GenerateConfigurationFingerprint(configService);
-                
-                // Generate file hashes for cache keys
-                var file1Hash = _cacheService.GenerateFileHash(oldXmlStream);
-                var file2Hash = _cacheService.GenerateFileHash(newXmlStream);
-                
-                // Try to get cached comparison result first
-                if (_cacheService.TryGetCachedComparison(file1Hash, file2Hash, configFingerprint, out var cachedResult))
-                {
-                    logger.LogDebug("Using cached comparison result for files with hashes {File1Hash}..{File2Hash}", 
-                        file1Hash[..8], file2Hash[..8]);
-                    return cachedResult;
-                }
-                
-                logger.LogDebug("Cache miss - performing fresh comparison for {ModelName}", modelName);
-                
-                // Check if model exists (will throw if not found)
-                var modelType = deserializationService.GetModelType(modelName);
-
-                var deserializeMethod = typeof(IXmlDeserializationService)
-                    .GetMethod(nameof(IXmlDeserializationService.DeserializeXml))
-                    .MakeGenericMethod(modelType);
-
-                // CRITICAL FIX: Eliminate cloning entirely - use original deserialized objects
-                var oldResponse = await _performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}", async () =>
-                {
-                    return await Task.Run(() =>
-                    {
-                        oldXmlStream.Position = 0;
-                        return deserializeMethod.Invoke(deserializationService, new object[] { oldXmlStream });
-                    }, cancellationToken);
-                });
-
-                var newResponse = await _performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}", async () =>
-                {
-                    return await Task.Run(() =>
-                    {
-                        newXmlStream.Position = 0;
-                        return deserializeMethod.Invoke(deserializationService, new object[] { newXmlStream });
-                    }, cancellationToken);
-                });
-
-                // PERFORMANCE OPTIMIZATION: Get ignore rules once and reuse
-                var propertiesToIgnore = await _performanceTracker.TrackOperationAsync("Get_Ignore_Rules", () => Task.FromResult(
-                    configService.GetIgnoreRules()
-                        .Where(r => r.IgnoreCompletely)
-                        .Select(r => GetPropertyNameFromPath(r.PropertyPath))
-                        .Where(p => !string.IsNullOrEmpty(p))
-                        .Distinct()
-                        .ToList()));
-
-                // THREAD-SAFE COMPARISON: Create completely isolated configuration
-                var result = await _performanceTracker.TrackOperationAsync("Compare_Objects", async () => 
-                {
-                    return await Task.Run(() =>
-                    {
-                        // CRITICAL FIX: Create truly isolated CompareLogic with no shared state
-                        var isolatedCompareLogic = CreateIsolatedCompareLogic();
-                        
-                        logger.LogDebug("Performing comparison with {ComparerCount} custom comparers. First: {FirstComparer}",
-                            isolatedCompareLogic.Config.CustomComparers.Count,
-                            isolatedCompareLogic.Config.CustomComparers.FirstOrDefault()?.GetType().Name ?? "none");
-
-                        // Direct comparison without cloning - this eliminates XML serialization corruption
-                        return isolatedCompareLogic.Compare(oldResponse, newResponse);
-                    }, cancellationToken);
-                });
-
-                logger.LogDebug("Comparison completed. Found {DifferenceCount} differences",
-                    result.Differences.Count);
-
-                // Filter out ignored properties using smart rules and legacy pattern matching
-                result = configService.FilterSmartIgnoredDifferences(result, modelType);
-                result = configService.FilterIgnoredDifferences(result);
-
-                var filteredResult = FilterDuplicateDifferences(result);
-
-                // Cache the result for future use
-                _cacheService.CacheComparison(file1Hash, file2Hash, configFingerprint, filteredResult);
-
-                return filteredResult;
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error occurred while comparing XML files with caching");
-                throw;
-            }
-        });
+        return await _comparisonOrchestrator.CompareXmlFilesWithCachingAsync(oldXmlStream, newXmlStream, modelName, oldFilePath, newFilePath, cancellationToken);
     }
 
     /// <summary>
@@ -177,79 +91,7 @@ public class ComparisonService : IComparisonService
         string modelName,
         CancellationToken cancellationToken = default)
     {
-        return await _performanceTracker.TrackOperationAsync("CompareXmlFilesAsync", async () =>
-        {
-            try
-            {
-                logger.LogDebug("Starting comparison of XML files using model {ModelName}", modelName);
-
-                // Check if model exists (will throw if not found)
-                var modelType = deserializationService.GetModelType(modelName);
-
-                var deserializeMethod = typeof(IXmlDeserializationService)
-                    .GetMethod(nameof(IXmlDeserializationService.DeserializeXml))
-                    .MakeGenericMethod(modelType);
-
-                // CRITICAL FIX: Eliminate cloning entirely - use original deserialized objects
-                var oldResponse = await _performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}", async () =>
-                {
-                    return await Task.Run(() =>
-                    {
-                        oldXmlStream.Position = 0;
-                        return deserializeMethod.Invoke(deserializationService, new object[] { oldXmlStream });
-                    }, cancellationToken);
-                });
-
-                var newResponse = await _performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}", async () =>
-                {
-                    return await Task.Run(() =>
-                    {
-                        newXmlStream.Position = 0;
-                        return deserializeMethod.Invoke(deserializationService, new object[] { newXmlStream });
-                    }, cancellationToken);
-                });
-
-                // PERFORMANCE OPTIMIZATION: Get ignore rules once and reuse
-                var propertiesToIgnore = await _performanceTracker.TrackOperationAsync("Get_Ignore_Rules", () => Task.FromResult(
-                    configService.GetIgnoreRules()
-                        .Where(r => r.IgnoreCompletely)
-                        .Select(r => GetPropertyNameFromPath(r.PropertyPath))
-                        .Where(p => !string.IsNullOrEmpty(p))
-                        .Distinct()
-                        .ToList()));
-
-                // THREAD-SAFE COMPARISON: Create completely isolated configuration
-                var result = await _performanceTracker.TrackOperationAsync("Compare_Objects", async () => 
-                {
-                    return await Task.Run(() =>
-                    {
-                        // CRITICAL FIX: Create truly isolated CompareLogic with no shared state
-                        var isolatedCompareLogic = CreateIsolatedCompareLogic();
-                        
-                        logger.LogDebug("Performing comparison with {ComparerCount} custom comparers. First: {FirstComparer}",
-                            isolatedCompareLogic.Config.CustomComparers.Count,
-                            isolatedCompareLogic.Config.CustomComparers.FirstOrDefault()?.GetType().Name ?? "none");
-
-                        // Direct comparison without cloning - this eliminates XML serialization corruption
-                        return isolatedCompareLogic.Compare(oldResponse, newResponse);
-                    }, cancellationToken);
-                });
-
-                logger.LogDebug("Comparison completed. Found {DifferenceCount} differences",
-                    result.Differences.Count);
-
-                // Filter out ignored properties using smart rules and legacy pattern matching
-                result = configService.FilterSmartIgnoredDifferences(result, modelType);
-                result = configService.FilterIgnoredDifferences(result);
-
-                return FilterDuplicateDifferences(result);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error occurred while comparing XML files");
-                throw;
-            }
-        });
+        return await _comparisonOrchestrator.CompareXmlFilesAsync(oldXmlStream, newXmlStream, modelName, cancellationToken);
     }
 
     /// <summary>
@@ -270,88 +112,7 @@ public class ComparisonService : IComparisonService
         string newFilePath,
         CancellationToken cancellationToken = default)
     {
-        if (_deserializationFactory == null)
-        {
-            // Fallback to XML-only comparison for backward compatibility
-            logger.LogDebug("DeserializationFactory not available, falling back to XML-only comparison");
-            return await CompareXmlFilesWithCachingAsync(oldFileStream, newFileStream, modelName, oldFilePath, newFilePath, cancellationToken);
-        }
-
-        return await _performanceTracker.TrackOperationAsync("CompareFilesWithCaching", async () =>
-        {
-            try
-            {
-                // Detect file formats
-                var oldFormat = FileTypeDetector.DetectFormat(oldFilePath);
-                var newFormat = FileTypeDetector.DetectFormat(newFilePath);
-
-                if (oldFormat != newFormat)
-                {
-                    throw new InvalidOperationException($"Cannot compare files of different formats: {oldFormat} vs {newFormat}");
-                }
-
-                logger.LogDebug("Comparing files in {Format} format: {OldFile} vs {NewFile}", oldFormat, oldFilePath, newFilePath);
-
-                // Get appropriate deserialization service
-                var deserializationService = _deserializationFactory.GetService(oldFormat);
-
-                // Generate configuration fingerprint for caching
-                var configFingerprint = _cacheService.GenerateConfigurationFingerprint(configService);
-                
-                // Generate file hashes for cache keys
-                var file1Hash = _cacheService.GenerateFileHash(oldFileStream);
-                var file2Hash = _cacheService.GenerateFileHash(newFileStream);
-                
-                // Try to get cached comparison result first
-                if (_cacheService.TryGetCachedComparison(file1Hash, file2Hash, configFingerprint, out var cachedResult))
-                {
-                    logger.LogDebug("Using cached comparison result for files with hashes {File1Hash}..{File2Hash}", 
-                        file1Hash[..8], file2Hash[..8]);
-                    return cachedResult;
-                }
-                
-                logger.LogDebug("Cache miss - performing fresh comparison for {ModelName} in {Format} format", modelName, oldFormat);
-                
-                // Check if model exists (will throw if not found)
-                var modelType = deserializationService.GetModelType(modelName);
-
-                // Deserialize both files using the proper domain type
-                var oldResponse = await _performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}_{oldFormat}", async () =>
-                {
-                    return await Task.Run(() =>
-                    {
-                        oldFileStream.Position = 0;
-                        // Use the proper domain type instead of object to avoid JsonElement issues
-                        var deserializeMethod = deserializationService.GetType().GetMethod("Deserialize").MakeGenericMethod(modelType);
-                        return deserializeMethod.Invoke(deserializationService, new object[] { oldFileStream, oldFormat });
-                    }, cancellationToken);
-                });
-
-                var newResponse = await _performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}_{newFormat}", async () =>
-                {
-                    return await Task.Run(() =>
-                    {
-                        newFileStream.Position = 0;
-                        // Use the proper domain type instead of object to avoid JsonElement issues
-                        var deserializeMethod = deserializationService.GetType().GetMethod("Deserialize").MakeGenericMethod(modelType);
-                        return deserializeMethod.Invoke(deserializationService, new object[] { newFileStream, newFormat });
-                    }, cancellationToken);
-                });
-
-                // Perform comparison using the same logic as XML comparison
-                var result = await PerformObjectComparison(oldResponse, newResponse, modelType, cancellationToken);
-
-                // Cache the result for future use
-                _cacheService.CacheComparison(file1Hash, file2Hash, configFingerprint, result);
-
-                return result;
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error occurred while comparing files with caching");
-                throw;
-            }
-        });
+        return await _comparisonOrchestrator.CompareFilesWithCachingAsync(oldFileStream, newFileStream, modelName, oldFilePath, newFilePath, cancellationToken);
     }
 
     /// <summary>
@@ -372,112 +133,10 @@ public class ComparisonService : IComparisonService
         string newFilePath,
         CancellationToken cancellationToken = default)
     {
-        if (_deserializationFactory == null)
-        {
-            // Fallback to XML-only comparison for backward compatibility
-            logger.LogDebug("DeserializationFactory not available, falling back to XML-only comparison");
-            return await CompareXmlFilesAsync(oldFileStream, newFileStream, modelName, cancellationToken);
-        }
-
-        return await _performanceTracker.TrackOperationAsync("CompareFilesAsync", async () =>
-        {
-            try
-            {
-                // Detect file formats
-                var oldFormat = FileTypeDetector.DetectFormat(oldFilePath);
-                var newFormat = FileTypeDetector.DetectFormat(newFilePath);
-
-                if (oldFormat != newFormat)
-                {
-                    throw new InvalidOperationException($"Cannot compare files of different formats: {oldFormat} vs {newFormat}");
-                }
-
-                logger.LogDebug("Starting comparison of files in {Format} format using model {ModelName}", oldFormat, modelName);
-
-                // Get appropriate deserialization service
-                var deserializationService = _deserializationFactory.GetService(oldFormat);
-
-                // Check if model exists (will throw if not found)
-                var modelType = deserializationService.GetModelType(modelName);
-
-                // Deserialize both files using the proper domain type
-                var oldResponse = await _performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}_{oldFormat}", async () =>
-                {
-                    return await Task.Run(() =>
-                    {
-                        oldFileStream.Position = 0;
-                        // Use the proper domain type instead of object to avoid JsonElement issues
-                        var deserializeMethod = deserializationService.GetType().GetMethod("Deserialize").MakeGenericMethod(modelType);
-                        return deserializeMethod.Invoke(deserializationService, new object[] { oldFileStream, oldFormat });
-                    }, cancellationToken);
-                });
-
-                var newResponse = await _performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}_{newFormat}", async () =>
-                {
-                    return await Task.Run(() =>
-                    {
-                        newFileStream.Position = 0;
-                        // Use the proper domain type instead of object to avoid JsonElement issues
-                        var deserializeMethod = deserializationService.GetType().GetMethod("Deserialize").MakeGenericMethod(modelType);
-                        return deserializeMethod.Invoke(deserializationService, new object[] { newFileStream, newFormat });
-                    }, cancellationToken);
-                });
-
-                // Perform comparison using the same logic as XML comparison
-                return await PerformObjectComparison(oldResponse, newResponse, modelType, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error occurred while comparing files");
-                throw;
-            }
-        });
+        return await _comparisonOrchestrator.CompareFilesAsync(oldFileStream, newFileStream, modelName, oldFilePath, newFilePath, cancellationToken);
     }
 
-    /// <summary>
-    /// Shared comparison logic extracted from XML-specific methods
-    /// </summary>
-    private async Task<ComparisonResult> PerformObjectComparison(
-        object oldResponse, 
-        object newResponse, 
-        Type modelType, 
-        CancellationToken cancellationToken)
-    {
-        // PERFORMANCE OPTIMIZATION: Get ignore rules once and reuse
-        var propertiesToIgnore = await _performanceTracker.TrackOperationAsync("Get_Ignore_Rules", () => Task.FromResult(
-            configService.GetIgnoreRules()
-                .Where(r => r.IgnoreCompletely)
-                .Select(r => GetPropertyNameFromPath(r.PropertyPath))
-                .Where(p => !string.IsNullOrEmpty(p))
-                .Distinct()
-                .ToList()));
 
-        // THREAD-SAFE COMPARISON: Create completely isolated configuration
-        var result = await _performanceTracker.TrackOperationAsync("Compare_Objects", async () => 
-        {
-            return await Task.Run(() =>
-            {
-                // CRITICAL FIX: Create truly isolated CompareLogic with no shared state
-                var isolatedCompareLogic = CreateIsolatedCompareLogic();
-                
-                logger.LogDebug("Performing comparison with {ComparerCount} custom comparers. First: {FirstComparer}",
-                    isolatedCompareLogic.Config.CustomComparers.Count,
-                    isolatedCompareLogic.Config.CustomComparers.FirstOrDefault()?.GetType().Name ?? "none");
-
-                // Direct comparison without cloning - this eliminates serialization corruption
-                return isolatedCompareLogic.Compare(oldResponse, newResponse);
-            }, cancellationToken);
-        });
-
-        logger.LogDebug("Comparison completed. Found {DifferenceCount} differences",
-            result.Differences.Count);
-
-        // Filter out ignored properties using smart rules and legacy pattern matching
-        result = configService.FilterSmartIgnoredDifferences(result, modelType);
-        result = configService.FilterIgnoredDifferences(result);
-
-        return FilterDuplicateDifferences(result);
-    }
 
     /// <summary>
     /// Compare multiple folder pairs of XML files
@@ -493,56 +152,7 @@ public class ComparisonService : IComparisonService
         string modelName,
         CancellationToken cancellationToken = default)
     {
-        var result = new MultiFolderComparisonResult();
-        int pairCount = Math.Min(folder1Files.Count, folder2Files.Count);
-        result.TotalPairsCompared = pairCount;
-
-        if (pairCount == 0)
-        {
-            logger.LogWarning("No file pairs to compare");
-            return result;
-        }
-
-        logger.LogInformation("Starting comparison of {PairCount} file pairs using model {ModelName}", pairCount, modelName);
-
-        for (int i = 0; i < pairCount; i++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var file1Path = folder1Files[i];
-            var file2Path = folder2Files[i];
-            try
-            {
-                // Only log individual file pairs in debug mode to avoid spam with large comparisons
-            if (logger.IsEnabled(LogLevel.Debug))
-            {
-                logger.LogDebug("Comparing pair {PairNumber}/{TotalPairs}: {File1} vs {File2}", i + 1, pairCount, file1Path, file2Path);
-            }
-                using var file1Stream = await fileSystemService.OpenFileStreamAsync(file1Path, cancellationToken);
-                using var file2Stream = await fileSystemService.OpenFileStreamAsync(file2Path, cancellationToken);
-                var pairResult = await CompareFilesWithCachingAsync(file1Stream, file2Stream, modelName, file1Path, file2Path, cancellationToken);
-                var categorizer = new DifferenceCategorizer();
-                var summary = categorizer.CategorizeAndSummarize(pairResult);
-                var filePairResult = new FilePairComparisonResult
-                {
-                    File1Name = Path.GetFileName(file1Path),
-                    File2Name = Path.GetFileName(file2Path),
-                    Result = pairResult,
-                    Summary = summary
-                };
-                result.FilePairResults.Add(filePairResult);
-                if (!summary.AreEqual)
-                {
-                    result.AllEqual = false;
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Error comparing files {File1} and {File2}", file1Path, file2Path);
-                throw;
-            }
-        }
-        logger.LogInformation("Folder comparison completed. {EqualCount} equal, {DifferentCount} different", result.FilePairResults.Count(r => r.AreEqual), result.FilePairResults.Count(r => !r.AreEqual));
-        return result;
+        return await _comparisonOrchestrator.CompareFoldersAsync(folder1Files, folder2Files, modelName, cancellationToken);
     }
 
     /// <summary>
@@ -563,203 +173,10 @@ public class ComparisonService : IComparisonService
         IProgress<(int Completed, int Total)> progress = null,
         CancellationToken cancellationToken = default)
     {
-        return await _performanceTracker.TrackOperationAsync("CompareFoldersInBatchesAsync", async () => 
-        {
-            logger.LogInformation("Starting batch comparison of {Count1} files from folder 1 and {Count2} files from folder 2",
-                folder1Files.Count, folder2Files.Count);
-            
-            // Estimate optimal batch size based on file count and system resources
-            int optimalBatchSize = CalculateOptimalBatchSize(Math.Max(folder1Files.Count, folder2Files.Count), folder1Files);
-            
-            // Use the provided batch size if specified, otherwise use the calculated one
-            if (batchSize <= 0)
-            {
-                batchSize = optimalBatchSize;
-                logger.LogInformation("Using calculated optimal batch size: {BatchSize}", batchSize);
-            }
-            else
-            {
-                logger.LogInformation("Using provided batch size: {BatchSize}", batchSize);
-            }
-            
-            // Create mappings between files in both folders (by name for now)
-            var filePairMappings = CreateFilePairMappings(folder1Files, folder2Files);
-            
-            // Report batch information
-            int totalPairs = filePairMappings.Count;
-            int batchCount = (int)Math.Ceiling((double)totalPairs / batchSize);
-            
-            progress?.Report((0, totalPairs));
-            
-            var result = new MultiFolderComparisonResult
-            {
-                TotalPairsCompared = totalPairs,
-                AllEqual = true,
-                FilePairResults = new List<FilePairComparisonResult>(),
-                Metadata = new Dictionary<string, object>()
-            };
-            
-            // Create empty results list
-            var filePairResults = new ConcurrentBag<FilePairComparisonResult>();
-            int processedCount = 0;
-            int equalityFlag = 1;  // Assume all equal until proven otherwise
-            
-            // Process in batches
-            for (int batchIndex = 0; batchIndex < batchCount; batchIndex++)
-            {
-                if (cancellationToken.IsCancellationRequested)
-                    break;
-                
-                // Get the current batch of files
-                var batchStart = batchIndex * batchSize;
-                var batchEnd = Math.Min(batchStart + batchSize, totalPairs);
-                var batchFilePairs = filePairMappings.Skip(batchStart).Take(batchEnd - batchStart).ToList();
-                
-                // Recalculate parallelism for this specific batch
-                int batchParallelism = CalculateOptimalParallelism(batchFilePairs.Count, 
-                    batchFilePairs.Select(p => p.file1Path));
-                    
-                logger.LogDebug("Processing batch {BatchIndex}/{BatchCount} with {FileCount} files using parallelism of {Parallelism}",
-                    batchIndex + 1, batchCount, batchFilePairs.Count, batchParallelism);
-                
-                // Process this batch in parallel
-                await _performanceTracker.TrackOperationAsync($"Batch_{batchIndex+1}", async () =>
-                {
-                    await Parallel.ForEachAsync(
-                        batchFilePairs,
-                        new ParallelOptions
-                        {
-                            MaxDegreeOfParallelism = batchParallelism,
-                            CancellationToken = cancellationToken
-                        },
-                        async (filePair, ct) =>
-                        {
-                            try
-                            {
-                                var (file1Path, file2Path, relativePath) = filePair;
-                                
-                                var operationId = _performanceTracker.StartOperation($"Compare_File_{Path.GetFileName(file1Path)}");
-                                
-                                try
-                                {
-                                    // Open file streams without loading entirely into memory
-                                    using var file1Stream = await fileSystemService.OpenFileStreamAsync(file1Path, ct);
-                                    using var file2Stream = await fileSystemService.OpenFileStreamAsync(file2Path, ct);
-                                    
-                                    // Perform comparison with caching using format-agnostic method
-                                    var comparisonResult = await CompareFilesWithCachingAsync(
-                                        file1Stream,
-                                        file2Stream,
-                                        modelName,
-                                        file1Path,
-                                        file2Path,
-                                        ct);
-                                    
-                                    // Generate summary
-                                    var categorizer = new DifferenceCategorizer();
-                                    var summary = categorizer.CategorizeAndSummarize(comparisonResult);
-                                    
-                                    // Create result
-                                    var pairResult = new FilePairComparisonResult
-                                    {                                
-                                        File1Name = Path.GetFileName(file1Path),
-                                        File2Name = Path.GetFileName(file2Path),
-                                        Result = comparisonResult,
-                                        Summary = summary
-                                    };
-                                    
-                                    // Update result
-                                    filePairResults.Add(pairResult);
-                                    
-                                    // If any differences, flag the overall result
-                                    if (!summary.AreEqual)
-                                    {
-                                        Interlocked.Exchange(ref equalityFlag, 0);
-                                    }
-                                }
-                                finally
-                                {
-                                    _performanceTracker.StopOperation(operationId);
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                logger.LogError(ex, "Error comparing files {File1} and {File2}", 
-                                    filePair.file1Path, filePair.file2Path);
-                            }
-                            
-                            // Update progress
-                            var currentProcessed = Interlocked.Increment(ref processedCount);
-                            if (currentProcessed % 10 == 0 || currentProcessed == totalPairs)
-                            {
-                                progress?.Report((currentProcessed, totalPairs));
-                            }
-                        });
-                });
-                
-                // If adaptive throttling is needed based on system resources, add it here
-                if (batchIndex < batchCount - 1)
-                {
-                    var cpuUsage = _resourceMonitor.GetCpuUsage();
-                    var memoryUsage = _resourceMonitor.GetMemoryUsage();
-                    
-                    // If system is under heavy load, add a delay between batches
-                    if (cpuUsage > 90 || memoryUsage > 90)
-                    {
-                        logger.LogInformation("System under load (CPU: {CpuUsage}%, Memory: {MemoryUsage}%), adding delay between batches", 
-                            cpuUsage, memoryUsage);
-                        await Task.Delay(1000, cancellationToken); // 1 second delay
-                    }
-                    else if (cpuUsage > 75 || memoryUsage > 75)
-                    {
-                        logger.LogInformation("System under moderate load (CPU: {CpuUsage}%, Memory: {MemoryUsage}%), adding short delay", 
-                            cpuUsage, memoryUsage);
-                        await Task.Delay(300, cancellationToken); // 300ms delay
-                    }
-                }
-            }
-            
-            // Complete the result
-            result.FilePairResults = filePairResults.ToList();
-            result.AllEqual = equalityFlag == 1;
-            
-            logger.LogInformation("Batch comparison completed. Processed {Processed}/{Total} file pairs. Equal: {AllEqual}",
-                processedCount, totalPairs, result.AllEqual);
-                
-            progress?.Report((totalPairs, totalPairs));
-            
-            return result;
-        });
+        return await _comparisonOrchestrator.CompareFoldersInBatchesAsync(folder1Files, folder2Files, modelName, batchSize, progress, cancellationToken);
     }
 
-    /// <summary>
-    /// Create file pair mappings between two folder file lists
-    /// </summary>
-    private List<(string file1Path, string file2Path, string relativePath)> CreateFilePairMappings(
-        List<string> folder1Files, 
-        List<string> folder2Files)
-    {
-        var result = new List<(string file1Path, string file2Path, string relativePath)>();
-        
-        // Sort files by name for consistent ordering
-        var sortedFolder1 = folder1Files.OrderBy(f => Path.GetFileName(f)).ToList();
-        var sortedFolder2 = folder2Files.OrderBy(f => Path.GetFileName(f)).ToList();
-        
-        // Use the minimum count between the two folders
-        int pairCount = Math.Min(sortedFolder1.Count, sortedFolder2.Count);
-        
-        // Create pairs by index (side-by-side comparison)
-        for (int i = 0; i < pairCount; i++)
-        {
-            var file1Path = sortedFolder1[i];
-            var file2Path = sortedFolder2[i];
-            var relativePath = Path.GetFileName(file1Path);
-            
-            result.Add((file1Path, file2Path, relativePath));
-        }
-        
-        return result;
-    }
+
 
     /// <summary>
     /// Analyze patterns across multiple file comparison results
@@ -1417,94 +834,5 @@ public class ComparisonService : IComparisonService
         return _resourceMonitor.CalculateOptimalBatchSize(fileCount, averageFileSizeKb);
     }
 
-    /// <summary>
-    /// Creates a completely isolated CompareLogic instance with no shared state.
-    /// This eliminates the "Collection was modified" errors by ensuring each comparison
-    /// operation has its own independent configuration.
-    /// </summary>
-    private CompareLogic CreateIsolatedCompareLogic()
-    {
-        var isolatedCompareLogic = new CompareLogic();
-        
-        // Copy basic configuration settings from the main service
-        var currentConfig = configService.GetCurrentConfig();
-        isolatedCompareLogic.Config.MaxDifferences = currentConfig.MaxDifferences;
-        isolatedCompareLogic.Config.IgnoreObjectTypes = currentConfig.IgnoreObjectTypes;
-        isolatedCompareLogic.Config.ComparePrivateFields = currentConfig.ComparePrivateFields;
-        isolatedCompareLogic.Config.ComparePrivateProperties = currentConfig.ComparePrivateProperties;
-        isolatedCompareLogic.Config.CompareReadOnly = currentConfig.CompareReadOnly;
-        isolatedCompareLogic.Config.IgnoreCollectionOrder = currentConfig.IgnoreCollectionOrder;
-        isolatedCompareLogic.Config.CaseSensitive = currentConfig.CaseSensitive;
-        
-        // Initialize collections to prevent null reference exceptions
-        isolatedCompareLogic.Config.MembersToIgnore = new List<string>();
-        isolatedCompareLogic.Config.CustomComparers = new List<BaseTypeComparer>();
-        isolatedCompareLogic.Config.AttributesToIgnore = new List<Type>();
-        isolatedCompareLogic.Config.MembersToInclude = new List<string>();
-        
-        // Apply ignore rules by applying them directly to the config
-        var ignoreRules = configService.GetIgnoreRules();
-        foreach (var rule in ignoreRules.Where(r => r.IgnoreCompletely))
-        {
-            try
-            {
-                // Apply the rule directly to the isolated config
-                rule.ApplyTo(isolatedCompareLogic.Config);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Error applying ignore rule for property {PropertyPath} in isolated config", rule.PropertyPath);
-            }
-        }
-        
-        // Ensure array Length and LongLength properties are always ignored
-        if (!isolatedCompareLogic.Config.MembersToIgnore.Contains("Length"))
-        {
-            isolatedCompareLogic.Config.MembersToIgnore.Add("Length");
-        }
 
-        if (!isolatedCompareLogic.Config.MembersToIgnore.Contains("LongLength"))
-        {
-            isolatedCompareLogic.Config.MembersToIgnore.Add("LongLength");
-        }
-
-        if (!isolatedCompareLogic.Config.MembersToIgnore.Contains("NativeLength"))
-        {
-            isolatedCompareLogic.Config.MembersToIgnore.Add("NativeLength");
-        }
-
-        // Apply collection order rules by creating new, independent custom comparers
-        var collectionOrderRules = ignoreRules.Where(r => r.IgnoreCollectionOrder && !r.IgnoreCompletely).ToList();
-        if (collectionOrderRules.Any())
-        {
-            try
-            {
-                // Create independent collection order comparer with no shared state
-                var propertiesWithIgnoreOrder = collectionOrderRules.Select(r => r.PropertyPath).ToList();
-                var expandedProperties = propertiesWithIgnoreOrder
-                    .SelectMany(p => new[] { p, p.Replace("[*]", "[0]"), p.Replace("[*]", "[1]") })
-                    .Distinct()
-                    .ToList();
-                
-                // Use RootComparerFactory directly like other parts of the codebase
-                var collectionOrderComparer = new PropertySpecificCollectionOrderComparer(
-                    RootComparerFactory.GetRootComparer(), expandedProperties, logger);
-                
-                isolatedCompareLogic.Config.CustomComparers.Add(collectionOrderComparer);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Error creating independent collection order comparer");
-            }
-        }
-        
-        // Note: XmlIgnore properties are handled by adding them to MembersToIgnore during configuration
-        // This avoids the recursion issue that occurs with custom comparers
-        
-        logger.LogDebug("Created isolated CompareLogic with {IgnorePatterns} ignore patterns and {Comparers} custom comparers", 
-            isolatedCompareLogic.Config.MembersToIgnore.Count, 
-            isolatedCompareLogic.Config.CustomComparers.Count);
-        
-        return isolatedCompareLogic;
-    }
 }

@@ -4,7 +4,7 @@ This project contains comprehensive tests for the ComparisonTool application, pr
 
 ## ✅ Test Implementation Status
 
-**All 59 tests are now passing!** The test suite provides comprehensive coverage of the core functionality.
+**All 66 tests are now passing!** The test suite provides comprehensive coverage of the core functionality and includes our first refactoring success.
 
 ## Test Structure
 
@@ -15,6 +15,7 @@ This project contains comprehensive tests for the ComparisonTool application, pr
   - `XmlDeserializationServiceTests.cs` - XML deserialization with caching and error handling
 - **Utilities**: Tests for utility services
   - `FileSystemServiceTests.cs` - File operations with proper test directory management
+  - `FilePairMappingUtilityTests.cs` - File pair mapping logic (extracted from ComparisonService)
 
 ### Integration Tests (`Integration/`)
 - **Services**: Tests for how services work together
@@ -50,7 +51,7 @@ This project contains comprehensive tests for the ComparisonTool application, pr
 - **Performance Awareness**: Tests include performance tracking and resource monitoring
 
 ### 📊 Test Coverage
-- **Unit Tests**: 59 total tests covering all major components
+- **Unit Tests**: 66 total tests covering all major components
 - **Integration Tests**: Service interaction testing
 - **End-to-End Tests**: Complete workflow validation
 - **Error Scenarios**: Malformed XML, missing files, invalid configurations
@@ -85,15 +86,59 @@ The tests use:
 - **Mock Services**: Where appropriate, but prefer real service integration
 - **Real Domain Models**: Actual domain models from the project
 
+## Refactoring Progress
+
+### Phase 1, Step 1: Extract ComparisonEngine ✅ COMPLETED
+- **Goal**: Extract core object comparison logic from `ComparisonService` into a dedicated `ComparisonEngine`
+- **Files Created/Modified**:
+  - `ComparisonTool.Core/Comparison/IComparisonEngine.cs` (NEW)
+  - `ComparisonTool.Core/Comparison/ComparisonEngine.cs` (NEW)
+  - `ComparisonTool.Core/Comparison/ComparisonService.cs` (MODIFIED)
+  - `ComparisonTool.Core/DI/ServiceCollectionExtensions.cs` (MODIFIED)
+  - `ComparisonTool.Tests/Integration/Services/ComparisonServiceIntegrationTests.cs` (MODIFIED)
+  - `ComparisonTool.Tests/EndToEnd/Workflows/CompleteComparisonWorkflowTests.cs` (MODIFIED)
+- **Benefits Achieved**:
+  - ✅ Separated core comparison logic from orchestration
+  - ✅ Improved testability with dedicated comparison engine
+  - ✅ Reduced complexity in `ComparisonService`
+  - ✅ Better separation of concerns
+  - ✅ All 66 tests passing
+
+### Phase 1, Step 2: Extract ComparisonOrchestrator ✅ COMPLETED
+- **Goal**: Extract file-level comparison operations from `ComparisonService` into a dedicated `ComparisonOrchestrator`
+- **Files Created/Modified**:
+  - `ComparisonTool.Core/Comparison/IComparisonOrchestrator.cs` (NEW)
+  - `ComparisonTool.Core/Comparison/ComparisonOrchestrator.cs` (NEW)
+  - `ComparisonTool.Core/Comparison/ComparisonService.cs` (MODIFIED)
+  - `ComparisonTool.Core/DI/ServiceCollectionExtensions.cs` (MODIFIED)
+  - `ComparisonTool.Tests/Integration/Services/ComparisonServiceIntegrationTests.cs` (MODIFIED)
+  - `ComparisonTool.Tests/EndToEnd/Workflows/CompleteComparisonWorkflowTests.cs` (MODIFIED)
+- **Methods Extracted**:
+  - ✅ `CompareXmlFilesWithCachingAsync`
+  - ✅ `CompareXmlFilesAsync`
+  - ✅ `CompareFilesWithCachingAsync`
+  - ✅ `CompareFilesAsync`
+  - ✅ `CompareFoldersAsync`
+  - ✅ `CompareFoldersInBatchesAsync`
+- **Benefits Achieved**:
+  - ✅ Separated file-level orchestration from core service logic
+  - ✅ Improved testability with dedicated orchestrator
+  - ✅ Reduced complexity in `ComparisonService`
+  - ✅ Better separation of concerns
+  - ✅ All 66 tests passing
+
 ## Next Steps for Refactoring
 
 With this comprehensive test suite in place, you can now safely:
 
-1. **Refactor Core Services**: The tests will catch any breaking changes
-2. **Optimize Performance**: Tests include performance tracking
-3. **Add New Features**: Extend the test suite as you add functionality
-4. **Improve Error Handling**: Tests cover various error scenarios
-5. **Enhance Configuration**: Smart ignore rules and filtering are well-tested
+1. **✅ First Refactoring Complete**: Successfully extracted `CreateFilePairMappings` from `ComparisonService` into `FilePairMappingUtility`
+2. **✅ Phase 1, Step 1 Complete**: Successfully extracted `ComparisonEngine` for core object comparison logic
+3. **✅ Phase 1, Step 2 Complete**: Successfully extracted `ComparisonOrchestrator` for file-level comparison operations
+4. **Refactor Core Services**: The tests will catch any breaking changes
+5. **Optimize Performance**: Tests include performance tracking
+6. **Add New Features**: Extend the test suite as you add functionality
+7. **Improve Error Handling**: Tests cover various error scenarios
+8. **Enhance Configuration**: Smart ignore rules and filtering are well-tested
 
 ## Test Maintenance
 
