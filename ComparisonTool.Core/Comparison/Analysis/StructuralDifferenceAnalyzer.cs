@@ -24,11 +24,11 @@ namespace ComparisonTool.Core.Comparison.Analysis
         /// </summary>
         public class StructuralPattern
         {
-            public string ParentPath { get; set; }
+            public string ParentPath { get; set; } = string.Empty;
 
-            public string MissingProperty { get; set; }
+            public string MissingProperty { get; set; } = string.Empty;
 
-            public string FullPattern { get; set; }
+            public string FullPattern { get; set; } = string.Empty;
 
             public DifferenceCategory Category { get; set; }
 
@@ -96,7 +96,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
 
                 var pairIdentifier = $"{filePair.File1Name} vs {filePair.File2Name}";
 
-                foreach (var diff in filePair.Result.Differences)
+                foreach (var diff in filePair.Result?.Differences ?? new System.Collections.Generic.List<KellermanSoftware.CompareNetObjects.Difference>())
                 {
                     allDifferences.Add((diff, pairIdentifier));
 

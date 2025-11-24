@@ -47,13 +47,13 @@
 
 @code {
     [Parameter]
-    public Type Type { get; set; }
+    public Type? Type { get; set; }
 
     [Parameter]
-    public string Path { get; set; }
+    public string? Path { get; set; }
 
     [Parameter]
-    public string DisplayName { get; set; }
+    public string? DisplayName { get; set; }
 
     [Parameter]
     public bool Expanded { get; set; }
@@ -65,7 +65,7 @@
     public EventCallback<string> OnPropertySelected { get; set; }
 
     [Parameter]
-    public string SelectedPath { get; set; }
+    public string? SelectedPath { get; set; }
 
     private bool HasChildProperties => Type != null &&
                                       !Type.IsPrimitive &&

@@ -199,10 +199,12 @@ public class DirectoryComparisonService
 
             result.AllEqual = equalityFlag == 1; // Convert from int flag to bool
 
+            var equal = result.FilePairResults.Count(r => r.Summary?.AreEqual ?? true);
+            var different = result.FilePairResults.Count(r => !(r.Summary?.AreEqual ?? true));
             this.logger.LogInformation(
                 "Directory comparison completed. {Equal} equal, {Different} different",
-                result.FilePairResults.Count(r => r.AreEqual),
-                result.FilePairResults.Count(r => !r.AreEqual));
+                equal,
+                different);
 
             progress?.Report(new ComparisonProgress(
                 filePairs.Count,
@@ -379,10 +381,12 @@ public class DirectoryComparisonService
                 result.FilePairResults = filePairResults.OrderBy(r => r.File1Name).ToList();
                 result.AllEqual = equalityFlag == 1;
 
+                var equal = result.FilePairResults.Count(r => r.Summary?.AreEqual ?? true);
+                var different = result.FilePairResults.Count(r => !(r.Summary?.AreEqual ?? true));
                 this.logger.LogInformation(
                     "Comparison completed. {Equal} equal, {Different} different",
-                    result.FilePairResults.Count(r => r.Summary.AreEqual),
-                    result.FilePairResults.Count(r => !r.Summary.AreEqual));
+                    equal,
+                    different);
 
                 progress?.Report(new ComparisonProgress(pairCount, pairCount, "Comparison completed"));
             });

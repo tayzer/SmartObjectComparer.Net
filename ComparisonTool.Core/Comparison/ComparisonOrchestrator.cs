@@ -112,6 +112,13 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                     }, cancellationToken);
                 });
 
+                // Validate deserialization results
+                if (oldResponse == null || newResponse == null)
+                {
+                    this.logger.LogError("Deserialization returned null for model {ModelName}", modelName);
+                    throw new InvalidOperationException($"Deserialization returned null for model {modelName}");
+                }
+
                 // Use the comparison engine for the actual comparison
                 var result = await this.comparisonEngine.CompareObjectsAsync(oldResponse, newResponse, modelType, cancellationToken);
 
@@ -171,6 +178,13 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                         return deserializeMethod.Invoke(this.deserializationService, new object[] { newXmlStream });
                     }, cancellationToken);
                 });
+
+                // Validate deserialization results
+                if (oldResponse == null || newResponse == null)
+                {
+                    this.logger.LogError("Deserialization returned null for model {ModelName}", modelName);
+                    throw new InvalidOperationException($"Deserialization returned null for model {modelName}");
+                }
 
                 // Use the comparison engine for the actual comparison
                 var result = await this.comparisonEngine.CompareObjectsAsync(oldResponse, newResponse, modelType, cancellationToken);
@@ -270,6 +284,13 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                     }, cancellationToken);
                 });
 
+                // Validate deserialization results
+                if (oldResponse == null || newResponse == null)
+                {
+                    this.logger.LogError("Deserialization returned null for model {ModelName}", modelName);
+                    throw new InvalidOperationException($"Deserialization returned null for model {modelName}");
+                }
+
                 // Use the comparison engine for the actual comparison
                 var result = await this.comparisonEngine.CompareObjectsAsync(oldResponse, newResponse, modelType, cancellationToken);
 
@@ -353,6 +374,13 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                     }, cancellationToken);
                 });
 
+                // Validate deserialization results
+                if (oldResponse == null || newResponse == null)
+                {
+                    this.logger.LogError("Deserialization returned null for model {ModelName}", modelName);
+                    throw new InvalidOperationException($"Deserialization returned null for model {modelName}");
+                }
+
                 // Use the comparison engine for the actual comparison
                 return await this.comparisonEngine.CompareObjectsAsync(oldResponse, newResponse, modelType, cancellationToken);
             }
@@ -424,7 +452,9 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
             }
         }
 
-        this.logger.LogInformation("Folder comparison completed. {EqualCount} equal, {DifferentCount} different", result.FilePairResults.Count(r => r.AreEqual), result.FilePairResults.Count(r => !r.AreEqual));
+        var equalCount = result.FilePairResults.Count(r => r.Summary?.AreEqual ?? true);
+        var differentCount = result.FilePairResults.Count(r => !(r.Summary?.AreEqual ?? true));
+        this.logger.LogInformation("Folder comparison completed. {EqualCount} equal, {DifferentCount} different", equalCount, differentCount);
         return result;
     }
 

@@ -279,7 +279,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
 
                 var pairIdentifier = $"{filePairResult.File1Name} vs {filePairResult.File2Name}";
 
-                foreach (var difference in filePairResult.Result.Differences)
+                foreach (var difference in filePairResult.Result?.Differences ?? new System.Collections.Generic.List<KellermanSoftware.CompareNetObjects.Difference>())
                 {
                     allDifferences.Add((difference, pairIdentifier, filePairResult));
                     result.TotalDifferencesFound++;
@@ -1382,11 +1382,11 @@ namespace ComparisonTool.Core.Comparison.Analysis
 
         private string ClassifyFilePrimaryDifferenceType(FilePairComparisonResult filePair)
         {
-            if (filePair.Result?.Differences == null || !filePair.Result.Differences.Any()) {
+            var differences = filePair.Result?.Differences ?? new System.Collections.Generic.List<KellermanSoftware.CompareNetObjects.Difference>();
+            if (!differences.Any())
+            {
                 return "Uncategorized";
             }
-
-            var differences = filePair.Result.Differences;
 
             // Count different types of differences in this file
             var valueCount = 0;

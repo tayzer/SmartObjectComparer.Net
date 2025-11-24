@@ -224,13 +224,14 @@ public class ComparisonService : IComparisonService
 
                 var pairIdentifier = $"{filePair.File1Name} vs {filePair.File2Name}";
 
-                // Category counts
-                foreach (var category in filePair.Summary.DifferencesByChangeType)
+                // Category counts (guard Summary/result which may be nullable)
+                foreach (var category in filePair.Summary?.DifferencesByChangeType ?? new System.Collections.Generic.Dictionary<DifferenceCategory, System.Collections.Generic.List<Difference>>())
                 {
                     categoryCounts.AddOrUpdate(category.Key, category.Value.Count, (k, v) => v + category.Value.Count);
                 }
 
-                foreach (var diff in filePair.Result.Differences)
+                var differences = filePair.Result?.Differences ?? new System.Collections.Generic.List<Difference>();
+                foreach (var diff in differences)
                 {
                     var normalizedPath = this.NormalizePropertyPath(diff.PropertyName);
 
@@ -381,7 +382,7 @@ public class ComparisonService : IComparisonService
 
         // Step 1: Build fingerprints
         var fileFingerprints = new Dictionary<string, HashSet<string>>();
-        foreach (var filePair in folderResult.FilePairResults)
+            foreach (var filePair in folderResult.FilePairResults)
         {
             if (filePair.AreEqual) {
                 continue;
@@ -389,7 +390,9 @@ public class ComparisonService : IComparisonService
 
             var pairIdentifier = $"{filePair.File1Name} vs {filePair.File2Name}";
             var fingerprint = new HashSet<string>();
-            foreach (var diff in filePair.Result.Differences) {
+            var fpDifferences = filePair.Result?.Differences ?? new System.Collections.Generic.List<KellermanSoftware.CompareNetObjects.Difference>();
+            foreach (var diff in fpDifferences)
+            {
                 fingerprint.Add(this.NormalizePropertyPath(diff.PropertyName));
             }
 

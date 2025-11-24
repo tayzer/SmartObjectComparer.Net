@@ -105,7 +105,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
 
                 // 4. Categorize each difference
                 var diffIndex = 0;
-                foreach (var diff in filePair.Result.Differences)
+                foreach (var diff in filePair.Result?.Differences ?? new System.Collections.Generic.List<KellermanSoftware.CompareNetObjects.Difference>())
                 {
                     diffIndex++;
 

@@ -6,12 +6,12 @@ namespace ComparisonTool.Core.Comparison.Analysis;
 
 public class GlobalPropertyChangeInfo
 {
-    public string PropertyName { get; set; }
+    public string PropertyName { get; set; } = string.Empty;
 
-    // Changed to field for use with Interlocked.Increment
+    // Public field retained for use with Interlocked operations
     public int occurrenceCount;
 
-    // Property wrapper for the field
+    // Property wrapper for the field (keeps API compatibility)
     public int OccurrenceCount
     {
         get => this.occurrenceCount;

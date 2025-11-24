@@ -21,11 +21,11 @@
 
 @code {
     [Parameter]
-    public Type ModelType { get; set; }
+    public Type? ModelType { get; set; }
 
     [Parameter]
     public EventCallback<string> OnPropertySelected { get; set; }
 
     [Parameter]
-    public string SelectedPath { get; set; }
+    public string? SelectedPath { get; set; }
 }

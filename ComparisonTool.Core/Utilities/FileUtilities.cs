@@ -3,6 +3,8 @@
 // </copyright>
 
 using System.Text;
+using System.Linq;
+using KellermanSoftware.CompareNetObjects;
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Results;
 using Microsoft.Extensions.Logging;
@@ -145,7 +147,7 @@ public class FileUtilities : IFileUtilities
         foreach (var result in folderResult.FilePairResults)
         {
             var status = result.AreEqual ? "✓ Equal" : "❌ Different";
-            var diffCount = result.AreEqual ? "0" : result.Summary.TotalDifferenceCount.ToString();
+            var diffCount = result.AreEqual ? "0" : (result.Summary?.TotalDifferenceCount ?? 0).ToString();
 
             sb.AppendLine($"| {result.File1Name} | {result.File2Name} | {status} | {diffCount} |");
         }
@@ -176,9 +178,16 @@ public class FileUtilities : IFileUtilities
                 sb.AppendLine("| Category | Count | Percentage |");
                 sb.AppendLine("|----------|-------|------------|");
 
-                foreach (var category in result.Summary.DifferencesByChangeType.OrderByDescending(c => c.Value.Count).Take(5))
+                foreach (var category in (result.Summary?.DifferencesByChangeType ?? new System.Collections.Generic.Dictionary<DifferenceCategory, System.Collections.Generic.List<Difference>>()).OrderByDescending(c => c.Value.Count).Take(5))
                 {
-                    sb.AppendLine($"| {this.FormatCategoryName(category.Key)} | {category.Value.Count} | {result.Summary.CategoryPercentages[category.Key]}% |");
+                    if (result.Summary != null && result.Summary.CategoryPercentages != null && result.Summary.CategoryPercentages.TryGetValue(category.Key, out var pct))
+                    {
+                        sb.AppendLine($"| {this.FormatCategoryName(category.Key)} | {category.Value.Count} | {pct}% |");
+                    }
+                    else
+                    {
+                        sb.AppendLine($"| {this.FormatCategoryName(category.Key)} | {category.Value.Count} | 0% |");
+                    }
                 }
 
                 sb.AppendLine();
@@ -187,7 +196,7 @@ public class FileUtilities : IFileUtilities
                 sb.AppendLine("### Sample Differences");
                 sb.AppendLine();
 
-                var sampleDiffs = result.Result.Differences.Take(10).ToList();
+                var sampleDiffs = result.Result?.Differences?.Take(10).ToList() ?? new System.Collections.Generic.List<KellermanSoftware.CompareNetObjects.Difference>();
                 foreach (var diff in sampleDiffs)
                 {
                     sb.AppendLine($"- Property: `{diff.PropertyName}`");
@@ -195,10 +204,10 @@ public class FileUtilities : IFileUtilities
                     sb.AppendLine($"  - Actual: `{this.FormatValue(diff.Object2Value)}`");
                     sb.AppendLine();
                 }
-
-                if (result.Result.Differences.Count > 10)
+                var totalDiffCount = result.Result?.Differences?.Count ?? 0;
+                if (totalDiffCount > 10)
                 {
-                    sb.AppendLine($"*...and {result.Result.Differences.Count - 10} more differences*");
+                    sb.AppendLine($"*...and {Math.Max(0, totalDiffCount - 10)} more differences*");
                     sb.AppendLine();
                 }
             }

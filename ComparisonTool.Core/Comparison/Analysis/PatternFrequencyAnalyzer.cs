@@ -20,7 +20,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
     {
         public class PatternFrequencyGroup
         {
-            public string NormalizedPath { get; set; }
+            public string NormalizedPath { get; set; } = string.Empty;
 
             public DifferenceCategory Category { get; set; }
 

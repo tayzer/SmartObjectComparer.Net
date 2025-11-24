@@ -12,11 +12,12 @@ namespace ComparisonTool.Core.Comparison.Analysis;
 /// </summary>
 public class GlobalPatternInfo
 {
-    public string PatternPath { get; set; }
+    public string PatternPath { get; set; } = string.Empty;
 
+    // Public fields retained for use with Interlocked operations elsewhere in the codebase
     public int occurrenceCount;
 
-    // Property wrapper for the field
+    // Property wrapper for the field (keeps API compatibility)
     public int OccurrenceCount
     {
         get => this.occurrenceCount;
@@ -25,7 +26,7 @@ public class GlobalPatternInfo
 
     public int fileCount;
 
-    // Property wrapper for the field
+    // Property wrapper for the field (keeps API compatibility)
     public int FileCount
     {
         get => this.fileCount;

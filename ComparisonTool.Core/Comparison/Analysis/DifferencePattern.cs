@@ -11,9 +11,9 @@ namespace ComparisonTool.Core.Comparison.Analysis;
 /// </summary>
 public class DifferencePattern
 {
-    public string Pattern { get; set; }
+    public string Pattern { get; set; } = string.Empty;
 
-    public string PropertyPath { get; set; }
+    public string PropertyPath { get; set; } = string.Empty;
 
     public int OccurrenceCount { get; set; }
 

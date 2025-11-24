@@ -24,11 +24,13 @@ public static class FilePairMappingUtility
         List<string> folder1Files,
         List<string> folder2Files)
         {
-        if (folder1Files == null) {
+        if (folder1Files == null)
+        {
             throw new ArgumentNullException(nameof(folder1Files));
         }
 
-        if (folder2Files == null) {
+        if (folder2Files == null)
+        {
             throw new ArgumentNullException(nameof(folder2Files));
         }
 

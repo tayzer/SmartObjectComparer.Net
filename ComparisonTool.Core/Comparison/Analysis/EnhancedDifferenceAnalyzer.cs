@@ -81,10 +81,10 @@ namespace ComparisonTool.Core.Comparison.Analysis
         public class StructuralPattern
         {
             // The XML path where this pattern occurs
-            public string XmlPath { get; set; }
+            public string XmlPath { get; set; } = string.Empty;
 
             // Human-readable description of the pattern
-            public string Description { get; set; }
+            public string Description { get; set; } = string.Empty;
 
             // How many times this pattern appears
             public int OccurrenceCount { get; set; }
@@ -113,10 +113,10 @@ namespace ComparisonTool.Core.Comparison.Analysis
                 this.Consistency > 40 ? "Medium" : "Low";
 
             // A helpful explanation for testers
-            public string TesterGuidance { get; set; }
+            public string TesterGuidance { get; set; } = string.Empty;
 
             // Potential root cause
-            public string PotentialRootCause { get; set; }
+            public string PotentialRootCause { get; set; } = string.Empty;
         }
 
         public EnhancedDifferenceAnalyzer(MultiFolderComparisonResult folderResult, ILogger logger = null)
@@ -159,7 +159,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
 
                 var pairIdentifier = $"{filePair.File1Name} vs {filePair.File2Name}";
 
-                foreach (var diff in filePair.Result.Differences)
+                foreach (var diff in filePair.Result?.Differences ?? new System.Collections.Generic.List<KellermanSoftware.CompareNetObjects.Difference>())
                 {
                     // Add to total count
                     result.TotalDifferences++;

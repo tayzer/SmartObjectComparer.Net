@@ -26,9 +26,17 @@ public class DifferenceCategorizer
     /// <returns></returns>
     public DifferenceSummary CategorizeAndSummarize(ComparisonResult comparisonResult)
     {
+        if (comparisonResult == null)
+        {
+            this.logger?.LogWarning("CategorizeAndSummarize called with null ComparisonResult");
+            return new DifferenceSummary { AreEqual = true, TotalDifferenceCount = 0 };
+        }
+
+        var diffs = comparisonResult.Differences ?? new List<Difference>();
+
         this.logger?.LogInformation(
             "Starting difference summary. AreEqual={AreEqual}, DifferenceCount={Count}",
-            comparisonResult.AreEqual, comparisonResult.Differences?.Count ?? 0);
+            comparisonResult.AreEqual, diffs.Count);
 
         var summary = new DifferenceSummary();
 
@@ -40,11 +48,11 @@ public class DifferenceCategorizer
         }
 
         summary.AreEqual = false;
-        summary.TotalDifferenceCount = comparisonResult.Differences.Count;
+        summary.TotalDifferenceCount = diffs.Count;
 
         // --- Single-pass grouping for efficiency ---
         var patternGroups = new Dictionary<string, List<Difference>>();
-        foreach (var diff in comparisonResult.Differences)
+        foreach (var diff in diffs)
         {
             // Change type grouping
             var category = this.GetDifferenceCategory(diff);
