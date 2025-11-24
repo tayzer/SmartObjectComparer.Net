@@ -78,7 +78,10 @@ public class ComparisonService : IComparisonService
         string newFilePath,
         CancellationToken cancellationToken = default)
         {
-        return await this.comparisonOrchestrator.CompareXmlFilesWithCachingAsync(oldXmlStream, newXmlStream, modelName, oldFilePath, newFilePath, cancellationToken);
+        var result = await this.comparisonOrchestrator.CompareXmlFilesWithCachingAsync(oldXmlStream, newXmlStream, modelName, oldFilePath, newFilePath, cancellationToken);
+
+        // Filter duplicate differences (e.g., System.Collections.IList.Item vs standard indexed paths)
+        return ComparisonTool.Core.Comparison.Utilities.DifferenceFilter.FilterDuplicateDifferences(result, this.logger);
     }
 
     /// <summary>
@@ -95,7 +98,10 @@ public class ComparisonService : IComparisonService
         string modelName,
         CancellationToken cancellationToken = default)
         {
-        return await this.comparisonOrchestrator.CompareXmlFilesAsync(oldXmlStream, newXmlStream, modelName, cancellationToken);
+        var result = await this.comparisonOrchestrator.CompareXmlFilesAsync(oldXmlStream, newXmlStream, modelName, cancellationToken);
+
+        // Ensure duplicate differences are removed before returning
+        return ComparisonTool.Core.Comparison.Utilities.DifferenceFilter.FilterDuplicateDifferences(result, this.logger);
     }
 
     /// <summary>
@@ -116,7 +122,10 @@ public class ComparisonService : IComparisonService
         string newFilePath,
         CancellationToken cancellationToken = default)
         {
-        return await this.comparisonOrchestrator.CompareFilesWithCachingAsync(oldFileStream, newFileStream, modelName, oldFilePath, newFilePath, cancellationToken);
+        var result = await this.comparisonOrchestrator.CompareFilesWithCachingAsync(oldFileStream, newFileStream, modelName, oldFilePath, newFilePath, cancellationToken);
+
+        // Post-process to remove duplicate representation differences
+        return ComparisonTool.Core.Comparison.Utilities.DifferenceFilter.FilterDuplicateDifferences(result, this.logger);
     }
 
     /// <summary>
@@ -137,7 +146,10 @@ public class ComparisonService : IComparisonService
         string newFilePath,
         CancellationToken cancellationToken = default)
         {
-        return await this.comparisonOrchestrator.CompareFilesAsync(oldFileStream, newFileStream, modelName, oldFilePath, newFilePath, cancellationToken);
+        var result = await this.comparisonOrchestrator.CompareFilesAsync(oldFileStream, newFileStream, modelName, oldFilePath, newFilePath, cancellationToken);
+
+        // Remove duplicate differences so the UI sees a concise list
+        return ComparisonTool.Core.Comparison.Utilities.DifferenceFilter.FilterDuplicateDifferences(result, this.logger);
     }
 
     /// <summary>

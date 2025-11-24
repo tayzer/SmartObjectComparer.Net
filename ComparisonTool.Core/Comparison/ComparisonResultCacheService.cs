@@ -242,6 +242,8 @@ namespace ComparisonTool.Core.Comparison
             if (result == null) {
                 return;
             }
+            // Ensure cached results are normalized and duplicate differences removed
+            result = ComparisonTool.Core.Comparison.Utilities.DifferenceFilter.FilterDuplicateDifferences(result, this.logger);
 
             var cacheKey = $"{file1Hash}_{file2Hash}_{configFingerprint}";
             var cachedResult = new CachedComparisonResult(result, configFingerprint);
