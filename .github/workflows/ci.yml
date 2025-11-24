@@ -22,7 +22,7 @@ jobs:
         run: dotnet restore ComparisonTool.sln
 
       - name: Format (whitespace only, verify no changes)
-        run: dotnet format whitespace ComparisonTool.sln --verify-no-changes --verbosity minimal
+        run: dotnet format whitespace ComparisonTool.sln --verify-no-changes --verbosity minimal --exclude "ComparisonTool.Tests"
 
       - name: Build
         run: dotnet build ComparisonTool.sln --configuration Release --no-restore

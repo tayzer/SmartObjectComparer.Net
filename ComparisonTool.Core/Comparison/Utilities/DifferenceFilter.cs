@@ -20,7 +20,8 @@ namespace ComparisonTool.Core.Comparison.Utilities
     {
         public static ComparisonResult FilterDuplicateDifferences(ComparisonResult result, ILogger logger = null)
         {
-            if (result == null) {
+            if (result == null)
+            {
                 return result;
             }
 
@@ -71,7 +72,8 @@ namespace ComparisonTool.Core.Comparison.Utilities
 
         private static bool IsConfusingCollectionDifference(Difference diff, ILogger logger)
         {
-            if (diff == null) {
+            if (diff == null)
+            {
                 return false;
             }
 
@@ -89,7 +91,8 @@ namespace ComparisonTool.Core.Comparison.Utilities
 
         private static Difference ImproveDifferenceDescription(Difference diff, ILogger logger)
         {
-            if (diff == null) {
+            if (diff == null)
+            {
                 return diff;
             }
 
@@ -147,7 +150,8 @@ namespace ComparisonTool.Core.Comparison.Utilities
 
             public override bool Equals(object obj)
             {
-                if (obj is not DifferenceGroupingKey other) {
+                if (obj is not DifferenceGroupingKey other)
+                {
                     return false;
                 }
 

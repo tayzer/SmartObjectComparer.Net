@@ -688,7 +688,7 @@ namespace ComparisonTool.TestDataGenerator
                     {
                         Method = "Credit Card",
                         Amount = (decimal)((Random.NextDouble() * 400) + 200),
-                        Status = PaymentStatus.Captured
+                        Status = PaymentStatus.Captured,
                     },
                 },
             };
