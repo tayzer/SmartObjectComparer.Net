@@ -1,3 +1,7 @@
+// <copyright file="Program.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using ComparisonTool.Core.DI;
 using ComparisonTool.Web;
 using ComparisonTool.Web.Components;
@@ -18,16 +22,14 @@ builder.Host.UseSerilog();
 builder.Services
     .AddUnifiedComparisonServices(builder.Configuration)
     .AddRazorComponents()
-    .AddInteractiveServerComponents(options =>
-    {
+    .AddInteractiveServerComponents(options => {
         options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(30);
         options.DisconnectedCircuitMaxRetained = 100;
     });
 
 builder.Services.AddBlazorBootstrap();
 
-builder.Services.AddSignalR(options =>
-{
+builder.Services.AddSignalR(options => {
     options.MaximumReceiveMessageSize = 10 * 1024 * 1024;
     options.ClientTimeoutInterval = TimeSpan.FromMinutes(5);
     options.KeepAliveInterval = TimeSpan.FromSeconds(15);
@@ -41,13 +43,11 @@ ThreadPoolConfig.Configure();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-if (!app.Environment.IsDevelopment())
-{
+if (!app.Environment.IsDevelopment()) {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
     app.UseHsts();
 }
-else
-{
+else {
     app.UseDeveloperExceptionPage();
 }
 

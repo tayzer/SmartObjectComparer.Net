@@ -1,68 +1,65 @@
-﻿using System.Text;
+// <copyright file="FileUtilities.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
+using System.Linq;
+using System.Text;
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Results;
+using KellermanSoftware.CompareNetObjects;
 using Microsoft.Extensions.Logging;
 
 namespace ComparisonTool.Core.Utilities;
 
 /// <summary>
-/// Utility methods for file operations used in the comparison tool
+/// Utility methods for file operations used in the comparison tool.
 /// </summary>
-public class FileUtilities : IFileUtilities
-{
+public class FileUtilities : IFileUtilities {
     private readonly ILogger<FileUtilities> logger;
 
-    public FileUtilities(ILogger<FileUtilities> logger)
-    {
+    public FileUtilities(ILogger<FileUtilities> logger) {
         this.logger = logger;
     }
 
     /// <summary>
-    /// Creates a memory stream from a file stream
+    /// Creates a memory stream from a file stream.
     /// </summary>
-    /// <param name="fileStream">The source file stream</param>
-    /// <param name="cancellationToken">Cancellation token for async operations</param>
-    /// <returns>A memory stream containing the file contents</returns>
-    public async Task<MemoryStream> CreateMemoryStreamFromFileAsync(Stream fileStream, CancellationToken cancellationToken = default)
-    {
-        try
-        {
+    /// <param name="fileStream">The source file stream.</param>
+    /// <param name="cancellationToken">Cancellation token for async operations.</param>
+    /// <returns>A memory stream containing the file contents.</returns>
+    public async Task<MemoryStream> CreateMemoryStreamFromFileAsync(Stream fileStream, CancellationToken cancellationToken = default) {
+        try {
             var memoryStream = new MemoryStream();
             await fileStream.CopyToAsync(memoryStream, cancellationToken);
             memoryStream.Position = 0;
             return memoryStream;
         }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error creating memory stream from file");
+        catch (Exception ex) {
+            this.logger.LogError(ex, "Error creating memory stream from file");
             throw;
         }
     }
 
     /// <summary>
-    /// Generates a report markdown file
+    /// Generates a report markdown file.
     /// </summary>
-    /// <param name="summary">The difference summary to generate report from</param>
-    /// <param name="additionalInfo">Optional additional information to include at the top of the report</param>
-    /// <returns>Markdown content as a string</returns>
-    public string GenerateReportMarkdown(DifferenceSummary summary, string additionalInfo = null)
-    {
+    /// <param name="summary">The difference summary to generate report from.</param>
+    /// <param name="additionalInfo">Optional additional information to include at the top of the report.</param>
+    /// <returns>Markdown content as a string.</returns>
+    public string GenerateReportMarkdown(DifferenceSummary summary, string additionalInfo = null) {
         var sb = new StringBuilder();
 
         // Add additional information if provided
-        if (!string.IsNullOrEmpty(additionalInfo))
-        {
+        if (!string.IsNullOrEmpty(additionalInfo)) {
             sb.AppendLine(additionalInfo);
             sb.AppendLine();
         }
-        else
-        {
+        else {
             sb.AppendLine("# Comparison Summary Report");
             sb.AppendLine();
         }
 
-        if (summary.AreEqual)
-        {
+        if (summary.AreEqual) {
             sb.AppendLine("**No differences found.** The objects are identical according to current comparison rules.");
             return sb.ToString();
         }
@@ -76,9 +73,8 @@ public class FileUtilities : IFileUtilities
         sb.AppendLine("| Category | Count | Percentage |");
         sb.AppendLine("|----------|-------|------------|");
 
-        foreach (var category in summary.DifferencesByChangeType.OrderByDescending(c => c.Value.Count))
-        {
-            sb.AppendLine($"| {FormatCategoryName(category.Key)} | {category.Value.Count} | {summary.CategoryPercentages[category.Key]}% |");
+        foreach (var category in summary.DifferencesByChangeType.OrderByDescending(c => c.Value.Count)) {
+            sb.AppendLine($"| {this.FormatCategoryName(category.Key)} | {category.Value.Count} | {summary.CategoryPercentages[category.Key]}% |");
         }
 
         sb.AppendLine();
@@ -89,8 +85,7 @@ public class FileUtilities : IFileUtilities
         sb.AppendLine("| Object | Count | Percentage |");
         sb.AppendLine("|--------|-------|------------|");
 
-        foreach (var obj in summary.DifferencesByRootObject.OrderByDescending(o => o.Value.Count))
-        {
+        foreach (var obj in summary.DifferencesByRootObject.OrderByDescending(o => o.Value.Count)) {
             sb.AppendLine($"| {obj.Key} | {obj.Value.Count} | {summary.RootObjectPercentages[obj.Key]}% |");
         }
 
@@ -107,11 +102,10 @@ public class FileUtilities : IFileUtilities
             sb.AppendLine("Example differences:");
             sb.AppendLine();
 
-            foreach (var example in pattern.Examples)
-            {
+            foreach (var example in pattern.Examples) {
                 sb.AppendLine($"- Property: `{example.PropertyName}`");
-                sb.AppendLine($"  - Old: `{FormatValue(example.Object1Value)}`");
-                sb.AppendLine($"  - New: `{FormatValue(example.Object2Value)}`");
+                sb.AppendLine($"  - Old: `{this.FormatValue(example.Object1Value)}`");
+                sb.AppendLine($"  - New: `{this.FormatValue(example.Object2Value)}`");
                 sb.AppendLine();
             }
         }
@@ -120,28 +114,26 @@ public class FileUtilities : IFileUtilities
     }
 
     /// <summary>
-    /// Generates a report for folder comparisons
+    /// Generates a report for folder comparisons.
     /// </summary>
-    /// <param name="folderResult">The folder comparison result</param>
-    /// <returns>Markdown content as a string</returns>
-    public string GenerateFolderComparisonReport(MultiFolderComparisonResult folderResult)
-    {
+    /// <param name="folderResult">The folder comparison result.</param>
+    /// <returns>Markdown content as a string.</returns>
+    public string GenerateFolderComparisonReport(MultiFolderComparisonResult folderResult) {
         var sb = new StringBuilder();
 
-                    sb.AppendLine("# Expected vs Actual Folder Comparison Report");
+        sb.AppendLine("# Expected vs Actual Folder Comparison Report");
         sb.AppendLine();
         sb.AppendLine($"Date: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
         sb.AppendLine();
 
         sb.AppendLine("## Summary");
         sb.AppendLine();
-                    sb.AppendLine("| Expected File | Actual File | Status | Differences |");
+        sb.AppendLine("| Expected File | Actual File | Status | Differences |");
         sb.AppendLine("|---------|---------|--------|------------|");
 
-        foreach (var result in folderResult.FilePairResults)
-        {
+        foreach (var result in folderResult.FilePairResults) {
             var status = result.AreEqual ? "✓ Equal" : "❌ Different";
-            var diffCount = result.AreEqual ? "0" : result.Summary.TotalDifferenceCount.ToString();
+            var diffCount = result.AreEqual ? "0" : (result.Summary?.TotalDifferenceCount ?? 0).ToString();
 
             sb.AppendLine($"| {result.File1Name} | {result.File2Name} | {status} | {diffCount} |");
         }
@@ -149,19 +141,16 @@ public class FileUtilities : IFileUtilities
         sb.AppendLine();
 
         // Add detailed comparison for each file pair
-        for (int i = 0; i < folderResult.FilePairResults.Count; i++)
-        {
+        for (var i = 0; i < folderResult.FilePairResults.Count; i++) {
             var result = folderResult.FilePairResults[i];
 
             sb.AppendLine($"## Pair {i + 1}: {result.File1Name} vs {result.File2Name}");
             sb.AppendLine();
 
-            if (result.AreEqual)
-            {
+            if (result.AreEqual) {
                 sb.AppendLine("**No differences found.** The objects are identical according to current comparison rules.");
             }
-            else
-            {
+            else {
                 // Include only the most important parts of the report for each file
                 sb.AppendLine($"**Total Differences: {result.Summary.TotalDifferenceCount}**");
                 sb.AppendLine();
@@ -172,9 +161,13 @@ public class FileUtilities : IFileUtilities
                 sb.AppendLine("| Category | Count | Percentage |");
                 sb.AppendLine("|----------|-------|------------|");
 
-                foreach (var category in result.Summary.DifferencesByChangeType.OrderByDescending(c => c.Value.Count).Take(5))
-                {
-                    sb.AppendLine($"| {FormatCategoryName(category.Key)} | {category.Value.Count} | {result.Summary.CategoryPercentages[category.Key]}% |");
+                foreach (var category in (result.Summary?.DifferencesByChangeType ?? new System.Collections.Generic.Dictionary<DifferenceCategory, System.Collections.Generic.List<Difference>>()).OrderByDescending(c => c.Value.Count).Take(5)) {
+                    if (result.Summary != null && result.Summary.CategoryPercentages != null && result.Summary.CategoryPercentages.TryGetValue(category.Key, out var pct)) {
+                        sb.AppendLine($"| {this.FormatCategoryName(category.Key)} | {category.Value.Count} | {pct}% |");
+                    }
+                    else {
+                        sb.AppendLine($"| {this.FormatCategoryName(category.Key)} | {category.Value.Count} | 0% |");
+                    }
                 }
 
                 sb.AppendLine();
@@ -183,18 +176,17 @@ public class FileUtilities : IFileUtilities
                 sb.AppendLine("### Sample Differences");
                 sb.AppendLine();
 
-                var sampleDiffs = result.Result.Differences.Take(10).ToList();
-                foreach (var diff in sampleDiffs)
-                {
+                var sampleDiffs = result.Result?.Differences?.Take(10).ToList() ?? new System.Collections.Generic.List<KellermanSoftware.CompareNetObjects.Difference>();
+                foreach (var diff in sampleDiffs) {
                     sb.AppendLine($"- Property: `{diff.PropertyName}`");
-                    sb.AppendLine($"  - Expected: `{FormatValue(diff.Object1Value)}`");
-                    sb.AppendLine($"  - Actual: `{FormatValue(diff.Object2Value)}`");
+                    sb.AppendLine($"  - Expected: `{this.FormatValue(diff.Object1Value)}`");
+                    sb.AppendLine($"  - Actual: `{this.FormatValue(diff.Object2Value)}`");
                     sb.AppendLine();
                 }
 
-                if (result.Result.Differences.Count > 10)
-                {
-                    sb.AppendLine($"*...and {result.Result.Differences.Count - 10} more differences*");
+                var totalDiffCount = result.Result?.Differences?.Count ?? 0;
+                if (totalDiffCount > 10) {
+                    sb.AppendLine($"*...and {Math.Max(0, totalDiffCount - 10)} more differences*");
                     sb.AppendLine();
                 }
             }
@@ -207,12 +199,11 @@ public class FileUtilities : IFileUtilities
     }
 
     /// <summary>
-    /// Generates a pattern analysis report
+    /// Generates a pattern analysis report.
     /// </summary>
-    /// <param name="analysis">The pattern analysis data</param>
-    /// <returns>Markdown content as a string</returns>
-    public string GeneratePatternAnalysisReport(ComparisonPatternAnalysis analysis)
-    {
+    /// <param name="analysis">The pattern analysis data.</param>
+    /// <returns>Markdown content as a string.</returns>
+    public string GeneratePatternAnalysisReport(ComparisonPatternAnalysis analysis) {
         var sb = new StringBuilder();
 
         sb.AppendLine("# XML Comparison Pattern Analysis");
@@ -230,14 +221,13 @@ public class FileUtilities : IFileUtilities
         sb.AppendLine("| Category | Count | Percentage |");
         sb.AppendLine("|----------|-------|------------|");
 
-        foreach (var category in analysis.TotalByCategory.OrderByDescending(c => c.Value))
-        {
-            if (category.Value > 0)
-            {
-                double percentage = (double)category.Value / analysis.TotalDifferences * 100;
-                sb.AppendLine($"| {FormatCategoryName(category.Key)} | {category.Value} | {percentage:F1}% |");
+        foreach (var category in analysis.TotalByCategory.OrderByDescending(c => c.Value)) {
+            if (category.Value > 0) {
+                var percentage = (double)category.Value / analysis.TotalDifferences * 100;
+                sb.AppendLine($"| {this.FormatCategoryName(category.Key)} | {category.Value} | {percentage:F1}% |");
             }
         }
+
         sb.AppendLine();
 
         // Common patterns across files
@@ -248,10 +238,10 @@ public class FileUtilities : IFileUtilities
         sb.AppendLine("| Property Path | Files Affected | Total Occurrences |");
         sb.AppendLine("|--------------|----------------|-------------------|");
 
-        foreach (var pattern in analysis.CommonPathPatterns)
-        {
+        foreach (var pattern in analysis.CommonPathPatterns) {
             sb.AppendLine($"| `{pattern.PatternPath}` | {pattern.FileCount} | {pattern.OccurrenceCount} |");
         }
+
         sb.AppendLine();
 
         // Common value changes
@@ -260,27 +250,24 @@ public class FileUtilities : IFileUtilities
         sb.AppendLine("The following specific property value changes appeared in multiple files:");
         sb.AppendLine();
 
-        foreach (var change in analysis.CommonPropertyChanges.Take(10))
-        {
+        foreach (var change in analysis.CommonPropertyChanges.Take(10)) {
             sb.AppendLine($"### `{change.PropertyName}`");
             sb.AppendLine();
             sb.AppendLine($"Changed in {change.AffectedFiles.Count} files, {change.OccurrenceCount} total occurrences");
             sb.AppendLine();
 
-            foreach (var valueChange in change.CommonChanges)
-            {
-                sb.AppendLine($"- From: `{TruncateText(valueChange.Key, 50)}` → To: `{TruncateText(valueChange.Value, 50)}`");
+            foreach (var valueChange in change.CommonChanges) {
+                sb.AppendLine($"- From: `{this.TruncateText(valueChange.Key, 50)}` → To: `{this.TruncateText(valueChange.Value, 50)}`");
             }
+
             sb.AppendLine();
             sb.AppendLine("Affected files:");
             sb.AppendLine();
-            foreach (var file in change.AffectedFiles.Take(5))
-            {
+            foreach (var file in change.AffectedFiles.Take(5)) {
                 sb.AppendLine($"- {file}");
             }
 
-            if (change.AffectedFiles.Count > 5)
-            {
+            if (change.AffectedFiles.Count > 5) {
                 sb.AppendLine($"- ...and {change.AffectedFiles.Count - 5} more");
             }
 
@@ -288,15 +275,13 @@ public class FileUtilities : IFileUtilities
         }
 
         // File groups
-        if (analysis.SimilarFileGroups.Count > 0)
-        {
+        if (analysis.SimilarFileGroups.Count > 0) {
             sb.AppendLine("## File Similarity Groups");
             sb.AppendLine();
             sb.AppendLine("Files with similar difference patterns have been grouped:");
             sb.AppendLine();
 
-            foreach (var group in analysis.SimilarFileGroups.OrderByDescending(g => g.FileCount))
-            {
+            foreach (var group in analysis.SimilarFileGroups.OrderByDescending(g => g.FileCount)) {
                 sb.AppendLine($"### {group.GroupName} ({group.FileCount} files)");
                 sb.AppendLine();
                 sb.AppendLine($"**Pattern:** {group.CommonPattern}");
@@ -304,8 +289,7 @@ public class FileUtilities : IFileUtilities
                 sb.AppendLine("Files in this group:");
                 sb.AppendLine();
 
-                foreach (var file in group.FilePairs)
-                {
+                foreach (var file in group.FilePairs) {
                     sb.AppendLine($"- {file}");
                 }
 
@@ -317,12 +301,11 @@ public class FileUtilities : IFileUtilities
     }
 
     /// <summary>
-    /// Generates a semantic difference analysis report
+    /// Generates a semantic difference analysis report.
     /// </summary>
-    /// <param name="analysis">The semantic difference analysis</param>
-    /// <returns>Markdown content as a string</returns>
-    public string GenerateSemanticAnalysisReport(SemanticDifferenceAnalysis analysis)
-    {
+    /// <param name="analysis">The semantic difference analysis.</param>
+    /// <returns>Markdown content as a string.</returns>
+    public string GenerateSemanticAnalysisReport(SemanticDifferenceAnalysis analysis) {
         var sb = new StringBuilder();
 
         sb.AppendLine("# Semantic Difference Analysis Report");
@@ -339,14 +322,13 @@ public class FileUtilities : IFileUtilities
         sb.AppendLine("| Group | Description | Differences | Files | Confidence |");
         sb.AppendLine("|-------|-------------|-------------|-------|------------|");
 
-        foreach (var group in analysis.SemanticGroups)
-        {
+        foreach (var group in analysis.SemanticGroups) {
             sb.AppendLine($"| **{group.GroupName}** | {group.SemanticDescription} | {group.DifferenceCount} | {group.FileCount} | {group.ConfidenceLevel}% |");
         }
+
         sb.AppendLine();
 
-        foreach (var group in analysis.SemanticGroups)
-        {
+        foreach (var group in analysis.SemanticGroups) {
             sb.AppendLine($"### {group.GroupName}");
             sb.AppendLine();
             sb.AppendLine($"**Description:** {group.SemanticDescription}");
@@ -358,14 +340,14 @@ public class FileUtilities : IFileUtilities
             // Related properties
             sb.AppendLine("#### Related Properties");
             sb.AppendLine();
-            foreach (var prop in group.RelatedProperties.Take(10))
-            {
+            foreach (var prop in group.RelatedProperties.Take(10)) {
                 sb.AppendLine($"- `{prop}`");
             }
-            if (group.RelatedProperties.Count > 10)
-            {
+
+            if (group.RelatedProperties.Count > 10) {
                 sb.AppendLine($"- *...and {group.RelatedProperties.Count - 10} more properties*");
             }
+
             sb.AppendLine();
 
             // Example differences
@@ -374,14 +356,13 @@ public class FileUtilities : IFileUtilities
             sb.AppendLine("| Property | Old Value | New Value |");
             sb.AppendLine("|----------|-----------|-----------|");
 
-            foreach (var diff in group.Differences.Take(5))
-            {
-                sb.AppendLine($"| `{diff.PropertyName}` | {TruncateText(FormatValue(diff.Object1Value), 50)} | {TruncateText(FormatValue(diff.Object2Value), 50)} |");
+            foreach (var diff in group.Differences.Take(5)) {
+                sb.AppendLine($"| `{diff.PropertyName}` | {this.TruncateText(this.FormatValue(diff.Object1Value), 50)} | {this.TruncateText(this.FormatValue(diff.Object2Value), 50)} |");
             }
+
             sb.AppendLine();
 
-            if (group.Differences.Count > 5)
-            {
+            if (group.Differences.Count > 5) {
                 sb.AppendLine($"*...and {group.Differences.Count - 5} more differences*");
                 sb.AppendLine();
             }
@@ -394,8 +375,7 @@ public class FileUtilities : IFileUtilities
             sb.AppendLine();
 
             // Generate specific testing recommendations based on the group
-            switch (group.GroupName)
-            {
+            switch (group.GroupName) {
                 case "Status Changes":
                     sb.AppendLine("- Verify the status transitions are valid according to business rules");
                     sb.AppendLine("- Check that UI correctly reflects different statuses with appropriate styling");
@@ -460,18 +440,15 @@ public class FileUtilities : IFileUtilities
             .OrderByDescending(g => g.ConfidenceLevel * g.DifferenceCount)
             .Take(3);
 
-        foreach (var group in topGroups)
-        {
+        foreach (var group in topGroups) {
             sb.AppendLine($"- **{group.GroupName}** - {group.DifferenceCount} differences across {group.FileCount} files");
         }
 
         return sb.ToString();
     }
 
-    private string FormatCategoryName(DifferenceCategory category)
-    {
-        return category switch
-        {
+    private string FormatCategoryName(DifferenceCategory category) {
+        return category switch {
             DifferenceCategory.NumericValueChanged => "Numeric Value Changed",
             DifferenceCategory.DateTimeChanged => "Date/Time Changed",
             DifferenceCategory.BooleanValueChanged => "Boolean Value Changed",
@@ -484,18 +461,19 @@ public class FileUtilities : IFileUtilities
         };
     }
 
-    private string FormatValue(object value, int maxLength = 100)
-    {
-        if (value == null)
+    private string FormatValue(object value, int maxLength = 100) {
+        if (value == null) {
             return "null";
+        }
 
-        if (value is DateTime dt)
+        if (value is DateTime dt) {
             return dt.ToString("yyyy-MM-dd HH:mm:ss");
+        }
 
-        if (value is string str)
-        {
-            if (str.Length <= maxLength)
+        if (value is string str) {
+            if (str.Length <= maxLength) {
                 return str;
+            }
 
             return str.Substring(0, maxLength - 3) + "...";
         }
@@ -503,10 +481,10 @@ public class FileUtilities : IFileUtilities
         return value.ToString();
     }
 
-    private string TruncateText(string text, int maxLength)
-    {
-        if (string.IsNullOrEmpty(text) || text.Length <= maxLength)
+    private string TruncateText(string text, int maxLength) {
+        if (string.IsNullOrEmpty(text) || text.Length <= maxLength) {
             return text;
+        }
 
         return text.Substring(0, maxLength - 3) + "...";
     }

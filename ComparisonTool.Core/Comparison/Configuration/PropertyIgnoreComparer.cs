@@ -1,5 +1,7 @@
-using Microsoft.Extensions.Logging;
+// <copyright file="PropertyIgnoreComparer.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
 
-namespace ComparisonTool.Core.Comparison.Configuration
-{
-} 
+namespace ComparisonTool.Core.Comparison.Configuration {
+    using Microsoft.Extensions.Logging;
+}

@@ -1,44 +1,44 @@
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
-using System.Text.RegularExpressions;
-using KellermanSoftware.CompareNetObjects;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
+// <copyright file="SmartIgnoreProcessor.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
 
-namespace ComparisonTool.Core.Comparison.Configuration
-{
+namespace ComparisonTool.Core.Comparison.Configuration {
+    using System;
+    using System.Collections;
+    using System.Collections.Generic;
+    using System.Linq;
+    using System.Reflection;
+    using System.Text.RegularExpressions;
+    using KellermanSoftware.CompareNetObjects;
+    using Microsoft.Extensions.Logging;
+    using Microsoft.Extensions.Logging.Abstractions;
+
     /// <summary>
-    /// Processes smart ignore rules and applies them to comparisons
+    /// Processes smart ignore rules and applies them to comparisons.
     /// </summary>
-    public class SmartIgnoreProcessor
-    {
-        private readonly ILogger _logger;
+    public class SmartIgnoreProcessor {
+        private readonly ILogger logger;
 
-        public SmartIgnoreProcessor(ILogger logger = null)
-        {
-            _logger = logger ?? NullLogger.Instance;
+        public SmartIgnoreProcessor(ILogger logger = null) {
+            this.logger = logger ?? NullLogger.Instance;
         }
 
         /// <summary>
-        /// Apply smart ignore rules to comparison configuration
+        /// Apply smart ignore rules to comparison configuration.
         /// </summary>
-        public void ApplyRulesToConfig(List<SmartIgnoreRule> rules, ComparisonConfig config)
-        {
-            if (rules == null || !rules.Any())
+        public void ApplyRulesToConfig(List<SmartIgnoreRule> rules, ComparisonConfig config) {
+            if (rules == null || !rules.Any()) {
                 return;
+            }
 
             var activeRules = rules.Where(r => r.IsEnabled).ToList();
-            _logger.LogInformation("Applying {Count} active smart ignore rules to configuration", activeRules.Count);
+            this.logger.LogInformation("Applying {Count} active smart ignore rules to configuration", activeRules.Count);
 
             // Handle collection ordering rules
             var collectionOrderingRule = activeRules.FirstOrDefault(r => r.Type == SmartIgnoreType.CollectionOrdering);
-            if (collectionOrderingRule != null)
-            {
+            if (collectionOrderingRule != null) {
                 config.IgnoreCollectionOrder = true;
-                _logger.LogDebug("Applied collection ordering rule: {Description}", collectionOrderingRule.Description);
+                this.logger.LogDebug("Applied collection ordering rule: {Description}", collectionOrderingRule.Description);
             }
 
             // Note: Property-based rules will be handled during result filtering
@@ -46,32 +46,32 @@ namespace ComparisonTool.Core.Comparison.Configuration
         }
 
         /// <summary>
-        /// Filter comparison result based on smart ignore rules
+        /// Filter comparison result based on smart ignore rules.
         /// </summary>
-        public ComparisonResult FilterResult(ComparisonResult result, List<SmartIgnoreRule> rules, Type modelType = null)
-        {
-            if (result == null || !result.Differences.Any() || rules == null)
+        /// <returns></returns>
+        public ComparisonResult FilterResult(ComparisonResult result, List<SmartIgnoreRule> rules, Type modelType = null) {
+            if (result == null || !result.Differences.Any() || rules == null) {
                 return result;
+            }
 
             var activeRules = rules.Where(r => r.IsEnabled).ToList();
-            if (!activeRules.Any())
+            if (!activeRules.Any()) {
                 return result;
+            }
 
-            _logger.LogInformation("Filtering {Count} differences using {RuleCount} smart ignore rules", 
+            this.logger.LogInformation(
+                "Filtering {Count} differences using {RuleCount} smart ignore rules",
                 result.Differences.Count, activeRules.Count);
 
             var originalCount = result.Differences.Count;
             var filteredDifferences = new List<Difference>();
 
-            foreach (var difference in result.Differences)
-            {
-                if (!ShouldIgnoreDifference(difference, activeRules, modelType))
-                {
+            foreach (var difference in result.Differences) {
+                if (!this.ShouldIgnoreDifference(difference, activeRules, modelType)) {
                     filteredDifferences.Add(difference);
                 }
-                else
-                {
-                    _logger.LogDebug("Filtered out difference for property: {PropertyName}", difference.PropertyName);
+                else {
+                    this.logger.LogDebug("Filtered out difference for property: {PropertyName}", difference.PropertyName);
                 }
             }
 
@@ -81,9 +81,9 @@ namespace ComparisonTool.Core.Comparison.Configuration
             var filteredCount = result.Differences.Count;
             var removedCount = originalCount - filteredCount;
 
-            if (removedCount > 0)
-            {
-                _logger.LogInformation("Smart filtering removed {RemovedCount} differences from {OriginalCount} total (kept {FilteredCount})", 
+            if (removedCount > 0) {
+                this.logger.LogInformation(
+                    "Smart filtering removed {RemovedCount} differences from {OriginalCount} total (kept {FilteredCount})",
                     removedCount, originalCount, filteredCount);
             }
 
@@ -91,26 +91,23 @@ namespace ComparisonTool.Core.Comparison.Configuration
         }
 
         /// <summary>
-        /// Check if a difference should be ignored based on smart rules
+        /// Check if a difference should be ignored based on smart rules.
         /// </summary>
-        private bool ShouldIgnoreDifference(Difference difference, List<SmartIgnoreRule> rules, Type modelType)
-        {
-            var propertyName = GetPropertyName(difference.PropertyName);
-            var propertyType = GetPropertyType(difference, modelType);
+        private bool ShouldIgnoreDifference(Difference difference, List<SmartIgnoreRule> rules, Type modelType) {
+            var propertyName = this.GetPropertyName(difference.PropertyName);
+            var propertyType = this.GetPropertyType(difference, modelType);
 
             // Special handling for unknown element scenarios - ignore differences where one side has default values
             // and the other side has null, which often indicates unknown elements not being deserialized
-            if (IsUnknownElementScenario(difference))
-            {
-                _logger.LogDebug("Ignoring potential unknown element difference for property: {PropertyName}", propertyName);
+            if (this.IsUnknownElementScenario(difference)) {
+                this.logger.LogDebug("Ignoring potential unknown element difference for property: {PropertyName}", propertyName);
                 return true;
             }
 
-            foreach (var rule in rules)
-            {
-                if (MatchesRule(propertyName, propertyType, rule))
-                {
-                    _logger.LogDebug("Property '{PropertyName}' matches rule: {RuleDescription}", 
+            foreach (var rule in rules) {
+                if (this.MatchesRule(propertyName, propertyType, rule)) {
+                    this.logger.LogDebug(
+                        "Property '{PropertyName}' matches rule: {RuleDescription}",
                         propertyName, rule.Description);
                     return true;
                 }
@@ -120,26 +117,22 @@ namespace ComparisonTool.Core.Comparison.Configuration
         }
 
         /// <summary>
-        /// Check if this difference represents an unknown element scenario (null vs default value)
+        /// Check if this difference represents an unknown element scenario (null vs default value).
         /// </summary>
-        private bool IsUnknownElementScenario(Difference difference)
-        {
+        private bool IsUnknownElementScenario(Difference difference) {
             var value1 = difference.Object1Value;
             var value2 = difference.Object2Value;
 
             // Check for null vs default value scenarios
-            if ((value1 == null && IsDefaultValue(value2)) || 
-                (value2 == null && IsDefaultValue(value1)))
-            {
+            if ((value1 == null && this.IsDefaultValue(value2)) ||
+                (value2 == null && this.IsDefaultValue(value1))) {
                 return true;
             }
 
             // Check for collection count differences where one is 0 (empty/default) and other is null
-            if (difference.PropertyName?.Contains("Count") == true)
-            {
+            if (difference.PropertyName?.Contains("Count") == true) {
                 if ((value1?.Equals(0) == true && value2 == null) ||
-                    (value2?.Equals(0) == true && value1 == null))
-                {
+                    (value2?.Equals(0) == true && value1 == null)) {
                     return true;
                 }
             }
@@ -148,41 +141,63 @@ namespace ComparisonTool.Core.Comparison.Configuration
         }
 
         /// <summary>
-        /// Check if a value represents a default value for its type
+        /// Check if a value represents a default value for its type.
         /// </summary>
-        private bool IsDefaultValue(object value)
-        {
-            if (value == null) return true;
+        private bool IsDefaultValue(object value) {
+            if (value == null) {
+                return true;
+            }
 
             var type = value.GetType();
 
-            if (type == typeof(int) && value.Equals(0)) return true;
-            if (type == typeof(double) && value.Equals(0.0)) return true;
-            if (type == typeof(decimal) && value.Equals(0m)) return true;
-            if (type == typeof(bool) && value.Equals(false)) return true;
-            if (type == typeof(string) && string.IsNullOrEmpty((string)value)) return true;
-            if (type == typeof(DateTime) && value.Equals(DateTime.MinValue)) return true;
-            if (type == typeof(Guid) && value.Equals(Guid.Empty)) return true;
-            if (type == typeof(TimeSpan) && value.Equals(TimeSpan.Zero)) return true;
+            if (type == typeof(int) && value.Equals(0)) {
+                return true;
+            }
+
+            if (type == typeof(double) && value.Equals(0.0)) {
+                return true;
+            }
+
+            if (type == typeof(decimal) && value.Equals(0m)) {
+                return true;
+            }
+
+            if (type == typeof(bool) && value.Equals(false)) {
+                return true;
+            }
+
+            if (type == typeof(string) && string.IsNullOrEmpty((string)value)) {
+                return true;
+            }
+
+            if (type == typeof(DateTime) && value.Equals(DateTime.MinValue)) {
+                return true;
+            }
+
+            if (type == typeof(Guid) && value.Equals(Guid.Empty)) {
+                return true;
+            }
+
+            if (type == typeof(TimeSpan) && value.Equals(TimeSpan.Zero)) {
+                return true;
+            }
 
             return false;
         }
 
         /// <summary>
-        /// Check if a property matches a specific rule
+        /// Check if a property matches a specific rule.
         /// </summary>
-        private bool MatchesRule(string propertyName, Type propertyType, SmartIgnoreRule rule)
-        {
-            switch (rule.Type)
-            {
+        private bool MatchesRule(string propertyName, Type propertyType, SmartIgnoreRule rule) {
+            switch (rule.Type) {
                 case SmartIgnoreType.PropertyName:
                     return string.Equals(propertyName, rule.Value, StringComparison.OrdinalIgnoreCase);
 
                 case SmartIgnoreType.NamePattern:
-                    return MatchesPattern(propertyName, rule.Value);
+                    return this.MatchesPattern(propertyName, rule.Value);
 
                 case SmartIgnoreType.PropertyType:
-                    return propertyType != null && 
+                    return propertyType != null &&
                            string.Equals(propertyType.FullName, rule.Value, StringComparison.OrdinalIgnoreCase);
 
                 case SmartIgnoreType.CollectionOrdering:
@@ -195,15 +210,14 @@ namespace ComparisonTool.Core.Comparison.Configuration
         }
 
         /// <summary>
-        /// Check if a property name matches a wildcard pattern
+        /// Check if a property name matches a wildcard pattern.
         /// </summary>
-        private bool MatchesPattern(string propertyName, string pattern)
-        {
-            if (string.IsNullOrEmpty(propertyName) || string.IsNullOrEmpty(pattern))
+        private bool MatchesPattern(string propertyName, string pattern) {
+            if (string.IsNullOrEmpty(propertyName) || string.IsNullOrEmpty(pattern)) {
                 return false;
+            }
 
-            try
-            {
+            try {
                 // Convert wildcard pattern to regex
                 var regexPattern = "^" + Regex.Escape(pattern)
                     .Replace("\\*", ".*")
@@ -211,20 +225,19 @@ namespace ComparisonTool.Core.Comparison.Configuration
 
                 return Regex.IsMatch(propertyName, regexPattern, RegexOptions.IgnoreCase);
             }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Error matching pattern '{Pattern}' against '{PropertyName}'", pattern, propertyName);
+            catch (Exception ex) {
+                this.logger.LogWarning(ex, "Error matching pattern '{Pattern}' against '{PropertyName}'", pattern, propertyName);
                 return false;
             }
         }
 
         /// <summary>
-        /// Extract the actual property name from a property path
+        /// Extract the actual property name from a property path.
         /// </summary>
-        private string GetPropertyName(string propertyPath)
-        {
-            if (string.IsNullOrEmpty(propertyPath))
+        private string GetPropertyName(string propertyPath) {
+            if (string.IsNullOrEmpty(propertyPath)) {
                 return propertyPath;
+            }
 
             // Handle array indices: "Results[0].Name" -> "Name"
             // Handle nested paths: "Body.Response.Name" -> "Name"
@@ -237,16 +250,13 @@ namespace ComparisonTool.Core.Comparison.Configuration
         }
 
         /// <summary>
-        /// Try to determine the property type from the difference
+        /// Try to determine the property type from the difference.
         /// </summary>
-        private Type GetPropertyType(Difference difference, Type modelType)
-        {
-            try
-            {
+        private Type GetPropertyType(Difference difference, Type modelType) {
+            try {
                 // Use the type of the actual values
                 var value = difference.Object1Value ?? difference.Object2Value;
-                if (value != null)
-                {
+                if (value != null) {
                     return value.GetType();
                 }
 
@@ -254,55 +264,51 @@ namespace ComparisonTool.Core.Comparison.Configuration
                 // For now, this simple approach should handle most cases
                 return null;
             }
-            catch
-            {
+            catch {
                 return null;
             }
         }
 
         /// <summary>
-        /// Get property information for a given model type (for advanced scenarios)
+        /// Get property information for a given model type (for advanced scenarios).
         /// </summary>
-        public List<PropertyInfo> GetModelProperties(Type modelType)
-        {
-            if (modelType == null)
+        /// <returns></returns>
+        public List<PropertyInfo> GetModelProperties(Type modelType) {
+            if (modelType == null) {
                 return new List<PropertyInfo>();
-
-            try
-            {
-                return GetAllProperties(modelType).ToList();
             }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Error getting properties for type {TypeName}", modelType.Name);
+
+            try {
+                return this.GetAllProperties(modelType).ToList();
+            }
+            catch (Exception ex) {
+                this.logger.LogWarning(ex, "Error getting properties for type {TypeName}", modelType.Name);
                 return new List<PropertyInfo>();
             }
         }
 
         /// <summary>
-        /// Recursively get all properties from a type
+        /// Recursively get all properties from a type.
         /// </summary>
-        private IEnumerable<PropertyInfo> GetAllProperties(Type type, HashSet<Type> visited = null, int depth = 0)
-        {
-            if (depth > 5 || type == null)
+        private IEnumerable<PropertyInfo> GetAllProperties(Type type, HashSet<Type> visited = null, int depth = 0) {
+            if (depth > 5 || type == null) {
                 yield break;
+            }
 
             visited ??= new HashSet<Type>();
-            if (visited.Contains(type))
+            if (visited.Contains(type)) {
                 yield break;
+            }
 
             visited.Add(type);
 
             var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
-            foreach (var prop in properties)
-            {
+            foreach (var prop in properties) {
                 yield return prop;
 
                 // Recursively explore complex types
-                if (!IsSimpleType(prop.PropertyType) && !IsCollectionType(prop.PropertyType))
-                {
-                    foreach (var nestedProp in GetAllProperties(prop.PropertyType, visited, depth + 1))
-                    {
+                if (!this.IsSimpleType(prop.PropertyType) && !this.IsCollectionType(prop.PropertyType)) {
+                    foreach (var nestedProp in this.GetAllProperties(prop.PropertyType, visited, depth + 1)) {
                         yield return nestedProp;
                     }
                 }
@@ -310,10 +316,9 @@ namespace ComparisonTool.Core.Comparison.Configuration
         }
 
         /// <summary>
-        /// Check if a type is a simple/primitive type
+        /// Check if a type is a simple/primitive type.
         /// </summary>
-        private bool IsSimpleType(Type type)
-        {
+        private bool IsSimpleType(Type type) {
             return type.IsPrimitive ||
                    type == typeof(string) ||
                    type == typeof(DateTime) ||
@@ -324,16 +329,14 @@ namespace ComparisonTool.Core.Comparison.Configuration
         }
 
         /// <summary>
-        /// Check if a type is a collection type
+        /// Check if a type is a collection type.
         /// </summary>
-        private bool IsCollectionType(Type type)
-        {
+        private bool IsCollectionType(Type type) {
             return type.IsArray ||
                    (type.IsGenericType && (
                        typeof(IEnumerable<>).IsAssignableFrom(type.GetGenericTypeDefinition()) ||
                        typeof(ICollection<>).IsAssignableFrom(type.GetGenericTypeDefinition()) ||
-                       typeof(IList<>).IsAssignableFrom(type.GetGenericTypeDefinition())
-                   ));
+                       typeof(IList<>).IsAssignableFrom(type.GetGenericTypeDefinition())));
         }
     }
-} 
+}

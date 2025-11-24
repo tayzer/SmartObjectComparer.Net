@@ -1,5 +1,6 @@
 @namespace ComparisonTool.Web.Components.Comparison
 @using ComparisonTool.Web.Components.Shared
+@using System.Linq
 
 <div class="card">
     <div class="card-header">
@@ -42,10 +43,10 @@
 
 @code {
     [Parameter]
-    public IEnumerable<string> ModelNames { get; set; }
+    public IEnumerable<string> ModelNames { get; set; } = Enumerable.Empty<string>();
 
     [Parameter]
-    public string SelectedModelName { get; set; }
+    public string? SelectedModelName { get; set; }
 
     [Parameter]
     public EventCallback<string> OnModelNameChanged { get; set; }
@@ -64,7 +65,7 @@
 
     private string SelectedModelNameLocal
     {
-        get => SelectedModelName;
+        get => SelectedModelName ?? string.Empty;
         set
         {
             if (SelectedModelName != value)

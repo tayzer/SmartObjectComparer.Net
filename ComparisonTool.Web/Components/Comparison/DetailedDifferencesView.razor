@@ -1,6 +1,7 @@
 ﻿@namespace ComparisonTool.Web.Components.Comparison
 @using System.Text.RegularExpressions
 @using ComparisonTool.Core
+@using ComparisonTool.Core.Utilities
 @using ComparisonTool.Core.Comparison.Analysis
 @using ComparisonTool.Core.Comparison.Results
 @using KellermanSoftware.CompareNetObjects
@@ -114,8 +115,11 @@
     {
         if (ComparisonResult != null)
         {
+            // Group by normalized property path so System.Collections.IList.Item[...] and indexed
+            // variants are treated as the same logical property and don't appear duplicated.
             GroupedDifferences = (ComparisonResult.Differences ?? Enumerable.Empty<Difference>())
-                .GroupBy(d => GetGroupKey(d.PropertyName))
+                .Select(d => new { Normalized = PropertyPathNormalizer.NormalizePropertyPath(d.PropertyName), Diff = d })
+                .GroupBy(x => x.Normalized, x => x.Diff)
                 .OrderBy(g => g.Key);
 
             foreach (var group in GroupedDifferences)
@@ -136,33 +140,39 @@
 
     private string GetGroupKey(string propertyPath)
     {
-        if (string.IsNullOrEmpty(propertyPath)) return "(Root)";
+        // Operate on normalized path to ensure grouping is consistent with normalization
+        var normalized = PropertyPathNormalizer.NormalizePropertyPath(propertyPath);
+        if (string.IsNullOrEmpty(normalized)) return "(Root)";
 
-        var match = Regex.Match(propertyPath, @"(.*)(\.[\w]+|\[\d+\])$", RegexOptions.RightToLeft);
+        var match = Regex.Match(normalized, @"(.*)(\.[\w]+|\[\d+\])$", RegexOptions.RightToLeft);
 
         if (match.Success && !string.IsNullOrEmpty(match.Groups[1].Value))
         {
             return match.Groups[1].Value;
         }
 
-        if (!propertyPath.Contains(".") && !propertyPath.Contains("["))
+        if (!normalized.Contains(".") && !normalized.Contains("["))
         {
             return "(Root Properties)";
         }
 
-        return propertyPath;
+        return normalized;
     }
 
     private string GetRelativePropertyName(string fullPath, string groupKey)
     {
         if (string.IsNullOrEmpty(fullPath)) return "";
-        if (groupKey == "(Root Properties)") return fullPath;
-        if (fullPath.StartsWith(groupKey))
+
+        // Use normalized full path for display relative to the normalized group key
+        var normalizedFull = PropertyPathNormalizer.NormalizePropertyPath(fullPath);
+        if (groupKey == "(Root Properties)") return normalizedFull;
+        if (normalizedFull.StartsWith(groupKey))
         {
-            var relative = fullPath.Substring(groupKey.Length);
+            var relative = normalizedFull.Substring(groupKey.Length);
             return relative.TrimStart('.', '[').TrimEnd(']');
         }
-        return fullPath;
+
+        return normalizedFull;
     }
 
     private bool IsGroupCollapsed(string groupKey)

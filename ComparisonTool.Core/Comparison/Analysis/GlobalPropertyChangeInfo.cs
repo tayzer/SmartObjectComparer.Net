@@ -1,19 +1,22 @@
-﻿namespace ComparisonTool.Core.Comparison.Analysis;
+// <copyright file="GlobalPropertyChangeInfo.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
 
-public class GlobalPropertyChangeInfo
-{
-    public string PropertyName { get; set; }
+namespace ComparisonTool.Core.Comparison.Analysis;
 
-    // Changed to field for use with Interlocked.Increment
-    public int _occurrenceCount;
+public class GlobalPropertyChangeInfo {
+    public string PropertyName { get; set; } = string.Empty;
 
-    // Property wrapper for the field
-    public int OccurrenceCount
-    {
-        get => _occurrenceCount;
-        set => _occurrenceCount = value;
+    // Public field retained for use with Interlocked operations
+    public int OccurrenceCountValue;
+
+    // Property wrapper for the field (keeps API compatibility)
+    public int OccurrenceCount {
+        get => this.OccurrenceCountValue;
+        set => this.OccurrenceCountValue = value;
     }
 
     public Dictionary<string, string> CommonChanges { get; set; } = new();
+
     public List<string> AffectedFiles { get; set; } = new();
 }

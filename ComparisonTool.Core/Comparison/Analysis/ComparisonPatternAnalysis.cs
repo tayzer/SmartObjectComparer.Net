@@ -1,10 +1,21 @@
-﻿namespace ComparisonTool.Core.Comparison.Analysis;
+// <copyright file="ComparisonPatternAnalysis.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
 
-public class ComparisonPatternAnalysis
-{
-    public int TotalFilesPaired { get; set; }
-    public int FilesWithDifferences { get; set; }
-    public int TotalDifferences { get; set; }
+namespace ComparisonTool.Core.Comparison.Analysis;
+
+public class ComparisonPatternAnalysis {
+    public int TotalFilesPaired {
+        get; set;
+    }
+
+    public int FilesWithDifferences {
+        get; set;
+    }
+
+    public int TotalDifferences {
+        get; set;
+    }
 
     // Common path patterns across files
     public List<GlobalPatternInfo> CommonPathPatterns { get; set; } = new();

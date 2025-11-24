@@ -1,18 +1,23 @@
+// <copyright file="TestModels.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using System.Text.Json.Serialization;
 
 namespace ComparisonTool.Domain.Models;
 
 /// <summary>
 /// Test domain model for validating JSON comparison functionality
-/// Represents a customer order with various data types and nested structures
+/// Represents a customer order with various data types and nested structures.
 /// </summary>
-public class CustomerOrder
-{
+public class CustomerOrder {
     [JsonPropertyName("orderId")]
     public string OrderId { get; set; } = string.Empty;
 
     [JsonPropertyName("orderDate")]
-    public DateTime OrderDate { get; set; }
+    public DateTime OrderDate {
+        get; set;
+    }
 
     [JsonPropertyName("customer")]
     public Customer Customer { get; set; } = new();
@@ -30,22 +35,29 @@ public class CustomerOrder
     public PaymentInfo Payment { get; set; } = new();
 
     [JsonPropertyName("status")]
-    public OrderStatus Status { get; set; }
+    public OrderStatus Status {
+        get; set;
+    }
 
     [JsonPropertyName("totalAmount")]
-    public decimal TotalAmount { get; set; }
+    public decimal TotalAmount {
+        get; set;
+    }
 
     [JsonPropertyName("notes")]
-    public string? Notes { get; set; }
+    public string? Notes {
+        get; set;
+    }
 
     [JsonPropertyName("tags")]
     public List<string> Tags { get; set; } = new();
 }
 
-public class Customer
-{
+public class Customer {
     [JsonPropertyName("id")]
-    public int Id { get; set; }
+    public int Id {
+        get; set;
+    }
 
     [JsonPropertyName("firstName")]
     public string FirstName { get; set; } = string.Empty;
@@ -57,17 +69,22 @@ public class Customer
     public string Email { get; set; } = string.Empty;
 
     [JsonPropertyName("phone")]
-    public string? Phone { get; set; }
+    public string? Phone {
+        get; set;
+    }
 
     [JsonPropertyName("isVip")]
-    public bool IsVip { get; set; }
+    public bool IsVip {
+        get; set;
+    }
 
     [JsonPropertyName("loyaltyPoints")]
-    public int LoyaltyPoints { get; set; }
+    public int LoyaltyPoints {
+        get; set;
+    }
 }
 
-public class OrderItem
-{
+public class OrderItem {
     [JsonPropertyName("productId")]
     public string ProductId { get; set; } = string.Empty;
 
@@ -78,23 +95,30 @@ public class OrderItem
     public string Category { get; set; } = string.Empty;
 
     [JsonPropertyName("quantity")]
-    public int Quantity { get; set; }
+    public int Quantity {
+        get; set;
+    }
 
     [JsonPropertyName("unitPrice")]
-    public decimal UnitPrice { get; set; }
+    public decimal UnitPrice {
+        get; set;
+    }
 
     [JsonPropertyName("discount")]
-    public decimal Discount { get; set; }
+    public decimal Discount {
+        get; set;
+    }
 
     [JsonPropertyName("total")]
-    public decimal Total { get; set; }
+    public decimal Total {
+        get; set;
+    }
 
     [JsonPropertyName("attributes")]
     public List<ProductAttribute> Attributes { get; set; } = new();
 }
 
-public class ProductAttribute
-{
+public class ProductAttribute {
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
@@ -102,8 +126,7 @@ public class ProductAttribute
     public string Value { get; set; } = string.Empty;
 }
 
-public class Address
-{
+public class Address {
     [JsonPropertyName("street")]
     public string Street { get; set; } = string.Empty;
 
@@ -120,34 +143,37 @@ public class Address
     public string Country { get; set; } = string.Empty;
 }
 
-public class PaymentInfo
-{
+public class PaymentInfo {
     [JsonPropertyName("method")]
-    public PaymentMethod Method { get; set; }
+    public PaymentMethod Method {
+        get; set;
+    }
 
     [JsonPropertyName("cardLastFour")]
-    public string? CardLastFour { get; set; }
+    public string? CardLastFour {
+        get; set;
+    }
 
     [JsonPropertyName("transactionId")]
     public string TransactionId { get; set; } = string.Empty;
 
     [JsonPropertyName("processedDate")]
-    public DateTime ProcessedDate { get; set; }
+    public DateTime ProcessedDate {
+        get; set;
+    }
 }
 
-public enum OrderStatus
-{
+public enum OrderStatus {
     Pending,
     Processing,
     Shipped,
     Delivered,
-    Cancelled
+    Cancelled,
 }
 
-public enum PaymentMethod
-{
+public enum PaymentMethod {
     CreditCard,
     DebitCard,
     PayPal,
-    BankTransfer
-} 
+    BankTransfer,
+}

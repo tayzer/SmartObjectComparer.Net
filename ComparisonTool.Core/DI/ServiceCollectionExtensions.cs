@@ -1,3 +1,7 @@
+// <copyright file="ServiceCollectionExtensions.cs" company="PlaceholderCompany">
+// Copyright (c) PlaceholderCompany. All rights reserved.
+// </copyright>
+
 using ComparisonTool.Core.Comparison;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Models;
@@ -11,50 +15,45 @@ using Microsoft.Extensions.Logging;
 namespace ComparisonTool.Core.DI;
 
 /// <summary>
-/// Extension methods for registering services
+/// Extension methods for registering services.
 /// </summary>
-public static class ServiceCollectionExtensions
-{
+public static class ServiceCollectionExtensions {
     /// <summary>
-    /// Add XML comparison services with proper dependency injection
+    /// Add XML comparison services with proper dependency injection.
     /// </summary>
-    public static IServiceCollection AddXmlComparisonServices(this IServiceCollection services, IConfiguration configuration = null)
-    {
-        if (configuration != null)
-        {
+    /// <returns></returns>
+    public static IServiceCollection AddXmlComparisonServices(this IServiceCollection services, IConfiguration configuration = null) {
+        if (configuration != null) {
             services.AddOptions();
             services.Configure<ComparisonConfigurationOptions>(configuration.GetSection("ComparisonSettings"));
         }
 
-        services.AddSingleton<XmlSerializerFactory>(provider =>
-        {
+        services.AddSingleton<XmlSerializerFactory>(provider => {
             var logger = provider.GetRequiredService<ILogger<XmlSerializerFactory>>();
             return new XmlSerializerFactory(logger);
         });
 
         // Add performance tracking service
         services.AddSingleton<PerformanceTracker>();
-        
+
         // Add system resource monitor
         services.AddSingleton<SystemResourceMonitor>();
 
         // Add comparison result cache service
         services.AddSingleton<ComparisonResultCacheService>();
 
-        services.AddSingleton<IComparisonConfigurationService>(provider =>
-        {
+        services.AddSingleton<IComparisonConfigurationService>(provider => {
             var logger = provider.GetRequiredService<ILogger<ComparisonConfigurationService>>();
             var configurationService = new ComparisonConfigurationService(logger);
-            
+
             // Wire up the cache service
             var cacheService = provider.GetRequiredService<ComparisonResultCacheService>();
             configurationService.SetCacheService(cacheService);
-            
+
             return configurationService;
         });
 
-        services.AddSingleton<IXmlDeserializationService>(provider =>
-        {
+        services.AddSingleton<IXmlDeserializationService>(provider => {
             var logger = provider.GetRequiredService<ILogger<XmlDeserializationService>>();
             var serializerFactory = provider.GetRequiredService<XmlSerializerFactory>();
             var configService = provider.GetRequiredService<IComparisonConfigurationService>();
@@ -66,6 +65,9 @@ public static class ServiceCollectionExtensions
 
             return service;
         });
+
+        services.AddScoped<IComparisonEngine, ComparisonEngine>();
+        services.AddScoped<IComparisonOrchestrator, ComparisonOrchestrator>();
 
         services.AddScoped<IComparisonService, ComparisonService>();
 
@@ -79,19 +81,18 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Add JSON comparison services with proper dependency injection
+    /// Add JSON comparison services with proper dependency injection.
     /// </summary>
-    public static IServiceCollection AddJsonComparisonServices(this IServiceCollection services)
-    {
+    /// <returns></returns>
+    public static IServiceCollection AddJsonComparisonServices(this IServiceCollection services) {
         // Add JSON deserialization service
-        services.AddSingleton<JsonDeserializationService>(provider =>
-        {
+        services.AddSingleton<JsonDeserializationService>(provider => {
             var logger = provider.GetRequiredService<ILogger<JsonDeserializationService>>();
             var service = new JsonDeserializationService(logger);
-            
+
             // Register test domain model for JSON/XML comparison testing
             service.RegisterDomainModel<ComparisonTool.Domain.Models.CustomerOrder>("CustomerOrder");
-            
+
             return service;
         });
 
@@ -99,24 +100,22 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Add unified comparison services that support both XML and JSON formats
+    /// Add unified comparison services that support both XML and JSON formats.
     /// </summary>
-    public static IServiceCollection AddUnifiedComparisonServices(this IServiceCollection services, IConfiguration configuration = null)
-    {
+    /// <returns></returns>
+    public static IServiceCollection AddUnifiedComparisonServices(this IServiceCollection services, IConfiguration configuration = null) {
         // Add both XML and JSON services
         services.AddXmlComparisonServices(configuration);
         services.AddJsonComparisonServices();
 
         // Add the factory for choosing appropriate services
-        services.AddSingleton<DeserializationServiceFactory>(provider =>
-        {
+        services.AddSingleton<DeserializationServiceFactory>(provider => {
             var logger = provider.GetRequiredService<ILogger<DeserializationServiceFactory>>();
             return new DeserializationServiceFactory(provider, logger);
         });
 
         // Add unified deserialization service that can handle both formats
-        services.AddSingleton<IDeserializationService>(provider =>
-        {
+        services.AddSingleton<IDeserializationService>(provider => {
             var factory = provider.GetRequiredService<DeserializationServiceFactory>();
             return factory.GetUnifiedService();
         });
@@ -125,16 +124,15 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Register domain models with all deserialization services
+    /// Register domain models with all deserialization services.
     /// </summary>
-    public static IServiceCollection RegisterDomainModel<T>(this IServiceCollection services, string modelName) where T : class
-    {
-        services.AddSingleton<Action<IServiceProvider>>(provider => serviceProvider =>
-        {
+    /// <returns></returns>
+    public static IServiceCollection RegisterDomainModel<T>(this IServiceCollection services, string modelName)
+        where T : class {
+        services.AddSingleton<Action<IServiceProvider>>(provider => serviceProvider => {
             // Register with unified service if available
             var unifiedService = serviceProvider.GetService<IDeserializationService>();
-            if (unifiedService != null)
-            {
+            if (unifiedService != null) {
                 unifiedService.RegisterDomainModel<T>(modelName);
                 return;
             }
