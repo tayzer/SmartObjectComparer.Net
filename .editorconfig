@@ -1,5 +1,30 @@
 root = true
 
+# Top-level defaults
+[*.{cs,vb}]
+# Use spaces and 4-space indent as conventional for C# projects
+indent_style = space
+indent_size = 4
+
+# C# formatting rules - prefer Allman (open brace on its own line)
+# Put braces on a new line for all elements (types, methods, properties, control blocks, etc.)
+csharp_new_line_before_open_brace = all
+
+# Prefer multi-line blocks where appropriate
+csharp_preserve_single_line_blocks = false
+
+# Keep else/catch/finally on their own lines
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+
+# Keep other defaults explicit if you want them enforced consistently
+csharp_indent_braces = false
+
+# Keep formatting rule reporting enabled (IDE0055) so CI still enforces formatting
+dotnet_diagnostic.IDE0055.severity = warning
+root = true
+
 # Core settings
 [*.{cs,csproj,sln}]
 end_of_line = crlf

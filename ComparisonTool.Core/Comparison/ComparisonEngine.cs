@@ -14,7 +14,8 @@ namespace ComparisonTool.Core.Comparison;
 /// <summary>
 /// Core comparison engine that handles object-to-object comparisons with isolated configuration.
 /// </summary>
-public class ComparisonEngine : IComparisonEngine {
+public class ComparisonEngine : IComparisonEngine
+{
     private readonly ILogger<ComparisonEngine> logger;
     private readonly IComparisonConfigurationService configService;
     private readonly PerformanceTracker performanceTracker;
@@ -22,7 +23,8 @@ public class ComparisonEngine : IComparisonEngine {
     public ComparisonEngine(
         ILogger<ComparisonEngine> logger,
         IComparisonConfigurationService configService,
-        PerformanceTracker performanceTracker) {
+        PerformanceTracker performanceTracker)
+        {
         this.logger = logger;
         this.configService = configService;
         this.performanceTracker = performanceTracker;
@@ -40,7 +42,8 @@ public class ComparisonEngine : IComparisonEngine {
         object oldResponse,
         object newResponse,
         Type modelType,
-        CancellationToken cancellationToken = default) {
+        CancellationToken cancellationToken = default)
+        {
         // PERFORMANCE OPTIMIZATION: Get ignore rules once and reuse
         var propertiesToIgnore = await this.performanceTracker.TrackOperationAsync("Get_Ignore_Rules", () => Task.FromResult(
             this.configService.GetIgnoreRules()
@@ -51,9 +54,11 @@ public class ComparisonEngine : IComparisonEngine {
                 .ToList()));
 
         // THREAD-SAFE COMPARISON: Create completely isolated configuration
-        var result = await this.performanceTracker.TrackOperationAsync("Compare_Objects", async () => {
+        var result = await this.performanceTracker.TrackOperationAsync("Compare_Objects", async () =>
+        {
             return await Task.Run(
-                () => {
+                () =>
+                {
                     // CRITICAL FIX: Create truly isolated CompareLogic with no shared state
                     var isolatedCompareLogic = this.CreateIsolatedCompareLogic();
 
@@ -83,7 +88,8 @@ public class ComparisonEngine : IComparisonEngine {
     /// This eliminates the "Collection was modified" errors by ensuring each comparison
     /// operation has its own independent configuration.
     /// </summary>
-    private CompareLogic CreateIsolatedCompareLogic() {
+    private CompareLogic CreateIsolatedCompareLogic()
+    {
         var isolatedCompareLogic = new CompareLogic();
 
         // Copy basic configuration settings from the main service
@@ -104,33 +110,41 @@ public class ComparisonEngine : IComparisonEngine {
 
         // Apply ignore rules by applying them directly to the config
         var ignoreRules = this.configService.GetIgnoreRules();
-        foreach (var rule in ignoreRules.Where(r => r.IgnoreCompletely)) {
-            try {
+        foreach (var rule in ignoreRules.Where(r => r.IgnoreCompletely))
+        {
+            try
+            {
                 // Apply the rule directly to the isolated config
                 rule.ApplyTo(isolatedCompareLogic.Config);
             }
-            catch (Exception ex) {
+            catch (Exception ex)
+            {
                 this.logger.LogWarning(ex, "Error applying ignore rule for property {PropertyPath} in isolated config", rule.PropertyPath);
             }
         }
 
         // Ensure array Length and LongLength properties are always ignored
-        if (!isolatedCompareLogic.Config.MembersToIgnore.Contains("Length")) {
+        if (!isolatedCompareLogic.Config.MembersToIgnore.Contains("Length"))
+        {
             isolatedCompareLogic.Config.MembersToIgnore.Add("Length");
         }
 
-        if (!isolatedCompareLogic.Config.MembersToIgnore.Contains("LongLength")) {
+        if (!isolatedCompareLogic.Config.MembersToIgnore.Contains("LongLength"))
+        {
             isolatedCompareLogic.Config.MembersToIgnore.Add("LongLength");
         }
 
-        if (!isolatedCompareLogic.Config.MembersToIgnore.Contains("NativeLength")) {
+        if (!isolatedCompareLogic.Config.MembersToIgnore.Contains("NativeLength"))
+        {
             isolatedCompareLogic.Config.MembersToIgnore.Add("NativeLength");
         }
 
         // Apply collection order rules by creating new, independent custom comparers
         var collectionOrderRules = ignoreRules.Where(r => r.IgnoreCollectionOrder && !r.IgnoreCompletely).ToList();
-        if (collectionOrderRules.Any()) {
-            try {
+        if (collectionOrderRules.Any())
+        {
+            try
+            {
                 // Create independent collection order comparer with no shared state
                 var propertiesWithIgnoreOrder = collectionOrderRules.Select(r => r.PropertyPath).ToList();
                 var expandedProperties = propertiesWithIgnoreOrder
@@ -144,7 +158,8 @@ public class ComparisonEngine : IComparisonEngine {
 
                 isolatedCompareLogic.Config.CustomComparers.Add(collectionOrderComparer);
             }
-            catch (Exception ex) {
+            catch (Exception ex)
+            {
                 this.logger.LogWarning(ex, "Error creating independent collection order comparer");
             }
         }
@@ -164,8 +179,10 @@ public class ComparisonEngine : IComparisonEngine {
     /// </summary>
     /// <param name="propertyPath">The property path (e.g., "Customer.Orders[0].Items[1].Name").</param>
     /// <returns>The extracted property name (e.g., "Name").</returns>
-    private string GetPropertyNameFromPath(string propertyPath) {
-        if (string.IsNullOrEmpty(propertyPath)) {
+    private string GetPropertyNameFromPath(string propertyPath)
+    {
+        if (string.IsNullOrEmpty(propertyPath))
+        {
             return string.Empty;
         }
 

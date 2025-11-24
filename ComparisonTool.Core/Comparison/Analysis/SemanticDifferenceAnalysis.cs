@@ -7,7 +7,8 @@ namespace ComparisonTool.Core.Comparison.Analysis;
 /// <summary>
 /// Extension to ComparisonPatternAnalysis to include semantic grouping.
 /// </summary>
-public class SemanticDifferenceAnalysis {
+public class SemanticDifferenceAnalysis
+{
     /// <summary>
     /// Gets or sets groups of semantically related differences.
     /// </summary>
@@ -16,7 +17,10 @@ public class SemanticDifferenceAnalysis {
     /// <summary>
     /// Gets or sets the overall analysis this semantic grouping is based on.
     /// </summary>
-    public ComparisonPatternAnalysis BaseAnalysis { get; set; }
+    public ComparisonPatternAnalysis BaseAnalysis
+    {
+        get; set;
+    }
 
     /// <summary>
     /// Gets total number of differences analyzed.

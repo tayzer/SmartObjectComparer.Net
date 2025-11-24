@@ -4,19 +4,21 @@
 
 namespace ComparisonTool.Core.Comparison.Analysis;
 
-public class GlobalPropertyChangeInfo {
+public class GlobalPropertyChangeInfo
+{
     public string PropertyName { get; set; } = string.Empty;
 
     // Public field retained for use with Interlocked operations
-    public int occurrenceCount;
+    public int OccurrenceCountValue;
 
     // Property wrapper for the field (keeps API compatibility)
-    public int OccurrenceCount {
-        get => this.occurrenceCount;
-        set => this.occurrenceCount = value;
+    public int OccurrenceCount
+    {
+        get => this.OccurrenceCountValue;
+        set => this.OccurrenceCountValue = value;
     }
 
-    public Dictionary<string, string> CommonChanges { get; set; } = new();
+    public Dictionary<string, string> CommonChanges { get; set; } = new ();
 
-    public List<string> AffectedFiles { get; set; } = new();
+    public List<string> AffectedFiles { get; set; } = new ();
 }

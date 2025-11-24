@@ -12,9 +12,11 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace ComparisonTool.Tests.Unit.Utilities;
 
 [TestClass]
-public class FilePairMappingUtilityTests {
+public class FilePairMappingUtilityTests
+{
     [TestMethod]
-    public void CreateFilePairMappings_WithValidInputs_ShouldReturnCorrectMappings() {
+    public void CreateFilePairMappings_WithValidInputs_ShouldReturnCorrectMappings()
+    {
         // Arrange
         var folder1Files = new List<string>
         {
@@ -40,7 +42,8 @@ public class FilePairMappingUtilityTests {
     }
 
     [TestMethod]
-    public void CreateFilePairMappings_WithUnorderedFiles_ShouldSortByName() {
+    public void CreateFilePairMappings_WithUnorderedFiles_ShouldSortByName()
+    {
         // Arrange
         var folder1Files = new List<string>
         {
@@ -66,7 +69,8 @@ public class FilePairMappingUtilityTests {
     }
 
     [TestMethod]
-    public void CreateFilePairMappings_WithDifferentCounts_ShouldUseMinimumCount() {
+    public void CreateFilePairMappings_WithDifferentCounts_ShouldUseMinimumCount()
+    {
         // Arrange
         var folder1Files = new List<string>
         {
@@ -90,7 +94,8 @@ public class FilePairMappingUtilityTests {
     }
 
     [TestMethod]
-    public void CreateFilePairMappings_WithEmptyLists_ShouldReturnEmptyList() {
+    public void CreateFilePairMappings_WithEmptyLists_ShouldReturnEmptyList()
+    {
         // Arrange
         var folder1Files = new List<string>();
         var folder2Files = new List<string>();
@@ -103,7 +108,8 @@ public class FilePairMappingUtilityTests {
     }
 
     [TestMethod]
-    public void CreateFilePairMappings_WithNullFolder1Files_ShouldThrowArgumentNullException() {
+    public void CreateFilePairMappings_WithNullFolder1Files_ShouldThrowArgumentNullException()
+    {
         // Arrange
         List<string> folder1Files = null;
         var folder2Files = new List<string> { @"C:\Folder2\file1.xml" };
@@ -114,7 +120,8 @@ public class FilePairMappingUtilityTests {
     }
 
     [TestMethod]
-    public void CreateFilePairMappings_WithNullFolder2Files_ShouldThrowArgumentNullException() {
+    public void CreateFilePairMappings_WithNullFolder2Files_ShouldThrowArgumentNullException()
+    {
         // Arrange
         var folder1Files = new List<string> { @"C:\Folder1\file1.xml" };
         List<string> folder2Files = null;
@@ -125,7 +132,8 @@ public class FilePairMappingUtilityTests {
     }
 
     [TestMethod]
-    public void CreateFilePairMappings_WithComplexFileNames_ShouldHandleCorrectly() {
+    public void CreateFilePairMappings_WithComplexFileNames_ShouldHandleCorrectly()
+    {
         // Arrange
         var folder1Files = new List<string>
         {

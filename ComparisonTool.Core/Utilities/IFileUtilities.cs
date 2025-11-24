@@ -10,11 +10,12 @@ namespace ComparisonTool.Core.Utilities;
 /// <summary>
 /// Interface for file utilities.
 /// </summary>
-public interface IFileUtilities {
+public interface IFileUtilities
+{
     /// <summary>
     /// Creates a memory stream from a file stream.
     /// </summary>
-    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     Task<MemoryStream> CreateMemoryStreamFromFileAsync(Stream fileStream, CancellationToken cancellationToken = default);
 
     /// <summary>

@@ -16,7 +16,8 @@ namespace ComparisonTool.Core.Comparison;
 /// <summary>
 /// Orchestrator responsible for handling file-level comparison operations.
 /// </summary>
-public class ComparisonOrchestrator : IComparisonOrchestrator {
+public class ComparisonOrchestrator : IComparisonOrchestrator
+{
     private readonly ILogger<ComparisonOrchestrator> logger;
     private readonly IXmlDeserializationService deserializationService;
     private readonly DeserializationServiceFactory deserializationFactory;
@@ -36,7 +37,8 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
         SystemResourceMonitor resourceMonitor,
         ComparisonResultCacheService cacheService,
         IComparisonEngine comparisonEngine,
-        DeserializationServiceFactory deserializationFactory = null) {
+        DeserializationServiceFactory deserializationFactory = null)
+        {
         this.logger = logger;
         this.deserializationService = deserializationService;
         this.configService = configService;
@@ -51,16 +53,19 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
     /// <summary>
     /// Compare two XML files using the specified domain model with caching and performance optimization.
     /// </summary>
-    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task<ComparisonResult> CompareXmlFilesWithCachingAsync(
         Stream oldXmlStream,
         Stream newXmlStream,
         string modelName,
         string oldFilePath,
         string newFilePath,
-        CancellationToken cancellationToken = default) {
-        return await this.performanceTracker.TrackOperationAsync("CompareXmlFilesWithCaching", async () => {
-            try {
+        CancellationToken cancellationToken = default)
+        {
+        return await this.performanceTracker.TrackOperationAsync("CompareXmlFilesWithCaching", async () =>
+        {
+            try
+            {
                 // Generate configuration fingerprint for caching
                 var configFingerprint = this.cacheService.GenerateConfigurationFingerprint(this.configService);
 
@@ -69,7 +74,8 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
                 var file2Hash = this.cacheService.GenerateFileHash(newXmlStream);
 
                 // Try to get cached comparison result first
-                if (this.cacheService.TryGetCachedComparison(file1Hash, file2Hash, configFingerprint, out var cachedResult)) {
+                if (this.cacheService.TryGetCachedComparison(file1Hash, file2Hash, configFingerprint, out var cachedResult))
+                {
                     this.logger.LogDebug(
                         "Using cached comparison result for files with hashes {File1Hash}..{File2Hash}",
                         file1Hash[..8], file2Hash[..8]);
@@ -86,24 +92,29 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
                     .MakeGenericMethod(modelType);
 
                 // CRITICAL FIX: Eliminate cloning entirely - use original deserialized objects
-                var oldResponse = await this.performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}", async () => {
+                var oldResponse = await this.performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}", async () =>
+                {
                     return await Task.Run(
-                        () => {
+                        () =>
+                        {
                             oldXmlStream.Position = 0;
                             return deserializeMethod.Invoke(this.deserializationService, new object[] { oldXmlStream });
                         }, cancellationToken);
                 });
 
-                var newResponse = await this.performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}", async () => {
+                var newResponse = await this.performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}", async () =>
+                {
                     return await Task.Run(
-                        () => {
+                        () =>
+                        {
                             newXmlStream.Position = 0;
                             return deserializeMethod.Invoke(this.deserializationService, new object[] { newXmlStream });
                         }, cancellationToken);
                 });
 
                 // Validate deserialization results
-                if (oldResponse == null || newResponse == null) {
+                if (oldResponse == null || newResponse == null)
+                {
                     this.logger.LogError("Deserialization returned null for model {ModelName}", modelName);
                     throw new InvalidOperationException($"Deserialization returned null for model {modelName}");
                 }
@@ -116,7 +127,8 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
 
                 return result;
             }
-            catch (Exception ex) {
+            catch (Exception ex)
+            {
                 this.logger.LogError(ex, "Error occurred while comparing XML files with caching");
                 throw;
             }
@@ -126,14 +138,17 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
     /// <summary>
     /// Compare two XML files using the specified domain model.
     /// </summary>
-    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task<ComparisonResult> CompareXmlFilesAsync(
         Stream oldXmlStream,
         Stream newXmlStream,
         string modelName,
-        CancellationToken cancellationToken = default) {
-        return await this.performanceTracker.TrackOperationAsync("CompareXmlFilesAsync", async () => {
-            try {
+        CancellationToken cancellationToken = default)
+        {
+        return await this.performanceTracker.TrackOperationAsync("CompareXmlFilesAsync", async () =>
+        {
+            try
+            {
                 this.logger.LogDebug("Starting comparison of XML files using model {ModelName}", modelName);
 
                 // Check if model exists (will throw if not found)
@@ -144,24 +159,29 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
                     .MakeGenericMethod(modelType);
 
                 // CRITICAL FIX: Eliminate cloning entirely - use original deserialized objects
-                var oldResponse = await this.performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}", async () => {
+                var oldResponse = await this.performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}", async () =>
+                {
                     return await Task.Run(
-                        () => {
+                        () =>
+                        {
                             oldXmlStream.Position = 0;
                             return deserializeMethod.Invoke(this.deserializationService, new object[] { oldXmlStream });
                         }, cancellationToken);
                 });
 
-                var newResponse = await this.performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}", async () => {
+                var newResponse = await this.performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}", async () =>
+                {
                     return await Task.Run(
-                        () => {
+                        () =>
+                        {
                             newXmlStream.Position = 0;
                             return deserializeMethod.Invoke(this.deserializationService, new object[] { newXmlStream });
                         }, cancellationToken);
                 });
 
                 // Validate deserialization results
-                if (oldResponse == null || newResponse == null) {
+                if (oldResponse == null || newResponse == null)
+                {
                     this.logger.LogError("Deserialization returned null for model {ModelName}", modelName);
                     throw new InvalidOperationException($"Deserialization returned null for model {modelName}");
                 }
@@ -171,7 +191,8 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
 
                 return result;
             }
-            catch (Exception ex) {
+            catch (Exception ex)
+            {
                 this.logger.LogError(ex, "Error occurred while comparing XML files");
                 throw;
             }
@@ -181,27 +202,32 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
     /// <summary>
     /// Compare two files with auto-format detection (supports XML and JSON) with caching.
     /// </summary>
-    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task<ComparisonResult> CompareFilesWithCachingAsync(
         Stream oldFileStream,
         Stream newFileStream,
         string modelName,
         string oldFilePath,
         string newFilePath,
-        CancellationToken cancellationToken = default) {
-        if (this.deserializationFactory == null) {
+        CancellationToken cancellationToken = default)
+        {
+        if (this.deserializationFactory == null)
+        {
             // Fallback to XML-only comparison for backward compatibility
             this.logger.LogDebug("DeserializationFactory not available, falling back to XML-only comparison");
             return await this.CompareXmlFilesWithCachingAsync(oldFileStream, newFileStream, modelName, oldFilePath, newFilePath, cancellationToken);
         }
 
-        return await this.performanceTracker.TrackOperationAsync("CompareFilesWithCaching", async () => {
-            try {
+        return await this.performanceTracker.TrackOperationAsync("CompareFilesWithCaching", async () =>
+        {
+            try
+            {
                 // Detect file formats
                 var oldFormat = FileTypeDetector.DetectFormat(oldFilePath);
                 var newFormat = FileTypeDetector.DetectFormat(newFilePath);
 
-                if (oldFormat != newFormat) {
+                if (oldFormat != newFormat)
+                {
                     throw new InvalidOperationException($"Cannot compare files of different formats: {oldFormat} vs {newFormat}");
                 }
 
@@ -218,7 +244,8 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
                 var file2Hash = this.cacheService.GenerateFileHash(newFileStream);
 
                 // Try to get cached comparison result first
-                if (this.cacheService.TryGetCachedComparison(file1Hash, file2Hash, configFingerprint, out var cachedResult)) {
+                if (this.cacheService.TryGetCachedComparison(file1Hash, file2Hash, configFingerprint, out var cachedResult))
+                {
                     this.logger.LogDebug(
                         "Using cached comparison result for files with hashes {File1Hash}..{File2Hash}",
                         file1Hash[..8], file2Hash[..8]);
@@ -231,9 +258,11 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
                 var modelType = deserializationService.GetModelType(modelName);
 
                 // Deserialize both files using the proper domain type
-                var oldResponse = await this.performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}_{oldFormat}", async () => {
+                var oldResponse = await this.performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}_{oldFormat}", async () =>
+                {
                     return await Task.Run(
-                        () => {
+                        () =>
+                        {
                             oldFileStream.Position = 0;
 
                             // Use the proper domain type instead of object to avoid JsonElement issues
@@ -242,9 +271,11 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
                         }, cancellationToken);
                 });
 
-                var newResponse = await this.performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}_{newFormat}", async () => {
+                var newResponse = await this.performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}_{newFormat}", async () =>
+                {
                     return await Task.Run(
-                        () => {
+                        () =>
+                        {
                             newFileStream.Position = 0;
 
                             // Use the proper domain type instead of object to avoid JsonElement issues
@@ -254,7 +285,8 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
                 });
 
                 // Validate deserialization results
-                if (oldResponse == null || newResponse == null) {
+                if (oldResponse == null || newResponse == null)
+                {
                     this.logger.LogError("Deserialization returned null for model {ModelName}", modelName);
                     throw new InvalidOperationException($"Deserialization returned null for model {modelName}");
                 }
@@ -267,7 +299,8 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
 
                 return result;
             }
-            catch (Exception ex) {
+            catch (Exception ex)
+            {
                 this.logger.LogError(ex, "Error occurred while comparing files with caching");
                 throw;
             }
@@ -277,27 +310,32 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
     /// <summary>
     /// Compare two files with auto-format detection (supports XML and JSON).
     /// </summary>
-    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task<ComparisonResult> CompareFilesAsync(
         Stream oldFileStream,
         Stream newFileStream,
         string modelName,
         string oldFilePath,
         string newFilePath,
-        CancellationToken cancellationToken = default) {
-        if (this.deserializationFactory == null) {
+        CancellationToken cancellationToken = default)
+        {
+        if (this.deserializationFactory == null)
+        {
             // Fallback to XML-only comparison for backward compatibility
             this.logger.LogDebug("DeserializationFactory not available, falling back to XML-only comparison");
             return await this.CompareXmlFilesAsync(oldFileStream, newFileStream, modelName, cancellationToken);
         }
 
-        return await this.performanceTracker.TrackOperationAsync("CompareFilesAsync", async () => {
-            try {
+        return await this.performanceTracker.TrackOperationAsync("CompareFilesAsync", async () =>
+        {
+            try
+            {
                 // Detect file formats
                 var oldFormat = FileTypeDetector.DetectFormat(oldFilePath);
                 var newFormat = FileTypeDetector.DetectFormat(newFilePath);
 
-                if (oldFormat != newFormat) {
+                if (oldFormat != newFormat)
+                {
                     throw new InvalidOperationException($"Cannot compare files of different formats: {oldFormat} vs {newFormat}");
                 }
 
@@ -310,9 +348,11 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
                 var modelType = deserializationService.GetModelType(modelName);
 
                 // Deserialize both files using the proper domain type
-                var oldResponse = await this.performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}_{oldFormat}", async () => {
+                var oldResponse = await this.performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}_{oldFormat}", async () =>
+                {
                     return await Task.Run(
-                        () => {
+                        () =>
+                        {
                             oldFileStream.Position = 0;
 
                             // Use the proper domain type instead of object to avoid JsonElement issues
@@ -321,9 +361,11 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
                         }, cancellationToken);
                 });
 
-                var newResponse = await this.performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}_{newFormat}", async () => {
+                var newResponse = await this.performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}_{newFormat}", async () =>
+                {
                     return await Task.Run(
-                        () => {
+                        () =>
+                        {
                             newFileStream.Position = 0;
 
                             // Use the proper domain type instead of object to avoid JsonElement issues
@@ -333,7 +375,8 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
                 });
 
                 // Validate deserialization results
-                if (oldResponse == null || newResponse == null) {
+                if (oldResponse == null || newResponse == null)
+                {
                     this.logger.LogError("Deserialization returned null for model {ModelName}", modelName);
                     throw new InvalidOperationException($"Deserialization returned null for model {modelName}");
                 }
@@ -341,7 +384,8 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
                 // Use the comparison engine for the actual comparison
                 return await this.comparisonEngine.CompareObjectsAsync(oldResponse, newResponse, modelType, cancellationToken);
             }
-            catch (Exception ex) {
+            catch (Exception ex)
+            {
                 this.logger.LogError(ex, "Error occurred while comparing files");
                 throw;
             }
@@ -351,30 +395,35 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
     /// <summary>
     /// Compare multiple folder pairs of files.
     /// </summary>
-    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task<MultiFolderComparisonResult> CompareFoldersAsync(
         List<string> folder1Files,
         List<string> folder2Files,
         string modelName,
-        CancellationToken cancellationToken = default) {
+        CancellationToken cancellationToken = default)
+        {
         var result = new MultiFolderComparisonResult();
         var pairCount = Math.Min(folder1Files.Count, folder2Files.Count);
         result.TotalPairsCompared = pairCount;
 
-        if (pairCount == 0) {
+        if (pairCount == 0)
+        {
             this.logger.LogWarning("No file pairs to compare");
             return result;
         }
 
         this.logger.LogInformation("Starting comparison of {PairCount} file pairs using model {ModelName}", pairCount, modelName);
 
-        for (var i = 0; i < pairCount; i++) {
+        for (var i = 0; i < pairCount; i++)
+        {
             cancellationToken.ThrowIfCancellationRequested();
             var file1Path = folder1Files[i];
             var file2Path = folder2Files[i];
-            try {
+            try
+            {
                 // Only log individual file pairs in debug mode to avoid spam with large comparisons
-                if (this.logger.IsEnabled(LogLevel.Debug)) {
+                if (this.logger.IsEnabled(LogLevel.Debug))
+                {
                     this.logger.LogDebug("Comparing pair {PairNumber}/{TotalPairs}: {File1} vs {File2}", i + 1, pairCount, file1Path, file2Path);
                 }
 
@@ -383,18 +432,21 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
                 var pairResult = await this.CompareFilesWithCachingAsync(file1Stream, file2Stream, modelName, file1Path, file2Path, cancellationToken);
                 var categorizer = new DifferenceCategorizer();
                 var summary = categorizer.CategorizeAndSummarize(pairResult);
-                var filePairResult = new FilePairComparisonResult {
+                var filePairResult = new FilePairComparisonResult
+                {
                     File1Name = Path.GetFileName(file1Path),
                     File2Name = Path.GetFileName(file2Path),
                     Result = pairResult,
                     Summary = summary,
                 };
                 result.FilePairResults.Add(filePairResult);
-                if (!summary.AreEqual) {
+                if (!summary.AreEqual)
+                {
                     result.AllEqual = false;
                 }
             }
-            catch (Exception ex) {
+            catch (Exception ex)
+            {
                 this.logger.LogError(ex, "Error comparing files {File1} and {File2}", file1Path, file2Path);
                 throw;
             }
@@ -409,15 +461,17 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
     /// <summary>
     /// Compare multiple folder pairs of files in batches with parallel processing.
     /// </summary>
-    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task<MultiFolderComparisonResult> CompareFoldersInBatchesAsync(
         List<string> folder1Files,
         List<string> folder2Files,
         string modelName,
         int batchSize = 25,
         IProgress<(int Completed, int Total)> progress = null,
-        CancellationToken cancellationToken = default) {
-        return await this.performanceTracker.TrackOperationAsync("CompareFoldersInBatchesAsync", async () => {
+        CancellationToken cancellationToken = default)
+        {
+        return await this.performanceTracker.TrackOperationAsync("CompareFoldersInBatchesAsync", async () =>
+        {
             this.logger.LogInformation(
                 "Starting batch comparison of {Count1} files from folder 1 and {Count2} files from folder 2",
                 folder1Files.Count, folder2Files.Count);
@@ -426,11 +480,13 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
             var optimalBatchSize = this.CalculateOptimalBatchSize(Math.Max(folder1Files.Count, folder2Files.Count), folder1Files);
 
             // Use the provided batch size if specified, otherwise use the calculated one
-            if (batchSize <= 0) {
+            if (batchSize <= 0)
+            {
                 batchSize = optimalBatchSize;
                 this.logger.LogInformation("Using calculated optimal batch size: {BatchSize}", batchSize);
             }
-            else {
+            else
+            {
                 this.logger.LogInformation("Using provided batch size: {BatchSize}", batchSize);
             }
 
@@ -443,7 +499,8 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
 
             progress?.Report((0, totalPairs));
 
-            var result = new MultiFolderComparisonResult {
+            var result = new MultiFolderComparisonResult
+            {
                 TotalPairsCompared = totalPairs,
                 AllEqual = true,
                 FilePairResults = new List<FilePairComparisonResult>(),
@@ -456,8 +513,10 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
             var equalityFlag = 1;  // Assume all equal until proven otherwise
 
             // Process in batches
-            for (var batchIndex = 0; batchIndex < batchCount; batchIndex++) {
-                if (cancellationToken.IsCancellationRequested) {
+            for (var batchIndex = 0; batchIndex < batchCount; batchIndex++)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
                     break;
                 }
 
@@ -476,20 +535,25 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
                     batchIndex + 1, batchCount, batchFilePairs.Count, batchParallelism);
 
                 // Process this batch in parallel
-                await this.performanceTracker.TrackOperationAsync($"Batch_{batchIndex + 1}", async () => {
+                await this.performanceTracker.TrackOperationAsync($"Batch_{batchIndex + 1}", async () =>
+                {
                     await Parallel.ForEachAsync(
                         batchFilePairs,
-                        new ParallelOptions {
+                        new ParallelOptions
+                        {
                             MaxDegreeOfParallelism = batchParallelism,
                             CancellationToken = cancellationToken,
                         },
-                        async (filePair, ct) => {
-                            try {
+                        async (filePair, ct) =>
+                        {
+                            try
+                            {
                                 var (file1Path, file2Path, relativePath) = filePair;
 
                                 var operationId = this.performanceTracker.StartOperation($"Compare_File_{Path.GetFileName(file1Path)}");
 
-                                try {
+                                try
+                                {
                                     // Open file streams without loading entirely into memory
                                     using var file1Stream = await this.fileSystemService.OpenFileStreamAsync(file1Path, ct);
                                     using var file2Stream = await this.fileSystemService.OpenFileStreamAsync(file2Path, ct);
@@ -508,7 +572,8 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
                                     var summary = categorizer.CategorizeAndSummarize(comparisonResult);
 
                                     // Create result
-                                    var pairResult = new FilePairComparisonResult {
+                                    var pairResult = new FilePairComparisonResult
+                                    {
                                         File1Name = Path.GetFileName(file1Path),
                                         File2Name = Path.GetFileName(file2Path),
                                         Result = comparisonResult,
@@ -519,40 +584,47 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
                                     filePairResults.Add(pairResult);
 
                                     // If any differences, flag the overall result
-                                    if (!summary.AreEqual) {
+                                    if (!summary.AreEqual)
+                                    {
                                         Interlocked.Exchange(ref equalityFlag, 0);
                                     }
                                 }
-                                finally {
+                                finally
+                                {
                                     this.performanceTracker.StopOperation(operationId);
                                 }
                             }
-                            catch (Exception ex) {
+                            catch (Exception ex)
+                            {
                                 this.logger.LogError(ex, "Error comparing files {File1} and {File2}",
                                     filePair.file1Path, filePair.file2Path);
                             }
 
                             // Update progress
                             var currentProcessed = Interlocked.Increment(ref processedCount);
-                            if (currentProcessed % 10 == 0 || currentProcessed == totalPairs) {
+                            if (currentProcessed % 10 == 0 || currentProcessed == totalPairs)
+                            {
                                 progress?.Report((currentProcessed, totalPairs));
                             }
                         });
                 });
 
                 // If adaptive throttling is needed based on system resources, add it here
-                if (batchIndex < batchCount - 1) {
+                if (batchIndex < batchCount - 1)
+                {
                     var cpuUsage = this.resourceMonitor.GetCpuUsage();
                     var memoryUsage = this.resourceMonitor.GetMemoryUsage();
 
                     // If system is under heavy load, add a delay between batches
-                    if (cpuUsage > 90 || memoryUsage > 90) {
+                    if (cpuUsage > 90 || memoryUsage > 90)
+                    {
                         this.logger.LogInformation(
                             "System under load (CPU: {CpuUsage}%, Memory: {MemoryUsage}%), adding delay between batches",
                             cpuUsage, memoryUsage);
                         await Task.Delay(1000, cancellationToken); // 1 second delay
                     }
-                    else if (cpuUsage > 75 || memoryUsage > 75) {
+                    else if (cpuUsage > 75 || memoryUsage > 75)
+                    {
                         this.logger.LogInformation(
                             "System under moderate load (CPU: {CpuUsage}%, Memory: {MemoryUsage}%), adding short delay",
                             cpuUsage, memoryUsage);
@@ -578,7 +650,8 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
     /// <summary>
     /// Calculate optimal batch size based on file count and system resources.
     /// </summary>
-    private int CalculateOptimalBatchSize(int fileCount, IEnumerable<string> sampleFiles = null) {
+    private int CalculateOptimalBatchSize(int fileCount, IEnumerable<string> sampleFiles = null)
+    {
         // Base calculation on file count
         var baseBatchSize = Math.Max(10, Math.Min(50, fileCount / 4));
 
@@ -606,7 +679,8 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
     /// <summary>
     /// Calculate optimal parallelism for batch processing.
     /// </summary>
-    private int CalculateOptimalParallelism(int fileCount, IEnumerable<string> sampleFiles = null) {
+    private int CalculateOptimalParallelism(int fileCount, IEnumerable<string> sampleFiles = null)
+    {
         // Base calculation on available CPU cores
         var cpuCores = Environment.ProcessorCount;
 
@@ -614,7 +688,8 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
         var optimalParallelism = Math.Max(1, Math.Min(cpuCores - 1, 4));
 
         // Adjust based on file count (don't over-parallelize for small batches)
-        if (fileCount < optimalParallelism * 2) {
+        if (fileCount < optimalParallelism * 2)
+        {
             optimalParallelism = Math.Max(1, fileCount / 2);
         }
 

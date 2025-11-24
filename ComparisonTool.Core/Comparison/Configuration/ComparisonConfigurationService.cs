@@ -16,13 +16,14 @@ namespace ComparisonTool.Core.Comparison.Configuration;
 /// <summary>
 /// Service responsible for managing configuration settings for object comparison.
 /// </summary>
-public class ComparisonConfigurationService : IComparisonConfigurationService {
+public class ComparisonConfigurationService : IComparisonConfigurationService
+{
     private readonly ILogger<ComparisonConfigurationService> logger;
     private readonly CompareLogic compareLogic;
-    private readonly List<IgnoreRule> ignoreRules = new();
-    private readonly List<SmartIgnoreRule> smartIgnoreRules = new();
+    private readonly List<IgnoreRule> ignoreRules = new ();
+    private readonly List<SmartIgnoreRule> smartIgnoreRules = new ();
     private readonly SmartIgnoreProcessor smartIgnoreProcessor;
-    private readonly List<IgnoreRule> xmlIgnoreRules = new();
+    private readonly List<IgnoreRule> xmlIgnoreRules = new ();
 
     private IEnumerable<IgnoreRule> AllIgnoreRules => this.ignoreRules.Concat(this.xmlIgnoreRules);
 
@@ -36,39 +37,46 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
 
     public ComparisonConfigurationService(
         ILogger<ComparisonConfigurationService> logger,
-        IOptions<ComparisonConfigurationOptions> options = null) {
+        IOptions<ComparisonConfigurationOptions> options = null)
+        {
         this.logger = logger;
         this.smartIgnoreProcessor = new SmartIgnoreProcessor(logger);
 
         var configOptions = options?.Value ?? new ComparisonConfigurationOptions();
 
-        this.compareLogic = new CompareLogic {
-            Config = new ComparisonConfig {
+        this.compareLogic = new CompareLogic
+        {
+            Config = new ComparisonConfig
+            {
                 MaxDifferences = configOptions.MaxDifferences,
                 IgnoreObjectTypes = false,
                 ComparePrivateFields = false,
                 ComparePrivateProperties = true,
                 CompareReadOnly = true,
                 IgnoreCollectionOrder = configOptions.DefaultIgnoreCollectionOrder,
-                CaseSensitive = !configOptions.DefaultIgnoreStringCase
+                CaseSensitive = !configOptions.DefaultIgnoreStringCase,
             },
         };
 
         // Ensure critical collections are initialized to prevent null reference exceptions
         // in CompareNetObjects internal logic like ExcludedByWildcard
-        if (this.compareLogic.Config.MembersToIgnore == null) {
+        if (this.compareLogic.Config.MembersToIgnore == null)
+        {
             this.compareLogic.Config.MembersToIgnore = new List<string>();
         }
 
-        if (this.compareLogic.Config.CustomComparers == null) {
+        if (this.compareLogic.Config.CustomComparers == null)
+        {
             this.compareLogic.Config.CustomComparers = new List<BaseTypeComparer>();
         }
 
-        if (this.compareLogic.Config.AttributesToIgnore == null) {
+        if (this.compareLogic.Config.AttributesToIgnore == null)
+        {
             this.compareLogic.Config.AttributesToIgnore = new List<Type>();
         }
 
-        if (this.compareLogic.Config.MembersToInclude == null) {
+        if (this.compareLogic.Config.MembersToInclude == null)
+        {
             this.compareLogic.Config.MembersToInclude = new List<string>();
         }
 
@@ -92,7 +100,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// <summary>
     /// Set the cache service for invalidating cached results when configuration changes.
     /// </summary>
-    public void SetCacheService(ComparisonResultCacheService cacheService) {
+    public void SetCacheService(ComparisonResultCacheService cacheService)
+    {
         this.cacheService = cacheService;
     }
 
@@ -100,7 +109,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// Get the current comparison configuration.
     /// </summary>
     /// <returns></returns>
-    public ComparisonConfig GetCurrentConfig() {
+    public ComparisonConfig GetCurrentConfig()
+    {
         return this.compareLogic.Config;
     }
 
@@ -108,22 +118,27 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// Get the compare logic instance.
     /// </summary>
     /// <returns></returns>
-    public CompareLogic GetCompareLogic() {
+    public CompareLogic GetCompareLogic()
+    {
         // Ensure critical collections are always initialized to prevent null reference exceptions
         // This is defensive programming against CompareNetObjects internal assumptions
-        if (this.compareLogic.Config.MembersToIgnore == null) {
+        if (this.compareLogic.Config.MembersToIgnore == null)
+        {
             this.compareLogic.Config.MembersToIgnore = new List<string>();
         }
 
-        if (this.compareLogic.Config.CustomComparers == null) {
+        if (this.compareLogic.Config.CustomComparers == null)
+        {
             this.compareLogic.Config.CustomComparers = new List<BaseTypeComparer>();
         }
 
-        if (this.compareLogic.Config.AttributesToIgnore == null) {
+        if (this.compareLogic.Config.AttributesToIgnore == null)
+        {
             this.compareLogic.Config.AttributesToIgnore = new List<Type>();
         }
 
-        if (this.compareLogic.Config.MembersToInclude == null) {
+        if (this.compareLogic.Config.MembersToInclude == null)
+        {
             this.compareLogic.Config.MembersToInclude = new List<string>();
         }
 
@@ -135,8 +150,10 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// This prevents collection modification exceptions when multiple comparisons run in parallel.
     /// </summary>
     /// <returns></returns>
-    public CompareLogic GetThreadSafeCompareLogic() {
-        lock (this.configurationLock) {
+    public CompareLogic GetThreadSafeCompareLogic()
+    {
+        lock (this.configurationLock)
+        {
             // Ensure configuration is up to date
             this.ApplyConfiguredSettings();
 
@@ -159,22 +176,26 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
             isolatedCompareLogic.Config.MembersToInclude = new List<string>();
 
             // Defensive copy of MembersToIgnore to prevent concurrent modification
-            foreach (var member in this.compareLogic.Config.MembersToIgnore ?? new List<string>()) {
+            foreach (var member in this.compareLogic.Config.MembersToIgnore ?? new List<string>())
+            {
                 isolatedCompareLogic.Config.MembersToIgnore.Add(member);
             }
 
             // Defensive copy of CustomComparers
-            foreach (var comparer in this.compareLogic.Config.CustomComparers ?? new List<BaseTypeComparer>()) {
+            foreach (var comparer in this.compareLogic.Config.CustomComparers ?? new List<BaseTypeComparer>())
+            {
                 isolatedCompareLogic.Config.CustomComparers.Add(comparer);
             }
 
             // Defensive copy of AttributesToIgnore
-            foreach (var attribute in this.compareLogic.Config.AttributesToIgnore ?? new List<Type>()) {
+            foreach (var attribute in this.compareLogic.Config.AttributesToIgnore ?? new List<Type>())
+            {
                 isolatedCompareLogic.Config.AttributesToIgnore.Add(attribute);
             }
 
             // Defensive copy of MembersToInclude
-            foreach (var member in this.compareLogic.Config.MembersToInclude ?? new List<string>()) {
+            foreach (var member in this.compareLogic.Config.MembersToInclude ?? new List<string>())
+            {
                 isolatedCompareLogic.Config.MembersToInclude.Add(member);
             }
 
@@ -190,13 +211,15 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// <summary>
     /// Configure whether to ignore collection order.
     /// </summary>
-    public void SetIgnoreCollectionOrder(bool ignoreOrder) {
+    public void SetIgnoreCollectionOrder(bool ignoreOrder)
+    {
         this.compareLogic.Config.IgnoreCollectionOrder = ignoreOrder;
         this.MarkConfigurationDirty();
         this.logger.LogDebug("Set IgnoreCollectionOrder to {Value}", ignoreOrder);
 
         // Invalidate cache when configuration changes
-        if (this.cacheService != null) {
+        if (this.cacheService != null)
+        {
             var newFingerprint = this.cacheService.GenerateConfigurationFingerprint(this);
             this.cacheService.InvalidateConfigurationChanges(newFingerprint);
         }
@@ -206,20 +229,23 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// Get whether collection order is being ignored.
     /// </summary>
     /// <returns></returns>
-    public bool GetIgnoreCollectionOrder() {
+    public bool GetIgnoreCollectionOrder()
+    {
         return this.compareLogic.Config.IgnoreCollectionOrder;
     }
 
     /// <summary>
     /// Configure whether to ignore string case.
     /// </summary>
-    public void SetIgnoreStringCase(bool ignoreCase) {
+    public void SetIgnoreStringCase(bool ignoreCase)
+    {
         this.compareLogic.Config.CaseSensitive = !ignoreCase;
         this.MarkConfigurationDirty();
         this.logger.LogDebug("Set CaseSensitive to {Value} (IgnoreCase={IgnoreCase})", !ignoreCase, ignoreCase);
 
         // Invalidate cache when configuration changes
-        if (this.cacheService != null) {
+        if (this.cacheService != null)
+        {
             var newFingerprint = this.cacheService.GenerateConfigurationFingerprint(this);
             this.cacheService.InvalidateConfigurationChanges(newFingerprint);
         }
@@ -229,15 +255,18 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// Get whether string case is being ignored.
     /// </summary>
     /// <returns></returns>
-    public bool GetIgnoreStringCase() {
+    public bool GetIgnoreStringCase()
+    {
         return !this.compareLogic.Config.CaseSensitive;
     }
 
     /// <summary>
     /// Configure the comparer to ignore specific properties.
     /// </summary>
-    public void IgnoreProperty(string propertyPath) {
-        var rule = new IgnoreRule(this.logger) {
+    public void IgnoreProperty(string propertyPath)
+    {
+        var rule = new IgnoreRule(this.logger)
+        {
             PropertyPath = propertyPath,
             IgnoreCompletely = true,
         };
@@ -249,12 +278,14 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// <summary>
     /// Remove a property from the ignore list.
     /// </summary>
-    public void RemoveIgnoredProperty(string propertyPath) {
+    public void RemoveIgnoredProperty(string propertyPath)
+    {
         var rulesToRemove = this.ignoreRules
             .Where(r => r.PropertyPath == propertyPath)
             .ToList();
 
-        foreach (var rule in rulesToRemove) {
+        foreach (var rule in rulesToRemove)
+        {
             this.ignoreRules.Remove(rule);
         }
 
@@ -264,8 +295,10 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// <summary>
     /// Add an ignore rule to the configuration.
     /// </summary>
-    public void AddIgnoreRule(IgnoreRule rule) {
-        if (rule == null) {
+    public void AddIgnoreRule(IgnoreRule rule)
+    {
+        if (rule == null)
+        {
             return;
         }
 
@@ -279,7 +312,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
         this.RemoveIgnoredProperty(rule.PropertyPath);
 
         // Create a new rule with our logger to ensure proper logging
-        var newRule = new IgnoreRule(this.logger) {
+        var newRule = new IgnoreRule(this.logger)
+        {
             PropertyPath = rule.PropertyPath,
             IgnoreCompletely = rule.IgnoreCompletely,
             IgnoreCollectionOrder = rule.IgnoreCollectionOrder,
@@ -296,7 +330,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
         this.MarkConfigurationDirty();
 
         // Invalidate cache when ignore rules change
-        if (this.cacheService != null) {
+        if (this.cacheService != null)
+        {
             var newFingerprint = this.cacheService.GenerateConfigurationFingerprint(this);
             this.cacheService.InvalidateConfigurationChanges(newFingerprint);
         }
@@ -306,16 +341,20 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// Add multiple ignore rules to the configuration in a batch operation
     /// This is more efficient than calling AddIgnoreRule multiple times as it only invalidates cache once.
     /// </summary>
-    public void AddIgnoreRulesBatch(IEnumerable<IgnoreRule> rules) {
-        if (rules == null || !rules.Any()) {
+    public void AddIgnoreRulesBatch(IEnumerable<IgnoreRule> rules)
+    {
+        if (rules == null || !rules.Any())
+        {
             return;
         }
 
         var rulesList = rules.ToList();
         this.logger.LogDebug("Adding {Count} ignore rules in batch operation", rulesList.Count);
 
-        foreach (var rule in rulesList) {
-            if (rule == null) {
+        foreach (var rule in rulesList)
+        {
+            if (rule == null)
+            {
                 continue;
             }
 
@@ -323,7 +362,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
             this.RemoveIgnoredProperty(rule.PropertyPath);
 
             // Create a new rule with our logger to ensure proper logging
-            var newRule = new IgnoreRule(this.logger) {
+            var newRule = new IgnoreRule(this.logger)
+            {
                 PropertyPath = rule.PropertyPath,
                 IgnoreCompletely = rule.IgnoreCompletely,
                 IgnoreCollectionOrder = rule.IgnoreCollectionOrder,
@@ -344,19 +384,23 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
         this.MarkConfigurationDirty();
 
         // Single cache invalidation at the end for performance
-        if (this.cacheService != null) {
+        if (this.cacheService != null)
+        {
             var newFingerprint = this.cacheService.GenerateConfigurationFingerprint(this);
             this.cacheService.InvalidateConfigurationChanges(newFingerprint);
         }
     }
 
-    private string GetRuleSettingsDescription(IgnoreRule rule) {
+    private string GetRuleSettingsDescription(IgnoreRule rule)
+    {
         var settings = new List<string>();
-        if (rule.IgnoreCompletely) {
+        if (rule.IgnoreCompletely)
+        {
             settings.Add("IgnoreCompletely");
         }
 
-        if (rule.IgnoreCollectionOrder) {
+        if (rule.IgnoreCollectionOrder)
+        {
             settings.Add("IgnoreCollectionOrder");
         }
 
@@ -367,7 +411,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// Get all currently ignored properties.
     /// </summary>
     /// <returns></returns>
-    public IReadOnlyList<string> GetIgnoredProperties() {
+    public IReadOnlyList<string> GetIgnoredProperties()
+    {
         return this.AllIgnoreRules
             .Where(r => r.IgnoreCompletely)
             .Select(r => r.PropertyPath)
@@ -378,14 +423,16 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// Get all ignore rules.
     /// </summary>
     /// <returns></returns>
-    public IReadOnlyList<IgnoreRule> GetIgnoreRules() {
+    public IReadOnlyList<IgnoreRule> GetIgnoreRules()
+    {
         return this.AllIgnoreRules.ToList();
     }
 
     /// <summary>
     /// Clear all ignore rules.
     /// </summary>
-    public void ClearIgnoreRules() {
+    public void ClearIgnoreRules()
+    {
         var count = this.ignoreRules.Count;
         this.ignoreRules.Clear();
         this.logger.LogInformation("Cleared {Count} ignore rules", count);
@@ -394,7 +441,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
         this.MarkConfigurationDirty();
 
         // Invalidate cache when ignore rules change
-        if (this.cacheService != null) {
+        if (this.cacheService != null)
+        {
             var newFingerprint = this.cacheService.GenerateConfigurationFingerprint(this);
             this.cacheService.InvalidateConfigurationChanges(newFingerprint);
         }
@@ -403,12 +451,15 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// <summary>
     /// Apply all configured settings from ignore rules.
     /// </summary>
-    public void ApplyConfiguredSettings() {
+    public void ApplyConfiguredSettings()
+    {
         // Performance optimization: Use cached configuration if available and not dirty
-        lock (this.configurationLock) {
+        lock (this.configurationLock)
+        {
             var currentFingerprint = this.GenerateConfigurationFingerprint();
 
-            if (!this.isConfigurationDirty && this.lastConfigurationFingerprint == currentFingerprint && this.cachedConfig != null) {
+            if (!this.isConfigurationDirty && this.lastConfigurationFingerprint == currentFingerprint && this.cachedConfig != null)
+            {
                 // Configuration hasn't changed, apply cached config
                 this.ApplyCachedConfiguration(this.cachedConfig);
                 this.logger.LogDebug("Applied cached configuration (fingerprint: {Fingerprint})", currentFingerprint.Substring(0, 8));
@@ -430,8 +481,10 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// <summary>
     /// Generate a fingerprint of the current configuration for change detection.
     /// </summary>
-    private string GenerateConfigurationFingerprint() {
-        var config = new {
+    private string GenerateConfigurationFingerprint()
+    {
+        var config = new
+        {
             GlobalIgnoreCollectionOrder = this.compareLogic.Config.IgnoreCollectionOrder,
             GlobalIgnoreStringCase = !this.compareLogic.Config.CaseSensitive,
             IgnoreRules = this.AllIgnoreRules
@@ -454,20 +507,23 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// <summary>
     /// Apply a previously cached configuration.
     /// </summary>
-    private void ApplyCachedConfiguration(CachedComparisonConfig cachedConfig) {
+    private void ApplyCachedConfiguration(CachedComparisonConfig cachedConfig)
+    {
         // Copy cached settings to current config
         this.compareLogic.Config.IgnoreCollectionOrder = cachedConfig.IgnoreCollectionOrder;
         this.compareLogic.Config.CaseSensitive = !cachedConfig.CaseSensitive;
 
         // Clear and rebuild MembersToIgnore
         this.compareLogic.Config.MembersToIgnore.Clear();
-        foreach (var member in cachedConfig.MembersToIgnore) {
+        foreach (var member in cachedConfig.MembersToIgnore)
+        {
             this.compareLogic.Config.MembersToIgnore.Add(member);
         }
 
         // Clear and rebuild CustomComparers
         this.compareLogic.Config.CustomComparers.Clear();
-        foreach (var comparer in cachedConfig.CustomComparers) {
+        foreach (var comparer in cachedConfig.CustomComparers)
+        {
             this.compareLogic.Config.CustomComparers.Add(comparer);
         }
     }
@@ -476,7 +532,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// Performance check: if we have a lot of ignore rules for a large domain model,
     /// use fast property filtering instead of expensive pattern generation.
     /// </summary>
-    private bool ShouldUseFastFiltering() {
+    private bool ShouldUseFastFiltering()
+    {
         // TEMPORARILY DISABLED: Fast filtering caused infinite recursion
         // TODO: Implement proper fast filtering without recursion issues
         return false;
@@ -492,42 +549,52 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// <summary>
     /// Build and cache configuration with performance optimization for large domain models.
     /// </summary>
-    private void BuildAndCacheConfiguration() {
-        try {
+    private void BuildAndCacheConfiguration()
+    {
+        try
+        {
             // Store the current global ignore collection order setting
             var globalIgnoreCollectionOrder = this.compareLogic.Config.IgnoreCollectionOrder;
             this.logger.LogDebug("Building configuration with global IgnoreCollectionOrder: {GlobalSetting}", globalIgnoreCollectionOrder);
 
             // THREAD SAFETY: Use lock to prevent concurrent configuration changes
-            lock (this.configurationLock) {
+            lock (this.configurationLock)
+            {
                 // Clear any existing configuration - ensure collections are not null first
-                if (this.compareLogic.Config.MembersToIgnore == null) {
+                if (this.compareLogic.Config.MembersToIgnore == null)
+                {
                     this.compareLogic.Config.MembersToIgnore = new List<string>();
                 }
-                else {
+                else
+                {
                     this.compareLogic.Config.MembersToIgnore.Clear();
                 }
 
                 // Ensure other critical collections are initialized
-                if (this.compareLogic.Config.CustomComparers == null) {
+                if (this.compareLogic.Config.CustomComparers == null)
+                {
                     this.compareLogic.Config.CustomComparers = new List<BaseTypeComparer>();
                 }
-                else {
+                else
+                {
                     this.compareLogic.Config.CustomComparers.Clear();
                 }
 
-                if (this.compareLogic.Config.AttributesToIgnore == null) {
+                if (this.compareLogic.Config.AttributesToIgnore == null)
+                {
                     this.compareLogic.Config.AttributesToIgnore = new List<Type>();
                 }
 
-                if (this.compareLogic.Config.MembersToInclude == null) {
+                if (this.compareLogic.Config.MembersToInclude == null)
+                {
                     this.compareLogic.Config.MembersToInclude = new List<string>();
                 }
             }
 
             // Performance optimization: Check if we should use fast filtering
             var useFastFiltering = this.ShouldUseFastFiltering();
-            if (useFastFiltering) {
+            if (useFastFiltering)
+            {
                 this.logger.LogInformation(
                     "Using fast property filtering optimization for {Count} ignore rules (avoiding MembersToIgnore pattern explosion)",
                     this.AllIgnoreRules.Count(r => r.IgnoreCompletely));
@@ -541,7 +608,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
                 this.compareLogic.Config.CustomComparers.Insert(0, fastFilterComparer); // Insert at beginning for priority
 
                 // Cache the configuration
-                this.cachedConfig = new CachedComparisonConfig {
+                this.cachedConfig = new CachedComparisonConfig
+                {
                     IgnoreCollectionOrder = this.compareLogic.Config.IgnoreCollectionOrder,
                     CaseSensitive = this.compareLogic.Config.CaseSensitive,
                     MembersToIgnore = new List<string>(this.compareLogic.Config.MembersToIgnore),
@@ -557,7 +625,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
             // Original pattern generation logic for smaller rule sets
             this.ApplyAllRulesWithPatternGeneration(globalIgnoreCollectionOrder);
         }
-        catch (Exception ex) {
+        catch (Exception ex)
+        {
             this.logger.LogError(ex, "Error in BuildAndCacheConfiguration");
         }
     }
@@ -565,7 +634,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// <summary>
     /// Apply only collection order rules without expensive pattern generation.
     /// </summary>
-    private void ApplyCollectionOrderRulesOnly() {
+    private void ApplyCollectionOrderRulesOnly()
+    {
         // Check all the rules to make sure we have both Results and RelatedItems
         var resultsRule = this.AllIgnoreRules.Any(r => r.PropertyPath.Contains("Results") && r.IgnoreCollectionOrder);
         var relatedItemsRule = this.AllIgnoreRules.Any(r => r.PropertyPath.Contains("RelatedItems") && r.IgnoreCollectionOrder);
@@ -576,7 +646,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
 
         // Remove any existing custom comparers of our type to avoid duplicates
         var removedCount = this.compareLogic.Config.CustomComparers.RemoveAll(c => c is PropertySpecificCollectionOrderComparer);
-        if (removedCount > 0) {
+        if (removedCount > 0)
+        {
             this.logger.LogDebug("Removed {RemovedCount} existing PropertySpecificCollectionOrderComparer instances", removedCount);
         }
 
@@ -589,8 +660,10 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
         this.logger.LogDebug("Found {Count} properties with ignore collection order setting", propertiesWithIgnoreOrder.Count);
 
         // If we have properties that need to ignore collection order
-        if (propertiesWithIgnoreOrder.Any()) {
-            try {
+        if (propertiesWithIgnoreOrder.Any())
+        {
+            try
+            {
                 // Create property-specific collection order comparer
                 var expandedProperties = propertiesWithIgnoreOrder
                     .SelectMany(p => new[] { p, p.Replace("[*]", "[0]"), p.Replace("[*]", "[1]") })
@@ -609,7 +682,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
 
                 this.logger.LogDebug("Added property-specific collection order comparer for {PropertyCount} properties", expandedProperties.Count);
             }
-            catch (Exception ex) {
+            catch (Exception ex)
+            {
                 this.logger.LogError(ex, "Error creating PropertySpecificCollectionOrderComparer");
             }
         }
@@ -621,7 +695,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// <summary>
     /// Original pattern generation logic for smaller rule sets.
     /// </summary>
-    private void ApplyAllRulesWithPatternGeneration(bool globalIgnoreCollectionOrder) {
+    private void ApplyAllRulesWithPatternGeneration(bool globalIgnoreCollectionOrder)
+    {
         // Check all the rules to make sure we have both Results and RelatedItems
         var resultsRule = this.AllIgnoreRules.Any(r => r.PropertyPath.Contains("Results") && r.IgnoreCollectionOrder);
         var relatedItemsRule = this.AllIgnoreRules.Any(r => r.PropertyPath.Contains("RelatedItems") && r.IgnoreCollectionOrder);
@@ -632,7 +707,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
 
         // Remove any existing custom comparers of our type to avoid duplicates
         var removedCount = this.compareLogic.Config.CustomComparers.RemoveAll(c => c is PropertySpecificCollectionOrderComparer);
-        if (removedCount > 0) {
+        if (removedCount > 0)
+        {
             this.logger.LogDebug("Removed {RemovedCount} existing PropertySpecificCollectionOrderComparer instances", removedCount);
         }
 
@@ -645,8 +721,10 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
         this.logger.LogDebug("Found {Count} properties with ignore collection order setting", propertiesWithIgnoreOrder.Count);
 
         // If we have properties that need to ignore collection order
-        if (propertiesWithIgnoreOrder.Any()) {
-            try {
+        if (propertiesWithIgnoreOrder.Any())
+        {
+            try
+            {
                 // Create property-specific collection order comparer
                 var expandedProperties = propertiesWithIgnoreOrder
                     .SelectMany(p => new[] { p, p.Replace("[*]", "[0]"), p.Replace("[*]", "[1]") })
@@ -665,11 +743,13 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
 
                 this.logger.LogDebug("Added property-specific collection order comparer for {PropertyCount} properties", expandedProperties.Count);
             }
-            catch (Exception ex) {
+            catch (Exception ex)
+            {
                 this.logger.LogError(ex, "Error creating PropertySpecificCollectionOrderComparer");
             }
         }
-        else {
+        else
+        {
             // No property-specific collection order rules, so preserve the global setting
             this.compareLogic.Config.IgnoreCollectionOrder = globalIgnoreCollectionOrder;
             this.logger.LogDebug("No property-specific collection order rules found. Preserving global IgnoreCollectionOrder setting: {GlobalSetting}", globalIgnoreCollectionOrder);
@@ -682,8 +762,10 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
         var rulesApplied = 0;
         var beforeCount = this.compareLogic.Config.MembersToIgnore.Count;
 
-        foreach (var rule in this.AllIgnoreRules) {
-            try {
+        foreach (var rule in this.AllIgnoreRules)
+        {
+            try
+            {
                 rule.ApplyTo(this.compareLogic.Config);
                 rulesApplied++;
 
@@ -695,7 +777,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
                     break;
                 }
             }
-            catch (Exception ex) {
+            catch (Exception ex)
+            {
                 this.logger.LogError(ex, "Error applying rule for property {PropertyPath}", rule.PropertyPath);
             }
         }
@@ -704,7 +787,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
         var generatedPatterns = finalCount - beforeCount;
 
         // Cache the configuration
-        this.cachedConfig = new CachedComparisonConfig {
+        this.cachedConfig = new CachedComparisonConfig
+        {
             IgnoreCollectionOrder = this.compareLogic.Config.IgnoreCollectionOrder,
             CaseSensitive = this.compareLogic.Config.CaseSensitive,
             MembersToIgnore = new List<string>(this.compareLogic.Config.MembersToIgnore),
@@ -712,7 +796,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
         };
 
         // Only log configuration summary in debug mode to reduce noise
-        if (this.logger.IsEnabled(LogLevel.Debug)) {
+        if (this.logger.IsEnabled(LogLevel.Debug))
+        {
             this.logger.LogDebug(
                 "Configuration built and cached: {RuleCount} rules applied, {IgnoreCount} ignore patterns, {ComparerCount} custom comparers",
                 rulesApplied, finalCount, this.compareLogic.Config.CustomComparers.Count);
@@ -722,8 +807,10 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// <summary>
     /// Mark configuration as dirty when rules change.
     /// </summary>
-    private void MarkConfigurationDirty() {
-        lock (this.configurationLock) {
+    private void MarkConfigurationDirty()
+    {
+        lock (this.configurationLock)
+        {
             this.isConfigurationDirty = true;
             this.cachedConfig = null;
         }
@@ -734,8 +821,10 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// </summary>
     /// <param name="result">The comparison result to filter.</param>
     /// <returns>A filtered comparison result.</returns>
-    public ComparisonResult FilterIgnoredDifferences(ComparisonResult result) {
-        if (result == null || !result.Differences.Any()) {
+    public ComparisonResult FilterIgnoredDifferences(ComparisonResult result)
+    {
+        if (result == null || !result.Differences.Any())
+        {
             return result;
         }
 
@@ -743,27 +832,32 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
         // The patterns we generated (including System.Collections variations) are in compareLogic.Config.MembersToIgnore
         // THREAD SAFETY FIX: Create thread-safe copy to avoid concurrent modification exceptions
         HashSet<string> propertiesToIgnoreCompletely;
-        lock (this.configurationLock) {
+        lock (this.configurationLock)
+        {
             var membersToIgnoreSnapshot = this.compareLogic.Config.MembersToIgnore?.ToList() ?? new List<string>();
             propertiesToIgnoreCompletely = new HashSet<string>(membersToIgnoreSnapshot);
         }
 
         // Also add the original rule paths for backward compatibility
-        foreach (var rule in this.AllIgnoreRules.Where(r => r.IgnoreCompletely)) {
+        foreach (var rule in this.AllIgnoreRules.Where(r => r.IgnoreCompletely))
+        {
             propertiesToIgnoreCompletely.Add(rule.PropertyPath);
         }
 
-        if (!propertiesToIgnoreCompletely.Any()) {
+        if (!propertiesToIgnoreCompletely.Any())
+        {
             return result;
         }
 
         // Performance optimization: Use different strategies based on rule count
         var useFastFiltering = this.ShouldUseFastFiltering();
 
-        if (useFastFiltering) {
+        if (useFastFiltering)
+        {
             return this.FilterDifferencesDirectly(result, propertiesToIgnoreCompletely);
         }
-        else {
+        else
+        {
             return this.FilterDifferencesWithPatternMatching(result, propertiesToIgnoreCompletely);
         }
     }
@@ -771,7 +865,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// <summary>
     /// Fast direct filtering for large rule sets - avoids expensive pattern matching.
     /// </summary>
-    private ComparisonResult FilterDifferencesDirectly(ComparisonResult result, HashSet<string> propertiesToIgnore) {
+    private ComparisonResult FilterDifferencesDirectly(ComparisonResult result, HashSet<string> propertiesToIgnore)
+    {
         var originalCount = result.Differences.Count;
         var filteredDifferences = new List<Difference>();
         var ignoredCount = 0;
@@ -780,14 +875,17 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
         var normalizedPatterns = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
         var wildcardPatterns = new List<string>();
 
-        foreach (var property in propertiesToIgnore) {
+        foreach (var property in propertiesToIgnore)
+        {
             normalizedPatterns.Add(property);
 
             // Handle collection patterns
-            if (property.Contains("[*]")) {
+            if (property.Contains("[*]"))
+            {
                 wildcardPatterns.Add(property);
             }
-            else {
+            else
+            {
                 // Add common collection variations for simple properties
                 normalizedPatterns.Add($"Results[*].{property}");
                 normalizedPatterns.Add($"Items[*].{property}");
@@ -797,39 +895,48 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
 
         this.logger.LogInformation("Using direct filtering for {IgnoreCount} ignore patterns (performance optimized)", propertiesToIgnore.Count);
 
-        foreach (var difference in result.Differences) {
+        foreach (var difference in result.Differences)
+        {
             var shouldIgnore = false;
             var propertyPath = difference.PropertyName;
 
             // Fast exact match check
-            if (normalizedPatterns.Contains(propertyPath)) {
+            if (normalizedPatterns.Contains(propertyPath))
+            {
                 shouldIgnore = true;
             }
-            else {
+            else
+            {
                 // Fast wildcard pattern check (only for patterns containing [*])
-                foreach (var pattern in wildcardPatterns) {
-                    if (this.DoesPropertyMatchWildcardPattern(propertyPath, pattern)) {
+                foreach (var pattern in wildcardPatterns)
+                {
+                    if (this.DoesPropertyMatchWildcardPattern(propertyPath, pattern))
+                    {
                         shouldIgnore = true;
                         break;
                     }
                 }
             }
 
-            if (!shouldIgnore) {
+            if (!shouldIgnore)
+            {
                 filteredDifferences.Add(difference);
             }
-            else {
+            else
+            {
                 ignoredCount++;
             }
         }
 
         // THREAD SAFETY FIX: Lock when modifying the result collection
-        lock (result.Differences) {
+        lock (result.Differences)
+        {
             result.Differences.Clear();
             result.Differences.AddRange(filteredDifferences);
         }
 
-        if (ignoredCount > 0) {
+        if (ignoredCount > 0)
+        {
             this.logger.LogInformation(
                 "Direct filtering removed {IgnoredCount} differences from {OriginalCount} total (kept {FilteredCount})",
                 ignoredCount, originalCount, filteredDifferences.Count);
@@ -841,8 +948,10 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// <summary>
     /// Original pattern matching approach for smaller rule sets.
     /// </summary>
-    private ComparisonResult FilterDifferencesWithPatternMatching(ComparisonResult result, HashSet<string> propertiesToIgnore) {
-        if (this.logger.IsEnabled(LogLevel.Debug)) {
+    private ComparisonResult FilterDifferencesWithPatternMatching(ComparisonResult result, HashSet<string> propertiesToIgnore)
+    {
+        if (this.logger.IsEnabled(LogLevel.Debug))
+        {
             this.logger.LogDebug(
                 "Filtering differences using {Count} tree navigator ignore patterns",
                 propertiesToIgnore.Count);
@@ -853,9 +962,11 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
         var ignoredCount = 0;
 
         // Performance: Only log detailed differences in debug mode to avoid overhead
-        if (this.logger.IsEnabled(LogLevel.Debug)) {
+        if (this.logger.IsEnabled(LogLevel.Debug))
+        {
             this.logger.LogDebug("=== ALL DIFFERENCES FOUND BY COMPARENETOBJECTS ===");
-            foreach (var diff in result.Differences) {
+            foreach (var diff in result.Differences)
+            {
                 this.logger.LogDebug(
                     "DIFFERENCE: '{PropertyName}' | Value1: '{Value1}' | Value2: '{Value2}'",
                     diff.PropertyName, diff.Object1Value, diff.Object2Value);
@@ -870,19 +981,24 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
         var retryCount = 0;
         var copySuccessful = false;
 
-        while (retryCount < maxRetries && !copySuccessful) {
-            try {
+        while (retryCount < maxRetries && !copySuccessful)
+        {
+            try
+            {
                 // Attempt to create a safe copy of the differences collection
                 differencesToProcess.Clear();
-                foreach (var diff in result.Differences) {
+                foreach (var diff in result.Differences)
+                {
                     differencesToProcess.Add(diff);
                 }
 
                 copySuccessful = true; // Success, exit retry loop
             }
-            catch (InvalidOperationException) {
+            catch (InvalidOperationException)
+            {
                 retryCount++;
-                if (retryCount >= maxRetries) {
+                if (retryCount >= maxRetries)
+                {
                     // Last resort: return original result without filtering
                     this.logger.LogError("Failed to create thread-safe copy of differences after {MaxRetries} attempts. Skipping pattern filtering.", maxRetries);
                     return result;
@@ -891,9 +1007,11 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
                 // Brief delay before retry
                 Thread.Sleep(10);
             }
-            catch (ArgumentException) {
+            catch (ArgumentException)
+            {
                 retryCount++;
-                if (retryCount >= maxRetries) {
+                if (retryCount >= maxRetries)
+                {
                     // Last resort: return original result without filtering
                     this.logger.LogError("Failed to create thread-safe copy of differences after {MaxRetries} attempts. Skipping pattern filtering.", maxRetries);
                     return result;
@@ -904,29 +1022,36 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
             }
         }
 
-        if (!copySuccessful) {
+        if (!copySuccessful)
+        {
             this.logger.LogError("Failed to create thread-safe copy of differences. Skipping pattern filtering.");
             return result;
         }
 
-        foreach (var difference in differencesToProcess) {
+        foreach (var difference in differencesToProcess)
+        {
             var shouldIgnore = PropertyIgnoreHelper.ShouldIgnoreProperty(difference.PropertyName, propertiesToIgnore, this.logger);
 
             // Also check the static MembersToIgnore list (for System.Collections variations)
-            if (!shouldIgnore) {
+            if (!shouldIgnore)
+            {
                 // THREAD SAFETY FIX: Use lock to safely access shared configuration
                 List<string> membersToIgnoreSnapshot;
-                lock (this.configurationLock) {
+                lock (this.configurationLock)
+                {
                     membersToIgnoreSnapshot = this.compareLogic.Config.MembersToIgnore?.ToList() ?? new List<string>();
                 }
 
-                foreach (var ignoredPath in membersToIgnoreSnapshot) {
+                foreach (var ignoredPath in membersToIgnoreSnapshot)
+                {
                     if (difference.PropertyName.Equals(ignoredPath, StringComparison.OrdinalIgnoreCase) ||
-                        difference.PropertyName.StartsWith(ignoredPath + ".", StringComparison.OrdinalIgnoreCase)) {
+                        difference.PropertyName.StartsWith(ignoredPath + ".", StringComparison.OrdinalIgnoreCase))
+                        {
                         shouldIgnore = true;
 
                         // Performance: Only log filtering details in trace mode
-                        if (this.logger.IsEnabled(LogLevel.Trace)) {
+                        if (this.logger.IsEnabled(LogLevel.Trace))
+                        {
                             this.logger.LogTrace(
                                 "Filtering out property '{PropertyPath}' (matched static MembersToIgnore: '{MatchedPath}')",
                                 difference.PropertyName, ignoredPath);
@@ -937,8 +1062,10 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
                 }
             }
 
-            if (!shouldIgnore) {
-                if (this.logger.IsEnabled(LogLevel.Trace)) {
+            if (!shouldIgnore)
+            {
+                if (this.logger.IsEnabled(LogLevel.Trace))
+                {
                     this.logger.LogTrace(
                         "Property '{PropertyName}' DOES NOT MATCH any ignore pattern - WILL BE KEPT AS DIFFERENCE",
                         difference.PropertyName);
@@ -946,9 +1073,11 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
 
                 filteredDifferences.Add(difference);
             }
-            else {
+            else
+            {
                 // Only log in debug mode to prevent spam in production with large comparisons
-                if (this.logger.IsEnabled(LogLevel.Debug)) {
+                if (this.logger.IsEnabled(LogLevel.Debug))
+                {
                     this.logger.LogDebug(
                         "Property '{PropertyName}' MATCHED ignore pattern - WILL BE IGNORED",
                         difference.PropertyName);
@@ -959,13 +1088,15 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
         }
 
         // THREAD SAFETY FIX: Lock when modifying the result collection
-        lock (result.Differences) {
+        lock (result.Differences)
+        {
             result.Differences.Clear();
             result.Differences.AddRange(filteredDifferences);
         }
 
         // Only log filtering summary if significant differences were filtered and Information level is enabled
-        if (ignoredCount > 0 && this.logger.IsEnabled(LogLevel.Information)) {
+        if (ignoredCount > 0 && this.logger.IsEnabled(LogLevel.Information))
+        {
             this.logger.LogInformation(
                 "Pattern matching filtering removed {IgnoredCount} differences from {OriginalCount} total (kept {FilteredCount})",
                 ignoredCount, originalCount, filteredDifferences.Count);
@@ -973,7 +1104,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
 
         // Log cache performance for monitoring
         var (hits, misses, hitRatio) = PropertyIgnoreHelper.GetCacheStats();
-        if (hits + misses > 0) {
+        if (hits + misses > 0)
+        {
             this.logger.LogDebug(
                 "Pattern matching cache performance: {Hits} hits, {Misses} misses, {HitRatio:P1} hit ratio",
                 hits, misses, hitRatio);
@@ -985,25 +1117,30 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// <summary>
     /// Fast wildcard pattern matching without regex.
     /// </summary>
-    private bool DoesPropertyMatchWildcardPattern(string propertyPath, string pattern) {
-        if (!pattern.Contains("[*]")) {
+    private bool DoesPropertyMatchWildcardPattern(string propertyPath, string pattern)
+    {
+        if (!pattern.Contains("[*]"))
+        {
             return false;
         }
 
         // Simple pattern matching for [*] - replace with any digits
         var patternParts = pattern.Split(new[] { "[*]" }, StringSplitOptions.None);
-        if (patternParts.Length != 2) {
+        if (patternParts.Length != 2)
+        {
             return false;
         }
 
         var prefix = patternParts[0];
         var suffix = patternParts[1];
 
-        if (!propertyPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) {
+        if (!propertyPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
             return false;
         }
 
-        if (!string.IsNullOrEmpty(suffix) && !propertyPath.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) {
+        if (!string.IsNullOrEmpty(suffix) && !propertyPath.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+        {
             return false;
         }
 
@@ -1015,8 +1152,10 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// <summary>
     /// Add a smart ignore rule.
     /// </summary>
-    public void AddSmartIgnoreRule(SmartIgnoreRule rule) {
-        if (rule == null) {
+    public void AddSmartIgnoreRule(SmartIgnoreRule rule)
+    {
+        if (rule == null)
+        {
             return;
         }
 
@@ -1030,13 +1169,16 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// <summary>
     /// Remove a smart ignore rule.
     /// </summary>
-    public void RemoveSmartIgnoreRule(SmartIgnoreRule rule) {
-        if (rule == null) {
+    public void RemoveSmartIgnoreRule(SmartIgnoreRule rule)
+    {
+        if (rule == null)
+        {
             return;
         }
 
         var removed = this.smartIgnoreRules.RemoveAll(r => r.Type == rule.Type && r.Value == rule.Value);
-        if (removed > 0) {
+        if (removed > 0)
+        {
             this.logger.LogInformation("Removed smart ignore rule: {Description}", rule.Description);
         }
     }
@@ -1044,13 +1186,16 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// <summary>
     /// Apply a preset of smart ignore rules.
     /// </summary>
-    public void ApplySmartIgnorePreset(string presetName) {
-        if (!SmartIgnorePresets.AllPresets.TryGetValue(presetName, out var preset)) {
+    public void ApplySmartIgnorePreset(string presetName)
+    {
+        if (!SmartIgnorePresets.AllPresets.TryGetValue(presetName, out var preset))
+        {
             this.logger.LogWarning("Unknown preset: {PresetName}", presetName);
             return;
         }
 
-        foreach (var rule in preset) {
+        foreach (var rule in preset)
+        {
             this.AddSmartIgnoreRule(rule);
         }
 
@@ -1060,7 +1205,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// <summary>
     /// Clear all smart ignore rules.
     /// </summary>
-    public void ClearSmartIgnoreRules() {
+    public void ClearSmartIgnoreRules()
+    {
         var count = this.smartIgnoreRules.Count;
         this.smartIgnoreRules.Clear();
         this.logger.LogInformation("Cleared {Count} smart ignore rules", count);
@@ -1070,7 +1216,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// Get all smart ignore rules.
     /// </summary>
     /// <returns></returns>
-    public IReadOnlyList<SmartIgnoreRule> GetSmartIgnoreRules() {
+    public IReadOnlyList<SmartIgnoreRule> GetSmartIgnoreRules()
+    {
         return this.smartIgnoreRules.ToList();
     }
 
@@ -1078,24 +1225,29 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// Filter differences using smart ignore rules.
     /// </summary>
     /// <returns></returns>
-    public ComparisonResult FilterSmartIgnoredDifferences(ComparisonResult result, Type modelType = null) {
+    public ComparisonResult FilterSmartIgnoredDifferences(ComparisonResult result, Type modelType = null)
+    {
         return this.smartIgnoreProcessor.FilterResult(result, this.smartIgnoreRules, modelType);
     }
 
     /// <summary>
     /// Normalize values of specified properties throughout an object graph.
     /// </summary>
-    public void NormalizePropertyValues(object obj, List<string> propertyNames) {
-        if (obj == null || propertyNames == null || !propertyNames.Any()) {
+    public void NormalizePropertyValues(object obj, List<string> propertyNames)
+    {
+        if (obj == null || propertyNames == null || !propertyNames.Any())
+        {
             return;
         }
 
-        try {
+        try
+        {
             // Use reflection to process the object graph
             this.ProcessObject(obj, propertyNames, new HashSet<object>());
             this.logger.LogDebug("Normalized {PropertyCount} properties in object", propertyNames.Count);
         }
-        catch (Exception ex) {
+        catch (Exception ex)
+        {
             this.logger.LogError(ex, "Error normalizing property values");
         }
     }
@@ -1103,9 +1255,11 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// <summary>
     /// Process an object to normalize specified properties.
     /// </summary>
-    private void ProcessObject(object obj, List<string> propertyNames, HashSet<object> processedObjects) {
+    private void ProcessObject(object obj, List<string> propertyNames, HashSet<object> processedObjects)
+    {
         // Avoid cycles in the object graph
-        if (obj == null || !obj.GetType().IsClass || obj is string || processedObjects.Contains(obj)) {
+        if (obj == null || !obj.GetType().IsClass || obj is string || processedObjects.Contains(obj))
+        {
             return;
         }
 
@@ -1113,23 +1267,29 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
 
         var type = obj.GetType();
 
-        foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance)) {
+        foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
             // Check if this property should be normalized
-            if (propertyNames.Contains(property.Name) && property.CanWrite) {
+            if (propertyNames.Contains(property.Name) && property.CanWrite)
+            {
                 this.SetDefaultValue(obj, property);
             }
-            else if (property.CanRead) {
+            else if (property.CanRead)
+            {
                 var value = property.GetValue(obj);
 
                 // If it's a collection, process each item
-                if (value is System.Collections.IEnumerable enumerable && !(value is string)) {
-                    foreach (var item in enumerable) {
+                if (value is System.Collections.IEnumerable enumerable && !(value is string))
+                {
+                    foreach (var item in enumerable)
+                    {
                         this.ProcessObject(item, propertyNames, processedObjects);
                     }
                 }
 
                 // If it's a complex object, process it recursively
-                else if (value != null && value.GetType().IsClass && !(value is string)) {
+                else if (value != null && value.GetType().IsClass && !(value is string))
+                {
                     this.ProcessObject(value, propertyNames, processedObjects);
                 }
             }
@@ -1139,8 +1299,10 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// <summary>
     /// Set a property to its default/normalized value.
     /// </summary>
-    private void SetDefaultValue(object obj, PropertyInfo property) {
-        if (!property.CanWrite) {
+    private void SetDefaultValue(object obj, PropertyInfo property)
+    {
+        if (!property.CanWrite)
+        {
             return;
         }
 
@@ -1148,36 +1310,46 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
 
         var propertyType = property.PropertyType;
 
-        if (propertyType == typeof(string)) {
+        if (propertyType == typeof(string))
+        {
             defaultValue = string.Empty;
         }
-        else if (propertyType == typeof(int) || propertyType == typeof(int?)) {
+        else if (propertyType == typeof(int) || propertyType == typeof(int?))
+        {
             defaultValue = 0;
         }
-        else if (propertyType == typeof(double) || propertyType == typeof(double?)) {
+        else if (propertyType == typeof(double) || propertyType == typeof(double?))
+        {
             defaultValue = 0.0;
         }
-        else if (propertyType == typeof(decimal) || propertyType == typeof(decimal?)) {
+        else if (propertyType == typeof(decimal) || propertyType == typeof(decimal?))
+        {
             defaultValue = 0m;
         }
-        else if (propertyType == typeof(bool) || propertyType == typeof(bool?)) {
+        else if (propertyType == typeof(bool) || propertyType == typeof(bool?))
+        {
             defaultValue = false;
         }
-        else if (propertyType == typeof(DateTime) || propertyType == typeof(DateTime?)) {
+        else if (propertyType == typeof(DateTime) || propertyType == typeof(DateTime?))
+        {
             defaultValue = DateTime.MinValue;
         }
-        else if (propertyType == typeof(Guid) || propertyType == typeof(Guid?)) {
+        else if (propertyType == typeof(Guid) || propertyType == typeof(Guid?))
+        {
             defaultValue = Guid.Empty;
         }
-        else if (propertyType.IsEnum) {
+        else if (propertyType.IsEnum)
+        {
             // Use the first enum value
             defaultValue = Enum.GetValues(propertyType).Cast<object>().FirstOrDefault();
         }
 
-        try {
+        try
+        {
             property.SetValue(obj, defaultValue);
         }
-        catch (Exception ex) {
+        catch (Exception ex)
+        {
             this.logger.LogWarning(ex, "Failed to set default value for property {PropertyName} of type {PropertyType}",
                 property.Name, propertyType.Name);
         }
@@ -1186,21 +1358,29 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// <summary>
     /// Custom class to hold comparison configuration for caching.
     /// </summary>
-    private class CachedComparisonConfig {
-        public bool IgnoreCollectionOrder { get; set; }
+    private class CachedComparisonConfig
+    {
+        public bool IgnoreCollectionOrder
+        {
+            get; set;
+        }
 
-        public bool CaseSensitive { get; set; }
+        public bool CaseSensitive
+        {
+            get; set;
+        }
 
-        public List<string> MembersToIgnore { get; set; } = new();
+        public List<string> MembersToIgnore { get; set; } = new ();
 
-        public List<BaseTypeComparer> CustomComparers { get; set; } = new();
+        public List<BaseTypeComparer> CustomComparers { get; set; } = new ();
     }
 
     /// <summary>
     /// High-performance property filter comparer that bypasses MembersToIgnore pattern matching
     /// for large domain models with many ignore rules.
     /// </summary>
-    private class FastPropertyFilterComparer : BaseTypeComparer {
+    private class FastPropertyFilterComparer : BaseTypeComparer
+    {
         private readonly HashSet<string> exactIgnorePaths;
         private readonly HashSet<string> collectionPrefixes;
         private readonly ILogger logger;
@@ -1209,22 +1389,26 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
             RootComparer rootComparer,
             IEnumerable<IgnoreRule> ignoreRules,
             ILogger logger)
-            : base(rootComparer) {
+            : base(rootComparer)
+            {
             this.logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
 
             // Build fast lookup structures
             this.exactIgnorePaths = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
             this.collectionPrefixes = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
 
-            foreach (var rule in ignoreRules.Where(r => r.IgnoreCompletely)) {
+            foreach (var rule in ignoreRules.Where(r => r.IgnoreCompletely))
+            {
                 var path = rule.PropertyPath;
                 this.exactIgnorePaths.Add(path);
 
                 // Handle collection patterns efficiently
-                if (path.Contains("[*]")) {
+                if (path.Contains("[*]"))
+                {
                     // Store the prefix before [*] for fast prefix matching
                     var prefixEnd = path.IndexOf("[*]");
-                    if (prefixEnd > 0) {
+                    if (prefixEnd > 0)
+                    {
                         var prefix = path.Substring(0, prefixEnd);
                         this.collectionPrefixes.Add(prefix);
                     }
@@ -1236,16 +1420,20 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
                 this.exactIgnorePaths.Count, this.collectionPrefixes.Count);
         }
 
-        public override bool IsTypeMatch(Type type1, Type type2) {
+        public override bool IsTypeMatch(Type type1, Type type2)
+        {
             // Handle all property comparisons to filter at the right level
             return true;
         }
 
-        public override void CompareType(CompareParms parms) {
+        public override void CompareType(CompareParms parms)
+        {
             // Fast check if this property should be ignored
-            if (this.ShouldIgnoreProperty(parms.BreadCrumb)) {
+            if (this.ShouldIgnoreProperty(parms.BreadCrumb))
+            {
                 // Skip this property entirely - no difference will be recorded
-                if (this.logger.IsEnabled(LogLevel.Debug)) {
+                if (this.logger.IsEnabled(LogLevel.Debug))
+                {
                     this.logger.LogDebug("Fast filter: Ignoring property '{Path}'", parms.BreadCrumb);
                 }
 
@@ -1257,23 +1445,29 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
             this.RootComparer.Compare(parms);
         }
 
-        private bool ShouldIgnoreProperty(string propertyPath) {
-            if (string.IsNullOrEmpty(propertyPath)) {
+        private bool ShouldIgnoreProperty(string propertyPath)
+        {
+            if (string.IsNullOrEmpty(propertyPath))
+            {
                 return false;
             }
 
             // Fast exact match check
-            if (this.exactIgnorePaths.Contains(propertyPath)) {
+            if (this.exactIgnorePaths.Contains(propertyPath))
+            {
                 return true;
             }
 
             // Fast collection pattern check
-            foreach (var prefix in this.collectionPrefixes) {
-                if (propertyPath.StartsWith(prefix + "[", StringComparison.OrdinalIgnoreCase)) {
+            foreach (var prefix in this.collectionPrefixes)
+            {
+                if (propertyPath.StartsWith(prefix + "[", StringComparison.OrdinalIgnoreCase))
+                {
                     // Check if it matches the pattern (prefix[number].rest or prefix[number])
                     var afterPrefix = propertyPath.Substring(prefix.Length);
                     if (afterPrefix.StartsWith("[") &&
-                        (afterPrefix.Contains("].") || System.Text.RegularExpressions.Regex.IsMatch(afterPrefix, @"^\[\d+\]($|\.)"))) {
+                        (afterPrefix.Contains("].") || System.Text.RegularExpressions.Regex.IsMatch(afterPrefix, @"^\[\d+\]($|\.)")))
+                        {
                         return true;
                     }
                 }
@@ -1287,19 +1481,24 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// Automatically adds properties with XmlIgnore attributes to the MembersToIgnore list
     /// This prevents properties that should not be serialized from being compared.
     /// </summary>
-    public void AddXmlIgnorePropertiesToIgnoreList(Type modelType) {
-        if (modelType == null) {
+    public void AddXmlIgnorePropertiesToIgnoreList(Type modelType)
+    {
+        if (modelType == null)
+        {
             return;
         }
 
-        try {
+        try
+        {
             var ignoredProperties = this.FindXmlIgnoreProperties(modelType);
-            if (!ignoredProperties.Any()) {
+            if (!ignoredProperties.Any())
+            {
                 return;
             }
 
             var newRules = ignoredProperties
-                .Select(p => new IgnoreRule(this.logger) {
+                .Select(p => new IgnoreRule(this.logger)
+                {
                     PropertyPath = p,
                     IgnoreCompletely = true,
                 })
@@ -1310,7 +1509,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
 
             this.logger.LogInformation("Added {Count} XmlIgnore properties as ignore rules for type '{TypeName}'", ignoredProperties.Count, modelType.Name);
         }
-        catch (Exception ex) {
+        catch (Exception ex)
+        {
             this.logger.LogWarning(ex, "Error adding XmlIgnore properties to ignore list for type '{TypeName}'", modelType.Name);
         }
     }
@@ -1318,32 +1518,39 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
     /// <summary>
     /// Recursively finds all properties with XmlIgnore attributes in a type and its nested types.
     /// </summary>
-    private List<string> FindXmlIgnoreProperties(Type type, string currentPath = "", HashSet<Type> processedTypes = null) {
+    private List<string> FindXmlIgnoreProperties(Type type, string currentPath = "", HashSet<Type> processedTypes = null)
+    {
         var ignoredProperties = new List<string>();
 
-        if (processedTypes == null) {
+        if (processedTypes == null)
+        {
             processedTypes = new HashSet<Type>();
         }
 
         // Prevent infinite recursion on circular references
-        if (processedTypes.Contains(type)) {
+        if (processedTypes.Contains(type))
+        {
             return ignoredProperties;
         }
 
         processedTypes.Add(type);
 
-        try {
+        try
+        {
             var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
 
-            foreach (var property in properties) {
+            foreach (var property in properties)
+            {
                 var propertyPath = string.IsNullOrEmpty(currentPath) ? property.Name : $"{currentPath}.{property.Name}";
 
                 // Check if this property has XmlIgnore attribute
-                if (property.GetCustomAttribute<XmlIgnoreAttribute>() != null) {
+                if (property.GetCustomAttribute<XmlIgnoreAttribute>() != null)
+                {
                     ignoredProperties.Add(propertyPath);
                     this.logger.LogTrace("Found XmlIgnore property: {PropertyPath}", propertyPath);
                 }
-                else {
+                else
+                {
                     // Recursively check nested types (but not primitive types, strings, etc.)
                     var propertyType = property.PropertyType;
                     if (!propertyType.IsPrimitive &&
@@ -1351,24 +1558,30 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
                         propertyType != typeof(DateTime) &&
                         propertyType != typeof(decimal) &&
                         !propertyType.IsEnum &&
-                        !propertyType.IsValueType) {
+                        !propertyType.IsValueType)
+                        {
                         // Handle collections
                         if (propertyType.IsGenericType &&
-                            propertyType.GetGenericTypeDefinition() == typeof(List<>)) {
+                            propertyType.GetGenericTypeDefinition() == typeof(List<>))
+                            {
                             var elementType = propertyType.GetGenericArguments()[0];
-                            if (!elementType.IsPrimitive && elementType != typeof(string)) {
+                            if (!elementType.IsPrimitive && elementType != typeof(string))
+                            {
                                 var nestedProperties = this.FindXmlIgnoreProperties(elementType, $"{propertyPath}[*]", processedTypes);
                                 ignoredProperties.AddRange(nestedProperties);
                             }
                         }
-                        else if (propertyType.IsArray) {
+                        else if (propertyType.IsArray)
+                        {
                             var elementType = propertyType.GetElementType();
-                            if (!elementType.IsPrimitive && elementType != typeof(string)) {
+                            if (!elementType.IsPrimitive && elementType != typeof(string))
+                            {
                                 var nestedProperties = this.FindXmlIgnoreProperties(elementType, $"{propertyPath}[*]", processedTypes);
                                 ignoredProperties.AddRange(nestedProperties);
                             }
                         }
-                        else {
+                        else
+                        {
                             // Regular nested object
                             var nestedProperties = this.FindXmlIgnoreProperties(propertyType, propertyPath, processedTypes);
                             ignoredProperties.AddRange(nestedProperties);
@@ -1377,7 +1590,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService {
                 }
             }
         }
-        catch (Exception ex) {
+        catch (Exception ex)
+        {
             this.logger.LogWarning(ex, "Error scanning properties for XmlIgnore attributes in type '{TypeName}'", type.Name);
         }
 

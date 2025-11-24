@@ -4,12 +4,16 @@
 
 namespace ComparisonTool.Core.Comparison.Results;
 
-public class MultiFolderComparisonResult {
+public class MultiFolderComparisonResult
+{
     public bool AllEqual { get; set; } = true;
 
-    public int TotalPairsCompared { get; set; }
+    public int TotalPairsCompared
+    {
+        get; set;
+    }
 
-    public List<FilePairComparisonResult> FilePairResults { get; set; } = new();
+    public List<FilePairComparisonResult> FilePairResults { get; set; } = new ();
 
     public Dictionary<string, object> Metadata { get; set; } = new Dictionary<string, object>();
 }

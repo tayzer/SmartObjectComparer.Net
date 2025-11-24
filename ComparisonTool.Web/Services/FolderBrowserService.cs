@@ -12,32 +12,40 @@ namespace ComparisonTool.Web.Services;
 /// <summary>
 /// Service that provides folder browsing capabilities for the desktop environment.
 /// </summary>
-public static class FolderBrowserService {
+public static class FolderBrowserService
+{
     /// <summary>
     /// Opens a native folder browser dialog.
     /// </summary>
-    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     [JSInvokable]
-    public static async Task<string> BrowseFolderAsync(string title) {
+    public static async Task<string> BrowseFolderAsync(string title)
+    {
         // Only available in desktop environments
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) &&
             !RuntimeInformation.IsOSPlatform(OSPlatform.OSX) &&
-            !RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) {
+            !RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
             return null;
         }
 
-        try {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
+        try
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
                 return await BrowseFolderWindowsAsync(title);
             }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) {
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
                 return await BrowseFolderMacAsync(title);
             }
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) {
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
                 return await BrowseFolderLinuxAsync(title);
             }
         }
-        catch (Exception ex) {
+        catch (Exception ex)
+        {
             Console.Error.WriteLine($"Error browsing for folder: {ex.Message}");
         }
 
@@ -47,12 +55,16 @@ public static class FolderBrowserService {
     /// <summary>
     /// Opens a Windows folder browser dialog.
     /// </summary>
-    private static async Task<string> BrowseFolderWindowsAsync(string title) {
+    private static async Task<string> BrowseFolderWindowsAsync(string title)
+    {
         // Use System.Windows.Forms for Windows
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) {
-            try {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            try
+            {
                 // Create and configure a folder browser dialog
-                var folderBrowser = new System.Windows.Forms.FolderBrowserDialog {
+                var folderBrowser = new System.Windows.Forms.FolderBrowserDialog
+                {
                     Description = title,
                     UseDescriptionForTitle = true,
                     ShowNewFolderButton = true,
@@ -61,11 +73,13 @@ public static class FolderBrowserService {
                 // Show the dialog
                 var result = folderBrowser.ShowDialog();
 
-                if (result == System.Windows.Forms.DialogResult.OK) {
+                if (result == System.Windows.Forms.DialogResult.OK)
+                {
                     return folderBrowser.SelectedPath;
                 }
             }
-            catch (Exception ex) {
+            catch (Exception ex)
+            {
                 Console.Error.WriteLine($"Error showing Windows folder browser: {ex.Message}");
             }
         }
@@ -79,8 +93,10 @@ public static class FolderBrowserService {
     private static async Task<string> BrowseFolderMacAsync(string title)
     {
         // Fallback to command line for macOS
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) {
-            try {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            try
+            {
                 // Use NSOpenPanel through AppleScript on macOS
                 var scriptArguments = $"-e 'tell application \"System Events\"' " +
                                     $"-e 'set folderPath to choose folder with prompt \"{title}\"' " +
@@ -88,7 +104,8 @@ public static class FolderBrowserService {
                                     $"-e 'return posixPath' " +
                                     $"-e 'end tell'";
 
-                var processInfo = new System.Diagnostics.ProcessStartInfo {
+                var processInfo = new System.Diagnostics.ProcessStartInfo
+                {
                     FileName = "osascript",
                     Arguments = scriptArguments,
                     RedirectStandardOutput = true,
@@ -97,16 +114,19 @@ public static class FolderBrowserService {
                 };
 
                 using var process = System.Diagnostics.Process.Start(processInfo);
-                if (process != null) {
+                if (process != null)
+                {
                     var output = await process.StandardOutput.ReadToEndAsync();
                     await process.WaitForExitAsync();
 
-                    if (process.ExitCode == 0 && !string.IsNullOrEmpty(output)) {
+                    if (process.ExitCode == 0 && !string.IsNullOrEmpty(output))
+                    {
                         return output.Trim();
                     }
                 }
             }
-            catch (Exception ex) {
+            catch (Exception ex)
+            {
                 Console.Error.WriteLine($"Error showing macOS folder browser: {ex.Message}");
             }
         }
@@ -117,12 +137,16 @@ public static class FolderBrowserService {
     /// <summary>
     /// Opens a Linux folder browser dialog.
     /// </summary>
-    private static async Task<string> BrowseFolderLinuxAsync(string title) {
+    private static async Task<string> BrowseFolderLinuxAsync(string title)
+    {
         // Fallback to command line for Linux
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) {
-            try {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            try
+            {
                 // Try to use zenity for folder selection
-                var processInfo = new System.Diagnostics.ProcessStartInfo {
+                var processInfo = new System.Diagnostics.ProcessStartInfo
+                {
                     FileName = "zenity",
                     Arguments = $"--file-selection --directory --title=\"{title}\"",
                     RedirectStandardOutput = true,
@@ -131,16 +155,19 @@ public static class FolderBrowserService {
                 };
 
                 using var process = System.Diagnostics.Process.Start(processInfo);
-                if (process != null) {
+                if (process != null)
+                {
                     var output = await process.StandardOutput.ReadToEndAsync();
                     await process.WaitForExitAsync();
 
-                    if (process.ExitCode == 0 && !string.IsNullOrEmpty(output)) {
+                    if (process.ExitCode == 0 && !string.IsNullOrEmpty(output))
+                    {
                         return output.Trim();
                     }
                 }
             }
-            catch (Exception ex) {
+            catch (Exception ex)
+            {
                 Console.Error.WriteLine($"Error showing Linux folder browser: {ex.Message}");
             }
         }
@@ -153,7 +180,8 @@ public static class FolderBrowserService {
     /// </summary>
     /// <returns></returns>
     [JSInvokable]
-    public static bool IsDesktopEnvironment() {
+    public static bool IsDesktopEnvironment()
+    {
         return RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ||
                RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ||
                RuntimeInformation.IsOSPlatform(OSPlatform.Linux);

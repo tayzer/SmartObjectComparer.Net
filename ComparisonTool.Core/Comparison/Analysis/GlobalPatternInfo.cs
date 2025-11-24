@@ -10,27 +10,30 @@ namespace ComparisonTool.Core.Comparison.Analysis;
 /// Information about a pattern of differences that appears across multiple files
 /// Modified for thread safety with a field instead of property for OccurrenceCount.
 /// </summary>
-public class GlobalPatternInfo {
+public class GlobalPatternInfo
+{
     public string PatternPath { get; set; } = string.Empty;
 
     // Public fields retained for use with Interlocked operations elsewhere in the codebase
-    public int occurrenceCount;
+    public int OccurrenceCountValue;
 
     // Property wrapper for the field (keeps API compatibility)
-    public int OccurrenceCount {
-        get => this.occurrenceCount;
-        set => this.occurrenceCount = value;
+    public int OccurrenceCount
+    {
+        get => this.OccurrenceCountValue;
+        set => this.OccurrenceCountValue = value;
     }
 
-    public int fileCount;
+    public int FileCountValue;
 
     // Property wrapper for the field (keeps API compatibility)
-    public int FileCount {
-        get => this.fileCount;
-        set => this.fileCount = value;
+    public int FileCount
+    {
+        get => this.FileCountValue;
+        set => this.FileCountValue = value;
     }
 
-    public List<string> AffectedFiles { get; set; } = new();
+    public List<string> AffectedFiles { get; set; } = new ();
 
-    public List<Difference> Examples { get; set; } = new();
+    public List<Difference> Examples { get; set; } = new ();
 }

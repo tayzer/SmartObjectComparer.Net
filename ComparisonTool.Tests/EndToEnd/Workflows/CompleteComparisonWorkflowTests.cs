@@ -18,7 +18,8 @@ using Moq;
 namespace ComparisonTool.Tests.EndToEnd.Workflows;
 
 [TestClass]
-public class CompleteComparisonWorkflowTests {
+public class CompleteComparisonWorkflowTests
+{
     private readonly Mock<ILogger<ComparisonService>> mockLogger;
     private readonly Mock<ILogger<ComparisonConfigurationService>> mockConfigLogger;
     private readonly Mock<ILogger<XmlDeserializationService>> mockXmlLogger;
@@ -34,7 +35,8 @@ public class CompleteComparisonWorkflowTests {
     private readonly ComparisonResultCacheService cacheService;
     private readonly ComparisonService comparisonService;
 
-    public CompleteComparisonWorkflowTests() {
+    public CompleteComparisonWorkflowTests()
+    {
         this.mockLogger = new Mock<ILogger<ComparisonService>>();
         this.mockConfigLogger = new Mock<ILogger<ComparisonConfigurationService>>();
         this.mockXmlLogger = new Mock<ILogger<XmlDeserializationService>>();
@@ -42,7 +44,8 @@ public class CompleteComparisonWorkflowTests {
         this.mockPerfLogger = new Mock<ILogger<PerformanceTracker>>();
         this.mockResourceLogger = new Mock<ILogger<SystemResourceMonitor>>();
 
-        var configOptions = new ComparisonConfigurationOptions {
+        var configOptions = new ComparisonConfigurationOptions
+        {
             MaxDifferences = 1000,
             DefaultIgnoreCollectionOrder = true,
             DefaultIgnoreStringCase = false,
@@ -87,14 +90,16 @@ public class CompleteComparisonWorkflowTests {
         this.RegisterDomainModels();
     }
 
-    private void RegisterDomainModels() {
+    private void RegisterDomainModels()
+    {
         // Register test models for the workflow tests
         this.xmlService.RegisterDomainModel<TestOrderModel>("TestOrderModel");
         this.xmlService.RegisterDomainModel<TestCustomerModel>("TestCustomerModel");
     }
 
     [TestMethod]
-    public async Task CompleteWorkflow_WithSimpleIdenticalFiles_ShouldReturnNoDifferences() {
+    public async Task CompleteWorkflow_WithSimpleIdenticalFiles_ShouldReturnNoDifferences()
+    {
         // Arrange
         var xml = this.CreateSimpleOrderXml("Order123", "John Doe", "123 Main St");
 
@@ -111,7 +116,8 @@ public class CompleteComparisonWorkflowTests {
     }
 
     [TestMethod]
-    public async Task CompleteWorkflow_WithDifferentCustomerNames_ShouldReturnDifferences() {
+    public async Task CompleteWorkflow_WithDifferentCustomerNames_ShouldReturnDifferences()
+    {
         // Arrange
         var xml1 = this.CreateSimpleOrderXml("Order123", "John Doe", "123 Main St");
         var xml2 = this.CreateSimpleOrderXml("Order123", "Jane Smith", "123 Main St");
@@ -130,7 +136,8 @@ public class CompleteComparisonWorkflowTests {
     }
 
     [TestMethod]
-    public async Task CompleteWorkflow_WithIgnoredProperties_ShouldFilterDifferences() {
+    public async Task CompleteWorkflow_WithIgnoredProperties_ShouldFilterDifferences()
+    {
         // Arrange
         var xml1 = this.CreateSimpleOrderXml("Order123", "John Doe", "123 Main St");
         var xml2 = this.CreateSimpleOrderXml("Order123", "Jane Smith", "456 Oak Ave");
@@ -152,7 +159,8 @@ public class CompleteComparisonWorkflowTests {
     }
 
     [TestMethod]
-    public async Task CompleteWorkflow_WithComplexOrderWithItems_ShouldHandleComplexStructures() {
+    public async Task CompleteWorkflow_WithComplexOrderWithItems_ShouldHandleComplexStructures()
+    {
         // Arrange
         var xml1 = this.CreateComplexOrderXml("Order123", "John Doe", new[]
         {
@@ -180,7 +188,8 @@ public class CompleteComparisonWorkflowTests {
     }
 
     [TestMethod]
-    public async Task CompleteWorkflow_WithCollectionOrderIgnored_ShouldIgnoreItemOrder() {
+    public async Task CompleteWorkflow_WithCollectionOrderIgnored_ShouldIgnoreItemOrder()
+    {
         // Arrange
         var xml1 = this.CreateComplexOrderXml("Order123", "John Doe", new[]
         {
@@ -210,7 +219,8 @@ public class CompleteComparisonWorkflowTests {
     }
 
     [TestMethod]
-    public async Task CompleteWorkflow_WithCaching_ShouldUseCacheForIdenticalFiles() {
+    public async Task CompleteWorkflow_WithCaching_ShouldUseCacheForIdenticalFiles()
+    {
         // Arrange
         var xml = this.CreateSimpleOrderXml("Order123", "John Doe", "123 Main St");
 
@@ -238,7 +248,8 @@ public class CompleteComparisonWorkflowTests {
     }
 
     [TestMethod]
-    public async Task CompleteWorkflow_WithSmartIgnoreRules_ShouldFilterCorrectly() {
+    public async Task CompleteWorkflow_WithSmartIgnoreRules_ShouldFilterCorrectly()
+    {
         // Arrange
         var xml1 = this.CreateComplexOrderXml("Order123", "John Doe", new[]
         {
@@ -271,7 +282,8 @@ public class CompleteComparisonWorkflowTests {
     }
 
     [TestMethod]
-    public async Task CompleteWorkflow_WithPerformanceTracking_ShouldTrackOperations() {
+    public async Task CompleteWorkflow_WithPerformanceTracking_ShouldTrackOperations()
+    {
         // Arrange
         var xml = this.CreateSimpleOrderXml("Order123", "John Doe", "123 Main St");
 
@@ -289,7 +301,8 @@ public class CompleteComparisonWorkflowTests {
         // Note: In a real scenario, you might want to verify that performance data was logged
     }
 
-    private string CreateSimpleOrderXml(string orderId, string customerName, string address) {
+    private string CreateSimpleOrderXml(string orderId, string customerName, string address)
+    {
         return $@"<?xml version=""1.0"" encoding=""utf-8""?>
 <TestOrderModel>
     <OrderId>{orderId}</OrderId>
@@ -300,7 +313,8 @@ public class CompleteComparisonWorkflowTests {
 </TestOrderModel>";
     }
 
-    private string CreateComplexOrderXml(string orderId, string customerName, TestOrderItem[] items) {
+    private string CreateComplexOrderXml(string orderId, string customerName, TestOrderItem[] items)
+    {
         var itemsXml = string.Join("\n", items.Select(item => $@"
         <OrderItem>
             <Id>{item.Id}</Id>
@@ -325,50 +339,89 @@ public class CompleteComparisonWorkflowTests {
 
     // Test helper classes
     [System.Xml.Serialization.XmlRoot("TestOrderModel")]
-    public class TestOrderModel {
+    public class TestOrderModel
+    {
         [System.Xml.Serialization.XmlElement("OrderId")]
-        public string? OrderId { get; set; }
+        public string? OrderId
+        {
+            get; set;
+        }
 
         [System.Xml.Serialization.XmlElement("CustomerName")]
-        public string? CustomerName { get; set; }
+        public string? CustomerName
+        {
+            get; set;
+        }
 
         [System.Xml.Serialization.XmlElement("Address")]
-        public string? Address { get; set; }
+        public string? Address
+        {
+            get; set;
+        }
 
         [System.Xml.Serialization.XmlArray("OrderItems")]
         [System.Xml.Serialization.XmlArrayItem("OrderItem")]
-        public List<TestOrderItem> OrderItems { get; set; } = new();
+        public List<TestOrderItem> OrderItems { get; set; } = new ();
 
         [System.Xml.Serialization.XmlElement("TotalAmount")]
-        public decimal TotalAmount { get; set; }
+        public decimal TotalAmount
+        {
+            get; set;
+        }
 
         [System.Xml.Serialization.XmlElement("OrderDate")]
-        public DateTime OrderDate { get; set; }
+        public DateTime OrderDate
+        {
+            get; set;
+        }
     }
 
-    public class TestOrderItem {
+    public class TestOrderItem
+    {
         [System.Xml.Serialization.XmlElement("Id")]
-        public int Id { get; set; }
+        public int Id
+        {
+            get; set;
+        }
 
         [System.Xml.Serialization.XmlElement("Name")]
-        public string? Name { get; set; }
+        public string? Name
+        {
+            get; set;
+        }
 
         [System.Xml.Serialization.XmlElement("Price")]
-        public decimal Price { get; set; }
+        public decimal Price
+        {
+            get; set;
+        }
 
         [System.Xml.Serialization.XmlElement("Quantity")]
-        public int Quantity { get; set; }
+        public int Quantity
+        {
+            get; set;
+        }
     }
 
     [System.Xml.Serialization.XmlRoot("TestCustomerModel")]
-    public class TestCustomerModel {
+    public class TestCustomerModel
+    {
         [System.Xml.Serialization.XmlElement("CustomerId")]
-        public string? CustomerId { get; set; }
+        public string? CustomerId
+        {
+            get; set;
+        }
 
         [System.Xml.Serialization.XmlElement("Name")]
-        public string? Name { get; set; }
+        public string? Name
+        {
+            get; set;
+        }
 
         [System.Xml.Serialization.XmlElement("Email")]
-        public string? Email { get; set; }
+        public string? Email
+        {
+            get; set;
+        }
     }
 }

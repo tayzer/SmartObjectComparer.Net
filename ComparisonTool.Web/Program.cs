@@ -22,14 +22,16 @@ builder.Host.UseSerilog();
 builder.Services
     .AddUnifiedComparisonServices(builder.Configuration)
     .AddRazorComponents()
-    .AddInteractiveServerComponents(options => {
+    .AddInteractiveServerComponents(options =>
+    {
         options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(30);
         options.DisconnectedCircuitMaxRetained = 100;
     });
 
 builder.Services.AddBlazorBootstrap();
 
-builder.Services.AddSignalR(options => {
+builder.Services.AddSignalR(options =>
+{
     options.MaximumReceiveMessageSize = 10 * 1024 * 1024;
     options.ClientTimeoutInterval = TimeSpan.FromMinutes(5);
     options.KeepAliveInterval = TimeSpan.FromSeconds(15);
@@ -43,11 +45,13 @@ ThreadPoolConfig.Configure();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-if (!app.Environment.IsDevelopment()) {
+if (!app.Environment.IsDevelopment())
+{
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
     app.UseHsts();
 }
-else {
+else
+{
     app.UseDeveloperExceptionPage();
 }
 

@@ -10,7 +10,8 @@ namespace ComparisonTool.Core.Comparison;
 /// <summary>
 /// Interface for the comparison orchestrator that handles file-level comparison operations.
 /// </summary>
-public interface IComparisonOrchestrator {
+public interface IComparisonOrchestrator
+{
     /// <summary>
     /// Compare two XML files using the specified domain model with caching and performance optimization.
     /// </summary>

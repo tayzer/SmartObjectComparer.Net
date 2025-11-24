@@ -7,7 +7,8 @@ namespace ComparisonTool.Core.Comparison.Analysis;
 /// <summary>
 /// Categories of differences for better organization.
 /// </summary>
-public enum DifferenceCategory {
+public enum DifferenceCategory
+{
     TextContentChanged,
     NumericValueChanged,
     DateTimeChanged,

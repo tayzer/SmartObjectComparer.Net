@@ -9,7 +9,8 @@ namespace ComparisonTool.Core.Comparison.Configuration;
 /// <summary>
 /// Interface for comparison configuration management.
 /// </summary>
-public interface IComparisonConfigurationService {
+public interface IComparisonConfigurationService
+{
     /// <summary>
     /// Get the current comparison configuration.
     /// </summary>
