@@ -9,29 +9,25 @@ namespace ComparisonTool.Core.Comparison.Analysis;
 /// <summary>
 /// Represents a group of semantically related differences.
 /// </summary>
-public class SemanticDifferenceGroup
-{
+public class SemanticDifferenceGroup {
     /// <summary>
     /// Gets or sets a descriptive name for this group of differences.
     /// </summary>
-    public string GroupName
-    {
+    public string GroupName {
         get; set;
     }
 
     /// <summary>
     /// Gets or sets a semantic description of what these differences represent.
     /// </summary>
-    public string SemanticDescription
-    {
+    public string SemanticDescription {
         get; set;
     }
 
     /// <summary>
     /// Gets or sets confidence level (0-100) that this grouping is accurate.
     /// </summary>
-    public int ConfidenceLevel
-    {
+    public int ConfidenceLevel {
         get; set;
     }
 

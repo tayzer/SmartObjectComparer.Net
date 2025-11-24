@@ -2,8 +2,7 @@
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
-namespace ComparisonTool.Core.Comparison.Analysis
-{
+namespace ComparisonTool.Core.Comparison.Analysis {
     using System.Text.RegularExpressions;
     using ComparisonTool.Core.Comparison.Results;
     using ComparisonTool.Core.Utilities;
@@ -14,8 +13,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
     /// Enhanced analyzer for XML differences that provides more meaningful categorization
     /// and identifies structured patterns across multiple comparison results.
     /// </summary>
-    public class EnhancedDifferenceAnalyzer
-    {
+    public class EnhancedDifferenceAnalyzer {
         private readonly MultiFolderComparisonResult folderResult;
         private readonly ILogger logger;
 
@@ -42,44 +40,40 @@ namespace ComparisonTool.Core.Comparison.Analysis
         /// <summary>
         /// Result of the enhanced analysis.
         /// </summary>
-        public class EnhancedAnalysisResult
-        {
+        public class EnhancedAnalysisResult {
             // Collection elements with recurring missing properties
-            public List<StructuralPattern> RecurringMissingElements { get; set; } = new ();
+            public List<StructuralPattern> RecurringMissingElements { get; set; } = new();
 
             // Properties with inconsistent presence
-            public List<StructuralPattern> InconsistentProperties { get; set; } = new ();
+            public List<StructuralPattern> InconsistentProperties { get; set; } = new();
 
             // Structural issues in the XML
-            public List<StructuralPattern> StructuralIssues { get; set; } = new ();
+            public List<StructuralPattern> StructuralIssues { get; set; } = new();
 
             // Differences by enhanced category
-            public Dictionary<EnhancedDifferenceCategory, List<Difference>> DifferencesByCategory { get; set; } = new ();
+            public Dictionary<EnhancedDifferenceCategory, List<Difference>> DifferencesByCategory { get; set; } = new();
 
             // Differences by XML path pattern
-            public Dictionary<string, List<Difference>> DifferencesByXmlPath { get; set; } = new ();
+            public Dictionary<string, List<Difference>> DifferencesByXmlPath { get; set; } = new();
 
             // Statistics by category
-            public Dictionary<EnhancedDifferenceCategory, int> CategoryCounts { get; set; } = new ();
+            public Dictionary<EnhancedDifferenceCategory, int> CategoryCounts { get; set; } = new();
 
             // Patterns with high impact (affect multiple files consistently)
-            public List<StructuralPattern> HighImpactPatterns { get; set; } = new ();
+            public List<StructuralPattern> HighImpactPatterns { get; set; } = new();
 
             // Total number of differences analyzed
-            public int TotalDifferences
-            {
+            public int TotalDifferences {
                 get; set;
             }
 
             // Total number of file pairs analyzed
-            public int TotalFilePairs
-            {
+            public int TotalFilePairs {
                 get; set;
             }
 
             // Number of file pairs with differences
-            public int FilePairsWithDifferences
-            {
+            public int FilePairsWithDifferences {
                 get; set;
             }
         }
@@ -87,8 +81,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
         /// <summary>
         /// A structural pattern identified in the differences.
         /// </summary>
-        public class StructuralPattern
-        {
+        public class StructuralPattern {
             // The XML path where this pattern occurs
             public string XmlPath { get; set; } = string.Empty;
 
@@ -96,38 +89,33 @@ namespace ComparisonTool.Core.Comparison.Analysis
             public string Description { get; set; } = string.Empty;
 
             // How many times this pattern appears
-            public int OccurrenceCount
-            {
+            public int OccurrenceCount {
                 get; set;
             }
 
             // Number of files where this pattern appears
-            public int FileCount
-            {
+            public int FileCount {
                 get; set;
             }
 
             // How consistently this pattern appears across files with differences (0-100%)
-            public double Consistency
-            {
+            public double Consistency {
                 get; set;
             }
 
             // Detailed category of this difference
-            public EnhancedDifferenceCategory Category
-            {
+            public EnhancedDifferenceCategory Category {
                 get; set;
             }
 
             // List of file pairs affected by this pattern
-            public List<string> AffectedFiles { get; set; } = new ();
+            public List<string> AffectedFiles { get; set; } = new();
 
             // Example differences for this pattern
-            public List<Difference> Examples { get; set; } = new ();
+            public List<Difference> Examples { get; set; } = new();
 
             // Is this a collection-related pattern?
-            public bool IsCollectionPattern
-            {
+            public bool IsCollectionPattern {
                 get; set;
             }
 
@@ -143,8 +131,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
             public string PotentialRootCause { get; set; } = string.Empty;
         }
 
-        public EnhancedDifferenceAnalyzer(MultiFolderComparisonResult folderResult, ILogger logger = null)
-        {
+        public EnhancedDifferenceAnalyzer(MultiFolderComparisonResult folderResult, ILogger logger = null) {
             this.folderResult = folderResult;
             this.logger = logger;
         }
@@ -153,19 +140,16 @@ namespace ComparisonTool.Core.Comparison.Analysis
         /// Analyze differences across all file pairs and identify structural patterns.
         /// </summary>
         /// <returns></returns>
-        public EnhancedAnalysisResult AnalyzeWithStructuralPatterns()
-        {
+        public EnhancedAnalysisResult AnalyzeWithStructuralPatterns() {
             this.logger?.LogInformation("Starting enhanced difference analysis for {FileCount} file pairs", this.folderResult.FilePairResults.Count);
 
-            var result = new EnhancedAnalysisResult
-            {
+            var result = new EnhancedAnalysisResult {
                 TotalFilePairs = this.folderResult.FilePairResults.Count,
                 FilePairsWithDifferences = this.folderResult.FilePairResults.Count(fp => !fp.AreEqual),
             };
 
             // Initialize category counts
-            foreach (EnhancedDifferenceCategory category in Enum.GetValues(typeof(EnhancedDifferenceCategory)))
-            {
+            foreach (EnhancedDifferenceCategory category in Enum.GetValues(typeof(EnhancedDifferenceCategory))) {
                 result.DifferencesByCategory[category] = new List<Difference>();
                 result.CategoryCounts[category] = 0;
             }
@@ -175,17 +159,14 @@ namespace ComparisonTool.Core.Comparison.Analysis
             var xmlPathOccurrences = new Dictionary<string, (int Count, HashSet<string> Files)>();
 
             // First pass: collect all differences with context
-            foreach (var filePair in this.folderResult.FilePairResults)
-            {
-                if (filePair.AreEqual)
-                {
+            foreach (var filePair in this.folderResult.FilePairResults) {
+                if (filePair.AreEqual) {
                     continue;
                 }
 
                 var pairIdentifier = $"{filePair.File1Name} vs {filePair.File2Name}";
 
-                foreach (var diff in filePair.Result?.Differences ?? new System.Collections.Generic.List<KellermanSoftware.CompareNetObjects.Difference>())
-                {
+                foreach (var diff in filePair.Result?.Differences ?? new System.Collections.Generic.List<KellermanSoftware.CompareNetObjects.Difference>()) {
                     // Add to total count
                     result.TotalDifferences++;
 
@@ -201,16 +182,14 @@ namespace ComparisonTool.Core.Comparison.Analysis
                     var normalizedPath = this.NormalizeXmlPath(diff.PropertyName);
 
                     // Track XML path occurrences
-                    if (!result.DifferencesByXmlPath.ContainsKey(normalizedPath))
-                    {
+                    if (!result.DifferencesByXmlPath.ContainsKey(normalizedPath)) {
                         result.DifferencesByXmlPath[normalizedPath] = new List<Difference>();
                     }
 
                     result.DifferencesByXmlPath[normalizedPath].Add(diff);
 
                     // Update occurrence counts
-                    if (!xmlPathOccurrences.ContainsKey(normalizedPath))
-                    {
+                    if (!xmlPathOccurrences.ContainsKey(normalizedPath)) {
                         xmlPathOccurrences[normalizedPath] = (0, new HashSet<string>());
                     }
 
@@ -234,31 +213,26 @@ namespace ComparisonTool.Core.Comparison.Analysis
             this.IdentifyStructuralIssues(allDifferenceContexts, structuralPatterns);
 
             // Calculate consistency and organize patterns
-            foreach (var pattern in structuralPatterns.Values)
-            {
+            foreach (var pattern in structuralPatterns.Values) {
                 // Calculate consistency percentage
                 pattern.Consistency = Math.Round((double)pattern.FileCount / result.FilePairsWithDifferences * 100, 1);
 
                 // Assign to appropriate category in result
                 if (pattern.Category == EnhancedDifferenceCategory.CollectionElementMissing ||
-                    pattern.Category == EnhancedDifferenceCategory.CollectionElementExtraProperty)
-                    {
+                    pattern.Category == EnhancedDifferenceCategory.CollectionElementExtraProperty) {
                     result.RecurringMissingElements.Add(pattern);
                 }
                 else if (pattern.Category == EnhancedDifferenceCategory.MissingRequiredField ||
-                         pattern.Category == EnhancedDifferenceCategory.NullValueChange)
-                        {
+                         pattern.Category == EnhancedDifferenceCategory.NullValueChange) {
                     result.InconsistentProperties.Add(pattern);
                 }
                 else if (pattern.Category == EnhancedDifferenceCategory.StructuralMismatch ||
-                         pattern.Category == EnhancedDifferenceCategory.SchemaViolation)
-                        {
+                         pattern.Category == EnhancedDifferenceCategory.SchemaViolation) {
                     result.StructuralIssues.Add(pattern);
                 }
 
                 // Add high-impact patterns
-                if (pattern.Consistency > 40 && pattern.FileCount > 1)
-                {
+                if (pattern.Consistency > 40 && pattern.FileCount > 1) {
                     result.HighImpactPatterns.Add(pattern);
                 }
             }
@@ -298,15 +272,13 @@ namespace ComparisonTool.Core.Comparison.Analysis
         /// </summary>
         private void IdentifyCollectionPatterns(
             List<(Difference Diff, string FilePair, FilePairComparisonResult Result)> differences,
-            Dictionary<string, StructuralPattern> patterns)
-            {
+            Dictionary<string, StructuralPattern> patterns) {
             // Group differences by collection path
             var collectionDiffs = differences
                 .Where(d => d.Diff.PropertyName.Contains("[") && d.Diff.PropertyName.Contains("]"))
                 .GroupBy(d => this.ExtractCollectionPath(d.Diff.PropertyName));
 
-            foreach (var collectionGroup in collectionDiffs)
-            {
+            foreach (var collectionGroup in collectionDiffs) {
                 var collectionPath = collectionGroup.Key;
                 var collectionName = this.ExtractCollectionName(collectionPath);
 
@@ -315,18 +287,15 @@ namespace ComparisonTool.Core.Comparison.Analysis
                     .Where(d => this.IsPropertyMissing(d.Diff))
                     .GroupBy(d => this.ExtractPropertyAfterIndex(d.Diff.PropertyName));
 
-                foreach (var propGroup in missingProps)
-                {
+                foreach (var propGroup in missingProps) {
                     if (propGroup.Count() > 1) // Only interested in recurring patterns
                     {
                         var propertyName = propGroup.Key;
                         var patternKey = $"{collectionPath}.{propertyName}_missing";
 
-                        if (!patterns.ContainsKey(patternKey))
-                        {
+                        if (!patterns.ContainsKey(patternKey)) {
                             var filesAffected = propGroup.Select(d => d.FilePair).Distinct().ToList();
-                            patterns[patternKey] = new StructuralPattern
-                            {
+                            patterns[patternKey] = new StructuralPattern {
                                 XmlPath = $"{collectionPath}[*].{propertyName}",
                                 Description = $"The property '{propertyName}' is consistently missing in elements of the '{collectionName}' collection",
                                 Category = EnhancedDifferenceCategory.CollectionElementMissing,
@@ -351,11 +320,9 @@ namespace ComparisonTool.Core.Comparison.Analysis
                 if (elementIndices.Count > 10) // Arbitrary threshold to suggest a potentially significant collection
                 {
                     var patternKey = $"{collectionPath}_count";
-                    if (!patterns.ContainsKey(patternKey))
-                    {
+                    if (!patterns.ContainsKey(patternKey)) {
                         var filesAffected = collectionGroup.Select(d => d.FilePair).Distinct().ToList();
-                        patterns[patternKey] = new StructuralPattern
-                        {
+                        patterns[patternKey] = new StructuralPattern {
                             XmlPath = collectionPath,
                             Description = $"The '{collectionName}' collection has {elementIndices.Count} elements with differences",
                             Category = EnhancedDifferenceCategory.CollectionElementCountMismatch,
@@ -377,15 +344,13 @@ namespace ComparisonTool.Core.Comparison.Analysis
         /// </summary>
         private void IdentifyMissingPropertyPatterns(
             List<(Difference Diff, string FilePair, FilePairComparisonResult Result)> differences,
-            Dictionary<string, StructuralPattern> patterns)
-            {
+            Dictionary<string, StructuralPattern> patterns) {
             // Group non-collection differences by parent path
             var nonCollectionDiffs = differences
                 .Where(d => !d.Diff.PropertyName.Contains("[") && d.Diff.PropertyName.Contains("."))
                 .GroupBy(d => this.ExtractParentPath(d.Diff.PropertyName));
 
-            foreach (var parentGroup in nonCollectionDiffs)
-            {
+            foreach (var parentGroup in nonCollectionDiffs) {
                 var parentPath = parentGroup.Key;
 
                 // Check for consistent missing properties from this parent
@@ -393,8 +358,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
                     .Where(d => this.IsPropertyMissing(d.Diff))
                     .GroupBy(d => this.ExtractLastProperty(d.Diff.PropertyName));
 
-                foreach (var propGroup in missingProps)
-                {
+                foreach (var propGroup in missingProps) {
                     if (propGroup.Count() > 1) // Only interested in recurring patterns
                     {
                         var propertyName = propGroup.Key;
@@ -405,11 +369,9 @@ namespace ComparisonTool.Core.Comparison.Analysis
                                           EnhancedDifferenceCategory.IdentifierMismatch :
                                           EnhancedDifferenceCategory.MissingRequiredField;
 
-                        if (!patterns.ContainsKey(patternKey))
-                        {
+                        if (!patterns.ContainsKey(patternKey)) {
                             var filesAffected = propGroup.Select(d => d.FilePair).Distinct().ToList();
-                            patterns[patternKey] = new StructuralPattern
-                            {
+                            patterns[patternKey] = new StructuralPattern {
                                 XmlPath = $"{parentPath}.{propertyName}",
                                 Description = $"The {fieldType.ToLower()} property '{propertyName}' is consistently missing from '{parentPath}'",
                                 Category = category,
@@ -434,16 +396,13 @@ namespace ComparisonTool.Core.Comparison.Analysis
         /// </summary>
         private void IdentifyStructuralIssues(
             List<(Difference Diff, string FilePair, FilePairComparisonResult Result)> differences,
-            Dictionary<string, StructuralPattern> patterns)
-            {
+            Dictionary<string, StructuralPattern> patterns) {
             // Group by normalized path to find structural patterns
             var pathGroups = differences
                 .GroupBy(d => this.NormalizeXmlPath(d.Diff.PropertyName));
 
-            foreach (var pathGroup in pathGroups)
-            {
-                if (pathGroup.Count() < 3)
-                {
+            foreach (var pathGroup in pathGroups) {
+                if (pathGroup.Count() < 3) {
                     continue; // Skip rare differences
                 }
 
@@ -457,16 +416,13 @@ namespace ComparisonTool.Core.Comparison.Analysis
                         d.Diff.Object1Value.GetType() != d.Diff.Object2Value.GetType())
                     .ToList();
 
-                if (typeMismatches.Count > 0)
-                {
+                if (typeMismatches.Count > 0) {
                     var patternKey = $"{normalizedPath}_type_mismatch";
-                    if (!patterns.ContainsKey(patternKey))
-                    {
+                    if (!patterns.ContainsKey(patternKey)) {
                         var filesAffected = typeMismatches.Select(d => d.FilePair).Distinct().ToList();
                         var firstDiff = typeMismatches.First().Diff;
 
-                        patterns[patternKey] = new StructuralPattern
-                        {
+                        patterns[patternKey] = new StructuralPattern {
                             XmlPath = normalizedPath,
                             Description = $"Data type mismatch at '{normalizedPath}' (Expected: {firstDiff.Object1Value?.GetType().Name}, Actual: {firstDiff.Object2Value?.GetType().Name})",
                             Category = EnhancedDifferenceCategory.InconsistentDataType,
@@ -482,16 +438,13 @@ namespace ComparisonTool.Core.Comparison.Analysis
                 }
 
                 // Check for schema structure changes (unexpected new properties)
-                if (pathGroup.Any(d => this.IsExtraProperty(d.Diff)))
-                {
+                if (pathGroup.Any(d => this.IsExtraProperty(d.Diff))) {
                     var extraProps = pathGroup.Where(d => this.IsExtraProperty(d.Diff)).ToList();
                     var patternKey = $"{normalizedPath}_extra";
 
-                    if (!patterns.ContainsKey(patternKey) && extraProps.Count > 0)
-                    {
+                    if (!patterns.ContainsKey(patternKey) && extraProps.Count > 0) {
                         var filesAffected = extraProps.Select(d => d.FilePair).Distinct().ToList();
-                        patterns[patternKey] = new StructuralPattern
-                        {
+                        patterns[patternKey] = new StructuralPattern {
                             XmlPath = normalizedPath,
                             Description = $"Unexpected extra property at '{normalizedPath}'",
                             Category = normalizedPath.Contains("[*]") ?
@@ -513,19 +466,16 @@ namespace ComparisonTool.Core.Comparison.Analysis
         /// <summary>
         /// Normalize an XML path by replacing indices with wildcards.
         /// </summary>
-        private string NormalizeXmlPath(string xmlPath)
-        {
+        private string NormalizeXmlPath(string xmlPath) {
             return PropertyPathNormalizer.NormalizeArrayIndices(xmlPath);
         }
 
         /// <summary>
         /// Extract the collection path from a property path.
         /// </summary>
-        private string ExtractCollectionPath(string propertyPath)
-        {
+        private string ExtractCollectionPath(string propertyPath) {
             var match = Regex.Match(propertyPath, @"(.+?)(?:\[\d+\])");
-            if (match.Success)
-            {
+            if (match.Success) {
                 return match.Groups[1].Value;
             }
 
@@ -535,8 +485,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
         /// <summary>
         /// Extract the collection name from a path.
         /// </summary>
-        private string ExtractCollectionName(string collectionPath)
-        {
+        private string ExtractCollectionName(string collectionPath) {
             var segments = collectionPath.Split('.');
             return segments.Length > 0 ? segments.Last() : collectionPath;
         }
@@ -544,11 +493,9 @@ namespace ComparisonTool.Core.Comparison.Analysis
         /// <summary>
         /// Extract the property name that appears after an array index.
         /// </summary>
-        private string ExtractPropertyAfterIndex(string propertyPath)
-        {
+        private string ExtractPropertyAfterIndex(string propertyPath) {
             var match = Regex.Match(propertyPath, @"\[\d+\]\.(.+)$");
-            if (match.Success)
-            {
+            if (match.Success) {
                 return match.Groups[1].Value;
             }
 
@@ -560,11 +507,9 @@ namespace ComparisonTool.Core.Comparison.Analysis
         /// <summary>
         /// Extract just the numeric array index from a property path.
         /// </summary>
-        private int ExtractArrayIndex(string propertyPath)
-        {
+        private int ExtractArrayIndex(string propertyPath) {
             var match = Regex.Match(propertyPath, @"\[(\d+)\]");
-            if (match.Success && int.TryParse(match.Groups[1].Value, out var index))
-            {
+            if (match.Success && int.TryParse(match.Groups[1].Value, out var index)) {
                 return index;
             }
 
@@ -574,11 +519,9 @@ namespace ComparisonTool.Core.Comparison.Analysis
         /// <summary>
         /// Extract the parent path from a property path.
         /// </summary>
-        private string ExtractParentPath(string propertyPath)
-        {
+        private string ExtractParentPath(string propertyPath) {
             var lastDotIndex = propertyPath.LastIndexOf('.');
-            if (lastDotIndex > 0)
-            {
+            if (lastDotIndex > 0) {
                 return propertyPath.Substring(0, lastDotIndex);
             }
 
@@ -588,11 +531,9 @@ namespace ComparisonTool.Core.Comparison.Analysis
         /// <summary>
         /// Extract the last property name from a path.
         /// </summary>
-        private string ExtractLastProperty(string propertyPath)
-        {
+        private string ExtractLastProperty(string propertyPath) {
             var lastDotIndex = propertyPath.LastIndexOf('.');
-            if (lastDotIndex > 0 && lastDotIndex < propertyPath.Length - 1)
-            {
+            if (lastDotIndex > 0 && lastDotIndex < propertyPath.Length - 1) {
                 return propertyPath.Substring(lastDotIndex + 1);
             }
 
@@ -602,8 +543,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
         /// <summary>
         /// Determine if a property is missing (null in one side but not the other).
         /// </summary>
-        private bool IsPropertyMissing(Difference diff)
-        {
+        private bool IsPropertyMissing(Difference diff) {
             return (diff.Object1Value == null && diff.Object2Value != null) ||
                    (diff.Object1Value != null && diff.Object2Value == null);
         }
@@ -611,34 +551,27 @@ namespace ComparisonTool.Core.Comparison.Analysis
         /// <summary>
         /// Determine if a property exists in the actual but not the expected.
         /// </summary>
-        private bool IsExtraProperty(Difference diff)
-        {
+        private bool IsExtraProperty(Difference diff) {
             return diff.Object1Value == null && diff.Object2Value != null;
         }
 
         /// <summary>
         /// Categorize a difference with enhanced categories.
         /// </summary>
-        private EnhancedDifferenceCategory CategorizeEnhanced(Difference diff)
-        {
+        private EnhancedDifferenceCategory CategorizeEnhanced(Difference diff) {
             // Check for collection differences
-            if (diff.PropertyName.Contains("[") && diff.PropertyName.Contains("]"))
-            {
-                if (diff.Object1Value == null && diff.Object2Value != null)
-                {
+            if (diff.PropertyName.Contains("[") && diff.PropertyName.Contains("]")) {
+                if (diff.Object1Value == null && diff.Object2Value != null) {
                     return EnhancedDifferenceCategory.CollectionElementExtraProperty;
                 }
-                else if (diff.Object1Value != null && diff.Object2Value == null)
-                {
+                else if (diff.Object1Value != null && diff.Object2Value == null) {
                     return EnhancedDifferenceCategory.CollectionElementMissing;
                 }
                 else if (diff.Object1Value != null && diff.Object2Value != null &&
-                         diff.Object1Value.GetType() != diff.Object2Value.GetType())
-                        {
+                         diff.Object1Value.GetType() != diff.Object2Value.GetType()) {
                     return EnhancedDifferenceCategory.InconsistentDataType;
                 }
-                else
-                {
+                else {
                     return EnhancedDifferenceCategory.CollectionItemChanged;
                 }
             }
@@ -646,12 +579,9 @@ namespace ComparisonTool.Core.Comparison.Analysis
             // Check for property name patterns
             var propertyName = this.ExtractLastProperty(diff.PropertyName);
 
-            foreach (var pattern in this.fieldPatterns)
-            {
-                if (pattern.Value.IsMatch(propertyName))
-                {
-                    switch (pattern.Key)
-                    {
+            foreach (var pattern in this.fieldPatterns) {
+                if (pattern.Value.IsMatch(propertyName)) {
+                    switch (pattern.Key) {
                         case "Identifier":
                             return EnhancedDifferenceCategory.IdentifierMismatch;
                         case "Name":
@@ -671,51 +601,41 @@ namespace ComparisonTool.Core.Comparison.Analysis
             }
 
             // Check for attribute changes (attributes often in format @attribute)
-            if (propertyName.StartsWith("@"))
-            {
-                if (diff.Object1Value == null || diff.Object2Value == null)
-                {
+            if (propertyName.StartsWith("@")) {
+                if (diff.Object1Value == null || diff.Object2Value == null) {
                     return EnhancedDifferenceCategory.XmlAttributeMissing;
                 }
-                else
-                {
+                else {
                     return EnhancedDifferenceCategory.XmlAttributeValueChanged;
                 }
             }
 
             // Check for basic data types
-            if (diff.Object1Value != null && diff.Object2Value != null)
-            {
-                if (diff.Object1Value is string && diff.Object2Value is string)
-                {
+            if (diff.Object1Value != null && diff.Object2Value != null) {
+                if (diff.Object1Value is string && diff.Object2Value is string) {
                     return EnhancedDifferenceCategory.TextContentChanged;
                 }
 
                 if ((diff.Object1Value is int || diff.Object1Value is long || diff.Object1Value is float ||
                      diff.Object1Value is double || diff.Object1Value is decimal) &&
                     (diff.Object2Value is int || diff.Object2Value is long || diff.Object2Value is float ||
-                     diff.Object2Value is double || diff.Object2Value is decimal))
-                    {
+                     diff.Object2Value is double || diff.Object2Value is decimal)) {
                     return EnhancedDifferenceCategory.NumericValueChanged;
                 }
 
-                if (diff.Object1Value is DateTime && diff.Object2Value is DateTime)
-                {
+                if (diff.Object1Value is DateTime && diff.Object2Value is DateTime) {
                     return EnhancedDifferenceCategory.DateTimeChanged;
                 }
 
-                if (diff.Object1Value is bool && diff.Object2Value is bool)
-                {
+                if (diff.Object1Value is bool && diff.Object2Value is bool) {
                     return EnhancedDifferenceCategory.BooleanValueChanged;
                 }
 
-                if (diff.Object1Value.GetType() != diff.Object2Value.GetType())
-                {
+                if (diff.Object1Value.GetType() != diff.Object2Value.GetType()) {
                     return EnhancedDifferenceCategory.InconsistentDataType;
                 }
             }
-            else if (diff.Object1Value == null || diff.Object2Value == null)
-            {
+            else if (diff.Object1Value == null || diff.Object2Value == null) {
                 return EnhancedDifferenceCategory.NullValueChange;
             }
 
@@ -725,12 +645,9 @@ namespace ComparisonTool.Core.Comparison.Analysis
         /// <summary>
         /// Determine the type of field based on its name.
         /// </summary>
-        private string DetermineFieldType(string propertyName)
-        {
-            foreach (var pattern in this.fieldPatterns)
-            {
-                if (pattern.Value.IsMatch(propertyName))
-                {
+        private string DetermineFieldType(string propertyName) {
+            foreach (var pattern in this.fieldPatterns) {
+                if (pattern.Value.IsMatch(propertyName)) {
                     return pattern.Key;
                 }
             }

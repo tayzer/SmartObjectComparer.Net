@@ -7,19 +7,16 @@ using KellermanSoftware.CompareNetObjects;
 
 namespace ComparisonTool.Core.Comparison.Results;
 
-public class FilePairComparisonResult
-{
+public class FilePairComparisonResult {
     public string File1Name { get; set; } = string.Empty;
 
     public string File2Name { get; set; } = string.Empty;
 
-    public ComparisonResult? Result
-    {
+    public ComparisonResult? Result {
         get; set;
     }
 
-    public DifferenceSummary? Summary
-    {
+    public DifferenceSummary? Summary {
         get; set;
     }
 

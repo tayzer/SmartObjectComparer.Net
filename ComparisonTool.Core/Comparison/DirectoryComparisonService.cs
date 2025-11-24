@@ -16,8 +16,7 @@ namespace ComparisonTool.Web.Services;
 /// <summary>
 /// Service that handles directory-based XML comparisons to efficiently process large sets of files.
 /// </summary>
-public class DirectoryComparisonService
-{
+public class DirectoryComparisonService {
     private readonly ILogger<DirectoryComparisonService> logger;
     private readonly IComparisonService comparisonService;
     private readonly IFileSystemService fileSystemService;
@@ -33,8 +32,7 @@ public class DirectoryComparisonService
         IXmlDeserializationService deserializationService,
         IComparisonConfigurationService configService,
         PerformanceTracker performanceTracker,
-        SystemResourceMonitor resourceMonitor)
-        {
+        SystemResourceMonitor resourceMonitor) {
         this.logger = logger;
         this.comparisonService = comparisonService;
         this.fileSystemService = fileSystemService;
@@ -55,15 +53,12 @@ public class DirectoryComparisonService
         bool enablePatternAnalysis = true,
         bool enableSemanticAnalysis = true,
         IProgress<ComparisonProgress> progress = null,
-        CancellationToken cancellationToken = default)
-        {
-        if (string.IsNullOrEmpty(modelName))
-        {
+        CancellationToken cancellationToken = default) {
+        if (string.IsNullOrEmpty(modelName)) {
             throw new ArgumentException("Model name must be specified", nameof(modelName));
         }
 
-        try
-        {
+        try {
             // Apply configuration
             this.configService.ApplyConfiguredSettings();
 
@@ -75,14 +70,12 @@ public class DirectoryComparisonService
                 directory2Path,
                 cancellationToken);
 
-            if (filePairs.Count == 0)
-            {
+            if (filePairs.Count == 0) {
                 this.logger.LogWarning(
                     "No matching file pairs found in directories {Dir1} and {Dir2}",
                     directory1Path, directory2Path);
 
-                return new MultiFolderComparisonResult
-                {
+                return new MultiFolderComparisonResult {
                     AllEqual = true,
                     TotalPairsCompared = 0,
                     FilePairResults = new List<FilePairComparisonResult>(),
@@ -94,8 +87,7 @@ public class DirectoryComparisonService
             progress?.Report(new ComparisonProgress(0, filePairs.Count, $"Found {filePairs.Count} matching files"));
 
             // Compare files in batches using streams instead of loading all into memory
-            var result = new MultiFolderComparisonResult
-            {
+            var result = new MultiFolderComparisonResult {
                 TotalPairsCompared = filePairs.Count,
                 AllEqual = true,
                 Metadata = new Dictionary<string, object>(),
@@ -110,8 +102,7 @@ public class DirectoryComparisonService
             var batches = (filePairs.Count + batchSize - 1) / batchSize;
 
             // Process each batch
-            for (var batchIndex = 0; batchIndex < batches; batchIndex++)
-            {
+            for (var batchIndex = 0; batchIndex < batches; batchIndex++) {
                 var batchFilePairs = filePairs
                     .Skip(batchIndex * batchSize)
                     .Take(batchSize)
@@ -129,15 +120,12 @@ public class DirectoryComparisonService
                 // Process this batch in parallel
                 await Parallel.ForEachAsync(
                     batchFilePairs,
-                    new ParallelOptions
-                    {
+                    new ParallelOptions {
                         MaxDegreeOfParallelism = this.CalculateParallelism(batchFilePairs.Count),
                         CancellationToken = cancellationToken,
                     },
-                    async (filePair, ct) =>
-                    {
-                        try
-                        {
+                    async (filePair, ct) => {
+                        try {
                             var (file1Path, file2Path, relativePath) = filePair;
 
                             // Open file streams without loading entirely into memory
@@ -158,8 +146,7 @@ public class DirectoryComparisonService
                             var summary = categorizer.CategorizeAndSummarize(comparisonResult);
 
                             // Create result
-                            var pairResult = new FilePairComparisonResult
-                            {
+                            var pairResult = new FilePairComparisonResult {
                                 File1Name = Path.GetFileName(relativePath),
                                 File2Name = Path.GetFileName(relativePath),
                                 Result = comparisonResult,
@@ -170,8 +157,7 @@ public class DirectoryComparisonService
                             filePairResults.Add(pairResult);
 
                             // Update equality flag in a thread-safe way
-                            if (!summary.AreEqual)
-                            {
+                            if (!summary.AreEqual) {
                                 Interlocked.Exchange(ref equalityFlag, 0);
                             }
 
@@ -182,8 +168,7 @@ public class DirectoryComparisonService
                                 filePairs.Count,
                                 $"Compared {completed} of {filePairs.Count} files"));
                         }
-                        catch (Exception ex)
-                        {
+                        catch (Exception ex) {
                             this.logger.LogError(ex, "Error comparing file pair {Path}", filePair.RelativePath);
                         }
                     });
@@ -213,8 +198,7 @@ public class DirectoryComparisonService
 
             // Perform pattern analysis if requested
             ComparisonPatternAnalysis patternAnalysis = null;
-            if (enablePatternAnalysis && !result.AllEqual && result.FilePairResults.Count > 1)
-            {
+            if (enablePatternAnalysis && !result.AllEqual && result.FilePairResults.Count > 1) {
                 progress?.Report(new ComparisonProgress(
                     filePairs.Count,
                     filePairs.Count,
@@ -223,8 +207,7 @@ public class DirectoryComparisonService
                 patternAnalysis = await this.comparisonService.AnalyzePatternsAsync(result, cancellationToken);
 
                 // Perform semantic analysis if requested
-                if (enableSemanticAnalysis && patternAnalysis != null)
-                {
+                if (enableSemanticAnalysis && patternAnalysis != null) {
                     progress?.Report(new ComparisonProgress(
                         filePairs.Count,
                         filePairs.Count,
@@ -245,8 +228,7 @@ public class DirectoryComparisonService
 
             return result;
         }
-        catch (Exception ex)
-        {
+        catch (Exception ex) {
             this.logger.LogError(ex, "Error comparing directories {Dir1} and {Dir2}",
                 directory1Path, directory2Path);
             throw;
@@ -264,21 +246,17 @@ public class DirectoryComparisonService
         bool enablePatternAnalysis = true,
         bool enableSemanticAnalysis = true,
         IProgress<ComparisonProgress> progress = null,
-        CancellationToken cancellationToken = default)
-        {
-        return await this.performanceTracker.TrackOperationAsync("CompareFolderUploadsAsync", async () =>
-        {
+        CancellationToken cancellationToken = default) {
+        return await this.performanceTracker.TrackOperationAsync("CompareFolderUploadsAsync", async () => {
             // Record timing statistics about input
-            this.performanceTracker.TrackOperation("Folder_Stats", () =>
-            {
+            this.performanceTracker.TrackOperation("Folder_Stats", () => {
                 this.logger.LogInformation(
                     "Starting comparison of {Folder1Count} files in folder 1 and {Folder2Count} files in folder 2",
                     folder1Files.Count, folder2Files.Count);
             });
 
             // Sort files by name for consistent ordering
-            var sortedFiles = this.performanceTracker.TrackOperation("Sort_Files", () =>
-            {
+            var sortedFiles = this.performanceTracker.TrackOperation("Sort_Files", () => {
                 var f1 = folder1Files.OrderBy(f => Path.GetFileName(f)).ToList();
                 var f2 = folder2Files.OrderBy(f => Path.GetFileName(f)).ToList();
                 return (f1, f2);
@@ -292,8 +270,7 @@ public class DirectoryComparisonService
 
             progress?.Report(new ComparisonProgress(0, pairCount, $"Will compare {pairCount} files in order"));
 
-            var result = new MultiFolderComparisonResult
-            {
+            var result = new MultiFolderComparisonResult {
                 TotalPairsCompared = pairCount,
                 AllEqual = true,
                 FilePairResults = new List<FilePairComparisonResult>(),
@@ -305,19 +282,15 @@ public class DirectoryComparisonService
             var filePairResults = new ConcurrentBag<FilePairComparisonResult>();
 
             // Process files by index position instead of matching names
-            await this.performanceTracker.TrackOperationAsync("Parallel_Comparison", async () =>
-            {
+            await this.performanceTracker.TrackOperationAsync("Parallel_Comparison", async () => {
                 await Parallel.ForEachAsync(
                     Enumerable.Range(0, pairCount),
-                    new ParallelOptions
-                    {
+                    new ParallelOptions {
                         MaxDegreeOfParallelism = this.CalculateParallelism(pairCount, folder1Files),
                         CancellationToken = cancellationToken,
                     },
-                    async (index, ct) =>
-                    {
-                        try
-                        {
+                    async (index, ct) => {
+                        try {
                             var file1Path = folder1Files[index];
                             var file2Path = folder2Files[index];
 
@@ -327,8 +300,7 @@ public class DirectoryComparisonService
 
                             var operationId = this.performanceTracker.StartOperation($"Compare_File_{index}");
 
-                            try
-                            {
+                            try {
                                 using var file1Stream = await this.fileSystemService.OpenFileStreamAsync(file1Path, ct);
                                 using var file2Stream = await this.fileSystemService.OpenFileStreamAsync(file2Path, ct);
 
@@ -342,8 +314,7 @@ public class DirectoryComparisonService
                                 var categorizer = new DifferenceCategorizer();
                                 var summary = categorizer.CategorizeAndSummarize(comparisonResult);
 
-                                var pairResult = new FilePairComparisonResult
-                                {
+                                var pairResult = new FilePairComparisonResult {
                                     File1Name = file1Name,
                                     File2Name = file2Name,
                                     Result = comparisonResult,
@@ -352,32 +323,27 @@ public class DirectoryComparisonService
 
                                 filePairResults.Add(pairResult);
 
-                                if (!summary.AreEqual)
-                                {
+                                if (!summary.AreEqual) {
                                     Interlocked.Exchange(ref equalityFlag, 0);
                                 }
                             }
-                            finally
-                            {
+                            finally {
                                 this.performanceTracker.StopOperation(operationId);
                             }
                         }
-                        catch (Exception ex)
-                        {
+                        catch (Exception ex) {
                             this.logger.LogError(ex, "Error comparing file pair at index {Index}", index);
                         }
 
                         var current = Interlocked.Increment(ref processed);
-                        if (current % 10 == 0 || current == pairCount)
-                        {
+                        if (current % 10 == 0 || current == pairCount) {
                             progress?.Report(new ComparisonProgress(current, pairCount, $"Compared {current} of {pairCount} files"));
                         }
                     });
             });
 
             // Process results
-            await this.performanceTracker.TrackOperationAsync("Process_Results", async () =>
-            {
+            await this.performanceTracker.TrackOperationAsync("Process_Results", async () => {
                 result.FilePairResults = filePairResults.OrderBy(r => r.File1Name).ToList();
                 result.AllEqual = equalityFlag == 1;
 
@@ -392,18 +358,14 @@ public class DirectoryComparisonService
             });
 
             // Pattern and semantic analysis
-            if (enablePatternAnalysis && !result.AllEqual && result.FilePairResults.Count > 1)
-            {
-                await this.performanceTracker.TrackOperationAsync("Pattern_Analysis", async () =>
-                {
+            if (enablePatternAnalysis && !result.AllEqual && result.FilePairResults.Count > 1) {
+                await this.performanceTracker.TrackOperationAsync("Pattern_Analysis", async () => {
                     progress?.Report(new ComparisonProgress(pairCount, pairCount, "Analyzing patterns..."));
                     var patternAnalysis = await this.comparisonService.AnalyzePatternsAsync(result, cancellationToken);
                     result.Metadata["PatternAnalysis"] = patternAnalysis;
 
-                    if (enableSemanticAnalysis && patternAnalysis != null)
-                    {
-                        await this.performanceTracker.TrackOperationAsync("Semantic_Analysis", async () =>
-                        {
+                    if (enableSemanticAnalysis && patternAnalysis != null) {
+                        await this.performanceTracker.TrackOperationAsync("Semantic_Analysis", async () => {
                             progress?.Report(new ComparisonProgress(pairCount, pairCount, "Analyzing semantic differences..."));
                             var semanticAnalysis = await this.comparisonService.AnalyzeSemanticDifferencesAsync(
                                 result, patternAnalysis, cancellationToken);
@@ -430,23 +392,19 @@ public class DirectoryComparisonService
     /// <summary>
     /// Calculate batch size based on file count.
     /// </summary>
-    private int CalculateBatchSize(int fileCount)
-    {
+    private int CalculateBatchSize(int fileCount) {
         // For very large file sets, use smaller batches
-        if (fileCount > 2000)
-        {
+        if (fileCount > 2000) {
             return 20;
         }
 
         // For large file sets, use moderate batches
-        if (fileCount > 500)
-        {
+        if (fileCount > 500) {
             return 50;
         }
 
         // For smaller file sets, use larger batches
-        if (fileCount > 100)
-        {
+        if (fileCount > 100) {
             return 100;
         }
 
@@ -457,14 +415,12 @@ public class DirectoryComparisonService
     /// <summary>
     /// Calculate optimal parallelism based on file count, file sizes, and system resources.
     /// </summary>
-    private int CalculateParallelism(int fileCount, IEnumerable<string> sampleFiles = null)
-    {
+    private int CalculateParallelism(int fileCount, IEnumerable<string> sampleFiles = null) {
         // Use the resource monitor to determine optimal parallelism
         long averageFileSizeKb = 0;
 
         // If sample files were provided, estimate average file size
-        if (sampleFiles != null)
-        {
+        if (sampleFiles != null) {
             averageFileSizeKb = this.performanceTracker.TrackOperation("Calculate_Avg_FileSize", () =>
                 this.resourceMonitor.CalculateAverageFileSizeKb(sampleFiles.Take(Math.Min(20, fileCount))));
         }

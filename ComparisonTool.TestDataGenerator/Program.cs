@@ -2,19 +2,16 @@
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
-namespace ComparisonTool.TestDataGenerator
-{
+namespace ComparisonTool.TestDataGenerator {
     using System.Xml;
     using System.Xml.Serialization;
     using ComparisonTool.Core.Models;
 
-    internal class Program
-    {
+    internal class Program {
         private static readonly int FileCount = 4000;
         private static readonly Random Random = new Random(42); // Fixed seed for reproducible results
 
-        private static void Main(string[] args)
-        {
+        private static void Main(string[] args) {
             Console.WriteLine("🚀 Generating 4000 Expected and Actual files with ComplexOrderResponse model...");
             Console.WriteLine("This will thoroughly test performance optimizations with large file sets and ignore rules.");
 
@@ -22,10 +19,8 @@ namespace ComparisonTool.TestDataGenerator
             var current = AppDomain.CurrentDomain.BaseDirectory;
             var solutionRoot = current;
             var maxUp = 6;
-            for (var i = 0; i < maxUp; i++)
-            {
-                if (File.Exists(Path.Combine(solutionRoot, "ComparisonTool.sln")))
-                {
+            for (var i = 0; i < maxUp; i++) {
+                if (File.Exists(Path.Combine(solutionRoot, "ComparisonTool.sln"))) {
                     break;
                 }
 
@@ -47,10 +42,8 @@ namespace ComparisonTool.TestDataGenerator
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
             // Generate files in parallel for speed
-            Parallel.For(1, FileCount + 1, i =>
-            {
-                try
-                {
+            Parallel.For(1, FileCount + 1, i => {
+                try {
                     // Generate base order (Expected)
                     var expectedOrder = GenerateComplexOrder(i, isBaselineVersion: true);
                     var expectedXml = SerializeToXml(expectedOrder);
@@ -61,13 +54,11 @@ namespace ComparisonTool.TestDataGenerator
                     var actualXml = SerializeToXml(actualOrder);
                     File.WriteAllText(Path.Combine(actualsDir, $"{i}.xml"), actualXml, System.Text.Encoding.UTF8);
 
-                    if (i % 500 == 0)
-                    {
+                    if (i % 500 == 0) {
                         Console.WriteLine($"✅ Generated {i * 2} files...");
                     }
                 }
-                catch (Exception ex)
-                {
+                catch (Exception ex) {
                     Console.WriteLine($"❌ Error generating file {i}: {ex.Message}");
                 }
             });
@@ -88,10 +79,8 @@ namespace ComparisonTool.TestDataGenerator
             Console.WriteLine("4. Test both with and without ignore rules");
         }
 
-        private static ComplexOrderResponse GenerateComplexOrder(int fileIndex, bool isBaselineVersion)
-        {
-            var order = new ComplexOrderResponse
-            {
+        private static ComplexOrderResponse GenerateComplexOrder(int fileIndex, bool isBaselineVersion) {
+            var order = new ComplexOrderResponse {
                 RequestId = $"REQ-{DateTime.UtcNow:yyyyMMdd}-{fileIndex:D6}",
                 Timestamp = DateTime.UtcNow.AddMinutes(-Random.Next(0, 1440)), // Random time in last 24h
                 ProcessingTime = TimeSpan.FromMilliseconds(Random.Next(50, 500)),
@@ -106,22 +95,18 @@ namespace ComparisonTool.TestDataGenerator
             return order;
         }
 
-        private static ResponseMetadata GenerateMetadata(int fileIndex, bool isBaselineVersion)
-        {
-            return new ResponseMetadata
-            {
+        private static ResponseMetadata GenerateMetadata(int fileIndex, bool isBaselineVersion) {
+            return new ResponseMetadata {
                 Region = isBaselineVersion ? "US-EAST-1" : "US-WEST-2", // Regional difference
                 Environment = "Production",
-                ServerInfo = new ServerInfo
-                {
+                ServerInfo = new ServerInfo {
                     ServerId = $"srv-{fileIndex % 10:D3}",
                     LoadBalancerGroup = "Primary",
                     DeploymentVersion = isBaselineVersion ? "v2.1.4-hotfix.3" : "v2.1.5-release.1",
                     MemoryUsageBytes = Random.Next(1000000, 5000000),
                     CpuUsagePercent = Random.NextDouble() * 100,
                 },
-                Performance = new PerformanceMetrics
-                {
+                Performance = new PerformanceMetrics {
                     DatabaseQueryTime = TimeSpan.FromMilliseconds(Random.Next(10, 100)),
                     ExternalApiCalls = Random.Next(5, 20),
                     CacheHitRatio = Random.NextDouble(),
@@ -131,10 +116,8 @@ namespace ComparisonTool.TestDataGenerator
             };
         }
 
-        private static OrderData GenerateOrderData(int fileIndex, bool isBaselineVersion)
-        {
-            return new OrderData
-            {
+        private static OrderData GenerateOrderData(int fileIndex, bool isBaselineVersion) {
+            return new OrderData {
                 OrderId = $"ORD-{fileIndex:D6}",
                 OrderNumber = $"ON{DateTime.UtcNow:yyyyMMdd}{fileIndex:D4}",
                 Status = isBaselineVersion ? OrderStatus.Processing : OrderStatus.Shipped, // Status difference
@@ -149,13 +132,10 @@ namespace ComparisonTool.TestDataGenerator
             };
         }
 
-        private static Customer GenerateCustomer(int fileIndex, bool isBaselineVersion)
-        {
-            return new Customer
-            {
+        private static Customer GenerateCustomer(int fileIndex, bool isBaselineVersion) {
+            return new Customer {
                 CustomerId = $"CUST-{fileIndex % 1000:D6}",
-                Profile = new CustomerProfile
-                {
+                Profile = new CustomerProfile {
                     FirstName = $"Customer{fileIndex % 100}",
                     LastName = $"User{fileIndex % 200}",
                     Email = $"customer{fileIndex % 1000}@example.com",
@@ -163,8 +143,7 @@ namespace ComparisonTool.TestDataGenerator
                     DateOfBirth = DateTime.Today.AddYears(-Random.Next(18, 80)),
                     CustomerSince = DateTime.Today.AddDays(-Random.Next(30, 2000)),
                     TierLevel = (CustomerTier)(fileIndex % 5),
-                    Demographics = new Demographics
-                    {
+                    Demographics = new Demographics {
                         AgeGroup = "25-34",
                         Gender = fileIndex % 2 == 0 ? "Male" : "Female",
                         IncomeRange = "$50K-$75K",
@@ -179,18 +158,14 @@ namespace ComparisonTool.TestDataGenerator
             };
         }
 
-        private static List<OrderItem> GenerateOrderItems(int count, int fileIndex, bool isBaselineVersion)
-        {
+        private static List<OrderItem> GenerateOrderItems(int count, int fileIndex, bool isBaselineVersion) {
             var items = new List<OrderItem>();
-            for (var i = 0; i < count; i++)
-            {
-                items.Add(new OrderItem
-                {
+            for (var i = 0; i < count; i++) {
+                items.Add(new OrderItem {
                     ItemId = $"ITEM-{fileIndex:D6}-{i:D2}",
                     Product = GenerateProduct(fileIndex + i, isBaselineVersion),
                     Quantity = Random.Next(1, 5),
-                    Pricing = new ItemPricing
-                    {
+                    Pricing = new ItemPricing {
                         UnitPrice = (decimal)((Random.NextDouble() * 500) + 10),
                         DiscountAmount = isBaselineVersion ? 0 : (decimal)(Random.NextDouble() * 50), // Discount difference
                         TaxAmount = (decimal)(Random.NextDouble() * 50),
@@ -198,12 +173,10 @@ namespace ComparisonTool.TestDataGenerator
                         AppliedDiscounts = GenerateAppliedDiscounts(Random.Next(0, 2)),
                         TaxBreakdown = GenerateTaxBreakdown(Random.Next(1, 3)),
                     },
-                    Customizations = new ProductCustomizations
-                    {
+                    Customizations = new ProductCustomizations {
                         Options = GenerateCustomizationOptions(Random.Next(0, 3)),
                         PersonalizationText = isBaselineVersion ? string.Empty : $"Custom text {i}",
-                        GiftWrap = new GiftWrapOption
-                        {
+                        GiftWrap = new GiftWrapOption {
                             IsGiftWrap = Random.Next(0, 5) == 0,
                             WrapType = "Standard",
                             GiftMessage = string.Empty,
@@ -211,15 +184,13 @@ namespace ComparisonTool.TestDataGenerator
                         },
                     },
                     FulfillmentOptions = GenerateFulfillmentOptions(Random.Next(2, 4)),
-                    InventoryInfo = new InventoryInfo
-                    {
+                    InventoryInfo = new InventoryInfo {
                         AvailableQuantity = Random.Next(10, 100),
                         ReservedQuantity = Random.Next(0, 10),
                         WarehouseLocation = $"WH-{fileIndex % 5}",
                         LastUpdated = DateTime.UtcNow.AddMinutes(-Random.Next(0, 60)),
                         RestockDate = DateTime.UtcNow.AddDays(Random.Next(1, 30)),
-                        Supplier = new SupplierInfo
-                        {
+                        Supplier = new SupplierInfo {
                             SupplierId = $"SUP-{Random.Next(1, 10):D3}",
                             Name = $"Supplier {Random.Next(1, 10)}",
                             LeadTime = TimeSpan.FromDays(Random.Next(1, 14)),
@@ -233,16 +204,13 @@ namespace ComparisonTool.TestDataGenerator
             return items;
         }
 
-        private static Product GenerateProduct(int productIndex, bool isBaselineVersion)
-        {
-            return new Product
-            {
+        private static Product GenerateProduct(int productIndex, bool isBaselineVersion) {
+            return new Product {
                 ProductId = $"PROD-{productIndex % 500:D6}",
                 SKU = $"SKU{productIndex % 1000:D6}",
                 Name = $"Product {productIndex % 100}",
                 Description = isBaselineVersion ? $"Description for product {productIndex}" : $"Updated description for product {productIndex}",
-                Brand = new Brand
-                {
+                Brand = new Brand {
                     BrandId = $"BRAND-{productIndex % 20:D3}",
                     Name = $"Brand {productIndex % 20}",
                     LogoUrl = $"https://example.com/logos/brand{productIndex % 20}.png",
@@ -250,11 +218,9 @@ namespace ComparisonTool.TestDataGenerator
                     EstablishedYear = 1990 + (productIndex % 30),
                 },
                 Category = GenerateProductCategory(productIndex),
-                Specifications = new ProductSpecifications
-                {
+                Specifications = new ProductSpecifications {
                     Weight = new Weight { Value = (Random.NextDouble() * 10) + 0.1, Unit = "kg" },
-                    Dimensions = new Dimensions
-                    {
+                    Dimensions = new Dimensions {
                         Length = (Random.NextDouble() * 50) + 5,
                         Width = (Random.NextDouble() * 30) + 3,
                         Height = (Random.NextDouble() * 20) + 2,
@@ -268,8 +234,7 @@ namespace ComparisonTool.TestDataGenerator
                 },
                 Images = GenerateProductImages(Random.Next(3, 8), productIndex),
                 Reviews = GenerateProductReviews(Random.Next(5, 15), productIndex, isBaselineVersion),
-                Ratings = new ProductRatings
-                {
+                Ratings = new ProductRatings {
                     AverageRating = (Random.NextDouble() * 2) + 3, // 3-5 stars
                     TotalReviews = Random.Next(10, 500),
                     RatingDistribution = GenerateRatingDistribution(),
@@ -278,15 +243,12 @@ namespace ComparisonTool.TestDataGenerator
         }
 
         // Helper methods for generating complex nested objects
-        private static List<ComponentTiming> GenerateComponentTimings(int count)
-        {
+        private static List<ComponentTiming> GenerateComponentTimings(int count) {
             var timings = new List<ComponentTiming>();
             var components = new[] { "Database", "Cache", "ExternalAPI", "Validation", "Serialization" };
 
-            for (var i = 0; i < count; i++)
-            {
-                timings.Add(new ComponentTiming
-                {
+            for (var i = 0; i < count; i++) {
+                timings.Add(new ComponentTiming {
                     ComponentName = components[i % components.Length],
                     ExecutionTime = TimeSpan.FromMilliseconds(Random.Next(1, 100)),
                     CallCount = Random.Next(1, 10),
@@ -296,13 +258,10 @@ namespace ComparisonTool.TestDataGenerator
             return timings;
         }
 
-        private static List<FeatureFlag> GenerateFeatureFlags(int count)
-        {
+        private static List<FeatureFlag> GenerateFeatureFlags(int count) {
             var flags = new List<FeatureFlag>();
-            for (var i = 0; i < count; i++)
-            {
-                flags.Add(new FeatureFlag
-                {
+            for (var i = 0; i < count; i++) {
+                flags.Add(new FeatureFlag {
                     Name = $"Feature{i}",
                     Enabled = Random.Next(0, 2) == 1,
                     Percentage = Random.NextDouble() * 100,
@@ -312,20 +271,16 @@ namespace ComparisonTool.TestDataGenerator
             return flags;
         }
 
-        private static CustomerPreferences GenerateCustomerPreferences(int fileIndex, bool isBaselineVersion)
-        {
-            return new CustomerPreferences
-            {
-                Communication = new CommunicationPreferences
-                {
+        private static CustomerPreferences GenerateCustomerPreferences(int fileIndex, bool isBaselineVersion) {
+            return new CustomerPreferences {
+                Communication = new CommunicationPreferences {
                     EmailNotifications = true,
                     SmsNotifications = isBaselineVersion ? false : true, // Preference change
                     PushNotifications = true,
                     MarketingEmails = fileIndex % 2 == 0,
                     PreferredLanguage = "en-US",
                 },
-                Delivery = new DeliveryPreferences
-                {
+                Delivery = new DeliveryPreferences {
                     PreferredTimeSlot = "9AM-5PM",
                     DeliveryInstructions = isBaselineVersion ? "Leave at door" : "Ring doorbell",
                     AuthorityToLeave = true,
@@ -336,13 +291,10 @@ namespace ComparisonTool.TestDataGenerator
             };
         }
 
-        private static List<Address> GenerateAddresses(int count, int fileIndex)
-        {
+        private static List<Address> GenerateAddresses(int count, int fileIndex) {
             var addresses = new List<Address>();
-            for (var i = 0; i < count; i++)
-            {
-                addresses.Add(new Address
-                {
+            for (var i = 0; i < count; i++) {
+                addresses.Add(new Address {
                     AddressId = $"ADDR-{fileIndex:D6}-{i}",
                     Type = (AddressType)(i % 5),
                     Line1 = $"{Random.Next(100, 9999)} Main St",
@@ -351,8 +303,7 @@ namespace ComparisonTool.TestDataGenerator
                     StateProvince = "CA",
                     PostalCode = $"{Random.Next(10000, 99999):D5}",
                     Country = "USA",
-                    Coordinates = new GeoCoordinates
-                    {
+                    Coordinates = new GeoCoordinates {
                         Latitude = (Random.NextDouble() * 180) - 90,
                         Longitude = (Random.NextDouble() * 360) - 180,
                         AccuracyMeters = Random.NextDouble() * 10,
@@ -365,18 +316,14 @@ namespace ComparisonTool.TestDataGenerator
             return addresses;
         }
 
-        private static List<PaymentMethod> GeneratePaymentMethods(int count, int fileIndex)
-        {
+        private static List<PaymentMethod> GeneratePaymentMethods(int count, int fileIndex) {
             var methods = new List<PaymentMethod>();
-            for (var i = 0; i < count; i++)
-            {
-                methods.Add(new PaymentMethod
-                {
+            for (var i = 0; i < count; i++) {
+                methods.Add(new PaymentMethod {
                     PaymentMethodId = $"PM-{fileIndex:D6}-{i}",
                     Type = (PaymentMethodType)(i % 6),
                     IsDefault = i == 0,
-                    CardInfo = new CreditCardInfo
-                    {
+                    CardInfo = new CreditCardInfo {
                         Last4Digits = $"{Random.Next(1000, 9999)}",
                         Brand = "Visa",
                         ExpiryMonth = Random.Next(1, 13),
@@ -389,10 +336,8 @@ namespace ComparisonTool.TestDataGenerator
             return methods;
         }
 
-        private static LoyaltyProgram GenerateLoyaltyProgram(int fileIndex, bool isBaselineVersion)
-        {
-            return new LoyaltyProgram
-            {
+        private static LoyaltyProgram GenerateLoyaltyProgram(int fileIndex, bool isBaselineVersion) {
+            return new LoyaltyProgram {
                 MembershipNumber = $"LP{fileIndex:D8}",
                 CurrentPoints = isBaselineVersion ? Random.Next(100, 1000) : Random.Next(200, 1200), // Points difference
                 TierStatus = (CustomerTier)(fileIndex % 5),
@@ -402,13 +347,10 @@ namespace ComparisonTool.TestDataGenerator
             };
         }
 
-        private static List<RewardTransaction> GenerateRewardHistory(int count, int fileIndex)
-        {
+        private static List<RewardTransaction> GenerateRewardHistory(int count, int fileIndex) {
             var history = new List<RewardTransaction>();
-            for (var i = 0; i < count; i++)
-            {
-                history.Add(new RewardTransaction
-                {
+            for (var i = 0; i < count; i++) {
+                history.Add(new RewardTransaction {
                     TransactionId = $"RT-{fileIndex:D6}-{i:D2}",
                     Date = DateTime.UtcNow.AddDays(-Random.Next(1, 365)),
                     Points = Random.Next(-500, 500),
@@ -420,13 +362,10 @@ namespace ComparisonTool.TestDataGenerator
             return history;
         }
 
-        private static List<AvailableReward> GenerateAvailableRewards(int count)
-        {
+        private static List<AvailableReward> GenerateAvailableRewards(int count) {
             var rewards = new List<AvailableReward>();
-            for (var i = 0; i < count; i++)
-            {
-                rewards.Add(new AvailableReward
-                {
+            for (var i = 0; i < count; i++) {
+                rewards.Add(new AvailableReward {
                     RewardId = $"RWD-{i:D3}",
                     Name = $"Reward {i + 1}",
                     Description = $"Description for reward {i + 1}",
@@ -440,13 +379,10 @@ namespace ComparisonTool.TestDataGenerator
         }
 
         // Additional helper methods for remaining complex objects
-        private static List<CustomizationOption> GenerateCustomizationOptions(int count)
-        {
+        private static List<CustomizationOption> GenerateCustomizationOptions(int count) {
             var options = new List<CustomizationOption>();
-            for (var i = 0; i < count; i++)
-            {
-                options.Add(new CustomizationOption
-                {
+            for (var i = 0; i < count; i++) {
+                options.Add(new CustomizationOption {
                     OptionId = $"OPT-{i:D3}",
                     Name = $"Option {i + 1}",
                     Value = $"Value {i + 1}",
@@ -457,13 +393,10 @@ namespace ComparisonTool.TestDataGenerator
             return options;
         }
 
-        private static List<FulfillmentOption> GenerateFulfillmentOptions(int count)
-        {
+        private static List<FulfillmentOption> GenerateFulfillmentOptions(int count) {
             var options = new List<FulfillmentOption>();
-            for (var i = 0; i < count; i++)
-            {
-                options.Add(new FulfillmentOption
-                {
+            for (var i = 0; i < count; i++) {
+                options.Add(new FulfillmentOption {
                     OptionId = $"FO-{i:D3}",
                     Type = (FulfillmentType)(i % 5),
                     EstimatedDelivery = DateTime.UtcNow.AddDays(Random.Next(1, 14)),
@@ -476,13 +409,10 @@ namespace ComparisonTool.TestDataGenerator
             return options;
         }
 
-        private static List<Warranty> GenerateWarranties(int count)
-        {
+        private static List<Warranty> GenerateWarranties(int count) {
             var warranties = new List<Warranty>();
-            for (var i = 0; i < count; i++)
-            {
-                warranties.Add(new Warranty
-                {
+            for (var i = 0; i < count; i++) {
+                warranties.Add(new Warranty {
                     WarrantyId = $"WAR-{i:D3}",
                     Type = (WarrantyType)(i % 4),
                     Duration = TimeSpan.FromDays(Random.Next(365, 1095)),
@@ -495,10 +425,8 @@ namespace ComparisonTool.TestDataGenerator
             return warranties;
         }
 
-        private static ProductCategory GenerateProductCategory(int productIndex)
-        {
-            return new ProductCategory
-            {
+        private static ProductCategory GenerateProductCategory(int productIndex) {
+            return new ProductCategory {
                 CategoryId = $"CAT-{productIndex % 10:D3}",
                 Name = $"Category {productIndex % 10}",
                 ParentCategory = null,
@@ -507,13 +435,10 @@ namespace ComparisonTool.TestDataGenerator
             };
         }
 
-        private static List<CategoryAttribute> GenerateCategoryAttributes(int count)
-        {
+        private static List<CategoryAttribute> GenerateCategoryAttributes(int count) {
             var attributes = new List<CategoryAttribute>();
-            for (var i = 0; i < count; i++)
-            {
-                attributes.Add(new CategoryAttribute
-                {
+            for (var i = 0; i < count; i++) {
+                attributes.Add(new CategoryAttribute {
                     Name = $"Attribute {i + 1}",
                     Value = $"Value {i + 1}",
                     Unit = "unit",
@@ -524,13 +449,10 @@ namespace ComparisonTool.TestDataGenerator
             return attributes;
         }
 
-        private static List<TechnicalSpecification> GenerateTechnicalSpecs(int count)
-        {
+        private static List<TechnicalSpecification> GenerateTechnicalSpecs(int count) {
             var specs = new List<TechnicalSpecification>();
-            for (var i = 0; i < count; i++)
-            {
-                specs.Add(new TechnicalSpecification
-                {
+            for (var i = 0; i < count; i++) {
+                specs.Add(new TechnicalSpecification {
                     Name = $"Spec {i + 1}",
                     Value = $"Value {i + 1}",
                     Category = "Technical",
@@ -540,13 +462,10 @@ namespace ComparisonTool.TestDataGenerator
             return specs;
         }
 
-        private static List<ProductCertification> GenerateCertifications(int count)
-        {
+        private static List<ProductCertification> GenerateCertifications(int count) {
             var certs = new List<ProductCertification>();
-            for (var i = 0; i < count; i++)
-            {
-                certs.Add(new ProductCertification
-                {
+            for (var i = 0; i < count; i++) {
+                certs.Add(new ProductCertification {
                     Name = $"Certification {i + 1}",
                     IssuingAuthority = "Authority",
                     CertificationNumber = $"CERT-{i:D6}",
@@ -557,20 +476,16 @@ namespace ComparisonTool.TestDataGenerator
             return certs;
         }
 
-        private static List<ProductImage> GenerateProductImages(int count, int productIndex)
-        {
+        private static List<ProductImage> GenerateProductImages(int count, int productIndex) {
             var images = new List<ProductImage>();
-            for (var i = 0; i < count; i++)
-            {
-                images.Add(new ProductImage
-                {
+            for (var i = 0; i < count; i++) {
+                images.Add(new ProductImage {
                     ImageId = $"IMG-{productIndex:D6}-{i:D2}",
                     Url = $"https://example.com/images/product{productIndex}_{i}.jpg",
                     AltText = $"Product image {i + 1}",
                     Type = (ImageType)(i % 6),
                     SortOrder = i,
-                    Size = new ImageSize
-                    {
+                    Size = new ImageSize {
                         Width = Random.Next(200, 1000),
                         Height = Random.Next(200, 1000),
                         FileSizeBytes = Random.Next(10000, 500000),
@@ -581,13 +496,10 @@ namespace ComparisonTool.TestDataGenerator
             return images;
         }
 
-        private static List<ProductReview> GenerateProductReviews(int count, int productIndex, bool isBaselineVersion)
-        {
+        private static List<ProductReview> GenerateProductReviews(int count, int productIndex, bool isBaselineVersion) {
             var reviews = new List<ProductReview>();
-            for (var i = 0; i < count; i++)
-            {
-                reviews.Add(new ProductReview
-                {
+            for (var i = 0; i < count; i++) {
+                reviews.Add(new ProductReview {
                     ReviewId = $"REV-{productIndex:D6}-{i:D2}",
                     ReviewerName = $"Reviewer {i + 1}",
                     Rating = Random.Next(1, 6),
@@ -603,13 +515,10 @@ namespace ComparisonTool.TestDataGenerator
             return reviews;
         }
 
-        private static List<RatingDistribution> GenerateRatingDistribution()
-        {
+        private static List<RatingDistribution> GenerateRatingDistribution() {
             var distribution = new List<RatingDistribution>();
-            for (var i = 1; i <= 5; i++)
-            {
-                distribution.Add(new RatingDistribution
-                {
+            for (var i = 1; i <= 5; i++) {
+                distribution.Add(new RatingDistribution {
                     Stars = i,
                     Count = Random.Next(1, 100),
                     Percentage = Random.NextDouble() * 100,
@@ -619,13 +528,10 @@ namespace ComparisonTool.TestDataGenerator
             return distribution;
         }
 
-        private static List<AppliedDiscount> GenerateAppliedDiscounts(int count)
-        {
+        private static List<AppliedDiscount> GenerateAppliedDiscounts(int count) {
             var discounts = new List<AppliedDiscount>();
-            for (var i = 0; i < count; i++)
-            {
-                discounts.Add(new AppliedDiscount
-                {
+            for (var i = 0; i < count; i++) {
+                discounts.Add(new AppliedDiscount {
                     DiscountId = $"DISC-{i:D3}",
                     Name = $"Discount {i + 1}",
                     Type = (DiscountType)(i % 6),
@@ -637,13 +543,10 @@ namespace ComparisonTool.TestDataGenerator
             return discounts;
         }
 
-        private static List<TaxBreakdown> GenerateTaxBreakdown(int count)
-        {
+        private static List<TaxBreakdown> GenerateTaxBreakdown(int count) {
             var taxes = new List<TaxBreakdown>();
-            for (var i = 0; i < count; i++)
-            {
-                taxes.Add(new TaxBreakdown
-                {
+            for (var i = 0; i < count; i++) {
+                taxes.Add(new TaxBreakdown {
                     TaxName = $"Tax {i + 1}",
                     Rate = Random.NextDouble() * 0.15,
                     Amount = (decimal)(Random.NextDouble() * 20),
@@ -654,13 +557,10 @@ namespace ComparisonTool.TestDataGenerator
             return taxes;
         }
 
-        private static List<PreviousPurchase> GeneratePreviousPurchases(int count, int fileIndex)
-        {
+        private static List<PreviousPurchase> GeneratePreviousPurchases(int count, int fileIndex) {
             var purchases = new List<PreviousPurchase>();
-            for (var i = 0; i < count; i++)
-            {
-                purchases.Add(new PreviousPurchase
-                {
+            for (var i = 0; i < count; i++) {
+                purchases.Add(new PreviousPurchase {
                     ProductId = $"PROD-{(fileIndex + i) % 500:D6}",
                     PurchaseDate = DateTime.UtcNow.AddDays(-Random.Next(30, 365)),
                     Amount = (decimal)((Random.NextDouble() * 200) + 10),
@@ -671,10 +571,8 @@ namespace ComparisonTool.TestDataGenerator
             return purchases;
         }
 
-        private static OrderPricing GenerateOrderPricing(int fileIndex, bool isBaselineVersion)
-        {
-            return new OrderPricing
-            {
+        private static OrderPricing GenerateOrderPricing(int fileIndex, bool isBaselineVersion) {
+            return new OrderPricing {
                 Subtotal = (decimal)((Random.NextDouble() * 500) + 100),
                 TotalDiscount = isBaselineVersion ? 0 : (decimal)(Random.NextDouble() * 50), // Discount difference
                 TotalTax = (decimal)(Random.NextDouble() * 50),
@@ -694,10 +592,8 @@ namespace ComparisonTool.TestDataGenerator
             };
         }
 
-        private static FulfillmentInfo GenerateFulfillmentInfo(int fileIndex, bool isBaselineVersion)
-        {
-            return new FulfillmentInfo
-            {
+        private static FulfillmentInfo GenerateFulfillmentInfo(int fileIndex, bool isBaselineVersion) {
+            return new FulfillmentInfo {
                 FulfillmentId = $"FUL-{fileIndex:D6}",
                 Status = isBaselineVersion ? FulfillmentStatus.Processing : FulfillmentStatus.Shipped,
                 Method = FulfillmentMethod.StandardShipping,
@@ -719,18 +615,15 @@ namespace ComparisonTool.TestDataGenerator
             };
         }
 
-        private static PaymentInfo GeneratePaymentInfo(int fileIndex, bool isBaselineVersion)
-        {
-            return new PaymentInfo
-            {
+        private static PaymentInfo GeneratePaymentInfo(int fileIndex, bool isBaselineVersion) {
+            return new PaymentInfo {
                 PaymentId = $"PAY-{fileIndex:D6}",
                 Status = isBaselineVersion ? PaymentStatus.Authorized : PaymentStatus.Captured,
                 Method = new PaymentMethod(),
                 AuthorizationCode = $"AUTH{Random.Next(100000, 999999)}",
                 TransactionId = $"TXN-{fileIndex:D8}",
                 PaymentHistory = new List<PaymentTransaction>(),
-                FraudCheck = new FraudCheckResult
-                {
+                FraudCheck = new FraudCheckResult {
                     Score = Random.NextDouble(),
                     RiskLevel = RiskLevel.Low,
                     Decision = "Approve",
@@ -739,13 +632,10 @@ namespace ComparisonTool.TestDataGenerator
             };
         }
 
-        private static List<Promotion> GeneratePromotions(int count, int fileIndex)
-        {
+        private static List<Promotion> GeneratePromotions(int count, int fileIndex) {
             var promotions = new List<Promotion>();
-            for (var i = 0; i < count; i++)
-            {
-                promotions.Add(new Promotion
-                {
+            for (var i = 0; i < count; i++) {
+                promotions.Add(new Promotion {
                     PromotionId = $"PROMO-{i:D3}",
                     Name = $"Promotion {i + 1}",
                     Type = (PromotionType)(i % 6),
@@ -755,8 +645,7 @@ namespace ComparisonTool.TestDataGenerator
                     DiscountPercentage = Random.NextDouble() * 20,
                     ValidFrom = DateTime.UtcNow.AddDays(-30),
                     ValidUntil = DateTime.UtcNow.AddDays(30),
-                    Terms = new PromotionTerms
-                    {
+                    Terms = new PromotionTerms {
                         MinOrderValue = (decimal)((Random.NextDouble() * 100) + 50),
                         MaxDiscount = (decimal)(Random.NextDouble() * 100),
                         UsageLimit = Random.Next(100, 1000),
@@ -770,13 +659,10 @@ namespace ComparisonTool.TestDataGenerator
             return promotions;
         }
 
-        private static List<OrderEvent> GenerateOrderEvents(int count, int fileIndex, bool isBaselineVersion)
-        {
+        private static List<OrderEvent> GenerateOrderEvents(int count, int fileIndex, bool isBaselineVersion) {
             var events = new List<OrderEvent>();
-            for (var i = 0; i < count; i++)
-            {
-                events.Add(new OrderEvent
-                {
+            for (var i = 0; i < count; i++) {
+                events.Add(new OrderEvent {
                     EventId = $"EVT-{fileIndex:D6}-{i:D2}",
                     Type = (OrderEventType)(i % 9),
                     Timestamp = DateTime.UtcNow.AddHours(-Random.Next(1, 72)), // Different timestamps
@@ -790,17 +676,13 @@ namespace ComparisonTool.TestDataGenerator
             return events;
         }
 
-        private static List<ValidationMessage> GenerateValidationMessages(int fileIndex, bool isBaselineVersion)
-        {
+        private static List<ValidationMessage> GenerateValidationMessages(int fileIndex, bool isBaselineVersion) {
             var messages = new List<ValidationMessage>();
 
             // Only add validation messages in actual files to create differences
-            if (!isBaselineVersion)
-            {
-                for (var i = 0; i < Random.Next(0, 3); i++)
-                {
-                    messages.Add(new ValidationMessage
-                    {
+            if (!isBaselineVersion) {
+                for (var i = 0; i < Random.Next(0, 3); i++) {
+                    messages.Add(new ValidationMessage {
                         MessageId = $"VAL-{fileIndex:D6}-{i:D2}",
                         Severity = (MessageSeverity)(i % 4),
                         Code = $"VAL{i:D3}",
@@ -814,13 +696,10 @@ namespace ComparisonTool.TestDataGenerator
             return messages;
         }
 
-        private static List<AuditEntry> GenerateAuditTrail(int fileIndex, bool isBaselineVersion)
-        {
+        private static List<AuditEntry> GenerateAuditTrail(int fileIndex, bool isBaselineVersion) {
             var entries = new List<AuditEntry>();
-            for (var i = 0; i < Random.Next(2, 6); i++)
-            {
-                entries.Add(new AuditEntry
-                {
+            for (var i = 0; i < Random.Next(2, 6); i++) {
+                entries.Add(new AuditEntry {
                     EntryId = $"AUD-{fileIndex:D6}-{i:D2}",
                     Timestamp = DateTime.UtcNow.AddMinutes(-Random.Next(0, 1440)), // Different audit times
                     UserId = $"user{fileIndex % 10}",
@@ -836,16 +715,14 @@ namespace ComparisonTool.TestDataGenerator
             return entries;
         }
 
-        private static string SerializeToXml<T>(T obj)
-        {
+        private static string SerializeToXml<T>(T obj) {
             var serializer = new XmlSerializer(typeof(T));
 
             // Use MemoryStream instead of StringWriter to avoid UTF-16 encoding issues
             using var memoryStream = new MemoryStream();
 
             // Use XmlWriterSettings to control encoding and formatting
-            var settings = new XmlWriterSettings
-            {
+            var settings = new XmlWriterSettings {
                 Encoding = new System.Text.UTF8Encoding(false), // UTF-8 without BOM
                 Indent = true,
                 IndentChars = "  ",
@@ -865,8 +742,7 @@ namespace ComparisonTool.TestDataGenerator
             return System.Text.Encoding.UTF8.GetString(memoryStream.ToArray());
         }
 
-        private static void CreateDocumentation(string outputDir)
-        {
+        private static void CreateDocumentation(string outputDir) {
             var readme = @"# 4000 File Performance Test Dataset
 
 ## Overview

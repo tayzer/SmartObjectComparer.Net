@@ -2,8 +2,7 @@
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
-namespace ComparisonTool.Core.Comparison
-{
+namespace ComparisonTool.Core.Comparison {
     using System;
     using System.Collections.Concurrent;
     using System.Security.Cryptography;
@@ -18,30 +17,24 @@ namespace ComparisonTool.Core.Comparison
     /// <summary>
     /// Cached comparison result with metadata.
     /// </summary>
-    public class CachedComparisonResult
-    {
-        public ComparisonResult Result
-        {
+    public class CachedComparisonResult {
+        public ComparisonResult Result {
             get; set;
         }
 
-        public DateTime CachedAt
-        {
+        public DateTime CachedAt {
             get; set;
         }
 
-        public string ConfigurationFingerprint
-        {
+        public string ConfigurationFingerprint {
             get; set;
         }
 
-        public long ApproximateMemorySize
-        {
+        public long ApproximateMemorySize {
             get; set;
         }
 
-        public CachedComparisonResult(ComparisonResult result, string configFingerprint)
-        {
+        public CachedComparisonResult(ComparisonResult result, string configFingerprint) {
             this.Result = result;
             this.CachedAt = DateTime.UtcNow;
             this.ConfigurationFingerprint = configFingerprint;
@@ -54,35 +47,28 @@ namespace ComparisonTool.Core.Comparison
     /// <summary>
     /// Cached deserialized object with metadata.
     /// </summary>
-    public class CachedDeserializedObject
-    {
-        public object Object
-        {
+    public class CachedDeserializedObject {
+        public object Object {
             get; set;
         }
 
-        public DateTime CachedAt
-        {
+        public DateTime CachedAt {
             get; set;
         }
 
-        public DateTime FileLastModified
-        {
+        public DateTime FileLastModified {
             get; set;
         }
 
-        public string FileHash
-        {
+        public string FileHash {
             get; set;
         }
 
-        public long ApproximateMemorySize
-        {
+        public long ApproximateMemorySize {
             get; set;
         }
 
-        public CachedDeserializedObject(object obj, DateTime fileLastModified, string fileHash, long estimatedSize = 50000)
-        {
+        public CachedDeserializedObject(object obj, DateTime fileLastModified, string fileHash, long estimatedSize = 50000) {
             this.Object = obj;
             this.CachedAt = DateTime.UtcNow;
             this.FileLastModified = fileLastModified;
@@ -94,8 +80,7 @@ namespace ComparisonTool.Core.Comparison
     /// <summary>
     /// Service for caching comparison results and deserialized objects to improve performance on re-runs.
     /// </summary>
-    public class ComparisonResultCacheService
-    {
+    public class ComparisonResultCacheService {
         private readonly ILogger logger;
         private readonly PerformanceTracker performanceTracker;
 
@@ -103,13 +88,13 @@ namespace ComparisonTool.Core.Comparison
         private static readonly string AppSessionId = Guid.NewGuid().ToString("N")[..8];
 
         // Cache for comparison results: key = fileHash1 + fileHash2 + configHash
-        private readonly ConcurrentDictionary<string, CachedComparisonResult> comparisonCache = new ();
+        private readonly ConcurrentDictionary<string, CachedComparisonResult> comparisonCache = new();
 
         // Cache for deserialized objects: key = filePath + lastModified
-        private readonly ConcurrentDictionary<string, CachedDeserializedObject> objectCache = new ();
+        private readonly ConcurrentDictionary<string, CachedDeserializedObject> objectCache = new();
 
         // Cache for configuration fingerprints: key = rules + settings serialized
-        private readonly ConcurrentDictionary<string, string> configFingerprintCache = new ();
+        private readonly ConcurrentDictionary<string, string> configFingerprintCache = new();
 
         // Configuration
         private readonly TimeSpan comparisonCacheExpiration = TimeSpan.FromHours(24);
@@ -124,8 +109,7 @@ namespace ComparisonTool.Core.Comparison
         private long totalCacheEvictions = 0;
         private DateTime lastCleanup = DateTime.UtcNow;
 
-        public ComparisonResultCacheService(ILogger logger = null, PerformanceTracker performanceTracker = null)
-        {
+        public ComparisonResultCacheService(ILogger logger = null, PerformanceTracker performanceTracker = null) {
             this.logger = logger ?? NullLogger.Instance;
             this.performanceTracker = performanceTracker ?? new PerformanceTracker(this.logger as ILogger<PerformanceTracker> ?? NullLogger<PerformanceTracker>.Instance);
         }
@@ -134,8 +118,7 @@ namespace ComparisonTool.Core.Comparison
         /// Get cache statistics for monitoring and debugging.
         /// </summary>
         /// <returns></returns>
-        public (long Hits, long Misses, double HitRatio, int ComparisonEntries, int ObjectEntries, long EstimatedMemory) GetCacheStatistics()
-        {
+        public (long Hits, long Misses, double HitRatio, int ComparisonEntries, int ObjectEntries, long EstimatedMemory) GetCacheStatistics() {
             var total = this.totalCacheHits + this.totalCacheMisses;
             var hitRatio = total > 0 ? (double)this.totalCacheHits / total : 0.0;
 
@@ -149,14 +132,10 @@ namespace ComparisonTool.Core.Comparison
         /// Generate a configuration fingerprint for caching based on ignore rules and global settings.
         /// </summary>
         /// <returns></returns>
-        public string GenerateConfigurationFingerprint(IComparisonConfigurationService configService)
-        {
-            return this.performanceTracker.TrackOperation("Generate_Config_Fingerprint", () =>
-            {
-                try
-                {
-                    var config = new
-                    {
+        public string GenerateConfigurationFingerprint(IComparisonConfigurationService configService) {
+            return this.performanceTracker.TrackOperation("Generate_Config_Fingerprint", () => {
+                try {
+                    var config = new {
                         GlobalIgnoreCollectionOrder = configService.GetIgnoreCollectionOrder(),
                         GlobalIgnoreStringCase = configService.GetIgnoreStringCase(),
                         IgnoreRules = configService.GetIgnoreRules()
@@ -170,15 +149,13 @@ namespace ComparisonTool.Core.Comparison
                             .ToList(),
                     };
 
-                    var configJson = JsonSerializer.Serialize(config, new JsonSerializerOptions
-                    {
+                    var configJson = JsonSerializer.Serialize(config, new JsonSerializerOptions {
                         WriteIndented = false,
                         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
                     });
 
                     // Check cache first
-                    if (this.configFingerprintCache.TryGetValue(configJson, out var cachedFingerprint))
-                    {
+                    if (this.configFingerprintCache.TryGetValue(configJson, out var cachedFingerprint)) {
                         return cachedFingerprint;
                     }
 
@@ -188,15 +165,13 @@ namespace ComparisonTool.Core.Comparison
                     var fingerprint = Convert.ToBase64String(hashBytes)[..16]; // Use first 16 chars
 
                     // Cache the fingerprint (with size limit)
-                    if (this.configFingerprintCache.Count < 100)
-                    {
+                    if (this.configFingerprintCache.Count < 100) {
                         this.configFingerprintCache.TryAdd(configJson, fingerprint);
                     }
 
                     return fingerprint;
                 }
-                catch (Exception ex)
-                {
+                catch (Exception ex) {
                     this.logger.LogWarning(ex, "Error generating configuration fingerprint, using timestamp");
                     return DateTime.UtcNow.Ticks.ToString();
                 }
@@ -207,20 +182,16 @@ namespace ComparisonTool.Core.Comparison
         /// Generate a file content hash for caching.
         /// </summary>
         /// <returns></returns>
-        public string GenerateFileHash(Stream fileStream)
-        {
-            return this.performanceTracker.TrackOperation("Generate_File_Hash", () =>
-            {
-                try
-                {
+        public string GenerateFileHash(Stream fileStream) {
+            return this.performanceTracker.TrackOperation("Generate_File_Hash", () => {
+                try {
                     fileStream.Position = 0;
                     using var sha256 = SHA256.Create();
                     var hashBytes = sha256.ComputeHash(fileStream);
                     fileStream.Position = 0; // Reset for subsequent use
                     return Convert.ToBase64String(hashBytes)[..16]; // Use first 16 chars for shorter keys
                 }
-                catch (Exception ex)
-                {
+                catch (Exception ex) {
                     this.logger.LogWarning(ex, "Error generating file hash, using length + timestamp");
                     return $"{fileStream.Length}_{DateTime.UtcNow.Ticks}";
                 }
@@ -231,24 +202,20 @@ namespace ComparisonTool.Core.Comparison
         /// Try to get a cached comparison result.
         /// </summary>
         /// <returns></returns>
-        public bool TryGetCachedComparison(string file1Hash, string file2Hash, string configFingerprint, out ComparisonResult result)
-        {
+        public bool TryGetCachedComparison(string file1Hash, string file2Hash, string configFingerprint, out ComparisonResult result) {
             result = null;
 
             var cacheKey = $"{file1Hash}_{file2Hash}_{configFingerprint}";
 
-            if (this.comparisonCache.TryGetValue(cacheKey, out var cached))
-            {
+            if (this.comparisonCache.TryGetValue(cacheKey, out var cached)) {
                 // Check if cache entry is still valid
-                if (DateTime.UtcNow - cached.CachedAt < this.comparisonCacheExpiration)
-                {
+                if (DateTime.UtcNow - cached.CachedAt < this.comparisonCacheExpiration) {
                     result = cached.Result;
                     Interlocked.Increment(ref this.totalCacheHits);
                     this.logger.LogDebug("Cache HIT for comparison: {CacheKey}", cacheKey);
                     return true;
                 }
-                else
-                {
+                else {
                     // Remove expired entry
                     this.comparisonCache.TryRemove(cacheKey, out _);
                     Interlocked.Increment(ref this.totalCacheEvictions);
@@ -264,10 +231,8 @@ namespace ComparisonTool.Core.Comparison
         /// <summary>
         /// Cache a comparison result.
         /// </summary>
-        public void CacheComparison(string file1Hash, string file2Hash, string configFingerprint, ComparisonResult result)
-        {
-            if (result == null)
-            {
+        public void CacheComparison(string file1Hash, string file2Hash, string configFingerprint, ComparisonResult result) {
+            if (result == null) {
                 return;
             }
 
@@ -278,8 +243,7 @@ namespace ComparisonTool.Core.Comparison
             var cachedResult = new CachedComparisonResult(result, configFingerprint);
 
             // Check cache size limits before adding
-            if (this.comparisonCache.Count >= this.maxComparisonCacheEntries)
-            {
+            if (this.comparisonCache.Count >= this.maxComparisonCacheEntries) {
                 this.CleanupComparisonCache();
             }
 
@@ -287,8 +251,7 @@ namespace ComparisonTool.Core.Comparison
             this.logger.LogDebug("Cached comparison result: {CacheKey}", cacheKey);
 
             // Periodic cleanup
-            if (DateTime.UtcNow - this.lastCleanup > TimeSpan.FromMinutes(15))
-            {
+            if (DateTime.UtcNow - this.lastCleanup > TimeSpan.FromMinutes(15)) {
                 _ = Task.Run(this.CleanupCaches); // Run cleanup in background
             }
         }
@@ -298,28 +261,23 @@ namespace ComparisonTool.Core.Comparison
         /// </summary>
         /// <returns></returns>
         public bool TryGetCachedObject<T>(string filePath, DateTime fileLastModified, out T cachedObject)
-            where T : class
-            {
+            where T : class {
             cachedObject = null;
 
             var cacheKey = $"{filePath}_{fileLastModified.Ticks}_{AppSessionId}";
 
-            if (this.objectCache.TryGetValue(cacheKey, out var cached))
-            {
+            if (this.objectCache.TryGetValue(cacheKey, out var cached)) {
                 // Check if cache entry is still valid and file hasn't changed
                 if (DateTime.UtcNow - cached.CachedAt < this.objectCacheExpiration &&
-                    cached.FileLastModified == fileLastModified)
-                    {
+                    cached.FileLastModified == fileLastModified) {
                     cachedObject = cached.Object as T;
-                    if (cachedObject != null)
-                    {
+                    if (cachedObject != null) {
                         Interlocked.Increment(ref this.totalCacheHits);
                         this.logger.LogDebug("Object cache HIT for: {FilePath}", filePath);
                         return true;
                     }
                 }
-                else
-                {
+                else {
                     // Remove expired or invalid entry
                     this.objectCache.TryRemove(cacheKey, out _);
                     Interlocked.Increment(ref this.totalCacheEvictions);
@@ -334,10 +292,8 @@ namespace ComparisonTool.Core.Comparison
         /// <summary>
         /// Cache a deserialized object.
         /// </summary>
-        public void CacheObject(string filePath, DateTime fileLastModified, object obj, long estimatedSize = 50000)
-        {
-            if (obj == null)
-            {
+        public void CacheObject(string filePath, DateTime fileLastModified, object obj, long estimatedSize = 50000) {
+            if (obj == null) {
                 return;
             }
 
@@ -345,8 +301,7 @@ namespace ComparisonTool.Core.Comparison
             var cachedObject = new CachedDeserializedObject(obj, fileLastModified, string.Empty, estimatedSize);
 
             // Check cache size limits before adding
-            if (this.objectCache.Count >= this.maxObjectCacheEntries)
-            {
+            if (this.objectCache.Count >= this.maxObjectCacheEntries) {
                 this.CleanupObjectCache();
             }
 
@@ -357,8 +312,7 @@ namespace ComparisonTool.Core.Comparison
         /// <summary>
         /// Clear all caches (useful when memory pressure is high).
         /// </summary>
-        public void ClearAllCaches()
-        {
+        public void ClearAllCaches() {
             var comparisonCount = this.comparisonCache.Count;
             var objectCount = this.objectCache.Count;
 
@@ -375,8 +329,7 @@ namespace ComparisonTool.Core.Comparison
         /// Clear all cached objects - useful when XML serialization logic has been updated
         /// or when encountering inconsistent results between single file and folder comparisons.
         /// </summary>
-        public void ClearObjectCache()
-        {
+        public void ClearObjectCache() {
             this.objectCache.Clear();
             Interlocked.Exchange(ref this.totalCacheEvictions, this.objectCache.Count);
             this.logger.LogInformation("Cleared all cached deserialized objects");
@@ -385,21 +338,18 @@ namespace ComparisonTool.Core.Comparison
         /// <summary>
         /// Invalidate cached comparisons that used a different configuration.
         /// </summary>
-        public void InvalidateConfigurationChanges(string newConfigFingerprint)
-        {
+        public void InvalidateConfigurationChanges(string newConfigFingerprint) {
             var toRemove = this.comparisonCache
                 .Where(kvp => kvp.Value != null && kvp.Value.ConfigurationFingerprint != newConfigFingerprint)
                 .Select(kvp => kvp.Key)
                 .ToList();
 
-            foreach (var key in toRemove)
-            {
+            foreach (var key in toRemove) {
                 this.comparisonCache.TryRemove(key, out _);
                 Interlocked.Increment(ref this.totalCacheEvictions);
             }
 
-            if (toRemove.Count > 0)
-            {
+            if (toRemove.Count > 0) {
                 this.logger.LogInformation("Invalidated {Count} cached comparisons due to configuration changes", toRemove.Count);
             }
         }
@@ -407,8 +357,7 @@ namespace ComparisonTool.Core.Comparison
         /// <summary>
         /// Clean up expired comparison cache entries.
         /// </summary>
-        private void CleanupComparisonCache()
-        {
+        private void CleanupComparisonCache() {
             var cutoff = DateTime.UtcNow - this.comparisonCacheExpiration;
             var toRemove = this.comparisonCache
                 .Where(kvp => kvp.Value != null && kvp.Value.CachedAt < cutoff)
@@ -416,8 +365,7 @@ namespace ComparisonTool.Core.Comparison
                 .ToList();
 
             // If not enough expired entries, remove oldest ones
-            if (toRemove.Count < this.comparisonCache.Count / 4)
-            {
+            if (toRemove.Count < this.comparisonCache.Count / 4) {
                 var oldestEntries = this.comparisonCache
                     .Where(kvp => kvp.Value != null)
                     .OrderBy(kvp => kvp.Value.CachedAt)
@@ -427,8 +375,7 @@ namespace ComparisonTool.Core.Comparison
                 toRemove.AddRange(oldestEntries);
             }
 
-            foreach (var key in toRemove.Distinct())
-            {
+            foreach (var key in toRemove.Distinct()) {
                 this.comparisonCache.TryRemove(key, out _);
                 Interlocked.Increment(ref this.totalCacheEvictions);
             }
@@ -439,8 +386,7 @@ namespace ComparisonTool.Core.Comparison
         /// <summary>
         /// Clean up expired object cache entries.
         /// </summary>
-        private void CleanupObjectCache()
-        {
+        private void CleanupObjectCache() {
             var cutoff = DateTime.UtcNow - this.objectCacheExpiration;
             var toRemove = this.objectCache
                 .Where(kvp => kvp.Value != null && kvp.Value.CachedAt < cutoff)
@@ -448,8 +394,7 @@ namespace ComparisonTool.Core.Comparison
                 .ToList();
 
             // If not enough expired entries, remove oldest ones
-            if (toRemove.Count < this.objectCache.Count / 4)
-            {
+            if (toRemove.Count < this.objectCache.Count / 4) {
                 var oldestEntries = this.objectCache
                     .Where(kvp => kvp.Value != null)
                     .OrderBy(kvp => kvp.Value.CachedAt)
@@ -459,8 +404,7 @@ namespace ComparisonTool.Core.Comparison
                 toRemove.AddRange(oldestEntries);
             }
 
-            foreach (var key in toRemove.Distinct())
-            {
+            foreach (var key in toRemove.Distinct()) {
                 this.objectCache.TryRemove(key, out _);
                 Interlocked.Increment(ref this.totalCacheEvictions);
             }
@@ -471,10 +415,8 @@ namespace ComparisonTool.Core.Comparison
         /// <summary>
         /// Clean up all caches (removes expired entries and enforces memory limits).
         /// </summary>
-        private void CleanupCaches()
-        {
-            try
-            {
+        private void CleanupCaches() {
+            try {
                 this.lastCleanup = DateTime.UtcNow;
 
                 this.CleanupComparisonCache();
@@ -484,8 +426,7 @@ namespace ComparisonTool.Core.Comparison
                 var estimatedMemory = this.comparisonCache.Values.Where(c => c != null).Sum(c => c.ApproximateMemorySize) +
                                     this.objectCache.Values.Where(o => o != null).Sum(o => o.ApproximateMemorySize);
 
-                if (estimatedMemory > this.maxCacheMemoryBytes)
-                {
+                if (estimatedMemory > this.maxCacheMemoryBytes) {
                     this.logger.LogWarning(
                         "Cache memory usage ({MemoryMB}MB) exceeds limit ({LimitMB}MB), performing aggressive cleanup",
                         estimatedMemory / (1024 * 1024), this.maxCacheMemoryBytes / (1024 * 1024));
@@ -499,8 +440,7 @@ namespace ComparisonTool.Core.Comparison
                         .Select(kvp => kvp.Key)
                         .ToList();
 
-                    foreach (var key in comparisonToRemove)
-                    {
+                    foreach (var key in comparisonToRemove) {
                         this.comparisonCache.TryRemove(key, out _);
                     }
 
@@ -512,8 +452,7 @@ namespace ComparisonTool.Core.Comparison
                         .Select(kvp => kvp.Key)
                         .ToList();
 
-                    foreach (var key in objectToRemove)
-                    {
+                    foreach (var key in objectToRemove) {
                         this.objectCache.TryRemove(key, out _);
                     }
 
@@ -528,8 +467,7 @@ namespace ComparisonTool.Core.Comparison
                     "Cache stats - Hits: {Hits}, Misses: {Misses}, Hit Ratio: {HitRatio:P2}, Memory: {MemoryMB}MB",
                     stats.Hits, stats.Misses, stats.HitRatio, stats.EstimatedMemory / (1024 * 1024));
             }
-            catch (Exception ex)
-            {
+            catch (Exception ex) {
                 this.logger.LogError(ex, "Error during cache cleanup");
             }
         }
