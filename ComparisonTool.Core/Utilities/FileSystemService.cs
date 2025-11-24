@@ -1,4 +1,4 @@
-﻿// <copyright file="FileSystemService.cs" company="PlaceholderCompany">
+// <copyright file="FileSystemService.cs" company="PlaceholderCompany">
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
@@ -11,8 +11,7 @@ namespace ComparisonTool.Core.Utilities;
 /// <summary>
 /// Interface for file system operations with support for folder handling.
 /// </summary>
-public interface IFileSystemService
-{
+public interface IFileSystemService {
     /// <summary>
     /// Gets a list of XML files from a directory and its subdirectories.
     /// </summary>
@@ -58,12 +57,10 @@ public interface IFileSystemService
 /// <summary>
 /// Implementation of file system operations with folder handling capabilities.
 /// </summary>
-public class FileSystemService : IFileSystemService
-{
+public class FileSystemService : IFileSystemService {
     private readonly ILogger<FileSystemService> logger;
 
-    public FileSystemService(ILogger<FileSystemService> logger)
-    {
+    public FileSystemService(ILogger<FileSystemService> logger) {
         this.logger = logger;
     }
 
@@ -73,10 +70,8 @@ public class FileSystemService : IFileSystemService
     /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
     public async Task<List<(string FilePath, string RelativePath)>> GetXmlFilesFromDirectoryAsync(
         string directoryPath,
-        CancellationToken cancellationToken = default)
-        {
-        if (!Directory.Exists(directoryPath))
-        {
+        CancellationToken cancellationToken = default) {
+        if (!Directory.Exists(directoryPath)) {
             throw new DirectoryNotFoundException($"Directory not found: {directoryPath}");
         }
 
@@ -84,23 +79,21 @@ public class FileSystemService : IFileSystemService
 
         // This could take time for large directories, so use Task.Run
         await Task.Run(
-            () =>
-        {
-            var xmlFiles = Directory.GetFiles(directoryPath, "*.xml", SearchOption.AllDirectories);
+            () => {
+                var xmlFiles = Directory.GetFiles(directoryPath, "*.xml", SearchOption.AllDirectories);
 
-            foreach (var filePath in xmlFiles)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
+                foreach (var filePath in xmlFiles) {
+                    cancellationToken.ThrowIfCancellationRequested();
 
-                // Calculate the relative path from the base directory
-                var relativePath = Path.GetRelativePath(directoryPath, filePath);
-                result.Add((filePath, relativePath));
-            }
+                    // Calculate the relative path from the base directory
+                    var relativePath = Path.GetRelativePath(directoryPath, filePath);
+                    result.Add((filePath, relativePath));
+                }
 
-            this.logger.LogInformation(
-                "Found {Count} XML files in directory {Directory}",
-                result.Count, directoryPath);
-        }, cancellationToken);
+                this.logger.LogInformation(
+                    "Found {Count} XML files in directory {Directory}",
+                    result.Count, directoryPath);
+            }, cancellationToken);
 
         return result;
     }
@@ -111,10 +104,8 @@ public class FileSystemService : IFileSystemService
     /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
     public async Task<MemoryStream> GetFileAsMemoryStreamAsync(
         string filePath,
-        CancellationToken cancellationToken = default)
-        {
-        if (!File.Exists(filePath))
-        {
+        CancellationToken cancellationToken = default) {
+        if (!File.Exists(filePath)) {
             throw new FileNotFoundException($"File not found: {filePath}");
         }
 
@@ -126,8 +117,7 @@ public class FileSystemService : IFileSystemService
                    FileAccess.Read,
                    FileShare.Read,
                    4096, // Use a small buffer size
-                   FileOptions.Asynchronous | FileOptions.SequentialScan))
-                    {
+                   FileOptions.Asynchronous | FileOptions.SequentialScan)) {
             await fileStream.CopyToAsync(memoryStream, 81920, cancellationToken); // Use a decent buffer size
         }
 
@@ -141,10 +131,8 @@ public class FileSystemService : IFileSystemService
     /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
     public async Task<Stream> OpenFileStreamAsync(
         string filePath,
-        CancellationToken cancellationToken = default)
-        {
-        if (!File.Exists(filePath))
-        {
+        CancellationToken cancellationToken = default) {
+        if (!File.Exists(filePath)) {
             throw new FileNotFoundException($"File not found: {filePath}");
         }
 
@@ -172,15 +160,12 @@ public class FileSystemService : IFileSystemService
     public async Task<List<(string File1Path, string File2Path, string RelativePath)>> CreateFilePairsAsync(
         string directory1,
         string directory2,
-        CancellationToken cancellationToken = default)
-        {
-        if (!Directory.Exists(directory1))
-        {
+        CancellationToken cancellationToken = default) {
+        if (!Directory.Exists(directory1)) {
             throw new DirectoryNotFoundException($"Directory not found: {directory1}");
         }
 
-        if (!Directory.Exists(directory2))
-        {
+        if (!Directory.Exists(directory2)) {
             throw new DirectoryNotFoundException($"Directory not found: {directory2}");
         }
 
@@ -198,12 +183,10 @@ public class FileSystemService : IFileSystemService
         var files2Dict = files2.ToDictionary(f => f.RelativePath, f => f.FilePath);
 
         // Match files by relative path
-        foreach (var (filePath, relativePath) in files1)
-        {
+        foreach (var (filePath, relativePath) in files1) {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (files2Dict.TryGetValue(relativePath, out var matchingFile))
-            {
+            if (files2Dict.TryGetValue(relativePath, out var matchingFile)) {
                 result.Add((filePath, matchingFile, relativePath));
             }
         }
@@ -219,28 +202,24 @@ public class FileSystemService : IFileSystemService
     /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
     public async Task<Dictionary<string, List<(MemoryStream Stream, string FileName)>>> MapFilesByFolderAsync(
         List<(MemoryStream Stream, string FileName)> files,
-        CancellationToken cancellationToken = default)
-        {
+        CancellationToken cancellationToken = default) {
         var result =
             new Dictionary<string, List<(MemoryStream Stream, string FileName)>>(StringComparer.OrdinalIgnoreCase);
 
         // Process files in batches to avoid memory pressure
         const int batchSize = 50;
 
-        for (var i = 0; i < files.Count; i += batchSize)
-        {
+        for (var i = 0; i < files.Count; i += batchSize) {
             var batch = files.Skip(i).Take(batchSize).ToList();
 
-            foreach (var (stream, fileName) in batch)
-            {
+            foreach (var (stream, fileName) in batch) {
                 cancellationToken.ThrowIfCancellationRequested();
 
                 // Extract folder path from file name
                 var folderPath = this.GetFolderPath(fileName);
 
                 // Create or update the folder entry
-                if (!result.ContainsKey(folderPath))
-                {
+                if (!result.ContainsKey(folderPath)) {
                     result[folderPath] = new List<(MemoryStream Stream, string FileName)>();
                 }
 
@@ -249,8 +228,7 @@ public class FileSystemService : IFileSystemService
             }
 
             // Allow GC to work between batches
-            if (i + batchSize < files.Count)
-            {
+            if (i + batchSize < files.Count) {
                 await Task.Delay(1, cancellationToken);
             }
         }
@@ -265,14 +243,12 @@ public class FileSystemService : IFileSystemService
     /// <summary>
     /// Extract folder path from a file name.
     /// </summary>
-    private string GetFolderPath(string fileName)
-    {
+    private string GetFolderPath(string fileName) {
         // Normalize path separators
         var normalizedPath = fileName.Replace('\\', '/');
 
         var lastSeparatorIndex = normalizedPath.LastIndexOf('/');
-        if (lastSeparatorIndex < 0)
-        {
+        if (lastSeparatorIndex < 0) {
             return string.Empty; // No folder path
         }
 
@@ -282,8 +258,7 @@ public class FileSystemService : IFileSystemService
     /// <summary>
     /// Calculate an optimal buffer size based on file size.
     /// </summary>
-    private int CalculateOptimalBufferSize(long fileSize)
-    {
+    private int CalculateOptimalBufferSize(long fileSize) {
         // For very small files, use a small buffer
         if (fileSize < 4096) {
             return 4096; // 4 KB

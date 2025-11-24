@@ -18,8 +18,7 @@ using Moq;
 namespace ComparisonTool.Tests.Integration.Services;
 
 [TestClass]
-public class ComparisonServiceIntegrationTests
-{
+public class ComparisonServiceIntegrationTests {
     private readonly Mock<ILogger<ComparisonService>> mockLogger;
     private readonly Mock<ILogger<ComparisonConfigurationService>> mockConfigLogger;
     private readonly Mock<ILogger<XmlDeserializationService>> mockXmlLogger;
@@ -35,8 +34,7 @@ public class ComparisonServiceIntegrationTests
     private readonly ComparisonResultCacheService cacheService;
     private readonly ComparisonService comparisonService;
 
-    public ComparisonServiceIntegrationTests()
-    {
+    public ComparisonServiceIntegrationTests() {
         this.mockLogger = new Mock<ILogger<ComparisonService>>();
         this.mockConfigLogger = new Mock<ILogger<ComparisonConfigurationService>>();
         this.mockXmlLogger = new Mock<ILogger<XmlDeserializationService>>();
@@ -44,8 +42,7 @@ public class ComparisonServiceIntegrationTests
         this.mockPerfLogger = new Mock<ILogger<PerformanceTracker>>();
         this.mockResourceLogger = new Mock<ILogger<SystemResourceMonitor>>();
 
-        var configOptions = new ComparisonConfigurationOptions
-        {
+        var configOptions = new ComparisonConfigurationOptions {
             MaxDifferences = 1000,
             DefaultIgnoreCollectionOrder = true,
             DefaultIgnoreStringCase = false,
@@ -92,8 +89,7 @@ public class ComparisonServiceIntegrationTests
     }
 
     [TestMethod]
-    public async Task CompareXmlFilesAsync_WithIdenticalFiles_ShouldReturnNoDifferences()
-    {
+    public async Task CompareXmlFilesAsync_WithIdenticalFiles_ShouldReturnNoDifferences() {
         // Arrange
         var xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TestModel>
@@ -114,8 +110,7 @@ public class ComparisonServiceIntegrationTests
     }
 
     [TestMethod]
-    public async Task CompareXmlFilesAsync_WithDifferentFiles_ShouldReturnDifferences()
-    {
+    public async Task CompareXmlFilesAsync_WithDifferentFiles_ShouldReturnDifferences() {
         // Arrange
         var xml1 = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TestModel>
@@ -145,8 +140,7 @@ public class ComparisonServiceIntegrationTests
     }
 
     [TestMethod]
-    public async Task CompareXmlFilesAsync_WithIgnoredProperty_ShouldFilterDifferences()
-    {
+    public async Task CompareXmlFilesAsync_WithIgnoredProperty_ShouldFilterDifferences() {
         // Arrange
         var xml1 = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TestModel>
@@ -176,8 +170,7 @@ public class ComparisonServiceIntegrationTests
     }
 
     [TestMethod]
-    public async Task CompareXmlFilesAsync_WithComplexModel_ShouldHandleComplexStructures()
-    {
+    public async Task CompareXmlFilesAsync_WithComplexModel_ShouldHandleComplexStructures() {
         // Arrange
         var xml1 = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <ComplexTestModel>
@@ -215,8 +208,7 @@ public class ComparisonServiceIntegrationTests
     }
 
     [TestMethod]
-    public async Task CompareXmlFilesAsync_WithCollectionOrderIgnored_ShouldIgnoreOrder()
-    {
+    public async Task CompareXmlFilesAsync_WithCollectionOrderIgnored_ShouldIgnoreOrder() {
         // Arrange
         var xml1 = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <ComplexTestModel>
@@ -264,8 +256,7 @@ public class ComparisonServiceIntegrationTests
     }
 
     [TestMethod]
-    public async Task CompareXmlFilesAsync_WithUnregisteredModel_ShouldThrowException()
-    {
+    public async Task CompareXmlFilesAsync_WithUnregisteredModel_ShouldThrowException() {
         // Arrange
         var xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TestModel>
@@ -281,8 +272,7 @@ public class ComparisonServiceIntegrationTests
     }
 
     [TestMethod]
-    public async Task CompareXmlFilesAsync_WithMalformedXml_ShouldThrowException()
-    {
+    public async Task CompareXmlFilesAsync_WithMalformedXml_ShouldThrowException() {
         // Arrange
         var malformedXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TestModel>
@@ -298,8 +288,7 @@ public class ComparisonServiceIntegrationTests
     }
 
     [TestMethod]
-    public async Task CompareXmlFilesWithCachingAsync_WithSameFiles_ShouldUseCache()
-    {
+    public async Task CompareXmlFilesWithCachingAsync_WithSameFiles_ShouldUseCache() {
         // Arrange
         var xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TestModel>
@@ -334,8 +323,7 @@ public class ComparisonServiceIntegrationTests
 
     // Test helper classes
     [System.Xml.Serialization.XmlRoot("TestModel")]
-    public class TestModel
-    {
+    public class TestModel {
         [System.Xml.Serialization.XmlElement("StringProperty")]
         public string? StringProperty { get; set; }
 
@@ -344,18 +332,16 @@ public class ComparisonServiceIntegrationTests
     }
 
     [System.Xml.Serialization.XmlRoot("ComplexTestModel")]
-    public class ComplexTestModel
-    {
+    public class ComplexTestModel {
         [System.Xml.Serialization.XmlElement("Name")]
         public string? Name { get; set; }
 
         [System.Xml.Serialization.XmlArray("Items")]
         [System.Xml.Serialization.XmlArrayItem("ComplexTestModelItem")]
-        public List<ComplexTestModelItem> Items { get; set; } = new ();
+        public List<ComplexTestModelItem> Items { get; set; } = new();
     }
 
-    public class ComplexTestModelItem
-    {
+    public class ComplexTestModelItem {
         [System.Xml.Serialization.XmlElement("Id")]
         public int Id { get; set; }
 

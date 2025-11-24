@@ -1,4 +1,4 @@
-﻿// <copyright file="FilePairComparisonResult.cs" company="PlaceholderCompany">
+// <copyright file="FilePairComparisonResult.cs" company="PlaceholderCompany">
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
@@ -7,8 +7,7 @@ using KellermanSoftware.CompareNetObjects;
 
 namespace ComparisonTool.Core.Comparison.Results;
 
-public class FilePairComparisonResult
-{
+public class FilePairComparisonResult {
     public string File1Name { get; set; } = string.Empty;
 
     public string File2Name { get; set; } = string.Empty;

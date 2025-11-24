@@ -15,29 +15,25 @@ using Moq;
 namespace ComparisonTool.Tests.Unit.Serialization;
 
 [TestClass]
-public class XmlDeserializationServiceTests
-{
+public class XmlDeserializationServiceTests {
     private readonly Mock<ILogger<XmlDeserializationService>> mockLogger;
     private readonly ComparisonTool.Core.Serialization.XmlSerializerFactory serializerFactory;
     private readonly XmlDeserializationService service;
 
-    public XmlDeserializationServiceTests()
-    {
+    public XmlDeserializationServiceTests() {
         this.mockLogger = new Mock<ILogger<XmlDeserializationService>>();
         this.serializerFactory = new ComparisonTool.Core.Serialization.XmlSerializerFactory();
         this.service = new XmlDeserializationService(this.mockLogger.Object, this.serializerFactory);
     }
 
     [TestMethod]
-    public void Constructor_ShouldInitializeCorrectly()
-    {
+    public void Constructor_ShouldInitializeCorrectly() {
         // Act & Assert
         this.service.Should().NotBeNull();
     }
 
     [TestMethod]
-    public void RegisterDomainModel_WithValidType_ShouldRegisterSuccessfully()
-    {
+    public void RegisterDomainModel_WithValidType_ShouldRegisterSuccessfully() {
         // Arrange
         var modelName = "TestModel";
 
@@ -50,8 +46,7 @@ public class XmlDeserializationServiceTests
     }
 
     [TestMethod]
-    public void RegisterDomainModel_WithDuplicateName_ShouldOverwritePreviousRegistration()
-    {
+    public void RegisterDomainModel_WithDuplicateName_ShouldOverwritePreviousRegistration() {
         // Arrange
         var modelName = "TestModel";
         this.service.RegisterDomainModel<TestModel>(modelName);
@@ -65,8 +60,7 @@ public class XmlDeserializationServiceTests
     }
 
     [TestMethod]
-    public void GetModelType_WithUnregisteredModel_ShouldThrowException()
-    {
+    public void GetModelType_WithUnregisteredModel_ShouldThrowException() {
         // Arrange
         var modelName = "UnregisteredModel";
 
@@ -77,8 +71,7 @@ public class XmlDeserializationServiceTests
     }
 
     [TestMethod]
-    public void DeserializeXml_WithValidXml_ShouldDeserializeCorrectly()
-    {
+    public void DeserializeXml_WithValidXml_ShouldDeserializeCorrectly() {
         // Arrange
         var modelName = "TestModel";
         this.service.RegisterDomainModel<TestModel>(modelName);
@@ -101,8 +94,7 @@ public class XmlDeserializationServiceTests
     }
 
     [TestMethod]
-    public void DeserializeXml_WithMalformedXml_ShouldThrowException()
-    {
+    public void DeserializeXml_WithMalformedXml_ShouldThrowException() {
         // Arrange
         var modelName = "TestModel";
         this.service.RegisterDomainModel<TestModel>(modelName);
@@ -120,8 +112,7 @@ public class XmlDeserializationServiceTests
     }
 
     [TestMethod]
-    public void DeserializeXml_WithEmptyStream_ShouldThrowException()
-    {
+    public void DeserializeXml_WithEmptyStream_ShouldThrowException() {
         // Arrange
         var modelName = "TestModel";
         this.service.RegisterDomainModel<TestModel>(modelName);
@@ -134,8 +125,7 @@ public class XmlDeserializationServiceTests
     }
 
     [TestMethod]
-    public void DeserializeXml_WithComplexModel_ShouldDeserializeCorrectly()
-    {
+    public void DeserializeXml_WithComplexModel_ShouldDeserializeCorrectly() {
         // Arrange
         var modelName = "ComplexTestModel";
         this.service.RegisterDomainModel<ComplexTestModel>(modelName);
@@ -171,8 +161,7 @@ public class XmlDeserializationServiceTests
     }
 
     [TestMethod]
-    public void DeserializeXml_WithNullValues_ShouldHandleCorrectly()
-    {
+    public void DeserializeXml_WithNullValues_ShouldHandleCorrectly() {
         // Arrange
         var modelName = "TestModel";
         this.service.RegisterDomainModel<TestModel>(modelName);
@@ -195,8 +184,7 @@ public class XmlDeserializationServiceTests
     }
 
     [TestMethod]
-    public void DeserializeXml_WithMissingProperties_ShouldUseDefaultValues()
-    {
+    public void DeserializeXml_WithMissingProperties_ShouldUseDefaultValues() {
         // Arrange
         var modelName = "TestModel";
         this.service.RegisterDomainModel<TestModel>(modelName);
@@ -218,8 +206,7 @@ public class XmlDeserializationServiceTests
     }
 
     [TestMethod]
-    public void DeserializeXml_WithXmlNamespaces_ShouldHandleCorrectly()
-    {
+    public void DeserializeXml_WithXmlNamespaces_ShouldHandleCorrectly() {
         // Arrange
         var modelName = "TestModel";
         this.service.RegisterDomainModel<TestModel>(modelName);
@@ -244,8 +231,7 @@ public class XmlDeserializationServiceTests
     }
 
     [TestMethod]
-    public void GetRegisteredModelNames_ShouldReturnAllRegisteredModels()
-    {
+    public void GetRegisteredModelNames_ShouldReturnAllRegisteredModels() {
         // Arrange
         this.service.RegisterDomainModel<TestModel>("Model1");
         this.service.RegisterDomainModel<ComplexTestModel>("Model2");
@@ -259,8 +245,7 @@ public class XmlDeserializationServiceTests
     }
 
     [TestMethod]
-    public void ClearDeserializationCache_ShouldClearCache()
-    {
+    public void ClearDeserializationCache_ShouldClearCache() {
         // Arrange
         var modelName = "TestModel";
         this.service.RegisterDomainModel<TestModel>(modelName);
@@ -290,8 +275,7 @@ public class XmlDeserializationServiceTests
     }
 
     [TestMethod]
-    public void GetCacheStatistics_ShouldReturnValidStatistics()
-    {
+    public void GetCacheStatistics_ShouldReturnValidStatistics() {
         // Act
         var stats = this.service.GetCacheStatistics();
 
@@ -303,8 +287,7 @@ public class XmlDeserializationServiceTests
 
     // Test helper classes
     [XmlRoot("TestModel")]
-    public class TestModel
-    {
+    public class TestModel {
         [XmlElement("StringProperty")]
         public string? StringProperty { get; set; }
 
@@ -313,18 +296,16 @@ public class XmlDeserializationServiceTests
     }
 
     [XmlRoot("ComplexTestModel")]
-    public class ComplexTestModel
-    {
+    public class ComplexTestModel {
         [XmlElement("Name")]
         public string? Name { get; set; }
 
         [XmlArray("Items")]
         [XmlArrayItem("ComplexTestModelItem")]
-        public List<ComplexTestModelItem> Items { get; set; } = new ();
+        public List<ComplexTestModelItem> Items { get; set; } = new();
     }
 
-    public class ComplexTestModelItem
-    {
+    public class ComplexTestModelItem {
         [XmlElement("Id")]
         public int Id { get; set; }
 
@@ -333,8 +314,7 @@ public class XmlDeserializationServiceTests
     }
 
     [XmlRoot("AnotherTestModel")]
-    public class AnotherTestModel
-    {
+    public class AnotherTestModel {
         [XmlElement("Property")]
         public string? Property { get; set; }
     }

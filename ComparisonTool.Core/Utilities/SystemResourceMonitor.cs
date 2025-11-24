@@ -2,8 +2,7 @@
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
-namespace ComparisonTool.Core.Utilities
-{
+namespace ComparisonTool.Core.Utilities {
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
@@ -14,8 +13,7 @@ namespace ComparisonTool.Core.Utilities
     /// <summary>
     /// Monitors system resources to provide guidance for optimal resource utilization.
     /// </summary>
-    public class SystemResourceMonitor
-    {
+    public class SystemResourceMonitor {
         private readonly ILogger<SystemResourceMonitor> logger;
         private readonly Process currentProcess;
 
@@ -28,8 +26,7 @@ namespace ComparisonTool.Core.Utilities
         // Constants
         private const int ResourceCheckCacheTimeMs = 1000; // Only check resources every second
 
-        public SystemResourceMonitor(ILogger<SystemResourceMonitor> logger)
-        {
+        public SystemResourceMonitor(ILogger<SystemResourceMonitor> logger) {
             this.logger = logger;
             this.currentProcess = Process.GetCurrentProcess();
         }
@@ -38,15 +35,12 @@ namespace ComparisonTool.Core.Utilities
         /// Gets the current CPU usage percentage (0-100).
         /// </summary>
         /// <returns></returns>
-        public double GetCpuUsage()
-        {
-            if ((DateTime.Now - this.lastCpuCheck).TotalMilliseconds < ResourceCheckCacheTimeMs)
-            {
+        public double GetCpuUsage() {
+            if ((DateTime.Now - this.lastCpuCheck).TotalMilliseconds < ResourceCheckCacheTimeMs) {
                 return this.cachedCpuUsage;
             }
 
-            try
-            {
+            try {
                 var startTime = DateTime.UtcNow;
                 var startCpuUsage = this.currentProcess.TotalProcessorTime;
 
@@ -67,8 +61,7 @@ namespace ComparisonTool.Core.Utilities
 
                 return this.cachedCpuUsage;
             }
-            catch (Exception ex)
-            {
+            catch (Exception ex) {
                 this.logger.LogWarning(ex, "Error getting CPU usage, returning default");
                 return 50; // Default to 50% if we can't determine actual usage
             }
@@ -78,15 +71,12 @@ namespace ComparisonTool.Core.Utilities
         /// Gets the current memory usage percentage (0-100).
         /// </summary>
         /// <returns></returns>
-        public double GetMemoryUsage()
-        {
-            if ((DateTime.Now - this.lastMemoryCheck).TotalMilliseconds < ResourceCheckCacheTimeMs)
-            {
+        public double GetMemoryUsage() {
+            if ((DateTime.Now - this.lastMemoryCheck).TotalMilliseconds < ResourceCheckCacheTimeMs) {
                 return this.cachedMemoryUsage;
             }
 
-            try
-            {
+            try {
                 this.currentProcess.Refresh();
                 var memoryUsageMb = this.currentProcess.WorkingSet64 / (1024 * 1024);
 
@@ -96,8 +86,7 @@ namespace ComparisonTool.Core.Utilities
 
                 // Calculate memory usage percentage
                 double usagePercentage = 0;
-                if (totalMemoryMb > 0)
-                {
+                if (totalMemoryMb > 0) {
                     usagePercentage = 100 * (1 - ((double)availableMemoryMb / totalMemoryMb));
                 }
 
@@ -110,8 +99,7 @@ namespace ComparisonTool.Core.Utilities
 
                 return this.cachedMemoryUsage;
             }
-            catch (Exception ex)
-            {
+            catch (Exception ex) {
                 this.logger.LogWarning(ex, "Error getting memory usage, returning default");
                 return 50; // Default to 50% if we can't determine actual usage
             }
@@ -123,8 +111,7 @@ namespace ComparisonTool.Core.Utilities
         /// <param name="itemCount">Number of items to process.</param>
         /// <param name="averageItemSizeKb">Average size of each item in KB (0 if unknown).</param>
         /// <returns>Optimal parallelism degree.</returns>
-        public int CalculateOptimalParallelism(int itemCount, long averageItemSizeKb = 0)
-        {
+        public int CalculateOptimalParallelism(int itemCount, long averageItemSizeKb = 0) {
             // Get resource usage
             var cpuUsage = this.GetCpuUsage();
             var memoryUsage = this.GetMemoryUsage();
@@ -159,8 +146,7 @@ namespace ComparisonTool.Core.Utilities
             }
 
             // If item size is known, adjust for it
-            if (averageItemSizeKb > 0)
-            {
+            if (averageItemSizeKb > 0) {
                 if (averageItemSizeKb > 10000) {
                     workloadFactor *= 0.5; // Very large items
                 }
@@ -190,8 +176,7 @@ namespace ComparisonTool.Core.Utilities
         /// Gets optimal batch size based on system resources and item count.
         /// </summary>
         /// <returns></returns>
-        public int CalculateOptimalBatchSize(int totalItems, long averageItemSizeKb = 0)
-        {
+        public int CalculateOptimalBatchSize(int totalItems, long averageItemSizeKb = 0) {
             // Default batch sizes based on item count
             int batchSize;
 
@@ -219,8 +204,7 @@ namespace ComparisonTool.Core.Utilities
             }
 
             // Adjust for item size if known
-            if (averageItemSizeKb > 0)
-            {
+            if (averageItemSizeKb > 0) {
                 if (averageItemSizeKb > 10000) {
                     batchSize = Math.Max(2, batchSize / 4); // Very large items
                 }
@@ -240,10 +224,8 @@ namespace ComparisonTool.Core.Utilities
         /// Calculates average file size in KB for a list of files.
         /// </summary>
         /// <returns></returns>
-        public long CalculateAverageFileSizeKb(IEnumerable<string> filePaths, int sampleSize = 20)
-        {
-            try
-            {
+        public long CalculateAverageFileSizeKb(IEnumerable<string> filePaths, int sampleSize = 20) {
+            try {
                 // If there are a lot of files, just take a sample
                 var sampleFiles = filePaths.Count() <= sampleSize
                     ? filePaths
@@ -252,10 +234,8 @@ namespace ComparisonTool.Core.Utilities
                 long totalSizeBytes = 0;
                 var fileCount = 0;
 
-                foreach (var file in sampleFiles)
-                {
-                    if (File.Exists(file))
-                    {
+                foreach (var file in sampleFiles) {
+                    if (File.Exists(file)) {
                         totalSizeBytes += new FileInfo(file).Length;
                         fileCount++;
                     }
@@ -267,37 +247,30 @@ namespace ComparisonTool.Core.Utilities
 
                 return totalSizeBytes / fileCount / 1024; // Convert to KB
             }
-            catch (Exception ex)
-            {
+            catch (Exception ex) {
                 this.logger.LogWarning(ex, "Error calculating average file size");
                 return 0;
             }
         }
 
         // Helper methods to get system memory
-        private long GetAvailableSystemMemoryMB()
-        {
-            try
-            {
+        private long GetAvailableSystemMemoryMB() {
+            try {
                 // On Windows, use PerformanceCounter but handle errors gracefully
                 return GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024 * 1024);
             }
-            catch
-            {
+            catch {
                 // Fallback: rough estimate based on GC information
                 var gcMemory = GC.GetGCMemoryInfo();
                 return gcMemory.TotalAvailableMemoryBytes / (1024 * 1024);
             }
         }
 
-        private long GetTotalSystemMemoryMB()
-        {
-            try
-            {
+        private long GetTotalSystemMemoryMB() {
+            try {
                 return GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024 * 1024);
             }
-            catch
-            {
+            catch {
                 // Fallback to a reasonable default for modern systems
                 return 8192; // Assume 8GB if we can't determine
             }

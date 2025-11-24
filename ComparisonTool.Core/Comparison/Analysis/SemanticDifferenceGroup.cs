@@ -1,4 +1,4 @@
-﻿// <copyright file="SemanticDifferenceGroup.cs" company="PlaceholderCompany">
+// <copyright file="SemanticDifferenceGroup.cs" company="PlaceholderCompany">
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
@@ -9,8 +9,7 @@ namespace ComparisonTool.Core.Comparison.Analysis;
 /// <summary>
 /// Represents a group of semantically related differences.
 /// </summary>
-public class SemanticDifferenceGroup
-{
+public class SemanticDifferenceGroup {
     /// <summary>
     /// Gets or sets a descriptive name for this group of differences.
     /// </summary>

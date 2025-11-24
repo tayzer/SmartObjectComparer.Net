@@ -1,9 +1,8 @@
-﻿// <copyright file="SemanticDifferenceAnalyzer.cs" company="PlaceholderCompany">
+// <copyright file="SemanticDifferenceAnalyzer.cs" company="PlaceholderCompany">
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
-namespace ComparisonTool.Core.Comparison.Analysis
-{
+namespace ComparisonTool.Core.Comparison.Analysis {
     using System.Text;
     using System.Text.RegularExpressions;
     using ComparisonTool.Core.Comparison.Analysis;
@@ -15,8 +14,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
     /// <summary>
     /// Analyzes differences to create semantic groupings.
     /// </summary>
-    public class SemanticDifferenceAnalyzer
-    {
+    public class SemanticDifferenceAnalyzer {
         private readonly MultiFolderComparisonResult folderResult;
         private readonly ComparisonPatternAnalysis patternAnalysis;
         private readonly ILogger logger;
@@ -46,8 +44,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
             { "Tags & Categories", new HashSet<string> { "Tags", "Tag" } },
         };
 
-        public SemanticDifferenceAnalyzer(MultiFolderComparisonResult folderResult, ComparisonPatternAnalysis patternAnalysis, ILogger logger = null)
-        {
+        public SemanticDifferenceAnalyzer(MultiFolderComparisonResult folderResult, ComparisonPatternAnalysis patternAnalysis, ILogger logger = null) {
             this.folderResult = folderResult;
             this.patternAnalysis = patternAnalysis;
             this.logger = logger;
@@ -57,33 +54,26 @@ namespace ComparisonTool.Core.Comparison.Analysis
         /// Generate semantic difference groups from the comparison results.
         /// </summary>
         /// <returns></returns>
-        public SemanticDifferenceAnalysis AnalyzeSemanticGroups()
-        {
+        public SemanticDifferenceAnalysis AnalyzeSemanticGroups() {
             this.logger?.LogInformation("Starting semantic group analysis for {FileCount} file pairs", this.folderResult.FilePairResults.Count);
-            var analysis = new SemanticDifferenceAnalysis
-            {
+            var analysis = new SemanticDifferenceAnalysis {
                 BaseAnalysis = this.patternAnalysis,
             };
 
             // 1. Create empty semantic groups based on our patterns
             var semanticGroups = new Dictionary<string, SemanticDifferenceGroup>();
-            foreach (var pattern in this.semanticPatterns)
-            {
-                semanticGroups[pattern.Key] = new SemanticDifferenceGroup
-                {
+            foreach (var pattern in this.semanticPatterns) {
+                semanticGroups[pattern.Key] = new SemanticDifferenceGroup {
                     GroupName = pattern.Key,
                     SemanticDescription = this.GenerateDescriptionForGroup(pattern.Key),
                 };
             }
 
             // 2. Also create document section groups
-            foreach (var section in this.documentSections)
-            {
+            foreach (var section in this.documentSections) {
                 var key = $"{section.Key} Changes";
-                if (!semanticGroups.ContainsKey(key))
-                {
-                    semanticGroups[key] = new SemanticDifferenceGroup
-                    {
+                if (!semanticGroups.ContainsKey(key)) {
+                    semanticGroups[key] = new SemanticDifferenceGroup {
                         GroupName = key,
                         SemanticDescription = $"Changes that affect {section.Key.ToLower()}",
                     };
@@ -93,8 +83,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
             var filePairIndex = 0;
 
             // 3. Process each file pair's differences
-            foreach (var filePair in this.folderResult.FilePairResults)
-            {
+            foreach (var filePair in this.folderResult.FilePairResults) {
                 filePairIndex++;
                 if (filePair.AreEqual) {
                     continue;
@@ -105,16 +94,13 @@ namespace ComparisonTool.Core.Comparison.Analysis
 
                 // 4. Categorize each difference
                 var diffIndex = 0;
-                foreach (var diff in filePair.Result?.Differences ?? new System.Collections.Generic.List<KellermanSoftware.CompareNetObjects.Difference>())
-                {
+                foreach (var diff in filePair.Result?.Differences ?? new System.Collections.Generic.List<KellermanSoftware.CompareNetObjects.Difference>()) {
                     diffIndex++;
 
                     // 4.1 Try pattern-based categorization first
                     var categorized = false;
-                    foreach (var pattern in this.semanticPatterns)
-                    {
-                        if (pattern.Value(diff))
-                        {
+                    foreach (var pattern in this.semanticPatterns) {
+                        if (pattern.Value(diff)) {
                             this.AddDifferenceToGroup(semanticGroups[pattern.Key], diff, pairIdentifier);
                             this.logger?.LogTrace("Categorized difference {DiffIndex} in {PairIdentifier} as '{PatternKey}'", diffIndex, pairIdentifier, pattern.Key);
                             categorized = true;
@@ -123,12 +109,9 @@ namespace ComparisonTool.Core.Comparison.Analysis
                     }
 
                     // 4.2 If not categorized, try document section categorization
-                    if (!categorized)
-                    {
-                        foreach (var section in this.documentSections)
-                        {
-                            if (this.IsInDocumentSection(diff, section.Value))
-                            {
+                    if (!categorized) {
+                        foreach (var section in this.documentSections) {
+                            if (this.IsInDocumentSection(diff, section.Value)) {
                                 var key = $"{section.Key} Changes";
                                 this.AddDifferenceToGroup(semanticGroups[key], diff, pairIdentifier);
                                 this.logger?.LogTrace("Categorized difference {DiffIndex} in {PairIdentifier} as document section '{SectionKey}'", diffIndex, pairIdentifier, section.Key);
@@ -139,15 +122,11 @@ namespace ComparisonTool.Core.Comparison.Analysis
                     }
 
                     // 4.3 If still not categorized, look for specific value patterns
-                    if (!categorized)
-                    {
+                    if (!categorized) {
                         var valueBasedGroup = this.CategorizeByValuePattern(diff);
-                        if (!string.IsNullOrEmpty(valueBasedGroup))
-                        {
-                            if (!semanticGroups.ContainsKey(valueBasedGroup))
-                            {
-                                semanticGroups[valueBasedGroup] = new SemanticDifferenceGroup
-                                {
+                        if (!string.IsNullOrEmpty(valueBasedGroup)) {
+                            if (!semanticGroups.ContainsKey(valueBasedGroup)) {
+                                semanticGroups[valueBasedGroup] = new SemanticDifferenceGroup {
                                     GroupName = valueBasedGroup,
                                     SemanticDescription = $"Changes related to {valueBasedGroup.ToLower()}",
                                 };
@@ -156,8 +135,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
                             this.AddDifferenceToGroup(semanticGroups[valueBasedGroup], diff, pairIdentifier);
                             this.logger?.LogTrace("Categorized difference {DiffIndex} in {PairIdentifier} as value pattern '{ValuePattern}'", diffIndex, pairIdentifier, valueBasedGroup);
                         }
-                        else
-                        {
+                        else {
                             this.logger?.LogTrace("Difference {DiffIndex} in {PairIdentifier} could not be categorized", diffIndex, pairIdentifier);
                         }
                     }
@@ -165,10 +143,8 @@ namespace ComparisonTool.Core.Comparison.Analysis
             }
 
             // 5. Calculate confidence levels and add non-empty groups to the analysis
-            foreach (var group in semanticGroups.Values)
-            {
-                if (group.Differences.Count > 0)
-                {
+            foreach (var group in semanticGroups.Values) {
+                if (group.Differences.Count > 0) {
                     var baseConfidence = 50;
                     baseConfidence += 5 * Math.Min(10, group.RelatedProperties.Count);
                     baseConfidence += 5 * Math.Min(5, group.AffectedFiles.Count);
@@ -188,32 +164,27 @@ namespace ComparisonTool.Core.Comparison.Analysis
             return analysis;
         }
 
-        private void AddDifferenceToGroup(SemanticDifferenceGroup group, Difference diff, string fileIdentifier)
-        {
+        private void AddDifferenceToGroup(SemanticDifferenceGroup group, Difference diff, string fileIdentifier) {
             group.Differences.Add(diff);
             group.AffectedFiles.Add(fileIdentifier);
             group.RelatedProperties.Add(this.NormalizePropertyPath(diff.PropertyName));
         }
 
-        private string NormalizePropertyPath(string propertyPath)
-        {
+        private string NormalizePropertyPath(string propertyPath) {
             return PropertyPathNormalizer.NormalizePropertyPath(propertyPath);
         }
 
-        private bool IsInDocumentSection(Difference diff, HashSet<string> sectionKeys)
-        {
+        private bool IsInDocumentSection(Difference diff, HashSet<string> sectionKeys) {
             return sectionKeys.Any(key => diff.PropertyName.Contains(key));
         }
 
-        private string CategorizeByValuePattern(Difference diff)
-        {
+        private string CategorizeByValuePattern(Difference diff) {
             // Analyze specific value patterns in the differences
             // This could be extended with more sophisticated pattern recognition
             var oldValue = diff.Object1Value?.ToString();
             var newValue = diff.Object2Value?.ToString();
 
-            if (oldValue != null && newValue != null)
-            {
+            if (oldValue != null && newValue != null) {
                 // Check for GUID/UUID replacements
                 if (IsGuidFormat(oldValue) && IsGuidFormat(newValue)) {
                     return "Identifier Replacements";
@@ -234,28 +205,24 @@ namespace ComparisonTool.Core.Comparison.Analysis
             return null;
         }
 
-        private static bool IsGuidFormat(string value)
-        {
+        private static bool IsGuidFormat(string value) {
             return Regex.IsMatch(value, @"[0-9a-fA-F]{8}[-]?([0-9a-fA-F]{4}[-]?){3}[0-9a-fA-F]{12}");
         }
 
-        private static bool IsStatusChange(Difference diff)
-        {
+        private static bool IsStatusChange(Difference diff) {
             return diff.PropertyName.EndsWith(".Status") ||
                    diff.PropertyName.Contains(".Status.") ||
                    diff.PropertyName.EndsWith("Status");
         }
 
-        private static bool IsIdValueChange(Difference diff)
-        {
+        private static bool IsIdValueChange(Difference diff) {
             return diff.PropertyName.EndsWith(".Id") ||
                    diff.PropertyName.EndsWith("ReportId") ||
                    diff.PropertyName.Contains(".Id.") ||
                    diff.PropertyName.EndsWith("Id");
         }
 
-        private static bool IsDateTimeChange(Difference diff)
-        {
+        private static bool IsDateTimeChange(Difference diff) {
             return diff.PropertyName.Contains("Date") ||
                    diff.PropertyName.Contains("Time") ||
                    diff.PropertyName.Contains("Generated") ||
@@ -263,8 +230,7 @@ namespace ComparisonTool.Core.Comparison.Analysis
                    diff.Object2Value is DateTime;
         }
 
-        private static bool IsScoreValueChange(Difference diff)
-        {
+        private static bool IsScoreValueChange(Difference diff) {
             return diff.PropertyName.Contains("Score") ||
                    diff.PropertyName.Contains("Value") ||
                    diff.PropertyName.Contains("Amount") ||
@@ -273,16 +239,14 @@ namespace ComparisonTool.Core.Comparison.Analysis
                    (diff.Object2Value is double || diff.Object2Value is int || diff.Object2Value is decimal));
         }
 
-        private static bool IsNameOrDescriptionChange(Difference diff)
-        {
+        private static bool IsNameOrDescriptionChange(Difference diff) {
             return diff.PropertyName.Contains("Name") ||
                    diff.PropertyName.Contains("Description") ||
                    diff.PropertyName.Contains("Title") ||
                    diff.PropertyName.Contains("Label");
         }
 
-        private static bool IsCollectionOrderChange(Difference diff)
-        {
+        private static bool IsCollectionOrderChange(Difference diff) {
             // Detect collection order changes - this is complex as it may
             // require context from multiple differences
             return diff.PropertyName.Contains("[") && diff.PropertyName.Contains("]") &&
@@ -292,15 +256,13 @@ namespace ComparisonTool.Core.Comparison.Analysis
                    diff.Object1Value.ToString() == diff.Object2Value.ToString();
         }
 
-        private static bool IsTagChange(Difference diff)
-        {
+        private static bool IsTagChange(Difference diff) {
             return diff.PropertyName.Contains("Tag") ||
                    diff.PropertyName.Contains("Category") ||
                    diff.PropertyName.Contains("Label");
         }
 
-        private string GenerateDescriptionForGroup(string groupName)
-        {
+        private string GenerateDescriptionForGroup(string groupName) {
             return groupName switch {
                 "Status Changes" => "Changes to status values such as Success, Warning, Error",
                 "ID Value Changes" => "Changes to identifier values",

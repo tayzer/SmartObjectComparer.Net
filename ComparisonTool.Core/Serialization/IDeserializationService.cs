@@ -8,8 +8,7 @@ namespace ComparisonTool.Core.Serialization;
 /// Interface for format-agnostic deserialization operations
 /// Supports both XML and JSON file formats.
 /// </summary>
-public interface IDeserializationService
-{
+public interface IDeserializationService {
     /// <summary>
     /// Register a domain model for deserialization.
     /// </summary>
@@ -74,8 +73,7 @@ public interface IDeserializationService
 /// <summary>
 /// Supported serialization formats.
 /// </summary>
-public enum SerializationFormat
-{
+public enum SerializationFormat {
     /// <summary>
     /// XML format using System.Xml.Serialization
     /// </summary>

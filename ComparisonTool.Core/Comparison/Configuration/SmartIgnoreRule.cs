@@ -2,8 +2,7 @@
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
-namespace ComparisonTool.Core.Comparison.Configuration
-{
+namespace ComparisonTool.Core.Comparison.Configuration {
     using System;
     using System.Collections.Generic;
     using System.Linq;
@@ -14,8 +13,7 @@ namespace ComparisonTool.Core.Comparison.Configuration
     /// <summary>
     /// Smart ignore rule that works across any domain model.
     /// </summary>
-    public class SmartIgnoreRule
-    {
+    public class SmartIgnoreRule {
         [JsonIgnore]
         private readonly ILogger logger;
 
@@ -40,13 +38,11 @@ namespace ComparisonTool.Core.Comparison.Configuration
         public string Description { get; set; } = string.Empty;
 
         [JsonConstructor]
-        public SmartIgnoreRule()
-        {
+        public SmartIgnoreRule() {
             this.logger = NullLogger.Instance;
         }
 
-        public SmartIgnoreRule(ILogger logger = null)
-        {
+        public SmartIgnoreRule(ILogger logger = null) {
             this.logger = logger ?? NullLogger.Instance;
         }
 
@@ -54,10 +50,8 @@ namespace ComparisonTool.Core.Comparison.Configuration
         /// Create a rule to ignore properties by exact name.
         /// </summary>
         /// <returns></returns>
-        public static SmartIgnoreRule ByPropertyName(string propertyName, string description = null)
-        {
-            return new SmartIgnoreRule
-            {
+        public static SmartIgnoreRule ByPropertyName(string propertyName, string description = null) {
+            return new SmartIgnoreRule {
                 Type = SmartIgnoreType.PropertyName,
                 Value = propertyName,
                 Description = description ?? $"Ignore all '{propertyName}' properties",
@@ -68,10 +62,8 @@ namespace ComparisonTool.Core.Comparison.Configuration
         /// Create a rule to ignore properties by name pattern (supports wildcards).
         /// </summary>
         /// <returns></returns>
-        public static SmartIgnoreRule ByNamePattern(string pattern, string description = null)
-        {
-            return new SmartIgnoreRule
-            {
+        public static SmartIgnoreRule ByNamePattern(string pattern, string description = null) {
+            return new SmartIgnoreRule {
                 Type = SmartIgnoreType.NamePattern,
                 Value = pattern,
                 Description = description ?? $"Ignore properties matching '{pattern}'",
@@ -82,10 +74,8 @@ namespace ComparisonTool.Core.Comparison.Configuration
         /// Create a rule to ignore properties by type.
         /// </summary>
         /// <returns></returns>
-        public static SmartIgnoreRule ByPropertyType(Type type, string description = null)
-        {
-            return new SmartIgnoreRule
-            {
+        public static SmartIgnoreRule ByPropertyType(Type type, string description = null) {
+            return new SmartIgnoreRule {
                 Type = SmartIgnoreType.PropertyType,
                 Value = type.FullName,
                 Description = description ?? $"Ignore all {type.Name} properties",
@@ -96,10 +86,8 @@ namespace ComparisonTool.Core.Comparison.Configuration
         /// Create a rule to ignore collection ordering.
         /// </summary>
         /// <returns></returns>
-        public static SmartIgnoreRule IgnoreCollectionOrdering(string description = "Ignore collection item ordering")
-        {
-            return new SmartIgnoreRule
-            {
+        public static SmartIgnoreRule IgnoreCollectionOrdering(string description = "Ignore collection item ordering") {
+            return new SmartIgnoreRule {
                 Type = SmartIgnoreType.CollectionOrdering,
                 Value = "true",
                 Description = description,
@@ -110,8 +98,7 @@ namespace ComparisonTool.Core.Comparison.Configuration
     /// <summary>
     /// Types of smart ignore rules.
     /// </summary>
-    public enum SmartIgnoreType
-    {
+    public enum SmartIgnoreType {
         /// <summary>
         /// Ignore properties with exact name match
         /// </summary>
@@ -136,12 +123,11 @@ namespace ComparisonTool.Core.Comparison.Configuration
     /// <summary>
     /// Predefined ignore rule presets for common scenarios.
     /// </summary>
-    public static class SmartIgnorePresets
-    {
+    public static class SmartIgnorePresets {
         /// <summary>
         /// Gets common ID and key fields.
         /// </summary>
-        public static List<SmartIgnoreRule> IgnoreIdFields => new ()
+        public static List<SmartIgnoreRule> IgnoreIdFields => new()
         {
             SmartIgnoreRule.ByPropertyName("Id", "Ignore ID fields"),
             SmartIgnoreRule.ByPropertyName("Guid", "Ignore GUID fields"),
@@ -154,7 +140,7 @@ namespace ComparisonTool.Core.Comparison.Configuration
         /// <summary>
         /// Gets common timestamp and audit fields.
         /// </summary>
-        public static List<SmartIgnoreRule> IgnoreTimestamps => new ()
+        public static List<SmartIgnoreRule> IgnoreTimestamps => new()
         {
             SmartIgnoreRule.ByPropertyType(typeof(DateTime), "Ignore DateTime fields"),
             SmartIgnoreRule.ByPropertyName("Timestamp", "Ignore timestamp fields"),
@@ -170,7 +156,7 @@ namespace ComparisonTool.Core.Comparison.Configuration
         /// <summary>
         /// Gets system metadata fields.
         /// </summary>
-        public static List<SmartIgnoreRule> IgnoreMetadata => new ()
+        public static List<SmartIgnoreRule> IgnoreMetadata => new()
         {
             SmartIgnoreRule.ByPropertyName("Version", "Ignore version fields"),
             SmartIgnoreRule.ByPropertyName("ETag", "Ignore ETag fields"),
@@ -197,7 +183,7 @@ namespace ComparisonTool.Core.Comparison.Configuration
         /// <summary>
         /// Gets get all available presets.
         /// </summary>
-        public static Dictionary<string, List<SmartIgnoreRule>> AllPresets => new ()
+        public static Dictionary<string, List<SmartIgnoreRule>> AllPresets => new()
         {
             { "ID Fields", IgnoreIdFields },
             { "Timestamps", IgnoreTimestamps },

@@ -7,8 +7,7 @@ namespace ComparisonTool.Core.Serialization;
 /// <summary>
 /// Interface for XML deserialization operations.
 /// </summary>
-public interface IXmlDeserializationService
-{
+public interface IXmlDeserializationService {
     /// <summary>
     /// Register a domain model for XML deserialization.
     /// </summary>

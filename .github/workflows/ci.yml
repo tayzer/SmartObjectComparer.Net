@@ -2,9 +2,9 @@ name: Build & Format & Test
 
 on:
   push:
-    branches: [ Feature/Refactor, main ]
+    branches: [ master ]
   pull_request:
-    branches: [ main ]
+    branches: [ master ]
 
 jobs:
   validate:

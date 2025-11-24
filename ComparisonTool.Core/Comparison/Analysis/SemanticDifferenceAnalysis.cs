@@ -1,4 +1,4 @@
-﻿// <copyright file="SemanticDifferenceAnalysis.cs" company="PlaceholderCompany">
+// <copyright file="SemanticDifferenceAnalysis.cs" company="PlaceholderCompany">
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
@@ -7,8 +7,7 @@ namespace ComparisonTool.Core.Comparison.Analysis;
 /// <summary>
 /// Extension to ComparisonPatternAnalysis to include semantic grouping.
 /// </summary>
-public class SemanticDifferenceAnalysis
-{
+public class SemanticDifferenceAnalysis {
     /// <summary>
     /// Gets or sets groups of semantically related differences.
     /// </summary>

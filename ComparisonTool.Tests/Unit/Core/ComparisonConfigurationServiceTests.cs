@@ -16,17 +16,14 @@ using Moq;
 namespace ComparisonTool.Tests.Unit.Core;
 
 [TestClass]
-public class ComparisonConfigurationServiceTests
-{
+public class ComparisonConfigurationServiceTests {
     private readonly Mock<ILogger<ComparisonConfigurationService>> mockLogger;
     private readonly ComparisonConfigurationOptions options;
     private readonly ComparisonConfigurationService service;
 
-    public ComparisonConfigurationServiceTests()
-    {
+    public ComparisonConfigurationServiceTests() {
         this.mockLogger = new Mock<ILogger<ComparisonConfigurationService>>();
-        this.options = new ComparisonConfigurationOptions
-        {
+        this.options = new ComparisonConfigurationOptions {
             MaxDifferences = 1000,
             DefaultIgnoreCollectionOrder = true,
             DefaultIgnoreStringCase = false,
@@ -36,8 +33,7 @@ public class ComparisonConfigurationServiceTests
     }
 
     [TestMethod]
-    public void Constructor_WithValidOptions_ShouldInitializeCorrectly()
-    {
+    public void Constructor_WithValidOptions_ShouldInitializeCorrectly() {
         // Act & Assert
         this.service.Should().NotBeNull();
         this.service.GetCurrentConfig().Should().NotBeNull();
@@ -47,8 +43,7 @@ public class ComparisonConfigurationServiceTests
     }
 
     [TestMethod]
-    public void GetCompareLogic_ShouldReturnValidInstance()
-    {
+    public void GetCompareLogic_ShouldReturnValidInstance() {
         // Act
         var compareLogic = this.service.GetCompareLogic();
 
@@ -59,8 +54,7 @@ public class ComparisonConfigurationServiceTests
     }
 
     [TestMethod]
-    public void GetThreadSafeCompareLogic_ShouldReturnIsolatedInstance()
-    {
+    public void GetThreadSafeCompareLogic_ShouldReturnIsolatedInstance() {
         // Act
         var compareLogic1 = this.service.GetThreadSafeCompareLogic();
         var compareLogic2 = this.service.GetThreadSafeCompareLogic();
@@ -72,8 +66,7 @@ public class ComparisonConfigurationServiceTests
     }
 
     [TestMethod]
-    public void SetIgnoreCollectionOrder_ShouldUpdateConfiguration()
-    {
+    public void SetIgnoreCollectionOrder_ShouldUpdateConfiguration() {
         // Arrange
         var originalValue = this.service.GetIgnoreCollectionOrder();
 
@@ -86,8 +79,7 @@ public class ComparisonConfigurationServiceTests
     }
 
     [TestMethod]
-    public void SetIgnoreStringCase_ShouldUpdateConfiguration()
-    {
+    public void SetIgnoreStringCase_ShouldUpdateConfiguration() {
         // Arrange
         var originalValue = this.service.GetIgnoreStringCase();
 
@@ -100,8 +92,7 @@ public class ComparisonConfigurationServiceTests
     }
 
     [TestMethod]
-    public void IgnoreProperty_WithValidPath_ShouldAddToIgnoreList()
-    {
+    public void IgnoreProperty_WithValidPath_ShouldAddToIgnoreList() {
         // Arrange
         var propertyPath = "TestProperty";
 
@@ -114,8 +105,7 @@ public class ComparisonConfigurationServiceTests
     }
 
     [TestMethod]
-    public void RemoveIgnoredProperty_WithExistingProperty_ShouldRemoveFromIgnoreList()
-    {
+    public void RemoveIgnoredProperty_WithExistingProperty_ShouldRemoveFromIgnoreList() {
         // Arrange
         var propertyPath = "TestProperty";
         this.service.IgnoreProperty(propertyPath);
@@ -129,11 +119,9 @@ public class ComparisonConfigurationServiceTests
     }
 
     [TestMethod]
-    public void AddIgnoreRule_WithValidRule_ShouldAddToRules()
-    {
+    public void AddIgnoreRule_WithValidRule_ShouldAddToRules() {
         // Arrange
-        var rule = new IgnoreRule
-        {
+        var rule = new IgnoreRule {
             PropertyPath = "TestProperty",
             IgnoreCollectionOrder = true,
         };
@@ -148,8 +136,7 @@ public class ComparisonConfigurationServiceTests
     }
 
     [TestMethod]
-    public void AddIgnoreRulesBatch_WithMultipleRules_ShouldAddAllRules()
-    {
+    public void AddIgnoreRulesBatch_WithMultipleRules_ShouldAddAllRules() {
         // Arrange
         var rules = new List<IgnoreRule>
         {
@@ -170,8 +157,7 @@ public class ComparisonConfigurationServiceTests
     }
 
     [TestMethod]
-    public void ClearIgnoreRules_ShouldRemoveAllRules()
-    {
+    public void ClearIgnoreRules_ShouldRemoveAllRules() {
         // Arrange
         this.service.AddIgnoreRule(new IgnoreRule { PropertyPath = "TestProperty" });
 
@@ -184,11 +170,9 @@ public class ComparisonConfigurationServiceTests
     }
 
     [TestMethod]
-    public void ApplyConfiguredSettings_ShouldApplyAllRules()
-    {
+    public void ApplyConfiguredSettings_ShouldApplyAllRules() {
         // Arrange
-        this.service.AddIgnoreRule(new IgnoreRule
-        {
+        this.service.AddIgnoreRule(new IgnoreRule {
             PropertyPath = "TestProperty",
             IgnoreCollectionOrder = true,
         });
@@ -204,12 +188,10 @@ public class ComparisonConfigurationServiceTests
     }
 
     [TestMethod]
-    public void FilterIgnoredDifferences_WithIgnoredProperty_ShouldFilterOutDifferences()
-    {
+    public void FilterIgnoredDifferences_WithIgnoredProperty_ShouldFilterOutDifferences() {
         // Arrange
         var config = this.service.GetCurrentConfig();
-        var result = new ComparisonResult(config)
-        {
+        var result = new ComparisonResult(config) {
             Differences = new List<Difference>
             {
                 new () { PropertyName = "TestProperty", Object1Value = "Old", Object2Value = "New" },
@@ -228,8 +210,7 @@ public class ComparisonConfigurationServiceTests
     }
 
     [TestMethod]
-    public void AddSmartIgnoreRule_WithValidRule_ShouldAddToSmartRules()
-    {
+    public void AddSmartIgnoreRule_WithValidRule_ShouldAddToSmartRules() {
         // Arrange
         var rule = SmartIgnoreRule.ByNamePattern("Test.*", "Test pattern rule");
 
@@ -243,8 +224,7 @@ public class ComparisonConfigurationServiceTests
     }
 
     [TestMethod]
-    public void RemoveSmartIgnoreRule_WithExistingRule_ShouldRemoveFromSmartRules()
-    {
+    public void RemoveSmartIgnoreRule_WithExistingRule_ShouldRemoveFromSmartRules() {
         // Arrange
         var rule = SmartIgnoreRule.ByPropertyName("TestProperty");
         this.service.AddSmartIgnoreRule(rule);
@@ -258,8 +238,7 @@ public class ComparisonConfigurationServiceTests
     }
 
     [TestMethod]
-    public void ClearSmartIgnoreRules_ShouldRemoveAllSmartRules()
-    {
+    public void ClearSmartIgnoreRules_ShouldRemoveAllSmartRules() {
         // Arrange
         this.service.AddSmartIgnoreRule(SmartIgnoreRule.ByPropertyName("Property1"));
         this.service.AddSmartIgnoreRule(SmartIgnoreRule.ByPropertyName("Property2"));
@@ -273,12 +252,10 @@ public class ComparisonConfigurationServiceTests
     }
 
     [TestMethod]
-    public void FilterSmartIgnoredDifferences_WithSmartRule_ShouldFilterCorrectly()
-    {
+    public void FilterSmartIgnoredDifferences_WithSmartRule_ShouldFilterCorrectly() {
         // Arrange
         var config = this.service.GetCurrentConfig();
-        var result = new ComparisonResult(config)
-        {
+        var result = new ComparisonResult(config) {
             Differences = new List<Difference>
             {
                 new () { PropertyName = "TestProperty", Object1Value = "Old", Object2Value = "New" },
@@ -297,8 +274,7 @@ public class ComparisonConfigurationServiceTests
     }
 
     [TestMethod]
-    public void NormalizePropertyValues_WithValidObject_ShouldSetDefaultValues()
-    {
+    public void NormalizePropertyValues_WithValidObject_ShouldSetDefaultValues() {
         // Arrange
         var testObject = new TestClass { StringProperty = "Test", IntProperty = 42 };
         var propertyNames = new List<string> { "StringProperty", "IntProperty" };
@@ -312,8 +288,7 @@ public class ComparisonConfigurationServiceTests
     }
 
     [TestMethod]
-    public void AddXmlIgnorePropertiesToIgnoreList_WithType_ShouldAddXmlIgnoreProperties()
-    {
+    public void AddXmlIgnorePropertiesToIgnoreList_WithType_ShouldAddXmlIgnoreProperties() {
         // Act
         this.service.AddXmlIgnorePropertiesToIgnoreList(typeof(TestClassWithXmlIgnore));
 
@@ -323,15 +298,13 @@ public class ComparisonConfigurationServiceTests
     }
 
     // Test helper classes
-    private class TestClass
-    {
+    private class TestClass {
         public string? StringProperty { get; set; }
 
         public int IntProperty { get; set; }
     }
 
-    private class TestClassWithXmlIgnore
-    {
+    private class TestClassWithXmlIgnore {
         public string? NormalProperty { get; set; }
 
         [System.Xml.Serialization.XmlIgnore]

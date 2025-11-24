@@ -7,8 +7,7 @@ namespace ComparisonTool.Core.Comparison.Analysis;
 /// <summary>
 /// Enhanced categories of differences for more detailed analysis.
 /// </summary>
-public enum EnhancedDifferenceCategory
-{
+public enum EnhancedDifferenceCategory {
     // Basic categories from original DifferenceCategory
     TextContentChanged,
     NumericValueChanged,

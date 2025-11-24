@@ -477,7 +477,6 @@ async function processFolderContents(files, processor, batchSize = 50) {
         console.log(`Processed folder ${i + 1}/${folderNames.length}: ${folderName} with ${folderFiles.length} files`);
     }
 }
-
 /**
  * Estimate memory usage for a set of files
  */
@@ -512,7 +511,6 @@ window.uploadFolderInBatches = async function (inputId, batchSize, dotNetRef) {
         alert('Could not find folder input element.');
         return;
     }
-    
     // Filter for supported files (XML and JSON)
     const files = Array.from(input.files).filter(f => isSupportedFile(f));
     const totalFiles = files.length;
@@ -521,7 +519,7 @@ window.uploadFolderInBatches = async function (inputId, batchSize, dotNetRef) {
     
     // Use smaller batch sizes for very large folder uploads to avoid memory issues
     const adjustedBatchSize = totalFiles > 500 ? Math.min(batchSize, 10) : batchSize;
-    
+
     // Process in batches to avoid overloading the server
     for (let i = 0; i < totalFiles; i += adjustedBatchSize) {
         const batch = files.slice(i, i + adjustedBatchSize);
@@ -592,11 +590,10 @@ window.uploadFolderInBatches = async function (inputId, batchSize, dotNetRef) {
     }
     
     // Send result back to Blazor
-    const uploadResult = JSON.stringify({ 
-        uploaded: uploadedFileNames.length, 
+    const uploadResult = JSON.stringify({
+        uploaded: uploadedFileNames.length,
         files: uploadedFileNames
     });
-    
     console.log('Upload complete:', uploaded, '/', totalFiles);
     if (dotNetRef) dotNetRef.invokeMethodAsync('OnBatchUploadComplete', uploadResult);
 };
