@@ -4,14 +4,21 @@
 
 namespace ComparisonTool.Web {
     using System;
+    using System.Buffers;
+    using System.Collections.Concurrent;
     using System.Collections.Generic;
     using System.IO;
+    using System.Linq;
     using System.Text.Json;
     using System.Threading.Tasks;
     using Microsoft.AspNetCore.Builder;
     using Microsoft.AspNetCore.Http;
 
     public static class FileBatchUploadApi {
+        // Shared buffer pool to reduce GC pressure during file uploads
+        private static readonly ArrayPool<byte> BufferPool = ArrayPool<byte>.Shared;
+        private const int BufferSize = 81920; // 80KB buffer for streaming
+
         public static void MapFileBatchUploadApi(this WebApplication app) {
             app.MapPost("/api/upload/batch", async (HttpRequest request) => {
                 if (!request.HasFormContentType) {
@@ -20,7 +27,7 @@ namespace ComparisonTool.Web {
 
                 var form = await request.ReadFormAsync();
                 var files = form.Files;
-                var uploadedFiles = new List<string>();
+                var uploadedFiles = new ConcurrentBag<string>();
                 var tempPath = Path.Combine(Path.GetTempPath(), "ComparisonToolUploads");
 
                 // Clear old temp files (optional, but helps manage disk space)
@@ -44,44 +51,81 @@ namespace ComparisonTool.Web {
                 var batchPath = Path.Combine(tempPath, batchId);
                 Directory.CreateDirectory(batchPath);
 
+                // Pre-create all needed directories to avoid lock contention
+                var directories = new HashSet<string>();
                 foreach (var file in files) {
-                    // Only accept supported files (XML and JSON)
                     if (!file.FileName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) &&
                         !file.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) {
                         continue;
+                    }
+
+                    var filePath = file.FileName.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+                    var destPath = Path.Combine(batchPath, filePath);
+                    var destDir = Path.GetDirectoryName(destPath) ?? batchPath;
+                    directories.Add(destDir);
+                }
+
+                // Create directories in parallel (though this is usually fast)
+                foreach (var dir in directories) {
+                    Directory.CreateDirectory(dir);
+                }
+
+                // Process files in parallel with controlled concurrency
+                var parallelOptions = new ParallelOptions {
+                    MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount * 2, 16),
+                };
+
+                await Parallel.ForEachAsync(files, parallelOptions, async (file, ct) => {
+                    // Only accept supported files (XML and JSON)
+                    if (!file.FileName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) &&
+                        !file.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) {
+                        return;
                     }
 
                     try {
                         // Preserve folder structure by creating subdirectories
                         var filePath = file.FileName.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
                         var destPath = Path.Combine(batchPath, filePath);
-                        var destDir = Path.GetDirectoryName(destPath) ?? batchPath;
 
-                        if (!Directory.Exists(destDir)) {
-                            Directory.CreateDirectory(destDir);
+                        // Use buffered streaming with pooled buffer to reduce memory pressure
+                        var buffer = BufferPool.Rent(BufferSize);
+                        try {
+                            await using var sourceStream = file.OpenReadStream();
+                            await using var destStream = new FileStream(
+                                destPath,
+                                FileMode.Create,
+                                FileAccess.Write,
+                                FileShare.None,
+                                BufferSize,
+                                FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+                            int bytesRead;
+                            while ((bytesRead = await sourceStream.ReadAsync(buffer.AsMemory(0, BufferSize), ct)) > 0) {
+                                await destStream.WriteAsync(buffer.AsMemory(0, bytesRead), ct);
+                            }
+                        }
+                        finally {
+                            BufferPool.Return(buffer);
                         }
 
-                        await using (var stream = new FileStream(destPath, FileMode.Create, FileAccess.Write)) {
-                            await file.CopyToAsync(stream);
-                        }
-
-                        // Store the full path for later use (with batch ID prefix for identification)
+                        // Store the full path for later use
                         uploadedFiles.Add(destPath);
                     }
                     catch (Exception) {
                         // Log exception and continue with next file
-                        continue;
                     }
-                }
+                });
+
+                var sortedFiles = uploadedFiles.OrderBy(f => f).ToList();
 
                 // For large file sets, don't return the entire list to avoid memory pressure
                 // Instead, write to a temporary file and return its location
-                if (uploadedFiles.Count > 100) {
+                if (sortedFiles.Count > 100) {
                     var fileListPath = Path.Combine(batchPath, "_filelist.json");
-                    await File.WriteAllTextAsync(fileListPath, JsonSerializer.Serialize(uploadedFiles));
+                    await File.WriteAllTextAsync(fileListPath, JsonSerializer.Serialize(sortedFiles));
 
                     return Results.Ok(new {
-                        uploaded = uploadedFiles.Count,
+                        uploaded = sortedFiles.Count,
                         batchId = batchId,
                         fileListPath = fileListPath,
                     });
@@ -89,8 +133,8 @@ namespace ComparisonTool.Web {
                 else {
                     // For smaller sets, return the list directly
                     return Results.Ok(new {
-                        uploaded = uploadedFiles.Count,
-                        files = uploadedFiles,
+                        uploaded = sortedFiles.Count,
+                        files = sortedFiles,
                     });
                 }
             });

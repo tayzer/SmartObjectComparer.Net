@@ -517,15 +517,36 @@ window.uploadFolderInBatches = async function (inputId, batchSize, dotNetRef) {
     let uploaded = 0;
     let uploadedFileNames = [];
     
-    // Use smaller batch sizes for very large folder uploads to avoid memory issues
-    const adjustedBatchSize = totalFiles > 500 ? Math.min(batchSize, 10) : batchSize;
-
-    // Process in batches to avoid overloading the server
+    // OPTIMIZATION: Use larger batch sizes and parallel uploads
+    // Larger batches = fewer HTTP requests = faster overall upload
+    let adjustedBatchSize;
+    if (totalFiles > 2000) {
+        adjustedBatchSize = 100; // Very large: 100 files per batch
+    } else if (totalFiles > 500) {
+        adjustedBatchSize = 50;  // Large: 50 files per batch
+    } else {
+        adjustedBatchSize = Math.max(batchSize, 25); // Use at least 25
+    }
+    
+    // OPTIMIZATION: Process multiple batches in parallel
+    const maxConcurrentBatches = totalFiles > 1000 ? 4 : (totalFiles > 500 ? 3 : 2);
+    
+    // Create batch ranges
+    const batches = [];
     for (let i = 0; i < totalFiles; i += adjustedBatchSize) {
-        const batch = files.slice(i, i + adjustedBatchSize);
+        batches.push({
+            start: i,
+            end: Math.min(i + adjustedBatchSize, totalFiles)
+        });
+    }
+    
+    // Process batches with controlled concurrency
+    let batchIndex = 0;
+    const processBatch = async (batch) => {
+        const batchFiles = files.slice(batch.start, batch.end);
         const form = new FormData();
         
-        for (const file of batch) {
+        for (const file of batchFiles) {
             // Use webkitRelativePath to preserve folder structure
             form.append('files', file, file.webkitRelativePath || file.name);
         }
@@ -539,8 +560,7 @@ window.uploadFolderInBatches = async function (inputId, batchSize, dotNetRef) {
             if (!response.ok) {
                 const err = await response.text();
                 console.log('Batch upload error:', err);
-                if (dotNetRef) dotNetRef.invokeMethodAsync('OnBatchUploadError', err);
-                break;
+                throw new Error(err);
             }
             
             // Parse backend response
@@ -548,45 +568,73 @@ window.uploadFolderInBatches = async function (inputId, batchSize, dotNetRef) {
             
             // Handle large file sets with the new approach
             if (result.batchId) {
-                // For large file sets, the server returns a batch ID instead of the file list
-                // Store the batch ID for later reference
-                if (!uploadedFileNames.includes(result.batchId)) {
-                    uploadedFileNames.push(result.batchId);
-                }
+                return { batchId: result.batchId, count: result.uploaded };
             } else if (result && result.files) {
-                // For smaller sets, collect the files directly
-                uploadedFileNames = uploadedFileNames.concat(result.files);
+                return { files: result.files, count: result.uploaded };
             }
-            
-            // Add a small delay between batches to prevent server overload
-            await new Promise(resolve => setTimeout(resolve, 50));
+            return { count: 0 };
         } catch (e) {
             console.log('Batch upload exception:', e);
+            throw e;
+        }
+    };
+    
+    // Process batches with concurrency control
+    const results = [];
+    let hasError = false;
+    
+    for (let i = 0; i < batches.length; i += maxConcurrentBatches) {
+        if (hasError) break;
+        
+        const currentBatches = batches.slice(i, i + maxConcurrentBatches);
+        
+        try {
+            const batchResults = await Promise.all(currentBatches.map(b => processBatch(b)));
+            results.push(...batchResults);
+            
+            // Update progress
+            uploaded = Math.min((i + maxConcurrentBatches) * adjustedBatchSize, totalFiles);
+            console.log('Batches uploaded:', uploaded, '/', totalFiles);
+            if (dotNetRef) dotNetRef.invokeMethodAsync('OnBatchUploadProgress', uploaded, totalFiles);
+        } catch (e) {
+            hasError = true;
             if (dotNetRef) dotNetRef.invokeMethodAsync('OnBatchUploadError', e.toString());
             break;
         }
-        
-        uploaded += batch.length;
-        console.log('Batch uploaded:', uploaded, '/', totalFiles);
-        if (dotNetRef) dotNetRef.invokeMethodAsync('OnBatchUploadProgress', uploaded, totalFiles);
+    }
+    
+    if (hasError) return;
+    
+    // Collect all file names from results
+    for (const result of results) {
+        if (result.batchId) {
+            // Store batch ID for later fetch
+            uploadedFileNames.push(result.batchId);
+        } else if (result.files) {
+            uploadedFileNames = uploadedFileNames.concat(result.files);
+        }
     }
     
     // For large uploads, we might need to fetch the file list in a separate request
-    // to avoid memory issues in the initial response
-    if (uploadedFileNames.length === 1 && uploadedFileNames[0].length === 8) {
-        // This looks like a batch ID, not a file path
-        const batchId = uploadedFileNames[0];
-        try {
-            const response = await fetch(`/api/upload/batch/${batchId}`);
-            if (response.ok) {
-                const result = await response.json();
-                if (result && result.files) {
-                    uploadedFileNames = result.files;
+    // Check if we have batch IDs that need resolution
+    const batchIds = uploadedFileNames.filter(f => f && f.length === 8 && !f.includes('/') && !f.includes('\\'));
+    if (batchIds.length > 0) {
+        const resolvedFiles = [];
+        for (const batchId of batchIds) {
+            try {
+                const response = await fetch(`/api/upload/batch/${batchId}`);
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result && result.files) {
+                        resolvedFiles.push(...result.files);
+                    }
                 }
+            } catch (e) {
+                console.error('Error fetching file list:', e);
             }
-        } catch (e) {
-            console.error('Error fetching file list:', e);
         }
+        // Replace batch IDs with actual file paths
+        uploadedFileNames = uploadedFileNames.filter(f => !batchIds.includes(f)).concat(resolvedFiles);
     }
     
     // Send result back to Blazor
@@ -594,7 +642,7 @@ window.uploadFolderInBatches = async function (inputId, batchSize, dotNetRef) {
         uploaded: uploadedFileNames.length,
         files: uploadedFileNames
     });
-    console.log('Upload complete:', uploaded, '/', totalFiles);
+    console.log('Upload complete:', uploadedFileNames.length, '/', totalFiles);
     if (dotNetRef) dotNetRef.invokeMethodAsync('OnBatchUploadComplete', uploadResult);
 };
 
