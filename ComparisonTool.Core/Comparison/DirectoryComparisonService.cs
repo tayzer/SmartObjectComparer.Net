@@ -161,20 +161,25 @@ public class DirectoryComparisonService {
                                 Interlocked.Exchange(ref equalityFlag, 0);
                             }
 
-                            // Update progress
+                            // Update progress - throttle to reduce UI contention
                             var completed = Interlocked.Increment(ref completedPairs);
-                            progress?.Report(new ComparisonProgress(
-                                completed,
-                                filePairs.Count,
-                                $"Compared {completed} of {filePairs.Count} files"));
+                            if (completed % Math.Max(1, filePairs.Count / 50) == 0 || completed == filePairs.Count) {
+                                progress?.Report(new ComparisonProgress(
+                                    completed,
+                                    filePairs.Count,
+                                    $"Compared {completed} of {filePairs.Count} files"));
+                            }
                         }
                         catch (Exception ex) {
                             this.logger.LogError(ex, "Error comparing file pair {Path}", filePair.RelativePath);
                         }
                     });
 
-                // Force garbage collection between batches
-                GC.Collect(2, GCCollectionMode.Forced, true);
+                // PERFORMANCE: Let GC work naturally instead of forcing collection
+                // Only hint GC between batches if memory pressure is high
+                if (GC.GetTotalMemory(false) > 500 * 1024 * 1024) { // > 500MB
+                    GC.Collect(1, GCCollectionMode.Optimized, false);
+                }
             }
 
             // Convert from ConcurrentBag to List and sort

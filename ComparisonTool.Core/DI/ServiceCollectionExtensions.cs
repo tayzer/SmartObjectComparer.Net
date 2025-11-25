@@ -67,7 +67,33 @@ public static class ServiceCollectionExtensions {
         });
 
         services.AddScoped<IComparisonEngine, ComparisonEngine>();
-        services.AddScoped<IComparisonOrchestrator, ComparisonOrchestrator>();
+        services.AddScoped<IComparisonOrchestrator>(provider => {
+            var logger = provider.GetRequiredService<ILogger<ComparisonOrchestrator>>();
+            var deserializationService = provider.GetRequiredService<IXmlDeserializationService>();
+            var configService = provider.GetRequiredService<IComparisonConfigurationService>();
+            var fileSystemService = provider.GetRequiredService<IFileSystemService>();
+            var performanceTracker = provider.GetRequiredService<PerformanceTracker>();
+            var resourceMonitor = provider.GetRequiredService<SystemResourceMonitor>();
+            var cacheService = provider.GetRequiredService<ComparisonResultCacheService>();
+            var comparisonEngine = provider.GetRequiredService<IComparisonEngine>();
+            var deserializationFactory = provider.GetService<DeserializationServiceFactory>();
+            var loggerFactory = provider.GetRequiredService<ILoggerFactory>();
+
+            return new ComparisonOrchestrator(
+                logger,
+                deserializationService,
+                configService,
+                fileSystemService,
+                performanceTracker,
+                resourceMonitor,
+                cacheService,
+                comparisonEngine,
+                deserializationFactory,
+                loggerFactory);
+        });
+
+        // Add high-performance comparison pipeline for large batch operations
+        services.AddScoped<HighPerformanceComparisonPipeline>();
 
         services.AddScoped<IComparisonService, ComparisonService>();
 

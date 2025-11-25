@@ -19,13 +19,21 @@ namespace ComparisonTool.Core.Comparison;
 public class ComparisonOrchestrator : IComparisonOrchestrator {
     private readonly ILogger<ComparisonOrchestrator> logger;
     private readonly IXmlDeserializationService deserializationService;
-    private readonly DeserializationServiceFactory deserializationFactory;
+    private readonly DeserializationServiceFactory? deserializationFactory;
     private readonly IComparisonConfigurationService configService;
     private readonly IFileSystemService fileSystemService;
     private readonly PerformanceTracker performanceTracker;
     private readonly SystemResourceMonitor resourceMonitor;
     private readonly ComparisonResultCacheService cacheService;
     private readonly IComparisonEngine comparisonEngine;
+
+    // High-performance pipeline for large batch operations
+    private readonly Lazy<HighPerformanceComparisonPipeline> highPerformancePipeline;
+
+    /// <summary>
+    /// Threshold for switching to high-performance pipeline (number of file pairs).
+    /// </summary>
+    private const int HighPerformancePipelineThreshold = 100;
 
     public ComparisonOrchestrator(
         ILogger<ComparisonOrchestrator> logger,
@@ -36,7 +44,8 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
         SystemResourceMonitor resourceMonitor,
         ComparisonResultCacheService cacheService,
         IComparisonEngine comparisonEngine,
-        DeserializationServiceFactory deserializationFactory = null) {
+        DeserializationServiceFactory? deserializationFactory = null,
+        ILoggerFactory? loggerFactory = null) {
         this.logger = logger;
         this.deserializationService = deserializationService;
         this.configService = configService;
@@ -46,6 +55,18 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
         this.cacheService = cacheService;
         this.comparisonEngine = comparisonEngine;
         this.deserializationFactory = deserializationFactory;
+
+        // Lazy-initialize high-performance pipeline to avoid circular dependencies
+        this.highPerformancePipeline = new Lazy<HighPerformanceComparisonPipeline>(() => {
+            var pipelineLogger = loggerFactory?.CreateLogger<HighPerformanceComparisonPipeline>()
+                ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<HighPerformanceComparisonPipeline>.Instance;
+            return new HighPerformanceComparisonPipeline(
+                pipelineLogger,
+                configService,
+                deserializationService,
+                performanceTracker,
+                deserializationFactory);
+        });
     }
 
     /// <summary>
@@ -415,12 +436,40 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
         List<string> folder2Files,
         string modelName,
         int batchSize = 25,
-        IProgress<(int Completed, int Total)> progress = null,
+        IProgress<(int Completed, int Total)>? progress = null,
         CancellationToken cancellationToken = default) {
         return await this.performanceTracker.TrackOperationAsync("CompareFoldersInBatchesAsync", async () => {
             this.logger.LogInformation(
                 "Starting batch comparison of {Count1} files from folder 1 and {Count2} files from folder 2",
                 folder1Files.Count, folder2Files.Count);
+
+            // Create mappings between files in both folders (by name for now)
+            var filePairMappings = FilePairMappingUtility.CreateFilePairMappings(folder1Files, folder2Files);
+            var totalPairs = filePairMappings.Count;
+
+            // Use high-performance pipeline for large batch operations
+            if (totalPairs >= HighPerformancePipelineThreshold) {
+                this.logger.LogInformation(
+                    "Using high-performance pipeline for {TotalPairs} file pairs (threshold: {Threshold})",
+                    totalPairs, HighPerformancePipelineThreshold);
+
+                // Create a progress adapter to convert ComparisonProgress to the tuple format
+                IProgress<ComparisonProgress>? pipelineProgress = null;
+                if (progress != null) {
+                    pipelineProgress = new Progress<ComparisonProgress>(p => progress.Report((p.Completed, p.Total)));
+                }
+
+                return await this.highPerformancePipeline.Value.CompareFilesAsync(
+                    filePairMappings,
+                    modelName,
+                    pipelineProgress,
+                    cancellationToken);
+            }
+
+            // For smaller batches, use the standard approach
+            this.logger.LogDebug(
+                "Using standard batch processing for {TotalPairs} file pairs (below threshold: {Threshold})",
+                totalPairs, HighPerformancePipelineThreshold);
 
             // Estimate optimal batch size based on file count and system resources
             var optimalBatchSize = this.CalculateOptimalBatchSize(Math.Max(folder1Files.Count, folder2Files.Count), folder1Files);
@@ -434,11 +483,7 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
                 this.logger.LogInformation("Using provided batch size: {BatchSize}", batchSize);
             }
 
-            // Create mappings between files in both folders (by name for now)
-            var filePairMappings = FilePairMappingUtility.CreateFilePairMappings(folder1Files, folder2Files);
-
             // Report batch information
-            var totalPairs = filePairMappings.Count;
             var batchCount = (int)Math.Ceiling((double)totalPairs / batchSize);
 
             progress?.Report((0, totalPairs));
