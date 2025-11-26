@@ -1,109 +1,113 @@
 @namespace ComparisonTool.Web.Components.Shared
+@using MudBlazor
 @inject IJSRuntime JSRuntime
 @using Microsoft.JSInterop
 @implements IDisposable
 
-<div class="form-group mt-3">
-    <label>@Label</label>
-    <div class="d-flex flex-column gap-2">
-        <div class="d-flex gap-2">
-            <InputFile class="form-control" OnChange="HandleFileUpload" multiple />
-            <button class="btn btn-outline-primary" @onclick="TriggerFolderUpload" type="button">
-                <i class="bi bi-folder"></i> Select Folder
-            </button>
-            <span class="badge bg-info d-flex align-items-center">
-                @if (Files.Count > 0)
-                {
-                    <span>@Files.Count files</span>
-                }
-            </span>
-        </div>
-        <!-- Hidden folder input for JS batch upload -->
-        <input type="file" id="jsFolderInput_@_folderInputId" style="display:none" multiple webkitdirectory directory />
-    </div>
+<MudStack Spacing="2" Class="mt-3">
+    <MudText Typo="Typo.subtitle2">@Label</MudText>
+    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+        <InputFile class="mud-input-outlined" OnChange="HandleFileUpload" multiple style="flex: 1;" />
+        <MudButton Variant="Variant.Outlined" 
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Folder"
+                   OnClick="TriggerFolderUpload">
+            Select Folder
+        </MudButton>
+        @if (Files.Count > 0)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Info">@Files.Count files</MudChip>
+        }
+    </MudStack>
+    <!-- Hidden folder input for JS batch upload -->
+    <input type="file" id="jsFolderInput_@_folderInputId" style="display:none" multiple webkitdirectory directory />
 
     @if (IsProcessing)
     {
-        <div class="mt-3">
-            <div class="progress" style="height: 20px;">
-                <div class="progress-bar progress-bar-striped progress-bar-animated"
-                     role="progressbar"
-                     style="width: @ProgressPercentage%;">
-                    @ProcessingStatus
-                </div>
-            </div>
-            <small class="text-muted">@ProcessingStatus</small>
-        </div>
+        <MudStack Spacing="1" Class="mt-3">
+            <MudProgressLinear Value="@ProgressPercentage" Color="Color.Primary" Striped="true" Size="Size.Large">
+                <MudText Typo="Typo.caption">@ProcessingStatus</MudText>
+            </MudProgressLinear>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@ProcessingStatus</MudText>
+        </MudStack>
     }
 
     @if (Files.Any())
     {
-        <div class="mt-3">
-            <div class="card">
-                <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                    <span>Files (@Files.Count)</span>
-                    <div>
-                        <button class="btn btn-sm btn-outline-danger" @onclick="ClearAllFiles">
-                            Clear All
-                        </button>
-                    </div>
-                </div>
-                <div style="max-height: 200px; overflow-y: auto;">
-                    @if (Files.Count > 50)
-                    {
-                        <div class="p-3 text-center">
-                            <p>@Files.Count files selected.</p>
-                            <p><small class="text-muted">File list not shown for performance reasons.</small></p>
-                            @if (HasMultipleFolders)
-                            {
-                                <div class="mt-2 alert alert-info">
-                                    <i class="bi bi-info-circle me-2"></i> Files are from multiple folders
-                                </div>
-                            }
-                        </div>
-                    }
-                    else
-                    {
-                        <ul class="list-group list-group-flush">
-                            @foreach (var folderGroup in GetFolderGroups().Take(5))
-                            {
-                                <li class="list-group-item bg-light">
-                                    <small><strong>@(string.IsNullOrEmpty(folderGroup.Key) ? "Root" : folderGroup.Key)</strong></small>
-                                </li>
+        <MudPaper Outlined="true" Class="mt-3">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pa-2 mud-background-gray">
+                <MudText Typo="Typo.body2">Files (@Files.Count)</MudText>
+                <MudButton Variant="Variant.Outlined" 
+                           Size="Size.Small"
+                           Color="Color.Error"
+                           StartIcon="@Icons.Material.Filled.DeleteSweep"
+                           OnClick="ClearAllFiles">
+                    Clear All
+                </MudButton>
+            </MudStack>
+            <div style="max-height: 200px; overflow-y: auto;">
+                @if (Files.Count > 50)
+                {
+                    <MudStack Class="pa-3" AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.body1">@Files.Count files selected.</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">File list not shown for performance reasons.</MudText>
+                        @if (HasMultipleFolders)
+                        {
+                            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudIcon Icon="@Icons.Material.Filled.Info" Size="Size.Small" />
+                                    <MudText>Files are from multiple folders</MudText>
+                                </MudStack>
+                            </MudAlert>
+                        }
+                    </MudStack>
+                }
+                else
+                {
+                    <MudList T="string" Dense="true">
+                        @foreach (var folderGroup in GetFolderGroups().Take(5))
+                        {
+                            <MudListSubheader>
+                                <MudText Typo="Typo.caption"><strong>@(string.IsNullOrEmpty(folderGroup.Key) ? "Root" : folderGroup.Key)</strong></MudText>
+                            </MudListSubheader>
 
-                                @foreach (var file in folderGroup.Take(10))
-                                {
-                                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <small>@GetFileNameOnly(file)</small>
-                                        </div>
-                                        <button class="btn btn-sm btn-danger" @onclick="() => RemoveFile(file)">
-                                            <i class="bi bi-x"></i>
-                                        </button>
-                                    </li>
-                                }
-
-                                @if (folderGroup.Count() > 10)
-                                {
-                                    <li class="list-group-item text-center">
-                                        <small>And @(folderGroup.Count() - 10) more files in this folder...</small>
-                                    </li>
-                                }
+                            @foreach (var file in folderGroup.Take(10))
+                            {
+                                <MudListItem T="string">
+                                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                        <MudText Typo="Typo.body2">@GetFileNameOnly(file)</MudText>
+                                        <MudIconButton Icon="@Icons.Material.Filled.Close"
+                                                       Size="Size.Small"
+                                                       Color="Color.Error"
+                                                       OnClick="@(() => RemoveFile(file))" />
+                                    </MudStack>
+                                </MudListItem>
                             }
 
-                            @if (GetFolderGroups().Count() > 5)
+                            @if (folderGroup.Count() > 10)
                             {
-                                <li class="list-group-item text-center">
-                                    <small>And @(GetFolderGroups().Count() - 5) more folders...</small>
-                                </li>
+                                <MudListItem T="string">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="text-align: center;">
+                                        And @(folderGroup.Count() - 10) more files in this folder...
+                                    </MudText>
+                                </MudListItem>
                             }
-                        </ul>
-                    }
-                </div>
+                        }
+
+                        @if (GetFolderGroups().Count() > 5)
+                        {
+                            <MudListItem T="string">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Style="text-align: center;">
+                                    And @(GetFolderGroups().Count() - 5) more folders...
+                                </MudText>
+                            </MudListItem>
+                        }
+                    </MudList>
+                }
             </div>
-        </div>
+        </MudPaper>
     }
-</div>
+</MudStack>
 
 @code {
     [Parameter]

@@ -5,6 +5,7 @@
 using ComparisonTool.Core.DI;
 using ComparisonTool.Web;
 using ComparisonTool.Web.Components;
+using MudBlazor.Services;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -27,7 +28,8 @@ builder.Services
         options.DisconnectedCircuitMaxRetained = 100;
     });
 
-builder.Services.AddBlazorBootstrap();
+// Add MudBlazor services
+builder.Services.AddMudServices();
 
 builder.Services.AddSignalR(options => {
     options.MaximumReceiveMessageSize = 10 * 1024 * 1024;

@@ -4,218 +4,73 @@
 @using Microsoft.AspNetCore.Components.Forms
 @using System.Text.Json
 @using Microsoft.JSInterop
+@using MudBlazor
 
 @inject IComparisonConfigurationService ConfigService
 @inject IJSRuntime JSRuntime
 
-<style>
-
-
-    .ignore-rules-compact {
-        margin-top: 0.5rem;
-    }
-
-    .rules-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 0.5rem;
-        padding-bottom: 0.25rem;
-        border-bottom: 1px solid #e9ecef;
-    }
-
-    .rules-count {
-        font-weight: 600;
-        color: #495057;
-        font-size: 0.9rem;
-    }
-
-    .compact-rules-table {
-        max-height: 300px;
-        overflow-y: auto;
-        border: 1px solid #e9ecef;
-        border-radius: 4px;
-    }
-
-    .rule-group-compact {
-        background: #f8f9fa;
-        padding: 0.25rem 0.5rem;
-        border-bottom: 1px solid #e9ecef;
-        font-size: 0.8rem;
-        font-weight: 500;
-        color: #6c757d;
-    }
-
-    .group-label {
-        display: flex;
-        align-items: center;
-    }
-
-    .rule-row {
-        display: grid;
-        grid-template-columns: 1fr auto auto;
-        gap: 0.5rem;
-        padding: 0.4rem 0.5rem;
-        border-bottom: 1px solid #f1f3f4;
-        align-items: center;
-        transition: background-color 0.15s ease;
-    }
-
-    .rule-row:hover {
-        background-color: #f8f9fa;
-    }
-
-    .rule-row:last-child {
-        border-bottom: none;
-    }
-
-    .rule-path-compact {
-        min-width: 0;
-        overflow: hidden;
-    }
-
-    .rule-path-compact code {
-        font-size: 0.8rem;
-        color: #6f42c1;
-        background: none;
-        padding: 0;
-        border-radius: 0;
-        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-        word-break: break-all;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        display: block;
-    }
-
-    .rule-settings-compact {
-        display: flex;
-        gap: 0.25rem;
-        align-items: center;
-    }
-
-    .setting-badge {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 18px;
-        height: 18px;
-        border-radius: 50%;
-        font-size: 0.7rem;
-        line-height: 1;
-    }
-
-    .setting-badge.ignore {
-        background: #dc3545;
-        color: white;
-    }
-
-    .setting-badge.order {
-        background: #ffc107;
-        color: #212529;
-    }
-
-    .rule-actions-compact {
-        display: flex;
-        align-items: center;
-    }
-
-    .btn-remove-compact {
-        border: none;
-        background: none;
-        color: #6c757d;
-        cursor: pointer;
-        padding: 0.2rem;
-        border-radius: 3px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 20px;
-        height: 20px;
-        font-size: 0.8rem;
-        transition: all 0.15s ease;
-    }
-
-    .btn-remove-compact:hover {
-        background: #dc3545;
-        color: white;
-    }
-
-    .empty-state-compact {
-        padding: 1rem;
-        text-align: center;
-        color: #6c757d;
-        font-style: italic;
-        background: #f8f9fa;
-        border-radius: 4px;
-        font-size: 0.9rem;
-    }
-
-    /* Mobile responsiveness */
-    @@media (max-width: 768px) {
-        .rule-row {
-            grid-template-columns: 1fr auto;
-            gap: 0.3rem;
-        }
+<MudPaper Elevation="2" Class="pa-4">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h6">Step 2: Configure Comparison Options</MudText>
         
-        .rule-settings-compact {
-            grid-column: 1;
-            justify-self: start;
-            margin-top: 0.25rem;
-        }
-        
-        .rule-actions-compact {
-            grid-column: 2;
-            grid-row: 1;
-        }
-        
-        .compact-rules-table {
-            max-height: 250px;
-        }
-    }
-</style>
+        <!-- Global Settings -->
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.subtitle2">Global Settings</MudText>
+            <MudSwitch T="bool"
+                       Value="IgnoreCollectionOrder"
+                       ValueChanged="@((bool val) => { IgnoreCollectionOrder = val; OnIgnoreCollectionOrderChanged.InvokeAsync(val); })"
+                       Color="Color.Primary"
+                       Label="Ignore Collection Order Globally"
+                       aria-label="Ignore collection order globally" />
+            <MudSwitch T="bool"
+                       Value="IgnoreStringCase"
+                       ValueChanged="@((bool val) => { IgnoreStringCase = val; OnIgnoreStringCaseChanged.InvokeAsync(val); })"
+                       Color="Color.Primary"
+                       Label="Ignore String Case Globally"
+                       aria-label="Ignore string case globally" />
+        </MudStack>
 
-<div class="card">
-    <div class="card-header">
-        <h5>Step 2: Configure Comparison Options</h5>
-    </div>
-    <div class="card-body">
-        <h6>Global Settings</h6>
-        <div class="form-check form-switch mb-2">
-            <input class="form-check-input" type="checkbox" id="ignoreCollectionOrderSwitch" @bind="IgnoreCollectionOrder" @bind:after="() => OnIgnoreCollectionOrderChanged.InvokeAsync(IgnoreCollectionOrder)" />
-            <label class="form-check-label" for="ignoreCollectionOrderSwitch">Ignore Collection Order Globally</label>
-        </div>
-        <div class="form-check form-switch mb-3">
-            <input class="form-check-input" type="checkbox" id="ignoreStringCaseSwitch" @bind="IgnoreStringCase" @bind:after="() => OnIgnoreStringCaseChanged.InvokeAsync(IgnoreStringCase)" />
-            <label class="form-check-label" for="ignoreStringCaseSwitch">Ignore String Case Globally</label>
-        </div>
+        <MudDivider />
 
-        <h6>Analysis Options</h6>
-        <div class="form-check form-switch mb-2">
-            <input class="form-check-input" type="checkbox" id="enableSemanticAnalysisSwitch" @bind="EnableSemanticAnalysis" @bind:after="() => OnEnableSemanticAnalysisChanged.InvokeAsync(EnableSemanticAnalysis)" />
-            <label class="form-check-label" for="enableSemanticAnalysisSwitch">Enable Semantic Analysis</label>
-        </div>
-        <div class="form-check form-switch mb-3">
-            <input class="form-check-input" type="checkbox" id="enableEnhancedStructuralAnalysisSwitch" @bind="EnableEnhancedStructuralAnalysis" @bind:after="() => OnEnableEnhancedStructuralAnalysisChanged.InvokeAsync(EnableEnhancedStructuralAnalysis)" />
-            <label class="form-check-label" for="enableEnhancedStructuralAnalysisSwitch">Enable Enhanced Structural Pattern Analysis</label>
-        </div>
+        <!-- Analysis Options -->
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.subtitle2">Analysis Options</MudText>
+            <MudSwitch T="bool"
+                       Value="EnableSemanticAnalysis"
+                       ValueChanged="@((bool val) => { EnableSemanticAnalysis = val; OnEnableSemanticAnalysisChanged.InvokeAsync(val); })"
+                       Color="Color.Primary"
+                       Label="Enable Semantic Analysis"
+                       aria-label="Enable semantic analysis" />
+            <MudSwitch T="bool"
+                       Value="EnableEnhancedStructuralAnalysis"
+                       ValueChanged="@((bool val) => { EnableEnhancedStructuralAnalysis = val; OnEnableEnhancedStructuralAnalysisChanged.InvokeAsync(val); })"
+                       Color="Color.Primary"
+                       Label="Enable Enhanced Structural Pattern Analysis"
+                       aria-label="Enable enhanced structural pattern analysis" />
+        </MudStack>
 
-        <!-- Smart Ignore Rules Section - Collapsible -->
-        <div class="mt-3 mb-3">
-            <div class="d-flex align-items-center mb-2">
-                <h6 class="mb-0 me-2">Smart Ignore Rules</h6>
-                @{
-                    var smartRulesCount = GetSmartIgnoreRules().Count;
-                }
-                @if (smartRulesCount > 0)
-                {
-                    <span class="badge bg-secondary me-2">@smartRulesCount active</span>
-                }
-                <button class="btn btn-sm btn-outline-secondary" @onclick="() => IsSmartIgnoreCollapsed = !IsSmartIgnoreCollapsed">
-                    <i class="bi @(IsSmartIgnoreCollapsed ? "bi-chevron-down" : "bi-chevron-up")"></i>
+        <MudDivider />
+
+        <!-- Smart Ignore Rules Section -->
+        <MudStack Spacing="2">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudText Typo="Typo.subtitle2">Smart Ignore Rules</MudText>
+                    @{
+                        var smartRulesCount = GetSmartIgnoreRules().Count;
+                    }
+                    @if (smartRulesCount > 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default">@smartRulesCount active</MudChip>
+                    }
+                </MudStack>
+                <MudButton Variant="Variant.Outlined" 
+                           Size="Size.Small"
+                           OnClick="@(() => IsSmartIgnoreCollapsed = !IsSmartIgnoreCollapsed)"
+                           EndIcon="@(IsSmartIgnoreCollapsed ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ExpandLess)">
                     @(IsSmartIgnoreCollapsed ? "Show" : "Hide")
-                </button>
-            </div>
+                </MudButton>
+            </MudStack>
             
             @if (!IsSmartIgnoreCollapsed)
             {
@@ -225,42 +80,60 @@
                                                OnPresetApplied="@HandleSmartIgnorePresetApplied"
                                                OnRulesCleared="@HandleSmartIgnoreRulesCleared" />
             }
-        </div>
+        </MudStack>
 
-        <h6 class="mt-4">Tree Navigator (Visual Property Selection)</h6>
-        <div class="d-flex gap-2 mb-2">
-            <button class="btn btn-sm btn-outline-primary" @onclick="OpenPropertySelector" disabled="@(!IsModelSelected)">
-                <i class="bi bi-list-nested me-1"></i> Simple Property Selector
-            </button>
-            <button class="btn btn-sm btn-outline-success" @onclick="OpenTreePropertySelector" disabled="@(!IsModelSelected)">
-                <i class="bi bi-diagram-3 me-1"></i> Tree Navigator ⭐
-            </button>
-        </div>
-        @if (!IsModelSelected)
-        {
-            <small class="d-block text-muted">Select a model first to browse and ignore properties.</small>
-        }
+        <MudDivider />
 
+        <!-- Tree Navigator -->
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.subtitle2">Tree Navigator (Visual Property Selection)</MudText>
+            <MudStack Row="true" Spacing="2">
+                <MudButton Variant="Variant.Outlined" 
+                           Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.List"
+                           OnClick="OpenPropertySelector" 
+                           Disabled="@(!IsModelSelected)"
+                           aria-label="Open simple property selector">
+                    Simple Property Selector
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" 
+                           Size="Size.Small"
+                           Color="Color.Success"
+                           StartIcon="@Icons.Material.Filled.AccountTree"
+                           OnClick="OpenTreePropertySelector" 
+                           Disabled="@(!IsModelSelected)"
+                           aria-label="Open tree navigator">
+                    Tree Navigator ⭐
+                </MudButton>
+            </MudStack>
+            @if (!IsModelSelected)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Default">
+                    Select a model first to browse and ignore properties.
+                </MudText>
+            }
+        </MudStack>
+
+        <!-- Ignore Rules List -->
         @if (IgnoreRules.Any())
         {
-            <div class="ignore-rules-compact">
-                <div class="rules-header">
-                    <span class="rules-count">
-                        <i class="bi bi-shield-x me-1"></i>
-                        @IgnoreRules.Count Ignore Rules
-                    </span>
-                    <div class="d-flex align-items-center gap-2">
-                        @if (IgnoreRules.Count > 10)
-                        {
-                            <small class="text-muted">Showing all rules in compact view</small>
-                        }
-                        <button class="btn btn-sm btn-outline-danger" @onclick="HandleClearAllIgnoreRules" title="Clear all ignore rules">
-                            <i class="bi bi-trash me-1"></i> Clear All
-                        </button>
-                    </div>
-                </div>
+            <MudStack Spacing="2">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" />
+                        <MudText Typo="Typo.subtitle2">@IgnoreRules.Count Ignore Rules</MudText>
+                    </MudStack>
+                    <MudButton Variant="Variant.Outlined" 
+                               Size="Size.Small"
+                               Color="Color.Error"
+                               StartIcon="@Icons.Material.Filled.DeleteSweep"
+                               OnClick="HandleClearAllIgnoreRules"
+                               aria-label="Clear all ignore rules">
+                        Clear All
+                    </MudButton>
+                </MudStack>
                 
-                <div class="compact-rules-table">
+                <MudPaper Outlined="true" Style="max-height: 300px; overflow-y: auto;">
                     @{
                         var groupedRules = GetCompactRuleGroups();
                     }
@@ -269,78 +142,97 @@
                     {
                         @if (groupedRules.Count > 1)
                         {
-                            <div class="rule-group-compact">
-                                <span class="group-label">
-                                    <i class="@group.Icon me-1"></i>@group.Name (@group.Rules.Count)
-                                </span>
-                            </div>
+                            <MudStack Row="true" Class="pa-2 mud-background-gray" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@GetGroupIcon(group.Name)" Size="Size.Small" />
+                                <MudText Typo="Typo.caption">@group.Name (@group.Rules.Count)</MudText>
+                            </MudStack>
                         }
                         
                         @foreach (var rule in group.Rules)
                         {
-                            <div class="rule-row">
-                                <div class="rule-path-compact">
-                                    <code>@rule.PropertyPath</code>
-                                </div>
-                                <div class="rule-settings-compact">
+                            <MudStack Row="true" Class="pa-2" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.body2" Style="font-family: 'Consolas', 'Monaco', monospace; word-break: break-all;">
+                                    @rule.PropertyPath
+                                </MudText>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                     @if (rule.IgnoreCompletely)
                                     {
-                                        <span class="setting-badge ignore">
-                                            <i class="bi bi-eye-slash"></i>
-                                        </span>
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.VisibilityOff">
+                                            Ignore
+                                        </MudChip>
                                     }
                                     @if (rule.IgnoreCollectionOrder)
                                     {
-                                        <span class="setting-badge order">
-                                            <i class="bi bi-arrow-down-up"></i>
-                                        </span>
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.SwapVert">
+                                            Order
+                                        </MudChip>
                                     }
-                                </div>
-                                <div class="rule-actions-compact">
-                                    <button class="btn-remove-compact" 
-                                            @onclick="() => OnIgnoreRuleRemoved.InvokeAsync(rule)"
-                                            title="Remove rule">
-                                        <i class="bi bi-x"></i>
-                                    </button>
-                                </div>
-                            </div>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Close"
+                                                   Size="Size.Small"
+                                                   Color="Color.Error"
+                                                   OnClick="@(() => OnIgnoreRuleRemoved.InvokeAsync(rule))"
+                                                   aria-label="Remove rule" />
+                                </MudStack>
+                            </MudStack>
+                            <MudDivider />
                         }
                     }
-                </div>
-            </div>
+                </MudPaper>
+            </MudStack>
         }
         else
         {
-            <div class="empty-state-compact">
-                <i class="bi bi-shield-check me-2"></i>
-                <span>No ignore rules configured</span>
-            </div>
+            <MudPaper Outlined="true" Class="pa-4" Style="text-align: center;">
+                <MudStack Row="true" Justify="Justify.Center" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Default" />
+                    <MudText Typo="Typo.body2" Color="Color.Default">No ignore rules configured</MudText>
+                </MudStack>
+            </MudPaper>
         }
         
-        @* --- Import/Export Buttons --- *@
-        <div class="d-flex justify-content-start gap-2 mt-3 mb-3">
-             <InputFile OnChange="HandleImportFileSelected" accept=".json" id="import-config-input" style="display: none;" />
-             <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('import-config-input').click();">
-                 <i class="bi bi-upload me-1"></i> Import Config...
-             </button>
-             <button class="btn btn-sm btn-outline-secondary" @onclick="ExportConfiguration" disabled="@(!IgnoreRules.Any())">
-                 <i class="bi bi-download me-1"></i> Export Config
-             </button>
-        </div>
-         @if (!string.IsNullOrEmpty(importStatusMessage))
-         {
-             <div class="alert @(importStatusIsError ? "alert-danger" : "alert-success") mt-2 p-2" role="alert">
-                 @importStatusMessage
-             </div>
-         }
+        <MudDivider />
+
+        <!-- Import/Export Buttons -->
+        <MudStack Row="true" Spacing="2">
+            <InputFile OnChange="HandleImportFileSelected" accept=".json" id="import-config-input" style="display: none;" />
+            <MudButton Variant="Variant.Outlined" 
+                       Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.Upload"
+                       OnClick="@(() => { })"
+                       HtmlTag="label"
+                       for="import-config-input"
+                       aria-label="Import configuration">
+                Import Config...
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" 
+                       Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.Download"
+                       OnClick="ExportConfiguration" 
+                       Disabled="@(!IgnoreRules.Any())"
+                       aria-label="Export configuration">
+                Export Config
+            </MudButton>
+        </MudStack>
         
-    </div>
-    <div class="card-footer text-end">
-        <button class="btn btn-success" @onclick="OnRunComparison" disabled="@(!CanRunComparison)">
-            <i class="bi bi-play-fill me-1"></i> Run Comparison
-        </button>
-    </div>
-</div>
+        @if (!string.IsNullOrEmpty(importStatusMessage))
+        {
+            <MudAlert Severity="@(importStatusIsError ? Severity.Error : Severity.Success)" Variant="Variant.Outlined">
+                @importStatusMessage
+            </MudAlert>
+        }
+
+        <!-- Run Comparison Button -->
+        <MudButton Variant="Variant.Filled" 
+                   Color="Color.Success" 
+                   FullWidth="true"
+                   StartIcon="@Icons.Material.Filled.PlayArrow"
+                   OnClick="OnRunComparison" 
+                   Disabled="@(!CanRunComparison)"
+                   aria-label="Run comparison">
+            Run Comparison
+        </MudButton>
+    </MudStack>
+</MudPaper>
 
 @code {
     [Parameter] public bool IgnoreCollectionOrder { get; set; }
@@ -429,6 +321,17 @@
         public List<IgnoreRule> Rules { get; set; } = new();
     }
 
+    private string GetGroupIcon(string groupName)
+    {
+        return groupName switch
+        {
+            "Root Properties" => Icons.Material.Filled.Home,
+            "Nested Properties" => Icons.Material.Filled.AccountTree,
+            "Collections" => Icons.Material.Filled.List,
+            _ => Icons.Material.Filled.Rule
+        };
+    }
+
     private List<CompactRuleGroup> GetCompactRuleGroups()
     {
         var groups = new List<CompactRuleGroup>();
@@ -442,7 +345,7 @@
             groups.Add(new CompactRuleGroup
             {
                 Name = "Root Properties",
-                Icon = "bi bi-house",
+                Icon = Icons.Material.Filled.Home,
                 Rules = simpleRules
             });
         }
@@ -458,7 +361,7 @@
             groups.Add(new CompactRuleGroup
             {
                 Name = "Nested Properties",
-                Icon = "bi bi-diagram-3",
+                Icon = Icons.Material.Filled.AccountTree,
                 Rules = nestedRules
             });
         }
@@ -472,7 +375,7 @@
             groups.Add(new CompactRuleGroup
             {
                 Name = "Collections",
-                Icon = "bi bi-collection",
+                Icon = Icons.Material.Filled.List,
                 Rules = collectionRules
             });
         }
@@ -485,7 +388,7 @@
                 new CompactRuleGroup
                 {
                     Name = "All Rules",
-                    Icon = "bi bi-list",
+                    Icon = Icons.Material.Filled.Rule,
                     Rules = IgnoreRules.OrderBy(r => r.PropertyPath).ToList()
                 }
             };

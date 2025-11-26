@@ -1,7 +1,6 @@
 ﻿@using ComparisonTool.Core.Comparison.Configuration
 @using System.Reflection
-@using System.Reflection
-@using BlazorBootstrap
+@using MudBlazor
 
 <style>
     .ignored-properties-container {
@@ -154,8 +153,11 @@
     }
 </style>
 
-<Modal @ref="propertyModal" Title="Select Properties to Ignore" Size="ModalSize.Large">
-    <BodyTemplate>
+<MudDialog @bind-Visible="showPropertyModal" Options="dialogOptionsLarge">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Select Properties to Ignore</MudText>
+    </TitleContent>
+    <DialogContent>
         <div class="row">
             <div class="col-12">
                 <div class="input-group mb-3">
@@ -339,62 +341,49 @@
                 </div>
             </div>
         </div>
-    </BodyTemplate>
-    <FooterTemplate>
-        <Button Color="ButtonColor.Secondary" @onclick="ClosePropertySelector">Close</Button>
-    </FooterTemplate>
-</Modal>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Default" OnClick="ClosePropertySelector">Close</MudButton>
+    </DialogActions>
+</MudDialog>
 
 <!-- Bulk Ignore Confirmation Modal -->
-<Modal @ref="bulkIgnoreModal" Title="Confirm Bulk Ignore" Size="ModalSize.Regular">
-    <BodyTemplate>
-        <div class="alert alert-warning">
+<MudDialog @bind-Visible="showBulkIgnoreModal" Options="dialogOptionsRegular">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Confirm Bulk Ignore</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudAlert Severity="Severity.Warning" Class="mb-3">
             <i class="bi bi-exclamation-triangle me-2"></i>
             <strong>Bulk Ignore Confirmation</strong>
-        </div>
-        <p>You are about to ignore <strong>@selectedProperties.Count properties</strong> completely from comparison.</p>
+        </MudAlert>
+        <MudText>You are about to ignore <strong>@selectedProperties.Count properties</strong> completely from comparison.</MudText>
 
         @if (isProcessingBulkIgnore)
         {
             <div class="mb-3">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span>Processing...</span>
-                    <span>@bulkIgnoreProgress%</span>
-                </div>
-                <div class="progress mb-2">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated"
-                         role="progressbar"
-                         style="width: @(bulkIgnoreProgress)%"
-                         aria-valuenow="@bulkIgnoreProgress"
-                         aria-valuemin="0"
-                         aria-valuemax="100"></div>
-                </div>
-                <small class="text-muted">@bulkIgnoreStatus</small>
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+                    <MudText>Processing...</MudText>
+                    <MudText>@bulkIgnoreProgress%</MudText>
+                </MudStack>
+                <MudProgressLinear Value="@bulkIgnoreProgress" Color="Color.Primary" Striped="true" Class="mb-2" />
+                <MudText Typo="Typo.caption" Color="Color.Default">@bulkIgnoreStatus</MudText>
             </div>
         }
         else
         {
             <div class="mb-3">
-                <label class="form-label">Ignore Settings for All Selected Properties:</label>
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="bulkIgnoreCompletely" @bind="bulkIgnoreCompletely">
-                    <label class="form-check-label" for="bulkIgnoreCompletely">
-                        <i class="bi bi-eye-slash"></i> Ignore completely
-                    </label>
-                </div>
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="bulkIgnoreCollectionOrder"
-                           @bind="bulkIgnoreCollectionOrder" disabled="@bulkIgnoreCompletely">
-                    <label class="form-check-label" for="bulkIgnoreCollectionOrder">
-                        <i class="bi bi-arrow-down-up"></i> Ignore collection ordering (for collection properties)
-                    </label>
-                </div>
+                <MudText Class="mb-2">Ignore Settings for All Selected Properties:</MudText>
+                <MudCheckBox T="bool" @bind-Value="bulkIgnoreCompletely" Label="Ignore completely" />
+                <MudCheckBox T="bool" @bind-Value="bulkIgnoreCollectionOrder" 
+                             Label="Ignore collection ordering (for collection properties)"
+                             Disabled="@bulkIgnoreCompletely" />
             </div>
         }
 
         @if (selectedProperties.Count > 10)
         {
-            <div class="alert alert-info">
+            <MudAlert Severity="Severity.Info">
                 <strong>Preview of properties to be ignored:</strong>
                 <ul class="mb-0 mt-2">
                     @foreach (var prop in selectedProperties.Take(10))
@@ -403,11 +392,11 @@
                     }
                     <li><em>... and @(selectedProperties.Count - 10) more properties</em></li>
                 </ul>
-            </div>
+            </MudAlert>
         }
         else
         {
-            <div class="alert alert-info">
+            <MudAlert Severity="Severity.Info">
                 <strong>Properties to be ignored:</strong>
                 <ul class="mb-0 mt-2">
                     @foreach (var prop in selectedProperties)
@@ -415,14 +404,14 @@
                         <li><code>@prop</code></li>
                     }
                 </ul>
-            </div>
+            </MudAlert>
         }
-    </BodyTemplate>
-    <FooterTemplate>
-        <Button Color="ButtonColor.Success" @onclick="ExecuteBulkIgnore" Disabled="@isProcessingBulkIgnore">
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Success" OnClick="ExecuteBulkIgnore" Disabled="@isProcessingBulkIgnore">
             @if (isProcessingBulkIgnore)
             {
-                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="me-2" />
                 <text>Processing...</text>
             }
             else
@@ -430,10 +419,10 @@
                 <i class="bi bi-check"></i>
                 <text>Confirm Ignore</text>
             }
-        </Button>
-        <Button Color="ButtonColor.Secondary" @onclick="CancelBulkIgnore" Disabled="@isProcessingBulkIgnore">Cancel</Button>
-    </FooterTemplate>
-</Modal>
+        </MudButton>
+        <MudButton Color="Color.Default" OnClick="CancelBulkIgnore" Disabled="@isProcessingBulkIgnore">Cancel</MudButton>
+    </DialogActions>
+</MudDialog>
 
 @code {
     [Parameter]
@@ -451,8 +440,24 @@
     [Parameter]
     public EventCallback<string> OnPropertyRemoved { get; set; }
 
-    private Modal propertyModal;
-    private Modal bulkIgnoreModal;
+    // MudDialog visibility state
+    private bool showPropertyModal = false;
+    private bool showBulkIgnoreModal = false;
+    
+    // Dialog options
+    private DialogOptions dialogOptionsLarge = new DialogOptions 
+    { 
+        MaxWidth = MaxWidth.Large, 
+        FullWidth = true,
+        CloseOnEscapeKey = true 
+    };
+    private DialogOptions dialogOptionsRegular = new DialogOptions 
+    { 
+        MaxWidth = MaxWidth.Small, 
+        FullWidth = true,
+        CloseOnEscapeKey = true 
+    };
+    
     private string selectedProperty;
     private string searchTerm = "";
     private bool IgnoreProperty { get; set; }
@@ -474,7 +479,7 @@
         public string TypeName { get; set; }
     }
 
-    public async Task ShowAsync()
+    public Task ShowAsync()
     {
         if (ModelType != null)
         {
@@ -489,7 +494,8 @@
         }
 
         ResetSelectionState();
-        await propertyModal.ShowAsync();
+        showPropertyModal = true;
+        return Task.CompletedTask;
     }
 
     private void LoadAllProperties()
@@ -694,7 +700,7 @@
 
     private void ClosePropertySelector()
     {
-        propertyModal.HideAsync();
+        showPropertyModal = false;
     }
 
     private bool IsCollectionProperty(string propertyPath)
@@ -831,7 +837,7 @@
         StateHasChanged();
     }
 
-    private async Task ShowBulkIgnoreConfirmation()
+    private void ShowBulkIgnoreConfirmation()
     {
         if (!selectedProperties.Any())
             return;
@@ -840,7 +846,7 @@
         bulkIgnoreCompletely = true;
         bulkIgnoreCollectionOrder = false;
 
-        await bulkIgnoreModal.ShowAsync();
+        showBulkIgnoreModal = true;
     }
 
     private async Task ExecuteBulkIgnore()
@@ -935,14 +941,14 @@
             bulkIgnoreStatus = "";
             selectedProperties.Clear();
             selectAll = false;
-            await bulkIgnoreModal.HideAsync();
+            showBulkIgnoreModal = false;
             StateHasChanged();
         }
     }
 
-    private async Task CancelBulkIgnore()
+    private void CancelBulkIgnore()
     {
-        await bulkIgnoreModal.HideAsync();
+        showBulkIgnoreModal = false;
     }
 
     private void ClearAllSelections()

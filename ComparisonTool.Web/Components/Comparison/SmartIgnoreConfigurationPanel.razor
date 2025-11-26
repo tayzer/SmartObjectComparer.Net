@@ -1,189 +1,221 @@
 @using ComparisonTool.Core.Comparison.Configuration
-@using BlazorBootstrap
+@using MudBlazor
 
-<Card>
-    <CardHeader>
-        <div class="d-flex justify-content-between align-items-center">
-            <h6 class="mb-0">
-                <i class="bi bi-magic"></i> Smart Ignore Rules
-                <span class="badge bg-secondary ms-2">@SmartIgnoreRules.Count active</span>
-            </h6>
-            <div class="btn-group btn-group-sm">
-                <Button Color="ButtonColor.Success" Size="ButtonSize.Small" @onclick="ShowPresetsModal">
-                    <i class="bi bi-star"></i> Presets
-                </Button>
-                <Button Color="ButtonColor.Secondary" Size="ButtonSize.Small" @onclick="ShowCustomRuleModal">
-                    <i class="bi bi-plus"></i> Custom Rule
-                </Button>
-                <Button Color="ButtonColor.Danger" Size="ButtonSize.Small" @onclick="ClearAllRules" 
-                        Disabled="@(!SmartIgnoreRules.Any())">
-                    <i class="bi bi-trash"></i> Clear All
-                </Button>
-            </div>
-        </div>
-    </CardHeader>
-    <CardBody>
+<MudPaper Elevation="2" Class="pa-4">
+    <MudStack Spacing="3">
+        <!-- Header -->
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Color="Color.Primary" />
+                <MudText Typo="Typo.h6">Smart Ignore Rules</MudText>
+                <MudChip T="string" Size="Size.Small" Color="Color.Secondary">@SmartIgnoreRules.Count active</MudChip>
+            </MudStack>
+            <MudStack Row="true" Spacing="1">
+                <MudButton Variant="Variant.Outlined" 
+                           Size="Size.Small"
+                           Color="Color.Success"
+                           StartIcon="@Icons.Material.Filled.Star"
+                           OnClick="ShowPresetsDialog">
+                    Presets
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" 
+                           Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="ShowCustomRuleDialog">
+                    Custom Rule
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" 
+                           Size="Size.Small"
+                           Color="Color.Error"
+                           StartIcon="@Icons.Material.Filled.Delete"
+                           OnClick="ClearAllRules" 
+                           Disabled="@(!SmartIgnoreRules.Any())">
+                    Clear All
+                </MudButton>
+            </MudStack>
+        </MudStack>
+
+        <!-- Body -->
         @if (!SmartIgnoreRules.Any())
         {
-            <div class="alert alert-info">
-                <i class="bi bi-info-circle"></i>
-                No smart ignore rules configured. Use <strong>Presets</strong> for quick setup or <strong>Custom Rule</strong> for specific needs.
-            </div>
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Info" />
+                    <MudText>No smart ignore rules configured. Use <strong>Presets</strong> for quick setup or <strong>Custom Rule</strong> for specific needs.</MudText>
+                </MudStack>
+            </MudAlert>
         }
         else
         {
-            <div class="row">
-                <div class="col-md-6">
-                    <h6>Quick Toggles</h6>
-                    <div class="form-check mb-2">
-                        <input class="form-check-input" type="checkbox" id="toggleIdFields" 
-                               checked="@HasIdFieldsRule" @onchange="ToggleIdFields">
-                        <label class="form-check-label" for="toggleIdFields">
-                            <i class="bi bi-key text-primary"></i> Ignore ID fields (Id, Guid, Key, etc.)
-                        </label>
-                    </div>
-                    <div class="form-check mb-2">
-                        <input class="form-check-input" type="checkbox" id="toggleTimestamps" 
-                               checked="@HasTimestampsRule" @onchange="ToggleTimestamps">
-                        <label class="form-check-label" for="toggleTimestamps">
-                            <i class="bi bi-clock text-warning"></i> Ignore timestamps (DateTime, CreatedDate, etc.)
-                        </label>
-                    </div>
-                    <div class="form-check mb-2">
-                        <input class="form-check-input" type="checkbox" id="toggleMetadata" 
-                               checked="@HasMetadataRule" @onchange="ToggleMetadata">
-                        <label class="form-check-label" for="toggleMetadata">
-                            <i class="bi bi-database text-info"></i> Ignore metadata (Version, ETag, etc.)
-                        </label>
-                    </div>
-                    <div class="form-check mb-2">
-                        <input class="form-check-input" type="checkbox" id="toggleCollectionOrder" 
-                               checked="@HasCollectionOrderRule" @onchange="ToggleCollectionOrder">
-                        <label class="form-check-label" for="toggleCollectionOrder">
-                            <i class="bi bi-list-ol text-success"></i> Ignore collection ordering
-                        </label>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <h6>Active Rules</h6>
-                    <div style="max-height: 200px; overflow-y: auto;">
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Quick Toggles</MudText>
+                    <MudStack Spacing="1">
+                        <MudSwitch T="bool"
+                                   Value="HasIdFieldsRule"
+                                   ValueChanged="@((bool val) => ToggleIdFields())"
+                                   Color="Color.Primary"
+                                   Label="Ignore ID fields (Id, Guid, Key, etc.)" />
+                        <MudSwitch T="bool"
+                                   Value="HasTimestampsRule"
+                                   ValueChanged="@((bool val) => ToggleTimestamps())"
+                                   Color="Color.Warning"
+                                   Label="Ignore timestamps (DateTime, CreatedDate, etc.)" />
+                        <MudSwitch T="bool"
+                                   Value="HasMetadataRule"
+                                   ValueChanged="@((bool val) => ToggleMetadata())"
+                                   Color="Color.Info"
+                                   Label="Ignore metadata (Version, ETag, etc.)" />
+                        <MudSwitch T="bool"
+                                   Value="HasCollectionOrderRule"
+                                   ValueChanged="@((bool val) => ToggleCollectionOrder())"
+                                   Color="Color.Success"
+                                   Label="Ignore collection ordering" />
+                    </MudStack>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Active Rules</MudText>
+                    <MudPaper Outlined="true" Style="max-height: 200px; overflow-y: auto;">
                         @foreach (var rule in SmartIgnoreRules.Where(r => r.IsEnabled).OrderBy(r => r.Type).ThenBy(r => r.Value))
                         {
-                            <div class="d-flex justify-content-between align-items-center mb-1 p-2 border rounded">
-                                <div>
-                                    <small class="text-muted">@GetRuleTypeIcon(rule.Type)</small>
-                                    <span class="small">@rule.Description</span>
-                                </div>
-                                <button class="btn btn-outline-secondary btn-sm" 
-                                        @onclick="() => RemoveRule(rule)">
-                                    <i class="bi bi-x"></i>
-                                </button>
-                            </div>
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pa-2">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@GetRuleTypeIcon(rule.Type)</MudText>
+                                    <MudText Typo="Typo.body2">@rule.Description</MudText>
+                                </MudStack>
+                                <MudIconButton Icon="@Icons.Material.Filled.Close"
+                                               Size="Size.Small"
+                                               Color="Color.Default"
+                                               OnClick="@(() => RemoveRule(rule))" />
+                            </MudStack>
+                            <MudDivider />
                         }
-                    </div>
-                </div>
-            </div>
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
         }
-    </CardBody>
-</Card>
+    </MudStack>
+</MudPaper>
 
-<!-- Presets Modal -->
-<Modal @ref="presetsModal" Title="Smart Ignore Presets" Size="ModalSize.Large">
-    <BodyTemplate>
-        <div class="row">
+<!-- Presets Dialog -->
+<MudDialog @bind-Visible="showPresetsDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Smart Ignore Presets</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
             @foreach (var preset in SmartIgnorePresets.AllPresets)
             {
-                <div class="col-md-6 mb-3">
-                    <div class="card h-100">
-                        <div class="card-body">
-                            <h6 class="card-title">
-                                @GetPresetIcon(preset.Key) @preset.Key
-                                <span class="badge bg-secondary ms-2">@preset.Value.Count rules</span>
-                            </h6>
-                            <p class="card-text small text-muted">
+                <MudItem xs="12" md="6">
+                    <MudPaper Elevation="1" Class="pa-3" Style="height: 100%;">
+                        <MudStack Spacing="2">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudText Typo="Typo.subtitle1">@GetPresetIcon(preset.Key) @preset.Key</MudText>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Secondary">@preset.Value.Count rules</MudChip>
+                            </MudStack>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
                                 @GetPresetDescription(preset.Key)
-                            </p>
-                            <div class="mb-2">
-                                <small class="text-muted">Rules:</small>
-                                <ul class="small mb-2">
-                                    @foreach (var rule in preset.Value.Take(3))
-                                    {
-                                        <li>@rule.Description</li>
-                                    }
-                                    @if (preset.Value.Count > 3)
-                                    {
-                                        <li><em>...and @(preset.Value.Count - 3) more</em></li>
-                                    }
-                                </ul>
-                            </div>
-                            <Button Color="ButtonColor.Primary" Size="ButtonSize.Small" 
-                                    @onclick="() => ApplyPreset(preset.Key)" class="w-100">
+                            </MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Rules:</MudText>
+                            <ul style="font-size: 0.85rem; margin: 0; padding-left: 1.25rem;">
+                                @foreach (var rule in preset.Value.Take(3))
+                                {
+                                    <li>@rule.Description</li>
+                                }
+                                @if (preset.Value.Count > 3)
+                                {
+                                    <li><em>...and @(preset.Value.Count - 3) more</em></li>
+                                }
+                            </ul>
+                            <MudButton Variant="Variant.Filled" 
+                                       Color="Color.Primary" 
+                                       Size="Size.Small"
+                                       FullWidth="true"
+                                       OnClick="@(() => ApplyPreset(preset.Key))">
                                 Apply Preset
-                            </Button>
-                        </div>
-                    </div>
-                </div>
+                            </MudButton>
+                        </MudStack>
+                    </MudPaper>
+                </MudItem>
             }
-        </div>
-    </BodyTemplate>
-    <FooterTemplate>
-        <Button Color="ButtonColor.Secondary" @onclick="ClosePresetsModal">Close</Button>
-    </FooterTemplate>
-</Modal>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="ClosePresetsDialog">Close</MudButton>
+    </DialogActions>
+</MudDialog>
 
-<!-- Custom Rule Modal -->
-<Modal @ref="customRuleModal" Title="Add Custom Ignore Rule">
-    <BodyTemplate>
-        <div class="mb-3">
-            <label class="form-label">Rule Type</label>
-            <select class="form-select" @bind="NewRuleType">
-                <option value="@SmartIgnoreType.PropertyName">Property Name (exact match)</option>
-                <option value="@SmartIgnoreType.NamePattern">Name Pattern (with wildcards)</option>
-                <option value="@SmartIgnoreType.PropertyType">Property Type</option>
-            </select>
-        </div>
-        
-        <div class="mb-3">
-            <label class="form-label">Value</label>
+<!-- Custom Rule Dialog -->
+<MudDialog @bind-Visible="showCustomRuleDialog">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Add Custom Ignore Rule</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudSelect T="SmartIgnoreType" 
+                       Value="NewRuleType"
+                       ValueChanged="@((SmartIgnoreType val) => NewRuleType = val)"
+                       Label="Rule Type"
+                       Variant="Variant.Outlined">
+                <MudSelectItem Value="SmartIgnoreType.PropertyName">Property Name (exact match)</MudSelectItem>
+                <MudSelectItem Value="SmartIgnoreType.NamePattern">Name Pattern (with wildcards)</MudSelectItem>
+                <MudSelectItem Value="SmartIgnoreType.PropertyType">Property Type</MudSelectItem>
+            </MudSelect>
+            
             @if (NewRuleType == SmartIgnoreType.PropertyName)
             {
-                <input type="text" class="form-control" @bind="NewRuleValue" 
-                       placeholder="e.g., Id, Timestamp, Status">
-                <small class="form-text text-muted">Enter exact property name to ignore</small>
+                <MudTextField T="string" 
+                              Value="NewRuleValue"
+                              ValueChanged="@((string val) => NewRuleValue = val)"
+                              Label="Value"
+                              Variant="Variant.Outlined"
+                              Placeholder="e.g., Id, Timestamp, Status"
+                              HelperText="Enter exact property name to ignore" />
             }
             else if (NewRuleType == SmartIgnoreType.NamePattern)
             {
-                <input type="text" class="form-control" @bind="NewRuleValue" 
-                       placeholder="e.g., *Id, Request*, *Date">
-                <small class="form-text text-muted">Use * for wildcards (e.g., *Id ignores UserId, ProductId, etc.)</small>
+                <MudTextField T="string" 
+                              Value="NewRuleValue"
+                              ValueChanged="@((string val) => NewRuleValue = val)"
+                              Label="Value"
+                              Variant="Variant.Outlined"
+                              Placeholder="e.g., *Id, Request*, *Date"
+                              HelperText="Use * for wildcards (e.g., *Id ignores UserId, ProductId, etc.)" />
             }
             else if (NewRuleType == SmartIgnoreType.PropertyType)
             {
-                <select class="form-select" @bind="NewRuleValue">
-                    <option value="System.DateTime">DateTime</option>
-                    <option value="System.Guid">Guid</option>
-                    <option value="System.String">String</option>
-                    <option value="System.Int32">Integer</option>
-                    <option value="System.Boolean">Boolean</option>
-                </select>
-                <small class="form-text text-muted">All properties of this type will be ignored</small>
+                <MudSelect T="string" 
+                           Value="NewRuleValue"
+                           ValueChanged="@((string val) => NewRuleValue = val)"
+                           Label="Property Type"
+                           Variant="Variant.Outlined"
+                           HelperText="All properties of this type will be ignored">
+                    <MudSelectItem Value="@("System.DateTime")">DateTime</MudSelectItem>
+                    <MudSelectItem Value="@("System.Guid")">Guid</MudSelectItem>
+                    <MudSelectItem Value="@("System.String")">String</MudSelectItem>
+                    <MudSelectItem Value="@("System.Int32")">Integer</MudSelectItem>
+                    <MudSelectItem Value="@("System.Boolean")">Boolean</MudSelectItem>
+                </MudSelect>
             }
-        </div>
-        
-        <div class="mb-3">
-            <label class="form-label">Description (optional)</label>
-            <input type="text" class="form-control" @bind="NewRuleDescription" 
-                   placeholder="Describe what this rule does">
-        </div>
-    </BodyTemplate>
-    <FooterTemplate>
-        <Button Color="ButtonColor.Primary" @onclick="AddCustomRule" 
-                Disabled="@string.IsNullOrWhiteSpace(NewRuleValue)">
+            
+            <MudTextField T="string" 
+                          Value="NewRuleDescription"
+                          ValueChanged="@((string val) => NewRuleDescription = val)"
+                          Label="Description (optional)"
+                          Variant="Variant.Outlined"
+                          Placeholder="Describe what this rule does" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="CloseCustomRuleDialog">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" 
+                   Color="Color.Primary" 
+                   OnClick="AddCustomRule" 
+                   Disabled="@string.IsNullOrWhiteSpace(NewRuleValue)">
             Add Rule
-        </Button>
-        <Button Color="ButtonColor.Secondary" @onclick="CloseCustomRuleModal">Cancel</Button>
-    </FooterTemplate>
-</Modal>
+        </MudButton>
+    </DialogActions>
+</MudDialog>
 
 @code {
     [Parameter] public List<SmartIgnoreRule> SmartIgnoreRules { get; set; } = new();
@@ -192,8 +224,8 @@
     [Parameter] public EventCallback<string> OnPresetApplied { get; set; }
     [Parameter] public EventCallback OnRulesCleared { get; set; }
 
-    private Modal presetsModal;
-    private Modal customRuleModal;
+    private bool showPresetsDialog = false;
+    private bool showCustomRuleDialog = false;
 
     // Custom rule creation
     private SmartIgnoreType NewRuleType = SmartIgnoreType.PropertyName;
@@ -206,25 +238,25 @@
     private bool HasMetadataRule => SmartIgnoreRules.Any(r => r.Value == "Version" && r.Type == SmartIgnoreType.PropertyName);
     private bool HasCollectionOrderRule => SmartIgnoreRules.Any(r => r.Type == SmartIgnoreType.CollectionOrdering);
 
-    private async Task ShowPresetsModal()
+    private void ShowPresetsDialog()
     {
-        await presetsModal.ShowAsync();
+        showPresetsDialog = true;
     }
 
-    private async Task ClosePresetsModal()
+    private void ClosePresetsDialog()
     {
-        await presetsModal.HideAsync();
+        showPresetsDialog = false;
     }
 
-    private async Task ShowCustomRuleModal()
+    private void ShowCustomRuleDialog()
     {
         ResetCustomRuleForm();
-        await customRuleModal.ShowAsync();
+        showCustomRuleDialog = true;
     }
 
-    private async Task CloseCustomRuleModal()
+    private void CloseCustomRuleDialog()
     {
-        await customRuleModal.HideAsync();
+        showCustomRuleDialog = false;
     }
 
     private void ResetCustomRuleForm()
@@ -237,7 +269,7 @@
     private async Task ApplyPreset(string presetName)
     {
         await OnPresetApplied.InvokeAsync(presetName);
-        await ClosePresetsModal();
+        ClosePresetsDialog();
         StateHasChanged();
     }
 
@@ -257,7 +289,7 @@
         };
 
         await OnRuleAdded.InvokeAsync(rule);
-        await CloseCustomRuleModal();
+        CloseCustomRuleDialog();
         StateHasChanged();
     }
 
@@ -398,17 +430,3 @@
         };
     }
 }
-
-<style>
-    .cursor-pointer {
-        cursor: pointer;
-    }
-    
-    .form-check-label {
-        cursor: pointer;
-    }
-    
-    .card-text ul {
-        padding-left: 1rem;
-    }
-</style> 

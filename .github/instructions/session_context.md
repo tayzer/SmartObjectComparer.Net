@@ -1,60 +1,64 @@
 ---
 applyTo: '**'
-lastUpdated: 2025-11-25T17:25:00Z
+lastUpdated: 2025-11-26T10:00:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-Performance optimization analysis and implementation for file comparison tool
+Improve Tree Navigator (Visual Property Selection) usability for setting ignore rules
 
 ## Todo List Status
 ```markdown
-- [x] Analyze I/O & Deserialization bottlenecks
-- [x] Analyze Concurrency issues
-- [x] Analyze Memory Pressure issues
-- [x] Analyze CompareLogic configuration
-- [x] Create optimized ComparisonEngine with ThreadLocal caching
-- [x] Create HighPerformanceComparisonPipeline with Channels
-- [x] Update ComparisonResultCacheService with XxHash64
-- [x] Remove forced GC.Collect from DirectoryComparisonService
-- [x] Remove MD5 hashing from XmlDeserializationService
+- [x] Analyze current Tree Navigator UX issues
+- [x] Convert ObjectTreePropertySelector to MudBlazor fully
+- [x] Improve search/filter UX with MudBlazor components
+- [x] Enhance tree navigation with better visual hierarchy
+- [x] Improve property configuration panel usability
+- [x] Add better visual feedback and status indicators
+- [x] Test the application compiles and runs
 ```
 
 ## Recent File Changes
-- `ComparisonTool.Core/Comparison/HighPerformanceComparisonPipeline.cs` (NEW): Channel-based producer-consumer pipeline
-- `ComparisonTool.Core/Comparison/ComparisonEngine.cs`: Added ThreadLocal caching, IDisposable, CompareObjectsSync()
-- `ComparisonTool.Core/Comparison/ComparisonResultCacheService.cs`: XxHash64 instead of SHA256
-- `ComparisonTool.Core/Comparison/DirectoryComparisonService.cs`: Removed forced GC, throttled progress
-- `ComparisonTool.Core/Serialization/XmlDeserializationService.cs`: Removed MD5 hashing in hot path
+- `ObjectTreePropertySelector.razor`: Full MudBlazor conversion with improved UX:
+  - Replaced Bootstrap classes with MudBlazor components (MudGrid, MudItem, MudPaper, MudStack)
+  - Enhanced search with MudTextField with debounce, clearable, and icon adornment
+  - Filter dropdown using MudMenu with icons and visual selection indicators
+  - Active filter chips showing current filters with close buttons
+  - MudBreadcrumbs for navigation with proper items template
+  - Tree nodes with better visual hierarchy using MudStack, MudCheckBox, MudIcon
+  - Property configuration panel with clear sections and MudDividers
+  - Quick Add Common Ignores section with MudButton list
+  - Currently Ignored Properties table using MudSimpleTable
+  - Help modal with MudExpansionPanels for organized help content
+  - Bulk ignore modal with progress indicators
 
 ## Key Technical Decisions
-- Decision: Use System.Threading.Channels for producer-consumer pattern
-- Rationale: Separates I/O-bound and CPU-bound work for better throughput
-- Date: 2025-11-25
+- Decision: Convert ObjectTreePropertySelector from Bootstrap to full MudBlazor
+- Rationale: User requested improved usability for ignore rules navigation; MudBlazor provides better component consistency and UX patterns
+- Date: 2025-11-26
 
-- Decision: ThreadLocal<CompareLogic> instead of new instance per file
-- Rationale: Avoids allocation overhead while maintaining thread safety
-- Date: 2025-11-25
-
-- Decision: XxHash64 instead of MD5/SHA256 for cache keys
-- Rationale: 2-3x faster, non-cryptographic hashing is sufficient for cache keys
-- Date: 2025-11-25
+- Technical Notes:
+  - Used span wrapper with @onclick:stopPropagation for tree folder icons (MudIconButton doesn't support StopClickPropagation)
+  - Used MudCheckBox with StopClickPropagation="true" for inline selection
+  - Removed IsInitiallyExpanded from MudExpansionPanel (not valid in current MudBlazor version)
 
 ## Environment Notes
-- Dependencies installed: System.IO.Hashing@10.0.0
+- Dependencies installed: MudBlazor 8.15.0
 - .NET 8.0 target framework
+- Build status: Succeeding with warnings (nullable, StyleCop - no errors)
 
 ## Next Session Priority
-No active tasks - optimization complete
+No active tasks - Tree Navigator usability improvements complete
 
 ## Session Notes
-Created comprehensive performance analysis with multiple optimizations:
-1. Channel-based pipeline for I/O/CPU separation
-2. ThreadLocal CompareLogic caching
-3. Object pooling for DifferenceCategorizer
-4. XxHash64 for faster hashing
-5. Throttled progress reporting
-6. Removed forced GC.Collect
-7. Removed redundant MD5 hashing
+Successfully converted ObjectTreePropertySelector from Bootstrap/hybrid to full MudBlazor with significant UX improvements:
+1. Search with debounce and clearable input
+2. Filter dropdown with visual indicators
+3. Active filter chips for clear feedback
+4. Improved tree hierarchy with better icons and spacing
+5. Selection checkboxes with proper event handling
+6. Quick add common ignores feature
+7. Better property configuration panel layout
+8. Responsive grid layout using MudGrid
