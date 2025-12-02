@@ -529,10 +529,12 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
                             CancellationToken = cancellationToken,
                         },
                         async (filePair, ct) => {
-                            try {
-                                var (file1Path, file2Path, relativePath) = filePair;
+                            var (file1Path, file2Path, relativePath) = filePair;
+                            var file1Name = Path.GetFileName(file1Path);
+                            var file2Name = Path.GetFileName(file2Path);
 
-                                var operationId = this.performanceTracker.StartOperation($"Compare_File_{Path.GetFileName(file1Path)}");
+                            try {
+                                var operationId = this.performanceTracker.StartOperation($"Compare_File_{file1Name}");
 
                                 try {
                                     // Open file streams without loading entirely into memory
@@ -554,8 +556,8 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
 
                                     // Create result
                                     var pairResult = new FilePairComparisonResult {
-                                        File1Name = Path.GetFileName(file1Path),
-                                        File2Name = Path.GetFileName(file2Path),
+                                        File1Name = file1Name,
+                                        File2Name = file2Name,
                                         Result = comparisonResult,
                                         Summary = summary,
                                     };
@@ -573,8 +575,21 @@ public class ComparisonOrchestrator : IComparisonOrchestrator {
                                 }
                             }
                             catch (Exception ex) {
-                                this.logger.LogError(ex, "Error comparing files {File1} and {File2}",
-                                    filePair.file1Path, filePair.file2Path);
+                                this.logger.LogError(ex, "Error comparing files {File1} and {File2}: {Message}",
+                                    file1Path, file2Path, ex.Message);
+
+                                // CRITICAL FIX: Create an error result instead of silently skipping
+                                var errorResult = new FilePairComparisonResult {
+                                    File1Name = file1Name,
+                                    File2Name = file2Name,
+                                    ErrorMessage = ex.Message,
+                                    ErrorType = ex.GetType().Name,
+                                };
+
+                                filePairResults.Add(errorResult);
+
+                                // Mark as not equal since we couldn't determine the result
+                                Interlocked.Exchange(ref equalityFlag, 0);
                             }
 
                             // Update progress

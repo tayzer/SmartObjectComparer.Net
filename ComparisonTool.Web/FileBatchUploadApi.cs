@@ -30,16 +30,8 @@ namespace ComparisonTool.Web {
                 var uploadedFiles = new ConcurrentBag<string>();
                 var tempPath = Path.Combine(Path.GetTempPath(), "ComparisonToolUploads");
 
-                // Clear old temp files (optional, but helps manage disk space)
-                if (Directory.Exists(tempPath) &&
-                    Directory.GetCreationTime(tempPath) < DateTime.Now.AddDays(-1)) {
-                    try {
-                        Directory.Delete(tempPath, true);
-                    }
-                    catch {
-                        // Ignore errors when cleaning up temp
-                    }
-                }
+                // NOTE: Cleanup moved to application startup to avoid race conditions
+                // during parallel batch uploads. Old files will be cleaned on next app start.
 
                 // Create the uploads directory if it doesn't exist
                 if (!Directory.Exists(tempPath)) {

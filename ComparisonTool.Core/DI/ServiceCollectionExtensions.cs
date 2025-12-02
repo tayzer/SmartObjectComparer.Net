@@ -101,6 +101,9 @@ public static class ServiceCollectionExtensions {
 
         services.AddSingleton<IFileSystemService, FileSystemService>();
 
+        // Add comparison logging service for detailed comparison tracking
+        services.AddSingleton<IComparisonLogService, ComparisonLogService>();
+
         services.AddScoped<DirectoryComparisonService>();
 
         return services;

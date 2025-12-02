@@ -1,737 +1,619 @@
-@namespace ComparisonTool.Web.Components.Comparison
+﻿@namespace ComparisonTool.Web.Components.Comparison
 @using ComparisonTool.Core.Comparison.Analysis
 @using ComparisonTool.Core.Comparison.Results
 @using KellermanSoftware.CompareNetObjects
-@using Microsoft.AspNetCore.Components.Rendering
 
 <style>
-    /* Main Dashboard Styles */
-    .summary-dashboard {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border-radius: 0.5rem;
-        padding: 2rem;
-        margin-bottom: 2rem;
+    /* Visual Diff Styles */
+    .diff-expected {
+        background-color: rgba(46, 125, 50, 0.15);
+        border-left: 3px solid #2e7d32;
+        padding: 0.5rem;
+        border-radius: 4px;
+        font-family: 'Consolas', 'Monaco', monospace;
     }
     
-    .metric-card {
-        background: rgba(255, 255, 255, 0.1);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 0.375rem;
-        padding: 1.5rem;
-        text-align: center;
-        backdrop-filter: blur(10px);
+    .diff-actual {
+        background-color: rgba(211, 47, 47, 0.15);
+        border-left: 3px solid #d32f2f;
+        padding: 0.5rem;
+        border-radius: 4px;
+        font-family: 'Consolas', 'Monaco', monospace;
     }
     
-    .metric-number {
-        font-size: 2.5rem;
-        font-weight: 700;
-        margin-bottom: 0.5rem;
+    .diff-value-expected {
+        background-color: rgba(46, 125, 50, 0.25);
+        color: #1b5e20;
+        font-weight: 600;
+        padding: 2px 6px;
+        border-radius: 3px;
     }
     
-    .metric-label {
-        font-size: 0.9rem;
-        opacity: 0.9;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-    
-    /* Inspector Section Styles */
-    .inspector-section {
-        border: 1px solid #dee2e6;
-        border-radius: 0.5rem;
-        margin-bottom: 1.5rem;
-        overflow: hidden;
-    }
-    
-    .inspector-header {
-        padding: 1rem 1.5rem;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }
-    
-    .inspector-header:hover {
-        background-color: #f8f9fa;
-    }
-    
-    .inspector-content {
-        border-top: 1px solid #dee2e6;
-        background: white;
+    .diff-value-actual {
+        background-color: rgba(211, 47, 47, 0.25);
+        color: #b71c1c;
+        font-weight: 600;
+        padding: 2px 6px;
+        border-radius: 3px;
     }
     
     /* Property Tree Styles */
-    .property-tree {
-        background: #f8f9fa;
-        border-right: 1px solid #dee2e6;
-        max-height: 600px;
+    .property-tree-container {
+        max-height: 500px;
         overflow-y: auto;
+        border-right: 1px solid var(--mud-palette-lines-default);
     }
     
     .property-node {
-        padding: 0.75rem 1rem;
-        border-bottom: 1px solid #e9ecef;
+        padding: 8px 12px;
         cursor: pointer;
-        transition: all 0.15s ease;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
+        border-bottom: 1px solid var(--mud-palette-lines-default);
+        transition: background-color 0.15s;
     }
     
     .property-node:hover {
-        background-color: #e9ecef;
+        background-color: var(--mud-palette-action-default-hover);
     }
     
     .property-node.selected {
-        background-color: #007bff;
+        background-color: var(--mud-palette-primary);
         color: white;
     }
     
-    .property-badge {
-        background: #6c757d;
+    .property-node.selected .mud-chip {
+        background-color: rgba(255,255,255,0.3);
         color: white;
-        border-radius: 1rem;
-        padding: 0.25rem 0.5rem;
-        font-size: 0.75rem;
-        font-weight: 600;
     }
     
-    .property-badge.value-badge {
-        background: #007bff;
-    }
-    
-    .property-badge.order-badge {
-        background: #6f42c1;
-    }
-    
-    .property-badge.critical-badge {
-        background: #dc3545;
-    }
-    
-    /* Details Panel Styles */
     .details-panel {
-        background: white;
-        max-height: 600px;
+        max-height: 500px;
         overflow-y: auto;
-        padding: 1.5rem;
+        padding: 16px;
     }
     
-    .file-comparison {
-        border: 1px solid #dee2e6;
-        border-radius: 0.25rem;
-        margin-bottom: 1rem;
-        overflow: hidden;
-    }
-    
-    .file-header {
-        background: #f8f9fa;
-        padding: 0.75rem 1rem;
-        border-bottom: 1px solid #dee2e6;
-        font-weight: 600;
-    }
-    
-    .value-comparison {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 1px;
-        background: #dee2e6;
-    }
-    
-    .value-side {
-        background: white;
-        padding: 1rem;
-    }
-    
-    .value-side.expected {
-        background: #f8f9fa;
-    }
-    
-    .value-side.actual {
-        background: #fff3cd;
-    }
-    
-    .value-highlight {
-        background: #ffeb3b;
-        padding: 0.125rem 0.25rem;
-        border-radius: 0.125rem;
-    }
-    
-    /* Order Visualization Styles */
-    .order-visualization {
-        padding: 1rem;
-        background: #f8f9fa;
-        border-radius: 0.25rem;
-    }
-    
-    .order-list {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-    }
-    
-    .order-item {
-        padding: 0.5rem;
-        background: white;
-        border: 1px solid #dee2e6;
-        border-radius: 0.25rem;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    
-    .order-item.moved {
-        border-color: #ffc107;
-        background: #fff3cd;
-    }
-    
-    .order-index {
-        background: #6c757d;
-        color: white;
-        border-radius: 50%;
-        width: 1.5rem;
-        height: 1.5rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.75rem;
-        font-weight: 600;
-    }
-    
-    /* Hierarchical Tree Styles */
-    .tree-node {
-        padding: 0.5rem;
-        margin: 0.125rem 0;
-        cursor: pointer;
-        transition: all 0.15s ease;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        border-radius: 0.25rem;
-    }
-    
-    .tree-node:hover {
-        background-color: #e9ecef;
-    }
-    
-    .tree-node.selected {
-        background-color: #007bff;
-        color: white;
-    }
-    
-    .tree-node.has-differences {
-        border-left: 3px solid #007bff;
-        background-color: #f8f9fa;
-    }
-    
-    .tree-node.has-differences:hover {
-        background-color: #e9ecef;
-    }
-    
-    .tree-node.selected.has-differences {
-        background-color: #007bff;
-        border-left-color: #fff;
-    }
-    
-    .tree-node-content {
-        display: flex;
-        align-items: center;
-        flex-grow: 1;
-    }
-    
-    .tree-indent {
-        width: 1.5rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    
-    .tree-expander {
-        width: 1rem;
-        height: 1rem;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-right: 0.5rem;
-        font-size: 0.75rem;
-        color: #6c757d;
-    }
-    
-    .tree-expander:hover {
-        color: #007bff;
-    }
-    
-    .tree-icon {
-        margin-right: 0.5rem;
-        color: #6c757d;
-    }
-    
-    .tree-icon.has-differences {
-        color: #007bff;
-    }
-    
-    .tree-label {
-        font-weight: 500;
-    }
-    
-    .tree-badge {
-        background: #007bff;
-        color: white;
-        border-radius: 1rem;
-        padding: 0.125rem 0.5rem;
-        font-size: 0.75rem;
-        font-weight: 600;
-    }
-    
-    .tree-children {
-        margin-left: 1.5rem;
-    }
-    
-    .order-index.moved {
-        background: #ffc107;
-        color: #212529;
+    .file-diff-card {
+        margin-bottom: 12px;
     }
 </style>
 
-<!-- Main Summary Dashboard -->
-<div class="summary-dashboard">
-    <div class="row align-items-center mb-4">
-        <div class="col">
-            <h3 class="mb-1">
-                <i class="bi bi-clipboard-data me-2"></i>
+<!-- Summary Header with MudPaper and MudChips -->
+<MudPaper Elevation="3" Class="pa-4 mb-4" Style="background: linear-gradient(135deg, #1976d2 0%, #7b1fa2 100%);">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.h5" Style="color: white;">
+                <MudIcon Icon="@Icons.Material.Filled.Assessment" Class="mr-2" />
                 Comparison Run Details
-            </h3>
-            <p class="mb-0 opacity-75">In-depth analysis of differences between expected and actual results</p>
-        </div>
-        <div class="col-auto">
-            <div class="d-flex gap-2">
-                <button class="btn btn-outline-light btn-sm" @onclick="RefreshAnalysis">
-                    <i class="bi bi-arrow-clockwise me-1"></i>
-                    Refresh
-                </button>
-                <button class="btn btn-outline-light btn-sm" @onclick="ExportResults">
-                    <i class="bi bi-download me-1"></i>
-                    Export
-                </button>
-            </div>
-        </div>
-    </div>
+            </MudText>
+            <MudText Typo="Typo.body2" Style="color: rgba(255,255,255,0.8);">
+                In-depth analysis of differences between expected and actual results
+            </MudText>
+        </MudStack>
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Outlined" 
+                       Color="Color.Default" 
+                       Size="Size.Small" 
+                       StartIcon="@Icons.Material.Filled.Refresh"
+                       Style="color: white; border-color: rgba(255,255,255,0.5);"
+                       OnClick="RefreshAnalysis">
+                Refresh
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" 
+                       Color="Color.Default" 
+                       Size="Size.Small" 
+                       StartIcon="@Icons.Material.Filled.Download"
+                       Style="color: white; border-color: rgba(255,255,255,0.5);"
+                       OnClick="ExportResults">
+                Export
+            </MudButton>
+        </MudStack>
+    </MudStack>
     
-    <div class="row g-3">
-        <div class="col-md-2">
-            <div class="metric-card">
-                <div class="metric-number">@GetTotalFilesAnalyzed()</div>
-                <div class="metric-label">Total Files Analyzed</div>
-            </div>
-        </div>
-        <div class="col-md-2">
-            <div class="metric-card">
-                <div class="metric-number">@GetTotalFilesWithDifferences()</div>
-                <div class="metric-label">Files with Differences</div>
-            </div>
-        </div>
-        <div class="col-md-2">
-            <div class="metric-card">
-                <div class="metric-number text-info">@GetValueDifferencesCount()</div>
-                <div class="metric-label">Value Differences</div>
-            </div>
-        </div>
-        <div class="col-md-2">
-            <div class="metric-card">
-                <div class="metric-number text-warning">@GetOrderingDifferencesCount()</div>
-                <div class="metric-label">Ordering Differences</div>
-            </div>
-        </div>
-        <div class="col-md-2">
-            <div class="metric-card">
-                <div class="metric-number text-danger">@GetCriticalIssuesCount()</div>
-                <div class="metric-label">Critical Issues</div>
-            </div>
-        </div>
-        <div class="col-md-2">
-            <div class="metric-card">
-                <div class="metric-number">@GetTotalDifferencesCount()</div>
-                <div class="metric-label">Total Differences</div>
-            </div>
-        </div>
-    </div>
-</div>
+    <!-- Summary Stats with MudChips -->
+    <MudStack Row="true" Justify="Justify.SpaceAround" Class="flex-wrap" Style="gap: 12px;">
+        <MudTooltip Text="Total file pairs compared (excluding errors)">
+            <MudPaper Elevation="0" Class="pa-3 text-center" Style="background: rgba(255,255,255,0.15); border-radius: 8px; min-width: 130px;">
+                <MudText Typo="Typo.h4" Style="color: white; font-weight: 700;">@GetTotalFilesAnalyzed()</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.9); text-transform: uppercase; font-size: 0.7rem;">Files Analyzed</MudText>
+            </MudPaper>
+        </MudTooltip>
+        <MudTooltip Text="@($"Files with at least one difference ({GetFilesWithoutDifferences()} files are identical)")">
+            <MudPaper Elevation="0" Class="pa-3 text-center" Style="background: rgba(255,255,255,0.15); border-radius: 8px; min-width: 130px;">
+                <MudText Typo="Typo.h4" Style="color: white; font-weight: 700;">@GetTotalFilesWithDifferences()</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.9); text-transform: uppercase; font-size: 0.7rem;">With Differences</MudText>
+            </MudPaper>
+        </MudTooltip>
+        @if (GetFilesWithErrorsCount() > 0)
+        {
+            <MudTooltip Text="Files that failed during comparison (click for details)">
+                <MudPaper Elevation="0" Class="pa-3 text-center" Style="background: rgba(244,67,54,0.3); border-radius: 8px; min-width: 130px; border: 1px solid rgba(244,67,54,0.5);">
+                    <MudText Typo="Typo.h4" Style="color: #ffcdd2; font-weight: 700;">@GetFilesWithErrorsCount()</MudText>
+                    <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.9); text-transform: uppercase; font-size: 0.7rem;">Errors</MudText>
+                </MudPaper>
+            </MudTooltip>
+        }
+        <MudTooltip Text="Property value mismatches (numeric, text, boolean, date changes)">
+            <MudPaper Elevation="0" Class="pa-3 text-center" Style="background: rgba(255,255,255,0.15); border-radius: 8px; min-width: 130px;">
+                <MudChip T="string" Color="Color.Info" Size="Size.Large" Style="font-size: 1.25rem; font-weight: 700;">@GetValueDifferencesCount()</MudChip>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.9); text-transform: uppercase; font-size: 0.7rem;">Value Diffs</MudText>
+            </MudPaper>
+        </MudTooltip>
+        <MudTooltip Text="Collection ordering differences (items added, removed, or reordered)">
+            <MudPaper Elevation="0" Class="pa-3 text-center" Style="background: rgba(255,255,255,0.15); border-radius: 8px; min-width: 130px;">
+                <MudChip T="string" Color="Color.Warning" Size="Size.Large" Style="font-size: 1.25rem; font-weight: 700;">@GetOrderingDifferencesCount()</MudChip>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.9); text-transform: uppercase; font-size: 0.7rem;">Order Diffs</MudText>
+            </MudPaper>
+        </MudTooltip>
+        <MudTooltip Text="Structural issues (missing/extra fields, type changes)">
+            <MudPaper Elevation="0" Class="pa-3 text-center" Style="background: rgba(255,255,255,0.15); border-radius: 8px; min-width: 130px;">
+                <MudChip T="string" Color="Color.Error" Size="Size.Large" Style="font-size: 1.25rem; font-weight: 700;">@GetCriticalIssuesCount()</MudChip>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.9); text-transform: uppercase; font-size: 0.7rem;">Critical Issues</MudText>
+            </MudPaper>
+        </MudTooltip>
+        <MudTooltip Text="Sum of all differences across all files">
+            <MudPaper Elevation="0" Class="pa-3 text-center" Style="background: rgba(255,255,255,0.15); border-radius: 8px; min-width: 130px;">
+                <MudText Typo="Typo.h4" Style="color: white; font-weight: 700;">@GetTotalDifferencesCount()</MudText>
+                <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.9); text-transform: uppercase; font-size: 0.7rem;">Total Differences</MudText>
+            </MudPaper>
+        </MudTooltip>
+    </MudStack>
+</MudPaper>
 
-<!-- Value Differences Inspector -->
-<div class="inspector-section">
-    <div class="inspector-header" style="background: linear-gradient(135deg, #007bff, #0056b3); color: white;" @onclick="() => ToggleSection(InspectorSection.ValueDifferences)">
-        <div class="d-flex align-items-center">
-            <i class="bi bi-pencil-square me-3 fs-4"></i>
-            <div>
-                <h5 class="mb-0">Value Differences Inspector</h5>
-                <small class="opacity-75">Standard value changes between expected and actual results</small>
-            </div>
-        </div>
-        <div class="d-flex align-items-center gap-2">
-            <span class="badge bg-light text-dark">@GetValueDifferencesCount() differences</span>
-            <i class="bi @(ExpandedSections.Contains(InspectorSection.ValueDifferences) ? "bi-chevron-up" : "bi-chevron-down") fs-5"></i>
-        </div>
-    </div>
-    
-    @if (ExpandedSections.Contains(InspectorSection.ValueDifferences))
-    {
-        <div class="inspector-content">
-            <!-- View Toggle Tabs -->
-            <div class="border-bottom">
-                <ul class="nav nav-tabs" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link @(ValueViewMode == "flat" ? "active" : "")" 
-                                @onclick='() => ValueViewMode = "flat"'
-                                type="button">
-                            <i class="bi bi-list me-2"></i>
-                            Flat View
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link @(ValueViewMode == "tree" ? "active" : "")" 
-                                @onclick='() => ValueViewMode = "tree"'
-                                type="button">
-                            <i class="bi bi-diagram-3 me-2"></i>
-                            Tree View
-                        </button>
-                    </li>
-                </ul>
-            </div>
-            
-            <div class="row g-0">
-                <!-- Property Tree -->
-                <div class="col-md-4">
-                    <div class="property-tree">
-                        <div class="p-3 border-bottom">
-                            <h6 class="mb-2">
-                                <i class="bi @(ValueViewMode == "tree" ? "bi-diagram-3" : "bi-list") me-2"></i>
-                                Properties with Value Changes
-                            </h6>
-                            <div class="input-group input-group-sm">
-                                <span class="input-group-text">
-                                    <i class="bi bi-search"></i>
-                                </span>
-                                <input type="text" class="form-control" placeholder="Filter properties..." @bind="ValuePropertyFilter" @oninput="FilterValueProperties">
+@if (GetFilesWithErrorsCount() > 0)
+{
+    <MudExpansionPanels Class="mb-4">
+        <MudExpansionPanel Text="@($"⚠️ {GetFilesWithErrorsCount()} file(s) had errors during comparison")" 
+                           MaxHeight="300"
+                           Style="background-color: #fff3e0;">
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true" Class="mb-2">
+                These files could not be compared and are NOT counted as "equal" or "different". 
+                They may affect your difference totals.
+            </MudAlert>
+            <MudList T="string" Dense="true">
+                @foreach (var errorFile in GetFilesWithErrors())
+                {
+                    <MudListItem Icon="@Icons.Material.Filled.Error" IconColor="Color.Error">
+                        <MudStack Spacing="0">
+                            <MudText Typo="Typo.body2"><strong>@errorFile.File1Name</strong></MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Error">@errorFile.ErrorMessage</MudText>
+                        </MudStack>
+                    </MudListItem>
+                }
+            </MudList>
+        </MudExpansionPanel>
+    </MudExpansionPanels>
+}
+
+<!-- Inspectors in MudTabs -->
+<MudPaper Elevation="2" Class="pa-0">
+    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-0" @bind-ActivePanelIndex="ActiveTabIndex">
+        <!-- Value Differences Tab -->
+        <MudTabPanel Text="Value Differences" Icon="@Icons.Material.Filled.Edit" BadgeData="@GetValueDifferencesCount()" BadgeColor="Color.Info">
+            <MudGrid Spacing="0">
+                <!-- Left Panel: Property Tree -->
+                <MudItem xs="12" md="4">
+                    <div class="property-tree-container">
+                        <MudStack Class="pa-3" Spacing="2">
+                            <MudTextField @bind-Value="ValuePropertyFilter" 
+                                          Placeholder="Filter properties..." 
+                                          Variant="Variant.Outlined" 
+                                          Adornment="Adornment.Start" 
+                                          AdornmentIcon="@Icons.Material.Filled.Search"
+                                          Immediate="true"
+                                          Margin="Margin.Dense"
+                                          Size="Size.Small" />
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @GetFilteredValueProperties().Count() properties with differences
+                            </MudText>
+                        </MudStack>
+                        
+                        @foreach (var kvp in GetFilteredValueProperties().OrderBy(x => x.Key))
+                        {
+                            var prop = kvp.Key;
+                            var files = kvp.Value;
+                            var isSelected = prop == SelectedValueProperty;
+                            <div class="property-node @(isSelected ? "selected" : "")" @onclick="@(() => SelectValueProperty(prop))">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                    <MudStack Spacing="0">
+                                        <MudText Typo="Typo.body2" Style="@(isSelected ? "color: white;" : "")">
+                                            <strong>@GetPropertyDisplayName(prop)</strong>
+                                        </MudText>
+                                        <MudText Typo="Typo.caption" Style="@(isSelected ? "color: rgba(255,255,255,0.8);" : "")">
+                                            @prop
+                                        </MudText>
+                                    </MudStack>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info">@files.Count</MudChip>
+                                </MudStack>
                             </div>
-                        </div>
-                        <div class="property-list">
-                            @if (ValueViewMode == "flat")
-                            {
-                                @foreach (var property in GetFilteredValueProperties())
+                        }
+                        
+                        @if (!_valuePropertyGroups.Any())
+                        {
+                            <MudAlert Severity="Severity.Info" Variant="Variant.Text" Class="ma-3">
+                                No value differences found.
+                            </MudAlert>
+                        }
+                    </div>
+                </MudItem>
+                
+                <!-- Right Panel: File Differences -->
+                <MudItem xs="12" md="8">
+                    <div class="details-panel">
+                        @if (!string.IsNullOrEmpty(SelectedValueProperty) && _valuePropertyGroups.ContainsKey(SelectedValueProperty))
+                        {
+                            var files = _valuePropertyGroups[SelectedValueProperty];
+                            <MudStack Spacing="3">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                    <MudText Typo="Typo.h6">
+                                        <MudIcon Icon="@Icons.Material.Filled.Code" Class="mr-2" />
+                                        <code>@SelectedValueProperty</code>
+                                    </MudText>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info">@files.Count files affected</MudChip>
+                                </MudStack>
+                                
+                                <MudDivider />
+                                
+                                @foreach (var file in files.Take(50))
                                 {
-                                    <div class="property-node @(SelectedValueProperty == property.PropertyPath ? "selected" : "")" @onclick="() => SelectValueProperty(property.PropertyPath)">
-                                        <div>
-                                            <div class="fw-medium">@GetPropertyDisplayName(property.PropertyPath)</div>
-                                            <small class="text-muted">@property.PropertyPath</small>
-                                        </div>
-                                        <span class="property-badge value-badge">@property.DifferenceCount</span>
-                                    </div>
+                                    <MudPaper Outlined="true" Class="file-diff-card pa-3">
+                                        <MudStack Spacing="2">
+                                            <MudStack Row="true" AlignItems="AlignItems.Center">
+                                                <MudIcon Icon="@Icons.Material.Filled.InsertDriveFile" Size="Size.Small" Color="Color.Secondary" />
+                                                <MudText Typo="Typo.body2"><strong>@file.FileName</strong></MudText>
+                                            </MudStack>
+                                            
+                                            <MudGrid Spacing="2">
+                                                <MudItem xs="12" sm="6">
+                                                    <div class="diff-expected">
+                                                        <MudText Typo="Typo.caption" Color="Color.Success" Class="mb-1">
+                                                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Class="mr-1" />
+                                                            Expected
+                                                        </MudText>
+                                                        <MudText Typo="Typo.body2">
+                                                            <span class="diff-value-expected">@file.ExpectedValue</span>
+                                                        </MudText>
+                                                    </div>
+                                                </MudItem>
+                                                <MudItem xs="12" sm="6">
+                                                    <div class="diff-actual">
+                                                        <MudText Typo="Typo.caption" Color="Color.Error" Class="mb-1">
+                                                            <MudIcon Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Class="mr-1" />
+                                                            Actual
+                                                        </MudText>
+                                                        <MudText Typo="Typo.body2">
+                                                            <span class="diff-value-actual">@file.ActualValue</span>
+                                                        </MudText>
+                                                    </div>
+                                                </MudItem>
+                                            </MudGrid>
+                                        </MudStack>
+                                    </MudPaper>
                                 }
-                            }
-                            else
-                            {
-                                @RenderHierarchicalTree(GetFilteredValueTreeNodes())
-                            }
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Details Panel -->
-                <div class="col-md-8">
-                    <div class="details-panel">
-                        @if (!string.IsNullOrEmpty(SelectedValueProperty))
-                        {
-                            <h6 class="mb-3">
-                                <i class="bi bi-info-circle me-2"></i>
-                                Value Changes for: <code>@SelectedValueProperty</code>
-                            </h6>
-                            
-                            @foreach (var file in GetFilesWithValueDifferencesForProperty(SelectedValueProperty))
-                            {
-                                <div class="file-comparison">
-                                    <div class="file-header">
-                                        <i class="bi bi-file-earmark me-2"></i>
-                                        @file.FileName
-                                    </div>
-                                    <div class="value-comparison">
-                                        <div class="value-side expected">
-                                            <div class="fw-medium text-muted mb-2">Expected</div>
-                                            <code>@file.ExpectedValue</code>
-                                        </div>
-                                        <div class="value-side actual">
-                                            <div class="fw-medium text-warning mb-2">Actual</div>
-                                            <code>@file.ActualValue</code>
-                                        </div>
-                                    </div>
-                                </div>
-                            }
+                                
+                                @if (files.Count > 50)
+                                {
+                                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                                        Showing first 50 of @files.Count files. Use the filter to narrow down results.
+                                    </MudAlert>
+                                }
+                            </MudStack>
                         }
                         else
                         {
-                            <div class="text-center py-5 text-muted">
-                                <i class="bi bi-arrow-left fs-1 mb-3"></i>
-                                <h6>Select a property from the tree to view value differences</h6>
-                                <p>Click on any property in the left panel to see detailed comparisons</p>
-                            </div>
+                            <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="pa-8" Style="min-height: 300px;">
+                                <MudIcon Icon="@Icons.Material.Filled.TouchApp" Size="Size.Large" Color="Color.Secondary" />
+                                <MudText Typo="Typo.h6" Color="Color.Secondary">Select a Property</MudText>
+                                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                    Click on a property in the left panel to see which files have differences
+                                </MudText>
+                            </MudStack>
                         }
                     </div>
-                </div>
-            </div>
-        </div>
-    }
-</div>
-
-<!-- Ordering Differences Inspector -->
-<div class="inspector-section">
-    <div class="inspector-header" style="background: linear-gradient(135deg, #6f42c1, #5a3a96); color: white;" @onclick="() => ToggleSection(InspectorSection.OrderingDifferences)">
-        <div class="d-flex align-items-center">
-            <i class="bi bi-arrows-move me-3 fs-4"></i>
-            <div>
-                <h5 class="mb-0">Ordering Differences Inspector</h5>
-                <small class="opacity-75">Changes in the order of elements within lists or arrays</small>
-            </div>
-        </div>
-        <div class="d-flex align-items-center gap-2">
-            <span class="badge bg-light text-dark">@GetOrderingDifferencesCount() differences</span>
-            <i class="bi @(ExpandedSections.Contains(InspectorSection.OrderingDifferences) ? "bi-chevron-up" : "bi-chevron-down") fs-5"></i>
-        </div>
-    </div>
-    
-    @if (ExpandedSections.Contains(InspectorSection.OrderingDifferences))
-    {
-        <div class="inspector-content">
-            <div class="row g-0">
-                <!-- Property Tree -->
-                <div class="col-md-4">
-                    <div class="property-tree">
-                        <div class="p-3 border-bottom">
-                            <h6 class="mb-2">
-                                <i class="bi bi-list-ol me-2"></i>
-                                Collections with Order Changes
-                            </h6>
-                            <div class="input-group input-group-sm">
-                                <span class="input-group-text">
-                                    <i class="bi bi-search"></i>
-                                </span>
-                                <input type="text" class="form-control" placeholder="Filter collections..." @bind="OrderPropertyFilter" @oninput="FilterOrderProperties">
-                            </div>
-                        </div>
-                        <div class="property-list">
-                            @foreach (var property in GetFilteredOrderProperties())
-                            {
-                                <div class="property-node @(SelectedOrderProperty == property.PropertyPath ? "selected" : "")" @onclick="() => SelectOrderProperty(property.PropertyPath)">
-                                    <div>
-                                        <div class="fw-medium">@GetPropertyDisplayName(property.PropertyPath)</div>
-                                        <small class="text-muted">@property.PropertyPath</small>
-                                    </div>
-                                    <span class="property-badge order-badge">@property.DifferenceCount</span>
-                                </div>
-                            }
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Details Panel -->
-                <div class="col-md-8">
-                    <div class="details-panel">
-                        @if (!string.IsNullOrEmpty(SelectedOrderProperty))
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+        
+        <!-- Ordering Differences Tab -->
+        <MudTabPanel Text="Ordering Differences" Icon="@Icons.Material.Filled.SwapVert" BadgeData="@GetOrderingDifferencesCount()" BadgeColor="Color.Warning">
+            <MudGrid Spacing="0">
+                <MudItem xs="12" md="4">
+                    <div class="property-tree-container">
+                        <MudStack Class="pa-3" Spacing="2">
+                            <MudTextField @bind-Value="OrderPropertyFilter" 
+                                          Placeholder="Filter collections..." 
+                                          Variant="Variant.Outlined" 
+                                          Adornment="Adornment.Start" 
+                                          AdornmentIcon="@Icons.Material.Filled.Search"
+                                          Immediate="true"
+                                          Margin="Margin.Dense"
+                                          Size="Size.Small" />
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @GetFilteredOrderProperties().Count() collections with order changes
+                            </MudText>
+                        </MudStack>
+                        
+                        @foreach (var kvp in GetFilteredOrderProperties().OrderBy(x => x.Key))
                         {
-                            <h6 class="mb-3">
-                                <i class="bi bi-arrows-move me-2"></i>
-                                Order Changes for: <code>@SelectedOrderProperty</code>
-                            </h6>
-                            
-                            @foreach (var file in GetFilesWithOrderDifferencesForProperty(SelectedOrderProperty))
-                            {
-                                <div class="file-comparison">
-                                    <div class="file-header">
-                                        <i class="bi bi-file-earmark me-2"></i>
-                                        @file.FileName
-                                    </div>
-                                    <div class="order-visualization">
-                                        <div class="row">
-                                            <div class="col-md-6">
-                                                <h6 class="mb-3 text-muted">Expected Order (A)</h6>
-                                                <div class="order-list">
-                                                    @for (int i = 0; i < file.ExpectedOrder.Count; i++)
-                                                    {
-                                                        <div class="order-item @(file.MovedIndices.Contains(i) ? "moved" : "")">
-                                                            <span class="order-index @(file.MovedIndices.Contains(i) ? "moved" : "")">@(i + 1)</span>
-                                                            <span>@file.ExpectedOrder[i]</span>
-                                                        </div>
-                                                    }
-                                                </div>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <h6 class="mb-3 text-warning">Actual Order (B)</h6>
-                                                <div class="order-list">
-                                                    @for (int i = 0; i < file.ActualOrder.Count; i++)
-                                                    {
-                                                        <div class="order-item @(file.MovedIndices.Contains(i) ? "moved" : "")">
-                                                            <span class="order-index @(file.MovedIndices.Contains(i) ? "moved" : "")">@(i + 1)</span>
-                                                            <span>@file.ActualOrder[i]</span>
-                                                        </div>
-                                                    }
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            }
+                            var prop = kvp.Key;
+                            var files = kvp.Value;
+                            var isSelected = prop == SelectedOrderProperty;
+                            <div class="property-node @(isSelected ? "selected" : "")" @onclick="@(() => SelectOrderProperty(prop))">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                    <MudStack Spacing="0">
+                                        <MudText Typo="Typo.body2" Style="@(isSelected ? "color: white;" : "")">
+                                            <strong>@GetPropertyDisplayName(prop)</strong>
+                                        </MudText>
+                                        <MudText Typo="Typo.caption" Style="@(isSelected ? "color: rgba(255,255,255,0.8);" : "")">
+                                            @prop
+                                        </MudText>
+                                    </MudStack>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">@files.Count</MudChip>
+                                </MudStack>
+                            </div>
+                        }
+                        
+                        @if (!_orderPropertyGroups.Any())
+                        {
+                            <MudAlert Severity="Severity.Info" Variant="Variant.Text" Class="ma-3">
+                                No ordering differences found.
+                            </MudAlert>
+                        }
+                    </div>
+                </MudItem>
+                
+                <MudItem xs="12" md="8">
+                    <div class="details-panel">
+                        @if (!string.IsNullOrEmpty(SelectedOrderProperty) && _orderPropertyGroups.ContainsKey(SelectedOrderProperty))
+                        {
+                            var files = _orderPropertyGroups[SelectedOrderProperty];
+                            <MudStack Spacing="3">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                    <MudText Typo="Typo.h6">
+                                        <MudIcon Icon="@Icons.Material.Filled.SwapVert" Class="mr-2" />
+                                        <code>@SelectedOrderProperty</code>
+                                    </MudText>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">@files.Count files affected</MudChip>
+                                </MudStack>
+                                
+                                <MudDivider />
+                                
+                                @foreach (var file in files.Take(50))
+                                {
+                                    <MudPaper Outlined="true" Class="file-diff-card pa-3">
+                                        <MudStack Spacing="2">
+                                            <MudStack Row="true" AlignItems="AlignItems.Center">
+                                                <MudIcon Icon="@Icons.Material.Filled.InsertDriveFile" Size="Size.Small" Color="Color.Secondary" />
+                                                <MudText Typo="Typo.body2"><strong>@file.FileName</strong></MudText>
+                                            </MudStack>
+                                            
+                                            <MudGrid Spacing="2">
+                                                <MudItem xs="12" sm="6">
+                                                    <div class="diff-expected">
+                                                        <MudText Typo="Typo.caption" Color="Color.Success" Class="mb-1">Expected Position</MudText>
+                                                        <MudText Typo="Typo.body2">
+                                                            <span class="diff-value-expected">@file.ExpectedValue</span>
+                                                        </MudText>
+                                                    </div>
+                                                </MudItem>
+                                                <MudItem xs="12" sm="6">
+                                                    <div class="diff-actual">
+                                                        <MudText Typo="Typo.caption" Color="Color.Error" Class="mb-1">Actual Position</MudText>
+                                                        <MudText Typo="Typo.body2">
+                                                            <span class="diff-value-actual">@file.ActualValue</span>
+                                                        </MudText>
+                                                    </div>
+                                                </MudItem>
+                                            </MudGrid>
+                                        </MudStack>
+                                    </MudPaper>
+                                }
+                            </MudStack>
                         }
                         else
                         {
-                            <div class="text-center py-5 text-muted">
-                                <i class="bi bi-arrow-left fs-1 mb-3"></i>
-                                <h6>Select a collection from the tree to view order differences</h6>
-                                <p>Click on any collection in the left panel to see ordering changes</p>
-                            </div>
+                            <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="pa-8" Style="min-height: 300px;">
+                                <MudIcon Icon="@Icons.Material.Filled.TouchApp" Size="Size.Large" Color="Color.Secondary" />
+                                <MudText Typo="Typo.h6" Color="Color.Secondary">Select a Collection</MudText>
+                                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                    Click on a collection in the left panel to see ordering changes
+                                </MudText>
+                            </MudStack>
                         }
                     </div>
-                </div>
-            </div>
-        </div>
-    }
-</div>
-
-<!-- Critical Issues Inspector -->
-<div class="inspector-section">
-    <div class="inspector-header" style="background: linear-gradient(135deg, #dc3545, #c82333); color: white;" @onclick="() => ToggleSection(InspectorSection.CriticalIssues)">
-        <div class="d-flex align-items-center">
-            <i class="bi bi-exclamation-triangle me-3 fs-4"></i>
-            <div>
-                <h5 class="mb-0">Critical Issues Inspector</h5>
-                <small class="opacity-75">Changes to predefined critical properties vital to system functionality</small>
-            </div>
-        </div>
-        <div class="d-flex align-items-center gap-2">
-            <span class="badge bg-light text-dark">@GetCriticalIssuesCount() issues</span>
-            <i class="bi @(ExpandedSections.Contains(InspectorSection.CriticalIssues) ? "bi-chevron-up" : "bi-chevron-down") fs-5"></i>
-        </div>
-    </div>
-    
-    @if (ExpandedSections.Contains(InspectorSection.CriticalIssues))
-    {
-        <div class="inspector-content">
-            <div class="row g-0">
-                <!-- Property Tree -->
-                <div class="col-md-4">
-                    <div class="property-tree">
-                        <div class="p-3 border-bottom">
-                            <h6 class="mb-2">
-                                <i class="bi bi-shield-exclamation me-2"></i>
-                                Critical Properties with Issues
-                            </h6>
-                            <div class="input-group input-group-sm">
-                                <span class="input-group-text">
-                                    <i class="bi bi-search"></i>
-                                </span>
-                                <input type="text" class="form-control" placeholder="Filter critical..." @bind="CriticalPropertyFilter" @oninput="FilterCriticalProperties">
-                            </div>
-                        </div>
-                        <div class="property-list">
-                            @foreach (var property in GetFilteredCriticalProperties())
-                            {
-                                <div class="property-node @(SelectedCriticalProperty == property.PropertyPath ? "selected" : "")" @onclick="() => SelectCriticalProperty(property.PropertyPath)">
-                                    <div>
-                                        <div class="fw-medium">@GetPropertyDisplayName(property.PropertyPath)</div>
-                                        <small class="text-muted">@property.PropertyPath</small>
-                                    </div>
-                                    <span class="property-badge critical-badge">@property.DifferenceCount</span>
-                                </div>
-                            }
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Details Panel -->
-                <div class="col-md-8">
-                    <div class="details-panel">
-                        @if (!string.IsNullOrEmpty(SelectedCriticalProperty))
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+        
+        <!-- Critical Issues Tab -->
+        <MudTabPanel Text="Critical Issues" Icon="@Icons.Material.Filled.Warning" BadgeData="@GetCriticalIssuesCount()" BadgeColor="Color.Error">
+            <MudGrid Spacing="0">
+                <MudItem xs="12" md="4">
+                    <div class="property-tree-container">
+                        <MudStack Class="pa-3" Spacing="2">
+                            <MudTextField @bind-Value="CriticalPropertyFilter" 
+                                          Placeholder="Filter critical properties..." 
+                                          Variant="Variant.Outlined" 
+                                          Adornment="Adornment.Start" 
+                                          AdornmentIcon="@Icons.Material.Filled.Search"
+                                          Immediate="true"
+                                          Margin="Margin.Dense"
+                                          Size="Size.Small" />
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @GetFilteredCriticalProperties().Count() critical properties with issues
+                            </MudText>
+                        </MudStack>
+                        
+                        @foreach (var kvp in GetFilteredCriticalProperties().OrderBy(x => x.Key))
                         {
-                            <div class="alert alert-danger mb-3">
-                                <h6 class="alert-heading">
-                                    <i class="bi bi-exclamation-triangle me-2"></i>
-                                    Critical Property Analysis
-                                </h6>
-                                <p class="mb-0">This property is marked as critical to system functionality. Changes here may indicate significant issues.</p>
+                            var prop = kvp.Key;
+                            var files = kvp.Value;
+                            var isSelected = prop == SelectedCriticalProperty;
+                            <div class="property-node @(isSelected ? "selected" : "")" @onclick="@(() => SelectCriticalProperty(prop))">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                    <MudStack Spacing="0">
+                                        <MudText Typo="Typo.body2" Style="@(isSelected ? "color: white;" : "")">
+                                            <strong>@GetPropertyDisplayName(prop)</strong>
+                                        </MudText>
+                                        <MudText Typo="Typo.caption" Style="@(isSelected ? "color: rgba(255,255,255,0.8);" : "")">
+                                            @prop
+                                        </MudText>
+                                    </MudStack>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Error">@files.Count</MudChip>
+                                </MudStack>
                             </div>
-                            
-                            <h6 class="mb-3">
-                                <i class="bi bi-shield-exclamation me-2"></i>
-                                Critical Issues for: <code>@SelectedCriticalProperty</code>
-                            </h6>
-                            
-                            @foreach (var file in GetFilesWithCriticalDifferencesForProperty(SelectedCriticalProperty))
-                            {
-                                <div class="file-comparison">
-                                    <div class="file-header">
-                                        <i class="bi bi-file-earmark me-2"></i>
-                                        @file.FileName
-                                        <span class="badge bg-danger ms-2">Critical</span>
-                                    </div>
-                                    @if (file.IsValueDifference)
+                        }
+                        
+                        @if (!_criticalPropertyGroups.Any())
+                        {
+                            <MudAlert Severity="Severity.Success" Variant="Variant.Text" Class="ma-3">
+                                No critical issues found.
+                            </MudAlert>
+                        }
+                    </div>
+                </MudItem>
+                
+                <MudItem xs="12" md="8">
+                    <div class="details-panel">
+                        @if (!string.IsNullOrEmpty(SelectedCriticalProperty) && _criticalPropertyGroups.ContainsKey(SelectedCriticalProperty))
+                        {
+                            var files = _criticalPropertyGroups[SelectedCriticalProperty];
+                            <MudStack Spacing="3">
+                                <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="mb-2">
+                                    <MudText><strong>Critical Property:</strong> This property is vital to system functionality.</MudText>
+                                </MudAlert>
+                                
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                    <MudText Typo="Typo.h6">
+                                        <MudIcon Icon="@Icons.Material.Filled.Warning" Class="mr-2" Color="Color.Error" />
+                                        <code>@SelectedCriticalProperty</code>
+                                    </MudText>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Error">@files.Count files affected</MudChip>
+                                </MudStack>
+                                
+                                <MudDivider />
+                                
+                                @foreach (var file in files.Take(50))
+                                {
+                                    <MudPaper Outlined="true" Class="file-diff-card pa-3" Style="border-color: var(--mud-palette-error);">
+                                        <MudStack Spacing="2">
+                                            <MudStack Row="true" AlignItems="AlignItems.Center">
+                                                <MudIcon Icon="@Icons.Material.Filled.Error" Size="Size.Small" Color="Color.Error" />
+                                                <MudText Typo="Typo.body2"><strong>@file.FileName</strong></MudText>
+                                            </MudStack>
+                                            
+                                            <MudGrid Spacing="2">
+                                                <MudItem xs="12" sm="6">
+                                                    <div class="diff-expected">
+                                                        <MudText Typo="Typo.caption" Color="Color.Success" Class="mb-1">Expected</MudText>
+                                                        <MudText Typo="Typo.body2">
+                                                            <span class="diff-value-expected">@file.ExpectedValue</span>
+                                                        </MudText>
+                                                    </div>
+                                                </MudItem>
+                                                <MudItem xs="12" sm="6">
+                                                    <div class="diff-actual">
+                                                        <MudText Typo="Typo.caption" Color="Color.Error" Class="mb-1">Actual</MudText>
+                                                        <MudText Typo="Typo.body2">
+                                                            <span class="diff-value-actual">@file.ActualValue</span>
+                                                        </MudText>
+                                                    </div>
+                                                </MudItem>
+                                            </MudGrid>
+                                        </MudStack>
+                                    </MudPaper>
+                                }
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="pa-8" Style="min-height: 300px;">
+                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Large" Color="Color.Success" />
+                                <MudText Typo="Typo.h6" Color="Color.Secondary">No Critical Issues Selected</MudText>
+                                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                    Select a property to view critical differences
+                                </MudText>
+                            </MudStack>
+                        }
+                    </div>
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+        
+        <!-- All Differences Tab -->
+        <MudTabPanel Text="All Differences" Icon="@Icons.Material.Filled.List">
+            <MudStack Spacing="3" Class="pa-4">
+                <MudTextField @bind-Value="AllDifferencesFilter" 
+                              Placeholder="Search all differences..." 
+                              Variant="Variant.Outlined" 
+                              Adornment="Adornment.Start" 
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              Immediate="true"
+                              Margin="Margin.Dense" />
+                
+                @if (GetFilteredAllDifferences().Any())
+                {
+                    <MudDataGrid T="DifferenceGridItem" 
+                                 Items="@GetFilteredAllDifferences()" 
+                                 Dense="true" 
+                                 Hover="true" 
+                                 Striped="true"
+                                 Filterable="true"
+                                 SortMode="SortMode.Multiple"
+                                 Groupable="true"
+                                 RowsPerPage="50">
+                        <Columns>
+                            <TemplateColumn Title="Type" Sortable="true">
+                                <CellTemplate>
+                                    @if (context.Item.IsCritical)
                                     {
-                                        <div class="value-comparison">
-                                                                                    <div class="value-side expected">
-                                            <div class="fw-medium text-muted mb-2">Expected</div>
-                                            <code>@file.ExpectedValue</code>
-                                        </div>
-                                        <div class="value-side actual">
-                                            <div class="fw-medium text-danger mb-2">Actual</div>
-                                            <code>@file.ActualValue</code>
-                                        </div>
-                                        </div>
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Error">Critical</MudChip>
+                                    }
+                                    else if (context.Item.IsOrdering)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.SwapVert">Order</MudChip>
                                     }
                                     else
                                     {
-                                        <div class="order-visualization">
-                                            <div class="row">
-                                                <div class="col-md-6">
-                                                    <h6 class="mb-3 text-muted">Expected Order</h6>
-                                                    <div class="order-list">
-                                                        @for (int i = 0; i < file.ExpectedOrder.Count; i++)
-                                                        {
-                                                            <div class="order-item @(file.MovedIndices.Contains(i) ? "moved" : "")">
-                                                                <span class="order-index @(file.MovedIndices.Contains(i) ? "moved" : "")">@(i + 1)</span>
-                                                                <span>@file.ExpectedOrder[i]</span>
-                                                            </div>
-                                                        }
-                                                    </div>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <h6 class="mb-3 text-danger">Actual Order</h6>
-                                                    <div class="order-list">
-                                                        @for (int i = 0; i < file.ActualOrder.Count; i++)
-                                                        {
-                                                            <div class="order-item @(file.MovedIndices.Contains(i) ? "moved" : "")">
-                                                                <span class="order-index @(file.MovedIndices.Contains(i) ? "moved" : "")">@(i + 1)</span>
-                                                                <span>@file.ActualOrder[i]</span>
-                                                            </div>
-                                                        }
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.Edit">Value</MudChip>
                                     }
-                                </div>
-                            }
-                        }
-                        else
-                        {
-                            <div class="text-center py-5 text-muted">
-                                <i class="bi bi-arrow-left fs-1 mb-3"></i>
-                                <h6>Select a critical property from the tree to view issues</h6>
-                                <p>Click on any critical property in the left panel to see detailed analysis</p>
-                            </div>
-                        }
-                    </div>
-                </div>
-            </div>
-        </div>
-    }
-</div>
+                                </CellTemplate>
+                            </TemplateColumn>
+                            <PropertyColumn Property="x => x.PropertyPath" Title="Property" Sortable="true" Groupable="true">
+                                <CellTemplate>
+                                    <MudText Typo="Typo.body2"><code>@context.Item.PropertyPath</code></MudText>
+                                </CellTemplate>
+                            </PropertyColumn>
+                            <PropertyColumn Property="x => x.FileName" Title="File" Sortable="true" Groupable="true" />
+                            <TemplateColumn Title="Expected" Sortable="false">
+                                <CellTemplate>
+                                    <div class="diff-expected">
+                                        <span class="diff-value-expected">@context.Item.ExpectedValue</span>
+                                    </div>
+                                </CellTemplate>
+                            </TemplateColumn>
+                            <TemplateColumn Title="Actual" Sortable="false">
+                                <CellTemplate>
+                                    <div class="diff-actual">
+                                        <span class="diff-value-actual">@context.Item.ActualValue</span>
+                                    </div>
+                                </CellTemplate>
+                            </TemplateColumn>
+                            <PropertyColumn Property="x => x.Category" Title="Category" Sortable="true" Groupable="true" />
+                        </Columns>
+                        <PagerContent>
+                            <MudDataGridPager T="DifferenceGridItem" />
+                        </PagerContent>
+                    </MudDataGrid>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.CheckCircle">
+                        <MudText>No differences found matching the filter criteria.</MudText>
+                    </MudAlert>
+                }
+            </MudStack>
+        </MudTabPanel>
+    </MudTabs>
+</MudPaper>
 
 @code {
     [Parameter]
@@ -740,308 +622,161 @@
     [Parameter]
     public MultiFolderComparisonResult FolderComparisonResult { get; set; }
     
-    // Navigation State
-    private enum InspectorSection { ValueDifferences, OrderingDifferences, CriticalIssues }
-    private HashSet<InspectorSection> ExpandedSections { get; set; } = new HashSet<InspectorSection> { InspectorSection.ValueDifferences };
+    private int ActiveTabIndex { get; set; } = 0;
     
-    // Selection State
     private string SelectedValueProperty { get; set; } = "";
     private string SelectedOrderProperty { get; set; } = "";
     private string SelectedCriticalProperty { get; set; } = "";
     
-    // Filter State
     private string ValuePropertyFilter { get; set; } = "";
     private string OrderPropertyFilter { get; set; } = "";
     private string CriticalPropertyFilter { get; set; } = "";
+    private string AllDifferencesFilter { get; set; } = "";
     
-    // View Mode State
-    private string ValueViewMode { get; set; } = "flat";
-    private HashSet<string> ExpandedTreeNodes { get; set; } = new HashSet<string>();
+    private Dictionary<string, List<FileDifference>> _valuePropertyGroups = new();
+    private Dictionary<string, List<FileDifference>> _orderPropertyGroups = new();
+    private Dictionary<string, List<FileDifference>> _criticalPropertyGroups = new();
+    private List<DifferenceGridItem> _allDifferences = new();
     
-    // Cached Data
-    private List<PropertySummary> ValueProperties { get; set; } = new List<PropertySummary>();
-    private List<PropertySummary> OrderProperties { get; set; } = new List<PropertySummary>();
-    private List<PropertySummary> CriticalProperties { get; set; } = new List<PropertySummary>();
-    private List<TreeNode> ValueTreeNodes { get; set; } = new List<TreeNode>();
-    
-    public class PropertySummary
-    {
-        public string PropertyPath { get; set; } = "";
-        public int DifferenceCount { get; set; }
-        public string PropertyType { get; set; } = ""; // "Value", "Order", "Critical"
-    }
-    
-    public class TreeNode
-    {
-        public string Name { get; set; } = "";
-        public string FullPath { get; set; } = "";
-        public int DifferenceCount { get; set; } = 0;
-        public bool HasDifferences { get; set; } = false;
-        public bool IsLeaf { get; set; } = false;
-        public List<TreeNode> Children { get; set; } = new List<TreeNode>();
-        public TreeNode Parent { get; set; }
-        public int Level { get; set; } = 0;
-        
-        public bool HasChildrenWithDifferences => 
-            Children.Any(c => c.HasDifferences || c.HasChildrenWithDifferences);
-    }
-    
-    public class FileComparisonDetail
+    public class FileDifference
     {
         public string FileName { get; set; } = "";
-        public bool IsValueDifference { get; set; } = true;
-        
-        // For Value Differences
         public string ExpectedValue { get; set; } = "";
         public string ActualValue { get; set; } = "";
-        
-        // For Order Differences
-        public List<string> ExpectedOrder { get; set; } = new List<string>();
-        public List<string> ActualOrder { get; set; } = new List<string>();
-        public HashSet<int> MovedIndices { get; set; } = new HashSet<int>();
+        public string Category { get; set; } = "";
+    }
+    
+    public class DifferenceGridItem
+    {
+        public string PropertyPath { get; set; } = "";
+        public string FileName { get; set; } = "";
+        public string ExpectedValue { get; set; } = "";
+        public string ActualValue { get; set; } = "";
+        public string Category { get; set; } = "";
+        public bool IsCritical { get; set; }
+        public bool IsOrdering { get; set; }
     }
     
     protected override void OnParametersSet()
     {
-        LoadPropertySummaries();
+        BuildPropertyGroups();
     }
     
-    private void LoadPropertySummaries()
+    private void BuildPropertyGroups()
     {
-        ValueProperties = BuildValueProperties();
-        OrderProperties = BuildOrderProperties();
-        CriticalProperties = BuildCriticalProperties();
-        ValueTreeNodes = BuildValueTreeNodes();
-    }
-    
-    // Summary Dashboard Methods
-    private int GetTotalFilesAnalyzed()
-    {
-        return Analysis?.TotalFilesAnalyzed ?? 0;
-    }
-    
-    private int GetTotalFilesWithDifferences()
-    {
-        return Analysis?.FilesWithDifferences ?? 0;
-    }
-    
-    private int GetValueDifferencesCount()
-    {
-        if (Analysis?.AllPatterns == null) return 0;
-        return Analysis.AllPatterns.Where(p => IsValueDifference(p.Category)).SelectMany(p => p.AffectedFiles).Distinct().Count();
-    }
-    
-    private int GetOrderingDifferencesCount()
-    {
-        if (Analysis?.AllPatterns == null) return 0;
-        return Analysis.AllPatterns.Where(p => IsOrderingDifference(p.Category)).SelectMany(p => p.AffectedFiles).Distinct().Count();
-    }
-    
-    private int GetCriticalIssuesCount()
-    {
-        if (Analysis?.AllPatterns == null) return 0;
-        return Analysis.AllPatterns.Where(p => p.IsCriticalProperty).SelectMany(p => p.AffectedFiles).Distinct().Count();
-    }
-    
-    private int GetTotalDifferencesCount()
-    {
-        return Analysis?.TotalDifferencesFound ?? 0;
-    }
-    
-    // Navigation Methods
-    private void ToggleSection(InspectorSection section)
-    {
-        if (ExpandedSections.Contains(section))
+        _valuePropertyGroups.Clear();
+        _orderPropertyGroups.Clear();
+        _criticalPropertyGroups.Clear();
+        _allDifferences.Clear();
+        
+        if (Analysis?.AllPatterns == null) return;
+        
+        foreach (var pattern in Analysis.AllPatterns)
         {
-            ExpandedSections.Remove(section);
-        }
-        else
-        {
-            ExpandedSections.Add(section);
-        }
-    }
-    
-    // Property Building Methods
-    private List<PropertySummary> BuildValueProperties()
-    {
-        if (Analysis?.AllPatterns == null) return new List<PropertySummary>();
-        
-        return Analysis.AllPatterns
-            .Where(p => IsValueDifference(p.Category) && !p.IsCriticalProperty)
-            .GroupBy(p => ExtractBasePropertyPath(p.FullPattern))
-            .Select(g => new PropertySummary
-            {
-                PropertyPath = g.Key,
-                DifferenceCount = g.SelectMany(p => p.AffectedFiles).Distinct().Count(),
-                PropertyType = "Value"
-            })
-            .OrderByDescending(p => p.DifferenceCount)
-            .ToList();
-    }
-    
-    private List<PropertySummary> BuildOrderProperties()
-    {
-        if (Analysis?.AllPatterns == null) return new List<PropertySummary>();
-        
-        return Analysis.AllPatterns
-            .Where(p => IsOrderingDifference(p.Category) && !p.IsCriticalProperty)
-            .GroupBy(p => ExtractBasePropertyPath(p.FullPattern))
-            .Select(g => new PropertySummary
-            {
-                PropertyPath = g.Key,
-                DifferenceCount = g.SelectMany(p => p.AffectedFiles).Distinct().Count(),
-                PropertyType = "Order"
-            })
-            .OrderByDescending(p => p.DifferenceCount)
-            .ToList();
-    }
-    
-    private List<PropertySummary> BuildCriticalProperties()
-    {
-        if (Analysis?.AllPatterns == null) return new List<PropertySummary>();
-        
-        return Analysis.AllPatterns
-            .Where(p => p.IsCriticalProperty)
-            .GroupBy(p => ExtractBasePropertyPath(p.FullPattern))
-            .Select(g => new PropertySummary
-            {
-                PropertyPath = g.Key,
-                DifferenceCount = g.SelectMany(p => p.AffectedFiles).Distinct().Count(),
-                PropertyType = "Critical"
-            })
-            .OrderByDescending(p => p.DifferenceCount)
-            .ToList();
-    }
-    
-    // Tree Building Methods
-    private List<TreeNode> BuildValueTreeNodes()
-    {
-        if (Analysis?.AllPatterns == null) return new List<TreeNode>();
-        
-        var rootNodes = new List<TreeNode>();
-        var allPaths = Analysis.AllPatterns
-            .Where(p => IsValueDifference(p.Category) && !p.IsCriticalProperty)
-            .Select(p => new { Path = ExtractBasePropertyPath(p.FullPattern), Count = p.AffectedFiles.Distinct().Count() })
-            .GroupBy(x => x.Path)
-            .Select(g => new { Path = g.Key, Count = g.Sum(x => x.Count) })
-            .ToList();
-        
-        foreach (var pathInfo in allPaths)
-        {
-            AddPathToTree(rootNodes, pathInfo.Path, pathInfo.Count);
-        }
-        
-        return rootNodes.OrderBy(n => n.Name).ToList();
-    }
-    
-    private void AddPathToTree(List<TreeNode> rootNodes, string path, int differenceCount)
-    {
-        if (string.IsNullOrEmpty(path)) return;
-        
-        var segments = path.Split('.');
-        var currentNodes = rootNodes;
-        var currentPath = "";
-        
-        for (int i = 0; i < segments.Length; i++)
-        {
-            var segment = segments[i];
-            currentPath = string.IsNullOrEmpty(currentPath) ? segment : $"{currentPath}.{segment}";
+            var isValue = IsValueDifference(pattern.Category);
+            var isOrder = IsOrderingDifference(pattern.Category);
+            var isCritical = pattern.IsCriticalProperty;
+            var propertyPath = ExtractBasePropertyPath(pattern.FullPattern);
             
-            var existingNode = currentNodes.FirstOrDefault(n => n.Name == segment);
-            if (existingNode == null)
+            foreach (var file in pattern.AffectedFiles.Distinct())
             {
-                var newNode = new TreeNode
+                var example = pattern.Examples.FirstOrDefault();
+                var fileDiff = new FileDifference
                 {
-                    Name = segment,
-                    FullPath = currentPath,
-                    Level = i,
-                    IsLeaf = i == segments.Length - 1,
-                    HasDifferences = i == segments.Length - 1,
-                    DifferenceCount = i == segments.Length - 1 ? differenceCount : 0
+                    FileName = file,
+                    ExpectedValue = FormatValue(example?.Object1Value),
+                    ActualValue = FormatValue(example?.Object2Value),
+                    Category = pattern.Category.ToString()
                 };
                 
-                if (currentNodes == rootNodes)
+                var gridItem = new DifferenceGridItem
                 {
-                    newNode.Parent = null;
-                }
-                else
-                {
-                    var parentNode = GetParentNodeFromPath(rootNodes, currentPath.Substring(0, currentPath.LastIndexOf('.')));
-                    newNode.Parent = parentNode;
-                }
+                    PropertyPath = propertyPath,
+                    FileName = file,
+                    ExpectedValue = fileDiff.ExpectedValue,
+                    ActualValue = fileDiff.ActualValue,
+                    Category = pattern.Category.ToString(),
+                    IsCritical = isCritical,
+                    IsOrdering = isOrder
+                };
+                _allDifferences.Add(gridItem);
                 
-                currentNodes.Add(newNode);
-                currentNodes = newNode.Children;
-            }
-            else
-            {
-                if (i == segments.Length - 1)
+                if (isCritical)
                 {
-                    existingNode.DifferenceCount += differenceCount;
-                    existingNode.HasDifferences = true;
+                    if (!_criticalPropertyGroups.ContainsKey(propertyPath))
+                        _criticalPropertyGroups[propertyPath] = new List<FileDifference>();
+                    _criticalPropertyGroups[propertyPath].Add(fileDiff);
                 }
-                currentNodes = existingNode.Children;
+                else if (isOrder)
+                {
+                    if (!_orderPropertyGroups.ContainsKey(propertyPath))
+                        _orderPropertyGroups[propertyPath] = new List<FileDifference>();
+                    _orderPropertyGroups[propertyPath].Add(fileDiff);
+                }
+                else if (isValue)
+                {
+                    if (!_valuePropertyGroups.ContainsKey(propertyPath))
+                        _valuePropertyGroups[propertyPath] = new List<FileDifference>();
+                    _valuePropertyGroups[propertyPath].Add(fileDiff);
+                }
             }
         }
+        
+        if (_valuePropertyGroups.Any() && string.IsNullOrEmpty(SelectedValueProperty))
+            SelectedValueProperty = _valuePropertyGroups.Keys.First();
+        if (_orderPropertyGroups.Any() && string.IsNullOrEmpty(SelectedOrderProperty))
+            SelectedOrderProperty = _orderPropertyGroups.Keys.First();
+        if (_criticalPropertyGroups.Any() && string.IsNullOrEmpty(SelectedCriticalProperty))
+            SelectedCriticalProperty = _criticalPropertyGroups.Keys.First();
     }
     
-    private TreeNode GetParentNodeFromPath(List<TreeNode> rootNodes, string path)
-    {
-        if (string.IsNullOrEmpty(path)) return null;
-        
-        var segments = path.Split('.');
-        var currentNodes = rootNodes;
-        TreeNode foundNode = null;
-        
-        foreach (var segment in segments)
-        {
-            foundNode = currentNodes.FirstOrDefault(n => n.Name == segment);
-            if (foundNode == null) break;
-            currentNodes = foundNode.Children;
-        }
-        
-        return foundNode;
-    }
+    private void SelectValueProperty(string prop) { SelectedValueProperty = prop; }
+    private void SelectOrderProperty(string prop) { SelectedOrderProperty = prop; }
+    private void SelectCriticalProperty(string prop) { SelectedCriticalProperty = prop; }
     
-    private List<TreeNode> GetFilteredValueTreeNodes()
+    private IEnumerable<KeyValuePair<string, List<FileDifference>>> GetFilteredValueProperties()
     {
         if (string.IsNullOrWhiteSpace(ValuePropertyFilter))
-            return ValueTreeNodes;
-        
-        return FilterTreeNodes(ValueTreeNodes, ValuePropertyFilter);
+            return _valuePropertyGroups;
+        return _valuePropertyGroups.Where(kvp => kvp.Key.Contains(ValuePropertyFilter, StringComparison.OrdinalIgnoreCase));
     }
     
-    private List<TreeNode> FilterTreeNodes(List<TreeNode> nodes, string filter)
+    private IEnumerable<KeyValuePair<string, List<FileDifference>>> GetFilteredOrderProperties()
     {
-        var filteredNodes = new List<TreeNode>();
-        
-        foreach (var node in nodes)
-        {
-            var filteredChildren = FilterTreeNodes(node.Children, filter);
-            
-            if (node.Name.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                node.FullPath.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
-                filteredChildren.Any())
-            {
-                var filteredNode = new TreeNode
-                {
-                    Name = node.Name,
-                    FullPath = node.FullPath,
-                    DifferenceCount = node.DifferenceCount,
-                    HasDifferences = node.HasDifferences,
-                    IsLeaf = node.IsLeaf,
-                    Level = node.Level,
-                    Parent = node.Parent,
-                    Children = filteredChildren
-                };
-                filteredNodes.Add(filteredNode);
-            }
-        }
-        
-        return filteredNodes;
+        if (string.IsNullOrWhiteSpace(OrderPropertyFilter))
+            return _orderPropertyGroups;
+        return _orderPropertyGroups.Where(kvp => kvp.Key.Contains(OrderPropertyFilter, StringComparison.OrdinalIgnoreCase));
     }
     
-    // Helper Methods
+    private IEnumerable<KeyValuePair<string, List<FileDifference>>> GetFilteredCriticalProperties()
+    {
+        if (string.IsNullOrWhiteSpace(CriticalPropertyFilter))
+            return _criticalPropertyGroups;
+        return _criticalPropertyGroups.Where(kvp => kvp.Key.Contains(CriticalPropertyFilter, StringComparison.OrdinalIgnoreCase));
+    }
+    
+    private int GetTotalFilesAnalyzed() => Analysis?.TotalFilesAnalyzed ?? 0;
+    private int GetTotalFilesWithDifferences() => Analysis?.FilesWithDifferences ?? 0;
+    private int GetFilesWithoutDifferences() => GetTotalFilesAnalyzed() - GetTotalFilesWithDifferences();
+    private int GetFilesWithErrorsCount() => FolderComparisonResult?.FilePairResults?.Count(r => r.HasError) ?? 0;
+    private IEnumerable<FilePairComparisonResult> GetFilesWithErrors() => 
+        FolderComparisonResult?.FilePairResults?.Where(r => r.HasError) ?? Enumerable.Empty<FilePairComparisonResult>();
+    private int GetValueDifferencesCount() => _valuePropertyGroups.Values.Sum(x => x.Count);
+    private int GetOrderingDifferencesCount() => _orderPropertyGroups.Values.Sum(x => x.Count);
+    private int GetCriticalIssuesCount() => _criticalPropertyGroups.Values.Sum(x => x.Count);
+    private int GetTotalDifferencesCount() => Analysis?.TotalDifferencesFound ?? 0;
+    
+    private IEnumerable<DifferenceGridItem> GetFilteredAllDifferences()
+    {
+        if (string.IsNullOrWhiteSpace(AllDifferencesFilter))
+            return _allDifferences;
+        return _allDifferences.Where(d => 
+            d.PropertyPath.Contains(AllDifferencesFilter, StringComparison.OrdinalIgnoreCase) ||
+            d.FileName.Contains(AllDifferencesFilter, StringComparison.OrdinalIgnoreCase) ||
+            d.ExpectedValue.Contains(AllDifferencesFilter, StringComparison.OrdinalIgnoreCase) ||
+            d.ActualValue.Contains(AllDifferencesFilter, StringComparison.OrdinalIgnoreCase));
+    }
+    
     private bool IsValueDifference(DifferenceCategory category)
     {
         return category == DifferenceCategory.NumericValueChanged ||
@@ -1062,340 +797,33 @@
     
     private string ExtractBasePropertyPath(string fullPattern)
     {
-        // Remove array indices like [*] or [0]
         var cleaned = System.Text.RegularExpressions.Regex.Replace(fullPattern, @"\[\d*\*?\]", "");
-        
-        // Remove value suffixes like "_old_new" 
         var parts = cleaned.Split('_');
         if (parts.Length > 1 && !string.IsNullOrEmpty(parts[0]))
-        {
             cleaned = parts[0];
-        }
-        
         return cleaned;
     }
     
     private string GetPropertyDisplayName(string propertyPath)
     {
-        var segments = propertyPath.Split('.');
-        return segments.LastOrDefault() ?? propertyPath;
-    }
-    
-    // Selection Methods
-    private void SelectValueProperty(string propertyPath)
-    {
-        SelectedValueProperty = propertyPath;
-    }
-    
-    private void SelectOrderProperty(string propertyPath)
-    {
-        SelectedOrderProperty = propertyPath;
-    }
-    
-    private void SelectCriticalProperty(string propertyPath)
-    {
-        SelectedCriticalProperty = propertyPath;
-    }
-    
-    // Filter Methods
-    private void FilterValueProperties()
-    {
-        // Trigger re-render to apply filter
-        StateHasChanged();
-    }
-    
-    private void FilterOrderProperties()
-    {
-        // Trigger re-render to apply filter
-        StateHasChanged();
-    }
-    
-    private void FilterCriticalProperties()
-    {
-        // Trigger re-render to apply filter
-        StateHasChanged();
-    }
-    
-    private List<PropertySummary> GetFilteredValueProperties()
-    {
-        if (string.IsNullOrWhiteSpace(ValuePropertyFilter))
-            return ValueProperties;
-            
-        return ValueProperties.Where(p => p.PropertyPath.Contains(ValuePropertyFilter, StringComparison.OrdinalIgnoreCase)).ToList();
-    }
-    
-    private List<PropertySummary> GetFilteredOrderProperties()
-    {
-        if (string.IsNullOrWhiteSpace(OrderPropertyFilter))
-            return OrderProperties;
-            
-        return OrderProperties.Where(p => p.PropertyPath.Contains(OrderPropertyFilter, StringComparison.OrdinalIgnoreCase)).ToList();
-    }
-    
-    private List<PropertySummary> GetFilteredCriticalProperties()
-    {
-        if (string.IsNullOrWhiteSpace(CriticalPropertyFilter))
-            return CriticalProperties;
-            
-        return CriticalProperties.Where(p => p.PropertyPath.Contains(CriticalPropertyFilter, StringComparison.OrdinalIgnoreCase)).ToList();
-    }
-    
-    // File Details Methods
-    private List<FileComparisonDetail> GetFilesWithValueDifferencesForProperty(string propertyPath)
-    {
-        if (Analysis?.AllPatterns == null || string.IsNullOrEmpty(propertyPath))
-            return new List<FileComparisonDetail>();
-        
-        var patterns = Analysis.AllPatterns
-            .Where(p => IsValueDifference(p.Category) && ExtractBasePropertyPath(p.FullPattern) == propertyPath)
-            .ToList();
-        
-        var result = new List<FileComparisonDetail>();
-        
-        foreach (var pattern in patterns)
-        {
-            foreach (var file in pattern.AffectedFiles)
-            {
-                // Find actual differences for this file and property
-                var difference = pattern.Examples.FirstOrDefault();
-                if (difference != null)
-                {
-                    result.Add(new FileComparisonDetail
-                    {
-                        FileName = file,
-                        IsValueDifference = true,
-                        ExpectedValue = FormatValue(difference.Object1Value),
-                        ActualValue = FormatValue(difference.Object2Value)
-                    });
-                }
-            }
-        }
-        
-        return result.DistinctBy(f => f.FileName).ToList();
-    }
-    
-    private List<FileComparisonDetail> GetFilesWithOrderDifferencesForProperty(string propertyPath)
-    {
-        if (Analysis?.AllPatterns == null || string.IsNullOrEmpty(propertyPath))
-            return new List<FileComparisonDetail>();
-        
-        var patterns = Analysis.AllPatterns
-            .Where(p => IsOrderingDifference(p.Category) && ExtractBasePropertyPath(p.FullPattern) == propertyPath)
-            .ToList();
-        
-        var result = new List<FileComparisonDetail>();
-        
-        foreach (var pattern in patterns)
-        {
-            foreach (var file in pattern.AffectedFiles)
-            {
-                // Mock order data - in real implementation, this would extract from the actual differences
-                result.Add(new FileComparisonDetail
-                {
-                    FileName = file,
-                    IsValueDifference = false,
-                    ExpectedOrder = new List<string> { "Item A", "Item B", "Item C" },
-                    ActualOrder = new List<string> { "Item B", "Item A", "Item C" },
-                    MovedIndices = new HashSet<int> { 0, 1 }
-                });
-            }
-        }
-        
-        return result.DistinctBy(f => f.FileName).ToList();
-    }
-    
-    private List<FileComparisonDetail> GetFilesWithCriticalDifferencesForProperty(string propertyPath)
-    {
-        if (Analysis?.AllPatterns == null || string.IsNullOrEmpty(propertyPath))
-            return new List<FileComparisonDetail>();
-        
-        var patterns = Analysis.AllPatterns
-            .Where(p => p.IsCriticalProperty && ExtractBasePropertyPath(p.FullPattern) == propertyPath)
-            .ToList();
-        
-        var result = new List<FileComparisonDetail>();
-        
-        foreach (var pattern in patterns)
-        {
-            foreach (var file in pattern.AffectedFiles)
-            {
-                var difference = pattern.Examples.FirstOrDefault();
-                if (difference != null)
-                {
-                    var isValueDiff = IsValueDifference(pattern.Category);
-                    
-                    if (isValueDiff)
-                    {
-                        result.Add(new FileComparisonDetail
-                        {
-                            FileName = file,
-                            IsValueDifference = true,
-                            ExpectedValue = FormatValue(difference.Object1Value),
-                            ActualValue = FormatValue(difference.Object2Value)
-                        });
-                    }
-                    else
-                    {
-                        result.Add(new FileComparisonDetail
-                        {
-                            FileName = file,
-                            IsValueDifference = false,
-                            ExpectedOrder = new List<string> { "Critical Item A", "Critical Item B" },
-                            ActualOrder = new List<string> { "Critical Item B", "Critical Item A" },
-                            MovedIndices = new HashSet<int> { 0, 1 }
-                        });
-                    }
-                }
-            }
-        }
-        
-        return result.DistinctBy(f => f.FileName).ToList();
+        if (string.IsNullOrEmpty(propertyPath)) return propertyPath;
+        var parts = propertyPath.Split('.');
+        return parts.Length > 0 ? parts[parts.Length - 1] : propertyPath;
     }
     
     private string FormatValue(object value)
     {
-        if (value == null)
-            return "null";
-        
-        if (value is DateTime dt)
-            return dt.ToString("yyyy-MM-dd HH:mm:ss");
-        
-        if (value is string str && str.Length > 100)
-            return str.Substring(0, 97) + "...";
-        
-        return value.ToString() ?? "null";
+        if (value == null) return "null";
+        if (value is DateTime dt) return dt.ToString("yyyy-MM-dd HH:mm:ss");
+        var str = value.ToString() ?? "null";
+        return str.Length > 100 ? str.Substring(0, 97) + "..." : str;
     }
     
-    // Tree Rendering Methods
-    private RenderFragment RenderHierarchicalTree(List<TreeNode> nodes) => builder =>
-    {
-        foreach (var node in nodes)
-        {
-            RenderTreeNode(builder, node);
-        }
-    };
-    
-    private void RenderTreeNode(RenderTreeBuilder builder, TreeNode node)
-    {
-        var nodeClasses = "tree-node";
-        if (node.HasDifferences || node.HasChildrenWithDifferences)
-            nodeClasses += " has-differences";
-        if (SelectedValueProperty == node.FullPath)
-            nodeClasses += " selected";
-        
-        // Tree node container
-        builder.OpenElement(0, "div");
-        builder.AddAttribute(1, "class", nodeClasses);
-        builder.AddAttribute(2, "onclick", EventCallback.Factory.Create(this, () => OnTreeNodeClick(node)));
-        
-        // Tree node content
-        builder.OpenElement(3, "div");
-        builder.AddAttribute(4, "class", "tree-node-content");
-        
-        // Indent based on level
-        for (int i = 0; i < node.Level; i++)
-        {
-            builder.OpenElement(5, "div");
-            builder.AddAttribute(6, "class", "tree-indent");
-            builder.CloseElement();
-        }
-        
-        // Expander (if has children)
-        if (node.Children.Any())
-        {
-            var isExpanded = ExpandedTreeNodes.Contains(node.FullPath);
-            builder.OpenElement(7, "div");
-            builder.AddAttribute(8, "class", "tree-expander");
-            builder.AddAttribute(9, "onclick", EventCallback.Factory.Create(this, () => ToggleTreeNode(node.FullPath)));
-            builder.AddContent(10, isExpanded ? "▼" : "▶");
-            builder.CloseElement();
-        }
-        else
-        {
-            builder.OpenElement(11, "div");
-            builder.AddAttribute(12, "class", "tree-expander");
-            builder.CloseElement();
-        }
-        
-        // Icon
-        var iconClass = "tree-icon";
-        if (node.HasDifferences || node.HasChildrenWithDifferences)
-            iconClass += " has-differences";
-        
-        builder.OpenElement(13, "i");
-        builder.AddAttribute(14, "class", $"bi {(node.IsLeaf ? "bi-file-earmark" : "bi-folder")} {iconClass}");
-        builder.CloseElement();
-        
-        // Label
-        builder.OpenElement(15, "span");
-        builder.AddAttribute(16, "class", "tree-label");
-        builder.AddContent(17, node.Name);
-        builder.CloseElement();
-        
-        builder.CloseElement(); // tree-node-content
-        
-        // Badge (if has differences)
-        if (node.HasDifferences && node.DifferenceCount > 0)
-        {
-            builder.OpenElement(18, "span");
-            builder.AddAttribute(19, "class", "tree-badge");
-            builder.AddContent(20, node.DifferenceCount.ToString());
-            builder.CloseElement();
-        }
-        
-        builder.CloseElement(); // tree-node
-        
-        // Children (if expanded and has children)
-        if (node.Children.Any() && ExpandedTreeNodes.Contains(node.FullPath))
-        {
-            builder.OpenElement(21, "div");
-            builder.AddAttribute(22, "class", "tree-children");
-            
-            foreach (var child in node.Children.OrderBy(c => c.Name))
-            {
-                RenderTreeNode(builder, child);
-            }
-            
-            builder.CloseElement();
-        }
-    }
-    
-    // Tree Interaction Methods
-    private void OnTreeNodeClick(TreeNode node)
-    {
-        if (node.IsLeaf && node.HasDifferences)
-        {
-            SelectValueProperty(node.FullPath);
-        }
-        else if (node.Children.Any())
-        {
-            ToggleTreeNode(node.FullPath);
-        }
-    }
-    
-    private void ToggleTreeNode(string nodePath)
-    {
-        if (ExpandedTreeNodes.Contains(nodePath))
-        {
-            ExpandedTreeNodes.Remove(nodePath);
-        }
-        else
-        {
-            ExpandedTreeNodes.Add(nodePath);
-        }
-        StateHasChanged();
-    }
-    
-    // Action Methods
     private void RefreshAnalysis()
     {
-        LoadPropertySummaries();
+        BuildPropertyGroups();
         StateHasChanged();
     }
     
-    private void ExportResults()
-    {
-        // TODO: Implement export functionality
-        Console.WriteLine("Export functionality to be implemented");
-    }
-} 
+    private void ExportResults() { }
+}

@@ -44,6 +44,9 @@ ThreadPoolConfig.Configure();
 
 var app = builder.Build();
 
+// Clean up old temp files at startup (moved from upload API to avoid race conditions)
+CleanupOldTempFiles();
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment()) {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
@@ -63,3 +66,33 @@ app.MapRazorComponents<App>()
 app.MapFileBatchUploadApi();
 
 app.Run();
+
+/// <summary>
+/// Cleans up temporary upload files older than 1 day.
+/// Run at startup to avoid race conditions during parallel uploads.
+/// </summary>
+static void CleanupOldTempFiles() {
+    var tempPath = Path.Combine(Path.GetTempPath(), "ComparisonToolUploads");
+    if (!Directory.Exists(tempPath)) {
+        return;
+    }
+
+    try {
+        // Delete individual batch folders older than 1 day (not the parent folder)
+        foreach (var batchDir in Directory.GetDirectories(tempPath)) {
+            var dirInfo = new DirectoryInfo(batchDir);
+            if (dirInfo.CreationTime < DateTime.Now.AddDays(-1)) {
+                try {
+                    Directory.Delete(batchDir, true);
+                    Log.Information("Cleaned up old temp batch folder: {Folder}", batchDir);
+                }
+                catch (Exception ex) {
+                    Log.Warning(ex, "Failed to clean up temp folder: {Folder}", batchDir);
+                }
+            }
+        }
+    }
+    catch (Exception ex) {
+        Log.Warning(ex, "Error during temp file cleanup");
+    }
+}

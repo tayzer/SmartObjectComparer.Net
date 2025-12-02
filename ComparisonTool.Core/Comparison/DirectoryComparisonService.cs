@@ -24,6 +24,7 @@ public class DirectoryComparisonService {
     private readonly IComparisonConfigurationService configService;
     private readonly PerformanceTracker performanceTracker;
     private readonly SystemResourceMonitor resourceMonitor;
+    private readonly IComparisonLogService comparisonLogService;
 
     public DirectoryComparisonService(
         ILogger<DirectoryComparisonService> logger,
@@ -32,7 +33,8 @@ public class DirectoryComparisonService {
         IXmlDeserializationService deserializationService,
         IComparisonConfigurationService configService,
         PerformanceTracker performanceTracker,
-        SystemResourceMonitor resourceMonitor) {
+        SystemResourceMonitor resourceMonitor,
+        IComparisonLogService comparisonLogService) {
         this.logger = logger;
         this.comparisonService = comparisonService;
         this.fileSystemService = fileSystemService;
@@ -40,6 +42,7 @@ public class DirectoryComparisonService {
         this.configService = configService;
         this.performanceTracker = performanceTracker;
         this.resourceMonitor = resourceMonitor;
+        this.comparisonLogService = comparisonLogService;
     }
 
     /// <summary>
@@ -57,6 +60,8 @@ public class DirectoryComparisonService {
         if (string.IsNullOrEmpty(modelName)) {
             throw new ArgumentException("Model name must be specified", nameof(modelName));
         }
+
+        string sessionId = null;
 
         try {
             // Apply configuration
@@ -83,6 +88,9 @@ public class DirectoryComparisonService {
                 };
             }
 
+            // Start comparison logging session
+            sessionId = this.comparisonLogService.StartSession(modelName, filePairs.Count);
+
             this.logger.LogInformation("Found {Count} matching file pairs to compare", filePairs.Count);
             progress?.Report(new ComparisonProgress(0, filePairs.Count, $"Found {filePairs.Count} matching files"));
 
@@ -92,6 +100,9 @@ public class DirectoryComparisonService {
                 AllEqual = true,
                 Metadata = new Dictionary<string, object>(),
             };
+
+            // Store session ID in metadata for later retrieval
+            result.Metadata["ComparisonSessionId"] = sessionId;
 
             var filePairResults = new ConcurrentBag<FilePairComparisonResult>();
             var completedPairs = 0;
@@ -125,9 +136,8 @@ public class DirectoryComparisonService {
                         CancellationToken = cancellationToken,
                     },
                     async (filePair, ct) => {
+                        var (file1Path, file2Path, relativePath) = filePair;
                         try {
-                            var (file1Path, file2Path, relativePath) = filePair;
-
                             // Open file streams without loading entirely into memory
                             using var file1Stream = await this.fileSystemService.OpenFileStreamAsync(file1Path, ct);
                             using var file2Stream = await this.fileSystemService.OpenFileStreamAsync(file2Path, ct);
@@ -156,6 +166,9 @@ public class DirectoryComparisonService {
                             // Update result
                             filePairResults.Add(pairResult);
 
+                            // Log the result to dedicated comparison log
+                            this.comparisonLogService.LogFilePairResult(sessionId, pairResult);
+
                             // Update equality flag in a thread-safe way
                             if (!summary.AreEqual) {
                                 Interlocked.Exchange(ref equalityFlag, 0);
@@ -171,7 +184,34 @@ public class DirectoryComparisonService {
                             }
                         }
                         catch (Exception ex) {
-                            this.logger.LogError(ex, "Error comparing file pair {Path}", filePair.RelativePath);
+                            this.logger.LogError(ex, "Error comparing file pair {Path}: {Message}", relativePath, ex.Message);
+
+                            // CRITICAL FIX: Create an error result instead of silently skipping
+                            // This ensures files with errors (FileNotFound, deserialization failures, etc.)
+                            // are NOT counted as "Equal" and are properly reported to the user
+                            var errorResult = new FilePairComparisonResult {
+                                File1Name = Path.GetFileName(relativePath),
+                                File2Name = Path.GetFileName(relativePath),
+                                ErrorMessage = ex.Message,
+                                ErrorType = ex.GetType().Name,
+                            };
+
+                            filePairResults.Add(errorResult);
+
+                            // Log the error result to dedicated comparison log
+                            this.comparisonLogService.LogFilePairResult(sessionId, errorResult);
+
+                            // Mark as not equal since we couldn't determine the result
+                            Interlocked.Exchange(ref equalityFlag, 0);
+
+                            // Update progress even for errors
+                            var completed = Interlocked.Increment(ref completedPairs);
+                            if (completed % Math.Max(1, filePairs.Count / 50) == 0 || completed == filePairs.Count) {
+                                progress?.Report(new ComparisonProgress(
+                                    completed,
+                                    filePairs.Count,
+                                    $"Compared {completed} of {filePairs.Count} files (with errors)"));
+                            }
                         }
                     });
 
@@ -231,11 +271,22 @@ public class DirectoryComparisonService {
                 result.Metadata["PatternAnalysis"] = patternAnalysis;
             }
 
+            // End the logging session with final results
+            if (sessionId != null) {
+                this.comparisonLogService.EndSession(sessionId, result);
+            }
+
             return result;
         }
         catch (Exception ex) {
             this.logger.LogError(ex, "Error comparing directories {Dir1} and {Dir2}",
                 directory1Path, directory2Path);
+
+            // Log error to session if active
+            if (sessionId != null) {
+                this.comparisonLogService.LogError(sessionId, $"Fatal error comparing directories: {ex.Message}", ex);
+            }
+
             throw;
         }
     }
@@ -270,8 +321,32 @@ public class DirectoryComparisonService {
             folder1Files = sortedFiles.f1;
             folder2Files = sortedFiles.f2;
 
+            // Validate that files exist before starting comparison
+            // This catches issues with temp file cleanup or invalid paths early
+            var missingFiles = new List<string>();
+            foreach (var file in folder1Files.Take(10)) { // Check first 10 as a sample
+                if (!File.Exists(file)) {
+                    missingFiles.Add($"Folder1: {file}");
+                }
+            }
+            foreach (var file in folder2Files.Take(10)) { // Check first 10 as a sample
+                if (!File.Exists(file)) {
+                    missingFiles.Add($"Folder2: {file}");
+                }
+            }
+
+            if (missingFiles.Count > 0) {
+                this.logger.LogWarning(
+                    "File validation failed. {Count} sample files not found. This may indicate temp files were cleaned up. Missing: {Files}",
+                    missingFiles.Count,
+                    string.Join(", ", missingFiles.Take(5)));
+            }
+
             // Determine how many pairs we can make (minimum of both lists)
             var pairCount = Math.Min(folder1Files.Count, folder2Files.Count);
+
+            // Start comparison logging session
+            var sessionId = this.comparisonLogService.StartSession(modelName, pairCount);
 
             progress?.Report(new ComparisonProgress(0, pairCount, $"Will compare {pairCount} files in order"));
 
@@ -279,7 +354,7 @@ public class DirectoryComparisonService {
                 TotalPairsCompared = pairCount,
                 AllEqual = true,
                 FilePairResults = new List<FilePairComparisonResult>(),
-                Metadata = new Dictionary<string, object>(),
+                Metadata = new Dictionary<string, object> { ["ComparisonSessionId"] = sessionId },
             };
 
             var equalityFlag = 1;
@@ -295,14 +370,12 @@ public class DirectoryComparisonService {
                         CancellationToken = cancellationToken,
                     },
                     async (index, ct) => {
+                        var file1Path = folder1Files[index];
+                        var file2Path = folder2Files[index];
+                        var file1Name = Path.GetFileName(file1Path);
+                        var file2Name = Path.GetFileName(file2Path);
+
                         try {
-                            var file1Path = folder1Files[index];
-                            var file2Path = folder2Files[index];
-
-                            // Get display names for the UI
-                            var file1Name = Path.GetFileName(file1Path);
-                            var file2Name = Path.GetFileName(file2Path);
-
                             var operationId = this.performanceTracker.StartOperation($"Compare_File_{index}");
 
                             try {
@@ -328,6 +401,9 @@ public class DirectoryComparisonService {
 
                                 filePairResults.Add(pairResult);
 
+                                // Log result to dedicated comparison log
+                                this.comparisonLogService.LogFilePairResult(sessionId, pairResult);
+
                                 if (!summary.AreEqual) {
                                     Interlocked.Exchange(ref equalityFlag, 0);
                                 }
@@ -337,7 +413,24 @@ public class DirectoryComparisonService {
                             }
                         }
                         catch (Exception ex) {
-                            this.logger.LogError(ex, "Error comparing file pair at index {Index}", index);
+                            this.logger.LogError(ex, "Error comparing file pair at index {Index}: {File1} vs {File2}: {Message}",
+                                index, file1Name, file2Name, ex.Message);
+
+                            // CRITICAL FIX: Create an error result instead of silently skipping
+                            var errorResult = new FilePairComparisonResult {
+                                File1Name = file1Name,
+                                File2Name = file2Name,
+                                ErrorMessage = ex.Message,
+                                ErrorType = ex.GetType().Name,
+                            };
+
+                            filePairResults.Add(errorResult);
+
+                            // Log error result to dedicated comparison log
+                            this.comparisonLogService.LogFilePairResult(sessionId, errorResult);;
+
+                            // Mark as not equal since we couldn't determine the result
+                            Interlocked.Exchange(ref equalityFlag, 0);
                         }
 
                         var current = Interlocked.Increment(ref processed);
@@ -389,6 +482,9 @@ public class DirectoryComparisonService {
             var baseFileName = $"FolderComparison_{timestamp}";
             this.performanceTracker.SaveReportToFile(Path.Combine(reportsDirectory, $"{baseFileName}.txt"));
             this.performanceTracker.SaveReportToCsv(Path.Combine(reportsDirectory, $"{baseFileName}.csv"));
+
+            // End the logging session with final results
+            this.comparisonLogService.EndSession(sessionId, result);
 
             return result;
         });

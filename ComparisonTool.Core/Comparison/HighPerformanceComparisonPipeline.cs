@@ -185,9 +185,9 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable {
                 CancellationToken = cancellationToken,
             },
             async (filePair, ct) => {
-                try {
-                    var (file1Path, file2Path, relativePath) = filePair;
+                var (file1Path, file2Path, relativePath) = filePair;
 
+                try {
                     // OPTIMIZATION: Read both files in parallel
                     var (obj1, obj2) = await this.DeserializeBothFilesAsync(
                         file1Path, file2Path, deserializer, ct);
@@ -203,7 +203,21 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable {
                     await writer.WriteAsync(deserializedPair, ct);
                 }
                 catch (Exception ex) {
-                    this.logger.LogError(ex, "Error deserializing file pair: {Path}", filePair.RelativePath);
+                    this.logger.LogError(ex, "Error deserializing file pair: {Path}: {Message}", relativePath, ex.Message);
+
+                    // CRITICAL FIX: Pass error information to the comparison stage
+                    // so it can be properly reported instead of silently skipped
+                    var errorPair = new DeserializedFilePair {
+                        File1Path = file1Path,
+                        File2Path = file2Path,
+                        RelativePath = relativePath,
+                        Object1 = null,
+                        Object2 = null,
+                        ErrorMessage = ex.Message,
+                        ErrorType = ex.GetType().Name,
+                    };
+
+                    await writer.WriteAsync(errorPair, ct);
                 }
             });
     }
@@ -252,6 +266,19 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable {
         Type modelType,
         CancellationToken cancellationToken) {
         await foreach (var pair in reader.ReadAllAsync(cancellationToken)) {
+            // CRITICAL FIX: Check if the deserialization stage passed an error
+            if (pair.HasError) {
+                var errorResult = new FilePairComparisonResult {
+                    File1Name = Path.GetFileName(pair.File1Path),
+                    File2Name = Path.GetFileName(pair.File2Path),
+                    ErrorMessage = pair.ErrorMessage,
+                    ErrorType = pair.ErrorType,
+                };
+
+                await writer.WriteAsync(errorResult, cancellationToken);
+                continue;
+            }
+
             try {
                 // OPTIMIZATION: Reuse thread-local CompareLogic
                 var compareLogic = this.threadLocalCompareLogic.Value;
@@ -282,7 +309,17 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable {
                 }
             }
             catch (Exception ex) {
-                this.logger.LogError(ex, "Error comparing file pair: {Path}", pair.RelativePath);
+                this.logger.LogError(ex, "Error comparing file pair: {Path}: {Message}", pair.RelativePath, ex.Message);
+
+                // CRITICAL FIX: Create an error result instead of silently skipping
+                var errorResult = new FilePairComparisonResult {
+                    File1Name = Path.GetFileName(pair.File1Path),
+                    File2Name = Path.GetFileName(pair.File2Path),
+                    ErrorMessage = ex.Message,
+                    ErrorType = ex.GetType().Name,
+                };
+
+                await writer.WriteAsync(errorResult, cancellationToken);
             }
         }
     }
@@ -382,6 +419,21 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable {
         public string RelativePath { get; init; }
         public object Object1 { get; init; }
         public object Object2 { get; init; }
+
+        /// <summary>
+        /// Gets or sets the error message if deserialization failed.
+        /// </summary>
+        public string? ErrorMessage { get; init; }
+
+        /// <summary>
+        /// Gets or sets the error type if deserialization failed.
+        /// </summary>
+        public string? ErrorType { get; init; }
+
+        /// <summary>
+        /// Gets a value indicating whether this pair had an error during deserialization.
+        /// </summary>
+        public bool HasError => !string.IsNullOrEmpty(this.ErrorMessage);
     }
 }
 

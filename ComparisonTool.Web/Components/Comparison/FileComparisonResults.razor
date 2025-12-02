@@ -1,103 +1,179 @@
-@namespace ComparisonTool.Web.Components.Comparison
+﻿@namespace ComparisonTool.Web.Components.Comparison
 @using ComparisonTool.Core
 @using ComparisonTool.Core.Comparison.Results
 
-<div class="card">
-    <div class="card-header bg-light d-flex justify-content-between align-items-center">
-        <h5 class="mb-0">Expected vs Actual Comparison Results</h5>
-        <div>
-            <button class="btn btn-sm btn-outline-secondary me-2" @onclick="() => IsCollapsed = !IsCollapsed">
-                <i class="bi" @(IsCollapsed ? "bi-chevron-down" : "bi-chevron-up")></i> @(IsCollapsed ? "Expand" : "Collapse")
-            </button>
-            <button class="btn btn-sm btn-outline-primary" @onclick="ExportAll">
-                <i class="bi bi-download me-1"></i> Export All Results
-            </button>
-        </div>
-    </div>
+<MudPaper Elevation="2" Class="mt-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pa-3" Style="background: var(--mud-palette-surface);">
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.CompareArrows" Class="mr-2" />
+            Expected vs Actual Comparison Results
+        </MudText>
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Outlined" 
+                       Size="Size.Small" 
+                       StartIcon="@(IsCollapsed ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ExpandLess)"
+                       OnClick="() => IsCollapsed = !IsCollapsed">
+                @(IsCollapsed ? "Expand" : "Collapse")
+            </MudButton>
+            <MudButton Variant="Variant.Filled" 
+                       Color="Color.Primary"
+                       Size="Size.Small" 
+                       StartIcon="@Icons.Material.Filled.Download"
+                       OnClick="ExportAll">
+                Export All
+            </MudButton>
+        </MudStack>
+    </MudStack>
+    
     @if (!IsCollapsed)
     {
-        <div class="card-body">
-            <div class="mb-3 d-flex flex-wrap align-items-center gap-3">
-                <label>Status:
-                    <select class="form-select form-select-sm d-inline-block w-auto ms-1" @bind="StatusFilter">
-                        <option value="All">All</option>
-                        <option value="Equal">Equal</option>
-                        <option value="Different">Different</option>
-                    </select>
-                </label>
-                <label>Category/Pattern:
-                    <select class="form-select form-select-sm d-inline-block w-auto ms-1" @bind="SelectedGroupFilter">
-                        <option value="All">All</option>
-                        @foreach (var group in AvailableGroups)
-                        {
-                            <option value="@group">@group</option>
-                        }
-                    </select>
-                </label>
-            </div>
+        <MudDivider />
+        <div class="pa-4">
+            <!-- Filter Controls -->
+            <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Class="mb-4 flex-wrap">
+                <MudSelect T="string" @bind-Value="StatusFilter" Label="Status" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 140px;">
+                    <MudSelectItem Value='"All"'>All</MudSelectItem>
+                    <MudSelectItem Value='"Equal"'>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
+                            <span>Equal</span>
+                        </MudStack>
+                    </MudSelectItem>
+                    <MudSelectItem Value='"Different"'>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" Size="Size.Small" />
+                            <span>Different</span>
+                        </MudStack>
+                    </MudSelectItem>
+                    <MudSelectItem Value='"Error"'>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Size="Size.Small" />
+                            <span>Error</span>
+                        </MudStack>
+                    </MudSelectItem>
+                </MudSelect>
+                
+                <MudSelect T="string" @bind-Value="SelectedGroupFilter" Label="Category/Pattern" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 200px;">
+                    <MudSelectItem Value='"All"'>All Categories</MudSelectItem>
+                    @foreach (var group in AvailableGroups)
+                    {
+                        <MudSelectItem Value="@group">@group</MudSelectItem>
+                    }
+                </MudSelect>
+                
+                <!-- Quick Stats -->
+                <MudStack Row="true" Spacing="2" Class="ml-auto">
+                    <MudChip T="string" Color="Color.Success" Size="Size.Small" Icon="@Icons.Material.Filled.CheckCircle">
+                        @GetEqualCount() Equal
+                    </MudChip>
+                    <MudChip T="string" Color="Color.Error" Size="Size.Small" Icon="@Icons.Material.Filled.Cancel">
+                        @GetDifferentCount() Different
+                    </MudChip>
+                    @if (GetErrorCount() > 0)
+                    {
+                        <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.Warning">
+                            @GetErrorCount() Errors
+                        </MudChip>
+                    }
+                </MudStack>
+            </MudStack>
+            
             @if (Result.AllEqual)
             {
-                <div class="alert alert-success">
-                    <i class="bi bi-check-circle-fill me-2"></i>
-                    All file pairs are identical according to the current comparison rules.
-                </div>
+                <MudAlert Severity="Severity.Success" Variant="Variant.Filled" Icon="@Icons.Material.Filled.CheckCircle" Class="mb-4">
+                    <MudText Typo="Typo.body1"><strong>All file pairs are identical</strong></MudText>
+                    <MudText Typo="Typo.body2">All compared files match according to the current comparison rules.</MudText>
+                </MudAlert>
             }
             else
             {
-                <div class="alert alert-warning">
-                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                    Found differences in compared file pairs.
-                </div>
-                <h6>Select a file pair to view detailed comparison:</h6>
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>Expected File</th>
-                                <th>Actual File</th>
-                                <th>Status</th>
-                                <th>Differences</th>
-                                <th>Pattern/Category</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var item in GetFilteredResultsWithOriginalIndex().Take(ShowAll ? int.MaxValue : PreviewCount))
-                            {
-                                var result = item.Result;
-                                var originalIndex = item.OriginalIndex;
-                                <tr class="@(originalIndex == SelectedPairIndex ? "table-primary" : "")" style="cursor: pointer;" @onclick="() => SelectPair(originalIndex)">
-                                    <td>@result.File1Name</td>
-                                    <td>@result.File2Name</td>
-                                    <td>
-                                        <span class="@(result.AreEqual ? "text-success" : "text-danger")">
-                                            @(result.AreEqual ? "Equal" : "Different")
-                                        </span>
-                                    </td>
-                                    <td>@(result.AreEqual ? "0" : result.Summary.TotalDifferenceCount.ToString())</td>
-                                    <td>@(result.Summary?.CommonPatterns?.FirstOrDefault()?.Pattern ?? "Uncategorized")</td>
-                                    <td>
-                                        <button class="btn btn-sm btn-outline-secondary" @onclick:stopPropagation="true" @onclick="() => SelectPair(originalIndex)">
-                                            View
-                                        </button>
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                    </table>
-                    @if (GetFilteredResultsWithOriginalIndex().Count() > PreviewCount)
-                    {
-                        <div class="text-center mb-2">
-                            <button class="btn btn-link" @onclick="() => ShowAll = !ShowAll">
-                                @(ShowAll ? $"Show Top {PreviewCount}" : $"Show All ({GetFilteredResultsWithOriginalIndex().Count()})")
-                            </button>
-                        </div>
-                    }
-                </div>
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Info" Class="mb-4">
+                    <MudText Typo="Typo.body2">Found differences in compared file pairs. Select a row to view detailed comparison.</MudText>
+                </MudAlert>
+                
+                <MudDataGrid T="FileResultGridItem" 
+                             Items="@GetFilteredGridItems()" 
+                             Dense="true" 
+                             Hover="true"
+                             Striped="true"
+                             RowClick="@OnRowClick"
+                             RowClassFunc="@GetRowClass"
+                             SelectedItem="@SelectedItem"
+                             SelectedItemChanged="@OnSelectedItemChanged"
+                             Filterable="false"
+                             SortMode="SortMode.Single"
+                             RowsPerPage="@(ShowAll ? 100 : PreviewCount)">
+                    <Columns>
+                        <TemplateColumn Title="Status" Sortable="true">
+                            <CellTemplate>
+                                @if (context.Item.HasError)
+                                {
+                                    <MudTooltip Text="@context.Item.ErrorMessage">
+                                        <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" />
+                                    </MudTooltip>
+                                }
+                                else if (context.Item.AreEqual)
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" />
+                                }
+                                else
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" />
+                                }
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <PropertyColumn Property="x => x.File1Name" Title="Expected File" Sortable="true" />
+                        <PropertyColumn Property="x => x.File2Name" Title="Actual File" Sortable="true" />
+                        <PropertyColumn Property="x => x.DifferenceCount" Title="Differences" Sortable="true">
+                            <CellTemplate>
+                                @if (context.Item.HasError)
+                                {
+                                    <MudText Color="Color.Warning">-</MudText>
+                                }
+                                else if (context.Item.AreEqual)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success">0</MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Error">@context.Item.DifferenceCount</MudChip>
+                                }
+                            </CellTemplate>
+                        </PropertyColumn>
+                        <PropertyColumn Property="x => x.Category" Title="Category" Sortable="true">
+                            <CellTemplate>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default">@context.Item.Category</MudChip>
+                            </CellTemplate>
+                        </PropertyColumn>
+                        <TemplateColumn Title="Action">
+                            <CellTemplate>
+                                <MudButton Variant="Variant.Text" 
+                                           Color="Color.Primary" 
+                                           Size="Size.Small" 
+                                           StartIcon="@Icons.Material.Filled.Visibility"
+                                           OnClick="@(() => SelectPair(context.Item.OriginalIndex))">
+                                    View
+                                </MudButton>
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                    <PagerContent>
+                        <MudDataGridPager T="FileResultGridItem" />
+                    </PagerContent>
+                </MudDataGrid>
+                
+                @if (GetTotalFilteredCount() > PreviewCount)
+                {
+                    <MudStack Row="true" Justify="Justify.Center" Class="mt-3">
+                        <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => ShowAll = !ShowAll)">
+                            @(ShowAll ? $"Show Top {PreviewCount}" : $"Show All ({GetTotalFilteredCount()})")
+                        </MudButton>
+                    </MudStack>
+                }
             }
         </div>
     }
-</div>
+</MudPaper>
 
 @code {
     [Parameter]
@@ -115,9 +191,24 @@
     private bool IsCollapsed = false;
     private bool ShowAll = false;
     private const int PreviewCount = 20;
+    private FileResultGridItem SelectedItem { get; set; }
 
-    private string StatusFilter = "All"; // All, Equal, Different
+    private string StatusFilter = "All";
     private string SelectedGroupFilter = "All";
+    
+    // Grid item model
+    public class FileResultGridItem
+    {
+        public int OriginalIndex { get; set; }
+        public string File1Name { get; set; } = "";
+        public string File2Name { get; set; } = "";
+        public bool AreEqual { get; set; }
+        public bool HasError { get; set; }
+        public string ErrorMessage { get; set; } = "";
+        public int DifferenceCount { get; set; }
+        public string Category { get; set; } = "";
+    }
+    
     private List<string> AvailableGroups => Result?.FilePairResults?
         .Select(r => r.Summary?.CommonPatterns?.FirstOrDefault()?.Pattern ?? "Uncategorized")
         .Distinct()
@@ -125,15 +216,63 @@
 
     private IEnumerable<(FilePairComparisonResult Result, int OriginalIndex)> GetFilteredResultsWithOriginalIndex()
     {
+        if (Result?.FilePairResults == null)
+            return Enumerable.Empty<(FilePairComparisonResult, int)>();
+
         var results = Result.FilePairResults
             .Select((r, i) => (Result: r, OriginalIndex: i));
+        
         if (StatusFilter == "Equal")
-            results = results.Where(x => x.Result.AreEqual);
+            results = results.Where(x => !x.Result.HasError && x.Result.AreEqual);
         else if (StatusFilter == "Different")
-            results = results.Where(x => !x.Result.AreEqual);
+            results = results.Where(x => !x.Result.HasError && !x.Result.AreEqual);
+        else if (StatusFilter == "Error")
+            results = results.Where(x => x.Result.HasError);
+        
         if (SelectedGroupFilter != "All")
             results = results.Where(x => (x.Result.Summary?.CommonPatterns?.FirstOrDefault()?.Pattern ?? "Uncategorized") == SelectedGroupFilter);
+        
         return results;
+    }
+    
+    private IEnumerable<FileResultGridItem> GetFilteredGridItems()
+    {
+        return GetFilteredResultsWithOriginalIndex()
+            .Take(ShowAll ? int.MaxValue : PreviewCount)
+            .Select(x => new FileResultGridItem
+            {
+                OriginalIndex = x.OriginalIndex,
+                File1Name = x.Result.File1Name,
+                File2Name = x.Result.File2Name,
+                AreEqual = x.Result.AreEqual,
+                HasError = x.Result.HasError,
+                ErrorMessage = x.Result.ErrorMessage ?? "",
+                DifferenceCount = x.Result.Summary?.TotalDifferenceCount ?? 0,
+                Category = x.Result.Summary?.CommonPatterns?.FirstOrDefault()?.Pattern ?? "Uncategorized"
+            });
+    }
+    
+    private int GetEqualCount() => Result?.FilePairResults?.Count(r => !r.HasError && r.AreEqual) ?? 0;
+    private int GetDifferentCount() => Result?.FilePairResults?.Count(r => !r.HasError && !r.AreEqual) ?? 0;
+    private int GetErrorCount() => Result?.FilePairResults?.Count(r => r.HasError) ?? 0;
+    private int GetTotalFilteredCount() => GetFilteredResultsWithOriginalIndex().Count();
+    
+    private string GetRowClass(FileResultGridItem item, int index)
+    {
+        if (item.OriginalIndex == SelectedPairIndex)
+            return "mud-theme-primary";
+        return "";
+    }
+    
+    private void OnRowClick(DataGridRowClickEventArgs<FileResultGridItem> args)
+    {
+        SelectPair(args.Item.OriginalIndex);
+    }
+    
+    private void OnSelectedItemChanged(FileResultGridItem item)
+    {
+        if (item != null)
+            SelectPair(item.OriginalIndex);
     }
 
     private async Task SelectPair(int index)

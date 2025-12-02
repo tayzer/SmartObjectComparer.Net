@@ -14,10 +14,6 @@
                    OnClick="TriggerFolderUpload">
             Select Folder
         </MudButton>
-        @if (Files.Count > 0)
-        {
-            <MudChip T="string" Size="Size.Small" Color="Color.Info">@Files.Count files</MudChip>
-        }
     </MudStack>
     <!-- Hidden folder input for JS batch upload -->
     <input type="file" id="jsFolderInput_@_folderInputId" style="display:none" multiple webkitdirectory directory />
