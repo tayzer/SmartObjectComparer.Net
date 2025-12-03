@@ -571,6 +571,11 @@ namespace ComparisonTool.Core.Comparison.Analysis {
 
         private void AnalyzeMissingProperties(List<(Difference difference, string FilePair, FilePairComparisonResult Result)> allDifferences, Dictionary<string, StructuralPattern> structuralPatterns, HashSet<Difference> categorizedDifferences) {
             foreach (var (diff, filePair, _) in allDifferences) {
+                // Skip already categorized differences
+                if (categorizedDifferences.Contains(diff)) {
+                    continue;
+                }
+
                 if (this.IsPropertyMissing(diff) && !diff.PropertyName.Contains("[") &&
                     !this.IsCriticalProperty(diff.PropertyName)) {
                     var segments = this.ExtractPathSegments(diff.PropertyName);
@@ -649,9 +654,10 @@ namespace ComparisonTool.Core.Comparison.Analysis {
                 if (mostCommonChange.Key != default && mostCommonChange.Value > 1) {
                     var (oldValue, newValue) = mostCommonChange.Key;
 
-                    // Find all differences matching this path and value change
+                    // Find all UNCATEGORIZED differences matching this path and value change
                     var matchingDiffs = allDifferences
-                        .Where(d => this.NormalizePropertyPath(d.Difference.PropertyName) == path &&
+                        .Where(d => !categorizedDifferences.Contains(d.Difference) &&
+                                    this.NormalizePropertyPath(d.Difference.PropertyName) == path &&
                                     (d.Difference.Object1Value?.ToString() == oldValue ||
                                      (d.Difference.Object1Value == null && oldValue == "null")) &&
                                     (d.Difference.Object2Value?.ToString() == newValue ||
@@ -706,8 +712,10 @@ namespace ComparisonTool.Core.Comparison.Analysis {
             foreach (var fileGroup in fileGroups) {
                 var filePair = fileGroup.Key;
 
+                // Filter to only uncategorized collection differences
                 var collectionDiffs = fileGroup
-                    .Where(d => d.Difference.PropertyName.Contains("["))
+                    .Where(d => !categorizedDifferences.Contains(d.Difference) && 
+                               d.Difference.PropertyName.Contains("["))
                     .GroupBy(d => this.ExtractCollectionName(d.Difference.PropertyName));
 
                 foreach (var collectionGroup in collectionDiffs) {
@@ -717,14 +725,15 @@ namespace ComparisonTool.Core.Comparison.Analysis {
                     // 1. There are multiple differences in the same collection
                     // 2. The collection has more than one element (check indices)
                     // 3. The differences arent just missing properties
-                    var indices = collectionGroup
+                    var uncategorizedInGroup = collectionGroup.ToList();
+                    var indices = uncategorizedInGroup
                         .Select(d => this.ExtractArrayIndex(d.Difference.PropertyName))
                         .Where(c => c >= 0)
                         .Distinct()
                         .ToList();
 
                     var hasMultipleIndices = indices.Count > 1;
-                    var hasNonMissingDiffs = collectionGroup.Any(c => !this.IsPropertyMissing(c.Difference));
+                    var hasNonMissingDiffs = uncategorizedInGroup.Any(c => !this.IsPropertyMissing(c.Difference));
 
                     // TODO: this is unique to the domain and should be fixed generally, maybe pass in values like this in DI?
                     // Special case: if we have only one Applicant but its showing as an order difference, likely a false positive.
@@ -746,8 +755,8 @@ namespace ComparisonTool.Core.Comparison.Analysis {
                                 Category = DifferenceCategory.CollectionItemChanged,
                                 IsCollectionElement = true,
                                 AffectedFiles = new List<string>() { filePair },
-                                Examples = collectionGroup.Take(3).Select(c => c.Difference).ToList(),
-                                OccurenceCount = indices.Count,
+                                Examples = uncategorizedInGroup.Take(3).Select(c => c.Difference).ToList(),
+                                OccurenceCount = uncategorizedInGroup.Count,
                                 FileCount = 1,
                                 IsCriticalProperty = false,
                                 HumanReadableDescription = description,
@@ -755,26 +764,26 @@ namespace ComparisonTool.Core.Comparison.Analysis {
                             };
 
                             // Mark all differences in this collection group as categorized
-                            foreach (var diff in collectionGroup) {
+                            foreach (var diff in uncategorizedInGroup) {
                                 categorizedDifferences.Add(diff.Difference);
                             }
                         }
                         else {
                             var existingPattern = structuralPatterns[pattern];
-                            existingPattern.OccurenceCount += indices.Count;
+                            existingPattern.OccurenceCount += uncategorizedInGroup.Count;
                             if (!existingPattern.AffectedFiles.Contains(filePair)) {
                                 existingPattern.AffectedFiles.Add(filePair);
                                 existingPattern.FileCount++;
                             }
 
-                            foreach (var example in collectionGroup.Take(3).Select(c => c.Difference)) {
+                            foreach (var example in uncategorizedInGroup.Take(3).Select(c => c.Difference)) {
                                 if (existingPattern.Examples.Count < 3) {
                                     existingPattern.Examples.Add(example);
                                 }
                             }
 
                             // Mark all differences in this collection group as categorized
-                            foreach (var diff in collectionGroup) {
+                            foreach (var diff in uncategorizedInGroup) {
                                 categorizedDifferences.Add(diff.Difference);
                             }
                         }
@@ -785,6 +794,11 @@ namespace ComparisonTool.Core.Comparison.Analysis {
 
         private void AnalyzeCollectionElements(List<(Difference Difference, string FilePair, FilePairComparisonResult Result)> allDifferences, Dictionary<string, StructuralPattern> structuralPatterns, HashSet<Difference> categorizedDifferences) {
             foreach (var (difference, filePair, _) in allDifferences) {
+                // Skip already categorized differences
+                if (categorizedDifferences.Contains(difference)) {
+                    continue;
+                }
+
                 if (difference.PropertyName.Contains("[") && this.IsPropertyMissing(difference) &&
                     !this.IsCriticalProperty(difference.PropertyName)) {
                     var collection = this.ExtractCollectionName(difference.PropertyName);
@@ -997,12 +1011,16 @@ namespace ComparisonTool.Core.Comparison.Analysis {
 
         private void AnalyzeGeneralValueDifferences(List<(Difference Difference, string FilePair, FilePairComparisonResult Result)> allDifferences, Dictionary<string, StructuralPattern> structuralPatterns, HashSet<Difference> categorizedDifferences) {
             // Track general change frequency regardless of specific values
+            // ONLY for differences not already categorized by other analyzers
             var generalChangeCounts = new Dictionary<string, Dictionary<string, int>>();
 
-            // First pass: count all value changes by normalized path
+            // First pass: count UNCATEGORIZED value changes by normalized path
             foreach (var (difference, filePair, _) in allDifferences) {
-                // Only count non-missing value differences
-                if (!this.IsPropertyMissing(difference) && difference.Object1Value != null && difference.Object2Value != null) {
+                // Only count non-missing value differences that are NOT already categorized
+                if (!categorizedDifferences.Contains(difference) &&
+                    !this.IsPropertyMissing(difference) && 
+                    difference.Object1Value != null && 
+                    difference.Object2Value != null) {
                     var normalizedPath = this.NormalizePropertyPath(difference.PropertyName);
 
                     if (!generalChangeCounts.ContainsKey(normalizedPath)) {
@@ -1022,6 +1040,11 @@ namespace ComparisonTool.Core.Comparison.Analysis {
                 var path = pathEntry.Key;
                 var fileCounts = pathEntry.Value;
 
+                // Skip if no uncategorized differences for this path
+                if (fileCounts.Values.Sum() == 0) {
+                    continue;
+                }
+
                 // Process both multi-file and single-file changes
                 var segments = this.ExtractPathSegments(path);
                 var propertyName = segments.Last();
@@ -1034,9 +1057,10 @@ namespace ComparisonTool.Core.Comparison.Analysis {
                     var affectedFiles = fileCounts.Keys.ToList();
                     var totalOccurrences = fileCounts.Values.Sum();
 
-                    // Find all matching differences for this path
+                    // Find all UNCATEGORIZED matching differences for this path
                     var matchingDifferences = allDifferences
-                        .Where(d => this.NormalizePropertyPath(d.Difference.PropertyName) == path &&
+                        .Where(d => !categorizedDifferences.Contains(d.Difference) &&
+                                   this.NormalizePropertyPath(d.Difference.PropertyName) == path &&
                                    !this.IsPropertyMissing(d.Difference))
                         .ToList();
 

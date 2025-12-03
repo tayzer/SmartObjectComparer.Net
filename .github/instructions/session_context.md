@@ -1,64 +1,88 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2025-01-30T02:45:00Z
+lastUpdated: 2025-01-30T04:00:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-UI Improvements: Remove duplicate "files" chip and add hierarchical property tree navigation to ComparisonRunDetails.razor
+Add hierarchical tree navigation for Value and Ordering differences tabs
 
 ## Todo List Status
 ```markdown
-- [x] Read session context to understand current state
-- [x] Remove duplicate "files" chip from FolderUploadPanel.razor
-- [x] Add hierarchical property tree view to ComparisonRunDetails.razor
-- [x] Build and verify the changes compile successfully
+- [x] Investigate why Value Diffs + Order Diffs > Total Differences (COMPLETED IN PREVIOUS SESSION)
+- [x] Fix stat card layout - MudChip clipping outside boxes
+- [x] Fix folder button drift on small screens
+- [x] Add PropertyTreeNode class extending TreeItemData<string>
+- [x] Implement BuildPropertyTree() method to create hierarchical structure
+- [x] Convert Value Differences tab to MudTreeView
+- [x] Convert Ordering Differences tab to MudTreeView  
+- [x] Add expand/collapse all functionality for both trees
+- [x] Fix MudBlazor 8.x API compatibility (TreeItemData context issues)
+- [x] Build and verify all changes compile successfully
 ```
 
 ## Recent File Changes
-- `ComparisonTool.Web/Components/Shared/FolderUploadPanel.razor`: Removed duplicate MudChip showing file count (lines 17-20)
-- `ComparisonTool.Web/Components/Comparison/ComparisonRunDetails.razor`: Complete rewrite with:
-  - Two-panel layout (property tree left 4 cols, file differences right 8 cols)
-  - Property groups: `_valuePropertyGroups`, `_orderPropertyGroups`, `_criticalPropertyGroups` as Dictionary<string, List<FileDifference>>
-  - Separate filter fields for each tab (ValuePropertyFilter, OrderPropertyFilter, CriticalPropertyFilter)
-  - Click-to-select property shows file differences with Expected/Actual visual diff
-  - Auto-selection of first property in each group
-  - Scrollable property list with filter
-  - All Differences tab with MudDataGrid for comprehensive view
+- `ComparisonTool.Web/Components/Comparison/ComparisonRunDetails.razor`:
+  - **PropertyTreeNode class** (lines ~737-758): Now extends `TreeItemData<string>` for MudBlazor 8.x compatibility. Has Name, FullPath, IsLeaf, DifferenceCount, Differences properties.
+  - **Tree field declarations** (lines ~730-731): Changed from `HashSet<PropertyTreeNode>` to `List<TreeItemData<string>>` for _valueTreeNodes and _orderTreeNodes
+  - **BuildPropertyTree method** (lines ~851-940): Completely rewritten to build tree using TreeItemData hierarchy with nodeMap for tracking nodes by path
+  - **CalculateNodeCounts method** (lines ~942-957): Updated to use OfType<PropertyTreeNode>() for casting children
+  - **CountLeafNodes method** (lines ~959-974): Updated to take TreeItemData<string> and cast to PropertyTreeNode
+  - **SelectTreeNode/SelectOrderTreeNode** (lines ~976-1007): Updated to take TreeItemData<string> and use Expanded property instead of IsExpanded
+  - **SetExpandedRecursive** (lines ~1033-1041): Updated to take TreeItemData<string> and iterate Children
+  - **Value Differences tree view** (lines ~266-302): Now uses MudTreeView T="string", casts context to PropertyTreeNode, uses BodyContent Context="_"
+  - **Ordering Differences tree view** (lines ~415-451): Same pattern as Value Differences with Color.Warning for chips
 
 ## Key Technical Decisions
-- Decision: Use explicit inline tab panels instead of dynamic RenderFragment with conditional bindings
-- Rationale: Blazor does not support @bind-Value with ternary expressions - required explicit panels for each tab
+- Decision: Extend TreeItemData<string> instead of custom POCO
+- Rationale: MudBlazor 8.x requires Items to be IReadOnlyCollection<TreeItemData<T>>. Extending the base class gives us Expanded, Children, Value, Text properties for free.
 - Date: 2025-01-30
 
-- Decision: Use two-panel layout (property tree left, file differences right) based on original ComparisonRunDetails.razor.bak structure
-- Rationale: User feedback that flat MudDataGrid is hard to navigate with thousands of differences
+- Decision: Use `<BodyContent Context="_">` to avoid context naming conflict
+- Rationale: ItemTemplate's context shadows BodyContent's context. Using "_" as the BodyContent context name resolves the RZ9999 compiler error.
 - Date: 2025-01-30
+
+- Decision: Cast context in ItemTemplate with `var node = context as PropertyTreeNode`
+- Rationale: The ItemTemplate context is TreeItemData<string>, but we need access to custom properties (IsLeaf, DifferenceCount, etc.). Casting gives us type-safe access.
+- Date: 2025-01-30
+
+## Root Cause Analysis
+**MudBlazor 8.x API Changes**:
+- `MudTreeView.Items` now expects `IReadOnlyCollection<TreeItemData<T>>`
+- `ItemTemplate` context is `TreeItemData<T>`, not `T` directly
+- Must use `@bind-Expanded` and `context.Children` from base class
+- BodyContent Context naming conflicts require explicit Context parameter
 
 ## External Resources Referenced
-- None for this session
+- [MudBlazor TreeView Docs](https://mudblazor.com/components/treeview): Referenced for 8.x API patterns
+- [TreeViewItemTemplateExample.razor](https://raw.githubusercontent.com/MudBlazor/MudBlazor/dev/src/MudBlazor.Docs/Pages/Components/TreeView/Examples/TreeViewItemTemplateExample.razor): Shows how to extend TreeItemData and cast context
 
 ## Blockers & Issues
-- **[RESOLVED]** RenderFragment with @bind-Value ternary expression error - Fixed by using explicit inline panels
+- **[RESOLVED]** RZ9999 error - BodyContent context shadowing ItemTemplate context. Fixed with Context="_" parameter.
 
 ## Failed Approaches
-- Approach: Using RenderFragment with @bind-Value and ternary expression for dynamic filter binding
-- Failure Reason: Blazor does not support @bind-Value with ternary expressions - produces CS0029/CS1662/CS0201 errors
-- Lesson: Need to use explicit panels or separate render methods instead of dynamic RenderFragment with conditional bindings
+- Approach: Using custom PropertyTreeNode without extending TreeItemData
+- Failure Reason: MudBlazor 8.x enforces Items type as IReadOnlyCollection<TreeItemData<T>>
+- Lesson: Always check framework version compatibility for component APIs
 
 ## Environment Notes
-- MudBlazor 8.15.0
+- MudBlazor 8.15.0 - TreeView API changed significantly from earlier versions
 - .NET 8.0
-- Build succeeded with 0 errors, 174 warnings (mostly stylecop)
+- Build succeeded with 0 errors, 0 warnings
 
 ## Next Session Priority
-No active tasks - All items completed
+Test the hierarchical tree navigation with real data to verify:
+1. Trees populate correctly from property paths
+2. Expand/collapse works for both trees
+3. Clicking leaf nodes populates the right panel
+4. Difference counts aggregate correctly up the tree
 
 ## Session Notes
-- User feedback: "We don't need this files thing next to the 'Select Folder' button" - FIXED: Removed duplicate chip from FolderUploadPanel.razor
-- User feedback: "We should have a section like before that is based off the domain model" - FIXED: Implemented hierarchical property tree navigation
-- User complaint about "pages and pages of 'Timestamp' property" - FIXED: Properties now grouped by path with count badges
-- Solution: Two-panel layout with property tree on left, file differences on right
-- Build: 0 errors, 174 warnings (pre-existing stylecop warnings)
+- User requested hierarchical tree navigation for navigating differences by domain context
+- Example path: "OrderData.Customer.Profile.FirstName" → OrderData > Customer > Profile > FirstName tree
+- Trees show folder icons for branches, circle icons for leaves
+- Leaf nodes show difference count in colored chip (Info for Value, Warning for Order)
+- First 2 levels expanded by default
+- Expand/Collapse All buttons in header

@@ -3,7 +3,7 @@
 @using System.Linq
 @using MudBlazor
 
-<MudPaper Elevation="2" Class="pa-4">
+<MudPaper Elevation="2" Class="pa-4" Style="overflow: hidden;">
     <MudStack Spacing="3">
         <MudText Typo="Typo.h6">Step 1: Select Files (XML or JSON)</MudText>
         
@@ -21,16 +21,20 @@
         </MudSelect>
 
         <MudGrid Spacing="3">
-            <MudItem xs="12" md="6">
-                <FolderUploadPanel Label="Expected Folder (select folder):"
-                                 Files="Folder1Files"
-                                 OnFilesChanged="HandleFolder1Changed" />
+            <MudItem xs="12" md="6" Style="min-width: 0;">
+                <MudPaper Elevation="0" Class="pa-3" Style="background: var(--mud-palette-background-grey); border-radius: 8px;">
+                    <FolderUploadPanel Label="Expected Folder:"
+                                     Files="Folder1Files"
+                                     OnFilesChanged="HandleFolder1Changed" />
+                </MudPaper>
             </MudItem>
 
-            <MudItem xs="12" md="6">
-                <FolderUploadPanel Label="Actual Folder (select folder):"
-                                 Files="Folder2Files"
-                                 OnFilesChanged="HandleFolder2Changed" />
+            <MudItem xs="12" md="6" Style="min-width: 0;">
+                <MudPaper Elevation="0" Class="pa-3" Style="background: var(--mud-palette-background-grey); border-radius: 8px;">
+                    <FolderUploadPanel Label="Actual Folder:"
+                                     Files="Folder2Files"
+                                     OnFilesChanged="HandleFolder2Changed" />
+                </MudPaper>
             </MudItem>
         </MudGrid>
 

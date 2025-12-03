@@ -4,14 +4,15 @@
 @using Microsoft.JSInterop
 @implements IDisposable
 
-<MudStack Spacing="2" Class="mt-3">
+<MudStack Spacing="2" Class="mt-2">
     <MudText Typo="Typo.subtitle2">@Label</MudText>
-    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-        <InputFile class="mud-input-outlined" OnChange="HandleFileUpload" multiple style="flex: 1;" />
-        <MudButton Variant="Variant.Outlined" 
+    <MudStack Spacing="2">
+        <InputFile class="mud-input-outlined" OnChange="HandleFileUpload" multiple style="width: 100%; max-width: 100%;" />
+        <MudButton Variant="Variant.Filled" 
                    Color="Color.Primary"
                    StartIcon="@Icons.Material.Filled.Folder"
-                   OnClick="TriggerFolderUpload">
+                   OnClick="TriggerFolderUpload"
+                   FullWidth="true">
             Select Folder
         </MudButton>
     </MudStack>
