@@ -1,45 +1,53 @@
 @namespace ComparisonTool.Web.Components.Comparison
 @using ComparisonTool.Web.Components.Shared
 @using System.Linq
+@using MudBlazor
 
-<div class="card">
-    <div class="card-header">
-        <h5>Step 1: Select Files (XML or JSON)</h5>
-    </div>
-    <div class="card-body">
-        <div class="form-group">
-            <label>Select Domain Model:</label>
-            <select class="form-control" @bind="SelectedModelNameLocal">
-                @foreach (var modelName in ModelNames)
-                {
-                    <option value="@modelName">@modelName</option>
-                }
-            </select>
-        </div>
+<MudPaper Elevation="2" Class="pa-4" Style="overflow: hidden;">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h6">Step 1: Select Files (XML or JSON)</MudText>
+        
+        <MudSelect T="string" 
+                   Label="Select Domain Model" 
+                   Value="SelectedModelNameLocal"
+                   ValueChanged="@((string val) => SelectedModelNameLocal = val)"
+                   Variant="Variant.Outlined"
+                   AnchorOrigin="Origin.BottomCenter"
+                   aria-label="Select domain model for comparison">
+            @foreach (var modelName in ModelNames)
+            {
+                <MudSelectItem Value="@modelName">@modelName</MudSelectItem>
+            }
+        </MudSelect>
 
-        <div class="row">
-            <div class="col-md-6">
-                <FolderUploadPanel Label="Expected Folder (select folder):"
-                                 Files="Folder1Files"
-                                 OnFilesChanged="HandleFolder1Changed" />
-            </div>
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="6" Style="min-width: 0;">
+                <MudPaper Elevation="0" Class="pa-3" Style="background: var(--mud-palette-background-grey); border-radius: 8px;">
+                    <FolderUploadPanel Label="Expected Folder:"
+                                     Files="Folder1Files"
+                                     OnFilesChanged="HandleFolder1Changed" />
+                </MudPaper>
+            </MudItem>
 
-            <div class="col-md-6">
-                <FolderUploadPanel Label="Actual Folder (select folder):"
-                                 Files="Folder2Files"
-                                 OnFilesChanged="HandleFolder2Changed" />
-            </div>
-        </div>
+            <MudItem xs="12" md="6" Style="min-width: 0;">
+                <MudPaper Elevation="0" Class="pa-3" Style="background: var(--mud-palette-background-grey); border-radius: 8px;">
+                    <FolderUploadPanel Label="Actual Folder:"
+                                     Files="Folder2Files"
+                                     OnFilesChanged="HandleFolder2Changed" />
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
 
         @if (Folder1Files.Any() && Folder2Files.Any())
         {
-            <div class="alert alert-info mt-3">
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
                 <strong>Files will be paired for comparison in order.</strong><br />
-                Expected files are sorted by filename, and Actual files are sorted by filename. Each Expected file will be compared with the corresponding Actual file.
-            </div>
+                Expected files are sorted by filename, and Actual files are sorted by filename. 
+                Each Expected file will be compared with the corresponding Actual file.
+            </MudAlert>
         }
-    </div>
-</div>
+    </MudStack>
+</MudPaper>
 
 @code {
     [Parameter]

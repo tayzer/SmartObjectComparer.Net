@@ -6,83 +6,150 @@
 @using ComparisonTool.Core.Comparison.Results
 @using KellermanSoftware.CompareNetObjects
 
-<div class="mt-4" id="detailed-differences-section">
-    <div class="card">
-        <div class="card-header bg-light d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">
-                Comparison: @SelectedPair.File1Name vs @SelectedPair.File2Name
-            </h5>
-            <button class="btn btn-sm btn-outline-primary" @onclick="ExportResults">
-                <i class="bi bi-download me-1"></i> Export This Result
-            </button>
-        </div>
-        <div class="card-body">
-            <!-- Comparison Overview moved to parent component for better layout -->
-        </div>
-    </div>
-</div>
+<style>
+    .diff-expected-cell {
+        background-color: rgba(46, 125, 50, 0.1) !important;
+        border-left: 3px solid #2e7d32 !important;
+    }
+    
+    .diff-actual-cell {
+        background-color: rgba(211, 47, 47, 0.1) !important;
+        border-left: 3px solid #d32f2f !important;
+    }
+    
+    .diff-value-expected {
+        background-color: rgba(46, 125, 50, 0.2);
+        color: #1b5e20;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-family: 'Consolas', 'Monaco', monospace;
+        font-size: 0.875rem;
+    }
+    
+    .diff-value-actual {
+        background-color: rgba(211, 47, 47, 0.2);
+        color: #b71c1c;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-family: 'Consolas', 'Monaco', monospace;
+        font-size: 0.875rem;
+    }
+</style>
+
+<MudPaper Elevation="2" Class="mt-4" id="detailed-differences-section">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pa-3" Style="background: var(--mud-palette-surface);">
+        <MudStack Spacing="0">
+            <MudText Typo="Typo.h6">
+                <MudIcon Icon="@Icons.Material.Filled.Compare" Class="mr-2" />
+                Detailed Comparison
+            </MudText>
+            <MudText Typo="Typo.caption" Color="Color.Default">
+                @SelectedPair.File1Name vs @SelectedPair.File2Name
+            </MudText>
+        </MudStack>
+        <MudButton Variant="Variant.Outlined" 
+                   Color="Color.Primary"
+                   Size="Size.Small" 
+                   StartIcon="@Icons.Material.Filled.Download"
+                   OnClick="ExportResults">
+            Export This Result
+        </MudButton>
+    </MudStack>
+    <MudDivider />
+</MudPaper>
 
 @if (!DifferenceSummary.AreEqual)
 {
-    <div class="mt-4">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">Detailed Differences</h5>
-                <button class="btn btn-sm btn-outline-secondary" @onclick="OnToggleShowAll">
-                    @(ShowAllDifferences ? "Show Top 100 Differences Per Group" : "Show All Differences Per Group")
-                </button>
-            </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover">
-                        @foreach (var group in GroupedDifferences)
+    <MudPaper Elevation="2" Class="mt-4">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pa-3">
+            <MudText Typo="Typo.h6">
+                <MudIcon Icon="@Icons.Material.Filled.List" Class="mr-2" />
+                All Differences
+            </MudText>
+            <MudButton Variant="Variant.Text" 
+                       Size="Size.Small" 
+                       OnClick="OnToggleShowAll">
+                @(ShowAllDifferences ? "Show Top 100 Per Group" : "Show All Differences")
+            </MudButton>
+        </MudStack>
+        <MudDivider />
+        
+        <div class="pa-4">
+            <MudTextField @bind-Value="SearchFilter" 
+                          Placeholder="Search differences..." 
+                          Variant="Variant.Outlined" 
+                          Adornment="Adornment.Start" 
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true"
+                          Margin="Margin.Dense"
+                          Class="mb-4" />
+            
+            @foreach (var group in GetFilteredGroups())
+            {
+                string groupKey = group.Key;
+                bool isCollapsed = IsGroupCollapsed(groupKey);
+                var diffCount = group.Count();
+                
+                <MudPaper Elevation="1" Class="mb-3">
+                    <MudStack Row="true" 
+                              Justify="Justify.SpaceBetween" 
+                              AlignItems="AlignItems.Center" 
+                              Class="pa-3 cursor-pointer"
+                              Style="background: var(--mud-palette-background-grey);"
+                              @onclick="() => ToggleGroupCollapse(groupKey)">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@(isCollapsed ? Icons.Material.Filled.ChevronRight : Icons.Material.Filled.ExpandMore)" />
+                            <MudText Typo="Typo.subtitle1"><strong>@groupKey</strong></MudText>
+                            <MudChip T="string" Size="Size.Small" Color="Color.Error">@diffCount diffs</MudChip>
+                        </MudStack>
+                    </MudStack>
+                    
+                    @if (!isCollapsed)
+                    {
+                        <MudDivider />
+                        <MudDataGrid T="DifferenceItem" 
+                                     Items="@GetGroupItems(group)" 
+                                     Dense="true" 
+                                     Hover="true"
+                                     Striped="false"
+                                     Filterable="false"
+                                     SortMode="SortMode.Single"
+                                     RowsPerPage="25">
+                            <Columns>
+                                <PropertyColumn Property="x => x.PropertyName" Title="Property" Sortable="true">
+                                    <CellTemplate>
+                                        <code style="font-size: 0.85rem;">@context.Item.PropertyName</code>
+                                    </CellTemplate>
+                                </PropertyColumn>
+                                <TemplateColumn Title="Expected (A)" CellClass="diff-expected-cell">
+                                    <CellTemplate>
+                                        <span class="diff-value-expected">@context.Item.ExpectedValue</span>
+                                    </CellTemplate>
+                                </TemplateColumn>
+                                <TemplateColumn Title="Actual (B)" CellClass="diff-actual-cell">
+                                    <CellTemplate>
+                                        <span class="diff-value-actual">@context.Item.ActualValue</span>
+                                    </CellTemplate>
+                                </TemplateColumn>
+                            </Columns>
+                            <PagerContent>
+                                <MudDataGridPager T="DifferenceItem" />
+                            </PagerContent>
+                        </MudDataGrid>
+                        
+                        @if (diffCount > 100 && !ShowAllDifferences)
                         {
-                            string groupKey = group.Key;
-                            bool isCollapsed = IsGroupCollapsed(groupKey);
-
-                            <tbody class="collapsible-group-header">
-                                <tr @onclick="() => ToggleGroupCollapse(groupKey)" style="cursor: pointer; background-color: #f8f9fa;">
-                                    <td colspan="3">
-                                        <i class="bi @(isCollapsed ? "bi-chevron-right" : "bi-chevron-down") me-2"></i>
-                                        <strong>@groupKey</strong>
-                                        <span class="badge bg-secondary ms-2">@group.Count() diffs</span>
-                                    </td>
-                                </tr>
-                            </tbody>
-                            <tbody class="@(isCollapsed ? "collapse" : "")">
-                                @if (!isCollapsed)
-                                {
-                                    <thead>
-                                        <tr>
-                                            <th>Property</th>
-                                            <th>A Value (@SelectedPair.File1Name)</th>
-                                            <th>B Value (@SelectedPair.File2Name)</th>
-                                        </tr>
-                                    </thead>
-                                    @foreach (var diff in ShowAllDifferences ? group : group.Take(100))
-                                    {
-                                        <tr>
-                                            <td style="padding-left: 2em;">@GetRelativePropertyName(diff.PropertyName, groupKey)</td>
-                                            <td class="text-danger">@FormatValue(diff.Object1Value)</td>
-                                            <td class="text-success">@FormatValue(diff.Object2Value)</td>
-                                        </tr>
-                                    }
-                                    @if (group.Count() > 100 && !ShowAllDifferences)
-                                    {
-                                        <tr>
-                                            <td colspan="3" class="text-center">
-                                                <em>And @(group.Count() - 100) more differences in this group...</em>
-                                            </td>
-                                        </tr>
-                                    }
-                                }
-                            </tbody>
+                            <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true" Class="mx-3 mb-3">
+                                And @(diffCount - 100) more differences in this group...
+                            </MudAlert>
                         }
-                    </table>
-                </div>
-            </div>
+                    }
+                </MudPaper>
+            }
         </div>
-    </div>
+    </MudPaper>
 }
 
 @code {
@@ -107,7 +174,16 @@
     [Parameter]
     public MultiFolderComparisonResult FolderResult { get; set; }
 
+    private string SearchFilter { get; set; } = "";
     private Dictionary<string, bool> groupCollapsedStates = new Dictionary<string, bool>();
+    
+    // Grid item for differences
+    public class DifferenceItem
+    {
+        public string PropertyName { get; set; } = "";
+        public string ExpectedValue { get; set; } = "";
+        public string ActualValue { get; set; } = "";
+    }
 
     private IEnumerable<IGrouping<string, Difference>> GroupedDifferences { get; set; } = Enumerable.Empty<IGrouping<string, Difference>>();
 
@@ -115,8 +191,6 @@
     {
         if (ComparisonResult != null)
         {
-            // Group by normalized property path so System.Collections.IList.Item[...] and indexed
-            // variants are treated as the same logical property and don't appear duplicated.
             GroupedDifferences = (ComparisonResult.Differences ?? Enumerable.Empty<Difference>())
                 .Select(d => new { Normalized = PropertyPathNormalizer.NormalizePropertyPath(d.PropertyName), Diff = d })
                 .GroupBy(x => x.Normalized, x => x.Diff)
@@ -137,33 +211,35 @@
         }
         base.OnParametersSet();
     }
-
-    private string GetGroupKey(string propertyPath)
+    
+    private IEnumerable<IGrouping<string, Difference>> GetFilteredGroups()
     {
-        // Operate on normalized path to ensure grouping is consistent with normalization
-        var normalized = PropertyPathNormalizer.NormalizePropertyPath(propertyPath);
-        if (string.IsNullOrEmpty(normalized)) return "(Root)";
-
-        var match = Regex.Match(normalized, @"(.*)(\.[\w]+|\[\d+\])$", RegexOptions.RightToLeft);
-
-        if (match.Success && !string.IsNullOrEmpty(match.Groups[1].Value))
+        if (string.IsNullOrWhiteSpace(SearchFilter))
+            return GroupedDifferences;
+            
+        return GroupedDifferences.Where(g => 
+            g.Key.Contains(SearchFilter, StringComparison.OrdinalIgnoreCase) ||
+            g.Any(d => 
+                d.PropertyName.Contains(SearchFilter, StringComparison.OrdinalIgnoreCase) ||
+                FormatValue(d.Object1Value).Contains(SearchFilter, StringComparison.OrdinalIgnoreCase) ||
+                FormatValue(d.Object2Value).Contains(SearchFilter, StringComparison.OrdinalIgnoreCase)));
+    }
+    
+    private IEnumerable<DifferenceItem> GetGroupItems(IGrouping<string, Difference> group)
+    {
+        var items = ShowAllDifferences ? group : group.Take(100);
+        return items.Select(d => new DifferenceItem
         {
-            return match.Groups[1].Value;
-        }
-
-        if (!normalized.Contains(".") && !normalized.Contains("["))
-        {
-            return "(Root Properties)";
-        }
-
-        return normalized;
+            PropertyName = GetRelativePropertyName(d.PropertyName, group.Key),
+            ExpectedValue = FormatValue(d.Object1Value),
+            ActualValue = FormatValue(d.Object2Value)
+        });
     }
 
     private string GetRelativePropertyName(string fullPath, string groupKey)
     {
         if (string.IsNullOrEmpty(fullPath)) return "";
 
-        // Use normalized full path for display relative to the normalized group key
         var normalizedFull = PropertyPathNormalizer.NormalizePropertyPath(fullPath);
         if (groupKey == "(Root Properties)") return normalizedFull;
         if (normalizedFull.StartsWith(groupKey))
@@ -192,11 +268,6 @@
         }
     }
 
-    private IEnumerable<Difference> GetFilteredDifferences()
-    {
-        return ComparisonResult?.Differences ?? Enumerable.Empty<Difference>();
-    }
-
     private async Task ExportResults()
     {
         await OnExportResults.InvokeAsync();
@@ -209,9 +280,7 @@
         if (value is DateTime dt)
             return dt.ToString("yyyy-MM-dd HH:mm:ss");
 
-        if (value is string str && str.Length > 100)
-            return str.Substring(0, 97) + "...";
-
-        return value.ToString();
+        var str = value.ToString() ?? "null";
+        return str.Length > 100 ? str.Substring(0, 97) + "..." : str;
     }
 }

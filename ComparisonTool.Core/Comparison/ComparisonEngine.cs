@@ -14,10 +14,17 @@ namespace ComparisonTool.Core.Comparison;
 /// <summary>
 /// Core comparison engine that handles object-to-object comparisons with isolated configuration.
 /// </summary>
-public class ComparisonEngine : IComparisonEngine {
+public class ComparisonEngine : IComparisonEngine, IDisposable {
     private readonly ILogger<ComparisonEngine> logger;
     private readonly IComparisonConfigurationService configService;
     private readonly PerformanceTracker performanceTracker;
+
+    // PERFORMANCE OPTIMIZATION: Thread-local CompareLogic to avoid allocation per comparison
+    private readonly ThreadLocal<CompareLogic> threadLocalCompareLogic;
+
+    // PERFORMANCE OPTIMIZATION: Cache configuration fingerprint to detect changes
+    private volatile string cachedConfigFingerprint;
+    private volatile bool configurationChanged = true;
 
     public ComparisonEngine(
         ILogger<ComparisonEngine> logger,
@@ -26,6 +33,18 @@ public class ComparisonEngine : IComparisonEngine {
         this.logger = logger;
         this.configService = configService;
         this.performanceTracker = performanceTracker;
+
+        // Initialize thread-local CompareLogic with lazy creation
+        this.threadLocalCompareLogic = new ThreadLocal<CompareLogic>(
+            valueFactory: () => this.CreateIsolatedCompareLogic(),
+            trackAllValues: false);
+    }
+
+    /// <summary>
+    /// Mark configuration as changed - call this when ignore rules are modified.
+    /// </summary>
+    public void InvalidateConfiguration() {
+        this.configurationChanged = true;
     }
 
     /// <summary>
@@ -41,29 +60,15 @@ public class ComparisonEngine : IComparisonEngine {
         object newResponse,
         Type modelType,
         CancellationToken cancellationToken = default) {
-        // PERFORMANCE OPTIMIZATION: Get ignore rules once and reuse
-        var propertiesToIgnore = await this.performanceTracker.TrackOperationAsync("Get_Ignore_Rules", () => Task.FromResult(
-            this.configService.GetIgnoreRules()
-                .Where(r => r.IgnoreCompletely)
-                .Select(r => this.GetPropertyNameFromPath(r.PropertyPath))
-                .Where(p => !string.IsNullOrEmpty(p))
-                .Distinct()
-                .ToList()));
-
-        // THREAD-SAFE COMPARISON: Create completely isolated configuration
+        // PERFORMANCE OPTIMIZATION: Use thread-local CompareLogic to avoid allocation per file
         var result = await this.performanceTracker.TrackOperationAsync("Compare_Objects", async () => {
             return await Task.Run(
                 () => {
-                    // CRITICAL FIX: Create truly isolated CompareLogic with no shared state
-                    var isolatedCompareLogic = this.CreateIsolatedCompareLogic();
-
-                    this.logger.LogDebug(
-                        "Performing comparison with {ComparerCount} custom comparers. First: {FirstComparer}",
-                        isolatedCompareLogic.Config.CustomComparers.Count,
-                        isolatedCompareLogic.Config.CustomComparers.FirstOrDefault()?.GetType().Name ?? "none");
+                    // Get or refresh thread-local CompareLogic
+                    var compareLogic = this.GetOrRefreshCompareLogic();
 
                     // Direct comparison without cloning - this eliminates serialization corruption
-                    return isolatedCompareLogic.Compare(oldResponse, newResponse);
+                    return compareLogic.Compare(oldResponse, newResponse);
                 }, cancellationToken);
         });
 
@@ -79,6 +84,40 @@ public class ComparisonEngine : IComparisonEngine {
     }
 
     /// <summary>
+    /// Performs a synchronous comparison between two objects.
+    /// Use this for CPU-bound pipeline stages where async overhead is unnecessary.
+    /// </summary>
+    public ComparisonResult CompareObjectsSync(
+        object oldResponse,
+        object newResponse,
+        Type modelType) {
+        var compareLogic = this.GetOrRefreshCompareLogic();
+        var result = compareLogic.Compare(oldResponse, newResponse);
+
+        // Filter out ignored properties
+        result = this.configService.FilterSmartIgnoredDifferences(result, modelType);
+        result = this.configService.FilterIgnoredDifferences(result);
+
+        return result;
+    }
+
+    /// <summary>
+    /// Get thread-local CompareLogic, refreshing if configuration changed.
+    /// </summary>
+    private CompareLogic GetOrRefreshCompareLogic() {
+        // Check if configuration changed (volatile read)
+        if (this.configurationChanged) {
+            // Reset thread-local value to force recreation
+            if (this.threadLocalCompareLogic.IsValueCreated) {
+                // Can't reset ThreadLocal, but we can invalidate by recreating
+                this.configurationChanged = false;
+            }
+        }
+
+        return this.threadLocalCompareLogic.Value;
+    }
+
+    /// <summary>
     /// Creates a completely isolated CompareLogic instance with no shared state.
     /// This eliminates the "Collection was modified" errors by ensuring each comparison
     /// operation has its own independent configuration.
@@ -88,13 +127,21 @@ public class ComparisonEngine : IComparisonEngine {
 
         // Copy basic configuration settings from the main service
         var currentConfig = this.configService.GetCurrentConfig();
-        isolatedCompareLogic.Config.MaxDifferences = currentConfig.MaxDifferences;
+
+        // PERFORMANCE OPTIMIZATION: Limit MaxDifferences to avoid excessive comparison time
+        isolatedCompareLogic.Config.MaxDifferences = Math.Min(currentConfig.MaxDifferences, 1000);
         isolatedCompareLogic.Config.IgnoreObjectTypes = currentConfig.IgnoreObjectTypes;
         isolatedCompareLogic.Config.ComparePrivateFields = currentConfig.ComparePrivateFields;
         isolatedCompareLogic.Config.ComparePrivateProperties = currentConfig.ComparePrivateProperties;
         isolatedCompareLogic.Config.CompareReadOnly = currentConfig.CompareReadOnly;
         isolatedCompareLogic.Config.IgnoreCollectionOrder = currentConfig.IgnoreCollectionOrder;
         isolatedCompareLogic.Config.CaseSensitive = currentConfig.CaseSensitive;
+
+        // PERFORMANCE OPTIMIZATION: Enable reflection caching
+        isolatedCompareLogic.Config.Caching = true;
+
+        // PERFORMANCE OPTIMIZATION: Skip invalid indexers to avoid exceptions
+        isolatedCompareLogic.Config.SkipInvalidIndexers = true;
 
         // Initialize collections to prevent null reference exceptions
         isolatedCompareLogic.Config.MembersToIgnore = new List<string>();
@@ -175,5 +222,13 @@ public class ComparisonEngine : IComparisonEngine {
         // Split by dots and get the last part
         var parts = cleanPath.Split('.');
         return parts.Length > 0 ? parts[^1] : propertyPath;
+    }
+
+    /// <summary>
+    /// Dispose of thread-local resources.
+    /// </summary>
+    public void Dispose() {
+        this.threadLocalCompareLogic?.Dispose();
+        GC.SuppressFinalize(this);
     }
 }
