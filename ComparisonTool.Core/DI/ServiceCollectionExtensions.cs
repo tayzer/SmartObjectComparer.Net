@@ -222,10 +222,60 @@ public static class ServiceCollectionExtensions {
     /// <summary>
     /// Add unified comparison services that support both XML and JSON formats.
     /// </summary>
-    /// <returns></returns>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configuration">Optional configuration for comparison settings.</param>
+    /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddUnifiedComparisonServices(this IServiceCollection services, IConfiguration configuration = null) {
-        // Add both XML and JSON services
-        services.AddXmlComparisonServices(configuration);
+        return services.AddUnifiedComparisonServices(configuration, configureOptions: null);
+    }
+
+    /// <summary>
+    /// Add unified comparison services with custom domain model registration.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configureOptions">Action to configure domain models and serializers.</param>
+    /// <returns>The service collection for chaining.</returns>
+    /// <example>
+    /// <code>
+    /// // In Program.cs - register your own domain models
+    /// builder.Services.AddUnifiedComparisonServices(options => {
+    ///     // Register your custom domain model
+    ///     options.RegisterDomainModel&lt;MyCustomOrder&gt;("MyCustomOrder");
+    ///     
+    ///     // Register with custom serializer for special XML structure
+    ///     options.RegisterDomainModelWithSerializer&lt;LegacyOrder&gt;("LegacyOrder", 
+    ///         () => new XmlSerializer(typeof(LegacyOrder), new XmlRootAttribute("Order")));
+    /// });
+    /// </code>
+    /// </example>
+    public static IServiceCollection AddUnifiedComparisonServices(this IServiceCollection services, Action<XmlComparisonOptions> configureOptions) {
+        return services.AddUnifiedComparisonServices(configuration: null, configureOptions);
+    }
+
+    /// <summary>
+    /// Add unified comparison services with configuration and custom domain model registration.
+    /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configuration">Optional configuration for comparison settings.</param>
+    /// <param name="configureOptions">Action to configure domain models and serializers.</param>
+    /// <returns>The service collection for chaining.</returns>
+    /// <example>
+    /// <code>
+    /// // In Program.cs - register your own domain models alongside the built-in ones
+    /// builder.Services.AddUnifiedComparisonServices(builder.Configuration, options => {
+    ///     // The built-in ComplexOrderResponse is automatically registered
+    ///     // Add your own models here:
+    ///     options.RegisterDomainModel&lt;MyCustomOrder&gt;("MyCustomOrder");
+    ///     options.RegisterDomainModel&lt;SoapEnvelope&gt;("SoapEnvelope");
+    /// });
+    /// </code>
+    /// </example>
+    public static IServiceCollection AddUnifiedComparisonServices(
+        this IServiceCollection services,
+        IConfiguration? configuration,
+        Action<XmlComparisonOptions>? configureOptions) {
+        // Add both XML and JSON services, passing through the options
+        services.AddXmlComparisonServices(configuration, configureOptions);
         services.AddJsonComparisonServices();
 
         // Add the factory for choosing appropriate services
