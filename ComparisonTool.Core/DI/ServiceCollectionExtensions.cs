@@ -196,6 +196,7 @@ public static class ServiceCollectionExtensions {
         services.AddSingleton<IFileSystemService, FileSystemService>();
 
         services.AddScoped<DirectoryComparisonService>();
+        //services.AddScoped<IComparisonLogService, ComparisonLogService>();
 
         return services;
     }
