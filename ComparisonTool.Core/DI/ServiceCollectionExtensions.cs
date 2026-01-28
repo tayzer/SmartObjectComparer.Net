@@ -26,6 +26,11 @@ public class XmlComparisonOptions {
     /// <summary>
     /// Register a custom XmlSerializer factory for a specific type.
     /// Use this when your type requires special serialization configuration (custom root element, namespace handling, etc.).
+    /// <para>
+    /// <strong>Important:</strong> Since namespace-ignorant mode is enabled by default, your serializer should use
+    /// <c>Namespace = string.Empty</c> in any XmlRootAttribute. Use <see cref="RegisterDomainModelWithRootElement{T}"/>
+    /// for a simpler API that handles this automatically.
+    /// </para>
     /// </summary>
     /// <typeparam name="T">The type to register.</typeparam>
     /// <param name="serializerFactory">A factory function that creates the XmlSerializer for this type.</param>
@@ -37,6 +42,7 @@ public class XmlComparisonOptions {
     /// <summary>
     /// Register a domain model for XML deserialization.
     /// This makes the model available for selection in the comparison tool.
+    /// The model will use the default namespace-ignorant serializer.
     /// </summary>
     /// <typeparam name="T">The domain model type.</typeparam>
     /// <param name="modelName">The display name for this model in the comparison tool.</param>
@@ -47,8 +53,35 @@ public class XmlComparisonOptions {
     }
 
     /// <summary>
+    /// Register a domain model with a custom root element name.
+    /// This is the recommended way to register models that need a specific XML root element name.
+    /// The serializer is automatically configured for namespace-ignorant mode.
+    /// </summary>
+    /// <typeparam name="T">The domain model type.</typeparam>
+    /// <param name="modelName">The display name for this model in the comparison tool.</param>
+    /// <param name="rootElementName">The XML root element name (e.g., "Envelope", "Order").</param>
+    /// <example>
+    /// <code>
+    /// options.RegisterDomainModelWithRootElement&lt;SoapEnvelope&gt;("SoapEnvelope", "Envelope");
+    /// </code>
+    /// </example>
+    public XmlComparisonOptions RegisterDomainModelWithRootElement<T>(string modelName, string rootElementName)
+        where T : class {
+        this.RegisterSerializer<T>(() => new XmlSerializer(typeof(T), new XmlRootAttribute(rootElementName) {
+            Namespace = string.Empty, // Empty namespace for namespace-ignorant mode
+        }));
+        this.RegisterDomainModel<T>(modelName);
+        return this;
+    }
+
+    /// <summary>
     /// Register a domain model with a custom serializer.
     /// This is a convenience method that registers both the serializer and the domain model.
+    /// <para>
+    /// <strong>Important:</strong> Since namespace-ignorant mode is enabled by default, your serializer should use
+    /// <c>Namespace = string.Empty</c> in any XmlRootAttribute. Consider using
+    /// <see cref="RegisterDomainModelWithRootElement{T}"/> for a simpler API.
+    /// </para>
     /// </summary>
     /// <typeparam name="T">The domain model type.</typeparam>
     /// <param name="modelName">The display name for this model.</param>
@@ -225,7 +258,6 @@ public static class ServiceCollectionExtensions {
         services.AddSingleton<IComparisonLogService, ComparisonLogService>();
 
         services.AddScoped<DirectoryComparisonService>();
-        //services.AddScoped<IComparisonLogService, ComparisonLogService>();
 
         return services;
     }

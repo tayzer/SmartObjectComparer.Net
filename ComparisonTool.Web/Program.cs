@@ -24,11 +24,8 @@ builder.Host.UseSerilog();
 // Add services to the container with proper configuration
 builder.Services
     .AddUnifiedComparisonServices(builder.Configuration, options => {
-        options.RegisterDomainModelWithSerializer<SoapEnvelope>("SoapEnvelope",
-        () => new XmlSerializer(typeof(SoapEnvelope), new XmlRootAttribute("Envelope") {
-            Namespace = "http://schemas.xmlsoap.org/soap/envelope/",
-            ElementName = "Envelope"
-        }));
+        // Register SoapEnvelope with custom root element name
+        options.RegisterDomainModelWithRootElement<SoapEnvelope>("SoapEnvelope", "Envelope");
     })
     .AddRazorComponents()
     .AddInteractiveServerComponents(options => {
