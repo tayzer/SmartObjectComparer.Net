@@ -12,6 +12,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+using CoreXmlSerializerFactory = ComparisonTool.Core.Serialization.XmlSerializerFactory;
 
 namespace ComparisonTool.Tests.Unit.Serialization;
 
@@ -358,6 +359,71 @@ public class XmlDeserializationServiceTests
         result.Body.Response.Summary.TotalResults.Should().Be(5);
         result.Body.Response.Summary.SuccessCount.Should().Be(3);
         result.Body.Response.Summary.FailureCount.Should().Be(2);
+    }
+
+    [TestMethod]
+    public void DeserializeXml_SoapEnvelope_WithCustomRootSerializer_ShouldDeserializeAllNestedElements()
+    {
+        // Arrange - This simulates what happens when using RegisterDomainModelWithRootElement
+        // The serializer must handle ALL nested types, not just the root
+        var factory = new CoreXmlSerializerFactory();
+        factory.RegisterType<SoapEnvelope>(() => factory.CreateNamespaceIgnorantSerializer<SoapEnvelope>("Envelope"));
+
+        var service = new XmlDeserializationService(
+            Mock.Of<ILogger<XmlDeserializationService>>(),
+            factory,
+            null);
+        service.RegisterDomainModel<SoapEnvelope>("SoapEnvelope");
+        service.IgnoreXmlNamespaces = true;
+
+        // This XML has multiple different namespaces - soap: for Envelope/Body, and a default namespace for SearchResponse
+        var soapXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<soap:Envelope xmlns:soap=""http://schemas.xmlsoap.org/soap/envelope/"" xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"">
+    <soap:Body>
+        <SearchResponse xmlns=""urn:soap.co.uk/soap:search1"">
+            <ReportId>test-report-456</ReportId>
+            <GeneratedOn>2025-01-28T12:00:00</GeneratedOn>
+            <Summary>
+                <TotalResults>10</TotalResults>
+                <SuccessCount>8</SuccessCount>
+                <FailureCount>2</FailureCount>
+            </Summary>
+            <Results>
+                <Result>
+                    <Id>1</Id>
+                    <Name>First Item</Name>
+                    <Score>95.5</Score>
+                    <Details>
+                        <Description>First item description</Description>
+                        <Status>Success</Status>
+                    </Details>
+                    <Tags>
+                        <Tag>Important</Tag>
+                    </Tags>
+                </Result>
+            </Results>
+        </SearchResponse>
+    </soap:Body>
+</soap:Envelope>";
+
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(soapXml));
+
+        // Act
+        var result = service.DeserializeXml<SoapEnvelope>(stream);
+
+        // Assert - Verify ALL nested elements are populated correctly
+        result.Should().NotBeNull();
+        result.Body.Should().NotBeNull("Body element should be deserialized");
+        result.Body!.Response.Should().NotBeNull("SearchResponse should be deserialized");
+        result.Body.Response!.ReportId.Should().Be("test-report-456");
+        result.Body.Response.Summary.Should().NotBeNull();
+        result.Body.Response.Summary.TotalResults.Should().Be(10);
+        result.Body.Response.Results.Should().NotBeNull();
+        result.Body.Response.Results.Should().HaveCount(1);
+        result.Body.Response.Results[0].Id.Should().Be(1);
+        result.Body.Response.Results[0].Name.Should().Be("First Item");
+        result.Body.Response.Results[0].Details.Description.Should().Be("First item description");
+        result.Body.Response.Results[0].Tags.Should().Contain("Important");
     }
 
     [TestMethod]

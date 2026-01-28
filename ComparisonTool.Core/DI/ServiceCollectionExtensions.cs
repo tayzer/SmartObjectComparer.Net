@@ -55,7 +55,7 @@ public class XmlComparisonOptions {
     /// <summary>
     /// Register a domain model with a custom root element name.
     /// This is the recommended way to register models that need a specific XML root element name.
-    /// The serializer is automatically configured for namespace-ignorant mode.
+    /// The serializer is automatically configured for namespace-ignorant mode, including all nested types.
     /// </summary>
     /// <typeparam name="T">The domain model type.</typeparam>
     /// <param name="modelName">The display name for this model in the comparison tool.</param>
@@ -67,9 +67,9 @@ public class XmlComparisonOptions {
     /// </example>
     public XmlComparisonOptions RegisterDomainModelWithRootElement<T>(string modelName, string rootElementName)
         where T : class {
-        this.RegisterSerializer<T>(() => new XmlSerializer(typeof(T), new XmlRootAttribute(rootElementName) {
-            Namespace = string.Empty, // Empty namespace for namespace-ignorant mode
-        }));
+        // Use the factory's CreateNamespaceIgnorantSerializer which properly handles ALL nested types
+        this.serializerRegistrations.Add(factory =>
+            factory.RegisterType<T>(() => factory.CreateNamespaceIgnorantSerializer<T>(rootElementName)));
         this.RegisterDomainModel<T>(modelName);
         return this;
     }

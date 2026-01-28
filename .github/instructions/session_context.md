@@ -1,88 +1,94 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2025-01-30T04:00:00Z
+lastUpdated: 2025-01-30T06:30:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-Add hierarchical tree navigation for Value and Ordering differences tabs
+Fix namespace-ignorant XML deserialization for nested elements in SOAP envelopes
 
 ## Todo List Status
 ```markdown
-- [x] Investigate why Value Diffs + Order Diffs > Total Differences (COMPLETED IN PREVIOUS SESSION)
-- [x] Fix stat card layout - MudChip clipping outside boxes
-- [x] Fix folder button drift on small screens
-- [x] Add PropertyTreeNode class extending TreeItemData<string>
-- [x] Implement BuildPropertyTree() method to create hierarchical structure
-- [x] Convert Value Differences tab to MudTreeView
-- [x] Convert Ordering Differences tab to MudTreeView  
-- [x] Add expand/collapse all functionality for both trees
-- [x] Fix MudBlazor 8.x API compatibility (TreeItemData context issues)
-- [x] Build and verify all changes compile successfully
+- [x] Implement NamespaceIgnorantXmlReader to strip namespaces during XML reading
+- [x] Add IgnoreXmlNamespaces property to IXmlDeserializationService
+- [x] Modify XmlSerializerFactory to create serializers expecting empty namespaces
+- [x] Combine ProcessTypeForNamespaceRemoval and ProcessTypeForOrderRemoval into unified method
+- [x] Refactor DI registration - move ComplexOrderResponse from factory constructor to DI
+- [x] Create XmlComparisonOptions class with fluent API for extensibility
+- [x] Add overloads for AddUnifiedComparisonServices to accept options configuration
+- [x] Create RegisterDomainModelWithRootElement helper for custom root element names
+- [x] Fix nested element deserialization - CreateNamespaceIgnorantSerializer<T> method
+- [x] Update RegisterDomainModelWithRootElement to use factory's CreateNamespaceIgnorantSerializer
+- [x] Add comprehensive test for SoapEnvelope with nested elements
+- [x] Fix ambiguous XmlSerializerFactory reference in test file
+- [x] Verify all 72 tests pass
 ```
 
 ## Recent File Changes
-- `ComparisonTool.Web/Components/Comparison/ComparisonRunDetails.razor`:
-  - **PropertyTreeNode class** (lines ~737-758): Now extends `TreeItemData<string>` for MudBlazor 8.x compatibility. Has Name, FullPath, IsLeaf, DifferenceCount, Differences properties.
-  - **Tree field declarations** (lines ~730-731): Changed from `HashSet<PropertyTreeNode>` to `List<TreeItemData<string>>` for _valueTreeNodes and _orderTreeNodes
-  - **BuildPropertyTree method** (lines ~851-940): Completely rewritten to build tree using TreeItemData hierarchy with nodeMap for tracking nodes by path
-  - **CalculateNodeCounts method** (lines ~942-957): Updated to use OfType<PropertyTreeNode>() for casting children
-  - **CountLeafNodes method** (lines ~959-974): Updated to take TreeItemData<string> and cast to PropertyTreeNode
-  - **SelectTreeNode/SelectOrderTreeNode** (lines ~976-1007): Updated to take TreeItemData<string> and use Expanded property instead of IsExpanded
-  - **SetExpandedRecursive** (lines ~1033-1041): Updated to take TreeItemData<string> and iterate Children
-  - **Value Differences tree view** (lines ~266-302): Now uses MudTreeView T="string", casts context to PropertyTreeNode, uses BodyContent Context="_"
-  - **Ordering Differences tree view** (lines ~415-451): Same pattern as Value Differences with Color.Warning for chips
+- `ComparisonTool.Core/Serialization/XmlDeserializationService.cs`:
+  - **NamespaceIgnorantXmlReader class** (lines 18-63): XmlReader wrapper that returns empty string for all namespace URIs
+  - **IgnoreXmlNamespaces property** (line 77): Defaults to true, enables namespace stripping
+
+- `ComparisonTool.Core/Serialization/XmlSerializerFactory.cs`:
+  - **CreateNamespaceIgnorantSerializer<T>** (lines ~115-136): New public method that creates serializers with ProcessTypeForAttributeNormalization applied to ALL nested types
+  - **ProcessTypeForAttributeNormalization** (lines ~194+): Recursively processes types to clear namespaces and remove Order attributes
+
+- `ComparisonTool.Core/DI/ServiceCollectionExtensions.cs`:
+  - **XmlComparisonOptions class** (lines 45-80): Fluent API for registering domain models
+  - **RegisterDomainModelWithRootElement<T>** (lines 65-76): Uses factory.CreateNamespaceIgnorantSerializer<T>(rootElementName)
+  - **AddUnifiedComparisonServices overloads** (lines 162+): Accept Action<XmlComparisonOptions>
+
+- `ComparisonTool.Web/Program.cs`:
+  - Uses `options.RegisterDomainModelWithRootElement<SoapEnvelope>("SoapEnvelope", "Envelope")`
+
+- `ComparisonTool.Tests/Unit/Serialization/XmlDeserializationServiceTests.cs`:
+  - **Using alias** (line 15): `using CoreXmlSerializerFactory = ComparisonTool.Core.Serialization.XmlSerializerFactory`
+  - **DeserializeXml_SoapEnvelope_WithCustomRootSerializer_ShouldDeserializeAllNestedElements** (lines 365-430): Tests that nested elements are properly deserialized
 
 ## Key Technical Decisions
-- Decision: Extend TreeItemData<string> instead of custom POCO
-- Rationale: MudBlazor 8.x requires Items to be IReadOnlyCollection<TreeItemData<T>>. Extending the base class gives us Expanded, Children, Value, Text properties for free.
+- Decision: Create `CreateNamespaceIgnorantSerializer<T>` method in XmlSerializerFactory
+- Rationale: RegisterDomainModelWithRootElement needs access to factory's ProcessTypeForAttributeNormalization to handle ALL nested types, not just root
 - Date: 2025-01-30
 
-- Decision: Use `<BodyContent Context="_">` to avoid context naming conflict
-- Rationale: ItemTemplate's context shadows BodyContent's context. Using "_" as the BodyContent context name resolves the RZ9999 compiler error.
-- Date: 2025-01-30
-
-- Decision: Cast context in ItemTemplate with `var node = context as PropertyTreeNode`
-- Rationale: The ItemTemplate context is TreeItemData<string>, but we need access to custom properties (IsLeaf, DifferenceCount, etc.). Casting gives us type-safe access.
+- Decision: Use using alias for XmlSerializerFactory in test file
+- Rationale: Avoids CS0104 ambiguous reference between ComparisonTool.Core.Serialization.XmlSerializerFactory and System.Xml.Serialization.XmlSerializerFactory
 - Date: 2025-01-30
 
 ## Root Cause Analysis
-**MudBlazor 8.x API Changes**:
-- `MudTreeView.Items` now expects `IReadOnlyCollection<TreeItemData<T>>`
-- `ItemTemplate` context is `TreeItemData<T>`, not `T` directly
-- Must use `@bind-Expanded` and `context.Children` from base class
-- BodyContent Context naming conflicts require explicit Context parameter
+**Files showing as equal when different**:
+- Original implementation of RegisterDomainModelWithRootElement created a simple XmlSerializer with only XmlRootAttribute override
+- Nested types (SoapBody, SearchResponse, etc.) still expected their declared namespaces from XmlElement attributes
+- NamespaceIgnorantXmlReader strips ALL namespaces to empty string
+- Mismatch caused serializer to not find nested elements (all null)
+- Two files with all-null nested elements compared as equal
+
+**Fix**:
+- CreateNamespaceIgnorantSerializer<T> applies ProcessTypeForAttributeNormalization to ALL types in the object graph
+- This ensures every nested type expects empty namespace, matching what NamespaceIgnorantXmlReader provides
 
 ## External Resources Referenced
-- [MudBlazor TreeView Docs](https://mudblazor.com/components/treeview): Referenced for 8.x API patterns
-- [TreeViewItemTemplateExample.razor](https://raw.githubusercontent.com/MudBlazor/MudBlazor/dev/src/MudBlazor.Docs/Pages/Components/TreeView/Examples/TreeViewItemTemplateExample.razor): Shows how to extend TreeItemData and cast context
+- None needed - internal refactoring based on understanding of XmlSerializer behavior
 
 ## Blockers & Issues
-- **[RESOLVED]** RZ9999 error - BodyContent context shadowing ItemTemplate context. Fixed with Context="_" parameter.
+- **[RESOLVED]** CS0104 ambiguous XmlSerializerFactory reference - Fixed with using alias
 
 ## Failed Approaches
-- Approach: Using custom PropertyTreeNode without extending TreeItemData
-- Failure Reason: MudBlazor 8.x enforces Items type as IReadOnlyCollection<TreeItemData<T>>
-- Lesson: Always check framework version compatibility for component APIs
+- Approach: Simple XmlSerializer with XmlRootAttribute override only
+- Failure Reason: Nested types still expected their declared namespaces
+- Lesson: Must process ALL types in object graph for namespace-ignorant deserialization
 
 ## Environment Notes
-- MudBlazor 8.15.0 - TreeView API changed significantly from earlier versions
 - .NET 8.0
-- Build succeeded with 0 errors, 0 warnings
+- 72 tests passing
+- No build errors
 
 ## Next Session Priority
-Test the hierarchical tree navigation with real data to verify:
-1. Trees populate correctly from property paths
-2. Expand/collapse works for both trees
-3. Clicking leaf nodes populates the right panel
-4. Difference counts aggregate correctly up the tree
+No active tasks - namespace handling implementation complete.
 
 ## Session Notes
-- User requested hierarchical tree navigation for navigating differences by domain context
-- Example path: "OrderData.Customer.Profile.FirstName" → OrderData > Customer > Profile > FirstName tree
-- Trees show folder icons for branches, circle icons for leaves
-- Leaf nodes show difference count in colored chip (Info for Value, Warning for Order)
-- First 2 levels expanded by default
-- Expand/Collapse All buttons in header
+- User's original question: "Can we ignore namespaces in the comparison tool?"
+- Answer: Yes, implemented NamespaceIgnorantXmlReader + ProcessTypeForAttributeNormalization
+- Key feature: XmlComparisonOptions.RegisterDomainModelWithRootElement<T> for extensibility
+- SoapEnvelope model uses root element "Envelope" but DomainModelTypeName "SoapEnvelope"

@@ -58,6 +58,37 @@ public class XmlSerializerFactory {
         return serializer;
     }
 
+    /// <summary>
+    /// Creates a namespace-ignorant serializer for a type with a custom root element name.
+    /// This properly handles all nested types, clearing namespaces from all child elements.
+    /// Use this when you need to deserialize XML with any namespace (or no namespace).
+    /// </summary>
+    /// <typeparam name="T">The type to create a serializer for.</typeparam>
+    /// <param name="rootElementName">The expected XML root element name.</param>
+    /// <returns>A fully configured XmlSerializer that ignores namespaces.</returns>
+    public XmlSerializer CreateNamespaceIgnorantSerializer<T>(string rootElementName) {
+        var overrides = new XmlAttributeOverrides();
+        var type = typeof(T);
+
+        // Process ALL types for namespace removal - this is critical for nested elements
+        this.ProcessTypeForAttributeNormalization(type, overrides, new HashSet<Type>(), removeNamespaces: true);
+
+        // Create root attribute with empty namespace
+        var namespaceIgnorantRootAttr = new XmlRootAttribute(rootElementName) {
+            Namespace = string.Empty,
+        };
+
+        // Create serializer with all overrides applied
+        var serializer = new XmlSerializer(type, overrides, Type.EmptyTypes, namespaceIgnorantRootAttr, string.Empty);
+
+        // Add event handlers for unknown elements/attributes
+        serializer.UnknownElement += this.OnUnknownElement;
+        serializer.UnknownAttribute += this.OnUnknownAttribute;
+        serializer.UnknownNode += this.OnUnknownNode;
+
+        return serializer;
+    }
+
     private XmlSerializer CreateDefaultSerializer<T>() {
         var overrides = new XmlAttributeOverrides();
         var type = typeof(T);
