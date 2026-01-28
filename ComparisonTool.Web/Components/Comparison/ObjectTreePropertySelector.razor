@@ -2,483 +2,608 @@
 @using System.Reflection
 @using System.Text.RegularExpressions
 @using Microsoft.AspNetCore.Components.Web
-@using BlazorBootstrap
+@using MudBlazor
 
 <style>
-    .property-row-selected {
-        background-color: #e7f3ff !important;
+    .tree-node-row {
+        cursor: pointer;
+        border-radius: 4px;
+        transition: background-color 0.15s ease;
+    }
+    .tree-node-row:hover {
+        background-color: var(--mud-palette-action-default-hover);
+    }
+    .tree-node-selected {
+        background-color: var(--mud-palette-primary-lighten) !important;
+    }
+    .tree-node-checked {
+        background-color: var(--mud-palette-info-lighten) !important;
+    }
+    .property-code {
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-size: 0.85rem;
+        word-break: break-all;
     }
 </style>
 
-<Modal @ref="propertyModal" Title="Property Tree Navigator - Ignore Rules" Size="ModalSize.ExtraLarge">
-    <BodyTemplate>
-        <div class="row">
+<MudDialog @bind-Visible="showPropertyModal" Options="dialogOptionsExtraLarge">
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.AccountTree" />
+            <MudText Typo="Typo.h6">Property Tree Navigator</MudText>
+            @if (IgnoredProperties.Any())
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Info">@IgnoredProperties.Count rules</MudChip>
+            }
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid Spacing="3">
             <!-- Left Panel: Tree Navigation -->
-            <div class="col-md-8">
-                <!-- Enhanced Search with Autocomplete -->
-                <div class="mb-3">
-                    <div class="input-group">
-                        <span class="input-group-text">
-                            <i class="bi bi-search"></i>
-                        </span>
-                        <input type="text" class="form-control" placeholder="Search properties... (supports partial matching, regex patterns)" 
-                               @bind-value="searchTerm" @bind-value:event="oninput" @onkeyup="OnSearchKeyUp" />
-                        <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                            Filter
-                        </button>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="#" @onclick="() => SetSearchFilter(FilterAll)" @onclick:preventDefault="true">All Properties</a></li>
-                            <li><a class="dropdown-item" href="#" @onclick="() => SetSearchFilter(FilterCollections)" @onclick:preventDefault="true">Collections Only</a></li>
-                            <li><a class="dropdown-item" href="#" @onclick="() => SetSearchFilter(FilterPrimitives)" @onclick:preventDefault="true">Primitive Types</a></li>
-                            <li><a class="dropdown-item" href="#" @onclick="() => SetSearchFilter(FilterComplex)" @onclick:preventDefault="true">Complex Objects</a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="#" @onclick="() => SetSearchFilter(FilterIgnored)" @onclick:preventDefault="true">Currently Ignored</a></li>
-                        </ul>
-                        @if (!string.IsNullOrEmpty(searchTerm))
-                        {
-                            <button class="btn btn-outline-danger" type="button" @onclick="ClearSearch">
-                                <i class="bi bi-x"></i>
-                            </button>
-                        }
-                    </div>
-                    
-                    <!-- Search suggestions -->
-                    @if (searchSuggestions.Any() && !string.IsNullOrEmpty(searchTerm))
-                    {
-                        <div class="card mt-2">
-                            <div class="card-body py-2">
-                                <small class="text-muted">Suggestions:</small>
-                                <div class="d-flex flex-wrap gap-1 mt-1">
-                                    @foreach (var suggestion in searchSuggestions.Take(10))
-                                    {
-                                        <span class="badge bg-light text-dark cursor-pointer" @onclick="() => ApplySuggestion(suggestion)">
-                                            @suggestion
-                                        </span>
-                                    }
-                                </div>
-                            </div>
-                        </div>
-                    }
-                </div>
-
-                <!-- Breadcrumb Navigation -->
-                @if (selectedPropertyPath.Any())
-                {
-                    <nav class="mb-3">
-                        <ol class="breadcrumb">
-                            <li class="breadcrumb-item">
-                                <a href="#" @onclick="() => NavigateToBreadcrumb(new List<string>())" @onclick:preventDefault="true">
-                                    <i class="bi bi-house"></i> Root
-                                </a>
-                            </li>
-                            @for (int i = 0; i < selectedPropertyPath.Count; i++)
+            <MudItem xs="12" md="8">
+                <MudStack Spacing="3">
+                    <!-- Search and Filter Bar -->
+                    <MudPaper Elevation="0" Outlined="true" Class="pa-3">
+                        <MudStack Spacing="2">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudTextField T="string"
+                                              @bind-Value="searchTerm"
+                                              Placeholder="Search properties... (supports partial matching, wildcards *)"
+                                              Variant="Variant.Outlined"
+                                              Adornment="Adornment.Start"
+                                              AdornmentIcon="@Icons.Material.Filled.Search"
+                                              Immediate="true"
+                                              DebounceInterval="300"
+                                              OnDebounceIntervalElapsed="OnSearchChanged"
+                                              Clearable="true"
+                                              OnClearButtonClick="ClearSearch"
+                                              Style="flex-grow: 1;"
+                                              aria-label="Search properties" />
+                                <MudMenu Icon="@Icons.Material.Filled.FilterList" 
+                                         Variant="Variant.Outlined" 
+                                         Color="@(currentSearchFilter != FilterAll ? Color.Primary : Color.Default)"
+                                         aria-label="Filter properties">
+                                    <MudMenuItem OnClick="@(() => SetSearchFilter(FilterAll))" 
+                                                 Icon="@(currentSearchFilter == FilterAll ? Icons.Material.Filled.Check : null)">
+                                        All Properties
+                                    </MudMenuItem>
+                                    <MudMenuItem OnClick="@(() => SetSearchFilter(FilterCollections))"
+                                                 Icon="@(currentSearchFilter == FilterCollections ? Icons.Material.Filled.Check : null)">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                            <MudIcon Icon="@Icons.Material.Filled.List" Size="Size.Small" />
+                                            <MudText>Collections Only</MudText>
+                                        </MudStack>
+                                    </MudMenuItem>
+                                    <MudMenuItem OnClick="@(() => SetSearchFilter(FilterPrimitives))"
+                                                 Icon="@(currentSearchFilter == FilterPrimitives ? Icons.Material.Filled.Check : null)">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                            <MudIcon Icon="@Icons.Material.Filled.TextFields" Size="Size.Small" />
+                                            <MudText>Primitive Types</MudText>
+                                        </MudStack>
+                                    </MudMenuItem>
+                                    <MudMenuItem OnClick="@(() => SetSearchFilter(FilterComplex))"
+                                                 Icon="@(currentSearchFilter == FilterComplex ? Icons.Material.Filled.Check : null)">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                            <MudIcon Icon="@Icons.Material.Filled.Category" Size="Size.Small" />
+                                            <MudText>Complex Objects</MudText>
+                                        </MudStack>
+                                    </MudMenuItem>
+                                    <MudDivider />
+                                    <MudMenuItem OnClick="@(() => SetSearchFilter(FilterIgnored))"
+                                                 Icon="@(currentSearchFilter == FilterIgnored ? Icons.Material.Filled.Check : null)">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                            <MudIcon Icon="@Icons.Material.Filled.VisibilityOff" Size="Size.Small" Color="Color.Error" />
+                                            <MudText>Currently Ignored</MudText>
+                                        </MudStack>
+                                    </MudMenuItem>
+                                </MudMenu>
+                            </MudStack>
+                            
+                            <!-- Active Filter Indicator -->
+                            @if (currentSearchFilter != FilterAll || !string.IsNullOrEmpty(searchTerm))
                             {
-                                var pathSegment = selectedPropertyPath[i];
-                                var breadcrumbPath = selectedPropertyPath.Take(i + 1).ToList();
-                                var isLast = i == selectedPropertyPath.Count - 1;
-                                
-                                <li class="breadcrumb-item @(isLast ? "active" : "")">
-                                    @if (!isLast)
+                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                    <MudText Typo="Typo.caption" Color="Color.Default">Active filters:</MudText>
+                                    @if (!string.IsNullOrEmpty(searchTerm))
                                     {
-                                        <a href="#" @onclick="() => NavigateToBreadcrumb(breadcrumbPath)" @onclick:preventDefault="true">
-                                            @if (pathSegment == "[*]")
-                                            {
-                                                <i class="bi bi-collection me-1"></i><text>Items</text>
-                                            }
-                                            else
-                                            {
-                                                @pathSegment
-                                            }
-                                        </a>
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" OnClose="ClearSearch" Variant="Variant.Outlined">
+                                            Search: @searchTerm
+                                        </MudChip>
                                     }
-                                    else
+                                    @if (currentSearchFilter != FilterAll)
                                     {
-                                        @if (pathSegment == "[*]")
-                                        {
-                                            <i class="bi bi-collection me-1"></i><text>Items</text>
-                                        }
-                                        else
-                                        {
-                                            @pathSegment
-                                        }
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Secondary" OnClose="@(() => SetSearchFilter(FilterAll))" Variant="Variant.Outlined">
+                                            @GetFilterDisplayName(currentSearchFilter)
+                                        </MudChip>
                                     }
-                                </li>
+                                </MudStack>
                             }
-                        </ol>
-                    </nav>
-                }
+                            
+                            <!-- Search Suggestions -->
+                            @if (searchSuggestions.Any() && !string.IsNullOrEmpty(searchTerm))
+                            {
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.caption" Color="Color.Default">Quick select:</MudText>
+                                    <MudStack Row="true" Spacing="1" Style="flex-wrap: wrap;">
+                                        @foreach (var suggestion in searchSuggestions.Take(8))
+                                        {
+                                            <MudChip T="string" Size="Size.Small" 
+                                                     Color="Color.Default" 
+                                                     Variant="Variant.Text"
+                                                     OnClick="@(() => ApplySuggestion(suggestion))"
+                                                     Style="cursor: pointer;">
+                                                @GetShortPropertyName(suggestion)
+                                            </MudChip>
+                                        }
+                                    </MudStack>
+                                </MudStack>
+                            }
+                        </MudStack>
+                    </MudPaper>
 
-                <!-- Object Tree View -->
-                <div class="border rounded p-3" style="max-height: 400px; overflow-y: auto; background-color: #fafafa;">
-                    <h6 class="mb-3">
-                        <i class="bi bi-diagram-3"></i> 
-                        Object Tree Navigation
-                        @if (!string.IsNullOrEmpty(currentSearchFilter) && currentSearchFilter != "all")
-                        {
-                            <span class="badge bg-info ms-2">@currentSearchFilter</span>
-                        }
-                    </h6>
-                    
-                    <div class="tree-container">
+                    <!-- Breadcrumb Navigation -->
+                    <MudBreadcrumbs Items="@GetBreadcrumbItems()" Separator=">" MaxItems="6">
+                        <ItemTemplate Context="item">
+                            <MudLink Color="Color.Primary" OnClick="@(() => NavigateToBreadcrumbItem(item))">
+                                @item.Text
+                            </MudLink>
+                        </ItemTemplate>
+                        <SeparatorTemplate>
+                            <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" />
+                        </SeparatorTemplate>
+                    </MudBreadcrumbs>
+
+                    <!-- Object Tree View -->
+                    <MudPaper Elevation="0" Outlined="true" Class="pa-3" Style="max-height: 400px; overflow-y: auto;">
+                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.AccountTree" Size="Size.Small" />
+                                <MudText Typo="Typo.subtitle2">Object Tree</MudText>
+                                @if (currentSearchFilter != FilterAll)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">@GetFilterDisplayName(currentSearchFilter)</MudChip>
+                                }
+                            </MudStack>
+                            <MudStack Row="true" Spacing="1">
+                                <MudTooltip Text="Expand all nodes">
+                                    <MudIconButton Icon="@Icons.Material.Filled.UnfoldMore" Size="Size.Small" OnClick="ExpandAll" />
+                                </MudTooltip>
+                                <MudTooltip Text="Collapse all nodes">
+                                    <MudIconButton Icon="@Icons.Material.Filled.UnfoldLess" Size="Size.Small" OnClick="CollapseAll" />
+                                </MudTooltip>
+                                <MudTooltip Text="Refresh tree">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="RefreshTree" />
+                                </MudTooltip>
+                            </MudStack>
+                        </MudStack>
+                        
                         @if (IsLoading)
                         {
-                            <div class="text-center py-3">
-                                <div class="spinner-border spinner-border-sm" role="status"></div>
-                                <span class="ms-2">Loading object tree...</span>
-                            </div>
+                            <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="py-6">
+                                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Medium" />
+                                <MudText Typo="Typo.body2" Color="Color.Default">Loading object tree...</MudText>
+                            </MudStack>
                         }
                         else
                         {
-                            @RenderTreeLevel(GetCurrentLevelNodes(), selectedPropertyPath)
+                            <div class="tree-container">
+                                @RenderTreeLevel(GetCurrentLevelNodes(), selectedPropertyPath)
+                            </div>
                         }
-                    </div>
-                </div>
-                
-                <!-- Bulk Selection Actions -->
-                @if (selectedProperties.Any())
-                {
-                    <div class="alert alert-info mt-3">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <i class="bi bi-check-square"></i>
-                                <strong>@selectedProperties.Count properties selected</strong>
-                            </div>
-                            <div class="btn-group btn-group-sm">
-                                <button class="btn btn-success" @onclick="ShowBulkIgnoreConfirmation">
-                                    <i class="bi bi-eye-slash"></i> Ignore All Selected
-                                </button>
-                                <button class="btn btn-outline-secondary" @onclick="ClearAllSelections">
-                                    <i class="bi bi-x-square"></i> Clear Selection
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                }
+                    </MudPaper>
+                    
+                    <!-- Bulk Selection Actions -->
+                    @if (selectedProperties.Any())
+                    {
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Filled" Dense="true">
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Style="width: 100%;">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                    <MudIcon Icon="@Icons.Material.Filled.CheckBox" />
+                                    <MudText Typo="Typo.body2"><strong>@selectedProperties.Count</strong> properties selected</MudText>
+                                </MudStack>
+                                <MudStack Row="true" Spacing="1">
+                                    <MudButton Variant="Variant.Filled" 
+                                               Color="Color.Success" 
+                                               Size="Size.Small"
+                                               StartIcon="@Icons.Material.Filled.VisibilityOff"
+                                               OnClick="ShowBulkIgnoreConfirmation">
+                                        Ignore All
+                                    </MudButton>
+                                    <MudButton Variant="Variant.Outlined" 
+                                               Color="Color.Default" 
+                                               Size="Size.Small"
+                                               StartIcon="@Icons.Material.Filled.Clear"
+                                               OnClick="ClearAllSelections">
+                                        Clear
+                                    </MudButton>
+                                </MudStack>
+                            </MudStack>
+                        </MudAlert>
+                    }
 
-                <!-- Quick Actions -->
-                <div class="mt-3">
-                    <div class="btn-group btn-group-sm" role="group">
-                        <button class="btn btn-outline-secondary" @onclick="ExpandAll">
-                            <i class="bi bi-plus-square"></i> Expand All
-                        </button>
-                        <button class="btn btn-outline-secondary" @onclick="CollapseAll">
-                            <i class="bi bi-dash-square"></i> Collapse All
-                        </button>
-                        <button class="btn btn-outline-info" @onclick="RefreshTree">
-                            <i class="bi bi-arrow-clockwise"></i> Refresh
-                        </button>
-                        <button class="btn btn-outline-primary" @onclick="ToggleSelectAllVisible">
-                            <i class="bi bi-check-all"></i> 
-                            @(selectAllVisible ? "Deselect All Visible" : "Select All Visible")
-                        </button>
-                    </div>
-                </div>
-            </div>
+                    <!-- Quick Actions Bar -->
+                    <MudStack Row="true" Spacing="2" Justify="Justify.FlexStart">
+                        <MudButton Variant="Variant.Text" 
+                                   Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.SelectAll"
+                                   OnClick="ToggleSelectAllVisible">
+                            @(selectAllVisible ? "Deselect All" : "Select All Visible")
+                        </MudButton>
+                    </MudStack>
+                </MudStack>
+            </MudItem>
 
             <!-- Right Panel: Property Configuration -->
-            <div class="col-md-4">
-                <div class="border rounded p-3 h-100">
-                    <h6><i class="bi bi-gear"></i> Property Configuration</h6>
-                    
-                    @if (!string.IsNullOrEmpty(selectedProperty))
-                    {
-                        <div class="alert alert-primary">
-                            <div class="d-flex justify-content-between align-items-start">
-                                <div>
-                                    <strong>Selected Property:</strong><br/>
-                                    <code class="small">@selectedProperty</code>
-                                </div>
-                                <button class="btn btn-sm btn-outline-primary" @onclick="ClearSelection">
-                                    <i class="bi bi-x"></i>
-                                </button>
-                            </div>
-                        </div>
+            <MudItem xs="12" md="4">
+                <MudPaper Elevation="0" Outlined="true" Class="pa-3" Style="height: 100%; min-height: 500px;">
+                    <MudStack Spacing="3">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.Settings" Size="Size.Small" />
+                            <MudText Typo="Typo.subtitle2">Property Configuration</MudText>
+                        </MudStack>
+                        
+                        @if (!string.IsNullOrEmpty(selectedProperty))
+                        {
+                            <!-- Selected Property Info -->
+                            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                                <MudStack Spacing="1">
+                                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+                                        <MudText Typo="Typo.caption" Color="Color.Default">Selected Property</MudText>
+                                        <MudIconButton Icon="@Icons.Material.Filled.Close" 
+                                                       Size="Size.Small" 
+                                                       OnClick="ClearSelection" />
+                                    </MudStack>
+                                    <MudText Typo="Typo.body2" Class="property-code">@selectedProperty</MudText>
+                                </MudStack>
+                            </MudAlert>
 
-                        <div class="card">
-                            <div class="card-body">
-                                <!-- Property Type Info -->
-                                @if (GetPropertyType(selectedProperty) != null)
-                                {
-                                    <div class="mb-3">
-                                        <small class="text-muted">Type:</small><br/>
-                                        <code class="small">@GetFriendlyTypeName(GetPropertyType(selectedProperty))</code>
+                            <!-- Property Type Info -->
+                            @if (GetPropertyType(selectedProperty) != null)
+                            {
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.caption" Color="Color.Default">Type Information</MudText>
+                                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Style="flex-wrap: wrap;">
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
+                                            @GetFriendlyTypeName(GetPropertyType(selectedProperty))
+                                        </MudChip>
                                         @if (IsCollectionProperty(selectedProperty))
                                         {
-                                            <span class="badge bg-warning ms-1">Collection</span>
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.List">
+                                                Collection
+                                            </MudChip>
                                         }
                                         @if (IsPrimitiveProperty(selectedProperty))
                                         {
-                                            <span class="badge bg-info ms-1">Primitive</span>
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.TextFields">
+                                                Primitive
+                                            </MudChip>
                                         }
-                                    </div>
-                                }
+                                    </MudStack>
+                                </MudStack>
+                            }
 
-                                <!-- Ignore Rules Configuration -->
-                                <div class="form-check mb-2">
-                                    <input class="form-check-input" type="checkbox" id="ignoreProperty"
-                                           @bind="IgnoreProperty">
-                                    <label class="form-check-label" for="ignoreProperty">
-                                        <i class="bi bi-eye-slash"></i> Ignore this property completely
-                                    </label>
-                                    <small class="form-text text-muted d-block">Property will be excluded from all comparisons</small>
-                                </div>
+                            <MudDivider />
+
+                            <!-- Ignore Rules Configuration -->
+                            <MudStack Spacing="2">
+                                <MudText Typo="Typo.caption" Color="Color.Default">Ignore Options</MudText>
+                                
+                                <MudCheckBox T="bool" @bind-Value="IgnoreProperty" Color="Color.Error"
+                                             Label="Ignore this property completely"
+                                             aria-label="Ignore property completely" />
+                                <MudText Typo="Typo.caption" Color="Color.Default" Style="margin-left: 32px; margin-top: -8px;">
+                                    Property will be excluded from all comparisons
+                                </MudText>
 
                                 @if (IsCollectionProperty(selectedProperty))
                                 {
-                                    <div class="form-check mb-2">
-                                        <input class="form-check-input" type="checkbox" id="ignoreOrdering"
-                                               @bind="IgnoreCollectionOrder" disabled="@IgnoreProperty">
-                                        <label class="form-check-label" for="ignoreOrdering">
-                                            <i class="bi bi-arrow-down-up"></i> Ignore collection ordering
-                                        </label>
-                                        <small class="form-text text-muted d-block">Items can appear in any order</small>
-                                    </div>
+                                    <MudCheckBox T="bool" @bind-Value="IgnoreCollectionOrder" 
+                                                 Color="Color.Warning"
+                                                 Disabled="@IgnoreProperty"
+                                                 Label="Ignore collection ordering"
+                                                 aria-label="Ignore collection ordering" />
+                                    <MudText Typo="Typo.caption" Color="Color.Default" Style="margin-left: 32px; margin-top: -8px;">
+                                        Items can appear in any order
+                                    </MudText>
                                 }
+                            </MudStack>
 
-                                <button class="btn btn-success w-100 mt-3" @onclick="AddCurrentProperty">
-                                    <i class="bi bi-plus-circle"></i> Add Ignore Rule
-                                </button>
-                            </div>
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="alert alert-secondary">
-                            <i class="bi bi-info-circle"></i> 
-                            Select a property from the tree to configure ignore rules.
-                        </div>
-                        
-                        <!-- Quick Add Common Properties -->
-                        <div class="mt-3">
-                            <h6>Quick Add Common Ignores:</h6>
-                            <div class="d-grid gap-2">
-                                @foreach (var common in GetCommonIgnoreProperties())
-                                {
-                                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => QuickAddProperty(common)">
-                                        <i class="bi bi-lightning"></i> @common
-                                    </button>
-                                }
-                            </div>
-                        </div>
-                    }
-                </div>
-            </div>
-        </div>
-
-        <!-- Currently Ignored Properties Section -->
-        <div class="row mt-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h6 class="mb-0"><i class="bi bi-list-check"></i> Currently Ignored Properties</h6>
-                        <span class="badge bg-secondary">@IgnoredProperties.Count rules</span>
-                    </div>
-                    <div class="card-body">
-                        @if (IgnoredProperties.Any())
-                        {
-                            <div class="table-responsive">
-                                <table class="table table-sm table-hover">
-                                    <thead>
-                                        <tr>
-                                            <th>Property Path</th>
-                                            <th>Type</th>
-                                            <th>Rules</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach (var rule in IgnoredProperties.OrderBy(r => r.PropertyPath))
-                                        {
-                                            <tr>
-                                                <td>
-                                                    <code class="small">@rule.PropertyPath</code>
-                                                    @if (IsCollectionProperty(rule.PropertyPath))
-                                                    {
-                                                        <span class="badge bg-warning ms-1">Collection</span>
-                                                    }
-                                                </td>
-                                                <td>
-                                                    @if (GetPropertyType(rule.PropertyPath) != null)
-                                                    {
-                                                        <small>@GetFriendlyTypeName(GetPropertyType(rule.PropertyPath))</small>
-                                                    }
-                                                    else
-                                                    {
-                                                        <small class="text-muted">Unknown</small>
-                                                    }
-                                                </td>
-                                                <td>
-                                                    @if (rule.IgnoreCompletely)
-                                                    {
-                                                        <span class="badge bg-danger">Ignored</span>
-                                                    }
-                                                    @if (rule.IgnoreCollectionOrder)
-                                                    {
-                                                        <span class="badge bg-warning">Order Ignored</span>
-                                                    }
-                                                </td>
-                                                <td>
-                                                    <div class="btn-group btn-group-sm">
-                                                        <button class="btn btn-outline-primary" @onclick="() => EditIgnoredProperty(rule.PropertyPath)">
-                                                            <i class="bi bi-pencil"></i>
-                                                        </button>
-                                                        <button class="btn btn-outline-danger" @onclick="() => RemoveIgnoredProperty(rule.PropertyPath)">
-                                                            <i class="bi bi-trash"></i>
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        }
-                                    </tbody>
-                                </table>
-                            </div>
+                            <MudButton Variant="Variant.Filled" 
+                                       Color="Color.Success" 
+                                       FullWidth="true"
+                                       StartIcon="@Icons.Material.Filled.Add"
+                                       OnClick="AddCurrentProperty"
+                                       Disabled="@(!IgnoreProperty && !IgnoreCollectionOrder)">
+                                Add Ignore Rule
+                            </MudButton>
                         }
                         else
                         {
-                            <div class="alert alert-info">
-                                <i class="bi bi-info-circle"></i> No ignore rules configured yet. Use the tree navigator to add properties.
-                            </div>
+                            <!-- Empty State -->
+                            <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined">
+                                <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudIcon Icon="@Icons.Material.Filled.TouchApp" Size="Size.Large" Color="Color.Default" />
+                                    <MudText Typo="Typo.body2" Align="Align.Center">
+                                        Select a property from the tree to configure ignore rules
+                                    </MudText>
+                                </MudStack>
+                            </MudAlert>
+                            
+                            <MudDivider />
+                            
+                            <!-- Quick Add Common Properties -->
+                            <MudStack Spacing="2">
+                                <MudText Typo="Typo.caption" Color="Color.Default">Quick Add Common Ignores</MudText>
+                                <MudStack Spacing="1">
+                                    @foreach (var common in GetCommonIgnoreProperties())
+                                    {
+                                        <MudButton Variant="Variant.Text" 
+                                                   Size="Size.Small"
+                                                   FullWidth="true"
+                                                   StartIcon="@Icons.Material.Filled.FlashOn"
+                                                   OnClick="@(() => QuickAddProperty(common))"
+                                                   Style="justify-content: flex-start;">
+                                            @common
+                                        </MudButton>
+                                    }
+                                </MudStack>
+                            </MudStack>
                         }
-                    </div>
-                </div>
-            </div>
-        </div>
-    </BodyTemplate>
-    <FooterTemplate>
-        <div class="d-flex justify-content-between w-100">
-            <div>
-                <Button Color="ButtonColor.Info" @onclick="ShowHelpModal">
-                    <i class="bi bi-question-circle"></i> Help
-                </Button>
-            </div>
-            <div>
-                <Button Color="ButtonColor.Secondary" @onclick="ClosePropertySelector">Close</Button>
-            </div>
-        </div>
-    </FooterTemplate>
-</Modal>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- Currently Ignored Properties Section -->
+        <MudPaper Elevation="0" Outlined="true" Class="pa-3 mt-4">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@Icons.Material.Filled.PlaylistAddCheck" Size="Size.Small" />
+                    <MudText Typo="Typo.subtitle2">Currently Ignored Properties</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@IgnoredProperties.Count</MudChip>
+                </MudStack>
+            </MudStack>
+            
+            @if (IgnoredProperties.Any())
+            {
+                <MudSimpleTable Dense="true" Hover="true" Style="max-height: 250px; overflow-y: auto;">
+                    <thead>
+                        <tr>
+                            <th>Property Path</th>
+                            <th style="width: 120px;">Type</th>
+                            <th style="width: 150px;">Rules</th>
+                            <th style="width: 80px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var rule in IgnoredProperties.OrderBy(r => r.PropertyPath))
+                        {
+                            <tr>
+                                <td>
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                        <MudText Typo="Typo.body2" Class="property-code">@rule.PropertyPath</MudText>
+                                        @if (IsCollectionProperty(rule.PropertyPath))
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">[]</MudChip>
+                                        }
+                                    </MudStack>
+                                </td>
+                                <td>
+                                    @if (GetPropertyType(rule.PropertyPath) != null)
+                                    {
+                                        <MudText Typo="Typo.caption">@GetFriendlyTypeName(GetPropertyType(rule.PropertyPath))</MudText>
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Default">Unknown</MudText>
+                                    }
+                                </td>
+                                <td>
+                                    <MudStack Row="true" Spacing="1">
+                                        @if (rule.IgnoreCompletely)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled">Ignored</MudChip>
+                                        }
+                                        @if (rule.IgnoreCollectionOrder)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled">Order</MudChip>
+                                        }
+                                    </MudStack>
+                                </td>
+                                <td>
+                                    <MudStack Row="true" Spacing="0">
+                                        <MudTooltip Text="Edit rule">
+                                            <MudIconButton Icon="@Icons.Material.Filled.Edit" 
+                                                           Size="Size.Small" 
+                                                           Color="Color.Primary"
+                                                           OnClick="@(() => EditIgnoredProperty(rule.PropertyPath))" />
+                                        </MudTooltip>
+                                        <MudTooltip Text="Remove rule">
+                                            <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                                           Size="Size.Small" 
+                                                           Color="Color.Error"
+                                                           OnClick="@(() => RemoveIgnoredProperty(rule.PropertyPath))" />
+                                        </MudTooltip>
+                                    </MudStack>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Text">
+                    No ignore rules configured yet. Use the tree navigator above to select and add properties.
+                </MudAlert>
+            }
+        </MudPaper>
+    </DialogContent>
+    <DialogActions>
+        <MudStack Row="true" Justify="Justify.SpaceBetween" Style="width: 100%;">
+            <MudButton Variant="Variant.Text" 
+                       Color="Color.Info" 
+                       StartIcon="@Icons.Material.Filled.Help"
+                       OnClick="ShowHelpModal">
+                Help
+            </MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Default" OnClick="ClosePropertySelector">
+                Done
+            </MudButton>
+        </MudStack>
+    </DialogActions>
+</MudDialog>
 
 <!-- Help Modal -->
-<Modal @ref="helpModal" Title="Property Tree Navigator Help" Size="ModalSize.Large">
-    <BodyTemplate>
-        <div class="help-content">
-            <h6>Navigation Features:</h6>
-            <ul>
-                <li><strong>Tree Navigation:</strong> Click folder icons to expand/collapse object hierarchies</li>
-                <li><strong>Breadcrumbs:</strong> Click breadcrumb items to quickly navigate to parent levels</li>
-                <li><strong>Search:</strong> Use partial matching, wildcards (*), or regex patterns</li>
-                <li><strong>Filters:</strong> Filter by property types (collections, primitives, etc.)</li>
-            </ul>
-            
-            <h6>Search Examples:</h6>
-            <ul>
-                <li><code>Results</code> - Find all properties containing "Results"</li>
-                <li><code>*.Name</code> - Find all "Name" properties</li>
-                <li><code>Body.Response.*</code> - Find all properties under Body.Response</li>
-                <li><code>[0-9]+</code> - Find properties with numbers (regex)</li>
-            </ul>
-            
-            <h6>Ignore Rule Types:</h6>
-            <ul>
-                <li><strong>Ignore Completely:</strong> Property is excluded from all comparisons</li>
-                <li><strong>Ignore Collection Order:</strong> Array/list items can be in any order</li>
-            </ul>
-        </div>
-    </BodyTemplate>
-    <FooterTemplate>
-        <Button Color="ButtonColor.Secondary" @onclick="CloseHelpModal">Close</Button>
-    </FooterTemplate>
-</Modal>
+<MudDialog @bind-Visible="showHelpModal" Options="dialogOptionsLarge">
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.Help" />
+            <MudText Typo="Typo.h6">Property Tree Navigator Help</MudText>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudExpansionPanels MultiExpansion="true">
+                <MudExpansionPanel Text="Navigation Features">
+                    <MudList T="string" Dense="true">
+                        <MudListItem Icon="@Icons.Material.Filled.Folder">
+                            <strong>Tree Navigation:</strong> Click folder icons to expand/collapse object hierarchies
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Navigation">
+                            <strong>Breadcrumbs:</strong> Click breadcrumb items to quickly navigate to parent levels
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Search">
+                            <strong>Search:</strong> Use partial matching, wildcards (*), or regex patterns
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.FilterList">
+                            <strong>Filters:</strong> Filter by property types (collections, primitives, etc.)
+                        </MudListItem>
+                    </MudList>
+                </MudExpansionPanel>
+                
+                <MudExpansionPanel Text="Search Examples">
+                    <MudSimpleTable Dense="true">
+                        <tbody>
+                            <tr>
+                                <td><code>Results</code></td>
+                                <td>Find all properties containing "Results"</td>
+                            </tr>
+                            <tr>
+                                <td><code>*.Name</code></td>
+                                <td>Find all "Name" properties</td>
+                            </tr>
+                            <tr>
+                                <td><code>Body.Response.*</code></td>
+                                <td>Find all properties under Body.Response</td>
+                            </tr>
+                            <tr>
+                                <td><code>[0-9]+</code></td>
+                                <td>Find properties with numbers (regex)</td>
+                            </tr>
+                        </tbody>
+                    </MudSimpleTable>
+                </MudExpansionPanel>
+                
+                <MudExpansionPanel Text="Ignore Rule Types">
+                    <MudList T="string" Dense="true">
+                        <MudListItem Icon="@Icons.Material.Filled.VisibilityOff">
+                            <strong>Ignore Completely:</strong> Property is excluded from all comparisons
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.SwapVert">
+                            <strong>Ignore Collection Order:</strong> Array/list items can be in any order
+                        </MudListItem>
+                    </MudList>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Filled" Color="Color.Default" OnClick="CloseHelpModal">Got it</MudButton>
+    </DialogActions>
+</MudDialog>
 
 <!-- Bulk Ignore Confirmation Modal -->
-<Modal @ref="bulkIgnoreModal" Title="Confirm Bulk Ignore" Size="ModalSize.Regular">
-    <BodyTemplate>
-        <div class="alert alert-warning">
-            <i class="bi bi-exclamation-triangle me-2"></i>
-            <strong>Bulk Ignore Confirmation</strong>
-        </div>
-        <p>You are about to ignore <strong>@selectedProperties.Count properties</strong> completely from comparison.</p>
-        
-        @if (isProcessingBulkIgnore)
-        {
-            <div class="mb-3">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span>Processing...</span>
-                    <span>@bulkIgnoreProgress%</span>
-                </div>
-                <div class="progress mb-2">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
-                         role="progressbar" 
-                         style="width: @(bulkIgnoreProgress)%" 
-                         aria-valuenow="@bulkIgnoreProgress" 
-                         aria-valuemin="0" 
-                         aria-valuemax="100"></div>
-                </div>
-                <small class="text-muted">@bulkIgnoreStatus</small>
-            </div>
-        }
-        else
-        {
-            <div class="mb-3">
-                <label class="form-label">Ignore Settings for All Selected Properties:</label>
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="bulkIgnoreCompletely" @bind="bulkIgnoreCompletely">
-                    <label class="form-check-label" for="bulkIgnoreCompletely">
-                        <i class="bi bi-eye-slash"></i> Ignore completely
-                    </label>
-                </div>
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="bulkIgnoreCollectionOrder" 
-                           @bind="bulkIgnoreCollectionOrder" disabled="@bulkIgnoreCompletely">
-                    <label class="form-check-label" for="bulkIgnoreCollectionOrder">
-                        <i class="bi bi-arrow-down-up"></i> Ignore collection ordering (for collection properties)
-                    </label>
-                </div>
-            </div>
-        }
-
-        @if (selectedProperties.Count > 10)
-        {
-            <div class="alert alert-info">
-                <strong>Preview of properties to be ignored:</strong>
-                <ul class="mb-0 mt-2">
-                    @foreach (var prop in selectedProperties.Take(10))
-                    {
-                        <li><code>@prop</code></li>
-                    }
-                    <li><em>... and @(selectedProperties.Count - 10) more properties</em></li>
-                </ul>
-            </div>
-        }
-        else
-        {
-            <div class="alert alert-info">
-                <strong>Properties to be ignored:</strong>
-                <ul class="mb-0 mt-2">
-                    @foreach (var prop in selectedProperties)
-                    {
-                        <li><code>@prop</code></li>
-                    }
-                </ul>
-            </div>
-        }
-    </BodyTemplate>
-    <FooterTemplate>
-        <Button Color="ButtonColor.Success" @onclick="ExecuteBulkIgnore" Disabled="@isProcessingBulkIgnore">
+<MudDialog @bind-Visible="showBulkIgnoreModal" Options="dialogOptionsRegular">
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" />
+            <MudText Typo="Typo.h6">Confirm Bulk Ignore</MudText>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudText>You are about to add ignore rules for <strong>@selectedProperties.Count properties</strong>.</MudText>
+            
             @if (isProcessingBulkIgnore)
             {
-                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                <MudStack Spacing="2">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.body2">Processing...</MudText>
+                        <MudText Typo="Typo.body2">@bulkIgnoreProgress%</MudText>
+                    </MudStack>
+                    <MudProgressLinear Value="@bulkIgnoreProgress" Color="Color.Primary" Striped="true" />
+                    <MudText Typo="Typo.caption" Color="Color.Default">@bulkIgnoreStatus</MudText>
+                </MudStack>
+            }
+            else
+            {
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.subtitle2">Ignore Options</MudText>
+                    <MudCheckBox T="bool" @bind-Value="bulkIgnoreCompletely" 
+                                 Color="Color.Error"
+                                 Label="Ignore completely" />
+                    <MudCheckBox T="bool" @bind-Value="bulkIgnoreCollectionOrder" 
+                                 Color="Color.Warning"
+                                 Disabled="@bulkIgnoreCompletely"
+                                 Label="Ignore collection ordering (for collection properties)" />
+                </MudStack>
+            }
+
+            <MudPaper Elevation="0" Outlined="true" Class="pa-2" Style="max-height: 200px; overflow-y: auto;">
+                <MudText Typo="Typo.caption" Color="Color.Default" Class="mb-2">Properties to be affected:</MudText>
+                @if (selectedProperties.Count > 10)
+                {
+                    <MudStack Spacing="0">
+                        @foreach (var prop in selectedProperties.Take(10))
+                        {
+                            <MudText Typo="Typo.caption" Class="property-code">• @prop</MudText>
+                        }
+                        <MudText Typo="Typo.caption" Color="Color.Default" Class="mt-1">
+                            <em>... and @(selectedProperties.Count - 10) more properties</em>
+                        </MudText>
+                    </MudStack>
+                }
+                else
+                {
+                    <MudStack Spacing="0">
+                        @foreach (var prop in selectedProperties)
+                        {
+                            <MudText Typo="Typo.caption" Class="property-code">• @prop</MudText>
+                        }
+                    </MudStack>
+                }
+            </MudPaper>
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="CancelBulkIgnore" Disabled="@isProcessingBulkIgnore">
+            Cancel
+        </MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="ExecuteBulkIgnore" Disabled="@isProcessingBulkIgnore">
+            @if (isProcessingBulkIgnore)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
                 <text>Processing...</text>
             }
             else
             {
-                <i class="bi bi-check"></i>
-                <text>Confirm Ignore</text>
+                <MudIcon Icon="@Icons.Material.Filled.Check" Class="mr-1" />
+                <text>Confirm</text>
             }
-        </Button>
-        <Button Color="ButtonColor.Secondary" @onclick="CancelBulkIgnore" Disabled="@isProcessingBulkIgnore">Cancel</Button>
-    </FooterTemplate>
-</Modal>
+        </MudButton>
+    </DialogActions>
+</MudDialog>
 
 @code {
     [Parameter] public Type ModelType { get; set; }
@@ -494,9 +619,31 @@
     private const string FilterComplex = "complex";
     private const string FilterIgnored = "ignored";
 
-    private Modal propertyModal;
-    private Modal helpModal;
-    private Modal bulkIgnoreModal;
+    // MudDialog visibility state
+    private bool showPropertyModal = false;
+    private bool showHelpModal = false;
+    private bool showBulkIgnoreModal = false;
+    
+    // Dialog options
+    private DialogOptions dialogOptionsExtraLarge = new DialogOptions 
+    { 
+        MaxWidth = MaxWidth.ExtraLarge, 
+        FullWidth = true,
+        CloseOnEscapeKey = true 
+    };
+    private DialogOptions dialogOptionsLarge = new DialogOptions 
+    { 
+        MaxWidth = MaxWidth.Large, 
+        FullWidth = true,
+        CloseOnEscapeKey = true 
+    };
+    private DialogOptions dialogOptionsRegular = new DialogOptions 
+    { 
+        MaxWidth = MaxWidth.Small, 
+        FullWidth = true,
+        CloseOnEscapeKey = true 
+    };
+    
     private string selectedProperty;
     private List<string> selectedPropertyPath = new List<string>();
     private string searchTerm = "";
@@ -545,7 +692,7 @@
         }
 
         ResetSelectionState();
-        await propertyModal.ShowAsync();
+        showPropertyModal = true;
     }
 
     private void BuildPropertyTree()
@@ -631,45 +778,44 @@
                 var isExpanded = IsNodeExpanded(node.FullPath);
                 var indentLevel = currentPath.Count;
                 var isSelected = selectedProperty == node.FullPath;
+                var isChecked = selectedProperties.Contains(node.FullPath);
 
-                <div class="tree-node mb-1" style="margin-left: @(indentLevel * 20)px;">
-                    <div class="d-flex align-items-center tree-node-content @(isSelected ? "selected" : "") @(selectedProperties.Contains(node.FullPath) ? "property-row-selected" : "")" 
-                         @onclick="() => SelectPropertyFromTree(node.FullPath)">
-                        
+                <div class="tree-node-row @(isSelected ? "tree-node-selected" : "") @(isChecked ? "tree-node-checked" : "")" 
+                     style="padding: 4px 8px; margin-left: @(indentLevel * 20)px;"
+                     @onclick="() => SelectPropertyFromTree(node.FullPath)">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                         <!-- Selection checkbox -->
-                        <input class="form-check-input me-2" type="checkbox"
-                               checked="@selectedProperties.Contains(node.FullPath)"
-                               @onchange="(e) => TogglePropertySelectionFromCheckbox(e, node.FullPath)"
-                               @onclick:stopPropagation="true" />
+                        <MudCheckBox T="bool" 
+                                     Value="@isChecked"
+                                     ValueChanged="@((bool val) => TogglePropertySelectionDirect(node.FullPath, val))"
+                                     Size="Size.Small"
+                                     Color="Color.Primary"
+                                     StopClickPropagation="true"
+                                     aria-label="Select property" />
                         
                         @if (hasChildren)
                         {
-                            <button class="btn btn-sm btn-link p-0 me-1 tree-toggle" 
-                                    @onclick="() => ToggleNode(node.FullPath)" 
-                                    @onclick:stopPropagation="true">
-                                @if (node.Name == "[*]")
-                                {
-                                    <i class="bi @(isExpanded ? "bi-collection" : "bi-collection") text-primary"></i>
-                                }
-                                else
-                                {
-                                    <i class="bi @(isExpanded ? "bi-folder2-open" : "bi-folder2") text-warning"></i>
-                                }
-                            </button>
+                            <span @onclick="() => ToggleNode(node.FullPath)" @onclick:stopPropagation="true">
+                                <MudIcon Icon="@(isExpanded ? Icons.Material.Filled.FolderOpen : Icons.Material.Filled.Folder)" 
+                                         Size="Size.Small" 
+                                         Color="@(node.Name == "[*]" ? Color.Primary : Color.Warning)"
+                                         Style="cursor: pointer;"
+                                         Class="mr-1" />
+                            </span>
                         }
                         else
                         {
                             @if (node.Name == "[*]")
                             {
-                                <i class="bi bi-collection me-1 text-primary"></i>
+                                <MudIcon Icon="@Icons.Material.Filled.DataArray" Size="Size.Small" Color="Color.Primary" Class="mx-1" />
                             }
                             else
                             {
-                                <i class="bi bi-file-earmark me-1 text-muted"></i>
+                                <MudIcon Icon="@Icons.Material.Filled.Description" Size="Size.Small" Color="Color.Default" Class="mx-1" />
                             }
                         }
 
-                        <span class="tree-node-label flex-grow-1 @(isSelected ? "fw-bold" : "")">
+                        <MudText Typo="@(isSelected ? Typo.subtitle2 : Typo.body2)" Style="flex-grow: 1;">
                             @if (node.Name == "[*]")
                             {
                                 <text>Items</text>
@@ -678,38 +824,106 @@
                             {
                                 @node.Name
                             }
-                        </span>
+                        </MudText>
 
                         <!-- Property type indicators -->
                         @if (node.IsCollection)
                         {
-                            <span class="badge bg-warning me-1">[]</span>
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Text">[]</MudChip>
                         }
                         @if (node.IsPrimitive)
                         {
-                            <span class="badge bg-info me-1">P</span>
-                        }
-                        @if (node.Name == "[*]")
-                        {
-                            <span class="badge bg-primary me-1">Items</span>
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">P</MudChip>
                         }
                         
                         <!-- Ignore status indicator -->
                         @if (IsPropertyIgnored(node.FullPath))
                         {
-                            <i class="bi bi-eye-slash text-danger me-1" title="Property is ignored"></i>
+                            <MudTooltip Text="Property is ignored">
+                                <MudIcon Icon="@Icons.Material.Filled.VisibilityOff" Size="Size.Small" Color="Color.Error" />
+                            </MudTooltip>
                         }
-                    </div>
-
-                    @if (hasChildren && isExpanded)
-                    {
-                        <div class="tree-children mt-1">
-                            @RenderTreeLevel(node.Children, currentPath.Concat(new[] { node.Name }).ToList())
-                        </div>
-                    }
+                    </MudStack>
                 </div>
+
+                @if (hasChildren && isExpanded)
+                {
+                    @RenderTreeLevel(node.Children, currentPath.Concat(new[] { node.Name }).ToList())
+                }
             }
         </text>;
+    }
+
+    private void TogglePropertySelectionDirect(string propertyPath, bool isChecked)
+    {
+        if (isChecked && !selectedProperties.Contains(propertyPath))
+        {
+            selectedProperties.Add(propertyPath);
+        }
+        else if (!isChecked && selectedProperties.Contains(propertyPath))
+        {
+            selectedProperties.Remove(propertyPath);
+        }
+        
+        UpdateSelectAllVisibleState();
+        StateHasChanged();
+    }
+
+    private List<BreadcrumbItem> GetBreadcrumbItems()
+    {
+        var items = new List<BreadcrumbItem>
+        {
+            new BreadcrumbItem("Root", href: null, icon: Icons.Material.Filled.Home)
+        };
+        
+        for (int i = 0; i < selectedPropertyPath.Count; i++)
+        {
+            var segment = selectedPropertyPath[i];
+            var displayText = segment == "[*]" ? "Items" : segment;
+            items.Add(new BreadcrumbItem(displayText, href: null));
+        }
+        
+        return items;
+    }
+
+    private void NavigateToBreadcrumbItem(BreadcrumbItem item)
+    {
+        var index = GetBreadcrumbItems().IndexOf(item);
+        if (index == 0)
+        {
+            // Root
+            NavigateToBreadcrumb(new List<string>());
+        }
+        else if (index > 0 && index <= selectedPropertyPath.Count)
+        {
+            NavigateToBreadcrumb(selectedPropertyPath.Take(index).ToList());
+        }
+    }
+
+    private string GetFilterDisplayName(string filter)
+    {
+        return filter switch
+        {
+            FilterCollections => "Collections",
+            FilterPrimitives => "Primitives",
+            FilterComplex => "Complex",
+            FilterIgnored => "Ignored",
+            _ => "All"
+        };
+    }
+
+    private string GetShortPropertyName(string fullPath)
+    {
+        if (string.IsNullOrEmpty(fullPath)) return fullPath;
+        var parts = fullPath.Split('.');
+        return parts.Length > 2 ? $"...{parts[^2]}.{parts[^1]}" : fullPath;
+    }
+
+    private void OnSearchChanged(string value)
+    {
+        searchTerm = value;
+        UpdateSearchSuggestions();
+        StateHasChanged();
     }
 
     private Dictionary<string, PropertyTreeNode> GetCurrentLevelNodes()
@@ -869,15 +1083,6 @@
         return result;
     }
 
-    private void OnSearchKeyUp(KeyboardEventArgs e)
-    {
-        if (e.Key == "Enter" && searchSuggestions.Any())
-        {
-            ApplySuggestion(searchSuggestions.First());
-        }
-        UpdateSearchSuggestions();
-    }
-
     private void UpdateSearchSuggestions()
     {
         searchSuggestions.Clear();
@@ -968,14 +1173,14 @@
         };
     }
 
-    private async Task ShowHelpModal()
+    private void ShowHelpModal()
     {
-        await helpModal.ShowAsync();
+        showHelpModal = true;
     }
 
     private void CloseHelpModal()
     {
-        helpModal.HideAsync();
+        showHelpModal = false;
     }
 
     // ... (Include all the existing methods from HierarchicalPropertySelector like GetAllPropertyPaths, etc.)
@@ -1151,27 +1356,10 @@
 
     private void ClosePropertySelector()
     {
-        propertyModal.HideAsync();
+        showPropertyModal = false;
     }
 
     // Bulk selection methods
-    private void TogglePropertySelectionFromCheckbox(ChangeEventArgs e, string propertyPath)
-    {
-        var isChecked = (bool)(e.Value ?? false);
-        
-        if (isChecked && !selectedProperties.Contains(propertyPath))
-        {
-            selectedProperties.Add(propertyPath);
-        }
-        else if (!isChecked && selectedProperties.Contains(propertyPath))
-        {
-            selectedProperties.Remove(propertyPath);
-        }
-        
-        UpdateSelectAllVisibleState();
-        StateHasChanged();
-    }
-
     private void ToggleSelectAllVisible()
     {
         selectAllVisible = !selectAllVisible;
@@ -1237,7 +1425,7 @@
         }
     }
 
-    private async Task ShowBulkIgnoreConfirmation()
+    private void ShowBulkIgnoreConfirmation()
     {
         if (!selectedProperties.Any())
             return;
@@ -1246,7 +1434,7 @@
         bulkIgnoreCompletely = true;
         bulkIgnoreCollectionOrder = false;
         
-        await bulkIgnoreModal.ShowAsync();
+        showBulkIgnoreModal = true;
     }
 
     private async Task ExecuteBulkIgnore()
@@ -1341,14 +1529,14 @@
             bulkIgnoreStatus = "";
             selectedProperties.Clear();
             selectAllVisible = false;
-            await bulkIgnoreModal.HideAsync();
+            showBulkIgnoreModal = false;
             StateHasChanged();
         }
     }
 
-    private async Task CancelBulkIgnore()
+    private void CancelBulkIgnore()
     {
-        await bulkIgnoreModal.HideAsync();
+        showBulkIgnoreModal = false;
     }
 
     private void ClearAllSelections()

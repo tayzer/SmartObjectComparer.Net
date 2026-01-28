@@ -1,0 +1,217 @@
+﻿@namespace ComparisonTool.Web.Components.Comparison
+@using System.Text.RegularExpressions
+@using ComparisonTool.Core
+@using ComparisonTool.Core.Utilities
+@using ComparisonTool.Core.Comparison.Analysis
+@using ComparisonTool.Core.Comparison.Results
+@using KellermanSoftware.CompareNetObjects
+
+<div class="mt-4" id="detailed-differences-section">
+    <div class="card">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">
+                Comparison: @SelectedPair.File1Name vs @SelectedPair.File2Name
+            </h5>
+            <button class="btn btn-sm btn-outline-primary" @onclick="ExportResults">
+                <i class="bi bi-download me-1"></i> Export This Result
+            </button>
+        </div>
+        <div class="card-body">
+            <!-- Comparison Overview moved to parent component for better layout -->
+        </div>
+    </div>
+</div>
+
+@if (!DifferenceSummary.AreEqual)
+{
+    <div class="mt-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Detailed Differences</h5>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="OnToggleShowAll">
+                    @(ShowAllDifferences ? "Show Top 100 Differences Per Group" : "Show All Differences Per Group")
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        @foreach (var group in GroupedDifferences)
+                        {
+                            string groupKey = group.Key;
+                            bool isCollapsed = IsGroupCollapsed(groupKey);
+
+                            <tbody class="collapsible-group-header">
+                                <tr @onclick="() => ToggleGroupCollapse(groupKey)" style="cursor: pointer; background-color: #f8f9fa;">
+                                    <td colspan="3">
+                                        <i class="bi @(isCollapsed ? "bi-chevron-right" : "bi-chevron-down") me-2"></i>
+                                        <strong>@groupKey</strong>
+                                        <span class="badge bg-secondary ms-2">@group.Count() diffs</span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                            <tbody class="@(isCollapsed ? "collapse" : "")">
+                                @if (!isCollapsed)
+                                {
+                                    <thead>
+                                        <tr>
+                                            <th>Property</th>
+                                            <th>A Value (@SelectedPair.File1Name)</th>
+                                            <th>B Value (@SelectedPair.File2Name)</th>
+                                        </tr>
+                                    </thead>
+                                    @foreach (var diff in ShowAllDifferences ? group : group.Take(100))
+                                    {
+                                        <tr>
+                                            <td style="padding-left: 2em;">@GetRelativePropertyName(diff.PropertyName, groupKey)</td>
+                                            <td class="text-danger">@FormatValue(diff.Object1Value)</td>
+                                            <td class="text-success">@FormatValue(diff.Object2Value)</td>
+                                        </tr>
+                                    }
+                                    @if (group.Count() > 100 && !ShowAllDifferences)
+                                    {
+                                        <tr>
+                                            <td colspan="3" class="text-center">
+                                                <em>And @(group.Count() - 100) more differences in this group...</em>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        }
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public FilePairComparisonResult SelectedPair { get; set; }
+
+    [Parameter]
+    public DifferenceSummary DifferenceSummary { get; set; }
+
+    [Parameter]
+    public ComparisonResult ComparisonResult { get; set; }
+
+    [Parameter]
+    public bool ShowAllDifferences { get; set; }
+
+    [Parameter]
+    public EventCallback OnToggleShowAll { get; set; }
+
+    [Parameter]
+    public EventCallback OnExportResults { get; set; }
+
+    [Parameter]
+    public MultiFolderComparisonResult FolderResult { get; set; }
+
+    private Dictionary<string, bool> groupCollapsedStates = new Dictionary<string, bool>();
+
+    private IEnumerable<IGrouping<string, Difference>> GroupedDifferences { get; set; } = Enumerable.Empty<IGrouping<string, Difference>>();
+
+    protected override void OnParametersSet()
+    {
+        if (ComparisonResult != null)
+        {
+            // Group by normalized property path so System.Collections.IList.Item[...] and indexed
+            // variants are treated as the same logical property and don't appear duplicated.
+            GroupedDifferences = (ComparisonResult.Differences ?? Enumerable.Empty<Difference>())
+                .Select(d => new { Normalized = PropertyPathNormalizer.NormalizePropertyPath(d.PropertyName), Diff = d })
+                .GroupBy(x => x.Normalized, x => x.Diff)
+                .OrderBy(g => g.Key);
+
+            foreach (var group in GroupedDifferences)
+            {
+                if (!groupCollapsedStates.ContainsKey(group.Key))
+                {
+                    groupCollapsedStates[group.Key] = true;
+                }
+            }
+        }
+        else
+        {
+            GroupedDifferences = Enumerable.Empty<IGrouping<string, Difference>>();
+            groupCollapsedStates.Clear();
+        }
+        base.OnParametersSet();
+    }
+
+    private string GetGroupKey(string propertyPath)
+    {
+        // Operate on normalized path to ensure grouping is consistent with normalization
+        var normalized = PropertyPathNormalizer.NormalizePropertyPath(propertyPath);
+        if (string.IsNullOrEmpty(normalized)) return "(Root)";
+
+        var match = Regex.Match(normalized, @"(.*)(\.[\w]+|\[\d+\])$", RegexOptions.RightToLeft);
+
+        if (match.Success && !string.IsNullOrEmpty(match.Groups[1].Value))
+        {
+            return match.Groups[1].Value;
+        }
+
+        if (!normalized.Contains(".") && !normalized.Contains("["))
+        {
+            return "(Root Properties)";
+        }
+
+        return normalized;
+    }
+
+    private string GetRelativePropertyName(string fullPath, string groupKey)
+    {
+        if (string.IsNullOrEmpty(fullPath)) return "";
+
+        // Use normalized full path for display relative to the normalized group key
+        var normalizedFull = PropertyPathNormalizer.NormalizePropertyPath(fullPath);
+        if (groupKey == "(Root Properties)") return normalizedFull;
+        if (normalizedFull.StartsWith(groupKey))
+        {
+            var relative = normalizedFull.Substring(groupKey.Length);
+            return relative.TrimStart('.', '[').TrimEnd(']');
+        }
+
+        return normalizedFull;
+    }
+
+    private bool IsGroupCollapsed(string groupKey)
+    {
+        return groupCollapsedStates.TryGetValue(groupKey, out var isCollapsed) && isCollapsed;
+    }
+
+    private void ToggleGroupCollapse(string groupKey)
+    {
+        if (groupCollapsedStates.ContainsKey(groupKey))
+        {
+            groupCollapsedStates[groupKey] = !groupCollapsedStates[groupKey];
+        }
+        else
+        {
+            groupCollapsedStates[groupKey] = false;
+        }
+    }
+
+    private IEnumerable<Difference> GetFilteredDifferences()
+    {
+        return ComparisonResult?.Differences ?? Enumerable.Empty<Difference>();
+    }
+
+    private async Task ExportResults()
+    {
+        await OnExportResults.InvokeAsync();
+    }
+
+    private string FormatValue(object value)
+    {
+        if (value == null) return "null";
+
+        if (value is DateTime dt)
+            return dt.ToString("yyyy-MM-dd HH:mm:ss");
+
+        if (value is string str && str.Length > 100)
+            return str.Substring(0, 97) + "...";
+
+        return value.ToString();
+    }
+}

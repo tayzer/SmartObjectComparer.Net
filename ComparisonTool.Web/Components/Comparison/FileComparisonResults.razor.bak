@@ -1,0 +1,166 @@
+@namespace ComparisonTool.Web.Components.Comparison
+@using ComparisonTool.Core
+@using ComparisonTool.Core.Comparison.Results
+
+<div class="card">
+    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Expected vs Actual Comparison Results</h5>
+        <div>
+            <button class="btn btn-sm btn-outline-secondary me-2" @onclick="() => IsCollapsed = !IsCollapsed">
+                <i class="bi" @(IsCollapsed ? "bi-chevron-down" : "bi-chevron-up")></i> @(IsCollapsed ? "Expand" : "Collapse")
+            </button>
+            <button class="btn btn-sm btn-outline-primary" @onclick="ExportAll">
+                <i class="bi bi-download me-1"></i> Export All Results
+            </button>
+        </div>
+    </div>
+    @if (!IsCollapsed)
+    {
+        <div class="card-body">
+            <div class="mb-3 d-flex flex-wrap align-items-center gap-3">
+                <label>Status:
+                    <select class="form-select form-select-sm d-inline-block w-auto ms-1" @bind="StatusFilter">
+                        <option value="All">All</option>
+                        <option value="Equal">Equal</option>
+                        <option value="Different">Different</option>
+                        <option value="Error">Error</option>
+                    </select>
+                </label>
+                <label>Category/Pattern:
+                    <select class="form-select form-select-sm d-inline-block w-auto ms-1" @bind="SelectedGroupFilter">
+                        <option value="All">All</option>
+                        @foreach (var group in AvailableGroups)
+                        {
+                            <option value="@group">@group</option>
+                        }
+                    </select>
+                </label>
+            </div>
+            @if (Result.AllEqual)
+            {
+                <div class="alert alert-success">
+                    <i class="bi bi-check-circle-fill me-2"></i>
+                    All file pairs are identical according to the current comparison rules.
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    Found differences in compared file pairs.
+                </div>
+                <h6>Select a file pair to view detailed comparison:</h6>
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Expected File</th>
+                                <th>Actual File</th>
+                                <th>Status</th>
+                                <th>Differences</th>
+                                <th>Pattern/Category</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in GetFilteredResultsWithOriginalIndex().Take(ShowAll ? int.MaxValue : PreviewCount))
+                            {
+                                var result = item.Result;
+                                var originalIndex = item.OriginalIndex;
+                                <tr class="@(originalIndex == SelectedPairIndex ? "table-primary" : "")" style="cursor: pointer;" @onclick="() => SelectPair(originalIndex)">
+                                    <td>@result.File1Name</td>
+                                    <td>@result.File2Name</td>
+                                    <td>
+                                        @if (result.HasError)
+                                        {
+                                            <span class="text-warning" title="@result.ErrorMessage">
+                                                <i class="bi bi-exclamation-triangle me-1"></i>Error
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <span class="@(result.AreEqual ? "text-success" : "text-danger")">
+                                                @(result.AreEqual ? "Equal" : "Different")
+                                            </span>
+                                        }
+                                    </td>
+                                    <td>@(result.HasError ? "-" : (result.AreEqual ? "0" : (result.Summary?.TotalDifferenceCount.ToString() ?? "-")))</td>
+                                    <td>@(result.Summary?.CommonPatterns?.FirstOrDefault()?.Pattern ?? "Uncategorized")</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-secondary" @onclick:stopPropagation="true" @onclick="() => SelectPair(originalIndex)">
+                                            View
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                    @if (GetFilteredResultsWithOriginalIndex().Count() > PreviewCount)
+                    {
+                        <div class="text-center mb-2">
+                            <button class="btn btn-link" @onclick="() => ShowAll = !ShowAll">
+                                @(ShowAll ? $"Show Top {PreviewCount}" : $"Show All ({GetFilteredResultsWithOriginalIndex().Count()})")
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public MultiFolderComparisonResult Result { get; set; }
+
+    [Parameter]
+    public int SelectedPairIndex { get; set; } = -1;
+
+    [Parameter]
+    public EventCallback<int> OnPairSelected { get; set; }
+
+    [Parameter]
+    public EventCallback OnExportAll { get; set; }
+
+    private bool IsCollapsed = false;
+    private bool ShowAll = false;
+    private const int PreviewCount = 20;
+
+    private string StatusFilter = "All"; // All, Equal, Different, Error
+    private string SelectedGroupFilter = "All";
+    private List<string> AvailableGroups => Result?.FilePairResults?
+        .Select(r => r.Summary?.CommonPatterns?.FirstOrDefault()?.Pattern ?? "Uncategorized")
+        .Distinct()
+        .OrderBy(g => g).ToList() ?? new List<string>();
+
+    private IEnumerable<(FilePairComparisonResult Result, int OriginalIndex)> GetFilteredResultsWithOriginalIndex()
+    {
+        if (Result?.FilePairResults == null)
+            return Enumerable.Empty<(FilePairComparisonResult, int)>();
+
+        var results = Result.FilePairResults
+            .Select((r, i) => (Result: r, OriginalIndex: i));
+        
+        if (StatusFilter == "Equal")
+            results = results.Where(x => !x.Result.HasError && x.Result.AreEqual);
+        else if (StatusFilter == "Different")
+            results = results.Where(x => !x.Result.HasError && !x.Result.AreEqual);
+        else if (StatusFilter == "Error")
+            results = results.Where(x => x.Result.HasError);
+        
+        if (SelectedGroupFilter != "All")
+            results = results.Where(x => (x.Result.Summary?.CommonPatterns?.FirstOrDefault()?.Pattern ?? "Uncategorized") == SelectedGroupFilter);
+        
+        return results;
+    }
+
+    private async Task SelectPair(int index)
+    {
+        await OnPairSelected.InvokeAsync(index);
+    }
+
+    private async Task ExportAll()
+    {
+        await OnExportAll.InvokeAsync();
+    }
+}

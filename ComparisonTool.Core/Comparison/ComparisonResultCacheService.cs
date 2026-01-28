@@ -180,16 +180,31 @@ namespace ComparisonTool.Core.Comparison {
 
         /// <summary>
         /// Generate a file content hash for caching.
+        /// PERFORMANCE OPTIMIZATION: Use XxHash64 for 2-3x faster hashing than SHA256.
         /// </summary>
         /// <returns></returns>
         public string GenerateFileHash(Stream fileStream) {
             return this.performanceTracker.TrackOperation("Generate_File_Hash", () => {
                 try {
                     fileStream.Position = 0;
-                    using var sha256 = SHA256.Create();
-                    var hashBytes = sha256.ComputeHash(fileStream);
-                    fileStream.Position = 0; // Reset for subsequent use
-                    return Convert.ToBase64String(hashBytes)[..16]; // Use first 16 chars for shorter keys
+
+                    // PERFORMANCE OPTIMIZATION: Use XxHash64 instead of SHA256 (much faster, non-cryptographic)
+                    var hash = new System.IO.Hashing.XxHash64();
+                    const int bufferSize = 81920; // 80KB buffer
+                    var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(bufferSize);
+
+                    try {
+                        int bytesRead;
+                        while ((bytesRead = fileStream.Read(buffer, 0, bufferSize)) > 0) {
+                            hash.Append(buffer.AsSpan(0, bytesRead));
+                        }
+
+                        fileStream.Position = 0; // Reset for subsequent use
+                        return Convert.ToBase64String(hash.GetHashAndReset());
+                    }
+                    finally {
+                        System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
+                    }
                 }
                 catch (Exception ex) {
                     this.logger.LogWarning(ex, "Error generating file hash, using length + timestamp");

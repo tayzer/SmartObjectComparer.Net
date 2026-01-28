@@ -1,5 +1,4 @@
 @page "/"
-@rendermode InteractiveServer
 @using System.IO
 @using ComparisonTool.Core.Comparison
 @using ComparisonTool.Core.Comparison.Analysis
@@ -12,6 +11,7 @@
 @using Microsoft.AspNetCore.Components
 @using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.JSInterop
+@using MudBlazor
 @implements IDisposable
 @inject IDeserializationService DeserializationService
 @inject IComparisonConfigurationService ConfigService
@@ -25,250 +25,300 @@
 @inject SystemResourceMonitor ResourceMonitor
 @inject ComparisonResultCacheService CacheService
 
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h1>File Comparison Tool (XML & JSON)</h1>
-    <div class="text-end">
-        <small class="text-muted">Cache: @GetCacheStatsDisplay()</small>
-        <button class="btn btn-sm btn-outline-secondary ms-2" @onclick="ClearCache" title="Clear all caches">
-            <i class="bi bi-trash3"></i> Clear Cache
-        </button>
-    </div>
-</div>
+<MudStack Spacing="4">
+    <!-- Header Section -->
+    <MudPaper Elevation="2" Class="pa-4">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.h4">File Comparison Tool (XML &amp; JSON)</MudText>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudText Typo="Typo.caption" Color="Color.Default">Cache: @GetCacheStatsDisplay()</MudText>
+                <MudButton Variant="Variant.Outlined" 
+                           Size="Size.Small" 
+                           StartIcon="@Icons.Material.Filled.DeleteOutline" 
+                           OnClick="ClearCache"
+                           aria-label="Clear all caches">
+                    Clear Cache
+                </MudButton>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
 
-<div class="mb-4">
-    <div class="form-check form-switch">
-        <input class="form-check-input" type="checkbox" id="useDirectModeSwitch" @bind="UseDirectoryMode" />
-        <label class="form-check-label" for="useDirectModeSwitch">
-            @(UseDirectoryMode ? "Directory Mode: Compare folders on server" : "Upload Mode: Compare uploaded files")
-        </label>
-    </div>
-</div>
+    <!-- Mode Switch Section -->
+    <MudPaper Elevation="2" Class="pa-4">
+        <MudSwitch T="bool"
+                   Value="UseDirectoryMode"
+                   ValueChanged="@((bool val) => UseDirectoryMode = val)"
+                   Color="Color.Primary"
+                   Label="@(UseDirectoryMode ? "Directory Mode: Compare folders on server" : "Upload Mode: Compare uploaded files")"
+                   aria-label="Toggle between directory mode and upload mode" />
+    </MudPaper>
 
-@if (UseDirectoryMode)
-{
-    <div class="row mt-4">
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5>Step 1: Select Folders to Compare</h5>
-                </div>
-                <div class="card-body">
-                    <div class="form-group">
-                        <label>Select Domain Model:</label>
-                        <select class="form-control" @bind="SelectedModelName">
+    <!-- Main Content Grid -->
+    @if (UseDirectoryMode)
+    {
+        <MudGrid Spacing="4">
+            <MudItem xs="12" md="6">
+                <MudPaper Elevation="2" Class="pa-4">
+                    <MudStack Spacing="3">
+                        <MudText Typo="Typo.h6">Step 1: Select Folders to Compare</MudText>
+                        
+                        <MudSelect T="string" 
+                                   Label="Select Domain Model" 
+                                   Value="SelectedModelName"
+                                   ValueChanged="@((string val) => SelectedModelName = val)"
+                                   Variant="Variant.Outlined"
+                                   AnchorOrigin="Origin.BottomCenter"
+                                   aria-label="Select domain model for comparison">
                             @foreach (var modelName in DeserializationService.GetRegisteredModelNames())
                             {
-                                <option value="@modelName">@modelName</option>
+                                <MudSelectItem Value="@modelName">@modelName</MudSelectItem>
                             }
-                        </select>
-                    </div>
+                        </MudSelect>
 
-                    <div class="form-group mt-3">
-                        <label>Expected Directory:</label>
-                        <div class="input-group">
-                            <input type="text" class="form-control" @bind="Directory1Path" placeholder="Enter path to first directory" />
-                            <button class="btn btn-outline-secondary" type="button" @onclick="BrowseDirectory1">
-                                <i class="bi bi-folder"></i> Browse
-                            </button>
-                        </div>
-                        @if (!string.IsNullOrEmpty(Directory1Path) && Directory.Exists(Directory1Path))
-                        {
-                            <small class="text-success">Directory exists with @GetXmlFileCount(Directory1Path) XML files</small>
-                        }
-                        else if (!string.IsNullOrEmpty(Directory1Path))
-                        {
-                            <small class="text-danger">Directory does not exist</small>
-                        }
-                    </div>
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.body2" Color="Color.Default">Expected Directory:</MudText>
+                            <MudStack Row="true" Spacing="2">
+                                <MudTextField T="string"
+                                              Value="Directory1Path"
+                                              ValueChanged="@((string val) => Directory1Path = val)"
+                                              Label="Expected Directory Path"
+                                              Placeholder="Enter path to first directory"
+                                              Variant="Variant.Outlined"
+                                              FullWidth="true"
+                                              aria-label="Expected directory path" />
+                                <MudButton Variant="Variant.Outlined" 
+                                           StartIcon="@Icons.Material.Filled.Folder"
+                                           OnClick="BrowseDirectory1"
+                                           aria-label="Browse for expected directory">
+                                    Browse
+                                </MudButton>
+                            </MudStack>
+                            @if (!string.IsNullOrEmpty(Directory1Path) && Directory.Exists(Directory1Path))
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Success">
+                                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Class="mr-1" />
+                                    Directory exists with @GetXmlFileCount(Directory1Path) XML files
+                                </MudText>
+                            }
+                            else if (!string.IsNullOrEmpty(Directory1Path))
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Error">
+                                    <MudIcon Icon="@Icons.Material.Filled.Error" Size="Size.Small" Class="mr-1" />
+                                    Directory does not exist
+                                </MudText>
+                            }
+                        </MudStack>
 
-                    <div class="form-group mt-3">
-                        <label>Actual Directory:</label>
-                        <div class="input-group">
-                            <input type="text" class="form-control" @bind="Directory2Path" placeholder="Enter path to second directory" />
-                            <button class="btn btn-outline-secondary" type="button" @onclick="BrowseDirectory2">
-                                <i class="bi bi-folder"></i> Browse
-                            </button>
-                        </div>
-                        @if (!string.IsNullOrEmpty(Directory2Path) && Directory.Exists(Directory2Path))
-                        {
-                            <small class="text-success">Directory exists with @GetXmlFileCount(Directory2Path) XML files</small>
-                        }
-                        else if (!string.IsNullOrEmpty(Directory2Path))
-                        {
-                            <small class="text-danger">Directory does not exist</small>
-                        }
-                    </div>
-                </div>
-            </div>
-        </div>
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.body2" Color="Color.Default">Actual Directory:</MudText>
+                            <MudStack Row="true" Spacing="2">
+                                <MudTextField T="string"
+                                              Value="Directory2Path"
+                                              ValueChanged="@((string val) => Directory2Path = val)"
+                                              Label="Actual Directory Path"
+                                              Placeholder="Enter path to second directory"
+                                              Variant="Variant.Outlined"
+                                              FullWidth="true"
+                                              aria-label="Actual directory path" />
+                                <MudButton Variant="Variant.Outlined" 
+                                           StartIcon="@Icons.Material.Filled.Folder"
+                                           OnClick="BrowseDirectory2"
+                                           aria-label="Browse for actual directory">
+                                    Browse
+                                </MudButton>
+                            </MudStack>
+                            @if (!string.IsNullOrEmpty(Directory2Path) && Directory.Exists(Directory2Path))
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Success">
+                                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Class="mr-1" />
+                                    Directory exists with @GetXmlFileCount(Directory2Path) XML files
+                                </MudText>
+                            }
+                            else if (!string.IsNullOrEmpty(Directory2Path))
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Error">
+                                    <MudIcon Icon="@Icons.Material.Filled.Error" Size="Size.Small" Class="mr-1" />
+                                    Directory does not exist
+                                </MudText>
+                            }
+                        </MudStack>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
 
-        <div class="col-md-6">
-            <ComparisonConfigurationPanel IgnoreCollectionOrder="@IgnoreCollectionOrder"
-                                          OnIgnoreCollectionOrderChanged="@(value => IgnoreCollectionOrder = value)"
-                                          IgnoreStringCase="@IgnoreStringCase"
-                                          OnIgnoreStringCaseChanged="@(value => IgnoreStringCase = value)"
-                                          EnableSemanticAnalysis="@EnableSemanticAnalysis"
-                                          OnEnableSemanticAnalysisChanged="@(value => EnableSemanticAnalysis = value)"
-                                          EnableEnhancedStructuralAnalysis="@EnableEnhancedStructuralAnalysis"
-                                          OnEnableEnhancedStructuralAnalysisChanged="@(value => EnableEnhancedStructuralAnalysis = value)"
-                                          IgnoreRules="@IgnoreRules"
-                                          OnIgnoreRuleAdded="@AddIgnoreRule"
-                                          OnIgnoreRuleRemoved="@RemoveIgnoreRule"
-                                          OnIgnoreRulesCleared="@ClearAllIgnoreRules"
-                                          ModelType="@GetSelectedModelType()"
-                                          OnPropertySelectorOpened="@OpenPropertySelector"
-                                          OnTreePropertySelectorOpened="@OpenTreePropertySelector"
-                                          OnRunComparison="@RunDirectoryComparison"
-                                          CanRunComparison="@CanRunDirectoryComparison" />
-        </div>
-    </div>
-}
-else
-{
-    <div class="row mt-4">
-        <div class="col-md-6">
-            <FileSelector ModelNames="@DeserializationService.GetRegisteredModelNames()"
-                          SelectedModelName="@SelectedModelName"
-                          OnModelNameChanged="@(name => SelectedModelName = name)"
-                          Folder1Files="@Folder1Files"
-                          OnFolder1FilesChanged="@HandleFolder1FilesChanged"
-                          Folder2Files="@Folder2Files"
-                          OnFolder2FilesChanged="@HandleFolder2FilesChanged" />
-        </div>
-
-        <div class="col-md-6">
-            <ComparisonConfigurationPanel IgnoreCollectionOrder="@IgnoreCollectionOrder"
-                                          OnIgnoreCollectionOrderChanged="@(value => IgnoreCollectionOrder = value)"
-                                          IgnoreStringCase="@IgnoreStringCase"
-                                          OnIgnoreStringCaseChanged="@(value => IgnoreStringCase = value)"
-                                          EnableSemanticAnalysis="@EnableSemanticAnalysis"
-                                          OnEnableSemanticAnalysisChanged="@(value => EnableSemanticAnalysis = value)"
-                                          EnableEnhancedStructuralAnalysis="@EnableEnhancedStructuralAnalysis"
-                                          OnEnableEnhancedStructuralAnalysisChanged="@(value => EnableEnhancedStructuralAnalysis = value)"
-                                          IgnoreRules="@IgnoreRules"
-                                          OnIgnoreRuleAdded="@AddIgnoreRule"
-                                          OnIgnoreRuleRemoved="@RemoveIgnoreRule"
-                                          OnIgnoreRulesCleared="@ClearAllIgnoreRules"
-                                          ModelType="@GetSelectedModelType()"
-                                          OnPropertySelectorOpened="@OpenPropertySelector"
-                                          OnTreePropertySelectorOpened="@OpenTreePropertySelector"
-                                          OnRunComparison="@RunFolderComparison"
-                                          CanRunComparison="@CanRunFolderComparison" />
-        </div>
-    </div>
-}
-
-@if (IsComparing)
-{
-    <div class="card mt-4">
-        <div class="card-body">
-            <div class="progress mb-3">
-                <div class="progress-bar progress-bar-striped progress-bar-animated"
-                     role="progressbar"
-                     style="width: @(Progress.PercentComplete)%">
-                    @Progress.Status
-                </div>
-            </div>
-            <div class="text-center">
-                <p>@Progress.Status (@Progress.Completed of @Progress.Total completed)</p>
-                @if (IsCancellable)
-                {
-                    <button class="btn btn-sm btn-warning" @onclick="CancelComparison">
-                        <i class="bi bi-x-circle me-1"></i> Cancel
-                    </button>
-                }
-            </div>
-        </div>
-    </div>
-}
-
-@if (FolderComparisonResult != null)
-{
-    @if (EnableEnhancedStructuralAnalysis)
-    {
-        @if (EnhancedStructuralAnalysis != null)
-        {
-            <ComparisonRunDetails Analysis="@EnhancedStructuralAnalysis"
-                                  FolderComparisonResult="@FolderComparisonResult" />
-        }
-        else if (!FolderComparisonResult.AllEqual)
-        {
-            <!-- Loading state for Enhanced Structural Analysis -->
-            <div class="card">
-                <div class="card-header">
-                    <h4>Comparison Overview</h4>
-                </div>
-                <div class="card-body text-center py-5">
-                    <div class="spinner-border text-primary mb-3" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                    <h5>Generating Enhanced Analysis...</h5>
-                    <p class="text-muted">Please wait while we analyze structural patterns and categorize differences.</p>
-                </div>
-            </div>
-        }
-        else
-        {
-            <!-- All files are equal - show simple success message -->
-            <div class="card">
-                <div class="card-header">
-                    <h4>Comparison Overview</h4>
-                </div>
-                <div class="card-body">
-                    <div class="alert alert-success d-flex align-items-center">
-                        <i class="bi bi-check-circle-fill me-3 fs-4"></i>
-                        <div>
-                            <strong>All files are identical</strong>
-                            <div class="text-muted">
-                                No differences found in any of the @FolderComparisonResult.FilePairResults.Count compared files.
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        }
+            <MudItem xs="12" md="6">
+                <ComparisonConfigurationPanel IgnoreCollectionOrder="@IgnoreCollectionOrder"
+                                              OnIgnoreCollectionOrderChanged="@(value => IgnoreCollectionOrder = value)"
+                                              IgnoreStringCase="@IgnoreStringCase"
+                                              OnIgnoreStringCaseChanged="@(value => IgnoreStringCase = value)"
+                                              EnableSemanticAnalysis="@EnableSemanticAnalysis"
+                                              OnEnableSemanticAnalysisChanged="@(value => EnableSemanticAnalysis = value)"
+                                              EnableEnhancedStructuralAnalysis="@EnableEnhancedStructuralAnalysis"
+                                              OnEnableEnhancedStructuralAnalysisChanged="@(value => EnableEnhancedStructuralAnalysis = value)"
+                                              IgnoreRules="@IgnoreRules"
+                                              OnIgnoreRuleAdded="@AddIgnoreRule"
+                                              OnIgnoreRuleRemoved="@RemoveIgnoreRule"
+                                              OnIgnoreRulesCleared="@ClearAllIgnoreRules"
+                                              ModelType="@GetSelectedModelType()"
+                                              OnPropertySelectorOpened="@OpenPropertySelector"
+                                              OnTreePropertySelectorOpened="@OpenTreePropertySelector"
+                                              OnRunComparison="@RunDirectoryComparison"
+                                              CanRunComparison="@CanRunDirectoryComparison" />
+            </MudItem>
+        </MudGrid>
     }
     else
     {
-        <!-- Enhanced Structural Analysis is disabled - show traditional summary -->
-        <EnhancedDifferenceSummary Summary="@DifferenceSummary" FolderResult="@FolderComparisonResult" />
+        <MudGrid Spacing="4">
+            <MudItem xs="12" md="6">
+                <FileSelector ModelNames="@DeserializationService.GetRegisteredModelNames()"
+                              SelectedModelName="@SelectedModelName"
+                              OnModelNameChanged="@(name => SelectedModelName = name)"
+                              Folder1Files="@Folder1Files"
+                              OnFolder1FilesChanged="@HandleFolder1FilesChanged"
+                              Folder2Files="@Folder2Files"
+                              OnFolder2FilesChanged="@HandleFolder2FilesChanged" />
+            </MudItem>
+
+            <MudItem xs="12" md="6">
+                <ComparisonConfigurationPanel IgnoreCollectionOrder="@IgnoreCollectionOrder"
+                                              OnIgnoreCollectionOrderChanged="@(value => IgnoreCollectionOrder = value)"
+                                              IgnoreStringCase="@IgnoreStringCase"
+                                              OnIgnoreStringCaseChanged="@(value => IgnoreStringCase = value)"
+                                              EnableSemanticAnalysis="@EnableSemanticAnalysis"
+                                              OnEnableSemanticAnalysisChanged="@(value => EnableSemanticAnalysis = value)"
+                                              EnableEnhancedStructuralAnalysis="@EnableEnhancedStructuralAnalysis"
+                                              OnEnableEnhancedStructuralAnalysisChanged="@(value => EnableEnhancedStructuralAnalysis = value)"
+                                              IgnoreRules="@IgnoreRules"
+                                              OnIgnoreRuleAdded="@AddIgnoreRule"
+                                              OnIgnoreRuleRemoved="@RemoveIgnoreRule"
+                                              OnIgnoreRulesCleared="@ClearAllIgnoreRules"
+                                              ModelType="@GetSelectedModelType()"
+                                              OnPropertySelectorOpened="@OpenPropertySelector"
+                                              OnTreePropertySelectorOpened="@OpenTreePropertySelector"
+                                              OnRunComparison="@RunFolderComparison"
+                                              CanRunComparison="@CanRunFolderComparison" />
+            </MudItem>
+        </MudGrid>
     }
-    
-    <FileComparisonResults Result="@FolderComparisonResult"
-                           SelectedPairIndex="@SelectedPairIndex"
-                           OnPairSelected="@SelectPairResult"
-                           OnExportAll="@ExportAllFolderResults" />
-}
 
-@if (FolderComparisonResult != null && SelectedPairIndex >= 0 && DifferenceSummary != null)
-{
-    <DetailedDifferencesView SelectedPair="@FolderComparisonResult.FilePairResults[SelectedPairIndex]"
-                             DifferenceSummary="@DifferenceSummary"
-                             ComparisonResult="@ComparisonResult"
-                             ShowAllDifferences="@ShowAllDifferences"
-                             OnToggleShowAll="@ToggleShowAllDifferences"
-                             OnExportResults="@ExportFolderResults"
-                             FolderResult="@FolderComparisonResult" />
-}
+    <!-- Progress Section -->
+    @if (IsComparing)
+    {
+        <MudPaper Elevation="2" Class="pa-4">
+            <MudStack Spacing="3" AlignItems="AlignItems.Center">
+                <MudProgressLinear Color="Color.Primary" 
+                                   Value="@Progress.PercentComplete" 
+                                   Striped="true"
+                                   Size="Size.Large"
+                                   Class="my-2"
+                                   aria-label="Comparison progress" />
+                <MudText Typo="Typo.body1">@Progress.Status (@Progress.Completed of @Progress.Total completed)</MudText>
+                @if (IsCancellable)
+                {
+                    <MudButton Variant="Variant.Filled" 
+                               Color="Color.Warning" 
+                               StartIcon="@Icons.Material.Filled.Cancel" 
+                               OnClick="CancelComparison"
+                               Size="Size.Small"
+                               aria-label="Cancel comparison">
+                        Cancel
+                    </MudButton>
+                }
+            </MudStack>
+        </MudPaper>
+    }
 
+    <!-- Results Section -->
+    @if (FolderComparisonResult != null)
+    {
+        @if (EnableEnhancedStructuralAnalysis)
+        {
+            @if (EnhancedStructuralAnalysis != null)
+            {
+                <ComparisonRunDetails Analysis="@EnhancedStructuralAnalysis"
+                                      FolderComparisonResult="@FolderComparisonResult" />
+            }
+            else if (!FolderComparisonResult.AllEqual)
+            {
+                <!-- Loading state for Enhanced Structural Analysis -->
+                <MudPaper Elevation="2" Class="pa-4">
+                    <MudStack Spacing="3">
+                        <MudText Typo="Typo.h5">Comparison Overview</MudText>
+                        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="py-6">
+                            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+                            <MudText Typo="Typo.h6" Class="mt-3">Generating Enhanced Analysis...</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Default">
+                                Please wait while we analyze structural patterns and categorize differences.
+                            </MudText>
+                        </MudStack>
+                    </MudStack>
+                </MudPaper>
+            }
+            else
+            {
+                <!-- All files are equal - show simple success message -->
+                <MudPaper Elevation="2" Class="pa-4">
+                    <MudStack Spacing="3">
+                        <MudText Typo="Typo.h5">Comparison Overview</MudText>
+                        <MudAlert Severity="Severity.Success" Variant="Variant.Filled" Icon="@Icons.Material.Filled.CheckCircle">
+                            <MudText Typo="Typo.body1"><strong>All files are identical</strong></MudText>
+                            <MudText Typo="Typo.body2">
+                                No differences found in any of the @FolderComparisonResult.FilePairResults.Count compared files.
+                            </MudText>
+                        </MudAlert>
+                    </MudStack>
+                </MudPaper>
+            }
+        }
+        else
+        {
+            <!-- Enhanced Structural Analysis is disabled - show traditional summary -->
+            <EnhancedDifferenceSummary Summary="@DifferenceSummary" FolderResult="@FolderComparisonResult" />
+        }
+        
+        <FileComparisonResults Result="@FolderComparisonResult"
+                               SelectedPairIndex="@SelectedPairIndex"
+                               OnPairSelected="@SelectPairResult"
+                               OnExportAll="@ExportAllFolderResults" />
+    }
 
+    @if (FolderComparisonResult != null && SelectedPairIndex >= 0 && DifferenceSummary != null)
+    {
+        <DetailedDifferencesView SelectedPair="@FolderComparisonResult.FilePairResults[SelectedPairIndex]"
+                                 DifferenceSummary="@DifferenceSummary"
+                                 ComparisonResult="@ComparisonResult"
+                                 ShowAllDifferences="@ShowAllDifferences"
+                                 OnToggleShowAll="@ToggleShowAllDifferences"
+                                 OnExportResults="@ExportFolderResults"
+                                 FolderResult="@FolderComparisonResult" />
+    }
 
-@if (EnableEnhancedStructuralAnalysis && FolderComparisonResult != null && !FolderComparisonResult.AllEqual && EnhancedStructuralAnalysis == null)
-{
-    <div class="alert alert-info mt-3">
-        <h5>Enhanced Structural Analysis</h5>
-        <p>Enhanced structural analysis is enabled but no patterns were found or the analysis didn't run.</p>
-        <button class="btn btn-success btn-sm" @onclick="GenerateEnhancedStructuralAnalysis">
-            Run Enhanced Structural Analysis
-        </button>
-    </div>
-}
+    @if (EnableEnhancedStructuralAnalysis && FolderComparisonResult != null && !FolderComparisonResult.AllEqual && EnhancedStructuralAnalysis == null)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.h6">Enhanced Structural Analysis</MudText>
+                <MudText Typo="Typo.body2">
+                    Enhanced structural analysis is enabled but no patterns were found or the analysis didn't run.
+                </MudText>
+                <MudButton Variant="Variant.Filled" 
+                           Color="Color.Success" 
+                           Size="Size.Small" 
+                           OnClick="GenerateEnhancedStructuralAnalysis"
+                           aria-label="Run enhanced structural analysis">
+                    Run Enhanced Structural Analysis
+                </MudButton>
+            </MudStack>
+        </MudAlert>
+    }
 
-@if (SemanticAnalysis != null && EnableSemanticAnalysis)
-{
-    <SemanticGroupsPanel Analysis="@SemanticAnalysis"
-                         OnExportAnalysis="@ExportSemanticAnalysisReport" />
-}
+    @if (SemanticAnalysis != null && EnableSemanticAnalysis)
+    {
+        <SemanticGroupsPanel Analysis="@SemanticAnalysis"
+                             OnExportAnalysis="@ExportSemanticAnalysisReport" />
+    }
+</MudStack>
 
 <HierarchicalPropertySelector @ref="propertySelector"
                               ModelType="@GetSelectedModelType()"

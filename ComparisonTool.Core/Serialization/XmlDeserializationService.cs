@@ -160,40 +160,10 @@ public class XmlDeserializationService : IXmlDeserializationService {
         }
 
         try {
-            // Try to determine if we've seen this exact XML before
-            string cacheKey = null;
+            // PERFORMANCE OPTIMIZATION: Skip hashing for cache - rely on ComparisonResultCacheService instead
+            // The MD5 hashing was causing double memory usage and blocking the comparison start
+            // For deserialization, we now just deserialize directly since the result caching happens at a higher level
 
-            if (xmlStream.CanSeek && xmlStream.Length < 1024 * 1024) // Only for reasonably sized files
-            {
-                // Generate a simple hash as cache key
-                using (var ms = new MemoryStream()) {
-                    xmlStream.Position = 0;
-                    xmlStream.CopyTo(ms);
-                    var bytes = ms.ToArray();
-                    var contentHash = Convert.ToBase64String(System.Security.Cryptography.MD5.HashData(bytes));
-                    cacheKey = $"{contentHash}_{SessionId}"; // Include session ID for cache invalidation
-
-                    // Check cache first
-                    if (this.deserializationCache.TryGetValue(cacheKey, out var cached)) {
-                        this.deserializationCache[cacheKey] = (DateTime.Now, cached.Data);
-                        this.logger.LogDebug(
-                            "MD5-based cache HIT for XML content hash: {CacheKey} (SessionId: {SessionId})",
-                            contentHash[..8], SessionId);
-                        return (T)cached.Data;
-                    }
-                    else {
-                        this.logger.LogDebug(
-                            "MD5-based cache MISS for XML content hash: {CacheKey} (SessionId: {SessionId})",
-                            contentHash[..8], SessionId);
-                    }
-
-                    // Reset position for deserialization
-                    xmlStream.Position = 0;
-                }
-            }
-
-            // CRITICAL FIX: Always create fresh XmlReader to avoid state corruption
-            // The pooling was causing inconsistent behavior between single and batch processing
             var serializer = this.GetCachedSerializer<T>();
             xmlStream.Position = 0;
 
@@ -212,12 +182,6 @@ public class XmlDeserializationService : IXmlDeserializationService {
 
             // Deserialize using the reader (potentially wrapped)
             var result = (T)serializer.Deserialize(reader);
-
-            // Cache result if needed
-            if (cacheKey != null && this.deserializationCache.Count < this.maxCacheSize) {
-                this.deserializationCache[cacheKey] = (DateTime.Now, result);
-                this.CleanupCacheIfNeeded();
-            }
 
             return result;
         }
