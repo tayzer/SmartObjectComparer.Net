@@ -59,11 +59,37 @@ public class XmlSerializerFactory {
 
     private XmlSerializer CreateDefaultSerializer<T>() {
         var overrides = new XmlAttributeOverrides();
+        var type = typeof(T);
+
+        // Check if the type has an XmlRootAttribute with a namespace
+        var xmlRootAttr = type.GetCustomAttributes(typeof(XmlRootAttribute), true).FirstOrDefault() as XmlRootAttribute;
+        var hasNamespacedRoot = xmlRootAttr != null && !string.IsNullOrEmpty(xmlRootAttr.Namespace);
+
+        // If the root has a namespace, we need to override all element namespaces to empty
+        // This allows the serializer to deserialize XML regardless of what namespace is present
+        if (hasNamespacedRoot) {
+            this.ProcessTypeForNamespaceRemoval(type, overrides, new HashSet<Type>());
+        }
 
         // Recursively process all types to remove Order attributes
-        this.ProcessTypeForOrderRemoval(typeof(T), overrides);
+        this.ProcessTypeForOrderRemoval(type, overrides);
 
-        var serializer = new XmlSerializer(typeof(T), overrides);
+        XmlSerializer serializer;
+        if (hasNamespacedRoot) {
+            // Create a new XmlRoot attribute without the namespace
+            var namespaceIgnorantRootAttr = new XmlRootAttribute(xmlRootAttr!.ElementName) {
+                IsNullable = xmlRootAttr.IsNullable,
+                Namespace = string.Empty, // Clear the namespace to allow any namespace
+            };
+
+            // Use the constructor that takes root directly - this properly applies the namespace override
+            // The last parameter (defaultNamespace = "") ensures all elements default to empty namespace
+            serializer = new XmlSerializer(type, overrides, Type.EmptyTypes, namespaceIgnorantRootAttr, string.Empty);
+        }
+        else {
+            // No XmlRoot attribute with namespace, use standard constructor with overrides
+            serializer = new XmlSerializer(type, overrides);
+        }
 
         // Add event handlers for unknown elements/attributes
         serializer.UnknownElement += this.OnUnknownElement;
@@ -71,6 +97,69 @@ public class XmlSerializerFactory {
         serializer.UnknownNode += this.OnUnknownNode;
 
         return serializer;
+    }
+
+    /// <summary>
+    /// Process a type and all its properties to remove namespace requirements.
+    /// This ensures that child elements can be deserialized regardless of namespace.
+    /// </summary>
+    private void ProcessTypeForNamespaceRemoval(Type type, XmlAttributeOverrides overrides, HashSet<Type> processedTypes) {
+        if (type.IsPrimitive || type == typeof(string) || type == typeof(DateTime) || type == typeof(decimal)) {
+            return;
+        }
+
+        if (!processedTypes.Add(type)) {
+            return; // Already processed, avoid infinite recursion
+        }
+
+        foreach (var property in type.GetProperties()) {
+            // Check existing XmlElement attributes
+            var xmlElementAttrs = property.GetCustomAttributes<XmlElementAttribute>().ToList();
+
+            // Create new attributes without namespace (or with empty namespace)
+            var xmlAttributes = new XmlAttributes();
+
+            if (xmlElementAttrs.Any()) {
+                foreach (var attr in xmlElementAttrs) {
+                    var newAttr = new XmlElementAttribute(attr.ElementName ?? property.Name) {
+                        IsNullable = attr.IsNullable,
+                        Namespace = string.Empty, // Force empty namespace
+                    };
+                    if (attr.Type != null) {
+                        newAttr.Type = attr.Type;
+                    }
+
+                    if (!string.IsNullOrEmpty(attr.DataType)) {
+                        newAttr.DataType = attr.DataType;
+                    }
+
+                    xmlAttributes.XmlElements.Add(newAttr);
+                }
+            }
+            else {
+                // No XmlElement attribute, create one with empty namespace
+                var newAttr = new XmlElementAttribute(property.Name) {
+                    Namespace = string.Empty,
+                };
+                xmlAttributes.XmlElements.Add(newAttr);
+            }
+
+            overrides.Add(type, property.Name, xmlAttributes);
+
+            // Recursively process property types
+            var propertyType = property.PropertyType;
+            if (propertyType.IsClass && propertyType != typeof(string)) {
+                this.ProcessTypeForNamespaceRemoval(propertyType, overrides, processedTypes);
+            }
+            else if (propertyType.IsGenericType) {
+                var genericArgs = propertyType.GetGenericArguments();
+                foreach (var genericArg in genericArgs) {
+                    if (genericArg.IsClass && genericArg != typeof(string)) {
+                        this.ProcessTypeForNamespaceRemoval(genericArg, overrides, processedTypes);
+                    }
+                }
+            }
+        }
     }
 
     private void OnUnknownElement(object sender, XmlElementEventArgs e) {

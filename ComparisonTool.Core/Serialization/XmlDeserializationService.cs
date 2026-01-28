@@ -12,6 +12,55 @@ using Microsoft.Extensions.Logging;
 namespace ComparisonTool.Core.Serialization;
 
 /// <summary>
+/// An XmlReader wrapper that strips all XML namespace information during reading.
+/// This allows deserialization to work regardless of what namespace is declared in the XML document.
+/// </summary>
+public class NamespaceIgnorantXmlReader : XmlReader {
+    private readonly XmlReader innerReader;
+
+    public NamespaceIgnorantXmlReader(XmlReader innerReader) {
+        this.innerReader = innerReader ?? throw new ArgumentNullException(nameof(innerReader));
+    }
+
+    // Return empty string for all namespace-related properties
+    public override string NamespaceURI => string.Empty;
+    public override string Prefix => string.Empty;
+
+    // Delegate all other properties and methods to the inner reader
+    public override XmlNodeType NodeType => this.innerReader.NodeType;
+    public override string LocalName => this.innerReader.LocalName;
+    public override string Value => this.innerReader.Value;
+    public override int AttributeCount => this.innerReader.AttributeCount;
+    public override string BaseURI => this.innerReader.BaseURI;
+    public override int Depth => this.innerReader.Depth;
+    public override bool EOF => this.innerReader.EOF;
+    public override bool IsEmptyElement => this.innerReader.IsEmptyElement;
+    public override XmlNameTable NameTable => this.innerReader.NameTable;
+    public override ReadState ReadState => this.innerReader.ReadState;
+
+    public override string GetAttribute(int i) => this.innerReader.GetAttribute(i);
+    public override string? GetAttribute(string name) => this.innerReader.GetAttribute(name);
+    public override string? GetAttribute(string name, string? namespaceURI) => this.innerReader.GetAttribute(name, string.Empty);
+    public override string LookupNamespace(string prefix) => string.Empty;
+    public override bool MoveToAttribute(string name) => this.innerReader.MoveToAttribute(name);
+    public override bool MoveToAttribute(string name, string? ns) => this.innerReader.MoveToAttribute(name, string.Empty);
+    public override bool MoveToElement() => this.innerReader.MoveToElement();
+    public override bool MoveToFirstAttribute() => this.innerReader.MoveToFirstAttribute();
+    public override bool MoveToNextAttribute() => this.innerReader.MoveToNextAttribute();
+    public override bool Read() => this.innerReader.Read();
+    public override bool ReadAttributeValue() => this.innerReader.ReadAttributeValue();
+    public override void ResolveEntity() => this.innerReader.ResolveEntity();
+
+    protected override void Dispose(bool disposing) {
+        if (disposing) {
+            this.innerReader.Dispose();
+        }
+
+        base.Dispose(disposing);
+    }
+}
+
+/// <summary>
 /// Service responsible for XML deserialization operations.
 /// </summary>
 public class XmlDeserializationService : IXmlDeserializationService {
@@ -33,6 +82,14 @@ public class XmlDeserializationService : IXmlDeserializationService {
     private static readonly string SessionId = Guid.NewGuid().ToString("N")[..8];
 
     private readonly IComparisonConfigurationService? configService;
+
+    /// <summary>
+    /// Gets or sets whether to ignore XML namespaces during deserialization.
+    /// When true, XML documents with any namespace (or no namespace) will deserialize correctly
+    /// regardless of what namespace the domain model expects.
+    /// Default is true to support version-agnostic XML comparison.
+    /// </summary>
+    public bool IgnoreXmlNamespaces { get; set; } = true;
 
     public XmlDeserializationService(ILogger<XmlDeserializationService> logger, XmlSerializerFactory serializerFactory, IComparisonConfigurationService? configService = null) {
         this.logger = logger;
@@ -141,9 +198,19 @@ public class XmlDeserializationService : IXmlDeserializationService {
             xmlStream.Position = 0;
 
             // Create a fresh XmlReader with consistent settings for every deserialization
-            using var reader = XmlReader.Create(xmlStream, this.GetOptimizedReaderSettings());
+            using var baseReader = XmlReader.Create(xmlStream, this.GetOptimizedReaderSettings());
 
-            // Deserialize using the fresh reader
+            // Wrap with namespace-ignorant reader if configured to ignore namespaces
+            // This allows XML with any namespace version to deserialize correctly
+            using var reader = this.IgnoreXmlNamespaces
+                ? new NamespaceIgnorantXmlReader(baseReader)
+                : baseReader;
+
+            if (this.IgnoreXmlNamespaces) {
+                this.logger.LogDebug("Using namespace-ignorant XML reader for type {Type}", typeof(T).Name);
+            }
+
+            // Deserialize using the reader (potentially wrapped)
             var result = (T)serializer.Deserialize(reader);
 
             // Cache result if needed

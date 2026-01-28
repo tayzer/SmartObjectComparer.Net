@@ -244,6 +244,91 @@ public class XmlDeserializationServiceTests
     }
 
     [TestMethod]
+    public void DeserializeXml_WithDifferentNamespaceVersions_ShouldDeserializeSuccessfully()
+    {
+        // Arrange - Model expects version7 namespace, but XML has version8
+        this.service.RegisterDomainModel<NamespacedTestModel>("NamespacedModel");
+        this.service.IgnoreXmlNamespaces = true; // This is the default, but being explicit
+
+        var xmlWithDifferentNamespace = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<NamespacedModel xmlns=""urn:example.co.uk/soap:version8"">
+    <Id>TEST-001</Id>
+    <Name>Test Item</Name>
+    <Value>42</Value>
+</NamespacedModel>";
+
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xmlWithDifferentNamespace));
+
+        // Act
+        var result = this.service.DeserializeXml<NamespacedTestModel>(stream);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Id.Should().Be("TEST-001");
+        result.Name.Should().Be("Test Item");
+        result.Value.Should().Be(42);
+    }
+
+    [TestMethod]
+    public void DeserializeXml_WithNoNamespace_ShouldDeserializeNamespacedModel()
+    {
+        // Arrange - Model expects version7 namespace, but XML has no namespace
+        this.service.RegisterDomainModel<NamespacedTestModel>("NamespacedModel");
+        this.service.IgnoreXmlNamespaces = true;
+
+        var xmlWithNoNamespace = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<NamespacedModel>
+    <Id>TEST-002</Id>
+    <Name>No Namespace Item</Name>
+    <Value>99</Value>
+</NamespacedModel>";
+
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xmlWithNoNamespace));
+
+        // Act
+        var result = this.service.DeserializeXml<NamespacedTestModel>(stream);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Id.Should().Be("TEST-002");
+        result.Name.Should().Be("No Namespace Item");
+        result.Value.Should().Be(99);
+    }
+
+    [TestMethod]
+    public void DeserializeXml_WithMatchingNamespace_ShouldDeserializeSuccessfully()
+    {
+        // Arrange - Model expects version7 namespace, XML has matching version7
+        this.service.RegisterDomainModel<NamespacedTestModel>("NamespacedModel");
+        this.service.IgnoreXmlNamespaces = true;
+
+        var xmlWithMatchingNamespace = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<NamespacedModel xmlns=""urn:example.co.uk/soap:version7"">
+    <Id>TEST-003</Id>
+    <Name>Matching Namespace Item</Name>
+    <Value>123</Value>
+</NamespacedModel>";
+
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xmlWithMatchingNamespace));
+
+        // Act
+        var result = this.service.DeserializeXml<NamespacedTestModel>(stream);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Id.Should().Be("TEST-003");
+        result.Name.Should().Be("Matching Namespace Item");
+        result.Value.Should().Be(123);
+    }
+
+    [TestMethod]
+    public void IgnoreXmlNamespaces_ShouldBeTrueByDefault()
+    {
+        // Assert
+        this.service.IgnoreXmlNamespaces.Should().BeTrue();
+    }
+
+    [TestMethod]
     public void GetRegisteredModelNames_ShouldReturnAllRegisteredModels()
     {
         // Arrange
@@ -355,5 +440,21 @@ public class XmlDeserializationServiceTests
         {
             get; set;
         }
+    }
+
+    /// <summary>
+    /// Test model with a specific namespace to verify namespace-ignorant deserialization.
+    /// </summary>
+    [XmlRoot("NamespacedModel", Namespace = "urn:example.co.uk/soap:version7")]
+    public class NamespacedTestModel
+    {
+        [XmlElement("Id")]
+        public string? Id { get; set; }
+
+        [XmlElement("Name")]
+        public string? Name { get; set; }
+
+        [XmlElement("Value")]
+        public int Value { get; set; }
     }
 }
