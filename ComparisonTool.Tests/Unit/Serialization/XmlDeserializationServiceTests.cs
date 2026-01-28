@@ -5,6 +5,7 @@
 using System.Text;
 using System.Xml;
 using System.Xml.Serialization;
+using ComparisonTool.Core.Models;
 using ComparisonTool.Core.Serialization;
 using ComparisonTool.Domain.Models;
 using FluentAssertions;
@@ -319,6 +320,44 @@ public class XmlDeserializationServiceTests
         result.Id.Should().Be("TEST-003");
         result.Name.Should().Be("Matching Namespace Item");
         result.Value.Should().Be(123);
+    }
+
+    [TestMethod]
+    public void DeserializeXml_SoapEnvelope_ShouldDeserializeWithPrefixedNamespaces()
+    {
+        // Arrange - SOAP envelope with prefixed namespaces (soap:Envelope, soap:Body)
+        this.service.RegisterDomainModel<SoapEnvelope>("SoapEnvelope");
+        this.service.IgnoreXmlNamespaces = true;
+
+        var soapXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<soap:Envelope xmlns:soap=""http://schemas.xmlsoap.org/soap/envelope/"" xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"">
+    <soap:Body>
+        <SearchResponse xmlns=""urn:soap.co.uk/soap:search1"">
+            <ReportId>test-report-123</ReportId>
+            <GeneratedOn>2025-01-28T10:00:00</GeneratedOn>
+            <Summary>
+                <TotalResults>5</TotalResults>
+                <SuccessCount>3</SuccessCount>
+                <FailureCount>2</FailureCount>
+            </Summary>
+        </SearchResponse>
+    </soap:Body>
+</soap:Envelope>";
+
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(soapXml));
+
+        // Act
+        var result = this.service.DeserializeXml<SoapEnvelope>(stream);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Body.Should().NotBeNull();
+        result.Body!.Response.Should().NotBeNull();
+        result.Body.Response!.ReportId.Should().Be("test-report-123");
+        result.Body.Response.Summary.Should().NotBeNull();
+        result.Body.Response.Summary.TotalResults.Should().Be(5);
+        result.Body.Response.Summary.SuccessCount.Should().Be(3);
+        result.Body.Response.Summary.FailureCount.Should().Be(2);
     }
 
     [TestMethod]

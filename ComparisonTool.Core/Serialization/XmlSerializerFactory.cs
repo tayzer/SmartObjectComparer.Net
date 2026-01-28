@@ -15,9 +15,6 @@ public class XmlSerializerFactory {
 
     public XmlSerializerFactory(ILogger<XmlSerializerFactory> logger = null) {
         this.logger = logger;
-
-        // Register the ComplexOrderResponse with custom configuration
-        this.RegisterType<ComplexOrderResponse>(() => this.CreateComplexOrderResponseSerializer());
     }
 
     public void RegisterType<T>(Func<XmlSerializer> factory) {
@@ -40,7 +37,11 @@ public class XmlSerializerFactory {
         return new XmlSerializer(type);
     }
 
-    private XmlSerializer CreateComplexOrderResponseSerializer() {
+    /// <summary>
+    /// Creates a custom serializer for ComplexOrderResponse with specific root element configuration.
+    /// Call RegisterType to register this serializer for the ComplexOrderResponse type.
+    /// </summary>
+    public XmlSerializer CreateComplexOrderResponseSerializer() {
         var serializer = new XmlSerializer(
             typeof(ComplexOrderResponse),
             root:
@@ -65,14 +66,9 @@ public class XmlSerializerFactory {
         var xmlRootAttr = type.GetCustomAttributes(typeof(XmlRootAttribute), true).FirstOrDefault() as XmlRootAttribute;
         var hasNamespacedRoot = xmlRootAttr != null && !string.IsNullOrEmpty(xmlRootAttr.Namespace);
 
-        // If the root has a namespace, we need to override all element namespaces to empty
-        // This allows the serializer to deserialize XML regardless of what namespace is present
-        if (hasNamespacedRoot) {
-            this.ProcessTypeForNamespaceRemoval(type, overrides, new HashSet<Type>());
-        }
-
-        // Recursively process all types to remove Order attributes
-        this.ProcessTypeForOrderRemoval(type, overrides);
+        // Process all types for namespace and order attribute removal in a single pass
+        // This avoids conflicts from adding overrides twice for the same property
+        this.ProcessTypeForAttributeNormalization(type, overrides, new HashSet<Type>(), hasNamespacedRoot);
 
         XmlSerializer serializer;
         if (hasNamespacedRoot) {
@@ -100,10 +96,11 @@ public class XmlSerializerFactory {
     }
 
     /// <summary>
-    /// Process a type and all its properties to remove namespace requirements.
-    /// This ensures that child elements can be deserialized regardless of namespace.
+    /// Process a type and all its properties to normalize XML attributes.
+    /// This removes Order attributes and optionally clears namespaces for all elements.
+    /// Combined into a single method to avoid conflicts from adding overrides twice.
     /// </summary>
-    private void ProcessTypeForNamespaceRemoval(Type type, XmlAttributeOverrides overrides, HashSet<Type> processedTypes) {
+    private void ProcessTypeForAttributeNormalization(Type type, XmlAttributeOverrides overrides, HashSet<Type> processedTypes, bool removeNamespaces) {
         if (type.IsPrimitive || type == typeof(string) || type == typeof(DateTime) || type == typeof(decimal)) {
             return;
         }
@@ -113,49 +110,86 @@ public class XmlSerializerFactory {
         }
 
         foreach (var property in type.GetProperties()) {
-            // Check existing XmlElement attributes
+            // Check existing XML attributes
             var xmlElementAttrs = property.GetCustomAttributes<XmlElementAttribute>().ToList();
+            var xmlArrayAttr = property.GetCustomAttributes<XmlArrayAttribute>().FirstOrDefault();
+            var xmlArrayItemAttrs = property.GetCustomAttributes<XmlArrayItemAttribute>().ToList();
 
-            // Create new attributes without namespace (or with empty namespace)
-            var xmlAttributes = new XmlAttributes();
+            // Determine if this is an array/collection property (uses XmlArray) vs element property (uses XmlElement)
+            var isArrayProperty = xmlArrayAttr != null || xmlArrayItemAttrs.Any();
 
-            if (xmlElementAttrs.Any()) {
-                foreach (var attr in xmlElementAttrs) {
-                    var newAttr = new XmlElementAttribute(attr.ElementName ?? property.Name) {
-                        IsNullable = attr.IsNullable,
-                        Namespace = string.Empty, // Force empty namespace
-                    };
-                    if (attr.Type != null) {
-                        newAttr.Type = attr.Type;
+            // Determine if we need to override this property
+            var hasOrderAttribute = xmlElementAttrs.Any(attr => attr.Order > 0);
+            var hasNamespace = xmlElementAttrs.Any(attr => !string.IsNullOrEmpty(attr.Namespace)) ||
+                               (xmlArrayAttr != null && !string.IsNullOrEmpty(xmlArrayAttr.Namespace)) ||
+                               xmlArrayItemAttrs.Any(attr => !string.IsNullOrEmpty(attr.Namespace));
+
+            // Only add override if we need to modify something
+            if (removeNamespaces || hasOrderAttribute || hasNamespace) {
+                var xmlAttributes = new XmlAttributes();
+
+                // CRITICAL: XmlElement and XmlArray/XmlArrayItem are mutually exclusive
+                // Only use one or the other based on the original attribute configuration
+                if (isArrayProperty) {
+                    // Handle XmlArray attribute for collection properties
+                    if (xmlArrayAttr != null) {
+                        xmlAttributes.XmlArray = new XmlArrayAttribute(xmlArrayAttr.ElementName ?? property.Name) {
+                            IsNullable = xmlArrayAttr.IsNullable,
+                            Namespace = removeNamespaces ? string.Empty : xmlArrayAttr.Namespace,
+                        };
                     }
 
-                    if (!string.IsNullOrEmpty(attr.DataType)) {
-                        newAttr.DataType = attr.DataType;
+                    // Handle XmlArrayItem attributes
+                    foreach (var attr in xmlArrayItemAttrs) {
+                        xmlAttributes.XmlArrayItems.Add(new XmlArrayItemAttribute(attr.ElementName) {
+                            IsNullable = attr.IsNullable,
+                            Type = attr.Type,
+                            Namespace = removeNamespaces ? string.Empty : attr.Namespace,
+                        });
                     }
-
-                    xmlAttributes.XmlElements.Add(newAttr);
                 }
-            }
-            else {
-                // No XmlElement attribute, create one with empty namespace
-                var newAttr = new XmlElementAttribute(property.Name) {
-                    Namespace = string.Empty,
-                };
-                xmlAttributes.XmlElements.Add(newAttr);
-            }
+                else {
+                    // Handle XmlElement attributes for non-array properties
+                    if (xmlElementAttrs.Any()) {
+                        foreach (var attr in xmlElementAttrs) {
+                            var newAttr = new XmlElementAttribute(attr.ElementName ?? property.Name) {
+                                IsNullable = attr.IsNullable,
+                                Namespace = removeNamespaces ? string.Empty : attr.Namespace,
+                                // Deliberately exclude Order to prevent deserialization issues
+                            };
+                            if (attr.Type != null) {
+                                newAttr.Type = attr.Type;
+                            }
 
-            overrides.Add(type, property.Name, xmlAttributes);
+                            if (!string.IsNullOrEmpty(attr.DataType)) {
+                                newAttr.DataType = attr.DataType;
+                            }
+
+                            xmlAttributes.XmlElements.Add(newAttr);
+                        }
+                    }
+                    else if (removeNamespaces) {
+                        // No XmlElement attribute, but we need to ensure empty namespace
+                        var newAttr = new XmlElementAttribute(property.Name) {
+                            Namespace = string.Empty,
+                        };
+                        xmlAttributes.XmlElements.Add(newAttr);
+                    }
+                }
+
+                overrides.Add(type, property.Name, xmlAttributes);
+            }
 
             // Recursively process property types
             var propertyType = property.PropertyType;
             if (propertyType.IsClass && propertyType != typeof(string)) {
-                this.ProcessTypeForNamespaceRemoval(propertyType, overrides, processedTypes);
+                this.ProcessTypeForAttributeNormalization(propertyType, overrides, processedTypes, removeNamespaces);
             }
             else if (propertyType.IsGenericType) {
                 var genericArgs = propertyType.GetGenericArguments();
                 foreach (var genericArg in genericArgs) {
                     if (genericArg.IsClass && genericArg != typeof(string)) {
-                        this.ProcessTypeForNamespaceRemoval(genericArg, overrides, processedTypes);
+                        this.ProcessTypeForAttributeNormalization(genericArg, overrides, processedTypes, removeNamespaces);
                     }
                 }
             }
@@ -181,66 +215,5 @@ public class XmlSerializerFactory {
         this.logger?.LogDebug(
             "Unknown XML node encountered: {NodeType} '{NodeName}' at line {LineNumber}, column {LinePosition}. Ignoring node.",
             e.NodeType, e.Name, e.LineNumber, e.LinePosition);
-    }
-
-    private void ProcessTypeForOrderRemoval(Type type, XmlAttributeOverrides overrides) {
-        // Skip primitive types and already processed types
-        if (type.IsPrimitive || type == typeof(string) || type == typeof(DateTime) || type == typeof(decimal)) {
-            return;
-        }
-
-        foreach (var property in type.GetProperties()) {
-            var xmlElementAttrs = property.GetCustomAttributes<XmlElementAttribute>();
-            var hasOrderAttribute = xmlElementAttrs.Any(attr => attr.Order > 0);
-
-            if (hasOrderAttribute) {
-                var xmlAttributes = new XmlAttributes();
-
-                // Recreate XmlElement attributes without Order
-                foreach (var attr in xmlElementAttrs) {
-                    var newAttr = new XmlElementAttribute(attr.ElementName) {
-                        IsNullable = attr.IsNullable,
-                        DataType = attr.DataType,
-                        Type = attr.Type,
-
-                        // Deliberately exclude Order to prevent deserialization issues
-                    };
-                    xmlAttributes.XmlElements.Add(newAttr);
-                }
-
-                // Handle other XML attributes if present
-                var xmlArrayAttrs = property.GetCustomAttributes<XmlArrayAttribute>();
-                if (xmlArrayAttrs.Any()) {
-                    var xmlArrayAttr = xmlArrayAttrs.First();
-                    xmlAttributes.XmlArray = new XmlArrayAttribute(xmlArrayAttr.ElementName) {
-                        IsNullable = xmlArrayAttr.IsNullable,
-                    };
-                }
-
-                var xmlArrayItemAttrs = property.GetCustomAttributes<XmlArrayItemAttribute>();
-                foreach (var attr in xmlArrayItemAttrs) {
-                    xmlAttributes.XmlArrayItems.Add(new XmlArrayItemAttribute(attr.ElementName) {
-                        IsNullable = attr.IsNullable,
-                        Type = attr.Type,
-                    });
-                }
-
-                overrides.Add(type, property.Name, xmlAttributes);
-            }
-
-            // Recursively process property types
-            if (property.PropertyType.IsClass && property.PropertyType != typeof(string)) {
-                this.ProcessTypeForOrderRemoval(property.PropertyType, overrides);
-            }
-            else if (property.PropertyType.IsGenericType) {
-                // Handle generic types like List<T>
-                var genericArgs = property.PropertyType.GetGenericArguments();
-                foreach (var genericArg in genericArgs) {
-                    if (genericArg.IsClass && genericArg != typeof(string)) {
-                        this.ProcessTypeForOrderRemoval(genericArg, overrides);
-                    }
-                }
-            }
-        }
     }
 }
