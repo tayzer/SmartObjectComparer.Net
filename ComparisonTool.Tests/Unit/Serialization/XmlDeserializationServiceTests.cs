@@ -5,12 +5,14 @@
 using System.Text;
 using System.Xml;
 using System.Xml.Serialization;
+using ComparisonTool.Core.Models;
 using ComparisonTool.Core.Serialization;
 using ComparisonTool.Domain.Models;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+using CoreXmlSerializerFactory = ComparisonTool.Core.Serialization.XmlSerializerFactory;
 
 namespace ComparisonTool.Tests.Unit.Serialization;
 
@@ -244,6 +246,194 @@ public class XmlDeserializationServiceTests
     }
 
     [TestMethod]
+    public void DeserializeXml_WithDifferentNamespaceVersions_ShouldDeserializeSuccessfully()
+    {
+        // Arrange - Model expects version7 namespace, but XML has version8
+        this.service.RegisterDomainModel<NamespacedTestModel>("NamespacedModel");
+        this.service.IgnoreXmlNamespaces = true; // This is the default, but being explicit
+
+        var xmlWithDifferentNamespace = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<NamespacedModel xmlns=""urn:example.co.uk/soap:version8"">
+    <Id>TEST-001</Id>
+    <Name>Test Item</Name>
+    <Value>42</Value>
+</NamespacedModel>";
+
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xmlWithDifferentNamespace));
+
+        // Act
+        var result = this.service.DeserializeXml<NamespacedTestModel>(stream);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Id.Should().Be("TEST-001");
+        result.Name.Should().Be("Test Item");
+        result.Value.Should().Be(42);
+    }
+
+    [TestMethod]
+    public void DeserializeXml_WithNoNamespace_ShouldDeserializeNamespacedModel()
+    {
+        // Arrange - Model expects version7 namespace, but XML has no namespace
+        this.service.RegisterDomainModel<NamespacedTestModel>("NamespacedModel");
+        this.service.IgnoreXmlNamespaces = true;
+
+        var xmlWithNoNamespace = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<NamespacedModel>
+    <Id>TEST-002</Id>
+    <Name>No Namespace Item</Name>
+    <Value>99</Value>
+</NamespacedModel>";
+
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xmlWithNoNamespace));
+
+        // Act
+        var result = this.service.DeserializeXml<NamespacedTestModel>(stream);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Id.Should().Be("TEST-002");
+        result.Name.Should().Be("No Namespace Item");
+        result.Value.Should().Be(99);
+    }
+
+    [TestMethod]
+    public void DeserializeXml_WithMatchingNamespace_ShouldDeserializeSuccessfully()
+    {
+        // Arrange - Model expects version7 namespace, XML has matching version7
+        this.service.RegisterDomainModel<NamespacedTestModel>("NamespacedModel");
+        this.service.IgnoreXmlNamespaces = true;
+
+        var xmlWithMatchingNamespace = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<NamespacedModel xmlns=""urn:example.co.uk/soap:version7"">
+    <Id>TEST-003</Id>
+    <Name>Matching Namespace Item</Name>
+    <Value>123</Value>
+</NamespacedModel>";
+
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xmlWithMatchingNamespace));
+
+        // Act
+        var result = this.service.DeserializeXml<NamespacedTestModel>(stream);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Id.Should().Be("TEST-003");
+        result.Name.Should().Be("Matching Namespace Item");
+        result.Value.Should().Be(123);
+    }
+
+    [TestMethod]
+    public void DeserializeXml_SoapEnvelope_ShouldDeserializeWithPrefixedNamespaces()
+    {
+        // Arrange - SOAP envelope with prefixed namespaces (soap:Envelope, soap:Body)
+        this.service.RegisterDomainModel<SoapEnvelope>("SoapEnvelope");
+        this.service.IgnoreXmlNamespaces = true;
+
+        var soapXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<soap:Envelope xmlns:soap=""http://schemas.xmlsoap.org/soap/envelope/"" xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"">
+    <soap:Body>
+        <SearchResponse xmlns=""urn:soap.co.uk/soap:search1"">
+            <ReportId>test-report-123</ReportId>
+            <GeneratedOn>2025-01-28T10:00:00</GeneratedOn>
+            <Summary>
+                <TotalResults>5</TotalResults>
+                <SuccessCount>3</SuccessCount>
+                <FailureCount>2</FailureCount>
+            </Summary>
+        </SearchResponse>
+    </soap:Body>
+</soap:Envelope>";
+
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(soapXml));
+
+        // Act
+        var result = this.service.DeserializeXml<SoapEnvelope>(stream);
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Body.Should().NotBeNull();
+        result.Body!.Response.Should().NotBeNull();
+        result.Body.Response!.ReportId.Should().Be("test-report-123");
+        result.Body.Response.Summary.Should().NotBeNull();
+        result.Body.Response.Summary.TotalResults.Should().Be(5);
+        result.Body.Response.Summary.SuccessCount.Should().Be(3);
+        result.Body.Response.Summary.FailureCount.Should().Be(2);
+    }
+
+    [TestMethod]
+    public void DeserializeXml_SoapEnvelope_WithCustomRootSerializer_ShouldDeserializeAllNestedElements()
+    {
+        // Arrange - This simulates what happens when using RegisterDomainModelWithRootElement
+        // The serializer must handle ALL nested types, not just the root
+        var factory = new CoreXmlSerializerFactory();
+        factory.RegisterType<SoapEnvelope>(() => factory.CreateNamespaceIgnorantSerializer<SoapEnvelope>("Envelope"));
+
+        var service = new XmlDeserializationService(
+            Mock.Of<ILogger<XmlDeserializationService>>(),
+            factory,
+            null);
+        service.RegisterDomainModel<SoapEnvelope>("SoapEnvelope");
+        service.IgnoreXmlNamespaces = true;
+
+        // This XML has multiple different namespaces - soap: for Envelope/Body, and a default namespace for SearchResponse
+        var soapXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<soap:Envelope xmlns:soap=""http://schemas.xmlsoap.org/soap/envelope/"" xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"">
+    <soap:Body>
+        <SearchResponse xmlns=""urn:soap.co.uk/soap:search1"">
+            <ReportId>test-report-456</ReportId>
+            <GeneratedOn>2025-01-28T12:00:00</GeneratedOn>
+            <Summary>
+                <TotalResults>10</TotalResults>
+                <SuccessCount>8</SuccessCount>
+                <FailureCount>2</FailureCount>
+            </Summary>
+            <Results>
+                <Result>
+                    <Id>1</Id>
+                    <Name>First Item</Name>
+                    <Score>95.5</Score>
+                    <Details>
+                        <Description>First item description</Description>
+                        <Status>Success</Status>
+                    </Details>
+                    <Tags>
+                        <Tag>Important</Tag>
+                    </Tags>
+                </Result>
+            </Results>
+        </SearchResponse>
+    </soap:Body>
+</soap:Envelope>";
+
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(soapXml));
+
+        // Act
+        var result = service.DeserializeXml<SoapEnvelope>(stream);
+
+        // Assert - Verify ALL nested elements are populated correctly
+        result.Should().NotBeNull();
+        result.Body.Should().NotBeNull("Body element should be deserialized");
+        result.Body!.Response.Should().NotBeNull("SearchResponse should be deserialized");
+        result.Body.Response!.ReportId.Should().Be("test-report-456");
+        result.Body.Response.Summary.Should().NotBeNull();
+        result.Body.Response.Summary.TotalResults.Should().Be(10);
+        result.Body.Response.Results.Should().NotBeNull();
+        result.Body.Response.Results.Should().HaveCount(1);
+        result.Body.Response.Results[0].Id.Should().Be(1);
+        result.Body.Response.Results[0].Name.Should().Be("First Item");
+        result.Body.Response.Results[0].Details.Description.Should().Be("First item description");
+        result.Body.Response.Results[0].Tags.Should().Contain("Important");
+    }
+
+    [TestMethod]
+    public void IgnoreXmlNamespaces_ShouldBeTrueByDefault()
+    {
+        // Assert
+        this.service.IgnoreXmlNamespaces.Should().BeTrue();
+    }
+
+    [TestMethod]
     public void GetRegisteredModelNames_ShouldReturnAllRegisteredModels()
     {
         // Arrange
@@ -355,5 +545,21 @@ public class XmlDeserializationServiceTests
         {
             get; set;
         }
+    }
+
+    /// <summary>
+    /// Test model with a specific namespace to verify namespace-ignorant deserialization.
+    /// </summary>
+    [XmlRoot("NamespacedModel", Namespace = "urn:example.co.uk/soap:version7")]
+    public class NamespacedTestModel
+    {
+        [XmlElement("Id")]
+        public string? Id { get; set; }
+
+        [XmlElement("Name")]
+        public string? Name { get; set; }
+
+        [XmlElement("Value")]
+        public int Value { get; set; }
     }
 }

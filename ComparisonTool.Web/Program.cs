@@ -2,7 +2,9 @@
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
+using System.Xml.Serialization;
 using ComparisonTool.Core.DI;
+using ComparisonTool.Core.Models;
 using ComparisonTool.Web;
 using ComparisonTool.Web.Components;
 using MudBlazor.Services;
@@ -21,7 +23,10 @@ builder.Host.UseSerilog();
 
 // Add services to the container with proper configuration
 builder.Services
-    .AddUnifiedComparisonServices(builder.Configuration)
+    .AddUnifiedComparisonServices(builder.Configuration, options => {
+        // Register SoapEnvelope with custom root element name
+        options.RegisterDomainModelWithRootElement<SoapEnvelope>("SoapEnvelope", "Envelope");
+    })
     .AddRazorComponents()
     .AddInteractiveServerComponents(options => {
         options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(30);

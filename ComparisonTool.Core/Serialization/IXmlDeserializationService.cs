@@ -9,6 +9,14 @@ namespace ComparisonTool.Core.Serialization;
 /// </summary>
 public interface IXmlDeserializationService {
     /// <summary>
+    /// Gets or sets whether to ignore XML namespaces during deserialization.
+    /// When true, XML documents with any namespace (or no namespace) will deserialize correctly
+    /// regardless of what namespace the domain model expects.
+    /// Default is true to support version-agnostic XML comparison.
+    /// </summary>
+    bool IgnoreXmlNamespaces { get; set; }
+
+    /// <summary>
     /// Register a domain model for XML deserialization.
     /// </summary>
     void RegisterDomainModel<T>(string modelName)
