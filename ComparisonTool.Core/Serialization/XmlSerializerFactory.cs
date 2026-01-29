@@ -159,24 +159,39 @@ public class XmlSerializerFactory {
             if (removeNamespaces || hasOrderAttribute || hasNamespace) {
                 var xmlAttributes = new XmlAttributes();
 
+                // Check if property type is Nullable<T> - if so, IsNullable must be true
+                var isNullableValueType = Nullable.GetUnderlyingType(property.PropertyType) != null;
+
                 // CRITICAL: XmlElement and XmlArray/XmlArrayItem are mutually exclusive
                 // Only use one or the other based on the original attribute configuration
                 if (isArrayProperty) {
                     // Handle XmlArray attribute for collection properties
                     if (xmlArrayAttr != null) {
-                        xmlAttributes.XmlArray = new XmlArrayAttribute(xmlArrayAttr.ElementName ?? property.Name) {
-                            IsNullable = xmlArrayAttr.IsNullable,
+                        var arrayAttr = new XmlArrayAttribute(xmlArrayAttr.ElementName ?? property.Name) {
                             Namespace = removeNamespaces ? string.Empty : xmlArrayAttr.Namespace,
                         };
+
+                        // Only set IsNullable if it won't conflict with Nullable<T> types
+                        if (!isNullableValueType || xmlArrayAttr.IsNullable) {
+                            arrayAttr.IsNullable = xmlArrayAttr.IsNullable;
+                        }
+
+                        xmlAttributes.XmlArray = arrayAttr;
                     }
 
                     // Handle XmlArrayItem attributes
                     foreach (var attr in xmlArrayItemAttrs) {
-                        xmlAttributes.XmlArrayItems.Add(new XmlArrayItemAttribute(attr.ElementName) {
-                            IsNullable = attr.IsNullable,
+                        var arrayItemAttr = new XmlArrayItemAttribute(attr.ElementName) {
                             Type = attr.Type,
                             Namespace = removeNamespaces ? string.Empty : attr.Namespace,
-                        });
+                        };
+
+                        // Only set IsNullable if it won't conflict with Nullable<T> types
+                        if (!isNullableValueType || attr.IsNullable) {
+                            arrayItemAttr.IsNullable = attr.IsNullable;
+                        }
+
+                        xmlAttributes.XmlArrayItems.Add(arrayItemAttr);
                     }
                 }
                 else {
@@ -184,10 +199,16 @@ public class XmlSerializerFactory {
                     if (xmlElementAttrs.Any()) {
                         foreach (var attr in xmlElementAttrs) {
                             var newAttr = new XmlElementAttribute(attr.ElementName ?? property.Name) {
-                                IsNullable = attr.IsNullable,
                                 Namespace = removeNamespaces ? string.Empty : attr.Namespace,
                                 // Deliberately exclude Order to prevent deserialization issues
                             };
+
+                            // Only set IsNullable if it won't conflict with Nullable<T> types
+                            // For Nullable<T>, IsNullable cannot be false
+                            if (!isNullableValueType || attr.IsNullable) {
+                                newAttr.IsNullable = attr.IsNullable;
+                            }
+
                             if (attr.Type != null) {
                                 newAttr.Type = attr.Type;
                             }
