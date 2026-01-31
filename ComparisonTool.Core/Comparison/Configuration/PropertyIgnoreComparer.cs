@@ -2,6 +2,6 @@
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
-namespace ComparisonTool.Core.Comparison.Configuration {
-    using Microsoft.Extensions.Logging;
-}
+namespace ComparisonTool.Core.Comparison.Configuration;
+
+using Microsoft.Extensions.Logging;

@@ -20,17 +20,17 @@ public class FileSystemServiceTests : IDisposable
 
     public FileSystemServiceTests()
     {
-        this.mockLogger = new Mock<ILogger<FileSystemService>>();
-        this.service = new FileSystemService(this.mockLogger.Object);
-        this.testDirectory = Path.Combine(Path.GetTempPath(), "ComparisonToolTests", Guid.NewGuid().ToString());
-        Directory.CreateDirectory(this.testDirectory);
+        mockLogger = new Mock<ILogger<FileSystemService>>();
+        service = new FileSystemService(mockLogger.Object);
+        testDirectory = Path.Combine(Path.GetTempPath(), "ComparisonToolTests", Guid.NewGuid().ToString());
+        Directory.CreateDirectory(testDirectory);
     }
 
     public void Dispose()
     {
-        if (Directory.Exists(this.testDirectory))
+        if (Directory.Exists(testDirectory))
         {
-            Directory.Delete(this.testDirectory, true);
+            Directory.Delete(testDirectory, true);
         }
     }
 
@@ -38,18 +38,18 @@ public class FileSystemServiceTests : IDisposable
     public void Constructor_ShouldInitializeCorrectly()
     {
         // Act & Assert
-        this.service.Should().NotBeNull();
+        service.Should().NotBeNull();
     }
 
     [TestMethod]
     public async Task GetXmlFilesFromDirectoryAsync_WithValidDirectory_ShouldReturnFiles()
     {
         // Arrange
-        var testFile = Path.Combine(this.testDirectory, "testfile.xml");
+        var testFile = Path.Combine(testDirectory, "testfile.xml");
         File.WriteAllText(testFile, "<test>content</test>");
 
         // Act
-        var files = await this.service.GetXmlFilesFromDirectoryAsync(this.testDirectory);
+        var files = await service.GetXmlFilesFromDirectoryAsync(testDirectory);
 
         // Assert
         files.Should().NotBeNull();
@@ -60,10 +60,10 @@ public class FileSystemServiceTests : IDisposable
     public async Task GetXmlFilesFromDirectoryAsync_WithNonExistentDirectory_ShouldThrowException()
     {
         // Arrange
-        var nonExistentDir = Path.Combine(this.testDirectory, "NonExistentDirectory");
+        var nonExistentDir = Path.Combine(testDirectory, "NonExistentDirectory");
 
         // Act & Assert
-        var action = () => this.service.GetXmlFilesFromDirectoryAsync(nonExistentDir);
+        var action = () => service.GetXmlFilesFromDirectoryAsync(nonExistentDir);
         await action.Should().ThrowAsync<DirectoryNotFoundException>();
     }
 
@@ -71,12 +71,12 @@ public class FileSystemServiceTests : IDisposable
     public async Task GetFileAsMemoryStreamAsync_WithExistingFile_ShouldReturnStream()
     {
         // Arrange
-        var testFile = Path.Combine(this.testDirectory, "testfile.txt");
+        var testFile = Path.Combine(testDirectory, "testfile.txt");
         var content = "test content";
         File.WriteAllText(testFile, content);
 
         // Act
-        using var stream = await this.service.GetFileAsMemoryStreamAsync(testFile);
+        using var stream = await service.GetFileAsMemoryStreamAsync(testFile);
 
         // Assert
         stream.Should().NotBeNull();
@@ -89,10 +89,10 @@ public class FileSystemServiceTests : IDisposable
     public async Task GetFileAsMemoryStreamAsync_WithNonExistentFile_ShouldThrowException()
     {
         // Arrange
-        var nonExistentFile = Path.Combine(this.testDirectory, "NonExistentFile.txt");
+        var nonExistentFile = Path.Combine(testDirectory, "NonExistentFile.txt");
 
         // Act & Assert
-        var action = () => this.service.GetFileAsMemoryStreamAsync(nonExistentFile);
+        var action = () => service.GetFileAsMemoryStreamAsync(nonExistentFile);
         await action.Should().ThrowAsync<FileNotFoundException>();
     }
 
@@ -100,12 +100,12 @@ public class FileSystemServiceTests : IDisposable
     public async Task OpenFileStreamAsync_WithExistingFile_ShouldReturnStream()
     {
         // Arrange
-        var testFile = Path.Combine(this.testDirectory, "testfile.txt");
+        var testFile = Path.Combine(testDirectory, "testfile.txt");
         var content = "test content";
         File.WriteAllText(testFile, content);
 
         // Act
-        using var stream = await this.service.OpenFileStreamAsync(testFile);
+        using var stream = await service.OpenFileStreamAsync(testFile);
 
         // Assert
         stream.Should().NotBeNull();
@@ -118,10 +118,10 @@ public class FileSystemServiceTests : IDisposable
     public async Task OpenFileStreamAsync_WithNonExistentFile_ShouldThrowException()
     {
         // Arrange
-        var nonExistentFile = Path.Combine(this.testDirectory, "NonExistentFile.txt");
+        var nonExistentFile = Path.Combine(testDirectory, "NonExistentFile.txt");
 
         // Act & Assert
-        var action = () => this.service.OpenFileStreamAsync(nonExistentFile);
+        var action = () => service.OpenFileStreamAsync(nonExistentFile);
         await action.Should().ThrowAsync<FileNotFoundException>();
     }
 
@@ -129,8 +129,8 @@ public class FileSystemServiceTests : IDisposable
     public async Task CreateFilePairsAsync_WithMatchingFiles_ShouldCreatePairs()
     {
         // Arrange
-        var tempDir1 = Path.Combine(this.testDirectory, "TestDir1");
-        var tempDir2 = Path.Combine(this.testDirectory, "TestDir2");
+        var tempDir1 = Path.Combine(testDirectory, "TestDir1");
+        var tempDir2 = Path.Combine(testDirectory, "TestDir2");
 
         Directory.CreateDirectory(tempDir1);
         Directory.CreateDirectory(tempDir2);
@@ -142,7 +142,7 @@ public class FileSystemServiceTests : IDisposable
         File.WriteAllText(file2, "<test>content2</test>");
 
         // Act
-        var pairs = await this.service.CreateFilePairsAsync(tempDir1, tempDir2);
+        var pairs = await service.CreateFilePairsAsync(tempDir1, tempDir2);
 
         // Assert
         pairs.Should().NotBeNull();
@@ -156,12 +156,12 @@ public class FileSystemServiceTests : IDisposable
     public async Task CreateFilePairsAsync_WithNonExistentDirectory_ShouldThrowException()
     {
         // Arrange
-        var nonExistentDir = Path.Combine(this.testDirectory, "NonExistentDirectory");
-        var tempDir = Path.Combine(this.testDirectory, "ExistingDir");
+        var nonExistentDir = Path.Combine(testDirectory, "NonExistentDirectory");
+        var tempDir = Path.Combine(testDirectory, "ExistingDir");
         Directory.CreateDirectory(tempDir);
 
         // Act & Assert
-        var action = () => this.service.CreateFilePairsAsync(nonExistentDir, tempDir);
+        var action = () => service.CreateFilePairsAsync(nonExistentDir, tempDir);
         await action.Should().ThrowAsync<DirectoryNotFoundException>();
     }
 
@@ -179,7 +179,7 @@ public class FileSystemServiceTests : IDisposable
         try
         {
             // Act
-            var result = await this.service.MapFilesByFolderAsync(files);
+            var result = await service.MapFilesByFolderAsync(files);
 
             // Assert
             result.Should().NotBeNull();
@@ -208,7 +208,7 @@ public class FileSystemServiceTests : IDisposable
         var files = new List<(MemoryStream Stream, string FileName)>();
 
         // Act
-        var result = await this.service.MapFilesByFolderAsync(files);
+        var result = await service.MapFilesByFolderAsync(files);
 
         // Assert
         result.Should().NotBeNull();

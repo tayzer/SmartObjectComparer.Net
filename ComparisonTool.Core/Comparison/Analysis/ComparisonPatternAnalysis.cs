@@ -4,28 +4,32 @@
 
 namespace ComparisonTool.Core.Comparison.Analysis;
 
-public class ComparisonPatternAnalysis {
-    public int TotalFilesPaired {
+public class ComparisonPatternAnalysis
+{
+    public int TotalFilesPaired
+    {
         get; set;
     }
 
-    public int FilesWithDifferences {
+    public int FilesWithDifferences
+    {
         get; set;
     }
 
-    public int TotalDifferences {
+    public int TotalDifferences
+    {
         get; set;
     }
 
     // Common path patterns across files
-    public List<GlobalPatternInfo> CommonPathPatterns { get; set; } = new();
+    public IList<GlobalPatternInfo> CommonPathPatterns { get; set; } = new List<GlobalPatternInfo>();
 
     // Common property changes across files
-    public List<GlobalPropertyChangeInfo> CommonPropertyChanges { get; set; } = new();
+    public IList<GlobalPropertyChangeInfo> CommonPropertyChanges { get; set; } = new List<GlobalPropertyChangeInfo>();
 
     // Common category statistics across files
-    public Dictionary<DifferenceCategory, int> TotalByCategory { get; set; } = new();
+    public IDictionary<DifferenceCategory, int> TotalByCategory { get; set; } = new Dictionary<DifferenceCategory, int>();
 
     // Files grouped by similarity
-    public List<SimilarFileGroup> SimilarFileGroups { get; set; } = new();
+    public IList<SimilarFileGroup> SimilarFileGroups { get; set; } = new List<SimilarFileGroup>();
 }

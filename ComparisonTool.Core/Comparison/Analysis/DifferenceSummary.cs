@@ -2,6 +2,7 @@
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
+using System.Globalization;
 using System.Text;
 using KellermanSoftware.CompareNetObjects;
 
@@ -10,43 +11,48 @@ namespace ComparisonTool.Core.Comparison.Analysis;
 /// <summary>
 /// Summary of the comparison differences.
 /// </summary>
-public class DifferenceSummary {
-    public bool AreEqual {
+public class DifferenceSummary
+{
+    public bool AreEqual
+    {
         get; set;
     }
 
-    public int TotalDifferenceCount {
+    public int TotalDifferenceCount
+    {
         get; set;
     }
 
-    public Dictionary<DifferenceCategory, List<Difference>> DifferencesByChangeType { get; set; } = new();
+    public IDictionary<DifferenceCategory, IList<Difference>> DifferencesByChangeType { get; set; } = new Dictionary<DifferenceCategory, IList<Difference>>();
 
-    public Dictionary<string, List<Difference>> DifferencesByRootObject { get; set; } = new();
+    public IDictionary<string, IList<Difference>> DifferencesByRootObject { get; set; } = new Dictionary<string, IList<Difference>>(StringComparer.Ordinal);
 
-    public Dictionary<string, Dictionary<DifferenceCategory, List<Difference>>> DifferencesByRootObjectAndCategory { get; set; } = new();
+    public IDictionary<string, IDictionary<DifferenceCategory, IList<Difference>>> DifferencesByRootObjectAndCategory { get; set; } = new Dictionary<string, IDictionary<DifferenceCategory, IList<Difference>>>(StringComparer.Ordinal);
 
-    public Dictionary<DifferenceCategory, double> CategoryPercentages { get; set; } = new();
+    public IDictionary<DifferenceCategory, double> CategoryPercentages { get; set; } = new Dictionary<DifferenceCategory, double>();
 
-    public Dictionary<string, double> RootObjectPercentages { get; set; } = new();
+    public IDictionary<string, double> RootObjectPercentages { get; set; } = new Dictionary<string, double>(StringComparer.Ordinal);
 
-    public List<DifferencePattern> CommonPatterns { get; set; } = new();
+    public IList<DifferencePattern> CommonPatterns { get; set; } = new List<DifferencePattern>();
 
     /// <summary>
     /// Generate a human-friendly summary report.
     /// </summary>
     /// <returns></returns>
-    public string GenerateReport() {
+    public string GenerateReport()
+    {
         var sb = new StringBuilder();
 
         sb.AppendLine("# Comparison Summary Report");
         sb.AppendLine();
 
-        if (this.AreEqual) {
+        if (AreEqual)
+        {
             sb.AppendLine("**No differences found.** The objects are identical according to current comparison rules.");
             return sb.ToString();
         }
 
-        sb.AppendLine($"**Total Differences: {this.TotalDifferenceCount}**");
+        AppendLineInvariant(sb, "**Total Differences: {0}**", TotalDifferenceCount);
         sb.AppendLine();
 
         // Summary by category
@@ -55,8 +61,14 @@ public class DifferenceSummary {
         sb.AppendLine("| Category | Count | Percentage |");
         sb.AppendLine("|----------|-------|------------|");
 
-        foreach (var category in this.DifferencesByChangeType.OrderByDescending(c => c.Value.Count)) {
-            sb.AppendLine($"| {this.FormatCategoryName(category.Key)} | {category.Value.Count} | {this.CategoryPercentages[category.Key]}% |");
+        foreach (var category in DifferencesByChangeType.OrderByDescending(c => c.Value.Count))
+        {
+            AppendLineInvariant(
+                sb,
+                "| {0} | {1} | {2}% |",
+                FormatCategoryName(category.Key),
+                category.Value.Count,
+                CategoryPercentages[category.Key]);
         }
 
         sb.AppendLine();
@@ -64,18 +76,23 @@ public class DifferenceSummary {
         // Summary by root object and category
         sb.AppendLine("## Differences by Root Object and Category");
         sb.AppendLine();
-        foreach (var obj in this.DifferencesByRootObjectAndCategory.OrderByDescending(o => o.Value.SelectMany(v => v.Value).Count())) {
+        foreach (var obj in DifferencesByRootObjectAndCategory.OrderByDescending(o => o.Value.SelectMany(v => v.Value).Count()))
+        {
             var total = obj.Value.SelectMany(v => v.Value).Count();
-            sb.AppendLine($"### {obj.Key} (Total: {total})");
-            foreach (var cat in obj.Value.OrderByDescending(c => c.Value.Count)) {
-                sb.AppendLine($"- {this.FormatCategoryName(cat.Key)}: {cat.Value.Count}");
-                foreach (var diff in cat.Value.Take(5)) // show up to 5 examples
+            AppendLineInvariant(sb, "### {0} (Total: {1})", obj.Key, total);
+            foreach (var cat in obj.Value.OrderByDescending(c => c.Value.Count))
+            {
+                AppendLineInvariant(sb, "- {0}: {1}", FormatCategoryName(cat.Key), cat.Value.Count);
+
+                // Show up to 5 examples
+                foreach (var diff in cat.Value.Take(5))
                 {
-                    sb.AppendLine($"    - Property: `{diff.PropertyName}` | Old: `{this.FormatValue(diff.Object1Value)}` | New: `{this.FormatValue(diff.Object2Value)}`");
+                    sb.AppendLine($"    - Property: `{diff.PropertyName}` | Old: `{FormatValue(diff.Object1Value)}` | New: `{FormatValue(diff.Object2Value)}`");
                 }
 
-                if (cat.Value.Count > 5) {
-                    sb.AppendLine($"    ...and {cat.Value.Count - 5} more");
+                if (cat.Value.Count > 5)
+                {
+                    AppendLineInvariant(sb, "    ...and {0} more", cat.Value.Count - 5);
                 }
             }
 
@@ -87,8 +104,14 @@ public class DifferenceSummary {
         sb.AppendLine();
         sb.AppendLine("| Object | Count | Percentage |");
         sb.AppendLine("|--------|-------|------------|");
-        foreach (var obj in this.DifferencesByRootObject.OrderByDescending(o => o.Value.Count)) {
-            sb.AppendLine($"| {obj.Key} | {obj.Value.Count} | {this.RootObjectPercentages[obj.Key]}% |");
+        foreach (var obj in DifferencesByRootObject.OrderByDescending(o => o.Value.Count))
+        {
+            AppendLineInvariant(
+                sb,
+                "| {0} | {1} | {2}% |",
+                obj.Key,
+                obj.Value.Count,
+                RootObjectPercentages[obj.Key]);
         }
 
         sb.AppendLine();
@@ -96,16 +119,19 @@ public class DifferenceSummary {
         // Common patterns
         sb.AppendLine("## Common Difference Patterns");
         sb.AppendLine();
-        foreach (var pattern in this.CommonPatterns.Take(10)) // Top 10 patterns
+
+        // Top 10 patterns
+        foreach (var pattern in CommonPatterns.Take(10))
         {
-            sb.AppendLine($"### Pattern: {pattern.Pattern} ({pattern.OccurrenceCount} occurrences)");
+            AppendLineInvariant(sb, "### Pattern: {0} ({1} occurrences)", pattern.Pattern, pattern.OccurrenceCount);
             sb.AppendLine();
             sb.AppendLine("Example differences:");
             sb.AppendLine();
-            foreach (var example in pattern.Examples) {
+            foreach (var example in pattern.Examples)
+            {
                 sb.AppendLine($"- Property: `{example.PropertyName}`");
-                sb.AppendLine($"  - Old: `{this.FormatValue(example.Object1Value)}`");
-                sb.AppendLine($"  - New: `{this.FormatValue(example.Object2Value)}`");
+                sb.AppendLine($"  - Old: `{FormatValue(example.Object1Value)}`");
+                sb.AppendLine($"  - New: `{FormatValue(example.Object2Value)}`");
                 sb.AppendLine();
             }
         }
@@ -113,8 +139,15 @@ public class DifferenceSummary {
         return sb.ToString();
     }
 
-    private string FormatCategoryName(DifferenceCategory category) {
-        switch (category) {
+    private static void AppendLineInvariant(StringBuilder sb, string format, params object[] args)
+    {
+        sb.AppendLine(string.Format(CultureInfo.InvariantCulture, format, args));
+    }
+
+    private static string FormatCategoryName(DifferenceCategory category)
+    {
+        switch (category)
+        {
             case DifferenceCategory.NumericValueChanged:
                 return "Numeric Value Changed";
             case DifferenceCategory.DateTimeChanged:
@@ -136,19 +169,25 @@ public class DifferenceSummary {
         }
     }
 
-    private string FormatValue(object value) {
-        if (value == null) {
+    private static string FormatValue(object value)
+    {
+        if (value == null)
+        {
             return "null";
         }
 
-        if (value is DateTime dt) {
-            return dt.ToString("yyyy-MM-dd HH:mm:ss");
+        if (value is DateTime dt)
+        {
+            return dt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
         }
 
-        if (value is string str && str.Length > 50) {
+        if (value is string str && str.Length > 50)
+        {
             return str.Substring(0, 47) + "...";
         }
 
-        return value.ToString();
+        return value is IFormattable formattable
+            ? formattable.ToString(null, CultureInfo.InvariantCulture)
+            : value.ToString() ?? string.Empty;
     }
 }

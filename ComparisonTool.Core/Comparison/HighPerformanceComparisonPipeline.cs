@@ -21,7 +21,11 @@ namespace ComparisonTool.Core.Comparison;
 /// High-performance comparison pipeline using System.Threading.Channels
 /// for producer-consumer pattern with separate I/O and CPU-bound stages.
 /// </summary>
-public sealed class HighPerformanceComparisonPipeline : IDisposable {
+public sealed class HighPerformanceComparisonPipeline : IDisposable
+{
+    // OPTIMIZATION 4: Use XxHash64 instead of MD5 for faster hashing (non-cryptographic)
+    private static readonly XxHash64 HashAlgorithm = new XxHash64();
+
     private readonly ILogger<HighPerformanceComparisonPipeline> logger;
     private readonly IComparisonConfigurationService configService;
     private readonly IXmlDeserializationService deserializationService;
@@ -35,10 +39,7 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable {
     private readonly ObjectPool<DifferenceCategorizer> categorizerPool;
 
     // OPTIMIZATION 3: Cache reflection method info
-    private readonly ConcurrentDictionary<Type, Func<Stream, object>> cachedDeserializers = new();
-
-    // OPTIMIZATION 4: Use XxHash64 instead of MD5 for faster hashing (non-cryptographic)
-    private static readonly XxHash64 HashAlgorithm = new();
+    private readonly ConcurrentDictionary<Type, Func<Stream, object>> cachedDeserializers = new ConcurrentDictionary<Type, Func<Stream, object>>();
 
     // Pipeline configuration
     private readonly int ioParallelism;
@@ -50,7 +51,8 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable {
         IComparisonConfigurationService configService,
         IXmlDeserializationService deserializationService,
         PerformanceTracker performanceTracker,
-        DeserializationServiceFactory deserializationFactory = null) {
+        DeserializationServiceFactory? deserializationFactory = null)
+    {
         this.logger = logger;
         this.configService = configService;
         this.deserializationService = deserializationService;
@@ -59,54 +61,89 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable {
 
         // Calculate optimal parallelism based on system resources
         var cpuCores = Environment.ProcessorCount;
-        this.ioParallelism = Math.Max(2, cpuCores / 2); // I/O can be more parallel
-        this.cpuParallelism = Math.Max(1, cpuCores - 2); // Leave cores for I/O and UI
-        this.channelCapacity = cpuCores * 4; // Buffer to decouple stages
+        ioParallelism = Math.Max(2, cpuCores / 2); // I/O can be more parallel
+        cpuParallelism = Math.Max(1, cpuCores - 2); // Leave cores for I/O and UI
+        channelCapacity = cpuCores * 4; // Buffer to decouple stages
 
         // OPTIMIZATION 1: Thread-local CompareLogic to avoid allocation per file
-        this.threadLocalCompareLogic = new ThreadLocal<CompareLogic>(
-            () => this.CreateOptimizedCompareLogic(),
+        threadLocalCompareLogic = new ThreadLocal<CompareLogic>(
+            () => CreateOptimizedCompareLogic(),
             trackAllValues: false);
 
         // OPTIMIZATION 2: Object pool for categorizers
-        this.categorizerPool = new ObjectPool<DifferenceCategorizer>(
+        categorizerPool = new ObjectPool<DifferenceCategorizer>(
             () => new DifferenceCategorizer(),
             maxPoolSize: cpuCores * 2);
     }
 
     /// <summary>
+    /// Generate a fast hash for cache key using XxHash64.
+    /// </summary>
+    /// <returns>Base64-encoded hash string.</returns>
+    public static string GenerateFastHash(Stream stream)
+    {
+        const int bufferSize = 81920;
+        var buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
+
+        try
+        {
+            var hash = new XxHash64();
+            int bytesRead;
+
+            stream.Position = 0;
+            while ((bytesRead = stream.Read(buffer, 0, bufferSize)) > 0)
+            {
+                hash.Append(buffer.AsSpan(0, bytesRead));
+            }
+
+            stream.Position = 0;
+            return Convert.ToBase64String(hash.GetHashAndReset());
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+    }
+
+    /// <summary>
     /// Compare files using a high-performance producer-consumer pipeline.
     /// </summary>
+    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
     public async Task<MultiFolderComparisonResult> CompareFilesAsync(
         IReadOnlyList<(string File1Path, string File2Path, string RelativePath)> filePairs,
         string modelName,
         IProgress<ComparisonProgress>? progress = null,
-        CancellationToken cancellationToken = default) {
+        CancellationToken cancellationToken = default)
+    {
         var totalFiles = filePairs.Count;
-        this.logger.LogInformation(
+        logger.LogInformation(
             "Starting high-performance comparison of {Count} file pairs with I/O parallelism {IoParallel} and CPU parallelism {CpuParallel}",
-            totalFiles, this.ioParallelism, this.cpuParallelism);
+            totalFiles,
+            ioParallelism,
+            cpuParallelism);
 
         // Create bounded channels for back-pressure
         var deserializationChannel = Channel.CreateBounded<DeserializedFilePair>(
-            new BoundedChannelOptions(this.channelCapacity) {
+            new BoundedChannelOptions(channelCapacity)
+            {
                 FullMode = BoundedChannelFullMode.Wait,
                 SingleWriter = false,
                 SingleReader = false,
             });
 
         var comparisonChannel = Channel.CreateBounded<FilePairComparisonResult>(
-            new BoundedChannelOptions(this.channelCapacity) {
+            new BoundedChannelOptions(channelCapacity)
+            {
                 FullMode = BoundedChannelFullMode.Wait,
                 SingleWriter = false,
                 SingleReader = true,
             });
 
         // Get model type once
-        var modelType = this.deserializationService.GetModelType(modelName);
+        var modelType = deserializationService.GetModelType(modelName);
 
         // Cache the deserializer for this model type
-        var deserializer = this.GetOrCreateDeserializer(modelType);
+        var deserializer = GetOrCreateDeserializer(modelType);
 
         // Results collection
         var results = new ConcurrentBag<FilePairComparisonResult>();
@@ -114,15 +151,15 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable {
         var allEqual = true;
 
         // Stage 1: I/O + Deserialization (I/O-bound producer)
-        var deserializationTask = this.RunDeserializationStageAsync(
+        var deserializationTask = RunDeserializationStageAsync(
             filePairs,
             deserializer,
             deserializationChannel.Writer,
             cancellationToken);
 
         // Stage 2: Comparison (CPU-bound consumers)
-        var comparisonTasks = Enumerable.Range(0, this.cpuParallelism)
-            .Select(_ => this.RunComparisonStageAsync(
+        var comparisonTasks = Enumerable.Range(0, cpuParallelism)
+            .Select(_ => RunComparisonStageAsync(
                 deserializationChannel.Reader,
                 comparisonChannel.Writer,
                 modelType,
@@ -130,18 +167,23 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable {
             .ToArray();
 
         // Stage 3: Result aggregation (single consumer)
-        var aggregationTask = Task.Run(async () => {
-            await foreach (var result in comparisonChannel.Reader.ReadAllAsync(cancellationToken)) {
+        var aggregationTask = Task.Run(
+            async () =>
+        {
+            await foreach (var result in comparisonChannel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+            {
                 results.Add(result);
 
-                if (!result.Summary?.AreEqual ?? false) {
+                if (!result.Summary?.AreEqual ?? false)
+                {
                     allEqual = false;
                 }
 
                 var current = Interlocked.Increment(ref completedCount);
 
                 // Throttle progress updates to reduce UI thread contention
-                if (current % Math.Max(1, totalFiles / 100) == 0 || current == totalFiles) {
+                if (current % Math.Max(1, totalFiles / 100) == 0 || current == totalFiles)
+                {
                     progress?.Report(new ComparisonProgress(
                         current,
                         totalFiles,
@@ -151,22 +193,28 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable {
         }, cancellationToken);
 
         // Wait for deserialization to complete and close its channel
-        await deserializationTask;
+        await deserializationTask.ConfigureAwait(false);
         deserializationChannel.Writer.Complete();
 
         // Wait for all comparison tasks
-        await Task.WhenAll(comparisonTasks);
+        await Task.WhenAll(comparisonTasks).ConfigureAwait(false);
         comparisonChannel.Writer.Complete();
 
         // Wait for aggregation
-        await aggregationTask;
+        await aggregationTask.ConfigureAwait(false);
 
-        return new MultiFolderComparisonResult {
+        return new MultiFolderComparisonResult
+        {
             TotalPairsCompared = totalFiles,
             AllEqual = allEqual,
-            FilePairResults = results.OrderBy(r => r.File1Name).ToList(),
-            Metadata = new Dictionary<string, object>(),
+            FilePairResults = results.OrderBy(r => r.File1Name, StringComparer.Ordinal).ToList(),
+            Metadata = new Dictionary<string, object>(StringComparer.Ordinal),
         };
+    }
+
+    public void Dispose()
+    {
+        threadLocalCompareLogic?.Dispose();
     }
 
     /// <summary>
@@ -176,23 +224,28 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable {
         IReadOnlyList<(string File1Path, string File2Path, string RelativePath)> filePairs,
         Func<Stream, object> deserializer,
         ChannelWriter<DeserializedFilePair> writer,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken)
+    {
         // Use Parallel.ForEachAsync for optimal I/O parallelism
         await Parallel.ForEachAsync(
             filePairs,
-            new ParallelOptions {
-                MaxDegreeOfParallelism = this.ioParallelism,
+            new ParallelOptions
+            {
+                MaxDegreeOfParallelism = ioParallelism,
                 CancellationToken = cancellationToken,
             },
-            async (filePair, ct) => {
+            async (filePair, ct) =>
+            {
                 var (file1Path, file2Path, relativePath) = filePair;
 
-                try {
+                try
+                {
                     // OPTIMIZATION: Read both files in parallel
-                    var (obj1, obj2) = await this.DeserializeBothFilesAsync(
-                        file1Path, file2Path, deserializer, ct);
+                    var (obj1, obj2) = await DeserializeBothFilesAsync(
+                        file1Path, file2Path, deserializer, ct).ConfigureAwait(false);
 
-                    var deserializedPair = new DeserializedFilePair {
+                    var deserializedPair = new DeserializedFilePair
+                    {
                         File1Path = file1Path,
                         File2Path = file2Path,
                         RelativePath = relativePath,
@@ -200,14 +253,16 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable {
                         Object2 = obj2,
                     };
 
-                    await writer.WriteAsync(deserializedPair, ct);
+                    await writer.WriteAsync(deserializedPair, ct).ConfigureAwait(false);
                 }
-                catch (Exception ex) {
-                    this.logger.LogError(ex, "Error deserializing file pair: {Path}: {Message}", relativePath, ex.Message);
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Error deserializing file pair: {Path}: {Message}", relativePath, ex.Message);
 
                     // CRITICAL FIX: Pass error information to the comparison stage
                     // so it can be properly reported instead of silently skipped
-                    var errorPair = new DeserializedFilePair {
+                    var errorPair = new DeserializedFilePair
+                    {
                         File1Path = file1Path,
                         File2Path = file2Path,
                         RelativePath = relativePath,
@@ -217,9 +272,9 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable {
                         ErrorType = ex.GetType().Name,
                     };
 
-                    await writer.WriteAsync(errorPair, ct);
+                    await writer.WriteAsync(errorPair, ct).ConfigureAwait(false);
                 }
-            });
+            }).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -230,12 +285,13 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable {
         string file1Path,
         string file2Path,
         Func<Stream, object> deserializer,
-        CancellationToken ct) {
+        CancellationToken ct)
+    {
         // OPTIMIZATION: Read and deserialize both files in parallel
-        var task1 = Task.Run(() => this.ReadAndDeserialize(file1Path, deserializer), ct);
-        var task2 = Task.Run(() => this.ReadAndDeserialize(file2Path, deserializer), ct);
+        var task1 = Task.Run(() => ReadAndDeserialize(file1Path, deserializer), ct);
+        var task2 = Task.Run(() => ReadAndDeserialize(file2Path, deserializer), ct);
 
-        await Task.WhenAll(task1, task2);
+        await Task.WhenAll(task1, task2).ConfigureAwait(false);
 
         return (task1.Result, task2.Result);
     }
@@ -244,7 +300,8 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable {
     /// Read file and deserialize with optimal buffer size.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private object ReadAndDeserialize(string filePath, Func<Stream, object> deserializer) {
+    private object ReadAndDeserialize(string filePath, Func<Stream, object> deserializer)
+    {
         // OPTIMIZATION: Use FileOptions.SequentialScan for hint to OS
         using var stream = new FileStream(
             filePath,
@@ -264,62 +321,72 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable {
         ChannelReader<DeserializedFilePair> reader,
         ChannelWriter<FilePairComparisonResult> writer,
         Type modelType,
-        CancellationToken cancellationToken) {
-        await foreach (var pair in reader.ReadAllAsync(cancellationToken)) {
+        CancellationToken cancellationToken)
+    {
+        await foreach (var pair in reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+        {
             // CRITICAL FIX: Check if the deserialization stage passed an error
-            if (pair.HasError) {
-                var errorResult = new FilePairComparisonResult {
+            if (pair.HasError)
+            {
+                var errorResult = new FilePairComparisonResult
+                {
                     File1Name = Path.GetFileName(pair.File1Path),
                     File2Name = Path.GetFileName(pair.File2Path),
                     ErrorMessage = pair.ErrorMessage,
                     ErrorType = pair.ErrorType,
                 };
 
-                await writer.WriteAsync(errorResult, cancellationToken);
+                await writer.WriteAsync(errorResult, cancellationToken).ConfigureAwait(false);
                 continue;
             }
 
-            try {
+            try
+            {
                 // OPTIMIZATION: Reuse thread-local CompareLogic
-                var compareLogic = this.threadLocalCompareLogic.Value;
+                var compareLogic = threadLocalCompareLogic.Value;
 
                 // Perform comparison
                 var result = compareLogic.Compare(pair.Object1, pair.Object2);
 
                 // Filter ignored differences
-                result = this.configService.FilterSmartIgnoredDifferences(result, modelType);
-                result = this.configService.FilterIgnoredDifferences(result);
+                result = configService.FilterSmartIgnoredDifferences(result, modelType);
+                result = configService.FilterIgnoredDifferences(result);
 
                 // OPTIMIZATION: Pool categorizer instances
-                var categorizer = this.categorizerPool.Get();
-                try {
+                var categorizer = categorizerPool.Get();
+                try
+                {
                     var summary = categorizer.CategorizeAndSummarize(result);
 
-                    var pairResult = new FilePairComparisonResult {
+                    var pairResult = new FilePairComparisonResult
+                    {
                         File1Name = Path.GetFileName(pair.File1Path),
                         File2Name = Path.GetFileName(pair.File2Path),
                         Result = result,
                         Summary = summary,
                     };
 
-                    await writer.WriteAsync(pairResult, cancellationToken);
+                    await writer.WriteAsync(pairResult, cancellationToken).ConfigureAwait(false);
                 }
-                finally {
-                    this.categorizerPool.Return(categorizer);
+                finally
+                {
+                    categorizerPool.Return(categorizer);
                 }
             }
-            catch (Exception ex) {
-                this.logger.LogError(ex, "Error comparing file pair: {Path}: {Message}", pair.RelativePath, ex.Message);
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error comparing file pair: {Path}: {Message}", pair.RelativePath, ex.Message);
 
                 // CRITICAL FIX: Create an error result instead of silently skipping
-                var errorResult = new FilePairComparisonResult {
+                var errorResult = new FilePairComparisonResult
+                {
                     File1Name = Path.GetFileName(pair.File1Path),
                     File2Name = Path.GetFileName(pair.File2Path),
                     ErrorMessage = ex.Message,
                     ErrorType = ex.GetType().Name,
                 };
 
-                await writer.WriteAsync(errorResult, cancellationToken);
+                await writer.WriteAsync(errorResult, cancellationToken).ConfigureAwait(false);
             }
         }
     }
@@ -327,11 +394,14 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable {
     /// <summary>
     /// Create an optimized CompareLogic instance with performance-tuned settings.
     /// </summary>
-    private CompareLogic CreateOptimizedCompareLogic() {
-        var currentConfig = this.configService.GetCurrentConfig();
+    private CompareLogic CreateOptimizedCompareLogic()
+    {
+        var currentConfig = configService.GetCurrentConfig();
 
-        var optimizedLogic = new CompareLogic {
-            Config = new ComparisonConfig {
+        var optimizedLogic = new CompareLogic
+        {
+            Config = new ComparisonConfig
+            {
                 // OPTIMIZATION: Limit max differences for early termination
                 MaxDifferences = Math.Min(currentConfig.MaxDifferences, 500),
 
@@ -358,11 +428,13 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable {
         optimizedLogic.Config.CustomComparers = new List<KellermanSoftware.CompareNetObjects.TypeComparers.BaseTypeComparer>();
 
         // Always ignore array length properties
-        if (!optimizedLogic.Config.MembersToIgnore.Contains("Length")) {
+        if (!optimizedLogic.Config.MembersToIgnore.Contains("Length", StringComparer.Ordinal))
+        {
             optimizedLogic.Config.MembersToIgnore.Add("Length");
         }
 
-        if (!optimizedLogic.Config.MembersToIgnore.Contains("LongLength")) {
+        if (!optimizedLogic.Config.MembersToIgnore.Contains("LongLength", StringComparer.Ordinal))
+        {
             optimizedLogic.Config.MembersToIgnore.Add("LongLength");
         }
 
@@ -372,68 +444,68 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable {
     /// <summary>
     /// Get or create a cached deserializer delegate for the model type.
     /// </summary>
-    private Func<Stream, object> GetOrCreateDeserializer(Type modelType) {
-        return this.cachedDeserializers.GetOrAdd(modelType, type => {
+    private Func<Stream, object> GetOrCreateDeserializer(Type modelType)
+    {
+        return cachedDeserializers.GetOrAdd(modelType, type =>
+        {
             var method = typeof(IXmlDeserializationService)
                 .GetMethod(nameof(IXmlDeserializationService.DeserializeXml))
                 .MakeGenericMethod(type);
 
-            return stream => method.Invoke(this.deserializationService, new object[] { stream });
+            return stream => method.Invoke(deserializationService, new object[] { stream });
         });
-    }
-
-    /// <summary>
-    /// Generate a fast hash for cache key using XxHash64.
-    /// </summary>
-    public static string GenerateFastHash(Stream stream) {
-        const int bufferSize = 81920;
-        var buffer = ArrayPool<byte>.Shared.Rent(bufferSize);
-
-        try {
-            var hash = new XxHash64();
-            int bytesRead;
-
-            stream.Position = 0;
-            while ((bytesRead = stream.Read(buffer, 0, bufferSize)) > 0) {
-                hash.Append(buffer.AsSpan(0, bytesRead));
-            }
-
-            stream.Position = 0;
-            return Convert.ToBase64String(hash.GetHashAndReset());
-        }
-        finally {
-            ArrayPool<byte>.Shared.Return(buffer);
-        }
-    }
-
-    public void Dispose() {
-        this.threadLocalCompareLogic?.Dispose();
     }
 
     /// <summary>
     /// Internal class for passing deserialized objects between pipeline stages.
     /// </summary>
-    private sealed class DeserializedFilePair {
-        public string File1Path { get; init; }
-        public string File2Path { get; init; }
-        public string RelativePath { get; init; }
-        public object Object1 { get; init; }
-        public object Object2 { get; init; }
+    private sealed class DeserializedFilePair
+    {
+        required public string File1Path
+        {
+            get; init;
+        }
+
+        required public string File2Path
+        {
+            get; init;
+        }
+
+        required public string RelativePath
+        {
+            get; init;
+        }
+
+        required public object Object1
+        {
+            get; init;
+        }
+
+        required public object Object2
+        {
+            get; init;
+        }
 
         /// <summary>
-        /// Gets or sets the error message if deserialization failed.
+        /// Gets the error message if deserialization failed.
         /// </summary>
-        public string? ErrorMessage { get; init; }
+        public string? ErrorMessage
+        {
+            get; init;
+        }
 
         /// <summary>
-        /// Gets or sets the error type if deserialization failed.
+        /// Gets the error type if deserialization failed.
         /// </summary>
-        public string? ErrorType { get; init; }
+        public string? ErrorType
+        {
+            get; init;
+        }
 
         /// <summary>
         /// Gets a value indicating whether this pair had an error during deserialization.
         /// </summary>
-        public bool HasError => !string.IsNullOrEmpty(this.ErrorMessage);
+        public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
     }
 }
 
@@ -442,32 +514,39 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable {
 /// </summary>
 /// <typeparam name="T">Type of objects to pool.</typeparam>
 public sealed class ObjectPool<T>
-    where T : class {
-    private readonly ConcurrentBag<T> pool = new();
+    where T : class
+{
+    private readonly ConcurrentBag<T> pool = new ConcurrentBag<T>();
     private readonly Func<T> factory;
     private readonly int maxPoolSize;
     private int currentSize;
 
-    public ObjectPool(Func<T> factory, int maxPoolSize = 32) {
+    public ObjectPool(Func<T> factory, int maxPoolSize = 32)
+    {
         this.factory = factory;
         this.maxPoolSize = maxPoolSize;
     }
 
-    public T Get() {
-        if (this.pool.TryTake(out var item)) {
-            Interlocked.Decrement(ref this.currentSize);
+    public T Get()
+    {
+        if (pool.TryTake(out var item))
+        {
+            Interlocked.Decrement(ref currentSize);
             return item;
         }
 
-        return this.factory();
+        return factory();
     }
 
-    public void Return(T item) {
-        if (Interlocked.Increment(ref this.currentSize) <= this.maxPoolSize) {
-            this.pool.Add(item);
+    public void Return(T item)
+    {
+        if (Interlocked.Increment(ref currentSize) <= maxPoolSize)
+        {
+            pool.Add(item);
         }
-        else {
-            Interlocked.Decrement(ref this.currentSize);
+        else
+        {
+            Interlocked.Decrement(ref currentSize);
         }
     }
 }

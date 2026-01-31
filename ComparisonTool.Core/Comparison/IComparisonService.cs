@@ -11,7 +11,8 @@ namespace ComparisonTool.Core.Comparison;
 /// <summary>
 /// Interface for comparison execution.
 /// </summary>
-public interface IComparisonService {
+public interface IComparisonService
+{
     /// <summary>
     /// Compare two XML files using the specified domain model.
     /// </summary>
@@ -30,8 +31,8 @@ public interface IComparisonService {
         Stream oldXmlStream,
         Stream newXmlStream,
         string modelName,
-        string oldFilePath = null,
-        string newFilePath = null,
+        string? oldFilePath = null,
+        string? newFilePath = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -77,7 +78,7 @@ public interface IComparisonService {
         List<string> folder2Files,
         string modelName,
         int batchSize = 50,
-        IProgress<(int Completed, int Total)> progress = null,
+        IProgress<(int Completed, int Total)>? progress = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>

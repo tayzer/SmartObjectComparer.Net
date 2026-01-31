@@ -10,7 +10,8 @@ namespace ComparisonTool.Core.Utilities;
 /// <summary>
 /// Interface for file utilities.
 /// </summary>
-public interface IFileUtilities {
+public interface IFileUtilities
+{
     /// <summary>
     /// Creates a memory stream from a file stream.
     /// </summary>
@@ -21,7 +22,7 @@ public interface IFileUtilities {
     /// Generates a report markdown file.
     /// </summary>
     /// <returns></returns>
-    string GenerateReportMarkdown(DifferenceSummary summary, string additionalInfo = null);
+    string GenerateReportMarkdown(DifferenceSummary summary, string? additionalInfo = null);
 
     /// <summary>
     /// Generates a report for folder comparisons.

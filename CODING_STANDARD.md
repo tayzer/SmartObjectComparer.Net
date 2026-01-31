@@ -28,7 +28,7 @@ Keep code consistent and easy to read across contributors, reduce churn in code 
 ## Formatting
 - Indentation: 4 spaces. Do not use tabs.
 - Line endings: CRLF (Windows). LF may be tolerated in cloned repos but will be normalized.
-- Maximum line length: 120 (soft wrap / guideline, not enforced hard).
+- Maximum line length: 120 (hard wrap).
 - Brace style: Allman (new line). Example:
 
   public class Foo
@@ -42,7 +42,7 @@ Keep code consistent and easy to read across contributors, reduce churn in code 
 - `using` directives: placed OUTSIDE the namespace at the very top of the file.
 - Namespaces: Prefer FILE-SCOPED namespaces where practical (C# 10+) for library and model classes. Use block namespaces only when multiple type declarations require region separation.
 - Remove trailing whitespace; ensure a final newline.
-- Always use `var` for local variables (consistency + focus on the right-hand side intent). Avoid `dynamic` unless absolutely required.
+- Use `var` for local variables when the type is apparent from the right-hand side. Avoid `dynamic` unless absolutely required.
 
 ## Naming
 - Types (classes, structs, enums, interfaces): PascalCase. Interfaces start with `I` (e.g., `IComparisonService`).
@@ -50,6 +50,7 @@ Keep code consistent and easy to read across contributors, reduce churn in code 
 - Local variables and method parameters: camelCase.
 - Private fields: camelCase (NO leading underscore). Example: `fileSystemService`. If a name conflicts with a parameter, prefer suffixing the field or using `this.` qualifier, do not add an underscore.
 - Constants and readonly static members: PascalCase.
+- Type parameters (generics): `T` or descriptive names starting with `T` (e.g., `TEntity`).
 - Boolean properties: affirmative names (`IsValid`, `HasChanges`).
 
 ## Files & Project Layout
@@ -59,8 +60,9 @@ Keep code consistent and easy to read across contributors, reduce churn in code 
 
 ## Language features & patterns
 - Prefer pattern matching and expression-bodied members only when they remain obviously readable (avoid nested pattern complexity that obscures intent).
-- Use `var` ALWAYS for local variables (uniformity). Exception: Use explicit types for constants, fields, and public API signatures.
+- Use `var` when the type is apparent. Exception: Use explicit types for constants, fields, and public API signatures.
 - Avoid premature optimization — profile first.
+- Enable nullable reference types in project files and treat nullable warnings as actionable.
 
 ## Asynchronous code
 - Prefer asynchronous APIs for I/O or long-running operations.
@@ -71,6 +73,12 @@ Keep code consistent and easy to read across contributors, reduce churn in code 
 - Use exceptions for exceptional conditions; validate inputs at public boundaries.
 - Catch only the exceptions you can handle meaningfully; otherwise let them bubble up.
 - Use structured logging (e.g., Microsoft.Extensions.Logging) and avoid string concatenation for log messages. Use message templates and pass variables separately.
+
+## Code organization
+- Member order: Fields -> Constructors -> Properties -> Methods.
+- Do not use `#region` blocks.
+- Avoid magic numbers; promote to constants or enums.
+- Use constructor injection for dependencies.
 
 ## Testing conventions
 - Framework: MSTest only (no xUnit / NUnit). Existing xUnit tests will be migrated incrementally.
@@ -96,7 +104,8 @@ Current tests use xUnit attributes (`[Fact]`). Migration plan:
 ## Tooling & enforcement
 - `.editorconfig` enforces indentation, brace style, using placement, namespace style, `var` usage, and naming patterns.
 - `dotnet format` (verify in CI) ensures style compliance.
-- StyleCop.Analyzers applied to ALL projects (as PrivateAssets) — warnings should be addressed; suppressions require justification.
+- Analyzers (centralized in Directory.Build.props): StyleCop.Analyzers, Roslynator.Analyzers, Meziantou.Analyzer, and MSTest.Analyzers (test projects only).
+- Analyzer warnings should be addressed; suppressions require justification.
 - Roslyn IDE analyzers enabled by default (implicit in SDK). Consider raising severity for key rules over time.
 - Optional future: pre-commit hook running `dotnet format --verify-no-changes` + `dotnet test` (deferred).
 
@@ -131,6 +140,13 @@ dotnet test ComparisonTool.UnitTests.csproj
 - Indent style: spaces
 - End of line: CRLF
 - Charset: UTF-8
+
+## Non-enforceable rules (require manual review or Roslyn analyzers)
+- Constructor injection only.
+- No magic numbers (use constants/enums).
+- Prefer exceptions over result/union patterns.
+- MSTest-only and test naming patterns.
+- Strict nullable checking requires <Nullable>enable</Nullable> in project files.
 
 ---
 

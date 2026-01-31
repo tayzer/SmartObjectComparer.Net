@@ -37,12 +37,12 @@ public class CompleteComparisonWorkflowTests
 
     public CompleteComparisonWorkflowTests()
     {
-        this.mockLogger = new Mock<ILogger<ComparisonService>>();
-        this.mockConfigLogger = new Mock<ILogger<ComparisonConfigurationService>>();
-        this.mockXmlLogger = new Mock<ILogger<XmlDeserializationService>>();
-        this.mockFileLogger = new Mock<ILogger<FileSystemService>>();
-        this.mockPerfLogger = new Mock<ILogger<PerformanceTracker>>();
-        this.mockResourceLogger = new Mock<ILogger<SystemResourceMonitor>>();
+        mockLogger = new Mock<ILogger<ComparisonService>>();
+        mockConfigLogger = new Mock<ILogger<ComparisonConfigurationService>>();
+        mockXmlLogger = new Mock<ILogger<XmlDeserializationService>>();
+        mockFileLogger = new Mock<ILogger<FileSystemService>>();
+        mockPerfLogger = new Mock<ILogger<PerformanceTracker>>();
+        mockResourceLogger = new Mock<ILogger<SystemResourceMonitor>>();
 
         var configOptions = new ComparisonConfigurationOptions
         {
@@ -51,63 +51,56 @@ public class CompleteComparisonWorkflowTests
             DefaultIgnoreStringCase = false,
         };
 
-        this.configService = new ComparisonConfigurationService(this.mockConfigLogger.Object, Options.Create(configOptions));
+        configService = new ComparisonConfigurationService(mockConfigLogger.Object, Options.Create(configOptions));
 
         var serializerFactory = new ComparisonTool.Core.Serialization.XmlSerializerFactory();
-        this.xmlService = new XmlDeserializationService(this.mockXmlLogger.Object, serializerFactory);
+        xmlService = new XmlDeserializationService(mockXmlLogger.Object, serializerFactory);
 
-        this.fileService = new FileSystemService(this.mockFileLogger.Object);
-        this.performanceTracker = new PerformanceTracker(this.mockPerfLogger.Object);
-        this.resourceMonitor = new SystemResourceMonitor(this.mockResourceLogger.Object);
-        this.cacheService = new ComparisonResultCacheService(this.mockLogger.Object);
+        fileService = new FileSystemService(mockFileLogger.Object);
+        performanceTracker = new PerformanceTracker(mockPerfLogger.Object);
+        resourceMonitor = new SystemResourceMonitor(mockResourceLogger.Object);
+        cacheService = new ComparisonResultCacheService(mockLogger.Object);
 
         var mockComparisonEngineLogger = new Mock<ILogger<ComparisonEngine>>();
-        var comparisonEngine = new ComparisonEngine(mockComparisonEngineLogger.Object, this.configService, this.performanceTracker);
+        var comparisonEngine = new ComparisonEngine(mockComparisonEngineLogger.Object, configService, performanceTracker);
 
         var mockComparisonOrchestratorLogger = new Mock<ILogger<ComparisonOrchestrator>>();
         var comparisonOrchestrator = new ComparisonOrchestrator(
             mockComparisonOrchestratorLogger.Object,
-            this.xmlService,
-            this.configService,
-            this.fileService,
-            this.performanceTracker,
-            this.resourceMonitor,
-            this.cacheService,
+            xmlService,
+            configService,
+            fileService,
+            performanceTracker,
+            resourceMonitor,
+            cacheService,
             comparisonEngine);
 
-        this.comparisonService = new ComparisonService(
-            this.mockLogger.Object,
-            this.xmlService,
-            this.configService,
-            this.fileService,
-            this.performanceTracker,
-            this.resourceMonitor,
-            this.cacheService,
+        comparisonService = new ComparisonService(
+            mockLogger.Object,
+            xmlService,
+            configService,
+            fileService,
+            performanceTracker,
+            resourceMonitor,
+            cacheService,
             comparisonEngine,
             comparisonOrchestrator);
 
         // Register domain models
-        this.RegisterDomainModels();
-    }
-
-    private void RegisterDomainModels()
-    {
-        // Register test models for the workflow tests
-        this.xmlService.RegisterDomainModel<TestOrderModel>("TestOrderModel");
-        this.xmlService.RegisterDomainModel<TestCustomerModel>("TestCustomerModel");
+        RegisterDomainModels();
     }
 
     [TestMethod]
     public async Task CompleteWorkflow_WithSimpleIdenticalFiles_ShouldReturnNoDifferences()
     {
         // Arrange
-        var xml = this.CreateSimpleOrderXml("Order123", "John Doe", "123 Main St");
+        var xml = CreateSimpleOrderXml("Order123", "John Doe", "123 Main St");
 
         using var stream1 = new MemoryStream(Encoding.UTF8.GetBytes(xml));
         using var stream2 = new MemoryStream(Encoding.UTF8.GetBytes(xml));
 
         // Act
-        var result = await this.comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestOrderModel");
+        var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestOrderModel");
 
         // Assert
         result.Should().NotBeNull();
@@ -119,14 +112,14 @@ public class CompleteComparisonWorkflowTests
     public async Task CompleteWorkflow_WithDifferentCustomerNames_ShouldReturnDifferences()
     {
         // Arrange
-        var xml1 = this.CreateSimpleOrderXml("Order123", "John Doe", "123 Main St");
-        var xml2 = this.CreateSimpleOrderXml("Order123", "Jane Smith", "123 Main St");
+        var xml1 = CreateSimpleOrderXml("Order123", "John Doe", "123 Main St");
+        var xml2 = CreateSimpleOrderXml("Order123", "Jane Smith", "123 Main St");
 
         using var stream1 = new MemoryStream(Encoding.UTF8.GetBytes(xml1));
         using var stream2 = new MemoryStream(Encoding.UTF8.GetBytes(xml2));
 
         // Act
-        var result = await this.comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestOrderModel");
+        var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestOrderModel");
 
         // Assert
         result.Should().NotBeNull();
@@ -139,18 +132,18 @@ public class CompleteComparisonWorkflowTests
     public async Task CompleteWorkflow_WithIgnoredProperties_ShouldFilterDifferences()
     {
         // Arrange
-        var xml1 = this.CreateSimpleOrderXml("Order123", "John Doe", "123 Main St");
-        var xml2 = this.CreateSimpleOrderXml("Order123", "Jane Smith", "456 Oak Ave");
+        var xml1 = CreateSimpleOrderXml("Order123", "John Doe", "123 Main St");
+        var xml2 = CreateSimpleOrderXml("Order123", "Jane Smith", "456 Oak Ave");
 
         using var stream1 = new MemoryStream(Encoding.UTF8.GetBytes(xml1));
         using var stream2 = new MemoryStream(Encoding.UTF8.GetBytes(xml2));
 
         // Configure ignore rules
-        this.configService.IgnoreProperty("CustomerName");
-        this.configService.IgnoreProperty("Address");
+        configService.IgnoreProperty("CustomerName");
+        configService.IgnoreProperty("Address");
 
         // Act
-        var result = await this.comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestOrderModel");
+        var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestOrderModel");
 
         // Assert
         result.Should().NotBeNull();
@@ -162,23 +155,25 @@ public class CompleteComparisonWorkflowTests
     public async Task CompleteWorkflow_WithComplexOrderWithItems_ShouldHandleComplexStructures()
     {
         // Arrange
-        var xml1 = this.CreateComplexOrderXml("Order123", "John Doe", new[]
+        var items1 = new[]
         {
             new TestOrderItem { Id = 1, Name = "Item 1", Price = 10.99m },
             new TestOrderItem { Id = 2, Name = "Item 2", Price = 15.50m },
-        });
+        };
+        var xml1 = CreateComplexOrderXml("Order123", "John Doe", items1);
 
-        var xml2 = this.CreateComplexOrderXml("Order123", "John Doe", new[]
+        var items2 = new[]
         {
             new TestOrderItem { Id = 1, Name = "Item 1", Price = 10.99m },
             new TestOrderItem { Id = 2, Name = "Item 2 Modified", Price = 15.50m },
-        });
+        };
+        var xml2 = CreateComplexOrderXml("Order123", "John Doe", items2);
 
         using var stream1 = new MemoryStream(Encoding.UTF8.GetBytes(xml1));
         using var stream2 = new MemoryStream(Encoding.UTF8.GetBytes(xml2));
 
         // Act
-        var result = await this.comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestOrderModel");
+        var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestOrderModel");
 
         // Assert
         result.Should().NotBeNull();
@@ -191,26 +186,28 @@ public class CompleteComparisonWorkflowTests
     public async Task CompleteWorkflow_WithCollectionOrderIgnored_ShouldIgnoreItemOrder()
     {
         // Arrange
-        var xml1 = this.CreateComplexOrderXml("Order123", "John Doe", new[]
+        var items1 = new[]
         {
             new TestOrderItem { Id = 1, Name = "Item 1", Price = 10.99m },
             new TestOrderItem { Id = 2, Name = "Item 2", Price = 15.50m },
-        });
+        };
+        var xml1 = CreateComplexOrderXml("Order123", "John Doe", items1);
 
-        var xml2 = this.CreateComplexOrderXml("Order123", "John Doe", new[]
+        var items2 = new[]
         {
             new TestOrderItem { Id = 2, Name = "Item 2", Price = 15.50m },
             new TestOrderItem { Id = 1, Name = "Item 1", Price = 10.99m },
-        });
+        };
+        var xml2 = CreateComplexOrderXml("Order123", "John Doe", items2);
 
         using var stream1 = new MemoryStream(Encoding.UTF8.GetBytes(xml1));
         using var stream2 = new MemoryStream(Encoding.UTF8.GetBytes(xml2));
 
         // Configure to ignore collection order
-        this.configService.SetIgnoreCollectionOrder(true);
+        configService.SetIgnoreCollectionOrder(true);
 
         // Act
-        var result = await this.comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestOrderModel");
+        var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestOrderModel");
 
         // Assert
         result.Should().NotBeNull();
@@ -222,13 +219,13 @@ public class CompleteComparisonWorkflowTests
     public async Task CompleteWorkflow_WithCaching_ShouldUseCacheForIdenticalFiles()
     {
         // Arrange
-        var xml = this.CreateSimpleOrderXml("Order123", "John Doe", "123 Main St");
+        var xml = CreateSimpleOrderXml("Order123", "John Doe", "123 Main St");
 
         using var stream1 = new MemoryStream(Encoding.UTF8.GetBytes(xml));
         using var stream2 = new MemoryStream(Encoding.UTF8.GetBytes(xml));
 
         // Act - First comparison
-        var result1 = await this.comparisonService.CompareXmlFilesWithCachingAsync(
+        var result1 = await comparisonService.CompareXmlFilesWithCachingAsync(
             stream1, stream2, "TestOrderModel", "order1.xml", "order2.xml");
 
         // Reset streams for second comparison
@@ -236,7 +233,7 @@ public class CompleteComparisonWorkflowTests
         stream2.Position = 0;
 
         // Act - Second comparison (should use cache)
-        var result2 = await this.comparisonService.CompareXmlFilesWithCachingAsync(
+        var result2 = await comparisonService.CompareXmlFilesWithCachingAsync(
             stream1, stream2, "TestOrderModel", "order1.xml", "order2.xml");
 
         // Assert
@@ -251,26 +248,28 @@ public class CompleteComparisonWorkflowTests
     public async Task CompleteWorkflow_WithSmartIgnoreRules_ShouldFilterCorrectly()
     {
         // Arrange
-        var xml1 = this.CreateComplexOrderXml("Order123", "John Doe", new[]
+        var items1 = new[]
         {
             new TestOrderItem { Id = 1, Name = "Item 1", Price = 10.99m },
             new TestOrderItem { Id = 2, Name = "Item 2", Price = 15.50m },
-        });
+        };
+        var xml1 = CreateComplexOrderXml("Order123", "John Doe", items1);
 
-        var xml2 = this.CreateComplexOrderXml("Order123", "John Doe", new[]
+        var items2 = new[]
         {
             new TestOrderItem { Id = 1, Name = "Item 1", Price = 12.99m }, // Price changed
             new TestOrderItem { Id = 2, Name = "Item 2", Price = 15.50m },
-        });
+        };
+        var xml2 = CreateComplexOrderXml("Order123", "John Doe", items2);
 
         using var stream1 = new MemoryStream(Encoding.UTF8.GetBytes(xml1));
         using var stream2 = new MemoryStream(Encoding.UTF8.GetBytes(xml2));
 
         // Configure smart ignore rule for price changes
-        this.configService.AddSmartIgnoreRule(SmartIgnoreRule.ByNamePattern(".*Price.*", "Ignore price changes"));
+        configService.AddSmartIgnoreRule(SmartIgnoreRule.ByNamePattern(".*Price.*", "Ignore price changes"));
 
         // Act
-        var result = await this.comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestOrderModel");
+        var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestOrderModel");
 
         // Assert
         result.Should().NotBeNull();
@@ -285,13 +284,13 @@ public class CompleteComparisonWorkflowTests
     public async Task CompleteWorkflow_WithPerformanceTracking_ShouldTrackOperations()
     {
         // Arrange
-        var xml = this.CreateSimpleOrderXml("Order123", "John Doe", "123 Main St");
+        var xml = CreateSimpleOrderXml("Order123", "John Doe", "123 Main St");
 
         using var stream1 = new MemoryStream(Encoding.UTF8.GetBytes(xml));
         using var stream2 = new MemoryStream(Encoding.UTF8.GetBytes(xml));
 
         // Act
-        var result = await this.comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestOrderModel");
+        var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestOrderModel");
 
         // Assert
         result.Should().NotBeNull();
@@ -299,6 +298,13 @@ public class CompleteComparisonWorkflowTests
 
         // Performance tracking should have recorded operations
         // Note: In a real scenario, you might want to verify that performance data was logged
+    }
+
+    private void RegisterDomainModels()
+    {
+        // Register test models for the workflow tests
+        xmlService.RegisterDomainModel<TestOrderModel>("TestOrderModel");
+        xmlService.RegisterDomainModel<TestCustomerModel>("TestCustomerModel");
     }
 
     private string CreateSimpleOrderXml(string orderId, string customerName, string address)
@@ -361,7 +367,7 @@ public class CompleteComparisonWorkflowTests
 
         [System.Xml.Serialization.XmlArray("OrderItems")]
         [System.Xml.Serialization.XmlArrayItem("OrderItem")]
-        public List<TestOrderItem> OrderItems { get; set; } = new ();
+        public List<TestOrderItem> OrderItems { get; set; } = new List<TestOrderItem>();
 
         [System.Xml.Serialization.XmlElement("TotalAmount")]
         public decimal TotalAmount

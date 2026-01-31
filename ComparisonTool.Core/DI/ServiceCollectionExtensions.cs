@@ -17,106 +17,18 @@ using CoreXmlSerializerFactory = ComparisonTool.Core.Serialization.XmlSerializer
 namespace ComparisonTool.Core.DI;
 
 /// <summary>
-/// Options for configuring XML comparison services, including domain model registration.
-/// </summary>
-public class XmlComparisonOptions {
-    private readonly List<Action<CoreXmlSerializerFactory>> serializerRegistrations = new();
-    private readonly List<Action<IXmlDeserializationService>> domainModelRegistrations = new();
-
-    /// <summary>
-    /// Register a custom XmlSerializer factory for a specific type.
-    /// Use this when your type requires special serialization configuration (custom root element, namespace handling, etc.).
-    /// <para>
-    /// <strong>Important:</strong> Since namespace-ignorant mode is enabled by default, your serializer should use
-    /// <c>Namespace = string.Empty</c> in any XmlRootAttribute. Use <see cref="RegisterDomainModelWithRootElement{T}"/>
-    /// for a simpler API that handles this automatically.
-    /// </para>
-    /// </summary>
-    /// <typeparam name="T">The type to register.</typeparam>
-    /// <param name="serializerFactory">A factory function that creates the XmlSerializer for this type.</param>
-    public XmlComparisonOptions RegisterSerializer<T>(Func<XmlSerializer> serializerFactory) {
-        this.serializerRegistrations.Add(factory => factory.RegisterType<T>(serializerFactory));
-        return this;
-    }
-
-    /// <summary>
-    /// Register a domain model for XML deserialization.
-    /// This makes the model available for selection in the comparison tool.
-    /// The model will use the default namespace-ignorant serializer.
-    /// </summary>
-    /// <typeparam name="T">The domain model type.</typeparam>
-    /// <param name="modelName">The display name for this model in the comparison tool.</param>
-    public XmlComparisonOptions RegisterDomainModel<T>(string modelName)
-        where T : class {
-        this.domainModelRegistrations.Add(service => service.RegisterDomainModel<T>(modelName));
-        return this;
-    }
-
-    /// <summary>
-    /// Register a domain model with a custom root element name.
-    /// This is the recommended way to register models that need a specific XML root element name.
-    /// The serializer is automatically configured for namespace-ignorant mode, including all nested types.
-    /// </summary>
-    /// <typeparam name="T">The domain model type.</typeparam>
-    /// <param name="modelName">The display name for this model in the comparison tool.</param>
-    /// <param name="rootElementName">The XML root element name (e.g., "Envelope", "Order").</param>
-    /// <example>
-    /// <code>
-    /// options.RegisterDomainModelWithRootElement&lt;SoapEnvelope&gt;("SoapEnvelope", "Envelope");
-    /// </code>
-    /// </example>
-    public XmlComparisonOptions RegisterDomainModelWithRootElement<T>(string modelName, string rootElementName)
-        where T : class {
-        // Use the factory's CreateNamespaceIgnorantSerializer which properly handles ALL nested types
-        this.serializerRegistrations.Add(factory =>
-            factory.RegisterType<T>(() => factory.CreateNamespaceIgnorantSerializer<T>(rootElementName)));
-        this.RegisterDomainModel<T>(modelName);
-        return this;
-    }
-
-    /// <summary>
-    /// Register a domain model with a custom serializer.
-    /// This is a convenience method that registers both the serializer and the domain model.
-    /// <para>
-    /// <strong>Important:</strong> Since namespace-ignorant mode is enabled by default, your serializer should use
-    /// <c>Namespace = string.Empty</c> in any XmlRootAttribute. Consider using
-    /// <see cref="RegisterDomainModelWithRootElement{T}"/> for a simpler API.
-    /// </para>
-    /// </summary>
-    /// <typeparam name="T">The domain model type.</typeparam>
-    /// <param name="modelName">The display name for this model.</param>
-    /// <param name="serializerFactory">A factory function that creates the XmlSerializer for this type.</param>
-    public XmlComparisonOptions RegisterDomainModelWithSerializer<T>(string modelName, Func<XmlSerializer> serializerFactory)
-        where T : class {
-        this.RegisterSerializer<T>(serializerFactory);
-        this.RegisterDomainModel<T>(modelName);
-        return this;
-    }
-
-    internal void ApplySerializerRegistrations(CoreXmlSerializerFactory factory) {
-        foreach (var registration in this.serializerRegistrations) {
-            registration(factory);
-        }
-    }
-
-    internal void ApplyDomainModelRegistrations(IXmlDeserializationService service) {
-        foreach (var registration in this.domainModelRegistrations) {
-            registration(service);
-        }
-    }
-}
-
-/// <summary>
 /// Extension methods for registering services.
 /// </summary>
-public static class ServiceCollectionExtensions {
+public static class ServiceCollectionExtensions
+{
     /// <summary>
     /// Add XML comparison services with proper dependency injection.
     /// </summary>
     /// <param name="services">The service collection.</param>
     /// <param name="configuration">Optional configuration for comparison settings.</param>
     /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddXmlComparisonServices(this IServiceCollection services, IConfiguration configuration = null) {
+    public static IServiceCollection AddXmlComparisonServices(this IServiceCollection services, IConfiguration? configuration = null)
+    {
         return services.AddXmlComparisonServices(configuration, configureOptions: null);
     }
 
@@ -131,14 +43,15 @@ public static class ServiceCollectionExtensions {
     /// services.AddXmlComparisonServices(options => {
     ///     // Register a domain model (uses default serializer with namespace handling)
     ///     options.RegisterDomainModel&lt;MyCustomOrder&gt;("MyCustomOrder");
-    ///     
+    ///
     ///     // Register with custom serializer for special XML structure
-    ///     options.RegisterDomainModelWithSerializer&lt;LegacyOrder&gt;("LegacyOrder", 
+    ///     options.RegisterDomainModelWithSerializer&lt;LegacyOrder&gt;("LegacyOrder",
     ///         () => new XmlSerializer(typeof(LegacyOrder), new XmlRootAttribute("Order")));
     /// });
     /// </code>
     /// </example>
-    public static IServiceCollection AddXmlComparisonServices(this IServiceCollection services, Action<XmlComparisonOptions> configureOptions) {
+    public static IServiceCollection AddXmlComparisonServices(this IServiceCollection services, Action<XmlComparisonOptions> configureOptions)
+    {
         return services.AddXmlComparisonServices(configuration: null, configureOptions);
     }
 
@@ -152,112 +65,14 @@ public static class ServiceCollectionExtensions {
     public static IServiceCollection AddXmlComparisonServices(
         this IServiceCollection services,
         IConfiguration? configuration,
-        Action<XmlComparisonOptions>? configureOptions) {
+        Action<XmlComparisonOptions>? configureOptions)
+    {
         // Build options from configuration action
-        var options = new XmlComparisonOptions();
+        var options = CreateAndConfigureOptions(configureOptions);
 
-        // Always register the built-in ComplexOrderResponse model
-        options.RegisterSerializer<ComplexOrderResponse>(() => {
-            var serializer = new XmlSerializer(
-                typeof(ComplexOrderResponse),
-                new XmlRootAttribute {
-                    ElementName = "OrderManagementResponse",
-                    Namespace = string.Empty,
-                });
-            return serializer;
-        });
-        options.RegisterDomainModel<ComplexOrderResponse>("ComplexOrderResponse");
-
-        // Apply user's custom registrations
-        configureOptions?.Invoke(options);
-
-        if (configuration != null) {
-            services.AddOptions();
-            services.Configure<ComparisonConfigurationOptions>(configuration.GetSection("ComparisonSettings"));
-        }
-
-        services.AddSingleton<CoreXmlSerializerFactory>(provider => {
-            var logger = provider.GetRequiredService<ILogger<CoreXmlSerializerFactory>>();
-            var factory = new CoreXmlSerializerFactory(logger);
-
-            // Apply all serializer registrations from options
-            options.ApplySerializerRegistrations(factory);
-
-            return factory;
-        });
-
-        // Add performance tracking service
-        services.AddSingleton<PerformanceTracker>();
-
-        // Add system resource monitor
-        services.AddSingleton<SystemResourceMonitor>();
-
-        // Add comparison result cache service
-        services.AddSingleton<ComparisonResultCacheService>();
-
-        services.AddSingleton<IComparisonConfigurationService>(provider => {
-            var logger = provider.GetRequiredService<ILogger<ComparisonConfigurationService>>();
-            var configurationService = new ComparisonConfigurationService(logger);
-
-            // Wire up the cache service
-            var cacheService = provider.GetRequiredService<ComparisonResultCacheService>();
-            configurationService.SetCacheService(cacheService);
-
-            return configurationService;
-        });
-
-        services.AddSingleton<IXmlDeserializationService>(provider => {
-            var logger = provider.GetRequiredService<ILogger<XmlDeserializationService>>();
-            var serializerFactory = provider.GetRequiredService<CoreXmlSerializerFactory>();
-            var configService = provider.GetRequiredService<IComparisonConfigurationService>();
-
-            var service = new XmlDeserializationService(logger, serializerFactory, configService);
-
-            // Apply all domain model registrations from options
-            options.ApplyDomainModelRegistrations(service);
-
-            return service;
-        });
-
-        services.AddScoped<IComparisonEngine, ComparisonEngine>();
-        services.AddScoped<IComparisonOrchestrator>(provider => {
-            var logger = provider.GetRequiredService<ILogger<ComparisonOrchestrator>>();
-            var deserializationService = provider.GetRequiredService<IXmlDeserializationService>();
-            var configService = provider.GetRequiredService<IComparisonConfigurationService>();
-            var fileSystemService = provider.GetRequiredService<IFileSystemService>();
-            var performanceTracker = provider.GetRequiredService<PerformanceTracker>();
-            var resourceMonitor = provider.GetRequiredService<SystemResourceMonitor>();
-            var cacheService = provider.GetRequiredService<ComparisonResultCacheService>();
-            var comparisonEngine = provider.GetRequiredService<IComparisonEngine>();
-            var deserializationFactory = provider.GetService<DeserializationServiceFactory>();
-            var loggerFactory = provider.GetRequiredService<ILoggerFactory>();
-
-            return new ComparisonOrchestrator(
-                logger,
-                deserializationService,
-                configService,
-                fileSystemService,
-                performanceTracker,
-                resourceMonitor,
-                cacheService,
-                comparisonEngine,
-                deserializationFactory,
-                loggerFactory);
-        });
-
-        // Add high-performance comparison pipeline for large batch operations
-        services.AddScoped<HighPerformanceComparisonPipeline>();
-
-        services.AddScoped<IComparisonService, ComparisonService>();
-
-        services.AddScoped<IFileUtilities, FileUtilities>();
-
-        services.AddSingleton<IFileSystemService, FileSystemService>();
-
-        // Add comparison logging service for detailed comparison tracking
-        services.AddSingleton<IComparisonLogService, ComparisonLogService>();
-
-        services.AddScoped<DirectoryComparisonService>();
+        ConfigureOptionsFromConfiguration(services, configuration);
+        RegisterCoreServices(services, options);
+        RegisterComparisonServices(services);
 
         return services;
     }
@@ -265,10 +80,13 @@ public static class ServiceCollectionExtensions {
     /// <summary>
     /// Add JSON comparison services with proper dependency injection.
     /// </summary>
-    /// <returns></returns>
-    public static IServiceCollection AddJsonComparisonServices(this IServiceCollection services) {
+    /// <param name="services">The service collection.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddJsonComparisonServices(this IServiceCollection services)
+    {
         // Add JSON deserialization service
-        services.AddSingleton<JsonDeserializationService>(provider => {
+        services.AddSingleton<JsonDeserializationService>(provider =>
+        {
             var logger = provider.GetRequiredService<ILogger<JsonDeserializationService>>();
             var service = new JsonDeserializationService(logger);
 
@@ -287,7 +105,8 @@ public static class ServiceCollectionExtensions {
     /// <param name="services">The service collection.</param>
     /// <param name="configuration">Optional configuration for comparison settings.</param>
     /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddUnifiedComparisonServices(this IServiceCollection services, IConfiguration configuration = null) {
+    public static IServiceCollection AddUnifiedComparisonServices(this IServiceCollection services, IConfiguration? configuration = null)
+    {
         return services.AddUnifiedComparisonServices(configuration, configureOptions: null);
     }
 
@@ -303,14 +122,15 @@ public static class ServiceCollectionExtensions {
     /// builder.Services.AddUnifiedComparisonServices(options => {
     ///     // Register your custom domain model
     ///     options.RegisterDomainModel&lt;MyCustomOrder&gt;("MyCustomOrder");
-    ///     
+    ///
     ///     // Register with custom serializer for special XML structure
-    ///     options.RegisterDomainModelWithSerializer&lt;LegacyOrder&gt;("LegacyOrder", 
+    ///     options.RegisterDomainModelWithSerializer&lt;LegacyOrder&gt;("LegacyOrder",
     ///         () => new XmlSerializer(typeof(LegacyOrder), new XmlRootAttribute("Order")));
     /// });
     /// </code>
     /// </example>
-    public static IServiceCollection AddUnifiedComparisonServices(this IServiceCollection services, Action<XmlComparisonOptions> configureOptions) {
+    public static IServiceCollection AddUnifiedComparisonServices(this IServiceCollection services, Action<XmlComparisonOptions> configureOptions)
+    {
         return services.AddUnifiedComparisonServices(configuration: null, configureOptions);
     }
 
@@ -335,19 +155,22 @@ public static class ServiceCollectionExtensions {
     public static IServiceCollection AddUnifiedComparisonServices(
         this IServiceCollection services,
         IConfiguration? configuration,
-        Action<XmlComparisonOptions>? configureOptions) {
+        Action<XmlComparisonOptions>? configureOptions)
+    {
         // Add both XML and JSON services, passing through the options
         services.AddXmlComparisonServices(configuration, configureOptions);
         services.AddJsonComparisonServices();
 
         // Add the factory for choosing appropriate services
-        services.AddSingleton<DeserializationServiceFactory>(provider => {
+        services.AddSingleton<DeserializationServiceFactory>(provider =>
+        {
             var logger = provider.GetRequiredService<ILogger<DeserializationServiceFactory>>();
             return new DeserializationServiceFactory(provider, logger);
         });
 
         // Add unified deserialization service that can handle both formats
-        services.AddSingleton<IDeserializationService>(provider => {
+        services.AddSingleton<IDeserializationService>(provider =>
+        {
             var factory = provider.GetRequiredService<DeserializationServiceFactory>();
             return factory.GetUnifiedService();
         });
@@ -358,13 +181,19 @@ public static class ServiceCollectionExtensions {
     /// <summary>
     /// Register domain models with all deserialization services.
     /// </summary>
-    /// <returns></returns>
+    /// <typeparam name="T">The domain model type.</typeparam>
+    /// <param name="services">The service collection.</param>
+    /// <param name="modelName">The display name for this model.</param>
+    /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection RegisterDomainModel<T>(this IServiceCollection services, string modelName)
-        where T : class {
-        services.AddSingleton<Action<IServiceProvider>>(provider => serviceProvider => {
+        where T : class
+    {
+        services.AddSingleton<Action<IServiceProvider>>(provider => serviceProvider =>
+        {
             // Register with unified service if available
             var unifiedService = serviceProvider.GetService<IDeserializationService>();
-            if (unifiedService != null) {
+            if (unifiedService != null)
+            {
                 unifiedService.RegisterDomainModel<T>(modelName);
                 return;
             }
@@ -378,5 +207,99 @@ public static class ServiceCollectionExtensions {
         });
 
         return services;
+    }
+
+    private static XmlComparisonOptions CreateAndConfigureOptions(Action<XmlComparisonOptions>? configureOptions)
+    {
+        var options = new XmlComparisonOptions();
+
+        // Always register the built-in ComplexOrderResponse model
+        options.RegisterSerializer<ComplexOrderResponse>(() =>
+        {
+            var serializer = new XmlSerializer(
+                typeof(ComplexOrderResponse),
+                new XmlRootAttribute
+                {
+                    ElementName = "OrderManagementResponse",
+                    Namespace = string.Empty,
+                });
+            return serializer;
+        });
+        options.RegisterDomainModel<ComplexOrderResponse>("ComplexOrderResponse");
+
+        // Apply user's custom registrations
+        configureOptions?.Invoke(options);
+
+        return options;
+    }
+
+    private static void ConfigureOptionsFromConfiguration(IServiceCollection services, IConfiguration? configuration)
+    {
+        if (configuration != null)
+        {
+            services.AddOptions();
+            services.Configure<ComparisonConfigurationOptions>(configuration.GetSection("ComparisonSettings"));
+        }
+    }
+
+    private static void RegisterCoreServices(IServiceCollection services, XmlComparisonOptions options)
+    {
+        services.AddSingleton<CoreXmlSerializerFactory>(provider =>
+        {
+            var logger = provider.GetRequiredService<ILogger<CoreXmlSerializerFactory>>();
+            var factory = new CoreXmlSerializerFactory(logger);
+            options.ApplySerializerRegistrations(factory);
+            return factory;
+        });
+
+        services.AddSingleton<PerformanceTracker>();
+        services.AddSingleton<SystemResourceMonitor>();
+        services.AddSingleton<ComparisonResultCacheService>();
+
+        services.AddSingleton<IComparisonConfigurationService>(provider =>
+        {
+            var logger = provider.GetRequiredService<ILogger<ComparisonConfigurationService>>();
+            var configurationService = new ComparisonConfigurationService(logger);
+            var cacheService = provider.GetRequiredService<ComparisonResultCacheService>();
+            configurationService.SetCacheService(cacheService);
+            return configurationService;
+        });
+
+        services.AddSingleton<IXmlDeserializationService>(provider =>
+        {
+            var logger = provider.GetRequiredService<ILogger<XmlDeserializationService>>();
+            var serializerFactory = provider.GetRequiredService<CoreXmlSerializerFactory>();
+            var configService = provider.GetRequiredService<IComparisonConfigurationService>();
+            var service = new XmlDeserializationService(logger, serializerFactory, configService);
+            options.ApplyDomainModelRegistrations(service);
+            return service;
+        });
+    }
+
+    private static void RegisterComparisonServices(IServiceCollection services)
+    {
+        services.AddScoped<IComparisonEngine, ComparisonEngine>();
+        services.AddScoped<IComparisonOrchestrator>(CreateComparisonOrchestrator);
+        services.AddScoped<HighPerformanceComparisonPipeline>();
+        services.AddScoped<IComparisonService, ComparisonService>();
+        services.AddScoped<IFileUtilities, FileUtilities>();
+        services.AddSingleton<IFileSystemService, FileSystemService>();
+        services.AddSingleton<IComparisonLogService, ComparisonLogService>();
+        services.AddScoped<DirectoryComparisonService>();
+    }
+
+    private static ComparisonOrchestrator CreateComparisonOrchestrator(IServiceProvider provider)
+    {
+        return new ComparisonOrchestrator(
+            provider.GetRequiredService<ILogger<ComparisonOrchestrator>>(),
+            provider.GetRequiredService<IXmlDeserializationService>(),
+            provider.GetRequiredService<IComparisonConfigurationService>(),
+            provider.GetRequiredService<IFileSystemService>(),
+            provider.GetRequiredService<PerformanceTracker>(),
+            provider.GetRequiredService<SystemResourceMonitor>(),
+            provider.GetRequiredService<ComparisonResultCacheService>(),
+            provider.GetRequiredService<IComparisonEngine>(),
+            provider.GetService<DeserializationServiceFactory>(),
+            provider.GetRequiredService<ILoggerFactory>());
     }
 }

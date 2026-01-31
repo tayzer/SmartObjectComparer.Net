@@ -3,7 +3,6 @@
 // </copyright>
 
 using System.Collections.Concurrent;
-using System.Reflection;
 using System.Xml;
 using System.Xml.Serialization;
 using ComparisonTool.Core.Comparison.Configuration;
@@ -12,94 +11,53 @@ using Microsoft.Extensions.Logging;
 namespace ComparisonTool.Core.Serialization;
 
 /// <summary>
-/// An XmlReader wrapper that strips all XML namespace information during reading.
-/// This allows deserialization to work regardless of what namespace is declared in the XML document.
-/// </summary>
-public class NamespaceIgnorantXmlReader : XmlReader {
-    private readonly XmlReader innerReader;
-
-    public NamespaceIgnorantXmlReader(XmlReader innerReader) {
-        this.innerReader = innerReader ?? throw new ArgumentNullException(nameof(innerReader));
-    }
-
-    // Return empty string for all namespace-related properties
-    public override string NamespaceURI => string.Empty;
-    public override string Prefix => string.Empty;
-
-    // Delegate all other properties and methods to the inner reader
-    public override XmlNodeType NodeType => this.innerReader.NodeType;
-    public override string LocalName => this.innerReader.LocalName;
-    public override string Value => this.innerReader.Value;
-    public override int AttributeCount => this.innerReader.AttributeCount;
-    public override string BaseURI => this.innerReader.BaseURI;
-    public override int Depth => this.innerReader.Depth;
-    public override bool EOF => this.innerReader.EOF;
-    public override bool IsEmptyElement => this.innerReader.IsEmptyElement;
-    public override XmlNameTable NameTable => this.innerReader.NameTable;
-    public override ReadState ReadState => this.innerReader.ReadState;
-
-    public override string GetAttribute(int i) => this.innerReader.GetAttribute(i);
-    public override string? GetAttribute(string name) => this.innerReader.GetAttribute(name);
-    public override string? GetAttribute(string name, string? namespaceURI) => this.innerReader.GetAttribute(name, string.Empty);
-    public override string LookupNamespace(string prefix) => string.Empty;
-    public override bool MoveToAttribute(string name) => this.innerReader.MoveToAttribute(name);
-    public override bool MoveToAttribute(string name, string? ns) => this.innerReader.MoveToAttribute(name, string.Empty);
-    public override bool MoveToElement() => this.innerReader.MoveToElement();
-    public override bool MoveToFirstAttribute() => this.innerReader.MoveToFirstAttribute();
-    public override bool MoveToNextAttribute() => this.innerReader.MoveToNextAttribute();
-    public override bool Read() => this.innerReader.Read();
-    public override bool ReadAttributeValue() => this.innerReader.ReadAttributeValue();
-    public override void ResolveEntity() => this.innerReader.ResolveEntity();
-
-    protected override void Dispose(bool disposing) {
-        if (disposing) {
-            this.innerReader.Dispose();
-        }
-
-        base.Dispose(disposing);
-    }
-}
-
-/// <summary>
 /// Service responsible for XML deserialization operations.
 /// </summary>
-public class XmlDeserializationService : IXmlDeserializationService {
+public class XmlDeserializationService : IXmlDeserializationService
+{
+    // Application session identifier to invalidate cache on restart
+    private static readonly string SessionId = Guid.NewGuid().ToString("N")[..8];
+
     private readonly ILogger<XmlDeserializationService> logger;
-    private readonly Dictionary<string, Type> registeredDomainModels = new();
+    private readonly Dictionary<string, Type> registeredDomainModels = new Dictionary<string, Type>(StringComparer.Ordinal);
     private readonly XmlSerializerFactory serializerFactory;
+    private readonly IComparisonConfigurationService? configService;
 
     // CRITICAL FIX: Use thread-local storage to prevent shared state corruption during parallel processing
     private readonly ThreadLocal<ConcurrentDictionary<Type, XmlSerializer>> threadLocalSerializerCache;
     private readonly ConcurrentDictionary<Type, XmlSerializer> serializerCache;
 
     // Cache for recently deserialized objects
-    private readonly ConcurrentDictionary<string, (DateTime LastAccess, object Data)> deserializationCache = new();
+    private readonly ConcurrentDictionary<string, (DateTime LastAccess, object Data)> deserializationCache = new ConcurrentDictionary<string, (DateTime LastAccess, object Data)>(StringComparer.Ordinal);
     private readonly TimeSpan cacheExpiration = TimeSpan.FromMinutes(10);
     private readonly int maxCacheSize = 100;
+
     private DateTime lastCacheCleanup = DateTime.Now;
 
-    // Application session identifier to invalidate cache on restart
-    private static readonly string SessionId = Guid.NewGuid().ToString("N")[..8];
-
-    private readonly IComparisonConfigurationService? configService;
-
     /// <summary>
-    /// Gets or sets whether to ignore XML namespaces during deserialization.
-    /// When true, XML documents with any namespace (or no namespace) will deserialize correctly
-    /// regardless of what namespace the domain model expects.
-    /// Default is true to support version-agnostic XML comparison.
+    /// Initializes a new instance of the <see cref="XmlDeserializationService"/> class.
     /// </summary>
-    public bool IgnoreXmlNamespaces { get; set; } = true;
-
-    public XmlDeserializationService(ILogger<XmlDeserializationService> logger, XmlSerializerFactory serializerFactory, IComparisonConfigurationService? configService = null) {
+    /// <param name="logger">The logger instance.</param>
+    /// <param name="serializerFactory">The XML serializer factory.</param>
+    /// <param name="configService">Optional comparison configuration service.</param>
+    public XmlDeserializationService(ILogger<XmlDeserializationService> logger, XmlSerializerFactory serializerFactory, IComparisonConfigurationService? configService = null)
+    {
         this.logger = logger;
         this.serializerFactory = serializerFactory;
         this.configService = configService;
 
         // CRITICAL FIX: Initialize thread-local storage for serializer cache
-        this.threadLocalSerializerCache = new ThreadLocal<ConcurrentDictionary<Type, XmlSerializer>>(() => new ConcurrentDictionary<Type, XmlSerializer>());
-        this.serializerCache = new ConcurrentDictionary<Type, XmlSerializer>();
+        threadLocalSerializerCache = new ThreadLocal<ConcurrentDictionary<Type, XmlSerializer>>(() => new ConcurrentDictionary<Type, XmlSerializer>());
+        serializerCache = new ConcurrentDictionary<Type, XmlSerializer>();
     }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether to ignore XML namespaces during deserialization.
+    /// When true, XML documents with any namespace (or no namespace) will deserialize correctly
+    /// regardless of what namespace the domain model expects.
+    /// Default is true to support version-agnostic XML comparison.
+    /// </summary>
+    public bool IgnoreXmlNamespaces { get; set; } = true;
 
     /// <summary>
     /// Register a domain model for XML deserialization.
@@ -107,20 +65,24 @@ public class XmlDeserializationService : IXmlDeserializationService {
     /// <typeparam name="T">The type to register.</typeparam>
     /// <param name="modelName">Name to identify this model type.</param>
     public void RegisterDomainModel<T>(string modelName)
-        where T : class {
-        this.registeredDomainModels[modelName] = typeof(T);
-        this.logger.LogInformation("Registered model {ModelName} as {ModelType}", modelName, typeof(T).Name);
+        where T : class
+    {
+        registeredDomainModels[modelName] = typeof(T);
+        logger.LogInformation("Registered model {ModelName} as {ModelType}", modelName, typeof(T).Name);
 
         // Pre-cache the serializer for this type to avoid creation during comparison
-        this.GetCachedSerializer<T>();
+        GetCachedSerializer<T>();
 
         // Automatically add XmlIgnore properties to the ignore list if config service is available
-        if (this.configService != null) {
-            try {
-                this.configService.AddXmlIgnorePropertiesToIgnoreList(typeof(T));
+        if (configService != null)
+        {
+            try
+            {
+                configService.AddXmlIgnorePropertiesToIgnoreList(typeof(T));
             }
-            catch (Exception ex) {
-                this.logger.LogWarning(ex, "Error adding XmlIgnore properties to ignore list for model {ModelName}", modelName);
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Error adding XmlIgnore properties to ignore list for model {ModelName}", modelName);
             }
         }
     }
@@ -128,9 +90,10 @@ public class XmlDeserializationService : IXmlDeserializationService {
     /// <summary>
     /// Get all registered domain model names.
     /// </summary>
-    /// <returns></returns>
-    public IEnumerable<string> GetRegisteredModelNames() {
-        return this.registeredDomainModels.Keys;
+    /// <returns>Collection of registered model names.</returns>
+    public IEnumerable<string> GetRegisteredModelNames()
+    {
+        return registeredDomainModels.Keys;
     }
 
     /// <summary>
@@ -139,54 +102,63 @@ public class XmlDeserializationService : IXmlDeserializationService {
     /// <param name="modelName">The name of the model to retrieve.</param>
     /// <returns>The type associated with the given model name.</returns>
     /// <exception cref="ArgumentException">Thrown when no model is registered with the given name.</exception>
-    public Type GetModelType(string modelName) {
-        if (!this.registeredDomainModels.ContainsKey(modelName)) {
-            this.logger.LogError("No model registered with name: {ModelName}", modelName);
-            throw new ArgumentException($"No model registered with name: {modelName}");
+    public Type GetModelType(string modelName)
+    {
+        if (!registeredDomainModels.ContainsKey(modelName))
+        {
+            logger.LogError("No model registered with name: {ModelName}", modelName);
+            throw new ArgumentException($"No model registered with name: {modelName}", nameof(modelName));
         }
 
-        return this.registeredDomainModels[modelName];
+        return registeredDomainModels[modelName];
     }
 
     /// <summary>
     /// Deserialize XML stream to object with efficient reader pooling and caching.
     /// </summary>
-    /// <returns></returns>
+    /// <typeparam name="T">The type to deserialize to.</typeparam>
+    /// <param name="xmlStream">The XML stream to deserialize.</param>
+    /// <returns>The deserialized object.</returns>
     public T DeserializeXml<T>(Stream xmlStream)
-        where T : class {
-        if (xmlStream == null) {
-            this.logger.LogError("XML stream cannot be null");
+        where T : class
+    {
+        if (xmlStream == null)
+        {
+            logger.LogError("XML stream cannot be null");
             throw new ArgumentNullException(nameof(xmlStream));
         }
 
-        try {
+        try
+        {
             // PERFORMANCE OPTIMIZATION: Skip hashing for cache - rely on ComparisonResultCacheService instead
             // The MD5 hashing was causing double memory usage and blocking the comparison start
             // For deserialization, we now just deserialize directly since the result caching happens at a higher level
-
-            var serializer = this.GetCachedSerializer<T>();
+            var serializer = GetCachedSerializer<T>();
             xmlStream.Position = 0;
 
             // Create a fresh XmlReader with consistent settings for every deserialization
-            using var baseReader = XmlReader.Create(xmlStream, this.GetOptimizedReaderSettings());
+            using var baseReader = XmlReader.Create(xmlStream, GetOptimizedReaderSettings());
 
             // Wrap with namespace-ignorant reader if configured to ignore namespaces
             // This allows XML with any namespace version to deserialize correctly
-            using var reader = this.IgnoreXmlNamespaces
+            using var reader = IgnoreXmlNamespaces
                 ? new NamespaceIgnorantXmlReader(baseReader)
                 : baseReader;
 
-            if (this.IgnoreXmlNamespaces) {
-                this.logger.LogDebug("Using namespace-ignorant XML reader for type {Type}", typeof(T).Name);
+            if (IgnoreXmlNamespaces)
+            {
+                logger.LogDebug("Using namespace-ignorant XML reader for type {Type}", typeof(T).Name);
             }
 
             // Deserialize using the reader (potentially wrapped)
-            var result = (T)serializer.Deserialize(reader);
+            var result = serializer.Deserialize(reader)
+                ?? throw new InvalidOperationException($"Deserialization of type {typeof(T).Name} returned null.");
 
-            return result;
+            return (T)result;
         }
-        catch (Exception ex) {
-            this.logger.LogError(ex, "Error deserializing XML to type {Type}", typeof(T).Name);
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error deserializing XML to type {Type}", typeof(T).Name);
             throw;
         }
     }
@@ -194,32 +166,40 @@ public class XmlDeserializationService : IXmlDeserializationService {
     /// <summary>
     /// Clone object efficiently using serialization.
     /// </summary>
-    /// <returns></returns>
-    public T CloneObject<T>(T source) {
-        if (source == null) {
-            return default;
+    /// <typeparam name="T">The type to clone.</typeparam>
+    /// <param name="source">The source object to clone.</param>
+    /// <returns>A cloned copy of the source object.</returns>
+    public T CloneObject<T>(T source)
+    {
+        if (source == null)
+        {
+            throw new ArgumentNullException(nameof(source));
         }
 
-        try {
-            var serializer = this.GetCachedSerializer<T>();
+        try
+        {
+            var serializer = GetCachedSerializer<T>();
             using var stream = new MemoryStream();
             serializer.Serialize(stream, source);
             stream.Position = 0;
 
             // CRITICAL FIX: Use conservative reader settings for cloning to preserve data fidelity
             // The aggressive GetOptimizedReaderSettings() was causing data loss during round-trip
-            using var reader = XmlReader.Create(stream, this.GetConservativeCloneReaderSettings());
-            var clonedResult = (T)serializer.Deserialize(reader);
+            using var reader = XmlReader.Create(stream, GetConservativeCloneReaderSettings());
+            var clonedResult = serializer.Deserialize(reader)
+                ?? throw new InvalidOperationException($"Cloning of type {typeof(T).Name} returned null.");
 
             // DIAGNOSTIC: Log cloning operation for debugging serialization issues
-            this.logger.LogDebug(
+            logger.LogDebug(
                 "Successfully cloned object of type {Type}. Stream size: {StreamSize} bytes",
-                typeof(T).Name, stream.Length);
+                typeof(T).Name,
+                stream.Length);
 
-            return clonedResult;
+            return (T)clonedResult;
         }
-        catch (Exception ex) {
-            this.logger.LogError(ex, "Error cloning object of type {Type}. This could indicate XML serialization round-trip issues.", typeof(T).Name);
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error cloning object of type {Type}. This could indicate XML serialization round-trip issues.", typeof(T).Name);
             throw;
         }
     }
@@ -227,41 +207,47 @@ public class XmlDeserializationService : IXmlDeserializationService {
     /// <summary>
     /// Clear the internal deserialization cache - useful for testing or when serialization logic changes.
     /// </summary>
-    public void ClearDeserializationCache() {
-        var count = this.deserializationCache.Count;
-        this.deserializationCache.Clear();
-        this.logger.LogInformation("Cleared internal deserialization cache: {Count} entries removed", count);
+    public void ClearDeserializationCache()
+    {
+        var count = deserializationCache.Count;
+        deserializationCache.Clear();
+        logger.LogInformation("Cleared internal deserialization cache: {Count} entries removed", count);
     }
 
     /// <summary>
     /// Get cache statistics for diagnostics.
     /// </summary>
-    /// <returns></returns>
-    public (int CacheSize, int SerializerCacheSize) GetCacheStatistics() {
-        return (this.deserializationCache.Count, this.serializerCache.Count);
+    /// <returns>A tuple containing the cache size and serializer cache size.</returns>
+    public (int CacheSize, int SerializerCacheSize) GetCacheStatistics()
+    {
+        return (deserializationCache.Count, serializerCache.Count);
     }
 
     /// <summary>
     /// Force clear all caches - useful for debugging deserialization inconsistencies.
     /// </summary>
-    public void ClearAllCaches() {
-        var deserializationCount = this.deserializationCache.Count;
-        var serializerCount = this.serializerCache.Count;
+    public void ClearAllCaches()
+    {
+        var deserializationCount = deserializationCache.Count;
+        var serializerCount = serializerCache.Count;
 
-        this.deserializationCache.Clear();
-        this.serializerCache.Clear();
+        deserializationCache.Clear();
+        serializerCache.Clear();
 
-        this.logger.LogWarning(
+        logger.LogWarning(
             "CLEARED ALL CACHES: {DeserializationCache} deserialization entries, {SerializerCache} serializer entries removed",
-            deserializationCount, serializerCount);
+            deserializationCount,
+            serializerCount);
     }
 
     /// <summary>
     /// Get optimized XML reader settings that are forgiving of XML variations
     /// and ensure consistent parsing behavior across all scenarios.
     /// </summary>
-    private XmlReaderSettings GetOptimizedReaderSettings() {
-        return new XmlReaderSettings {
+    private XmlReaderSettings GetOptimizedReaderSettings()
+    {
+        return new XmlReaderSettings
+        {
             // CRITICAL: Ensure consistent whitespace handling
             IgnoreWhitespace = true,
             IgnoreComments = true,
@@ -291,8 +277,10 @@ public class XmlDeserializationService : IXmlDeserializationService {
     /// Get conservative XML reader settings for cloning to preserve data fidelity
     /// These settings prioritize preserving all data over performance optimizations.
     /// </summary>
-    private XmlReaderSettings GetConservativeCloneReaderSettings() {
-        return new XmlReaderSettings {
+    private XmlReaderSettings GetConservativeCloneReaderSettings()
+    {
+        return new XmlReaderSettings
+        {
             // CONSERVATIVE: Preserve whitespace to avoid data loss during cloning
             IgnoreWhitespace = false,  // CRITICAL FIX: Don't ignore whitespace during cloning
             IgnoreComments = false,    // Preserve comments
@@ -320,30 +308,39 @@ public class XmlDeserializationService : IXmlDeserializationService {
     /// <summary>
     /// Get cached XmlSerializer with enhanced configuration for handling unknown elements.
     /// </summary>
-    private XmlSerializer GetCachedSerializer<T>() {
+    private XmlSerializer GetCachedSerializer<T>()
+    {
         var type = typeof(T);
 
         // CRITICAL FIX: Use thread-local storage to prevent shared state corruption
         // Each thread gets its own serializer cache to avoid parallel processing issues
-        var threadLocalCache = this.threadLocalSerializerCache.Value;
+        var threadLocalCache = threadLocalSerializerCache.Value
+            ?? throw new InvalidOperationException("Thread-local serializer cache is not initialized.");
 
-        return threadLocalCache.GetOrAdd(type, _ => {
+        return threadLocalCache.GetOrAdd(type, _ =>
+        {
             // CRITICAL FIX: Use the public GetSerializer method instead of private CreateComplexOrderResponseSerializer
-            var serializer = this.serializerFactory.GetSerializer<T>();
+            var serializer = serializerFactory.GetSerializer<T>();
 
             // CRITICAL FIX: Add event handlers to gracefully handle unknown elements
-            serializer.UnknownElement += (sender, e) => {
+            serializer.UnknownElement += (sender, e) =>
+            {
                 // Log unknown elements for debugging but don't throw exceptions
-                this.logger.LogDebug(
+                logger.LogDebug(
                     "Unknown XML element encountered: {ElementName} at line {LineNumber}, position {LinePosition}. This element will be ignored during deserialization.",
-                    e.Element.Name, e.LineNumber, e.LinePosition);
+                    e.Element.Name,
+                    e.LineNumber,
+                    e.LinePosition);
             };
 
-            serializer.UnknownAttribute += (sender, e) => {
+            serializer.UnknownAttribute += (sender, e) =>
+            {
                 // Log unknown attributes for debugging but don't throw exceptions
-                this.logger.LogDebug(
+                logger.LogDebug(
                     "Unknown XML attribute encountered: {AttributeName} at line {LineNumber}, position {LinePosition}. This attribute will be ignored during deserialization.",
-                    e.Attr.Name, e.LineNumber, e.LinePosition);
+                    e.Attr.Name,
+                    e.LineNumber,
+                    e.LinePosition);
             };
 
             return serializer;
@@ -353,29 +350,35 @@ public class XmlDeserializationService : IXmlDeserializationService {
     /// <summary>
     /// Clean up expired cache entries.
     /// </summary>
-    private void CleanupCacheIfNeeded() {
+    private void CleanupCacheIfNeeded()
+    {
         // Only clean up occasionally
-        if ((DateTime.Now - this.lastCacheCleanup).TotalMinutes < 5) {
+        if ((DateTime.Now - lastCacheCleanup).TotalMinutes < 5)
+        {
             return;
         }
 
-        this.lastCacheCleanup = DateTime.Now;
+        lastCacheCleanup = DateTime.Now;
 
         // Remove expired items
-        foreach (var entry in this.deserializationCache.ToArray()) {
-            if ((DateTime.Now - entry.Value.LastAccess) > this.cacheExpiration) {
-                this.deserializationCache.TryRemove(entry.Key, out _);
+        foreach (var entry in deserializationCache.ToArray())
+        {
+            if ((DateTime.Now - entry.Value.LastAccess) > cacheExpiration)
+            {
+                deserializationCache.TryRemove(entry.Key, out _);
             }
         }
 
         // If still too many entries, remove oldest ones
-        if (this.deserializationCache.Count > this.maxCacheSize) {
-            var oldestEntries = this.deserializationCache
+        if (deserializationCache.Count > maxCacheSize)
+        {
+            var oldestEntries = deserializationCache
                 .OrderBy(x => x.Value.LastAccess)
-                .Take(this.deserializationCache.Count - (this.maxCacheSize / 2));
+                .Take(deserializationCache.Count - (maxCacheSize / 2));
 
-            foreach (var entry in oldestEntries) {
-                this.deserializationCache.TryRemove(entry.Key, out _);
+            foreach (var entry in oldestEntries)
+            {
+                deserializationCache.TryRemove(entry.Key, out _);
             }
         }
     }

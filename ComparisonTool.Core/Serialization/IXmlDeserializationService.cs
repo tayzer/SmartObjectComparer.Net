@@ -7,14 +7,18 @@ namespace ComparisonTool.Core.Serialization;
 /// <summary>
 /// Interface for XML deserialization operations.
 /// </summary>
-public interface IXmlDeserializationService {
+public interface IXmlDeserializationService
+{
     /// <summary>
-    /// Gets or sets whether to ignore XML namespaces during deserialization.
+    /// Gets or sets a value indicating whether gets or sets whether to ignore XML namespaces during deserialization.
     /// When true, XML documents with any namespace (or no namespace) will deserialize correctly
     /// regardless of what namespace the domain model expects.
     /// Default is true to support version-agnostic XML comparison.
     /// </summary>
-    bool IgnoreXmlNamespaces { get; set; }
+    bool IgnoreXmlNamespaces
+    {
+        get; set;
+    }
 
     /// <summary>
     /// Register a domain model for XML deserialization.

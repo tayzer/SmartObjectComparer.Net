@@ -24,33 +24,33 @@ public class ComparisonConfigurationServiceTests
 
     public ComparisonConfigurationServiceTests()
     {
-        this.mockLogger = new Mock<ILogger<ComparisonConfigurationService>>();
-        this.options = new ComparisonConfigurationOptions
+        mockLogger = new Mock<ILogger<ComparisonConfigurationService>>();
+        options = new ComparisonConfigurationOptions
         {
             MaxDifferences = 1000,
             DefaultIgnoreCollectionOrder = true,
             DefaultIgnoreStringCase = false,
         };
 
-        this.service = new ComparisonConfigurationService(this.mockLogger.Object, Options.Create(this.options));
+        service = new ComparisonConfigurationService(mockLogger.Object, Options.Create(options));
     }
 
     [TestMethod]
     public void Constructor_WithValidOptions_ShouldInitializeCorrectly()
     {
         // Act & Assert
-        this.service.Should().NotBeNull();
-        this.service.GetCurrentConfig().Should().NotBeNull();
-        this.service.GetCurrentConfig().MaxDifferences.Should().Be(1000);
-        this.service.GetCurrentConfig().IgnoreCollectionOrder.Should().BeTrue();
-        this.service.GetCurrentConfig().CaseSensitive.Should().BeTrue(); // DefaultIgnoreStringCase = false
+        service.Should().NotBeNull();
+        service.GetCurrentConfig().Should().NotBeNull();
+        service.GetCurrentConfig().MaxDifferences.Should().Be(1000);
+        service.GetCurrentConfig().IgnoreCollectionOrder.Should().BeTrue();
+        service.GetCurrentConfig().CaseSensitive.Should().BeTrue(); // DefaultIgnoreStringCase = false
     }
 
     [TestMethod]
     public void GetCompareLogic_ShouldReturnValidInstance()
     {
         // Act
-        var compareLogic = this.service.GetCompareLogic();
+        var compareLogic = service.GetCompareLogic();
 
         // Assert
         compareLogic.Should().NotBeNull();
@@ -62,8 +62,8 @@ public class ComparisonConfigurationServiceTests
     public void GetThreadSafeCompareLogic_ShouldReturnIsolatedInstance()
     {
         // Act
-        var compareLogic1 = this.service.GetThreadSafeCompareLogic();
-        var compareLogic2 = this.service.GetThreadSafeCompareLogic();
+        var compareLogic1 = service.GetThreadSafeCompareLogic();
+        var compareLogic2 = service.GetThreadSafeCompareLogic();
 
         // Assert
         compareLogic1.Should().NotBeNull();
@@ -75,28 +75,28 @@ public class ComparisonConfigurationServiceTests
     public void SetIgnoreCollectionOrder_ShouldUpdateConfiguration()
     {
         // Arrange
-        var originalValue = this.service.GetIgnoreCollectionOrder();
+        var originalValue = service.GetIgnoreCollectionOrder();
 
         // Act
-        this.service.SetIgnoreCollectionOrder(!originalValue);
+        service.SetIgnoreCollectionOrder(!originalValue);
 
         // Assert
-        this.service.GetIgnoreCollectionOrder().Should().Be(!originalValue);
-        this.service.GetCurrentConfig().IgnoreCollectionOrder.Should().Be(!originalValue);
+        service.GetIgnoreCollectionOrder().Should().Be(!originalValue);
+        service.GetCurrentConfig().IgnoreCollectionOrder.Should().Be(!originalValue);
     }
 
     [TestMethod]
     public void SetIgnoreStringCase_ShouldUpdateConfiguration()
     {
         // Arrange
-        var originalValue = this.service.GetIgnoreStringCase();
+        var originalValue = service.GetIgnoreStringCase();
 
         // Act
-        this.service.SetIgnoreStringCase(!originalValue);
+        service.SetIgnoreStringCase(!originalValue);
 
         // Assert
-        this.service.GetIgnoreStringCase().Should().Be(!originalValue);
-        this.service.GetCurrentConfig().CaseSensitive.Should().Be(originalValue); // CaseSensitive is inverse of IgnoreStringCase
+        service.GetIgnoreStringCase().Should().Be(!originalValue);
+        service.GetCurrentConfig().CaseSensitive.Should().Be(originalValue); // CaseSensitive is inverse of IgnoreStringCase
     }
 
     [TestMethod]
@@ -106,10 +106,10 @@ public class ComparisonConfigurationServiceTests
         var propertyPath = "TestProperty";
 
         // Act
-        this.service.IgnoreProperty(propertyPath);
+        service.IgnoreProperty(propertyPath);
 
         // Assert
-        var ignoredProperties = this.service.GetIgnoredProperties();
+        var ignoredProperties = service.GetIgnoredProperties();
         ignoredProperties.Should().Contain(propertyPath);
     }
 
@@ -118,13 +118,13 @@ public class ComparisonConfigurationServiceTests
     {
         // Arrange
         var propertyPath = "TestProperty";
-        this.service.IgnoreProperty(propertyPath);
+        service.IgnoreProperty(propertyPath);
 
         // Act
-        this.service.RemoveIgnoredProperty(propertyPath);
+        service.RemoveIgnoredProperty(propertyPath);
 
         // Assert
-        var ignoredProperties = this.service.GetIgnoredProperties();
+        var ignoredProperties = service.GetIgnoredProperties();
         ignoredProperties.Should().NotContain(propertyPath);
     }
 
@@ -139,10 +139,10 @@ public class ComparisonConfigurationServiceTests
         };
 
         // Act
-        this.service.AddIgnoreRule(rule);
+        service.AddIgnoreRule(rule);
 
         // Assert
-        var rules = this.service.GetIgnoreRules();
+        var rules = service.GetIgnoreRules();
         rules.Should().ContainSingle();
         rules.First().PropertyPath.Should().Be("TestProperty");
     }
@@ -159,10 +159,10 @@ public class ComparisonConfigurationServiceTests
         };
 
         // Act
-        this.service.AddIgnoreRulesBatch(rules);
+        service.AddIgnoreRulesBatch(rules);
 
         // Assert
-        var resultRules = this.service.GetIgnoreRules();
+        var resultRules = service.GetIgnoreRules();
         resultRules.Should().HaveCount(3);
         resultRules.Should().Contain(r => r.PropertyPath == "Property1");
         resultRules.Should().Contain(r => r.PropertyPath == "Property2");
@@ -173,13 +173,13 @@ public class ComparisonConfigurationServiceTests
     public void ClearIgnoreRules_ShouldRemoveAllRules()
     {
         // Arrange
-        this.service.AddIgnoreRule(new IgnoreRule { PropertyPath = "TestProperty" });
+        service.AddIgnoreRule(new IgnoreRule { PropertyPath = "TestProperty" });
 
         // Act
-        this.service.ClearIgnoreRules();
+        service.ClearIgnoreRules();
 
         // Assert
-        var rules = this.service.GetIgnoreRules();
+        var rules = service.GetIgnoreRules();
         rules.Should().BeEmpty();
     }
 
@@ -187,19 +187,19 @@ public class ComparisonConfigurationServiceTests
     public void ApplyConfiguredSettings_ShouldApplyAllRules()
     {
         // Arrange
-        this.service.AddIgnoreRule(new IgnoreRule
+        service.AddIgnoreRule(new IgnoreRule
         {
             PropertyPath = "TestProperty",
             IgnoreCollectionOrder = true,
         });
 
         // Act
-        this.service.ApplyConfiguredSettings();
+        service.ApplyConfiguredSettings();
 
         // Assert
         // The configuration should be applied - we can verify by checking that the settings are reflected
         // in the compare logic configuration
-        var compareLogic = this.service.GetCompareLogic();
+        var compareLogic = service.GetCompareLogic();
         compareLogic.Config.Should().NotBeNull();
     }
 
@@ -207,7 +207,7 @@ public class ComparisonConfigurationServiceTests
     public void FilterIgnoredDifferences_WithIgnoredProperty_ShouldFilterOutDifferences()
     {
         // Arrange
-        var config = this.service.GetCurrentConfig();
+        var config = service.GetCurrentConfig();
         var result = new ComparisonResult(config)
         {
             Differences = new List<Difference>
@@ -217,10 +217,10 @@ public class ComparisonConfigurationServiceTests
             },
         };
 
-        this.service.IgnoreProperty("TestProperty");
+        service.IgnoreProperty("TestProperty");
 
         // Act
-        var filteredResult = this.service.FilterIgnoredDifferences(result);
+        var filteredResult = service.FilterIgnoredDifferences(result);
 
         // Assert
         filteredResult.Differences.Should().HaveCount(1);
@@ -234,10 +234,10 @@ public class ComparisonConfigurationServiceTests
         var rule = SmartIgnoreRule.ByNamePattern("Test.*", "Test pattern rule");
 
         // Act
-        this.service.AddSmartIgnoreRule(rule);
+        service.AddSmartIgnoreRule(rule);
 
         // Assert
-        var rules = this.service.GetSmartIgnoreRules();
+        var rules = service.GetSmartIgnoreRules();
         rules.Should().ContainSingle();
         rules.First().Value.Should().Be("Test.*");
     }
@@ -247,13 +247,13 @@ public class ComparisonConfigurationServiceTests
     {
         // Arrange
         var rule = SmartIgnoreRule.ByPropertyName("TestProperty");
-        this.service.AddSmartIgnoreRule(rule);
+        service.AddSmartIgnoreRule(rule);
 
         // Act
-        this.service.RemoveSmartIgnoreRule(rule);
+        service.RemoveSmartIgnoreRule(rule);
 
         // Assert
-        var rules = this.service.GetSmartIgnoreRules();
+        var rules = service.GetSmartIgnoreRules();
         rules.Should().BeEmpty();
     }
 
@@ -261,14 +261,14 @@ public class ComparisonConfigurationServiceTests
     public void ClearSmartIgnoreRules_ShouldRemoveAllSmartRules()
     {
         // Arrange
-        this.service.AddSmartIgnoreRule(SmartIgnoreRule.ByPropertyName("Property1"));
-        this.service.AddSmartIgnoreRule(SmartIgnoreRule.ByPropertyName("Property2"));
+        service.AddSmartIgnoreRule(SmartIgnoreRule.ByPropertyName("Property1"));
+        service.AddSmartIgnoreRule(SmartIgnoreRule.ByPropertyName("Property2"));
 
         // Act
-        this.service.ClearSmartIgnoreRules();
+        service.ClearSmartIgnoreRules();
 
         // Assert
-        var rules = this.service.GetSmartIgnoreRules();
+        var rules = service.GetSmartIgnoreRules();
         rules.Should().BeEmpty();
     }
 
@@ -276,7 +276,7 @@ public class ComparisonConfigurationServiceTests
     public void FilterSmartIgnoredDifferences_WithSmartRule_ShouldFilterCorrectly()
     {
         // Arrange
-        var config = this.service.GetCurrentConfig();
+        var config = service.GetCurrentConfig();
         var result = new ComparisonResult(config)
         {
             Differences = new List<Difference>
@@ -286,10 +286,10 @@ public class ComparisonConfigurationServiceTests
             },
         };
 
-        this.service.AddSmartIgnoreRule(SmartIgnoreRule.ByPropertyName("TestProperty"));
+        service.AddSmartIgnoreRule(SmartIgnoreRule.ByPropertyName("TestProperty"));
 
         // Act
-        var filteredResult = this.service.FilterSmartIgnoredDifferences(result);
+        var filteredResult = service.FilterSmartIgnoredDifferences(result);
 
         // Assert
         filteredResult.Differences.Should().HaveCount(1);
@@ -304,7 +304,7 @@ public class ComparisonConfigurationServiceTests
         var propertyNames = new List<string> { "StringProperty", "IntProperty" };
 
         // Act
-        this.service.NormalizePropertyValues(testObject, propertyNames);
+        service.NormalizePropertyValues(testObject, propertyNames);
 
         // Assert
         testObject.StringProperty.Should().Be(string.Empty); // NormalizePropertyValues sets strings to empty string, not null
@@ -315,10 +315,10 @@ public class ComparisonConfigurationServiceTests
     public void AddXmlIgnorePropertiesToIgnoreList_WithType_ShouldAddXmlIgnoreProperties()
     {
         // Act
-        this.service.AddXmlIgnorePropertiesToIgnoreList(typeof(TestClassWithXmlIgnore));
+        service.AddXmlIgnorePropertiesToIgnoreList(typeof(TestClassWithXmlIgnore));
 
         // Assert
-        var ignoredProperties = this.service.GetIgnoredProperties();
+        var ignoredProperties = service.GetIgnoredProperties();
         ignoredProperties.Should().Contain("IgnoredProperty");
     }
 

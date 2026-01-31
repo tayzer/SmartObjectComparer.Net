@@ -7,21 +7,26 @@ using System.Xml.Serialization;
 namespace ComparisonTool.Core.Models;
 
 [XmlRoot(ElementName = "Envelope", Namespace = "http://schemas.xmlsoap.org/soap/envelope/")]
-public class SoapEnvelope {
+public class SoapEnvelope
+{
     [XmlElement(ElementName = "Body", Namespace = "http://schemas.xmlsoap.org/soap/envelope/")]
-    public SoapBody? Body {
+    public SoapBody? Body
+    {
         get; set;
     }
 }
 
-public class SoapBody {
+public class SoapBody
+{
     [XmlElement(ElementName = "SearchResponse", Namespace = "urn:soap.co.uk/soap:search1")]
-    public SearchResponse? Response {
+    public SearchResponse? Response
+    {
         get; set;
     }
 }
 
-public class SearchResponse {
+public class SearchResponse
+{
     [XmlElement(ElementName = "ReportId")]
     public string ReportId { get; set; } = Guid.NewGuid().ToString();
 
@@ -30,39 +35,45 @@ public class SearchResponse {
 
     // A summary object with aggregated data.
     [XmlElement(ElementName = "Summary")]
-    public Summary Summary { get; set; } = new();
+    public Summary Summary { get; set; } = new Summary();
 
     // A collection of detailed result items.
     [XmlArray(ElementName = "Results")]
     [XmlArrayItem(ElementName = "Result")]
-    public List<ResultItem> Results { get; set; } = new();
+    public List<ResultItem> Results { get; set; } = new List<ResultItem>();
 
     // A new collection of related items to test property-specific collection order ignoring.
     [XmlArray(ElementName = "RelatedItems")]
     [XmlArrayItem(ElementName = "Item")]
-    public List<RelatedItem> RelatedItems { get; set; } = new();
+    public List<RelatedItem> RelatedItems { get; set; } = new List<RelatedItem>();
 }
 
-public class Summary {
+public class Summary
+{
     [XmlElement(ElementName = "TotalResults")]
-    public int TotalResults {
+    public int TotalResults
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "SuccessCount")]
-    public int SuccessCount {
+    public int SuccessCount
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "FailureCount")]
-    public int FailureCount {
+    public int FailureCount
+    {
         get; set;
     }
 }
 
-public class ResultItem {
+public class ResultItem
+{
     [XmlElement(ElementName = "Id")]
-    public int Id {
+    public int Id
+    {
         get; set;
     }
 
@@ -70,24 +81,27 @@ public class ResultItem {
     public string Name { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Score")]
-    public double Score {
+    public double Score
+    {
         get; set;
     }
 
     // A nested object with further details.
     [XmlElement(ElementName = "Details")]
-    public Details Details { get; set; } = new();
+    public Details Details { get; set; } = new Details();
 
     // A list to represent tags or categories associated with this result.
     [XmlArray(ElementName = "Tags")]
     [XmlArrayItem(ElementName = "Tag")]
-    public List<string> Tags { get; set; } = new();
+    public List<string> Tags { get; set; } = new List<string>();
 }
 
 // A new class for related items
-public class RelatedItem {
+public class RelatedItem
+{
     [XmlElement(ElementName = "ItemId")]
-    public int ItemId {
+    public int ItemId
+    {
         get; set;
     }
 
@@ -95,12 +109,14 @@ public class RelatedItem {
     public string ItemName { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Relevance")]
-    public double Relevance {
+    public double Relevance
+    {
         get; set;
     }
 }
 
-public class Details {
+public class Details
+{
     [XmlElement(ElementName = "Description")]
     public string Description { get; set; } = string.Empty;
 
