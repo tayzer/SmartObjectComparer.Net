@@ -79,7 +79,7 @@ public class TestObject {
     }
 
     [XmlElement(ElementName = "Type")]
-    public string? Type {
+    public string Type {
         get; set;
     }
 }
