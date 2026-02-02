@@ -2,10 +2,12 @@
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
+using System.IO;
 using System.Text;
 using ComparisonTool.Core.Comparison;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
+using ComparisonTool.Core.Models;
 using ComparisonTool.Core.Serialization;
 using ComparisonTool.Core.Utilities;
 using ComparisonTool.Domain.Models;
@@ -54,6 +56,8 @@ public class ComparisonServiceIntegrationTests
         configService = new ComparisonConfigurationService(mockConfigLogger.Object, Options.Create(configOptions));
 
         var serializerFactory = new ComparisonTool.Core.Serialization.XmlSerializerFactory();
+        serializerFactory.RegisterType<ComplexOrderResponse>(
+            () => serializerFactory.CreateComplexOrderResponseSerializer());
         xmlService = new XmlDeserializationService(mockXmlLogger.Object, serializerFactory);
 
         fileService = new FileSystemService(mockFileLogger.Object);
@@ -89,6 +93,7 @@ public class ComparisonServiceIntegrationTests
         // Register test models
         xmlService.RegisterDomainModel<TestModel>("TestModel");
         xmlService.RegisterDomainModel<ComplexTestModel>("ComplexTestModel");
+        xmlService.RegisterDomainModel<ComplexOrderResponse>("ComplexOrderResponse");
     }
 
     [TestMethod]
@@ -261,6 +266,66 @@ public class ComparisonServiceIntegrationTests
         result.Should().NotBeNull();
         result.Differences.Should().BeEmpty();
         result.AreEqual.Should().BeTrue();
+    }
+
+    [DataTestMethod]
+    [DataRow("Actual_4_Differences.xml", "Expected_4_Differences.xml", false)]
+    [DataRow("Actual_Component_Timings_Order.xml", "Expected_Component_Timings_Order.xml", true)]
+    [DataRow("Actual_DateTime_Diff.xml", "Expected_DateTime_Diff.xml", false)]
+    [DataRow("Actual_SourceSystem_Diff.xml", "Expected_SourceSystem_Diff.xml", false)]
+    [DataRow("Actual_Same.xml", "Expected_Same.xml", true)]
+    public async Task CompareXmlFilesAsync_WithSpecificComplexModelFiles_ShouldDetectDifferences(
+        string actualFileName,
+        string expectedFileName,
+        bool expectEqual)
+    {
+        var testRoot = GetSpecificComplexModelTestRoot();
+        var actualPath = Path.Combine(testRoot, "Actual", actualFileName);
+        var expectedPath = Path.Combine(testRoot, "Expected", expectedFileName);
+
+        actualPath.Should().MatchRegex(@".*Actual\\.+\.xml$");
+        expectedPath.Should().MatchRegex(@".*Expected\\.+\.xml$");
+
+        using var actualStream = File.OpenRead(actualPath);
+        using var expectedStream = File.OpenRead(expectedPath);
+
+        var result = await comparisonService.CompareXmlFilesAsync(
+            actualStream,
+            expectedStream,
+            "ComplexOrderResponse");
+
+        result.Should().NotBeNull();
+        if (expectEqual)
+        {
+            result.AreEqual.Should().BeTrue();
+            result.Differences.Should().BeEmpty();
+        }
+        else
+        {
+            result.AreEqual.Should().BeFalse();
+            result.Differences.Should().NotBeEmpty();
+        }
+    }
+
+    private static string GetSpecificComplexModelTestRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (current != null && !File.Exists(Path.Combine(current.FullName, "ComparisonTool.sln")))
+        {
+            current = current.Parent;
+        }
+
+        if (current == null)
+        {
+            throw new DirectoryNotFoundException("Could not locate ComparisonTool.sln to resolve test data paths.");
+        }
+
+        return Path.Combine(
+            current.FullName,
+            "ComparisonTool.Domain",
+            "TestFiles",
+            "SpecificTests_ComplexModel");
     }
 
     [TestMethod]

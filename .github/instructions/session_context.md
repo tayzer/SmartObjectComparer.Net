@@ -1,53 +1,52 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2026-02-02T02:05:00Z
+lastUpdated: 2026-02-02T15:30:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-Add UI toggle for strict/lenient XML namespace handling - COMPLETED
+Completed: Added new SpecificTests_ComplexModel files for SourceSystem attribute and reverted unintended edits
 
 ## Todo List Status
 ```markdown
-- [x] Add strict/lenient toggle to comparison settings UI
-- [x] Wire toggle to XML deserialization service state
-- [x] Run targeted tests or build verification
+- [x] Revert SourceSystem edits in existing XML files
+- [x] Add new Actual/Expected XML files for SourceSystem attribute
+- [x] Update session notes and verify changes
 ```
 
 ## Recent File Changes
-- `ComparisonTool.Web/Components/Comparison/ComparisonConfigurationPanel.razor`: Added UI toggle for Ignore XML Namespaces (lenient mode)
-- `ComparisonTool.Web/Components/Pages/Home.razor`: Wired UI toggle to IXmlDeserializationService and applied before comparisons
+- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Actual/Actual_3_Differences.xml`: Removed unintended `SourceSystem` attribute.
+- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Expected/Expected_3_Differences.xml`: Removed unintended `SourceSystem` attribute.
+- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Actual/Actual_Component_Timings_Order.xml`: Removed unintended `SourceSystem` attribute.
+- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Expected/Expected_Component_Timings_Order.xml`: Removed unintended `SourceSystem` attribute.
+- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Actual/Actual_DateTime_Diff.xml`: Removed unintended `SourceSystem` attribute.
+- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Expected/Expected_DateTime_Diff.xml`: Removed unintended `SourceSystem` attribute.
+- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Actual/Actual_SourceSystem_Diff.xml`: Added new SourceSystem-specific actual fixture.
+- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Expected/Expected_SourceSystem_Diff.xml`: Added new SourceSystem-specific expected fixture.
 
 ## Key Technical Decisions
-- Decision: Use NamespaceAgnosticXmlReader wrapper instead of removing namespace handling entirely
-- Rationale: Need to strip namespaces for version tolerance, but MUST preserve xsi:nil for nullable types (DateTime?, int?, etc.)
-- Date: 2026-02-02
-
-- Decision: Use tuple cache key (Type, IgnoreXmlNamespaces) for serializer cache
-- Rationale: Different namespace modes require different serializers; using just Type caused wrong serializer to be used
+- Decision: Add `SourceSystem` as an XML attribute on `OrderData`.
+- Rationale: Exercises attribute handling without altering element structure.
 - Date: 2026-02-02
 
 ## External Resources Referenced
-- None for this session (continuation of previous investigation)
+- [XmlAttributeAttribute Class](https://learn.microsoft.com/en-us/dotnet/api/system.xml.serialization.xmlattributeattribute): Attribute usage and examples.
+- [Attributes That Control XML Serialization](https://learn.microsoft.com/en-us/dotnet/standard/serialization/attributes-that-control-xml-serialization): Overview of XML serialization attributes.
 
 ## Blockers & Issues
-- **[RESOLVED]** NamespaceIgnorantXmlReader stripped xsi:nil attribute causing "not a valid AllXsd value" for empty DateTime? - Fixed with NamespaceAgnosticXmlReader that preserves xsi:nil
-- **[RESOLVED]** Corrupted code in XmlDeserializationService - Fixed constructor and DeserializeXml method
+- None
 
 ## Failed Approaches
-- Approach: Use XmlAttributeOverrides alone without reader wrapper
-- Failure Reason: XmlAttributeOverrides only affect serializer type mappings, not how incoming XML namespaces are parsed
-- Lesson: Must strip namespaces at reader level for true namespace-agnostic behavior
+- None
 
 ## Environment Notes
 - .NET 8.0
 
 ## Next Session Priority
-No active tasks - fix is complete.
+No active tasks
 
 ## Session Notes
-- UI toggle added for strict/lenient XML namespace handling
-- Toggle updates IXmlDeserializationService.IgnoreXmlNamespaces immediately and before running comparisons
-- Full test suite passed (72 tests)
+- User requested new test files instead of modifying existing SpecificTests_ComplexModel XML files.
+- Tests run: `dotnet test ComparisonTool.Tests` (2x). Warnings pre-existing.

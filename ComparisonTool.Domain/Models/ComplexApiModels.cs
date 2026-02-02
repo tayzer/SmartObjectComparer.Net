@@ -205,6 +205,9 @@ public class OrderData
     [XmlElement(ElementName = "OrderNumber")]
     public string OrderNumber { get; set; } = string.Empty;
 
+    [XmlAttribute(AttributeName = "SourceSystem")]
+    public string SourceSystem { get; set; } = string.Empty;
+
     [XmlElement(ElementName = "Status")]
     public OrderStatus Status
     {

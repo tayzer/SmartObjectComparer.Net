@@ -1,4 +1,4 @@
-﻿// <copyright file="NamespaceAgnosticXmlReader.cs" company="PlaceholderCompany">
+// <copyright file="NamespaceAgnosticXmlReader.cs" company="PlaceholderCompany">
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
