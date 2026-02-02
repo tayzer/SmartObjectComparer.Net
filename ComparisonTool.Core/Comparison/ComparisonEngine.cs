@@ -1,6 +1,6 @@
 // <copyright file="ComparisonEngine.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
+
+
 
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
@@ -14,7 +14,8 @@ namespace ComparisonTool.Core.Comparison;
 /// <summary>
 /// Core comparison engine that handles object-to-object comparisons with isolated configuration.
 /// </summary>
-public class ComparisonEngine : IComparisonEngine, IDisposable {
+public class ComparisonEngine : IComparisonEngine, IDisposable
+{
     private readonly ILogger<ComparisonEngine> logger;
     private readonly IComparisonConfigurationService configService;
     private readonly PerformanceTracker performanceTracker;
@@ -23,29 +24,28 @@ public class ComparisonEngine : IComparisonEngine, IDisposable {
     private readonly ThreadLocal<CompareLogic> threadLocalCompareLogic;
 
     // PERFORMANCE OPTIMIZATION: Cache configuration fingerprint to detect changes
-    private volatile string cachedConfigFingerprint;
+    private volatile string cachedConfigFingerprint = string.Empty;
     private volatile bool configurationChanged = true;
 
     public ComparisonEngine(
         ILogger<ComparisonEngine> logger,
         IComparisonConfigurationService configService,
-        PerformanceTracker performanceTracker) {
+        PerformanceTracker performanceTracker)
+    {
         this.logger = logger;
         this.configService = configService;
         this.performanceTracker = performanceTracker;
 
         // Initialize thread-local CompareLogic with lazy creation
-        this.threadLocalCompareLogic = new ThreadLocal<CompareLogic>(
-            valueFactory: () => this.CreateIsolatedCompareLogic(),
+        threadLocalCompareLogic = new ThreadLocal<CompareLogic>(
+            valueFactory: () => CreateIsolatedCompareLogic(),
             trackAllValues: false);
     }
 
     /// <summary>
     /// Mark configuration as changed - call this when ignore rules are modified.
     /// </summary>
-    public void InvalidateConfiguration() {
-        this.configurationChanged = true;
-    }
+    public void InvalidateConfiguration() => configurationChanged = true;
 
     /// <summary>
     /// Performs a comparison between two objects using the specified model type.
@@ -59,26 +59,28 @@ public class ComparisonEngine : IComparisonEngine, IDisposable {
         object oldResponse,
         object newResponse,
         Type modelType,
-        CancellationToken cancellationToken = default) {
+        CancellationToken cancellationToken = default)
+    {
         // PERFORMANCE OPTIMIZATION: Use thread-local CompareLogic to avoid allocation per file
-        var result = await this.performanceTracker.TrackOperationAsync("Compare_Objects", async () => {
-            return await Task.Run(
-                () => {
+        var result = await performanceTracker.TrackOperationAsync(
+            "Compare_Objects",
+            async () => await Task.Run(
+                () =>
+                {
                     // Get or refresh thread-local CompareLogic
-                    var compareLogic = this.GetOrRefreshCompareLogic();
+                    var compareLogic = GetOrRefreshCompareLogic();
 
                     // Direct comparison without cloning - this eliminates serialization corruption
                     return compareLogic.Compare(oldResponse, newResponse);
-                }, cancellationToken);
-        });
+                }, cancellationToken));
 
-        this.logger.LogDebug(
+        logger.LogDebug(
             "Comparison completed. Found {DifferenceCount} differences",
             result.Differences.Count);
 
         // Filter out ignored properties using smart rules and legacy pattern matching
-        result = this.configService.FilterSmartIgnoredDifferences(result, modelType);
-        result = this.configService.FilterIgnoredDifferences(result);
+        result = configService.FilterSmartIgnoredDifferences(result, modelType);
+        result = configService.FilterIgnoredDifferences(result);
 
         return result;
     }
@@ -87,34 +89,51 @@ public class ComparisonEngine : IComparisonEngine, IDisposable {
     /// Performs a synchronous comparison between two objects.
     /// Use this for CPU-bound pipeline stages where async overhead is unnecessary.
     /// </summary>
+    /// <param name="oldResponse">The old/reference object.</param>
+    /// <param name="newResponse">The new/comparison object.</param>
+    /// <param name="modelType">The type of the model being compared.</param>
+    /// <returns>Comparison result with differences.</returns>
     public ComparisonResult CompareObjectsSync(
         object oldResponse,
         object newResponse,
-        Type modelType) {
-        var compareLogic = this.GetOrRefreshCompareLogic();
+        Type modelType)
+    {
+        var compareLogic = GetOrRefreshCompareLogic();
         var result = compareLogic.Compare(oldResponse, newResponse);
 
         // Filter out ignored properties
-        result = this.configService.FilterSmartIgnoredDifferences(result, modelType);
-        result = this.configService.FilterIgnoredDifferences(result);
+        result = configService.FilterSmartIgnoredDifferences(result, modelType);
+        result = configService.FilterIgnoredDifferences(result);
 
         return result;
     }
 
     /// <summary>
+    /// Dispose of thread-local resources.
+    /// </summary>
+    public void Dispose()
+    {
+        threadLocalCompareLogic?.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
     /// Get thread-local CompareLogic, refreshing if configuration changed.
     /// </summary>
-    private CompareLogic GetOrRefreshCompareLogic() {
+    private CompareLogic GetOrRefreshCompareLogic()
+    {
         // Check if configuration changed (volatile read)
-        if (this.configurationChanged) {
+        if (configurationChanged)
+        {
             // Reset thread-local value to force recreation
-            if (this.threadLocalCompareLogic.IsValueCreated) {
+            if (threadLocalCompareLogic.IsValueCreated)
+            {
                 // Can't reset ThreadLocal, but we can invalidate by recreating
-                this.configurationChanged = false;
+                configurationChanged = false;
             }
         }
 
-        return this.threadLocalCompareLogic.Value;
+        return threadLocalCompareLogic.Value!;
     }
 
     /// <summary>
@@ -122,11 +141,12 @@ public class ComparisonEngine : IComparisonEngine, IDisposable {
     /// This eliminates the "Collection was modified" errors by ensuring each comparison
     /// operation has its own independent configuration.
     /// </summary>
-    private CompareLogic CreateIsolatedCompareLogic() {
+    private CompareLogic CreateIsolatedCompareLogic()
+    {
         var isolatedCompareLogic = new CompareLogic();
 
         // Copy basic configuration settings from the main service
-        var currentConfig = this.configService.GetCurrentConfig();
+        var currentConfig = configService.GetCurrentConfig();
 
         // PERFORMANCE OPTIMIZATION: Limit MaxDifferences to avoid excessive comparison time
         isolatedCompareLogic.Config.MaxDifferences = Math.Min(currentConfig.MaxDifferences, 1000);
@@ -150,34 +170,42 @@ public class ComparisonEngine : IComparisonEngine, IDisposable {
         isolatedCompareLogic.Config.MembersToInclude = new List<string>();
 
         // Apply ignore rules by applying them directly to the config
-        var ignoreRules = this.configService.GetIgnoreRules();
-        foreach (var rule in ignoreRules.Where(r => r.IgnoreCompletely)) {
-            try {
+        var ignoreRules = configService.GetIgnoreRules();
+        foreach (var rule in ignoreRules.Where(r => r.IgnoreCompletely))
+        {
+            try
+            {
                 // Apply the rule directly to the isolated config
                 rule.ApplyTo(isolatedCompareLogic.Config);
             }
-            catch (Exception ex) {
-                this.logger.LogWarning(ex, "Error applying ignore rule for property {PropertyPath} in isolated config", rule.PropertyPath);
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Error applying ignore rule for property {PropertyPath} in isolated config", rule.PropertyPath);
             }
         }
 
         // Ensure array Length and LongLength properties are always ignored
-        if (!isolatedCompareLogic.Config.MembersToIgnore.Contains("Length")) {
+        if (!isolatedCompareLogic.Config.MembersToIgnore.Contains("Length"))
+        {
             isolatedCompareLogic.Config.MembersToIgnore.Add("Length");
         }
 
-        if (!isolatedCompareLogic.Config.MembersToIgnore.Contains("LongLength")) {
+        if (!isolatedCompareLogic.Config.MembersToIgnore.Contains("LongLength"))
+        {
             isolatedCompareLogic.Config.MembersToIgnore.Add("LongLength");
         }
 
-        if (!isolatedCompareLogic.Config.MembersToIgnore.Contains("NativeLength")) {
+        if (!isolatedCompareLogic.Config.MembersToIgnore.Contains("NativeLength"))
+        {
             isolatedCompareLogic.Config.MembersToIgnore.Add("NativeLength");
         }
 
         // Apply collection order rules by creating new, independent custom comparers
         var collectionOrderRules = ignoreRules.Where(r => r.IgnoreCollectionOrder && !r.IgnoreCompletely).ToList();
-        if (collectionOrderRules.Any()) {
-            try {
+        if (collectionOrderRules.Any())
+        {
+            try
+            {
                 // Create independent collection order comparer with no shared state
                 var propertiesWithIgnoreOrder = collectionOrderRules.Select(r => r.PropertyPath).ToList();
                 var expandedProperties = propertiesWithIgnoreOrder
@@ -187,18 +215,19 @@ public class ComparisonEngine : IComparisonEngine, IDisposable {
 
                 // Use RootComparerFactory directly like other parts of the codebase
                 var collectionOrderComparer = new PropertySpecificCollectionOrderComparer(
-                    RootComparerFactory.GetRootComparer(), expandedProperties, this.logger);
+                    RootComparerFactory.GetRootComparer(), expandedProperties, logger);
 
                 isolatedCompareLogic.Config.CustomComparers.Add(collectionOrderComparer);
             }
-            catch (Exception ex) {
-                this.logger.LogWarning(ex, "Error creating independent collection order comparer");
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Error creating independent collection order comparer");
             }
         }
 
         // Note: XmlIgnore properties are handled by adding them to MembersToIgnore during configuration
         // This avoids the recursion issue that occurs with custom comparers
-        this.logger.LogDebug(
+        logger.LogDebug(
             "Created isolated CompareLogic with {IgnorePatterns} ignore patterns and {Comparers} custom comparers",
             isolatedCompareLogic.Config.MembersToIgnore.Count,
             isolatedCompareLogic.Config.CustomComparers.Count);
@@ -211,8 +240,10 @@ public class ComparisonEngine : IComparisonEngine, IDisposable {
     /// </summary>
     /// <param name="propertyPath">The property path (e.g., "Customer.Orders[0].Items[1].Name").</param>
     /// <returns>The extracted property name (e.g., "Name").</returns>
-    private string GetPropertyNameFromPath(string propertyPath) {
-        if (string.IsNullOrEmpty(propertyPath)) {
+    private string GetPropertyNameFromPath(string propertyPath)
+    {
+        if (string.IsNullOrEmpty(propertyPath))
+        {
             return string.Empty;
         }
 
@@ -222,13 +253,5 @@ public class ComparisonEngine : IComparisonEngine, IDisposable {
         // Split by dots and get the last part
         var parts = cleanPath.Split('.');
         return parts.Length > 0 ? parts[^1] : propertyPath;
-    }
-
-    /// <summary>
-    /// Dispose of thread-local resources.
-    /// </summary>
-    public void Dispose() {
-        this.threadLocalCompareLogic?.Dispose();
-        GC.SuppressFinalize(this);
     }
 }

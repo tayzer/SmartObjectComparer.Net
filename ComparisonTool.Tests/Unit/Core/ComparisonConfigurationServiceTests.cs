@@ -1,6 +1,6 @@
 // <copyright file="ComparisonConfigurationServiceTests.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
+
+
 
 using System.Text.Json;
 using ComparisonTool.Core.Comparison.Configuration;

@@ -1,6 +1,6 @@
 // <copyright file="DeserializationServiceFactory.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
+
+
 
 using ComparisonTool.Core.Utilities;
 using Microsoft.Extensions.Logging;
@@ -26,15 +26,13 @@ public class DeserializationServiceFactory
     /// </summary>
     /// <param name="format">Serialization format.</param>
     /// <returns>Deserialization service for the specified format.</returns>
-    public IDeserializationService GetService(SerializationFormat format)
-    {
-        return format switch
+    public IDeserializationService GetService(SerializationFormat format) =>
+        format switch
         {
             SerializationFormat.Xml => GetXmlService(),
             SerializationFormat.Json => GetJsonService(),
             _ => throw new NotSupportedException($"Unsupported serialization format: {format}")
         };
-    }
 
     /// <summary>
     /// Get the appropriate deserialization service based on file path.
@@ -92,33 +90,25 @@ public class DeserializationServiceFactory
     /// Get all available deserialization services.
     /// </summary>
     /// <returns>Dictionary of format to service mappings.</returns>
-    public Dictionary<SerializationFormat, IDeserializationService> GetAllServices()
-    {
-        return new Dictionary<SerializationFormat, IDeserializationService>
+    public Dictionary<SerializationFormat, IDeserializationService> GetAllServices() =>
+        new Dictionary<SerializationFormat, IDeserializationService>
         {
             { SerializationFormat.Xml, GetXmlService() },
             { SerializationFormat.Json, GetJsonService() },
         };
-    }
 
     /// <summary>
     /// Get all supported formats across all services.
     /// </summary>
     /// <returns>List of all supported serialization formats.</returns>
-    public IEnumerable<SerializationFormat> GetSupportedFormats()
-    {
-        return new[] { SerializationFormat.Xml, SerializationFormat.Json };
-    }
+    public IEnumerable<SerializationFormat> GetSupportedFormats() => new[] { SerializationFormat.Xml, SerializationFormat.Json };
 
     /// <summary>
     /// Check if a specific format is supported.
     /// </summary>
     /// <param name="format">Format to check.</param>
     /// <returns>True if the format is supported.</returns>
-    public bool IsFormatSupported(SerializationFormat format)
-    {
-        return GetSupportedFormats().Contains(format);
-    }
+    public bool IsFormatSupported(SerializationFormat format) => GetSupportedFormats().Contains(format);
 
     /// <summary>
     /// Register a domain model across all deserialization services.
@@ -153,10 +143,7 @@ public class DeserializationServiceFactory
     /// Get unified deserialization service that can handle multiple formats.
     /// </summary>
     /// <returns>Unified service that delegates to appropriate format-specific services.</returns>
-    public IDeserializationService GetUnifiedService()
-    {
-        return new UnifiedDeserializationService(this, logger);
-    }
+    public IDeserializationService GetUnifiedService() => new UnifiedDeserializationService(this, logger);
 
     internal IDeserializationService GetXmlService()
     {
@@ -189,28 +176,17 @@ internal class XmlDeserializationServiceAdapter : IDeserializationService
 {
     private readonly IXmlDeserializationService xmlService;
 
-    public XmlDeserializationServiceAdapter(IXmlDeserializationService xmlService)
-    {
-        this.xmlService = xmlService;
-    }
+    public XmlDeserializationServiceAdapter(IXmlDeserializationService xmlService) => this.xmlService = xmlService;
 
     public IEnumerable<SerializationFormat> SupportedFormats => new[] { SerializationFormat.Xml };
 
     public void RegisterDomainModel<T>(string modelName)
-        where T : class
-    {
+        where T : class =>
         xmlService.RegisterDomainModel<T>(modelName);
-    }
 
-    public IEnumerable<string> GetRegisteredModelNames()
-    {
-        return xmlService.GetRegisteredModelNames();
-    }
+    public IEnumerable<string> GetRegisteredModelNames() => xmlService.GetRegisteredModelNames();
 
-    public Type GetModelType(string modelName)
-    {
-        return xmlService.GetModelType(modelName);
-    }
+    public Type GetModelType(string modelName) => xmlService.GetModelType(modelName);
 
     public T Deserialize<T>(Stream stream, SerializationFormat? format = null)
         where T : class
@@ -224,25 +200,13 @@ internal class XmlDeserializationServiceAdapter : IDeserializationService
         return xmlService.DeserializeXml<T>(stream);
     }
 
-    public T CloneObject<T>(T source)
-    {
-        return xmlService.CloneObject<T>(source);
-    }
+    public T CloneObject<T>(T source) => xmlService.CloneObject<T>(source);
 
-    public void ClearDeserializationCache()
-    {
-        xmlService.ClearDeserializationCache();
-    }
+    public void ClearDeserializationCache() => xmlService.ClearDeserializationCache();
 
-    public (int CacheSize, int SerializerCacheSize) GetCacheStatistics()
-    {
-        return xmlService.GetCacheStatistics();
-    }
+    public (int CacheSize, int SerializerCacheSize) GetCacheStatistics() => xmlService.GetCacheStatistics();
 
-    public void ClearAllCaches()
-    {
-        xmlService.ClearAllCaches();
-    }
+    public void ClearAllCaches() => xmlService.ClearAllCaches();
 }
 
 /// <summary>

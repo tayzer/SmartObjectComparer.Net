@@ -1,8 +1,6 @@
 // <copyright file="EnhancedStructuralDifferenceAnalyzer.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
 
-namespace ComparisonTool.Core.Comparison.Analysis;
+
 
 using System.Text;
 using System.Text.RegularExpressions;
@@ -10,6 +8,8 @@ using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.Utilities;
 using KellermanSoftware.CompareNetObjects;
 using Microsoft.Extensions.Logging;
+
+namespace ComparisonTool.Core.Comparison.Analysis;
 
 /// <summary>
 /// Enhanced analzer that identifies structural patterns in differences,
@@ -683,10 +683,8 @@ string.Equals(NormalizePropertyPath(d.Difference.PropertyName), path, StringComp
         return segments.Length > 0 ? segments.Last() : differencePropertyName;
     }
 
-    private string NormalizePropertyPath(string differencePropertyName)
-    {
-        return PropertyPathNormalizer.NormalizePropertyPath(differencePropertyName, logger);
-    }
+    private string NormalizePropertyPath(string differencePropertyName) =>
+        PropertyPathNormalizer.NormalizePropertyPath(differencePropertyName, logger);
 
     private DifferenceCategory DetermineValueChangeCategory(string oldValue, string newValue)
     {
@@ -811,10 +809,8 @@ string.Equals(NormalizePropertyPath(d.Difference.PropertyName), path, StringComp
         return false;
     }
 
-    private bool IsPropertyMissing(Difference diff)
-    {
-        return (diff.Object1Value == null && diff.Object2Value != null) || (diff.Object1Value != null && diff.Object2Value == null);
-    }
+    private bool IsPropertyMissing(Difference diff) =>
+        (diff.Object1Value == null && diff.Object2Value != null) || (diff.Object1Value != null && diff.Object2Value == null);
 
     private string GetHumanReadableDescription(string pattern, string propertyName, bool isCritical)
     {
@@ -1114,38 +1110,32 @@ string.Equals(NormalizePropertyPath(d.Difference.PropertyName), path, StringComp
         result.ValueCategoryCombinations = valueCategoryCombinations;
     }
 
-    private string GetValueSubcategory(DifferenceCategory category)
+    private string GetValueSubcategory(DifferenceCategory category) => category switch
     {
-        return category switch
-        {
-            DifferenceCategory.TextContentChanged => "Text",
-            DifferenceCategory.NumericValueChanged => "Numeric",
-            DifferenceCategory.BooleanValueChanged => "Boolean",
-            DifferenceCategory.DateTimeChanged => "DateTime",
-            DifferenceCategory.ValueChanged => "General",
-            DifferenceCategory.GeneralValueChanged => "General",
-            _ => "Other"
-        };
-    }
+        DifferenceCategory.TextContentChanged => "Text",
+        DifferenceCategory.NumericValueChanged => "Numeric",
+        DifferenceCategory.BooleanValueChanged => "Boolean",
+        DifferenceCategory.DateTimeChanged => "DateTime",
+        DifferenceCategory.ValueChanged => "General",
+        DifferenceCategory.GeneralValueChanged => "General",
+        _ => "Other"
+    };
 
-    private string GetCategoryGroup(DifferenceCategory category)
+    private string GetCategoryGroup(DifferenceCategory category) => category switch
     {
-        return category switch
-        {
-            DifferenceCategory.TextContentChanged => "Value",
-            DifferenceCategory.NumericValueChanged => "Value",
-            DifferenceCategory.BooleanValueChanged => "Value",
-            DifferenceCategory.DateTimeChanged => "Value",
-            DifferenceCategory.ValueChanged => "Value",
-            DifferenceCategory.GeneralValueChanged => "Value",
-            DifferenceCategory.NullValueChange => "Missing",
-            DifferenceCategory.ItemRemoved => "Missing",
-            DifferenceCategory.ItemAdded => "Missing",
-            DifferenceCategory.CollectionItemChanged => "Order",
-            DifferenceCategory.UncategorizedDifference => "Uncategorized",
-            _ => "Other"
-        };
-    }
+        DifferenceCategory.TextContentChanged => "Value",
+        DifferenceCategory.NumericValueChanged => "Value",
+        DifferenceCategory.BooleanValueChanged => "Value",
+        DifferenceCategory.DateTimeChanged => "Value",
+        DifferenceCategory.ValueChanged => "Value",
+        DifferenceCategory.GeneralValueChanged => "Value",
+        DifferenceCategory.NullValueChange => "Missing",
+        DifferenceCategory.ItemRemoved => "Missing",
+        DifferenceCategory.ItemAdded => "Missing",
+        DifferenceCategory.CollectionItemChanged => "Order",
+        DifferenceCategory.UncategorizedDifference => "Uncategorized",
+        _ => "Other"
+    };
 
     private FileCoverageAnalysis CreateFileClassificationBreakdown()
     {
@@ -1283,23 +1273,17 @@ string.Equals(NormalizePropertyPath(d.Difference.PropertyName), path, StringComp
         return "Uncategorized";
     }
 
-    private bool IsOrderDifference(Difference diff)
-    {
-        // Simplified order detection - you can enhance this
-        return diff.PropertyName.Contains("[") &&
-               (diff.PropertyName.Contains("Order") ||
-                diff.PropertyName.Contains("Index") ||
-                diff.PropertyName.Contains("Position"));
-    }
+    private bool IsOrderDifference(Difference diff) =>
+        diff.PropertyName.Contains("[") &&
+        (diff.PropertyName.Contains("Order") ||
+         diff.PropertyName.Contains("Index") ||
+         diff.PropertyName.Contains("Position"));
 
-    private bool IsValueDifference(Difference diff)
-    {
-        // This is a value difference if both objects have values but they're different
-        return !IsPropertyMissing(diff) &&
-               diff.Object1Value != null &&
-               diff.Object2Value != null &&
-               !diff.Object1Value.Equals(diff.Object2Value);
-    }
+    private bool IsValueDifference(Difference diff) =>
+        !IsPropertyMissing(diff) &&
+        diff.Object1Value != null &&
+        diff.Object2Value != null &&
+        !diff.Object1Value.Equals(diff.Object2Value);
 
     public class StructuralPattern
     {

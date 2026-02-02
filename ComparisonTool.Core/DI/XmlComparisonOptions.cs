@@ -1,6 +1,6 @@
-﻿// <copyright file="XmlComparisonOptions.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
+// <copyright file="XmlComparisonOptions.cs" company="PlaceholderCompany">
+
+
 
 using System.Xml.Serialization;
 using ComparisonTool.Core.Serialization;
@@ -35,10 +35,7 @@ public class XmlComparisonOptions
     /// </summary>
     /// <typeparam name="T">The type to register.</typeparam>
     /// <param name="factory">Factory function that creates the XmlSerializer.</param>
-    public void RegisterSerializer<T>(Func<XmlSerializer> factory)
-    {
-        serializerRegistrations.Add((typeof(T), factory));
-    }
+    public void RegisterSerializer<T>(Func<XmlSerializer> factory) => serializerRegistrations.Add((typeof(T), factory));
 
     /// <summary>
     /// Register a domain model type for deserialization by name.
@@ -46,10 +43,8 @@ public class XmlComparisonOptions
     /// <typeparam name="T">The type to register.</typeparam>
     /// <param name="modelName">The name used to identify this model.</param>
     public void RegisterDomainModel<T>(string modelName)
-        where T : class
-    {
+        where T : class =>
         domainModelRegistrations.Add(service => service.RegisterDomainModel<T>(modelName));
-    }
 
     /// <summary>
     /// Register a domain model with a custom serializer.

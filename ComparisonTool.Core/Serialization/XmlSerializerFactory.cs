@@ -1,6 +1,6 @@
 // <copyright file="XmlSerializerFactory.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
+
+
 
 using System.Reflection;
 using System.Xml.Serialization;
@@ -18,15 +18,9 @@ public class XmlSerializerFactory
     /// Initializes a new instance of the <see cref="XmlSerializerFactory"/> class.
     /// </summary>
     /// <param name="logger">Optional logger instance.</param>
-    public XmlSerializerFactory(ILogger<XmlSerializerFactory>? logger = null)
-    {
-        this.logger = logger;
-    }
+    public XmlSerializerFactory(ILogger<XmlSerializerFactory>? logger = null) => this.logger = logger;
 
-    public void RegisterType<T>(Func<XmlSerializer> factory)
-    {
-        serializerFactories[typeof(T)] = factory;
-    }
+    public void RegisterType<T>(Func<XmlSerializer> factory) => serializerFactories[typeof(T)] = factory;
 
     /// <summary>
     /// Gets a namespace-agnostic (lenient) serializer for the specified type.
@@ -66,10 +60,7 @@ public class XmlSerializerFactory
     /// <typeparam name="T">The type to serialize/deserialize.</typeparam>
     /// <param name="ignoreNamespaces">If true, returns a lenient serializer; if false, returns a strict serializer.</param>
     /// <returns>The appropriate XmlSerializer based on the mode.</returns>
-    public XmlSerializer GetSerializer<T>(bool ignoreNamespaces)
-    {
-        return ignoreNamespaces ? GetSerializer<T>() : GetStrictSerializer<T>();
-    }
+    public XmlSerializer GetSerializer<T>(bool ignoreNamespaces) => ignoreNamespaces ? GetSerializer<T>() : GetStrictSerializer<T>();
 
     public XmlSerializer GetSerializer(Type type)
     {
@@ -377,35 +368,26 @@ public class XmlSerializerFactory
         }
     }
 
-    private void OnUnknownElement(object? sender, XmlElementEventArgs e)
-    {
-        // Log but don't throw - this allows deserialization to continue
+    private void OnUnknownElement(object? sender, XmlElementEventArgs e) =>
         logger?.LogDebug(
             "Unknown XML element encountered: {ElementName} at line {LineNumber}, column {LinePosition}. Ignoring element.",
             e.Element.Name,
             e.LineNumber,
             e.LinePosition);
-    }
 
-    private void OnUnknownAttribute(object? sender, XmlAttributeEventArgs e)
-    {
-        // Log but don't throw - this allows deserialization to continue
+    private void OnUnknownAttribute(object? sender, XmlAttributeEventArgs e) =>
         logger?.LogDebug(
             "Unknown XML attribute encountered: {AttributeName}='{AttributeValue}' at line {LineNumber}, column {LinePosition}. Ignoring attribute.",
             e.Attr.Name,
             e.Attr.Value,
             e.LineNumber,
             e.LinePosition);
-    }
 
-    private void OnUnknownNode(object? sender, XmlNodeEventArgs e)
-    {
-        // Log but don't throw - this allows deserialization to continue
+    private void OnUnknownNode(object? sender, XmlNodeEventArgs e) =>
         logger?.LogDebug(
             "Unknown XML node encountered: {NodeType} '{NodeName}' at line {LineNumber}, column {LinePosition}. Ignoring node.",
             e.NodeType,
             e.Name,
             e.LineNumber,
             e.LinePosition);
-    }
 }

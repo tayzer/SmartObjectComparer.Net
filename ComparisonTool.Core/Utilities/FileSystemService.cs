@@ -1,6 +1,6 @@
 // <copyright file="FileSystemService.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
+
+
 
 using System.IO;
 using System.Threading;
@@ -62,10 +62,7 @@ public class FileSystemService : IFileSystemService
 {
     private readonly ILogger<FileSystemService> logger;
 
-    public FileSystemService(ILogger<FileSystemService> logger)
-    {
-        this.logger = logger;
-    }
+    public FileSystemService(ILogger<FileSystemService> logger) => this.logger = logger;
 
     /// <summary>
     /// Gets a list of XML files from a directory and its subdirectories.

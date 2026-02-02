@@ -1,14 +1,9 @@
-// <copyright file="EnhancedDifferenceAnalyzer.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
-namespace ComparisonTool.Core.Comparison.Analysis;
-
 using System.Text.RegularExpressions;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.Utilities;
 using KellermanSoftware.CompareNetObjects;
 using Microsoft.Extensions.Logging;
+namespace ComparisonTool.Core.Comparison.Analysis;
 
 /// <summary>
 /// Enhanced analyzer for XML differences that provides more meaningful categorization
@@ -412,10 +407,7 @@ public class EnhancedDifferenceAnalyzer
     /// <summary>
     /// Normalize an XML path by replacing indices with wildcards.
     /// </summary>
-    private string NormalizeXmlPath(string xmlPath)
-    {
-        return PropertyPathNormalizer.NormalizeArrayIndices(xmlPath);
-    }
+    private string NormalizeXmlPath(string xmlPath) => PropertyPathNormalizer.NormalizeArrayIndices(xmlPath);
 
     /// <summary>
     /// Extract the collection path from a property path.
@@ -501,19 +493,14 @@ public class EnhancedDifferenceAnalyzer
     /// <summary>
     /// Determine if a property is missing (null in one side but not the other).
     /// </summary>
-    private bool IsPropertyMissing(Difference diff)
-    {
-        return (diff.Object1Value == null && diff.Object2Value != null) ||
-               (diff.Object1Value != null && diff.Object2Value == null);
-    }
+    private bool IsPropertyMissing(Difference diff) =>
+        (diff.Object1Value == null && diff.Object2Value != null) ||
+        (diff.Object1Value != null && diff.Object2Value == null);
 
     /// <summary>
     /// Determine if a property exists in the actual but not the expected.
     /// </summary>
-    private bool IsExtraProperty(Difference diff)
-    {
-        return diff.Object1Value == null && diff.Object2Value != null;
-    }
+    private bool IsExtraProperty(Difference diff) => diff.Object1Value == null && diff.Object2Value != null;
 
     /// <summary>
     /// Categorize a difference with enhanced categories.

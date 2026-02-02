@@ -1,14 +1,15 @@
 // <copyright file="StructuralDifferenceAnalyzer.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
 
-namespace ComparisonTool.Core.Comparison.Analysis;
+
 
 using System.Text.RegularExpressions;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.Utilities;
 using KellermanSoftware.CompareNetObjects;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace ComparisonTool.Core.Comparison.Analysis;
 
 /// <summary>
 /// Specialized analyzer that identifies structural patterns in differences,
@@ -17,7 +18,7 @@ using Microsoft.Extensions.Logging;
 public class StructuralDifferenceAnalyzer
 {
     private readonly MultiFolderComparisonResult folderResult;
-    private readonly ILogger logger;
+    private readonly ILogger? logger;
 
     public StructuralDifferenceAnalyzer(MultiFolderComparisonResult folderResult, ILogger? logger = null)
     {
@@ -28,7 +29,7 @@ public class StructuralDifferenceAnalyzer
     /// <summary>
     /// Analyze structural patterns in differences across all file pairs.
     /// </summary>
-    /// <returns></returns>
+    /// <returns>Aggregated structural analysis results.</returns>
     public StructuralAnalysisResult AnalyzeStructuralPatterns()
     {
         logger?.LogInformation("Starting structural pattern analysis for {FileCount} file pairs", folderResult.FilePairResults.Count);
@@ -343,19 +344,15 @@ public class StructuralDifferenceAnalyzer
     /// <summary>
     /// Normalize property path by replacing specific indices with [*].
     /// </summary>
-    private string NormalizePropertyPath(string propertyPath)
-    {
-        return PropertyPathNormalizer.NormalizePropertyPath(propertyPath, logger);
-    }
+    private string NormalizePropertyPath(string propertyPath) =>
+        PropertyPathNormalizer.NormalizePropertyPath(propertyPath, logger ?? NullLogger.Instance);
 
     /// <summary>
     /// Check if a difference represents a missing property (null in one but not the other).
     /// </summary>
-    private bool IsPropertyMissing(Difference diff)
-    {
-        return (diff.Object1Value == null && diff.Object2Value != null) ||
-               (diff.Object1Value != null && diff.Object2Value == null);
-    }
+    private bool IsPropertyMissing(Difference diff) =>
+        (diff.Object1Value == null && diff.Object2Value != null) ||
+        (diff.Object1Value != null && diff.Object2Value == null);
 
     /// <summary>
     /// Check if a difference likely represents an element order difference.

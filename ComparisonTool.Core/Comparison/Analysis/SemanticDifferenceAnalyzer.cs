@@ -1,6 +1,6 @@
 // <copyright file="SemanticDifferenceAnalyzer.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
+
+
 
 namespace ComparisonTool.Core.Comparison.Analysis;
 
@@ -189,70 +189,53 @@ public class SemanticDifferenceAnalyzer
         return analysis;
     }
 
-    private static bool IsGuidFormat(string value)
-    {
-        return Regex.IsMatch(value, @"[0-9a-fA-F]{8}[-]?([0-9a-fA-F]{4}[-]?){3}[0-9a-fA-F]{12}");
-    }
+    private static bool IsGuidFormat(string value) => Regex.IsMatch(value, @"[0-9a-fA-F]{8}[-]?([0-9a-fA-F]{4}[-]?){3}[0-9a-fA-F]{12}");
 
-    private static bool IsStatusChange(Difference diff)
-    {
-        return diff.PropertyName.EndsWith(".Status", StringComparison.Ordinal) ||
-               diff.PropertyName.Contains(".Status.") ||
-               diff.PropertyName.EndsWith("Status", StringComparison.Ordinal);
-    }
+    private static bool IsStatusChange(Difference diff) =>
+        diff.PropertyName.EndsWith(".Status", StringComparison.Ordinal) ||
+        diff.PropertyName.Contains(".Status.") ||
+        diff.PropertyName.EndsWith("Status", StringComparison.Ordinal);
 
-    private static bool IsIdValueChange(Difference diff)
-    {
-        return diff.PropertyName.EndsWith(".Id", StringComparison.Ordinal) ||
-               diff.PropertyName.EndsWith("ReportId", StringComparison.Ordinal) ||
-               diff.PropertyName.Contains(".Id.") ||
-               diff.PropertyName.EndsWith("Id", StringComparison.Ordinal);
-    }
+    private static bool IsIdValueChange(Difference diff) =>
+        diff.PropertyName.EndsWith(".Id", StringComparison.Ordinal) ||
+        diff.PropertyName.EndsWith("ReportId", StringComparison.Ordinal) ||
+        diff.PropertyName.Contains(".Id.") ||
+        diff.PropertyName.EndsWith("Id", StringComparison.Ordinal);
 
-    private static bool IsDateTimeChange(Difference diff)
-    {
-        return diff.PropertyName.Contains("Date") ||
-               diff.PropertyName.Contains("Time") ||
-               diff.PropertyName.Contains("Generated") ||
-               diff.Object1Value is DateTime ||
-               diff.Object2Value is DateTime;
-    }
+    private static bool IsDateTimeChange(Difference diff) =>
+        diff.PropertyName.Contains("Date") ||
+        diff.PropertyName.Contains("Time") ||
+        diff.PropertyName.Contains("Generated") ||
+        diff.Object1Value is DateTime ||
+        diff.Object2Value is DateTime;
 
-    private static bool IsScoreValueChange(Difference diff)
-    {
-        return diff.PropertyName.Contains("Score") ||
-               diff.PropertyName.Contains("Value") ||
-               diff.PropertyName.Contains("Amount") ||
-               diff.PropertyName.Contains("Count") ||
-               ((diff.Object1Value is double || diff.Object1Value is int || diff.Object1Value is decimal) &&
-               (diff.Object2Value is double || diff.Object2Value is int || diff.Object2Value is decimal));
-    }
+    private static bool IsScoreValueChange(Difference diff) =>
+        diff.PropertyName.Contains("Score") ||
+        diff.PropertyName.Contains("Value") ||
+        diff.PropertyName.Contains("Amount") ||
+        diff.PropertyName.Contains("Count") ||
+        ((diff.Object1Value is double || diff.Object1Value is int || diff.Object1Value is decimal) &&
+         (diff.Object2Value is double || diff.Object2Value is int || diff.Object2Value is decimal));
 
-    private static bool IsNameOrDescriptionChange(Difference diff)
-    {
-        return diff.PropertyName.Contains("Name") ||
-               diff.PropertyName.Contains("Description") ||
-               diff.PropertyName.Contains("Title") ||
-               diff.PropertyName.Contains("Label");
-    }
+    private static bool IsNameOrDescriptionChange(Difference diff) =>
+        diff.PropertyName.Contains("Name") ||
+        diff.PropertyName.Contains("Description") ||
+        diff.PropertyName.Contains("Title") ||
+        diff.PropertyName.Contains("Label");
 
-    private static bool IsCollectionOrderChange(Difference diff)
-    {
+    private static bool IsCollectionOrderChange(Difference diff) =>
         // Detect collection order changes - this is complex as it may
         // require context from multiple differences
-        return diff.PropertyName.Contains("[") && diff.PropertyName.Contains("]") &&
+        diff.PropertyName.Contains("[") && diff.PropertyName.Contains("]") &&
 
-               // Same values in different positions
-               diff.Object1Value != null && diff.Object2Value != null &&
-string.Equals(diff.Object1Value.ToString(), diff.Object2Value.ToString(), StringComparison.Ordinal);
-    }
+        // Same values in different positions
+        diff.Object1Value != null && diff.Object2Value != null &&
+        string.Equals(diff.Object1Value.ToString(), diff.Object2Value.ToString(), StringComparison.Ordinal);
 
-    private static bool IsTagChange(Difference diff)
-    {
-        return diff.PropertyName.Contains("Tag") ||
-               diff.PropertyName.Contains("Category") ||
-               diff.PropertyName.Contains("Label");
-    }
+    private static bool IsTagChange(Difference diff) =>
+        diff.PropertyName.Contains("Tag") ||
+        diff.PropertyName.Contains("Category") ||
+        diff.PropertyName.Contains("Label");
 
     private void AddDifferenceToGroup(SemanticDifferenceGroup group, Difference diff, string fileIdentifier)
     {
@@ -261,15 +244,9 @@ string.Equals(diff.Object1Value.ToString(), diff.Object2Value.ToString(), String
         group.RelatedProperties.Add(NormalizePropertyPath(diff.PropertyName));
     }
 
-    private string NormalizePropertyPath(string propertyPath)
-    {
-        return PropertyPathNormalizer.NormalizePropertyPath(propertyPath);
-    }
+    private string NormalizePropertyPath(string propertyPath) => PropertyPathNormalizer.NormalizePropertyPath(propertyPath);
 
-    private bool IsInDocumentSection(Difference diff, HashSet<string> sectionKeys)
-    {
-        return sectionKeys.Any(key => diff.PropertyName.Contains(key));
-    }
+    private bool IsInDocumentSection(Difference diff, HashSet<string> sectionKeys) => sectionKeys.Any(key => diff.PropertyName.Contains(key));
 
     private string? CategorizeByValuePattern(Difference diff)
     {
@@ -303,9 +280,8 @@ string.Equals(diff.Object1Value.ToString(), diff.Object2Value.ToString(), String
         return null;
     }
 
-    private string GenerateDescriptionForGroup(string groupName)
-    {
-        return groupName switch
+    private string GenerateDescriptionForGroup(string groupName) =>
+        groupName switch
         {
             "Status Changes" => "Changes to status values such as Success, Warning, Error",
             "ID Value Changes" => "Changes to identifier values",
@@ -316,5 +292,4 @@ string.Equals(diff.Object1Value.ToString(), diff.Object2Value.ToString(), String
             "Tag Modifications" => "Changes to tags, categories, or labels",
             _ => $"Changes related to {groupName.ToLower()}"
         };
-    }
 }

@@ -1,6 +1,6 @@
 // <copyright file="JsonDeserializationService.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
+
+
 
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
@@ -85,10 +85,7 @@ public class JsonDeserializationService : IDeserializationService
     /// Get all registered domain model names.
     /// </summary>
     /// <returns></returns>
-    public IEnumerable<string> GetRegisteredModelNames()
-    {
-        return registeredDomainModels.Keys;
-    }
+    public IEnumerable<string> GetRegisteredModelNames() => registeredDomainModels.Keys;
 
     /// <summary>
     /// Get type for a registered model name.
@@ -261,11 +258,9 @@ public class JsonDeserializationService : IDeserializationService
     /// Get cache statistics for diagnostics.
     /// </summary>
     /// <returns></returns>
-    public (int CacheSize, int SerializerCacheSize) GetCacheStatistics()
-    {
+    public (int CacheSize, int SerializerCacheSize) GetCacheStatistics() =>
         // JSON doesn't have a separate serializer cache like XML, so return 0 for that
-        return (deserializationCache.Count, 0);
-    }
+        (deserializationCache.Count, 0);
 
     /// <summary>
     /// Force clear all caches.
@@ -598,10 +593,7 @@ public class DateTimeConverter : JsonConverter<DateTime>
         throw new JsonException($"Unable to convert \"{stringValue}\" to DateTime");
     }
 
-    public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options)
-    {
-        writer.WriteStringValue(value.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"));
-    }
+    public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options) => writer.WriteStringValue(value.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"));
 }
 
 /// <summary>
@@ -609,10 +601,7 @@ public class DateTimeConverter : JsonConverter<DateTime>
 /// </summary>
 public class NullableConverter : JsonConverter<object>
 {
-    public override bool CanConvert(Type typeToConvert)
-    {
-        return Nullable.GetUnderlyingType(typeToConvert) != null;
-    }
+    public override bool CanConvert(Type typeToConvert) => Nullable.GetUnderlyingType(typeToConvert) != null;
 
     public override object? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {

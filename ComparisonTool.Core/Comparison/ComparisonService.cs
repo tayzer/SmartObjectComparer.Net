@@ -1,6 +1,6 @@
 // <copyright file="ComparisonService.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
+
+
 
 using System.Collections.Concurrent;
 using System.Globalization;
@@ -29,7 +29,7 @@ public class ComparisonService : IComparisonService
 
     private readonly ILogger<ComparisonService> logger;
     private readonly IXmlDeserializationService deserializationService;
-    private readonly DeserializationServiceFactory deserializationFactory;
+    private readonly DeserializationServiceFactory? deserializationFactory;
     private readonly IComparisonConfigurationService configService;
     private readonly IFileSystemService fileSystemService;
     private readonly PerformanceTracker performanceTracker;
@@ -76,11 +76,17 @@ public class ComparisonService : IComparisonService
         Stream oldXmlStream,
         Stream newXmlStream,
         string modelName,
-        string oldFilePath = null,
-        string newFilePath = null,
+        string? oldFilePath = null,
+        string? newFilePath = null,
         CancellationToken cancellationToken = default)
     {
-        var result = await comparisonOrchestrator.CompareXmlFilesWithCachingAsync(oldXmlStream, newXmlStream, modelName, oldFilePath, newFilePath, cancellationToken).ConfigureAwait(false);
+        var result = await comparisonOrchestrator.CompareXmlFilesWithCachingAsync(
+            oldXmlStream,
+            newXmlStream,
+            modelName,
+            oldFilePath ?? string.Empty,
+            newFilePath ?? string.Empty,
+            cancellationToken).ConfigureAwait(false);
 
         // Filter duplicate differences (e.g., System.Collections.IList.Item vs standard indexed paths)
         return ComparisonTool.Core.Comparison.Utilities.DifferenceFilter.FilterDuplicateDifferences(result, logger);
@@ -167,9 +173,7 @@ public class ComparisonService : IComparisonService
         List<string> folder2Files,
         string modelName,
         CancellationToken cancellationToken = default)
-    {
-        return await comparisonOrchestrator.CompareFoldersAsync(folder1Files, folder2Files, modelName, cancellationToken).ConfigureAwait(false);
-    }
+        => await comparisonOrchestrator.CompareFoldersAsync(folder1Files, folder2Files, modelName, cancellationToken).ConfigureAwait(false);
 
     /// <summary>
     /// Compare multiple folder pairs of XML files in batches with parallel processing.
@@ -188,9 +192,13 @@ public class ComparisonService : IComparisonService
         int batchSize = 50,
         IProgress<(int Completed, int Total)>? progress = null,
         CancellationToken cancellationToken = default)
-    {
-        return await comparisonOrchestrator.CompareFoldersInBatchesAsync(folder1Files, folder2Files, modelName, batchSize, progress, cancellationToken).ConfigureAwait(false);
-    }
+        => await comparisonOrchestrator.CompareFoldersInBatchesAsync(
+            folder1Files,
+            folder2Files,
+            modelName,
+            batchSize,
+            progress ?? new Progress<(int Completed, int Total)>(),
+            cancellationToken).ConfigureAwait(false);
 
     /// <summary>
     /// Analyze patterns across multiple file comparison results.
@@ -201,8 +209,7 @@ public class ComparisonService : IComparisonService
     public async Task<ComparisonPatternAnalysis> AnalyzePatternsAsync(
       MultiFolderComparisonResult folderResult,
       CancellationToken cancellationToken = default)
-    {
-        return await Task.Run(
+        => await Task.Run(
             () =>
             {
                 var overallSw = System.Diagnostics.Stopwatch.StartNew();
@@ -334,7 +341,6 @@ public class ComparisonService : IComparisonService
 
                 return analysis;
             }, cancellationToken).ConfigureAwait(false);
-    }
 
     /// <summary>
     /// Analyze semantic differences across multiple file comparison results.
@@ -347,8 +353,7 @@ public class ComparisonService : IComparisonService
         MultiFolderComparisonResult folderResult,
         ComparisonPatternAnalysis patternAnalysis,
         CancellationToken cancellationToken = default)
-    {
-        return await Task.Run(
+        => await Task.Run(
             () =>
             {
                 logger.LogInformation("Starting semantic difference analysis");
@@ -363,14 +368,12 @@ public class ComparisonService : IComparisonService
 
                 return semanticAnalysis;
             }, cancellationToken).ConfigureAwait(false);
-    }
 
     public async Task<EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult>
         AnalyzeStructualPatternsAsync(
             MultiFolderComparisonResult folderResult,
             CancellationToken cancellationToken = default)
-    {
-        return await Task.Run(
+        => await Task.Run(
             () =>
             {
                 logger.LogInformation("Starting enhanced structural pattern analysis");
@@ -386,7 +389,6 @@ public class ComparisonService : IComparisonService
 
                 return structuralAnalysis;
             }, cancellationToken).ConfigureAwait(false);
-    }
 
     private static string FormatValue(object? value)
     {
@@ -966,7 +968,7 @@ public class ComparisonService : IComparisonService
             get; set;
         }
 
-        public override bool Equals(object obj)
+        public override bool Equals(object? obj)
         {
             if (obj is not DifferenceGroupingKey other)
             {

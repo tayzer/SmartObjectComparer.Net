@@ -1,6 +1,6 @@
 // <copyright file="XmlDeserializationService.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
+
+
 
 using System.Collections.Concurrent;
 using System.Xml;
@@ -53,7 +53,7 @@ public class XmlDeserializationService : IXmlDeserializationService
     }
 
     /// <summary>
-    /// Gets or sets the namespace handling mode for XML deserialization.
+    /// Gets or sets a value indicating whether XML namespaces are ignored during deserialization.
     /// <para>
     /// <b>Lenient mode (true, default):</b> Uses namespace-agnostic serializer overrides.
     /// XML documents with any namespace (or no namespace) will deserialize correctly
@@ -100,10 +100,7 @@ public class XmlDeserializationService : IXmlDeserializationService
     /// Get all registered domain model names.
     /// </summary>
     /// <returns>Collection of registered model names.</returns>
-    public IEnumerable<string> GetRegisteredModelNames()
-    {
-        return registeredDomainModels.Keys;
-    }
+    public IEnumerable<string> GetRegisteredModelNames() => registeredDomainModels.Keys;
 
     /// <summary>
     /// Get type for a registered model name.
@@ -226,10 +223,7 @@ public class XmlDeserializationService : IXmlDeserializationService
     /// Get cache statistics for diagnostics.
     /// </summary>
     /// <returns>A tuple containing the cache size and serializer cache size.</returns>
-    public (int CacheSize, int SerializerCacheSize) GetCacheStatistics()
-    {
-        return (deserializationCache.Count, serializerCache.Count);
-    }
+    public (int CacheSize, int SerializerCacheSize) GetCacheStatistics() => (deserializationCache.Count, serializerCache.Count);
 
     /// <summary>
     /// Force clear all caches - useful for debugging deserialization inconsistencies.
@@ -252,72 +246,66 @@ public class XmlDeserializationService : IXmlDeserializationService
     /// Get optimized XML reader settings that are forgiving of XML variations
     /// and ensure consistent parsing behavior across all scenarios.
     /// </summary>
-    private XmlReaderSettings GetOptimizedReaderSettings()
+    private XmlReaderSettings GetOptimizedReaderSettings() => new XmlReaderSettings
     {
-        return new XmlReaderSettings
-        {
-            // CRITICAL: Ensure consistent whitespace handling
-            IgnoreWhitespace = true,
-            IgnoreComments = true,
-            IgnoreProcessingInstructions = true,
+        // CRITICAL: Ensure consistent whitespace handling
+        IgnoreWhitespace = true,
+        IgnoreComments = true,
+        IgnoreProcessingInstructions = true,
 
-            // Security and performance settings
-            DtdProcessing = DtdProcessing.Prohibit,
-            MaxCharactersInDocument = 50 * 1024 * 1024, // 50MB limit
-            CloseInput = false, // Don't close the underlying stream
+        // Security and performance settings
+        DtdProcessing = DtdProcessing.Prohibit,
+        MaxCharactersInDocument = 50 * 1024 * 1024, // 50MB limit
+        CloseInput = false, // Don't close the underlying stream
 
-            // ENHANCED: More lenient parsing for consistency
-            CheckCharacters = false, // More lenient character checking for encoding issues
-            ConformanceLevel = ConformanceLevel.Document, // Require well-formed documents (more strict than Fragment)
-            ValidationFlags = System.Xml.Schema.XmlSchemaValidationFlags.None, // No validation
-            ValidationType = ValidationType.None, // No validation
+        // ENHANCED: More lenient parsing for consistency
+        CheckCharacters = false, // More lenient character checking for encoding issues
+        ConformanceLevel = ConformanceLevel.Document, // Require well-formed documents (more strict than Fragment)
+        ValidationFlags = System.Xml.Schema.XmlSchemaValidationFlags.None, // No validation
+        ValidationType = ValidationType.None, // No validation
 
-            // WHITESPACE FIX: Ensure consistent normalization
-            // This helps ensure that whitespace-sensitive elements are handled consistently
-            Async = false, // Synchronous processing for consistency
+        // WHITESPACE FIX: Ensure consistent normalization
+        // This helps ensure that whitespace-sensitive elements are handled consistently
+        Async = false, // Synchronous processing for consistency
 
-            // Character encoding handling
-            XmlResolver = null, // Disable external resource resolution for security and consistency
-        };
-    }
+        // Character encoding handling
+        XmlResolver = null, // Disable external resource resolution for security and consistency
+    };
 
     /// <summary>
     /// Get conservative XML reader settings for cloning to preserve data fidelity
     /// These settings prioritize preserving all data over performance optimizations.
     /// </summary>
-    private XmlReaderSettings GetConservativeCloneReaderSettings()
+    private XmlReaderSettings GetConservativeCloneReaderSettings() => new XmlReaderSettings
     {
-        return new XmlReaderSettings
-        {
-            // CONSERVATIVE: Preserve whitespace to avoid data loss during cloning
-            IgnoreWhitespace = false,  // CRITICAL FIX: Don't ignore whitespace during cloning
-            IgnoreComments = false,    // Preserve comments
-            IgnoreProcessingInstructions = false, // Preserve processing instructions
+        // CONSERVATIVE: Preserve whitespace to avoid data loss during cloning
+        IgnoreWhitespace = false,  // CRITICAL FIX: Don't ignore whitespace during cloning
+        IgnoreComments = false,    // Preserve comments
+        IgnoreProcessingInstructions = false, // Preserve processing instructions
 
-            // Security settings (keep these strict)
-            DtdProcessing = DtdProcessing.Prohibit,
-            MaxCharactersInDocument = 50 * 1024 * 1024,
-            CloseInput = false,
+        // Security settings (keep these strict)
+        DtdProcessing = DtdProcessing.Prohibit,
+        MaxCharactersInDocument = 50 * 1024 * 1024,
+        CloseInput = false,
 
-            // Conservative parsing settings for fidelity
-            CheckCharacters = true,    // Strict character checking for data integrity
-            ConformanceLevel = ConformanceLevel.Document,
-            ValidationFlags = System.Xml.Schema.XmlSchemaValidationFlags.None,
-            ValidationType = ValidationType.None,
+        // Conservative parsing settings for fidelity
+        CheckCharacters = true,    // Strict character checking for data integrity
+        ConformanceLevel = ConformanceLevel.Document,
+        ValidationFlags = System.Xml.Schema.XmlSchemaValidationFlags.None,
+        ValidationType = ValidationType.None,
 
-            // Synchronous processing for consistency
-            Async = false,
+        // Synchronous processing for consistency
+        Async = false,
 
-            // Disable external resources for security
-            XmlResolver = null,
-        };
-    }
+        // Disable external resources for security
+        XmlResolver = null,
+    };
 
     /// <summary>
     /// Get cached XmlSerializer with enhanced configuration for handling unknown elements.
     /// The serializer is created based on the current IgnoreXmlNamespaces setting:
-    /// - Lenient mode (true): uses namespace-agnostic serializer that accepts any namespace
-    /// - Strict mode (false): uses strict serializer that requires exact namespace matching
+    /// - Lenient mode (true): uses namespace-agnostic serializer that accepts any namespace.
+    /// - Strict mode (false): uses strict serializer that requires exact namespace matching.
     /// </summary>
     private XmlSerializer GetCachedSerializer<T>()
     {
@@ -339,24 +327,18 @@ public class XmlDeserializationService : IXmlDeserializationService
 
             // CRITICAL FIX: Add event handlers to gracefully handle unknown elements
             serializer.UnknownElement += (sender, e) =>
-            {
-                // Log unknown elements for debugging but don't throw exceptions
                 logger.LogDebug(
                     "Unknown XML element encountered: {ElementName} at line {LineNumber}, position {LinePosition}. This element will be ignored during deserialization.",
                     e.Element.Name,
                     e.LineNumber,
                     e.LinePosition);
-            };
 
             serializer.UnknownAttribute += (sender, e) =>
-            {
-                // Log unknown attributes for debugging but don't throw exceptions
                 logger.LogDebug(
                     "Unknown XML attribute encountered: {AttributeName} at line {LineNumber}, position {LinePosition}. This attribute will be ignored during deserialization.",
                     e.Attr.Name,
                     e.LineNumber,
                     e.LinePosition);
-            };
 
             return serializer;
         });

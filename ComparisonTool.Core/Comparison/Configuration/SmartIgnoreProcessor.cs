@@ -1,6 +1,6 @@
 // <copyright file="SmartIgnoreProcessor.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
+
+
 
 namespace ComparisonTool.Core.Comparison.Configuration;
 
@@ -22,10 +22,7 @@ public class SmartIgnoreProcessor
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
     private readonly ILogger logger;
 
-    public SmartIgnoreProcessor(ILogger? logger = null)
-    {
-        this.logger = logger ?? NullLogger.Instance;
-    }
+    public SmartIgnoreProcessor(ILogger? logger = null) => this.logger = logger ?? NullLogger.Instance;
 
     /// <summary>
     /// Apply smart ignore rules to comparison configuration.
@@ -381,26 +378,22 @@ public class SmartIgnoreProcessor
     /// <summary>
     /// Check if a type is a simple/primitive type.
     /// </summary>
-    private bool IsSimpleType(Type type)
-    {
-        return type.IsPrimitive ||
-               type == typeof(string) ||
-               type == typeof(DateTime) ||
-               type == typeof(decimal) ||
-               type == typeof(Guid) ||
-               type.IsEnum ||
-               (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>));
-    }
+    private bool IsSimpleType(Type type) =>
+        type.IsPrimitive ||
+        type == typeof(string) ||
+        type == typeof(DateTime) ||
+        type == typeof(decimal) ||
+        type == typeof(Guid) ||
+        type.IsEnum ||
+        (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>));
 
     /// <summary>
     /// Check if a type is a collection type.
     /// </summary>
-    private bool IsCollectionType(Type type)
-    {
-        return type.IsArray ||
-               (type.IsGenericType && (
-                   typeof(IEnumerable<>).IsAssignableFrom(type.GetGenericTypeDefinition()) ||
-                   typeof(ICollection<>).IsAssignableFrom(type.GetGenericTypeDefinition()) ||
-                   typeof(IList<>).IsAssignableFrom(type.GetGenericTypeDefinition())));
-    }
+    private bool IsCollectionType(Type type) =>
+        type.IsArray ||
+        (type.IsGenericType && (
+            typeof(IEnumerable<>).IsAssignableFrom(type.GetGenericTypeDefinition()) ||
+            typeof(ICollection<>).IsAssignableFrom(type.GetGenericTypeDefinition()) ||
+            typeof(IList<>).IsAssignableFrom(type.GetGenericTypeDefinition())));
 }

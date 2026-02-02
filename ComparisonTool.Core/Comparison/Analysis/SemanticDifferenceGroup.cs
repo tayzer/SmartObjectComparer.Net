@@ -1,6 +1,6 @@
 // <copyright file="SemanticDifferenceGroup.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
+
+
 
 using KellermanSoftware.CompareNetObjects;
 
@@ -63,5 +63,5 @@ public class SemanticDifferenceGroup
     /// <summary>
     /// Gets a representative change that exemplifies this group.
     /// </summary>
-    public Difference RepresentativeDifference => Differences.FirstOrDefault();
+    public Difference? RepresentativeDifference => Differences.FirstOrDefault();
 }

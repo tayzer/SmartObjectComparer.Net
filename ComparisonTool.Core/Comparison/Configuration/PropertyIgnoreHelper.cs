@@ -1,6 +1,6 @@
 // <copyright file="PropertyIgnoreHelper.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
+
+
 
 namespace ComparisonTool.Core.Comparison.Configuration;
 
@@ -266,10 +266,7 @@ public static class PropertyIgnoreHelper
         return matches;
     }
 
-    private static string CreateCacheKey(string propertyPath, IEnumerable<string> ignorePatterns)
-    {
-        return $"{propertyPath}|{string.Join(",", ignorePatterns.OrderBy(p => p, StringComparer.Ordinal))}";
-    }
+    private static string CreateCacheKey(string propertyPath, IEnumerable<string> ignorePatterns) => $"{propertyPath}|{string.Join(",", ignorePatterns.OrderBy(p => p, StringComparer.Ordinal))}";
 
     private static bool TryGetCachedResult(string cacheKey, out bool cachedResult)
     {
@@ -354,9 +351,8 @@ public static class PropertyIgnoreHelper
             propertyPath);
     }
 
-    private static Regex GetOrCreateCollectionRegex(string pattern, ILogger logger)
-    {
-        return CompiledRegexCache.GetOrAdd(pattern, p =>
+    private static Regex GetOrCreateCollectionRegex(string pattern, ILogger logger) =>
+        CompiledRegexCache.GetOrAdd(pattern, p =>
         {
             var regexPattern = BuildCollectionRegexPattern(p);
 
@@ -370,7 +366,6 @@ public static class PropertyIgnoreHelper
 
             return new Regex(regexPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.ExplicitCapture, RegexTimeout);
         });
-    }
 
     private static string BuildCollectionRegexPattern(string pattern)
     {

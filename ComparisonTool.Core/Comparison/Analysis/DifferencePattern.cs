@@ -1,6 +1,6 @@
 // <copyright file="DifferencePattern.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
+
+
 
 using KellermanSoftware.CompareNetObjects;
 

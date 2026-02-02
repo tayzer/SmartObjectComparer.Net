@@ -1,6 +1,6 @@
 // <copyright file="FilePairComparisonResult.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
+
+
 
 using ComparisonTool.Core.Comparison.Analysis;
 using KellermanSoftware.CompareNetObjects;

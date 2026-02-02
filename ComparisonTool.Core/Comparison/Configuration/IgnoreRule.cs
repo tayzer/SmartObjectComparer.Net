@@ -1,6 +1,6 @@
 // <copyright file="IgnoreRule.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
+
+
 
 namespace ComparisonTool.Core.Comparison.Configuration;
 
@@ -26,19 +26,13 @@ public class IgnoreRule
 
     // Parameterless constructor explicitly marked for JSON deserialization
     [JsonConstructor]
-    public IgnoreRule()
-    {
-        logger = NullLogger.Instance; // Assign a default logger
-    }
+    public IgnoreRule() => logger = NullLogger.Instance; // Assign a default logger
 
     /// <summary>
     /// Initializes a new instance of the <see cref="IgnoreRule"/> class.
     /// Constructor for programmatic creation with logger.
     /// </summary>
-    public IgnoreRule(ILogger? logger = null)
-    {
-        this.logger = logger ?? NullLogger.Instance;
-    }
+    public IgnoreRule(ILogger? logger = null) => this.logger = logger ?? NullLogger.Instance;
 
     /// <summary>
     /// Gets or sets path to the property (e.g., "Body.Response.Results[0].Name").
@@ -245,10 +239,7 @@ public class IgnoreRule
     /// <summary>
     /// Normalize a property path to handle variations in XML deserialization.
     /// </summary>
-    private string NormalizePropertyPath(string propertyPath)
-    {
-        return PropertyPathNormalizer.NormalizePropertyPath(propertyPath, logger);
-    }
+    private string NormalizePropertyPath(string propertyPath) => PropertyPathNormalizer.NormalizePropertyPath(propertyPath, logger);
 
     /// <summary>
     /// Add MINIMAL collection variations - only the most essential patterns

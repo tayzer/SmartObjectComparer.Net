@@ -1,6 +1,6 @@
-// <copyright file="ComparisonLogService.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
+
+
+
 
 using System.Collections.Concurrent;
 using System.Text;
@@ -245,10 +245,7 @@ public class ComparisonLogService : IComparisonLogService, IDisposable
     }
 
     /// <inheritdoc/>
-    public ComparisonSessionStats GetSessionStats(string sessionId)
-    {
-        return sessions.TryGetValue(sessionId, out var stats) ? stats : new ComparisonSessionStats();
-    }
+    public ComparisonSessionStats GetSessionStats(string sessionId) => sessions.TryGetValue(sessionId, out var stats) ? stats : new ComparisonSessionStats();
 
     /// <inheritdoc/>
     public void Dispose()

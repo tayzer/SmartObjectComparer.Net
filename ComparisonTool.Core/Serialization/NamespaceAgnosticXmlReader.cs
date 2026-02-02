@@ -1,6 +1,6 @@
 // <copyright file="NamespaceAgnosticXmlReader.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
+
+
 
 using System.Xml;
 
@@ -27,11 +27,8 @@ public class NamespaceAgnosticXmlReader : XmlReader
     /// Initializes a new instance of the <see cref="NamespaceAgnosticXmlReader"/> class.
     /// </summary>
     /// <param name="innerReader">The underlying XmlReader to wrap.</param>
-    public NamespaceAgnosticXmlReader(XmlReader innerReader)
-    {
-        this.innerReader = innerReader ?? throw new ArgumentNullException(nameof(innerReader));
-    }
-    
+    public NamespaceAgnosticXmlReader(XmlReader innerReader) => this.innerReader = innerReader ?? throw new ArgumentNullException(nameof(innerReader));
+
     // Properties that need special handling for namespace-agnostic behavior
     
     /// <summary>

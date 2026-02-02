@@ -1,6 +1,6 @@
 // <copyright file="FileTypeDetector.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
+
+
 
 using ComparisonTool.Core.Serialization;
 using Microsoft.Extensions.Logging;
@@ -100,13 +100,12 @@ public static class FileTypeDetector {
     /// </summary>
     /// <param name="format">Serialization format.</param>
     /// <returns>File extension including the dot (e.g., ".xml").</returns>
-    public static string GetFileExtension(SerializationFormat format) {
-        return format switch {
+    public static string GetFileExtension(SerializationFormat format) =>
+        format switch {
             SerializationFormat.Xml => ".xml",
             SerializationFormat.Json => ".json",
             _ => throw new ArgumentException($"Unknown format: {format}")
         };
-    }
 
     /// <summary>
     /// Check if a file path has a supported file extension.
@@ -131,15 +130,11 @@ public static class FileTypeDetector {
     /// Get all supported file extensions.
     /// </summary>
     /// <returns>Array of supported extensions including the dot.</returns>
-    public static string[] GetSupportedExtensions() {
-        return new[] { ".xml", ".json" };
-    }
+    public static string[] GetSupportedExtensions() => new[] { ".xml", ".json" };
 
     /// <summary>
     /// Get file filter string for file dialogs.
     /// </summary>
     /// <returns>File filter string suitable for file dialogs.</returns>
-    public static string GetFileFilter() {
-        return "Supported Files (*.xml;*.json)|*.xml;*.json|XML Files (*.xml)|*.xml|JSON Files (*.json)|*.json|All Files (*.*)|*.*";
-    }
+    public static string GetFileFilter() => "Supported Files (*.xml;*.json)|*.xml;*.json|XML Files (*.xml)|*.xml|JSON Files (*.json)|*.json|All Files (*.*)|*.*";
 }

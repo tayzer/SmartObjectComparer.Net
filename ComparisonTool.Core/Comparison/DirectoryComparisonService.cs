@@ -1,6 +1,6 @@
 // <copyright file="DirectoryComparisonService.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
+
+
 
 using System.Collections.Concurrent;
 using ComparisonTool.Core.Comparison;
@@ -332,9 +332,8 @@ public class DirectoryComparisonService
         bool enablePatternAnalysis = true,
         bool enableSemanticAnalysis = true,
         IProgress<ComparisonProgress>? progress = null,
-        CancellationToken cancellationToken = default)
-    {
-        return await performanceTracker.TrackOperationAsync("CompareFolderUploadsAsync", async () =>
+        CancellationToken cancellationToken = default) =>
+        await performanceTracker.TrackOperationAsync("CompareFolderUploadsAsync", async () =>
         {
             // Record timing statistics about input
             performanceTracker.TrackOperation("Folder_Stats", () =>
@@ -552,7 +551,6 @@ public class DirectoryComparisonService
 
             return result;
         }).ConfigureAwait(false);
-    }
 
     /// <summary>
     /// Calculate batch size based on file count.

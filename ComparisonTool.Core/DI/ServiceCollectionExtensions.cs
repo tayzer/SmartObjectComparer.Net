@@ -1,6 +1,6 @@
 // <copyright file="ServiceCollectionExtensions.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
+
+
 
 using System.Xml.Serialization;
 using ComparisonTool.Core.Comparison;
@@ -28,9 +28,7 @@ public static class ServiceCollectionExtensions
     /// <param name="configuration">Optional configuration for comparison settings.</param>
     /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddXmlComparisonServices(this IServiceCollection services, IConfiguration? configuration = null)
-    {
-        return services.AddXmlComparisonServices(configuration, configureOptions: null);
-    }
+        => services.AddXmlComparisonServices(configuration, configureOptions: null);
 
     /// <summary>
     /// Add XML comparison services with custom domain model registration.
@@ -51,9 +49,7 @@ public static class ServiceCollectionExtensions
     /// </code>
     /// </example>
     public static IServiceCollection AddXmlComparisonServices(this IServiceCollection services, Action<XmlComparisonOptions> configureOptions)
-    {
-        return services.AddXmlComparisonServices(configuration: null, configureOptions);
-    }
+        => services.AddXmlComparisonServices(configuration: null, configureOptions);
 
     /// <summary>
     /// Add XML comparison services with configuration and custom domain model registration.
@@ -106,9 +102,7 @@ public static class ServiceCollectionExtensions
     /// <param name="configuration">Optional configuration for comparison settings.</param>
     /// <returns>The service collection for chaining.</returns>
     public static IServiceCollection AddUnifiedComparisonServices(this IServiceCollection services, IConfiguration? configuration = null)
-    {
-        return services.AddUnifiedComparisonServices(configuration, configureOptions: null);
-    }
+        => services.AddUnifiedComparisonServices(configuration, configureOptions: null);
 
     /// <summary>
     /// Add unified comparison services with custom domain model registration.
@@ -130,9 +124,7 @@ public static class ServiceCollectionExtensions
     /// </code>
     /// </example>
     public static IServiceCollection AddUnifiedComparisonServices(this IServiceCollection services, Action<XmlComparisonOptions> configureOptions)
-    {
-        return services.AddUnifiedComparisonServices(configuration: null, configureOptions);
-    }
+        => services.AddUnifiedComparisonServices(configuration: null, configureOptions);
 
     /// <summary>
     /// Add unified comparison services with configuration and custom domain model registration.
@@ -288,18 +280,15 @@ public static class ServiceCollectionExtensions
         services.AddScoped<DirectoryComparisonService>();
     }
 
-    private static ComparisonOrchestrator CreateComparisonOrchestrator(IServiceProvider provider)
-    {
-        return new ComparisonOrchestrator(
-            provider.GetRequiredService<ILogger<ComparisonOrchestrator>>(),
-            provider.GetRequiredService<IXmlDeserializationService>(),
-            provider.GetRequiredService<IComparisonConfigurationService>(),
-            provider.GetRequiredService<IFileSystemService>(),
-            provider.GetRequiredService<PerformanceTracker>(),
-            provider.GetRequiredService<SystemResourceMonitor>(),
-            provider.GetRequiredService<ComparisonResultCacheService>(),
-            provider.GetRequiredService<IComparisonEngine>(),
-            provider.GetService<DeserializationServiceFactory>(),
-            provider.GetRequiredService<ILoggerFactory>());
-    }
+    private static ComparisonOrchestrator CreateComparisonOrchestrator(IServiceProvider provider) => new ComparisonOrchestrator(
+        provider.GetRequiredService<ILogger<ComparisonOrchestrator>>(),
+        provider.GetRequiredService<IXmlDeserializationService>(),
+        provider.GetRequiredService<IComparisonConfigurationService>(),
+        provider.GetRequiredService<IFileSystemService>(),
+        provider.GetRequiredService<PerformanceTracker>(),
+        provider.GetRequiredService<SystemResourceMonitor>(),
+        provider.GetRequiredService<ComparisonResultCacheService>(),
+        provider.GetRequiredService<IComparisonEngine>(),
+        provider.GetService<DeserializationServiceFactory>(),
+        provider.GetRequiredService<ILoggerFactory>());
 }

@@ -1,8 +1,6 @@
 // <copyright file="DifferenceFilter.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
 
-namespace ComparisonTool.Core.Comparison.Utilities;
+
 
 using System;
 using System.Collections.Generic;
@@ -13,6 +11,8 @@ using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.Utilities;
 using KellermanSoftware.CompareNetObjects;
 using Microsoft.Extensions.Logging;
+
+namespace ComparisonTool.Core.Comparison.Utilities;
 
 /// <summary>
 /// Helper to normalize and remove duplicate differences from CompareNETObjects results.
@@ -26,7 +26,7 @@ public static class DifferenceFilter
     {
         if (result == null)
         {
-            return result;
+            throw new ArgumentNullException(nameof(result));
         }
 
         if (result.Differences == null || result.Differences.Count <= 1)
@@ -74,13 +74,8 @@ public static class DifferenceFilter
         return result;
     }
 
-    private static bool IsConfusingCollectionDifference(Difference diff, ILogger logger)
+    private static bool IsConfusingCollectionDifference(Difference diff, ILogger? logger)
     {
-        if (diff == null)
-        {
-            return false;
-        }
-
         if (diff.PropertyName.EndsWith(".System.Collections.IList.Item", StringComparison.Ordinal) || diff.PropertyName.EndsWith(".System.Collections.Generic.IList`1.Item", StringComparison.Ordinal))
         {
             if (int.TryParse(ToInvariantString(diff.Object1Value), NumberStyles.Integer, CultureInfo.InvariantCulture, out _)
@@ -94,11 +89,11 @@ public static class DifferenceFilter
         return false;
     }
 
-    private static Difference ImproveDifferenceDescription(Difference diff, ILogger logger)
+    private static Difference ImproveDifferenceDescription(Difference diff, ILogger? logger)
     {
         if (diff == null)
         {
-            return diff;
+            throw new ArgumentNullException(nameof(diff));
         }
 
         if (diff.PropertyName.Contains(".System.Collections.IList.Item[")
@@ -171,7 +166,7 @@ public static class DifferenceFilter
             get; set;
         }
 
-        public override bool Equals(object obj)
+        public override bool Equals(object? obj)
         {
             if (obj is not DifferenceGroupingKey other)
             {
@@ -181,12 +176,9 @@ public static class DifferenceFilter
             return string.Equals(OldValue, other.OldValue, StringComparison.Ordinal) && string.Equals(NewValue, other.NewValue, StringComparison.Ordinal) && string.Equals(PropertyPath, other.PropertyPath, StringComparison.Ordinal);
         }
 
-        public override int GetHashCode()
-        {
-            return HashCode.Combine(
-                StringComparer.Ordinal.GetHashCode(OldValue ?? string.Empty),
-                StringComparer.Ordinal.GetHashCode(NewValue ?? string.Empty),
-                StringComparer.Ordinal.GetHashCode(PropertyPath ?? string.Empty));
-        }
+        public override int GetHashCode() => HashCode.Combine(
+            StringComparer.Ordinal.GetHashCode(OldValue ?? string.Empty),
+            StringComparer.Ordinal.GetHashCode(NewValue ?? string.Empty),
+            StringComparer.Ordinal.GetHashCode(PropertyPath ?? string.Empty));
     }
 }
