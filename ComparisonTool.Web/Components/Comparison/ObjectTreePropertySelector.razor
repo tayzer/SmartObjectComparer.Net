@@ -1277,13 +1277,13 @@
         return type != null && IsPrimitiveType(type);
     }
 
-    private Type GetPropertyType(string propertyPath)
+    private Type? GetPropertyType(string propertyPath)
     {
         var allPaths = GetAllPropertyPaths(ModelType);
         return allPaths.TryGetValue(propertyPath, out var type) ? type : null;
     }
 
-    private string GetFriendlyTypeName(Type type)
+    private string GetFriendlyTypeName(Type? type)
     {
         if (type == null) return "Unknown";
 

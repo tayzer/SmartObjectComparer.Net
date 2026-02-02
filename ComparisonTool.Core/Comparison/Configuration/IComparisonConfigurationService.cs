@@ -1,7 +1,4 @@
 // <copyright file="IComparisonConfigurationService.cs" company="PlaceholderCompany">
-
-
-
 using KellermanSoftware.CompareNetObjects;
 
 namespace ComparisonTool.Core.Comparison.Configuration;

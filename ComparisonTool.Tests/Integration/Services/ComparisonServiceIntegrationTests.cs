@@ -1,7 +1,4 @@
 // <copyright file="ComparisonServiceIntegrationTests.cs" company="PlaceholderCompany">
-
-
-
 using System.IO;
 using System.Text;
 using ComparisonTool.Core.Comparison;

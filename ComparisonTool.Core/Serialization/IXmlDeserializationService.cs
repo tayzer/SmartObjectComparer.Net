@@ -1,7 +1,4 @@
 // <copyright file="IXmlDeserializationService.cs" company="PlaceholderCompany">
-
-
-
 namespace ComparisonTool.Core.Serialization;
 
 /// <summary>

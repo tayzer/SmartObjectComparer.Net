@@ -1,7 +1,4 @@
 // <copyright file="JsonDeserializationService.cs" company="PlaceholderCompany">
-
-
-
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Text.Json;

@@ -1,7 +1,4 @@
 // <copyright file="ComparisonConfigurationOptions.cs" company="PlaceholderCompany">
-
-
-
 namespace ComparisonTool.Core.Comparison.Configuration;
 
 /// <summary>

@@ -1,7 +1,4 @@
 // <copyright file="ServiceCollectionExtensions.cs" company="PlaceholderCompany">
-
-
-
 using System.Xml.Serialization;
 using ComparisonTool.Core.Comparison;
 using ComparisonTool.Core.Comparison.Configuration;

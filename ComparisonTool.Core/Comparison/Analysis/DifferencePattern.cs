@@ -1,7 +1,4 @@
 // <copyright file="DifferencePattern.cs" company="PlaceholderCompany">
-
-
-
 using KellermanSoftware.CompareNetObjects;
 
 namespace ComparisonTool.Core.Comparison.Analysis;
@@ -18,5 +15,5 @@ public class DifferencePattern {
         get; set;
     }
 
-    public List<Difference> Examples { get; set; } = new();
+    public List<Difference> Examples { get; set; } = new ();
 }

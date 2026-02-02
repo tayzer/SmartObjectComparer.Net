@@ -1,7 +1,4 @@
 // <copyright file="DifferenceSummary.cs" company="PlaceholderCompany">
-
-
-
 using System.Text;
 using KellermanSoftware.CompareNetObjects;
 
@@ -19,17 +16,17 @@ public class DifferenceSummary {
         get; set;
     }
 
-    public Dictionary<DifferenceCategory, List<Difference>> DifferencesByChangeType { get; set; } = new();
+    public Dictionary<DifferenceCategory, List<Difference>> DifferencesByChangeType { get; set; } = new ();
 
-    public Dictionary<string, List<Difference>> DifferencesByRootObject { get; set; } = new();
+    public Dictionary<string, List<Difference>> DifferencesByRootObject { get; set; } = new ();
 
-    public Dictionary<string, Dictionary<DifferenceCategory, List<Difference>>> DifferencesByRootObjectAndCategory { get; set; } = new();
+    public Dictionary<string, Dictionary<DifferenceCategory, List<Difference>>> DifferencesByRootObjectAndCategory { get; set; } = new ();
 
-    public Dictionary<DifferenceCategory, double> CategoryPercentages { get; set; } = new();
+    public Dictionary<DifferenceCategory, double> CategoryPercentages { get; set; } = new ();
 
-    public Dictionary<string, double> RootObjectPercentages { get; set; } = new();
+    public Dictionary<string, double> RootObjectPercentages { get; set; } = new ();
 
-    public List<DifferencePattern> CommonPatterns { get; set; } = new();
+    public List<DifferencePattern> CommonPatterns { get; set; } = new ();
 
     /// <summary>
     /// Generate a human-friendly summary report.

@@ -1,7 +1,4 @@
 // <copyright file="MultiFolderComparisonResult.cs" company="PlaceholderCompany">
-
-
-
 namespace ComparisonTool.Core.Comparison.Results;
 
 public class MultiFolderComparisonResult

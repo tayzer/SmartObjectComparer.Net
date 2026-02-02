@@ -1,7 +1,4 @@
 // <copyright file="FileTypeDetector.cs" company="PlaceholderCompany">
-
-
-
 using ComparisonTool.Core.Serialization;
 using Microsoft.Extensions.Logging;
 

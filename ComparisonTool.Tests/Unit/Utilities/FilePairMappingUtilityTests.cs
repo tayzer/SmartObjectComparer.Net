@@ -1,7 +1,4 @@
 // <copyright file="FilePairMappingUtilityTests.cs" company="PlaceholderCompany">
-
-
-
 using System;
 using System.Collections.Generic;
 using System.Linq;

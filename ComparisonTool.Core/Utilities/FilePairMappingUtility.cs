@@ -1,7 +1,4 @@
 // <copyright file="FilePairMappingUtility.cs" company="PlaceholderCompany">
-
-
-
 using System;
 using System.Collections.Generic;
 using System.IO;

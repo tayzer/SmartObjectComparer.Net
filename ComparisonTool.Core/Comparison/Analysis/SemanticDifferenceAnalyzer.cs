@@ -1,9 +1,3 @@
-// <copyright file="SemanticDifferenceAnalyzer.cs" company="PlaceholderCompany">
-
-
-
-namespace ComparisonTool.Core.Comparison.Analysis;
-
 using System.Text;
 using System.Text.RegularExpressions;
 using ComparisonTool.Core.Comparison.Analysis;
@@ -11,6 +5,8 @@ using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.Utilities;
 using KellermanSoftware.CompareNetObjects;
 using Microsoft.Extensions.Logging;
+
+namespace ComparisonTool.Core.Comparison.Analysis;
 
 /// <summary>
 /// Analyzes differences to create semantic groupings.

@@ -1,7 +1,4 @@
 // <copyright file="Program.cs" company="PlaceholderCompany">
-
-
-
 using System.Xml.Serialization;
 using ComparisonTool.Core.DI;
 using ComparisonTool.Core.Models;

@@ -1,7 +1,4 @@
 // <copyright file="FileBatchUploadApi.cs" company="PlaceholderCompany">
-
-
-
 namespace ComparisonTool.Web;
 
 using System;

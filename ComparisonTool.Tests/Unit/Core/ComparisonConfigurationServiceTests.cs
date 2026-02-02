@@ -1,7 +1,4 @@
 // <copyright file="ComparisonConfigurationServiceTests.cs" company="PlaceholderCompany">
-
-
-
 using System.Text.Json;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;

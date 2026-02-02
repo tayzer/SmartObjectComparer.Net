@@ -1,7 +1,4 @@
 // <copyright file="ThreadPoolConfig.cs" company="PlaceholderCompany">
-
-
-
 namespace ComparisonTool.Web {
     using System;
     using System.Threading;

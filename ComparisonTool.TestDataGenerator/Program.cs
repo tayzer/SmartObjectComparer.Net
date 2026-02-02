@@ -1,7 +1,4 @@
 // <copyright file="Program.cs" company="PlaceholderCompany">
-
-
-
 namespace ComparisonTool.TestDataGenerator {
     using System.Xml;
     using System.Xml.Serialization;

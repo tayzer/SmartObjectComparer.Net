@@ -1,9 +1,3 @@
-// <copyright file="PatternFrequencyAnalyzer.cs" company="PlaceholderCompany">
-
-
-
-namespace ComparisonTool.Core.Comparison.Analysis;
-
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,6 +5,7 @@ using System.Text.RegularExpressions;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.Utilities;
 using KellermanSoftware.CompareNetObjects;
+namespace ComparisonTool.Core.Comparison.Analysis;
 
 /// <summary>
 /// Analyzes frequency of recurring difference patterns (e.g., missing/added elements, value changes) across all file pairs.

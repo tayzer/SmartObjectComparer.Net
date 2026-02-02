@@ -1,7 +1,4 @@
 // <copyright file="ComparisonProgress.cs" company="PlaceholderCompany">
-
-
-
 namespace ComparisonTool.Core.Comparison;
 
 /// <summary>

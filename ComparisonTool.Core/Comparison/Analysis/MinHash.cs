@@ -1,7 +1,4 @@
 // <copyright file="MinHash.cs" company="PlaceholderCompany">
-
-
-
 namespace ComparisonTool.Core.Comparison.Analysis {
     using System;
     using System.Collections.Generic;

@@ -1,7 +1,4 @@
 // <copyright file="SystemResourceMonitor.cs" company="PlaceholderCompany">
-
-
-
 namespace ComparisonTool.Core.Utilities;
 
 using System;

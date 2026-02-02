@@ -1,6 +1,4 @@
 // <copyright file="XmlComparisonService.cs" company="PlaceholderCompany">
-
-
 // namespace ComparisonTool.Core.Comparison;
 
 ///// <summary>

@@ -1,7 +1,4 @@
 // <copyright file="FileSystemService.cs" company="PlaceholderCompany">
-
-
-
 using System.IO;
 using System.Threading;
 using Microsoft.Extensions.Logging;

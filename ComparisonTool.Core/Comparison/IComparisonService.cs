@@ -1,7 +1,4 @@
 // <copyright file="IComparisonService.cs" company="PlaceholderCompany">
-
-
-
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Results;
 using KellermanSoftware.CompareNetObjects;

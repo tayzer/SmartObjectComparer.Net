@@ -1,7 +1,4 @@
 // <copyright file="ComparisonOrchestrator.cs" company="PlaceholderCompany">
-
-
-
 using System.Collections.Concurrent;
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Configuration;

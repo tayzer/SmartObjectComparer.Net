@@ -1,7 +1,4 @@
 // <copyright file="ModelReflectionService.cs" company="PlaceholderCompany">
-
-
-
 using System.Reflection;
 
 namespace ComparisonTool.Core.Utilities;

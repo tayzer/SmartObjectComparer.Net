@@ -1,7 +1,4 @@
 // <copyright file="IDeserializationService.cs" company="PlaceholderCompany">
-
-
-
 namespace ComparisonTool.Core.Serialization;
 
 /// <summary>

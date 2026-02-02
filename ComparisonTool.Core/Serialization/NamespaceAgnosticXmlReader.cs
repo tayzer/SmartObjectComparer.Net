@@ -1,7 +1,4 @@
 // <copyright file="NamespaceAgnosticXmlReader.cs" company="PlaceholderCompany">
-
-
-
 using System.Xml;
 
 namespace ComparisonTool.Core.Serialization;

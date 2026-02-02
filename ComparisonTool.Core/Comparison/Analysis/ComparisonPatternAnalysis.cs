@@ -1,7 +1,3 @@
-// <copyright file="ComparisonPatternAnalysis.cs" company="PlaceholderCompany">
-
-
-
 namespace ComparisonTool.Core.Comparison.Analysis;
 
 public class ComparisonPatternAnalysis {

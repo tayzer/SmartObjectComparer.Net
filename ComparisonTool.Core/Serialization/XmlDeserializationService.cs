@@ -1,7 +1,4 @@
 // <copyright file="XmlDeserializationService.cs" company="PlaceholderCompany">
-
-
-
 using System.Collections.Concurrent;
 using System.Xml;
 using System.Xml.Serialization;

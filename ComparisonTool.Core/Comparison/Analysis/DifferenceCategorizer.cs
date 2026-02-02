@@ -1,7 +1,4 @@
 // <copyright file="DifferenceCategorizer.cs" company="PlaceholderCompany">
-
-
-
 using System;
 using System.Text.RegularExpressions;
 using KellermanSoftware.CompareNetObjects;
@@ -159,9 +156,8 @@ public class DifferenceCategorizer
 
     private bool IsBooleanDifference(object value1, object value2) => value1 is bool && value2 is bool;
 
-    private string GetPathPattern(string propertyPath) =>
-        // Replace array indices with [*] to generalize the pattern
-        Regex.Replace(propertyPath, @"\[\d+\]", "[*]", RegexOptions.None, RegexTimeout);
+    // Replace array indices with [*] to generalize the pattern
+    private string GetPathPattern(string propertyPath) => Regex.Replace(propertyPath, @"\[\d+\]", "[*]", RegexOptions.None, RegexTimeout);
 
     private string GetRootObjectName(string propertyPath)
     {

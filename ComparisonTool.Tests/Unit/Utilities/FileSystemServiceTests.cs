@@ -1,7 +1,4 @@
 // <copyright file="FileSystemServiceTests.cs" company="PlaceholderCompany">
-
-
-
 using System.IO;
 using ComparisonTool.Core.Utilities;
 using FluentAssertions;

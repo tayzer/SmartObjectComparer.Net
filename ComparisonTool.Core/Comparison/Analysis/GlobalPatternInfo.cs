@@ -1,7 +1,4 @@
 // <copyright file="GlobalPatternInfo.cs" company="PlaceholderCompany">
-
-
-
 using KellermanSoftware.CompareNetObjects;
 
 namespace ComparisonTool.Core.Comparison.Analysis;

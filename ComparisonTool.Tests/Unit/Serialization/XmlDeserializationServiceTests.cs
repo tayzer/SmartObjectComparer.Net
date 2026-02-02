@@ -1,7 +1,4 @@
 // <copyright file="XmlDeserializationServiceTests.cs" company="PlaceholderCompany">
-
-
-
 using System.Text;
 using System.Xml;
 using System.Xml.Serialization;

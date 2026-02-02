@@ -1,7 +1,4 @@
 // <copyright file="DifferenceFilter.cs" company="PlaceholderCompany">
-
-
-
 using System;
 using System.Collections.Generic;
 using System.Globalization;

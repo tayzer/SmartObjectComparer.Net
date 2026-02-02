@@ -1,7 +1,4 @@
 // <copyright file="DifferenceCategory.cs" company="PlaceholderCompany">
-
-
-
 namespace ComparisonTool.Core.Comparison.Analysis;
 
 /// <summary>

@@ -1,7 +1,4 @@
 // <copyright file="ComparisonService.cs" company="PlaceholderCompany">
-
-
-
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;

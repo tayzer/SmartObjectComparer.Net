@@ -1,7 +1,4 @@
 // <copyright file="PropertyPathNormalizer.cs" company="PlaceholderCompany">
-
-
-
 namespace ComparisonTool.Core.Utilities {
     using System.Text.RegularExpressions;
     using Microsoft.Extensions.Logging;

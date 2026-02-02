@@ -1,7 +1,4 @@
 // <copyright file="IFileUtilities.cs" company="PlaceholderCompany">
-
-
-
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Results;
 
