@@ -8,7 +8,16 @@ namespace ComparisonTool.Core.Serialization;
 /// Interface for format-agnostic deserialization operations
 /// Supports both XML and JSON file formats.
 /// </summary>
-public interface IDeserializationService {
+public interface IDeserializationService
+{
+    /// <summary>
+    /// Gets get supported file formats for this service.
+    /// </summary>
+    IEnumerable<SerializationFormat> SupportedFormats
+    {
+        get;
+    }
+
     /// <summary>
     /// Register a domain model for deserialization.
     /// </summary>
@@ -20,7 +29,7 @@ public interface IDeserializationService {
     /// <summary>
     /// Get all registered domain model names.
     /// </summary>
-    /// <returns></returns>
+    /// <returns>Collection of registered model names.</returns>
     IEnumerable<string> GetRegisteredModelNames();
 
     /// <summary>
@@ -56,26 +65,20 @@ public interface IDeserializationService {
     /// <summary>
     /// Get cache statistics for diagnostics.
     /// </summary>
-    /// <returns></returns>
+    /// <returns>Tuple with cache size and serializer cache size.</returns>
     (int CacheSize, int SerializerCacheSize) GetCacheStatistics();
 
     /// <summary>
     /// Force clear all caches - useful for debugging deserialization inconsistencies.
     /// </summary>
     void ClearAllCaches();
-
-    /// <summary>
-    /// Gets get supported file formats for this service.
-    /// </summary>
-    IEnumerable<SerializationFormat> SupportedFormats {
-        get;
-    }
 }
 
 /// <summary>
 /// Supported serialization formats.
 /// </summary>
-public enum SerializationFormat {
+public enum SerializationFormat
+{
     /// <summary>
     /// XML format using System.Xml.Serialization
     /// </summary>

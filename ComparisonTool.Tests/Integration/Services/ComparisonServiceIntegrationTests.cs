@@ -2,10 +2,12 @@
 // Copyright (c) PlaceholderCompany. All rights reserved.
 // </copyright>
 
+using System.IO;
 using System.Text;
 using ComparisonTool.Core.Comparison;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
+using ComparisonTool.Core.Models;
 using ComparisonTool.Core.Serialization;
 using ComparisonTool.Core.Utilities;
 using ComparisonTool.Domain.Models;
@@ -37,12 +39,12 @@ public class ComparisonServiceIntegrationTests
 
     public ComparisonServiceIntegrationTests()
     {
-        this.mockLogger = new Mock<ILogger<ComparisonService>>();
-        this.mockConfigLogger = new Mock<ILogger<ComparisonConfigurationService>>();
-        this.mockXmlLogger = new Mock<ILogger<XmlDeserializationService>>();
-        this.mockFileLogger = new Mock<ILogger<FileSystemService>>();
-        this.mockPerfLogger = new Mock<ILogger<PerformanceTracker>>();
-        this.mockResourceLogger = new Mock<ILogger<SystemResourceMonitor>>();
+        mockLogger = new Mock<ILogger<ComparisonService>>();
+        mockConfigLogger = new Mock<ILogger<ComparisonConfigurationService>>();
+        mockXmlLogger = new Mock<ILogger<XmlDeserializationService>>();
+        mockFileLogger = new Mock<ILogger<FileSystemService>>();
+        mockPerfLogger = new Mock<ILogger<PerformanceTracker>>();
+        mockResourceLogger = new Mock<ILogger<SystemResourceMonitor>>();
 
         var configOptions = new ComparisonConfigurationOptions
         {
@@ -51,44 +53,47 @@ public class ComparisonServiceIntegrationTests
             DefaultIgnoreStringCase = false,
         };
 
-        this.configService = new ComparisonConfigurationService(this.mockConfigLogger.Object, Options.Create(configOptions));
+        configService = new ComparisonConfigurationService(mockConfigLogger.Object, Options.Create(configOptions));
 
         var serializerFactory = new ComparisonTool.Core.Serialization.XmlSerializerFactory();
-        this.xmlService = new XmlDeserializationService(this.mockXmlLogger.Object, serializerFactory);
+        serializerFactory.RegisterType<ComplexOrderResponse>(
+            () => serializerFactory.CreateComplexOrderResponseSerializer());
+        xmlService = new XmlDeserializationService(mockXmlLogger.Object, serializerFactory);
 
-        this.fileService = new FileSystemService(this.mockFileLogger.Object);
-        this.performanceTracker = new PerformanceTracker(this.mockPerfLogger.Object);
-        this.resourceMonitor = new SystemResourceMonitor(this.mockResourceLogger.Object);
-        this.cacheService = new ComparisonResultCacheService(this.mockLogger.Object);
+        fileService = new FileSystemService(mockFileLogger.Object);
+        performanceTracker = new PerformanceTracker(mockPerfLogger.Object);
+        resourceMonitor = new SystemResourceMonitor(mockResourceLogger.Object);
+        cacheService = new ComparisonResultCacheService(mockLogger.Object);
 
         var mockComparisonEngineLogger = new Mock<ILogger<ComparisonEngine>>();
-        var comparisonEngine = new ComparisonEngine(mockComparisonEngineLogger.Object, this.configService, this.performanceTracker);
+        var comparisonEngine = new ComparisonEngine(mockComparisonEngineLogger.Object, configService, performanceTracker);
 
         var mockComparisonOrchestratorLogger = new Mock<ILogger<ComparisonOrchestrator>>();
         var comparisonOrchestrator = new ComparisonOrchestrator(
             mockComparisonOrchestratorLogger.Object,
-            this.xmlService,
-            this.configService,
-            this.fileService,
-            this.performanceTracker,
-            this.resourceMonitor,
-            this.cacheService,
+            xmlService,
+            configService,
+            fileService,
+            performanceTracker,
+            resourceMonitor,
+            cacheService,
             comparisonEngine);
 
-        this.comparisonService = new ComparisonService(
-            this.mockLogger.Object,
-            this.xmlService,
-            this.configService,
-            this.fileService,
-            this.performanceTracker,
-            this.resourceMonitor,
-            this.cacheService,
+        comparisonService = new ComparisonService(
+            mockLogger.Object,
+            xmlService,
+            configService,
+            fileService,
+            performanceTracker,
+            resourceMonitor,
+            cacheService,
             comparisonEngine,
             comparisonOrchestrator);
 
         // Register test models
-        this.xmlService.RegisterDomainModel<TestModel>("TestModel");
-        this.xmlService.RegisterDomainModel<ComplexTestModel>("ComplexTestModel");
+        xmlService.RegisterDomainModel<TestModel>("TestModel");
+        xmlService.RegisterDomainModel<ComplexTestModel>("ComplexTestModel");
+        xmlService.RegisterDomainModel<ComplexOrderResponse>("ComplexOrderResponse");
     }
 
     [TestMethod]
@@ -105,7 +110,7 @@ public class ComparisonServiceIntegrationTests
         using var stream2 = new MemoryStream(Encoding.UTF8.GetBytes(xml));
 
         // Act
-        var result = await this.comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestModel");
+        var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestModel");
 
         // Assert
         result.Should().NotBeNull();
@@ -133,7 +138,7 @@ public class ComparisonServiceIntegrationTests
         using var stream2 = new MemoryStream(Encoding.UTF8.GetBytes(xml2));
 
         // Act
-        var result = await this.comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestModel");
+        var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestModel");
 
         // Assert
         result.Should().NotBeNull();
@@ -164,10 +169,10 @@ public class ComparisonServiceIntegrationTests
         using var stream2 = new MemoryStream(Encoding.UTF8.GetBytes(xml2));
 
         // Configure ignore rule
-        this.configService.IgnoreProperty("StringProperty");
+        configService.IgnoreProperty("StringProperty");
 
         // Act
-        var result = await this.comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestModel");
+        var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestModel");
 
         // Assert
         result.Should().NotBeNull();
@@ -205,7 +210,7 @@ public class ComparisonServiceIntegrationTests
         using var stream2 = new MemoryStream(Encoding.UTF8.GetBytes(xml2));
 
         // Act
-        var result = await this.comparisonService.CompareXmlFilesAsync(stream1, stream2, "ComplexTestModel");
+        var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "ComplexTestModel");
 
         // Assert
         result.Should().NotBeNull();
@@ -252,15 +257,75 @@ public class ComparisonServiceIntegrationTests
         using var stream2 = new MemoryStream(Encoding.UTF8.GetBytes(xml2));
 
         // Configure to ignore collection order
-        this.configService.SetIgnoreCollectionOrder(true);
+        configService.SetIgnoreCollectionOrder(true);
 
         // Act
-        var result = await this.comparisonService.CompareXmlFilesAsync(stream1, stream2, "ComplexTestModel");
+        var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "ComplexTestModel");
 
         // Assert
         result.Should().NotBeNull();
         result.Differences.Should().BeEmpty();
         result.AreEqual.Should().BeTrue();
+    }
+
+    [DataTestMethod]
+    [DataRow("Actual_4_Differences.xml", "Expected_4_Differences.xml", false)]
+    [DataRow("Actual_Component_Timings_Order.xml", "Expected_Component_Timings_Order.xml", true)]
+    [DataRow("Actual_DateTime_Diff.xml", "Expected_DateTime_Diff.xml", false)]
+    [DataRow("Actual_SourceSystem_Diff.xml", "Expected_SourceSystem_Diff.xml", false)]
+    [DataRow("Actual_Same.xml", "Expected_Same.xml", true)]
+    public async Task CompareXmlFilesAsync_WithSpecificComplexModelFiles_ShouldDetectDifferences(
+        string actualFileName,
+        string expectedFileName,
+        bool expectEqual)
+    {
+        var testRoot = GetSpecificComplexModelTestRoot();
+        var actualPath = Path.Combine(testRoot, "Actual", actualFileName);
+        var expectedPath = Path.Combine(testRoot, "Expected", expectedFileName);
+
+        actualPath.Should().MatchRegex(@".*Actual\\.+\.xml$");
+        expectedPath.Should().MatchRegex(@".*Expected\\.+\.xml$");
+
+        using var actualStream = File.OpenRead(actualPath);
+        using var expectedStream = File.OpenRead(expectedPath);
+
+        var result = await comparisonService.CompareXmlFilesAsync(
+            actualStream,
+            expectedStream,
+            "ComplexOrderResponse");
+
+        result.Should().NotBeNull();
+        if (expectEqual)
+        {
+            result.AreEqual.Should().BeTrue();
+            result.Differences.Should().BeEmpty();
+        }
+        else
+        {
+            result.AreEqual.Should().BeFalse();
+            result.Differences.Should().NotBeEmpty();
+        }
+    }
+
+    private static string GetSpecificComplexModelTestRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (current != null && !File.Exists(Path.Combine(current.FullName, "ComparisonTool.sln")))
+        {
+            current = current.Parent;
+        }
+
+        if (current == null)
+        {
+            throw new DirectoryNotFoundException("Could not locate ComparisonTool.sln to resolve test data paths.");
+        }
+
+        return Path.Combine(
+            current.FullName,
+            "ComparisonTool.Domain",
+            "TestFiles",
+            "SpecificTests_ComplexModel");
     }
 
     [TestMethod]
@@ -276,7 +341,7 @@ public class ComparisonServiceIntegrationTests
         using var stream2 = new MemoryStream(Encoding.UTF8.GetBytes(xml));
 
         // Act & Assert
-        var action = () => this.comparisonService.CompareXmlFilesAsync(stream1, stream2, "UnregisteredModel");
+        var action = () => comparisonService.CompareXmlFilesAsync(stream1, stream2, "UnregisteredModel");
         await action.Should().ThrowAsync<ArgumentException>();
     }
 
@@ -293,7 +358,7 @@ public class ComparisonServiceIntegrationTests
         using var stream2 = new MemoryStream(Encoding.UTF8.GetBytes(malformedXml));
 
         // Act & Assert
-        var action = () => this.comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestModel");
+        var action = () => comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestModel");
         await action.Should().ThrowAsync<System.Reflection.TargetInvocationException>(); // Exception is wrapped when called through reflection
     }
 
@@ -311,7 +376,7 @@ public class ComparisonServiceIntegrationTests
         using var stream2 = new MemoryStream(Encoding.UTF8.GetBytes(xml));
 
         // Act - First comparison
-        var result1 = await this.comparisonService.CompareXmlFilesWithCachingAsync(
+        var result1 = await comparisonService.CompareXmlFilesWithCachingAsync(
             stream1, stream2, "TestModel", "file1.xml", "file2.xml");
 
         // Reset streams for second comparison
@@ -319,7 +384,7 @@ public class ComparisonServiceIntegrationTests
         stream2.Position = 0;
 
         // Act - Second comparison (should use cache)
-        var result2 = await this.comparisonService.CompareXmlFilesWithCachingAsync(
+        var result2 = await comparisonService.CompareXmlFilesWithCachingAsync(
             stream1, stream2, "TestModel", "file1.xml", "file2.xml");
 
         // Assert
@@ -360,7 +425,7 @@ public class ComparisonServiceIntegrationTests
 
         [System.Xml.Serialization.XmlArray("Items")]
         [System.Xml.Serialization.XmlArrayItem("ComplexTestModelItem")]
-        public List<ComplexTestModelItem> Items { get; set; } = new ();
+        public List<ComplexTestModelItem> Items { get; set; } = new List<ComplexTestModelItem>();
     }
 
     public class ComplexTestModelItem

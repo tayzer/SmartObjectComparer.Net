@@ -28,6 +28,12 @@
                        Color="Color.Primary"
                        Label="Ignore String Case Globally"
                        aria-label="Ignore string case globally" />
+            <MudSwitch T="bool"
+                       Value="IgnoreXmlNamespaces"
+                       ValueChanged="@((bool val) => { IgnoreXmlNamespaces = val; OnIgnoreXmlNamespacesChanged.InvokeAsync(val); })"
+                       Color="Color.Primary"
+                       Label="Ignore XML Namespaces (Lenient Mode)"
+                       aria-label="Ignore XML namespaces (lenient mode)" />
         </MudStack>
 
         <MudDivider />
@@ -239,6 +245,8 @@
     [Parameter] public EventCallback<bool> OnIgnoreCollectionOrderChanged { get; set; }
     [Parameter] public bool IgnoreStringCase { get; set; } 
     [Parameter] public EventCallback<bool> OnIgnoreStringCaseChanged { get; set; }
+    [Parameter] public bool IgnoreXmlNamespaces { get; set; }
+    [Parameter] public EventCallback<bool> OnIgnoreXmlNamespacesChanged { get; set; }
     [Parameter] public bool EnableSemanticAnalysis { get; set; }
     [Parameter] public EventCallback<bool> OnEnableSemanticAnalysisChanged { get; set; }
     [Parameter] public bool EnableEnhancedStructuralAnalysis { get; set; }
