@@ -14,6 +14,7 @@
 @using MudBlazor
 @implements IDisposable
 @inject IDeserializationService DeserializationService
+@inject IXmlDeserializationService XmlDeserializationService
 @inject IComparisonConfigurationService ConfigService
 @inject IComparisonService ComparisonService
 @inject IFileSystemService FileSystemService
@@ -151,6 +152,8 @@
                                               OnIgnoreCollectionOrderChanged="@(value => IgnoreCollectionOrder = value)"
                                               IgnoreStringCase="@IgnoreStringCase"
                                               OnIgnoreStringCaseChanged="@(value => IgnoreStringCase = value)"
+                                              IgnoreXmlNamespaces="@IgnoreXmlNamespaces"
+                                              OnIgnoreXmlNamespacesChanged="@(value => { IgnoreXmlNamespaces = value; XmlDeserializationService.IgnoreXmlNamespaces = value; })"
                                               EnableSemanticAnalysis="@EnableSemanticAnalysis"
                                               OnEnableSemanticAnalysisChanged="@(value => EnableSemanticAnalysis = value)"
                                               EnableEnhancedStructuralAnalysis="@EnableEnhancedStructuralAnalysis"
@@ -185,6 +188,8 @@
                                               OnIgnoreCollectionOrderChanged="@(value => IgnoreCollectionOrder = value)"
                                               IgnoreStringCase="@IgnoreStringCase"
                                               OnIgnoreStringCaseChanged="@(value => IgnoreStringCase = value)"
+                                              IgnoreXmlNamespaces="@IgnoreXmlNamespaces"
+                                              OnIgnoreXmlNamespacesChanged="@(value => { IgnoreXmlNamespaces = value; XmlDeserializationService.IgnoreXmlNamespaces = value; })"
                                               EnableSemanticAnalysis="@EnableSemanticAnalysis"
                                               OnEnableSemanticAnalysisChanged="@(value => EnableSemanticAnalysis = value)"
                                               EnableEnhancedStructuralAnalysis="@EnableEnhancedStructuralAnalysis"
@@ -339,6 +344,7 @@
     private string SelectedModelName { get; set; }
     private bool IgnoreCollectionOrder { get; set; } = false;
     private bool IgnoreStringCase { get; set; } = false;
+    private bool IgnoreXmlNamespaces { get; set; } = true;
     private List<IgnoreRule> IgnoreRules { get; set; } = new List<IgnoreRule>();
     private bool EnableSemanticAnalysis { get; set; } = true;
     private bool EnableEnhancedStructuralAnalysis { get; set; } = true;
@@ -387,6 +393,7 @@
 
             IgnoreCollectionOrder = ConfigService.GetIgnoreCollectionOrder();
             IgnoreStringCase = ConfigService.GetIgnoreStringCase();
+            IgnoreXmlNamespaces = XmlDeserializationService.IgnoreXmlNamespaces;
 
             foreach (var prop in ConfigService.GetIgnoredProperties())
             {
@@ -557,6 +564,7 @@
 
             ConfigService.SetIgnoreCollectionOrder(IgnoreCollectionOrder);
             ConfigService.SetIgnoreStringCase(IgnoreStringCase);
+            XmlDeserializationService.IgnoreXmlNamespaces = IgnoreXmlNamespaces;
 
             foreach (var rule in IgnoreRules)
             {
@@ -638,6 +646,7 @@
 
             ConfigService.SetIgnoreCollectionOrder(IgnoreCollectionOrder);
             ConfigService.SetIgnoreStringCase(IgnoreStringCase);
+            XmlDeserializationService.IgnoreXmlNamespaces = IgnoreXmlNamespaces;
 
             foreach (var rule in IgnoreRules)
             {

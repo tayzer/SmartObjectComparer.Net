@@ -10,52 +10,59 @@ namespace ComparisonTool.Domain.Models;
 /// Test domain model for validating JSON comparison functionality
 /// Represents a customer order with various data types and nested structures.
 /// </summary>
-public class CustomerOrder {
+public class CustomerOrder
+{
     [JsonPropertyName("orderId")]
     public string OrderId { get; set; } = string.Empty;
 
     [JsonPropertyName("orderDate")]
-    public DateTime OrderDate {
+    public DateTime OrderDate
+    {
         get; set;
     }
 
     [JsonPropertyName("customer")]
-    public Customer Customer { get; set; } = new();
+    public Customer Customer { get; set; } = new Customer();
 
     [JsonPropertyName("items")]
-    public List<OrderItem> Items { get; set; } = new();
+    public List<OrderItem> Items { get; set; } = new List<OrderItem>();
 
     [JsonPropertyName("shippingAddress")]
-    public Address ShippingAddress { get; set; } = new();
+    public Address ShippingAddress { get; set; } = new Address();
 
     [JsonPropertyName("billingAddress")]
-    public Address BillingAddress { get; set; } = new();
+    public Address BillingAddress { get; set; } = new Address();
 
     [JsonPropertyName("payment")]
-    public PaymentInfo Payment { get; set; } = new();
+    public PaymentInfo Payment { get; set; } = new PaymentInfo();
 
     [JsonPropertyName("status")]
-    public OrderStatus Status {
+    public OrderStatus Status
+    {
         get; set;
     }
 
     [JsonPropertyName("totalAmount")]
-    public decimal TotalAmount {
+    public decimal TotalAmount
+    {
         get; set;
     }
 
     [JsonPropertyName("notes")]
-    public string? Notes {
+    public string? Notes
+    {
         get; set;
     }
 
     [JsonPropertyName("tags")]
-    public List<string> Tags { get; set; } = new();
+    public List<string> Tags { get; set; } = new List<string>();
 }
 
-public class Customer {
+public class Customer
+{
     [JsonPropertyName("id")]
-    public int Id {
+    public int Id
+    {
         get; set;
     }
 
@@ -69,22 +76,26 @@ public class Customer {
     public string Email { get; set; } = string.Empty;
 
     [JsonPropertyName("phone")]
-    public string? Phone {
+    public string? Phone
+    {
         get; set;
     }
 
     [JsonPropertyName("isVip")]
-    public bool IsVip {
+    public bool IsVip
+    {
         get; set;
     }
 
     [JsonPropertyName("loyaltyPoints")]
-    public int LoyaltyPoints {
+    public int LoyaltyPoints
+    {
         get; set;
     }
 }
 
-public class OrderItem {
+public class OrderItem
+{
     [JsonPropertyName("productId")]
     public string ProductId { get; set; } = string.Empty;
 
@@ -95,30 +106,35 @@ public class OrderItem {
     public string Category { get; set; } = string.Empty;
 
     [JsonPropertyName("quantity")]
-    public int Quantity {
+    public int Quantity
+    {
         get; set;
     }
 
     [JsonPropertyName("unitPrice")]
-    public decimal UnitPrice {
+    public decimal UnitPrice
+    {
         get; set;
     }
 
     [JsonPropertyName("discount")]
-    public decimal Discount {
+    public decimal Discount
+    {
         get; set;
     }
 
     [JsonPropertyName("total")]
-    public decimal Total {
+    public decimal Total
+    {
         get; set;
     }
 
     [JsonPropertyName("attributes")]
-    public List<ProductAttribute> Attributes { get; set; } = new();
+    public List<ProductAttribute> Attributes { get; set; } = new List<ProductAttribute>();
 }
 
-public class ProductAttribute {
+public class ProductAttribute
+{
     [JsonPropertyName("name")]
     public string Name { get; set; } = string.Empty;
 
@@ -126,7 +142,8 @@ public class ProductAttribute {
     public string Value { get; set; } = string.Empty;
 }
 
-public class Address {
+public class Address
+{
     [JsonPropertyName("street")]
     public string Street { get; set; } = string.Empty;
 
@@ -143,14 +160,17 @@ public class Address {
     public string Country { get; set; } = string.Empty;
 }
 
-public class PaymentInfo {
+public class PaymentInfo
+{
     [JsonPropertyName("method")]
-    public PaymentMethod Method {
+    public PaymentMethod Method
+    {
         get; set;
     }
 
     [JsonPropertyName("cardLastFour")]
-    public string? CardLastFour {
+    public string? CardLastFour
+    {
         get; set;
     }
 
@@ -158,12 +178,14 @@ public class PaymentInfo {
     public string TransactionId { get; set; } = string.Empty;
 
     [JsonPropertyName("processedDate")]
-    public DateTime ProcessedDate {
+    public DateTime ProcessedDate
+    {
         get; set;
     }
 }
 
-public enum OrderStatus {
+public enum OrderStatus
+{
     Pending,
     Processing,
     Shipped,
@@ -171,7 +193,8 @@ public enum OrderStatus {
     Cancelled,
 }
 
-public enum PaymentMethod {
+public enum PaymentMethod
+{
     CreditCard,
     DebitCard,
     PayPal,

@@ -25,16 +25,16 @@ public class XmlDeserializationServiceTests
 
     public XmlDeserializationServiceTests()
     {
-        this.mockLogger = new Mock<ILogger<XmlDeserializationService>>();
-        this.serializerFactory = new ComparisonTool.Core.Serialization.XmlSerializerFactory();
-        this.service = new XmlDeserializationService(this.mockLogger.Object, this.serializerFactory);
+        mockLogger = new Mock<ILogger<XmlDeserializationService>>();
+        serializerFactory = new ComparisonTool.Core.Serialization.XmlSerializerFactory();
+        service = new XmlDeserializationService(mockLogger.Object, serializerFactory);
     }
 
     [TestMethod]
     public void Constructor_ShouldInitializeCorrectly()
     {
         // Act & Assert
-        this.service.Should().NotBeNull();
+        service.Should().NotBeNull();
     }
 
     [TestMethod]
@@ -44,10 +44,10 @@ public class XmlDeserializationServiceTests
         var modelName = "TestModel";
 
         // Act
-        this.service.RegisterDomainModel<TestModel>(modelName);
+        service.RegisterDomainModel<TestModel>(modelName);
 
         // Assert
-        var registeredType = this.service.GetModelType(modelName);
+        var registeredType = service.GetModelType(modelName);
         registeredType.Should().Be(typeof(TestModel));
     }
 
@@ -56,13 +56,13 @@ public class XmlDeserializationServiceTests
     {
         // Arrange
         var modelName = "TestModel";
-        this.service.RegisterDomainModel<TestModel>(modelName);
+        service.RegisterDomainModel<TestModel>(modelName);
 
         // Act
-        this.service.RegisterDomainModel<AnotherTestModel>(modelName);
+        service.RegisterDomainModel<AnotherTestModel>(modelName);
 
         // Assert
-        var registeredType = this.service.GetModelType(modelName);
+        var registeredType = service.GetModelType(modelName);
         registeredType.Should().Be(typeof(AnotherTestModel));
     }
 
@@ -73,7 +73,7 @@ public class XmlDeserializationServiceTests
         var modelName = "UnregisteredModel";
 
         // Act & Assert
-        var action = () => this.service.GetModelType(modelName);
+        var action = () => service.GetModelType(modelName);
         action.Should().Throw<ArgumentException>()
             .WithMessage("*No model registered with name*");
     }
@@ -83,7 +83,7 @@ public class XmlDeserializationServiceTests
     {
         // Arrange
         var modelName = "TestModel";
-        this.service.RegisterDomainModel<TestModel>(modelName);
+        service.RegisterDomainModel<TestModel>(modelName);
 
         var xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TestModel>
@@ -94,7 +94,7 @@ public class XmlDeserializationServiceTests
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
 
         // Act
-        var result = this.service.DeserializeXml<TestModel>(stream);
+        var result = service.DeserializeXml<TestModel>(stream);
 
         // Assert
         result.Should().NotBeNull();
@@ -107,7 +107,7 @@ public class XmlDeserializationServiceTests
     {
         // Arrange
         var modelName = "TestModel";
-        this.service.RegisterDomainModel<TestModel>(modelName);
+        service.RegisterDomainModel<TestModel>(modelName);
 
         var malformedXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TestModel>
@@ -117,7 +117,7 @@ public class XmlDeserializationServiceTests
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(malformedXml));
 
         // Act & Assert
-        var action = () => this.service.DeserializeXml<TestModel>(stream);
+        var action = () => service.DeserializeXml<TestModel>(stream);
         action.Should().Throw<InvalidOperationException>(); // XmlSerializer throws InvalidOperationException, not XmlException
     }
 
@@ -126,12 +126,12 @@ public class XmlDeserializationServiceTests
     {
         // Arrange
         var modelName = "TestModel";
-        this.service.RegisterDomainModel<TestModel>(modelName);
+        service.RegisterDomainModel<TestModel>(modelName);
 
         using var stream = new MemoryStream();
 
         // Act & Assert
-        var action = () => this.service.DeserializeXml<TestModel>(stream);
+        var action = () => service.DeserializeXml<TestModel>(stream);
         action.Should().Throw<InvalidOperationException>();
     }
 
@@ -140,7 +140,7 @@ public class XmlDeserializationServiceTests
     {
         // Arrange
         var modelName = "ComplexTestModel";
-        this.service.RegisterDomainModel<ComplexTestModel>(modelName);
+        service.RegisterDomainModel<ComplexTestModel>(modelName);
 
         var xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <ComplexTestModel>
@@ -160,7 +160,7 @@ public class XmlDeserializationServiceTests
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
 
         // Act
-        var result = this.service.DeserializeXml<ComplexTestModel>(stream);
+        var result = service.DeserializeXml<ComplexTestModel>(stream);
 
         // Assert
         result.Should().NotBeNull();
@@ -177,7 +177,7 @@ public class XmlDeserializationServiceTests
     {
         // Arrange
         var modelName = "TestModel";
-        this.service.RegisterDomainModel<TestModel>(modelName);
+        service.RegisterDomainModel<TestModel>(modelName);
 
         var xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TestModel>
@@ -188,7 +188,7 @@ public class XmlDeserializationServiceTests
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
 
         // Act
-        var result = this.service.DeserializeXml<TestModel>(stream);
+        var result = service.DeserializeXml<TestModel>(stream);
 
         // Assert
         result.Should().NotBeNull();
@@ -201,7 +201,7 @@ public class XmlDeserializationServiceTests
     {
         // Arrange
         var modelName = "TestModel";
-        this.service.RegisterDomainModel<TestModel>(modelName);
+        service.RegisterDomainModel<TestModel>(modelName);
 
         var xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TestModel>
@@ -211,7 +211,7 @@ public class XmlDeserializationServiceTests
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
 
         // Act
-        var result = this.service.DeserializeXml<TestModel>(stream);
+        var result = service.DeserializeXml<TestModel>(stream);
 
         // Assert
         result.Should().NotBeNull();
@@ -224,7 +224,7 @@ public class XmlDeserializationServiceTests
     {
         // Arrange
         var modelName = "TestModel";
-        this.service.RegisterDomainModel<TestModel>(modelName);
+        service.RegisterDomainModel<TestModel>(modelName);
 
         // Note: XML serialization with namespaces requires proper namespace handling
         // This test demonstrates that namespaces can cause issues if not properly configured
@@ -237,7 +237,7 @@ public class XmlDeserializationServiceTests
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
 
         // Act
-        var result = this.service.DeserializeXml<TestModel>(stream);
+        var result = service.DeserializeXml<TestModel>(stream);
 
         // Assert
         result.Should().NotBeNull();
@@ -249,8 +249,8 @@ public class XmlDeserializationServiceTests
     public void DeserializeXml_WithDifferentNamespaceVersions_ShouldDeserializeSuccessfully()
     {
         // Arrange - Model expects version7 namespace, but XML has version8
-        this.service.RegisterDomainModel<NamespacedTestModel>("NamespacedModel");
-        this.service.IgnoreXmlNamespaces = true; // This is the default, but being explicit
+        service.RegisterDomainModel<NamespacedTestModel>("NamespacedModel");
+        service.IgnoreXmlNamespaces = true; // This is the default, but being explicit
 
         var xmlWithDifferentNamespace = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <NamespacedModel xmlns=""urn:example.co.uk/soap:version8"">
@@ -262,7 +262,7 @@ public class XmlDeserializationServiceTests
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xmlWithDifferentNamespace));
 
         // Act
-        var result = this.service.DeserializeXml<NamespacedTestModel>(stream);
+        var result = service.DeserializeXml<NamespacedTestModel>(stream);
 
         // Assert
         result.Should().NotBeNull();
@@ -275,8 +275,8 @@ public class XmlDeserializationServiceTests
     public void DeserializeXml_WithNoNamespace_ShouldDeserializeNamespacedModel()
     {
         // Arrange - Model expects version7 namespace, but XML has no namespace
-        this.service.RegisterDomainModel<NamespacedTestModel>("NamespacedModel");
-        this.service.IgnoreXmlNamespaces = true;
+        service.RegisterDomainModel<NamespacedTestModel>("NamespacedModel");
+        service.IgnoreXmlNamespaces = true;
 
         var xmlWithNoNamespace = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <NamespacedModel>
@@ -288,7 +288,7 @@ public class XmlDeserializationServiceTests
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xmlWithNoNamespace));
 
         // Act
-        var result = this.service.DeserializeXml<NamespacedTestModel>(stream);
+        var result = service.DeserializeXml<NamespacedTestModel>(stream);
 
         // Assert
         result.Should().NotBeNull();
@@ -301,8 +301,8 @@ public class XmlDeserializationServiceTests
     public void DeserializeXml_WithMatchingNamespace_ShouldDeserializeSuccessfully()
     {
         // Arrange - Model expects version7 namespace, XML has matching version7
-        this.service.RegisterDomainModel<NamespacedTestModel>("NamespacedModel");
-        this.service.IgnoreXmlNamespaces = true;
+        service.RegisterDomainModel<NamespacedTestModel>("NamespacedModel");
+        service.IgnoreXmlNamespaces = true;
 
         var xmlWithMatchingNamespace = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <NamespacedModel xmlns=""urn:example.co.uk/soap:version7"">
@@ -314,7 +314,7 @@ public class XmlDeserializationServiceTests
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xmlWithMatchingNamespace));
 
         // Act
-        var result = this.service.DeserializeXml<NamespacedTestModel>(stream);
+        var result = service.DeserializeXml<NamespacedTestModel>(stream);
 
         // Assert
         result.Should().NotBeNull();
@@ -327,8 +327,8 @@ public class XmlDeserializationServiceTests
     public void DeserializeXml_SoapEnvelope_ShouldDeserializeWithPrefixedNamespaces()
     {
         // Arrange - SOAP envelope with prefixed namespaces (soap:Envelope, soap:Body)
-        this.service.RegisterDomainModel<SoapEnvelope>("SoapEnvelope");
-        this.service.IgnoreXmlNamespaces = true;
+        service.RegisterDomainModel<SoapEnvelope>("SoapEnvelope");
+        service.IgnoreXmlNamespaces = true;
 
         var soapXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <soap:Envelope xmlns:soap=""http://schemas.xmlsoap.org/soap/envelope/"" xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"">
@@ -348,7 +348,7 @@ public class XmlDeserializationServiceTests
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(soapXml));
 
         // Act
-        var result = this.service.DeserializeXml<SoapEnvelope>(stream);
+        var result = service.DeserializeXml<SoapEnvelope>(stream);
 
         // Assert
         result.Should().NotBeNull();
@@ -430,18 +430,18 @@ public class XmlDeserializationServiceTests
     public void IgnoreXmlNamespaces_ShouldBeTrueByDefault()
     {
         // Assert
-        this.service.IgnoreXmlNamespaces.Should().BeTrue();
+        service.IgnoreXmlNamespaces.Should().BeTrue();
     }
 
     [TestMethod]
     public void GetRegisteredModelNames_ShouldReturnAllRegisteredModels()
     {
         // Arrange
-        this.service.RegisterDomainModel<TestModel>("Model1");
-        this.service.RegisterDomainModel<ComplexTestModel>("Model2");
+        service.RegisterDomainModel<TestModel>("Model1");
+        service.RegisterDomainModel<ComplexTestModel>("Model2");
 
         // Act
-        var registeredModels = this.service.GetRegisteredModelNames();
+        var registeredModels = service.GetRegisteredModelNames();
 
         // Assert
         registeredModels.Should().Contain("Model1");
@@ -453,7 +453,7 @@ public class XmlDeserializationServiceTests
     {
         // Arrange
         var modelName = "TestModel";
-        this.service.RegisterDomainModel<TestModel>(modelName);
+        service.RegisterDomainModel<TestModel>(modelName);
 
         var xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <TestModel>
@@ -464,14 +464,14 @@ public class XmlDeserializationServiceTests
         using var stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
 
         // Act - First deserialization (should cache)
-        var result1 = this.service.DeserializeXml<TestModel>(stream);
+        var result1 = service.DeserializeXml<TestModel>(stream);
 
         // Clear cache
-        this.service.ClearDeserializationCache();
+        service.ClearDeserializationCache();
 
         // Reset stream for second deserialization
         stream.Position = 0;
-        var result2 = this.service.DeserializeXml<TestModel>(stream);
+        var result2 = service.DeserializeXml<TestModel>(stream);
 
         // Assert
         result1.Should().NotBeNull();
@@ -483,7 +483,7 @@ public class XmlDeserializationServiceTests
     public void GetCacheStatistics_ShouldReturnValidStatistics()
     {
         // Act
-        var stats = this.service.GetCacheStatistics();
+        var stats = service.GetCacheStatistics();
 
         // Assert
         stats.Should().NotBeNull();
@@ -519,7 +519,7 @@ public class XmlDeserializationServiceTests
 
         [XmlArray("Items")]
         [XmlArrayItem("ComplexTestModelItem")]
-        public List<ComplexTestModelItem> Items { get; set; } = new ();
+        public List<ComplexTestModelItem> Items { get; set; } = new List<ComplexTestModelItem>();
     }
 
     public class ComplexTestModelItem
@@ -554,12 +554,21 @@ public class XmlDeserializationServiceTests
     public class NamespacedTestModel
     {
         [XmlElement("Id")]
-        public string? Id { get; set; }
+        public string? Id
+        {
+            get; set;
+        }
 
         [XmlElement("Name")]
-        public string? Name { get; set; }
+        public string? Name
+        {
+            get; set;
+        }
 
         [XmlElement("Value")]
-        public int Value { get; set; }
+        public int Value
+        {
+            get; set;
+        }
     }
 }

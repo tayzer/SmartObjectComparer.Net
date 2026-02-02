@@ -12,7 +12,8 @@ namespace ComparisonTool.Core.Models;
 /// to thoroughly test performance optimizations with ignore rules.
 /// </summary>
 [XmlRoot(ElementName = "OrderManagementResponse")]
-public class ComplexOrderResponse {
+public class ComplexOrderResponse
+{
     [XmlElement(ElementName = "RequestId")]
     public string RequestId { get; set; } = Guid.NewGuid().ToString();
 
@@ -20,7 +21,8 @@ public class ComplexOrderResponse {
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
 
     [XmlElement(ElementName = "ProcessingTime")]
-    public TimeSpan ProcessingTime {
+    public TimeSpan ProcessingTime
+    {
         get; set;
     }
 
@@ -28,63 +30,71 @@ public class ComplexOrderResponse {
     public string ApiVersion { get; set; } = "2.1.4";
 
     [XmlElement(ElementName = "ResponseMetadata")]
-    public ResponseMetadata Metadata { get; set; } = new();
+    public ResponseMetadata Metadata { get; set; } = new ResponseMetadata();
 
     [XmlElement(ElementName = "OrderData")]
-    public OrderData OrderData { get; set; } = new();
+    public OrderData OrderData { get; set; } = new OrderData();
 
     [XmlArray(ElementName = "ValidationMessages")]
     [XmlArrayItem(ElementName = "Message")]
-    public List<ValidationMessage> ValidationMessages { get; set; } = new();
+    public List<ValidationMessage> ValidationMessages { get; set; } = new List<ValidationMessage>();
 
     [XmlArray(ElementName = "AuditTrail")]
     [XmlArrayItem(ElementName = "AuditEntry")]
-    public List<AuditEntry> AuditTrail { get; set; } = new();
+    public List<AuditEntry> AuditTrail { get; set; } = new List<AuditEntry>();
 
     [XmlElement(ElementName = "TestThisThing")]
-    public TestThisThing[]? TestThisThing {
-        get; set;
-    }
+    public TestThisThing[] TestThisThing { get; set; } = Array.Empty<TestThisThing>();
 }
 
-public class TestThisThing {
+public class TestThisThing
+{
     [XmlArray(ElementName = "Tests")]
     [XmlArrayItem(ElementName = "Test")]
-    public List<Test>? Tests {
+    public List<Test>? Tests
+    {
         get; set;
     }
 }
 
-public class Test {
+public class Test
+{
     [XmlElement(ElementName = "TestObject")]
-    public List<TestObject>? TestObjects {
+    public List<TestObject>? TestObjects
+    {
         get; set;
     }
 }
 
-public class TestObject {
+public class TestObject
+{
     [XmlElement(ElementName = "Id")]
-    public string Id {
+    required public string Id
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Name")]
-    public string Name {
+    required public string Name
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Description")]
-    public string Description {
+    required public string Description
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Type")]
-    public string? Type {
+    public string? Type
+    {
         get; set;
     }
 }
 
-public class ResponseMetadata {
+public class ResponseMetadata
+{
     [XmlElement(ElementName = "Region", Order = 1)]
     public string Region { get; set; } = "US-EAST-1";
 
@@ -92,17 +102,18 @@ public class ResponseMetadata {
     public string Environment { get; set; } = "Production";
 
     [XmlElement(ElementName = "ServerInfo", Order = 4)]
-    public ServerInfo ServerInfo { get; set; } = new();
+    public ServerInfo ServerInfo { get; set; } = new ServerInfo();
 
     [XmlElement(ElementName = "Performance", Order = 5)]
-    public PerformanceMetrics Performance { get; set; } = new();
+    public PerformanceMetrics Performance { get; set; } = new PerformanceMetrics();
 
     [XmlArray(ElementName = "Features", Order = 6)]
     [XmlArrayItem(ElementName = "Feature")]
-    public List<FeatureFlag> EnabledFeatures { get; set; } = new();
+    public List<FeatureFlag> EnabledFeatures { get; set; } = new List<FeatureFlag>();
 }
 
-public class ServerInfo {
+public class ServerInfo
+{
     [XmlElement(ElementName = "ServerId")]
     public string ServerId { get; set; } = Environment.MachineName;
 
@@ -113,68 +124,81 @@ public class ServerInfo {
     public string DeploymentVersion { get; set; } = "v2.1.4-hotfix.3";
 
     [XmlElement(ElementName = "MemoryUsage")]
-    public long MemoryUsageBytes {
+    public long MemoryUsageBytes
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "CpuUsage")]
-    public double CpuUsagePercent {
+    public double CpuUsagePercent
+    {
         get; set;
     }
 }
 
-public class PerformanceMetrics {
+public class PerformanceMetrics
+{
     [XmlElement(ElementName = "DatabaseQueryTime")]
-    public TimeSpan DatabaseQueryTime {
+    public TimeSpan DatabaseQueryTime
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "ExternalApiCalls")]
-    public int ExternalApiCalls {
+    public int ExternalApiCalls
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "CacheHitRatio")]
-    public double CacheHitRatio {
+    public double CacheHitRatio
+    {
         get; set;
     }
 
     [XmlArray(ElementName = "ComponentTimings")]
     [XmlArrayItem(ElementName = "Timing")]
-    public List<ComponentTiming> ComponentTimings { get; set; } = new();
+    public List<ComponentTiming> ComponentTimings { get; set; } = new List<ComponentTiming>();
 }
 
-public class ComponentTiming {
+public class ComponentTiming
+{
     [XmlElement(ElementName = "ComponentName")]
     public string ComponentName { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "ExecutionTime")]
-    public TimeSpan ExecutionTime {
+    public TimeSpan ExecutionTime
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "CallCount")]
-    public int CallCount {
+    public int CallCount
+    {
         get; set;
     }
 }
 
-public class FeatureFlag {
+public class FeatureFlag
+{
     [XmlElement(ElementName = "Name")]
     public string Name { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Enabled")]
-    public bool Enabled {
+    public bool Enabled
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Percentage")]
-    public double Percentage {
+    public double Percentage
+    {
         get; set;
     }
 }
 
-public class OrderData {
+public class OrderData
+{
     [XmlElement(ElementName = "OrderId")]
     public string OrderId { get; set; } = string.Empty;
 
@@ -182,36 +206,38 @@ public class OrderData {
     public string OrderNumber { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Status")]
-    public OrderStatus Status {
+    public OrderStatus Status
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Customer")]
-    public Customer Customer { get; set; } = new();
+    public Customer Customer { get; set; } = new Customer();
 
     [XmlArray(ElementName = "OrderItems")]
     [XmlArrayItem(ElementName = "Item")]
-    public List<OrderItem> Items { get; set; } = new();
+    public List<OrderItem> Items { get; set; } = new List<OrderItem>();
 
     [XmlElement(ElementName = "Pricing")]
-    public OrderPricing Pricing { get; set; } = new();
+    public OrderPricing Pricing { get; set; } = new OrderPricing();
 
     [XmlElement(ElementName = "Fulfillment")]
-    public FulfillmentInfo Fulfillment { get; set; } = new();
+    public FulfillmentInfo Fulfillment { get; set; } = new FulfillmentInfo();
 
     [XmlElement(ElementName = "Payment")]
-    public PaymentInfo Payment { get; set; } = new();
+    public PaymentInfo Payment { get; set; } = new PaymentInfo();
 
     [XmlArray(ElementName = "Promotions")]
     [XmlArrayItem(ElementName = "Promotion")]
-    public List<Promotion> AppliedPromotions { get; set; } = new();
+    public List<Promotion> AppliedPromotions { get; set; } = new List<Promotion>();
 
     [XmlArray(ElementName = "OrderHistory")]
     [XmlArrayItem(ElementName = "Event")]
-    public List<OrderEvent> OrderHistory { get; set; } = new();
+    public List<OrderEvent> OrderHistory { get; set; } = new List<OrderEvent>();
 }
 
-public enum OrderStatus {
+public enum OrderStatus
+{
     Pending,
     Confirmed,
     Processing,
@@ -221,29 +247,31 @@ public enum OrderStatus {
     Returned,
 }
 
-public class Customer {
+public class Customer
+{
     [XmlElement(ElementName = "CustomerId")]
     public string CustomerId { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Profile")]
-    public CustomerProfile Profile { get; set; } = new();
+    public CustomerProfile Profile { get; set; } = new CustomerProfile();
 
     [XmlElement(ElementName = "Preferences")]
-    public CustomerPreferences Preferences { get; set; } = new();
+    public CustomerPreferences Preferences { get; set; } = new CustomerPreferences();
 
     [XmlArray(ElementName = "Addresses")]
     [XmlArrayItem(ElementName = "Address")]
-    public List<Address> Addresses { get; set; } = new();
+    public List<Address> Addresses { get; set; } = new List<Address>();
 
     [XmlArray(ElementName = "PaymentMethods")]
     [XmlArrayItem(ElementName = "PaymentMethod")]
-    public List<PaymentMethod> PaymentMethods { get; set; } = new();
+    public List<PaymentMethod> PaymentMethods { get; set; } = new List<PaymentMethod>();
 
     [XmlElement(ElementName = "LoyaltyProgram")]
-    public LoyaltyProgram LoyaltyProgram { get; set; } = new();
+    public LoyaltyProgram LoyaltyProgram { get; set; } = new LoyaltyProgram();
 }
 
-public class CustomerProfile {
+public class CustomerProfile
+{
     [XmlElement(ElementName = "FirstName")]
     public string FirstName { get; set; } = string.Empty;
 
@@ -257,25 +285,29 @@ public class CustomerProfile {
     public string Phone { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "DateOfBirth")]
-    public DateTime? DateOfBirth {
+    public DateTime? DateOfBirth
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "CustomerSince")]
-    public DateTime CustomerSince {
+    public DateTime CustomerSince
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "TierLevel")]
-    public CustomerTier TierLevel {
+    public CustomerTier TierLevel
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Demographics")]
-    public Demographics Demographics { get; set; } = new();
+    public Demographics Demographics { get; set; } = new Demographics();
 }
 
-public enum CustomerTier {
+public enum CustomerTier
+{
     Bronze,
     Silver,
     Gold,
@@ -283,7 +315,8 @@ public enum CustomerTier {
     Diamond,
 }
 
-public class Demographics {
+public class Demographics
+{
     [XmlElement(ElementName = "AgeGroup")]
     public string AgeGroup { get; set; } = string.Empty;
 
@@ -300,40 +333,46 @@ public class Demographics {
     public string EducationLevel { get; set; } = string.Empty;
 }
 
-public class CustomerPreferences {
+public class CustomerPreferences
+{
     [XmlElement(ElementName = "CommunicationPreferences")]
-    public CommunicationPreferences Communication { get; set; } = new();
+    public CommunicationPreferences Communication { get; set; } = new CommunicationPreferences();
 
     [XmlElement(ElementName = "DeliveryPreferences")]
-    public DeliveryPreferences Delivery { get; set; } = new();
+    public DeliveryPreferences Delivery { get; set; } = new DeliveryPreferences();
 
     [XmlArray(ElementName = "InterestCategories")]
     [XmlArrayItem(ElementName = "Category")]
-    public List<string> InterestCategories { get; set; } = new();
+    public List<string> InterestCategories { get; set; } = new List<string>();
 
     [XmlArray(ElementName = "PreviousPurchases")]
     [XmlArrayItem(ElementName = "Purchase")]
-    public List<PreviousPurchase> PreviousPurchases { get; set; } = new();
+    public List<PreviousPurchase> PreviousPurchases { get; set; } = new List<PreviousPurchase>();
 }
 
-public class CommunicationPreferences {
+public class CommunicationPreferences
+{
     [XmlElement(ElementName = "EmailNotifications")]
-    public bool EmailNotifications {
+    public bool EmailNotifications
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "SmsNotifications")]
-    public bool SmsNotifications {
+    public bool SmsNotifications
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "PushNotifications")]
-    public bool PushNotifications {
+    public bool PushNotifications
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "MarketingEmails")]
-    public bool MarketingEmails {
+    public bool MarketingEmails
+    {
         get; set;
     }
 
@@ -341,7 +380,8 @@ public class CommunicationPreferences {
     public string PreferredLanguage { get; set; } = "en-US";
 }
 
-public class DeliveryPreferences {
+public class DeliveryPreferences
+{
     [XmlElement(ElementName = "PreferredTimeSlot")]
     public string PreferredTimeSlot { get; set; } = string.Empty;
 
@@ -349,42 +389,50 @@ public class DeliveryPreferences {
     public string DeliveryInstructions { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "AuthorityToLeave")]
-    public bool AuthorityToLeave {
+    public bool AuthorityToLeave
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "SignatureRequired")]
-    public bool SignatureRequired {
+    public bool SignatureRequired
+    {
         get; set;
     }
 }
 
-public class PreviousPurchase {
+public class PreviousPurchase
+{
     [XmlElement(ElementName = "ProductId")]
     public string ProductId { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "PurchaseDate")]
-    public DateTime PurchaseDate {
+    public DateTime PurchaseDate
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Amount")]
-    public decimal Amount {
+    public decimal Amount
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Rating")]
-    public int? Rating {
+    public int? Rating
+    {
         get; set;
     }
 }
 
-public class Address {
+public class Address
+{
     [XmlElement(ElementName = "AddressId")]
     public string AddressId { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Type")]
-    public AddressType Type {
+    public AddressType Type
+    {
         get; set;
     }
 
@@ -407,20 +455,23 @@ public class Address {
     public string Country { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Coordinates")]
-    public GeoCoordinates Coordinates { get; set; } = new();
+    public GeoCoordinates Coordinates { get; set; } = new GeoCoordinates();
 
     [XmlElement(ElementName = "IsDefault")]
-    public bool IsDefault {
+    public bool IsDefault
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "IsValidated")]
-    public bool IsValidated {
+    public bool IsValidated
+    {
         get; set;
     }
 }
 
-public enum AddressType {
+public enum AddressType
+{
     Home,
     Work,
     Billing,
@@ -428,48 +479,56 @@ public enum AddressType {
     Other,
 }
 
-public class GeoCoordinates {
+public class GeoCoordinates
+{
     [XmlElement(ElementName = "Latitude")]
-    public double Latitude {
+    public double Latitude
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Longitude")]
-    public double Longitude {
+    public double Longitude
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Accuracy")]
-    public double AccuracyMeters {
+    public double AccuracyMeters
+    {
         get; set;
     }
 }
 
-public class PaymentMethod {
+public class PaymentMethod
+{
     [XmlElement(ElementName = "PaymentMethodId")]
     public string PaymentMethodId { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Type")]
-    public PaymentMethodType Type {
+    public PaymentMethodType Type
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "IsDefault")]
-    public bool IsDefault {
+    public bool IsDefault
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "CardInfo")]
-    public CreditCardInfo CardInfo { get; set; } = new();
+    public CreditCardInfo CardInfo { get; set; } = new CreditCardInfo();
 
     [XmlElement(ElementName = "BankAccount")]
-    public BankAccountInfo BankAccount { get; set; } = new();
+    public BankAccountInfo BankAccount { get; set; } = new BankAccountInfo();
 
     [XmlElement(ElementName = "DigitalWallet")]
-    public DigitalWalletInfo DigitalWallet { get; set; } = new();
+    public DigitalWalletInfo DigitalWallet { get; set; } = new DigitalWalletInfo();
 }
 
-public enum PaymentMethodType {
+public enum PaymentMethodType
+{
     CreditCard,
     DebitCard,
     BankAccount,
@@ -478,7 +537,8 @@ public enum PaymentMethodType {
     StoreCredit,
 }
 
-public class CreditCardInfo {
+public class CreditCardInfo
+{
     [XmlElement(ElementName = "Last4Digits")]
     public string Last4Digits { get; set; } = string.Empty;
 
@@ -486,20 +546,23 @@ public class CreditCardInfo {
     public string Brand { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "ExpiryMonth")]
-    public int ExpiryMonth {
+    public int ExpiryMonth
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "ExpiryYear")]
-    public int ExpiryYear {
+    public int ExpiryYear
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "BillingAddress")]
-    public Address BillingAddress { get; set; } = new();
+    public Address BillingAddress { get; set; } = new Address();
 }
 
-public class BankAccountInfo {
+public class BankAccountInfo
+{
     [XmlElement(ElementName = "RoutingNumber")]
     public string RoutingNumber { get; set; } = string.Empty;
 
@@ -513,7 +576,8 @@ public class BankAccountInfo {
     public string BankName { get; set; } = string.Empty;
 }
 
-public class DigitalWalletInfo {
+public class DigitalWalletInfo
+{
     [XmlElement(ElementName = "Provider")]
     public string Provider { get; set; } = string.Empty;
 
@@ -521,55 +585,64 @@ public class DigitalWalletInfo {
     public string WalletId { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "IsVerified")]
-    public bool IsVerified {
+    public bool IsVerified
+    {
         get; set;
     }
 }
 
-public class LoyaltyProgram {
+public class LoyaltyProgram
+{
     [XmlElement(ElementName = "MembershipNumber")]
     public string MembershipNumber { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "CurrentPoints")]
-    public int CurrentPoints {
+    public int CurrentPoints
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "TierStatus")]
-    public CustomerTier TierStatus {
+    public CustomerTier TierStatus
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "NextTierRequirement")]
-    public int NextTierRequirement {
+    public int NextTierRequirement
+    {
         get; set;
     }
 
     [XmlArray(ElementName = "RewardHistory")]
     [XmlArrayItem(ElementName = "Reward")]
-    public List<RewardTransaction> RewardHistory { get; set; } = new();
+    public List<RewardTransaction> RewardHistory { get; set; } = new List<RewardTransaction>();
 
     [XmlArray(ElementName = "AvailableRewards")]
     [XmlArrayItem(ElementName = "Reward")]
-    public List<AvailableReward> AvailableRewards { get; set; } = new();
+    public List<AvailableReward> AvailableRewards { get; set; } = new List<AvailableReward>();
 }
 
-public class RewardTransaction {
+public class RewardTransaction
+{
     [XmlElement(ElementName = "TransactionId")]
     public string TransactionId { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Date")]
-    public DateTime Date {
+    public DateTime Date
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Points")]
-    public int Points {
+    public int Points
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Type")]
-    public RewardTransactionType Type {
+    public RewardTransactionType Type
+    {
         get; set;
     }
 
@@ -577,14 +650,16 @@ public class RewardTransaction {
     public string Description { get; set; } = string.Empty;
 }
 
-public enum RewardTransactionType {
+public enum RewardTransactionType
+{
     Earned,
     Redeemed,
     Expired,
     Adjusted,
 }
 
-public class AvailableReward {
+public class AvailableReward
+{
     [XmlElement(ElementName = "RewardId")]
     public string RewardId { get; set; } = string.Empty;
 
@@ -595,12 +670,14 @@ public class AvailableReward {
     public string Description { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "PointsCost")]
-    public int PointsCost {
+    public int PointsCost
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "ExpiryDate")]
-    public DateTime? ExpiryDate {
+    public DateTime? ExpiryDate
+    {
         get; set;
     }
 
@@ -608,37 +685,40 @@ public class AvailableReward {
     public string Category { get; set; } = string.Empty;
 }
 
-public class OrderItem {
+public class OrderItem
+{
     [XmlElement(ElementName = "ItemId")]
     public string ItemId { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Product")]
-    public Product Product { get; set; } = new();
+    public Product Product { get; set; } = new Product();
 
     [XmlElement(ElementName = "Quantity")]
-    public int Quantity {
+    public int Quantity
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Pricing")]
-    public ItemPricing Pricing { get; set; } = new();
+    public ItemPricing Pricing { get; set; } = new ItemPricing();
 
     [XmlElement(ElementName = "Customizations")]
-    public ProductCustomizations Customizations { get; set; } = new();
+    public ProductCustomizations Customizations { get; set; } = new ProductCustomizations();
 
     [XmlArray(ElementName = "FulfillmentOptions")]
     [XmlArrayItem(ElementName = "Option")]
-    public List<FulfillmentOption> FulfillmentOptions { get; set; } = new();
+    public List<FulfillmentOption> FulfillmentOptions { get; set; } = new List<FulfillmentOption>();
 
     [XmlElement(ElementName = "InventoryInfo")]
-    public InventoryInfo InventoryInfo { get; set; } = new();
+    public InventoryInfo InventoryInfo { get; set; } = new InventoryInfo();
 
     [XmlArray(ElementName = "Warranties")]
     [XmlArrayItem(ElementName = "Warranty")]
-    public List<Warranty> Warranties { get; set; } = new();
+    public List<Warranty> Warranties { get; set; } = new List<Warranty>();
 }
 
-public class Product {
+public class Product
+{
     [XmlElement(ElementName = "ProductId")]
     public string ProductId { get; set; } = string.Empty;
 
@@ -652,27 +732,28 @@ public class Product {
     public string Description { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Brand")]
-    public Brand Brand { get; set; } = new();
+    public Brand Brand { get; set; } = new Brand();
 
     [XmlElement(ElementName = "Category")]
-    public ProductCategory Category { get; set; } = new();
+    public ProductCategory Category { get; set; } = new ProductCategory();
 
     [XmlElement(ElementName = "Specifications")]
-    public ProductSpecifications Specifications { get; set; } = new();
+    public ProductSpecifications Specifications { get; set; } = new ProductSpecifications();
 
     [XmlArray(ElementName = "Images")]
     [XmlArrayItem(ElementName = "Image")]
-    public List<ProductImage> Images { get; set; } = new();
+    public List<ProductImage> Images { get; set; } = new List<ProductImage>();
 
     [XmlArray(ElementName = "Reviews")]
     [XmlArrayItem(ElementName = "Review")]
-    public List<ProductReview> Reviews { get; set; } = new();
+    public List<ProductReview> Reviews { get; set; } = new List<ProductReview>();
 
     [XmlElement(ElementName = "Ratings")]
-    public ProductRatings Ratings { get; set; } = new();
+    public ProductRatings Ratings { get; set; } = new ProductRatings();
 }
 
-public class Brand {
+public class Brand
+{
     [XmlElement(ElementName = "BrandId")]
     public string BrandId { get; set; } = string.Empty;
 
@@ -686,12 +767,14 @@ public class Brand {
     public string CountryOfOrigin { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "EstablishedYear")]
-    public int? EstablishedYear {
+    public int? EstablishedYear
+    {
         get; set;
     }
 }
 
-public class ProductCategory {
+public class ProductCategory
+{
     [XmlElement(ElementName = "CategoryId")]
     public string CategoryId { get; set; } = string.Empty;
 
@@ -699,20 +782,22 @@ public class ProductCategory {
     public string Name { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "ParentCategory")]
-    public ProductCategory ParentCategory {
+    public ProductCategory? ParentCategory
+    {
         get; set;
     }
 
     [XmlArray(ElementName = "SubCategories")]
     [XmlArrayItem(ElementName = "Category")]
-    public List<ProductCategory> SubCategories { get; set; } = new();
+    public List<ProductCategory> SubCategories { get; set; } = new List<ProductCategory>();
 
     [XmlArray(ElementName = "Attributes")]
     [XmlArrayItem(ElementName = "Attribute")]
-    public List<CategoryAttribute> Attributes { get; set; } = new();
+    public List<CategoryAttribute> Attributes { get; set; } = new List<CategoryAttribute>();
 }
 
-public class CategoryAttribute {
+public class CategoryAttribute
+{
     [XmlElement(ElementName = "Name")]
     public string Name { get; set; } = string.Empty;
 
@@ -723,17 +808,19 @@ public class CategoryAttribute {
     public string Unit { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "IsRequired")]
-    public bool IsRequired {
+    public bool IsRequired
+    {
         get; set;
     }
 }
 
-public class ProductSpecifications {
+public class ProductSpecifications
+{
     [XmlElement(ElementName = "Weight")]
-    public Weight Weight { get; set; } = new();
+    public Weight Weight { get; set; } = new Weight();
 
     [XmlElement(ElementName = "Dimensions")]
-    public Dimensions Dimensions { get; set; } = new();
+    public Dimensions Dimensions { get; set; } = new Dimensions();
 
     [XmlElement(ElementName = "Material")]
     public string Material { get; set; } = string.Empty;
@@ -746,16 +833,18 @@ public class ProductSpecifications {
 
     [XmlArray(ElementName = "TechnicalSpecs")]
     [XmlArrayItem(ElementName = "Spec")]
-    public List<TechnicalSpecification> TechnicalSpecs { get; set; } = new();
+    public List<TechnicalSpecification> TechnicalSpecs { get; set; } = new List<TechnicalSpecification>();
 
     [XmlArray(ElementName = "Certifications")]
     [XmlArrayItem(ElementName = "Certification")]
-    public List<ProductCertification> Certifications { get; set; } = new();
+    public List<ProductCertification> Certifications { get; set; } = new List<ProductCertification>();
 }
 
-public class Weight {
+public class Weight
+{
     [XmlElement(ElementName = "Value")]
-    public double Value {
+    public double Value
+    {
         get; set;
     }
 
@@ -763,19 +852,23 @@ public class Weight {
     public string Unit { get; set; } = "kg";
 }
 
-public class Dimensions {
+public class Dimensions
+{
     [XmlElement(ElementName = "Length")]
-    public double Length {
+    public double Length
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Width")]
-    public double Width {
+    public double Width
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Height")]
-    public double Height {
+    public double Height
+    {
         get; set;
     }
 
@@ -783,7 +876,8 @@ public class Dimensions {
     public string Unit { get; set; } = "cm";
 }
 
-public class TechnicalSpecification {
+public class TechnicalSpecification
+{
     [XmlElement(ElementName = "Name")]
     public string Name { get; set; } = string.Empty;
 
@@ -794,7 +888,8 @@ public class TechnicalSpecification {
     public string Category { get; set; } = string.Empty;
 }
 
-public class ProductCertification {
+public class ProductCertification
+{
     [XmlElement(ElementName = "Name")]
     public string Name { get; set; } = string.Empty;
 
@@ -805,12 +900,14 @@ public class ProductCertification {
     public string CertificationNumber { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "ValidUntil")]
-    public DateTime? ValidUntil {
+    public DateTime? ValidUntil
+    {
         get; set;
     }
 }
 
-public class ProductImage {
+public class ProductImage
+{
     [XmlElement(ElementName = "ImageId")]
     public string ImageId { get; set; } = string.Empty;
 
@@ -821,20 +918,23 @@ public class ProductImage {
     public string AltText { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Type")]
-    public ImageType Type {
+    public ImageType Type
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "SortOrder")]
-    public int SortOrder {
+    public int SortOrder
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Size")]
-    public ImageSize Size { get; set; } = new();
+    public ImageSize Size { get; set; } = new ImageSize();
 }
 
-public enum ImageType {
+public enum ImageType
+{
     Primary,
     Gallery,
     Thumbnail,
@@ -843,24 +943,29 @@ public enum ImageType {
     Technical,
 }
 
-public class ImageSize {
+public class ImageSize
+{
     [XmlElement(ElementName = "Width")]
-    public int Width {
+    public int Width
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Height")]
-    public int Height {
+    public int Height
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "FileSizeBytes")]
-    public long FileSizeBytes {
+    public long FileSizeBytes
+    {
         get; set;
     }
 }
 
-public class ProductReview {
+public class ProductReview
+{
     [XmlElement(ElementName = "ReviewId")]
     public string ReviewId { get; set; } = string.Empty;
 
@@ -868,7 +973,8 @@ public class ProductReview {
     public string ReviewerName { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Rating")]
-    public int Rating {
+    public int Rating
+    {
         get; set;
     }
 
@@ -879,89 +985,105 @@ public class ProductReview {
     public string Content { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "ReviewDate")]
-    public DateTime ReviewDate {
+    public DateTime ReviewDate
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "VerifiedPurchase")]
-    public bool VerifiedPurchase {
+    public bool VerifiedPurchase
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "HelpfulCount")]
-    public int HelpfulCount {
+    public int HelpfulCount
+    {
         get; set;
     }
 
     [XmlArray(ElementName = "Images")]
     [XmlArrayItem(ElementName = "Image")]
-    public List<string> Images { get; set; } = new();
+    public List<string> Images { get; set; } = new List<string>();
 }
 
-public class ProductRatings {
+public class ProductRatings
+{
     [XmlElement(ElementName = "AverageRating")]
-    public double AverageRating {
+    public double AverageRating
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "TotalReviews")]
-    public int TotalReviews {
+    public int TotalReviews
+    {
         get; set;
     }
 
     [XmlArray(ElementName = "RatingDistribution")]
     [XmlArrayItem(ElementName = "Distribution")]
-    public List<RatingDistribution> RatingDistribution { get; set; } = new();
+    public List<RatingDistribution> RatingDistribution { get; set; } = new List<RatingDistribution>();
 }
 
-public class RatingDistribution {
+public class RatingDistribution
+{
     [XmlElement(ElementName = "Stars")]
-    public int Stars {
+    public int Stars
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Count")]
-    public int Count {
+    public int Count
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Percentage")]
-    public double Percentage {
+    public double Percentage
+    {
         get; set;
     }
 }
 
-public class ItemPricing {
+public class ItemPricing
+{
     [XmlElement(ElementName = "UnitPrice")]
-    public decimal UnitPrice {
+    public decimal UnitPrice
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "DiscountAmount")]
-    public decimal DiscountAmount {
+    public decimal DiscountAmount
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "TaxAmount")]
-    public decimal TaxAmount {
+    public decimal TaxAmount
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "TotalPrice")]
-    public decimal TotalPrice {
+    public decimal TotalPrice
+    {
         get; set;
     }
 
     [XmlArray(ElementName = "AppliedDiscounts")]
     [XmlArrayItem(ElementName = "Discount")]
-    public List<AppliedDiscount> AppliedDiscounts { get; set; } = new();
+    public List<AppliedDiscount> AppliedDiscounts { get; set; } = new List<AppliedDiscount>();
 
     [XmlArray(ElementName = "TaxBreakdown")]
     [XmlArrayItem(ElementName = "Tax")]
-    public List<TaxBreakdown> TaxBreakdown { get; set; } = new();
+    public List<TaxBreakdown> TaxBreakdown { get; set; } = new List<TaxBreakdown>();
 }
 
-public class AppliedDiscount {
+public class AppliedDiscount
+{
     [XmlElement(ElementName = "DiscountId")]
     public string DiscountId { get; set; } = string.Empty;
 
@@ -969,22 +1091,26 @@ public class AppliedDiscount {
     public string Name { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Type")]
-    public DiscountType Type {
+    public DiscountType Type
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Amount")]
-    public decimal Amount {
+    public decimal Amount
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Percentage")]
-    public double? Percentage {
+    public double? Percentage
+    {
         get; set;
     }
 }
 
-public enum DiscountType {
+public enum DiscountType
+{
     Percentage,
     FixedAmount,
     BuyOneGetOne,
@@ -993,17 +1119,20 @@ public enum DiscountType {
     VolumeDiscount,
 }
 
-public class TaxBreakdown {
+public class TaxBreakdown
+{
     [XmlElement(ElementName = "TaxName")]
     public string TaxName { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Rate")]
-    public double Rate {
+    public double Rate
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Amount")]
-    public decimal Amount {
+    public decimal Amount
+    {
         get; set;
     }
 
@@ -1011,12 +1140,14 @@ public class TaxBreakdown {
     public string Jurisdiction { get; set; } = string.Empty;
 }
 
-public class ValidationMessage {
+public class ValidationMessage
+{
     [XmlElement(ElementName = "MessageId")]
     public string MessageId { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Severity")]
-    public MessageSeverity Severity {
+    public MessageSeverity Severity
+    {
         get; set;
     }
 
@@ -1030,24 +1161,28 @@ public class ValidationMessage {
     public string Field { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Timestamp")]
-    public DateTime Timestamp {
+    public DateTime Timestamp
+    {
         get; set;
     }
 }
 
-public enum MessageSeverity {
+public enum MessageSeverity
+{
     Info,
     Warning,
     Error,
     Critical,
 }
 
-public class AuditEntry {
+public class AuditEntry
+{
     [XmlElement(ElementName = "EntryId")]
     public string EntryId { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Timestamp")]
-    public DateTime Timestamp {
+    public DateTime Timestamp
+    {
         get; set;
     }
 
@@ -1073,19 +1208,21 @@ public class AuditEntry {
     public string UserAgent { get; set; } = string.Empty;
 }
 
-public class ProductCustomizations {
+public class ProductCustomizations
+{
     [XmlArray(ElementName = "Options")]
     [XmlArrayItem(ElementName = "Option")]
-    public List<CustomizationOption> Options { get; set; } = new();
+    public List<CustomizationOption> Options { get; set; } = new List<CustomizationOption>();
 
     [XmlElement(ElementName = "PersonalizationText")]
     public string PersonalizationText { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "GiftWrap")]
-    public GiftWrapOption GiftWrap { get; set; } = new();
+    public GiftWrapOption GiftWrap { get; set; } = new GiftWrapOption();
 }
 
-public class CustomizationOption {
+public class CustomizationOption
+{
     [XmlElement(ElementName = "OptionId")]
     public string OptionId { get; set; } = string.Empty;
 
@@ -1096,14 +1233,17 @@ public class CustomizationOption {
     public string Value { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "AdditionalCost")]
-    public decimal AdditionalCost {
+    public decimal AdditionalCost
+    {
         get; set;
     }
 }
 
-public class GiftWrapOption {
+public class GiftWrapOption
+{
     [XmlElement(ElementName = "IsGiftWrap")]
-    public bool IsGiftWrap {
+    public bool IsGiftWrap
+    {
         get; set;
     }
 
@@ -1114,27 +1254,32 @@ public class GiftWrapOption {
     public string GiftMessage { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Cost")]
-    public decimal Cost {
+    public decimal Cost
+    {
         get; set;
     }
 }
 
-public class FulfillmentOption {
+public class FulfillmentOption
+{
     [XmlElement(ElementName = "OptionId")]
     public string OptionId { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Type")]
-    public FulfillmentType Type {
+    public FulfillmentType Type
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "EstimatedDelivery")]
-    public DateTime EstimatedDelivery {
+    public DateTime EstimatedDelivery
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Cost")]
-    public decimal Cost {
+    public decimal Cost
+    {
         get; set;
     }
 
@@ -1145,7 +1290,8 @@ public class FulfillmentOption {
     public string ServiceLevel { get; set; } = string.Empty;
 }
 
-public enum FulfillmentType {
+public enum FulfillmentType
+{
     StandardDelivery,
     ExpressDelivery,
     NextDayDelivery,
@@ -1153,14 +1299,17 @@ public enum FulfillmentType {
     InStorePickup,
 }
 
-public class InventoryInfo {
+public class InventoryInfo
+{
     [XmlElement(ElementName = "AvailableQuantity")]
-    public int AvailableQuantity {
+    public int AvailableQuantity
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "ReservedQuantity")]
-    public int ReservedQuantity {
+    public int ReservedQuantity
+    {
         get; set;
     }
 
@@ -1168,20 +1317,23 @@ public class InventoryInfo {
     public string WarehouseLocation { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "LastUpdated")]
-    public DateTime LastUpdated {
+    public DateTime LastUpdated
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "RestockDate")]
-    public DateTime? RestockDate {
+    public DateTime? RestockDate
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Supplier")]
-    public SupplierInfo Supplier { get; set; } = new();
+    public SupplierInfo Supplier { get; set; } = new SupplierInfo();
 }
 
-public class SupplierInfo {
+public class SupplierInfo
+{
     [XmlElement(ElementName = "SupplierId")]
     public string SupplierId { get; set; } = string.Empty;
 
@@ -1189,27 +1341,32 @@ public class SupplierInfo {
     public string Name { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "LeadTime")]
-    public TimeSpan LeadTime {
+    public TimeSpan LeadTime
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "ReliabilityScore")]
-    public double ReliabilityScore {
+    public double ReliabilityScore
+    {
         get; set;
     }
 }
 
-public class Warranty {
+public class Warranty
+{
     [XmlElement(ElementName = "WarrantyId")]
     public string WarrantyId { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Type")]
-    public WarrantyType Type {
+    public WarrantyType Type
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Duration")]
-    public TimeSpan Duration {
+    public TimeSpan Duration
+    {
         get; set;
     }
 
@@ -1217,7 +1374,8 @@ public class Warranty {
     public string Coverage { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Cost")]
-    public decimal Cost {
+    public decimal Cost
+    {
         get; set;
     }
 
@@ -1225,41 +1383,49 @@ public class Warranty {
     public string Provider { get; set; } = string.Empty;
 }
 
-public enum WarrantyType {
+public enum WarrantyType
+{
     Manufacturer,
     Extended,
     ThirdParty,
     Accidental,
 }
 
-public class OrderPricing {
+public class OrderPricing
+{
     [XmlElement(ElementName = "Subtotal")]
-    public decimal Subtotal {
+    public decimal Subtotal
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "TotalDiscount")]
-    public decimal TotalDiscount {
+    public decimal TotalDiscount
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "TotalTax")]
-    public decimal TotalTax {
+    public decimal TotalTax
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "ShippingCost")]
-    public decimal ShippingCost {
+    public decimal ShippingCost
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "HandlingFee")]
-    public decimal HandlingFee {
+    public decimal HandlingFee
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Total")]
-    public decimal Total {
+    public decimal Total
+    {
         get; set;
     }
 
@@ -1268,25 +1434,29 @@ public class OrderPricing {
 
     [XmlArray(ElementName = "PaymentBreakdown")]
     [XmlArrayItem(ElementName = "Payment")]
-    public List<PaymentBreakdown> PaymentBreakdown { get; set; } = new();
+    public List<PaymentBreakdown> PaymentBreakdown { get; set; } = new List<PaymentBreakdown>();
 }
 
-public class PaymentBreakdown {
+public class PaymentBreakdown
+{
     [XmlElement(ElementName = "Method")]
     public string Method { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Amount")]
-    public decimal Amount {
+    public decimal Amount
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Status")]
-    public PaymentStatus Status {
+    public PaymentStatus Status
+    {
         get; set;
     }
 }
 
-public enum PaymentStatus {
+public enum PaymentStatus
+{
     Pending,
     Authorized,
     Captured,
@@ -1295,43 +1465,49 @@ public enum PaymentStatus {
     PartiallyRefunded,
 }
 
-public class FulfillmentInfo {
+public class FulfillmentInfo
+{
     [XmlElement(ElementName = "FulfillmentId")]
     public string FulfillmentId { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Status")]
-    public FulfillmentStatus Status {
+    public FulfillmentStatus Status
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Method")]
-    public FulfillmentMethod Method {
+    public FulfillmentMethod Method
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "ShippingAddress")]
-    public Address ShippingAddress { get; set; } = new();
+    public Address ShippingAddress { get; set; } = new Address();
 
     [XmlElement(ElementName = "EstimatedDelivery")]
-    public DateTime EstimatedDelivery {
+    public DateTime EstimatedDelivery
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "ActualDelivery")]
-    public DateTime? ActualDelivery {
+    public DateTime? ActualDelivery
+    {
         get; set;
     }
 
     [XmlArray(ElementName = "TrackingInfo")]
     [XmlArrayItem(ElementName = "Tracking")]
-    public List<TrackingInfo> TrackingInfo { get; set; } = new();
+    public List<TrackingInfo> TrackingInfo { get; set; } = new List<TrackingInfo>();
 
     [XmlArray(ElementName = "Shipments")]
     [XmlArrayItem(ElementName = "Shipment")]
-    public List<Shipment> Shipments { get; set; } = new();
+    public List<Shipment> Shipments { get; set; } = new List<Shipment>();
 }
 
-public enum FulfillmentStatus {
+public enum FulfillmentStatus
+{
     Pending,
     Processing,
     Shipped,
@@ -1342,7 +1518,8 @@ public enum FulfillmentStatus {
     Returned,
 }
 
-public enum FulfillmentMethod {
+public enum FulfillmentMethod
+{
     StandardShipping,
     ExpressShipping,
     OvernightShipping,
@@ -1350,7 +1527,8 @@ public enum FulfillmentMethod {
     Delivery,
 }
 
-public class TrackingInfo {
+public class TrackingInfo
+{
     [XmlElement(ElementName = "TrackingNumber")]
     public string TrackingNumber { get; set; } = string.Empty;
 
@@ -1361,18 +1539,21 @@ public class TrackingInfo {
     public string ServiceType { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "EstimatedDelivery")]
-    public DateTime EstimatedDelivery {
+    public DateTime EstimatedDelivery
+    {
         get; set;
     }
 
     [XmlArray(ElementName = "TrackingEvents")]
     [XmlArrayItem(ElementName = "Event")]
-    public List<TrackingEvent> TrackingEvents { get; set; } = new();
+    public List<TrackingEvent> TrackingEvents { get; set; } = new List<TrackingEvent>();
 }
 
-public class TrackingEvent {
+public class TrackingEvent
+{
     [XmlElement(ElementName = "Timestamp")]
-    public DateTime Timestamp {
+    public DateTime Timestamp
+    {
         get; set;
     }
 
@@ -1386,7 +1567,8 @@ public class TrackingEvent {
     public string Description { get; set; } = string.Empty;
 }
 
-public class Shipment {
+public class Shipment
+{
     [XmlElement(ElementName = "ShipmentId")]
     public string ShipmentId { get; set; } = string.Empty;
 
@@ -1397,22 +1579,24 @@ public class Shipment {
     public string ServiceLevel { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Weight")]
-    public Weight Weight { get; set; } = new();
+    public Weight Weight { get; set; } = new Weight();
 
     [XmlElement(ElementName = "Dimensions")]
-    public Dimensions Dimensions { get; set; } = new();
+    public Dimensions Dimensions { get; set; } = new Dimensions();
 
     [XmlArray(ElementName = "Items")]
     [XmlArrayItem(ElementName = "Item")]
-    public List<ShipmentItem> Items { get; set; } = new();
+    public List<ShipmentItem> Items { get; set; } = new List<ShipmentItem>();
 }
 
-public class ShipmentItem {
+public class ShipmentItem
+{
     [XmlElement(ElementName = "ItemId")]
     public string ItemId { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Quantity")]
-    public int Quantity {
+    public int Quantity
+    {
         get; set;
     }
 
@@ -1420,17 +1604,19 @@ public class ShipmentItem {
     public string Status { get; set; } = string.Empty;
 }
 
-public class PaymentInfo {
+public class PaymentInfo
+{
     [XmlElement(ElementName = "PaymentId")]
     public string PaymentId { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Status")]
-    public PaymentStatus Status {
+    public PaymentStatus Status
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Method")]
-    public PaymentMethod Method { get; set; } = new();
+    public PaymentMethod Method { get; set; } = new PaymentMethod();
 
     [XmlElement(ElementName = "AuthorizationCode")]
     public string AuthorizationCode { get; set; } = string.Empty;
@@ -1440,33 +1626,38 @@ public class PaymentInfo {
 
     [XmlArray(ElementName = "PaymentHistory")]
     [XmlArrayItem(ElementName = "Transaction")]
-    public List<PaymentTransaction> PaymentHistory { get; set; } = new();
+    public List<PaymentTransaction> PaymentHistory { get; set; } = new List<PaymentTransaction>();
 
     [XmlElement(ElementName = "FraudCheck")]
-    public FraudCheckResult FraudCheck { get; set; } = new();
+    public FraudCheckResult FraudCheck { get; set; } = new FraudCheckResult();
 }
 
-public class PaymentTransaction {
+public class PaymentTransaction
+{
     [XmlElement(ElementName = "TransactionId")]
     public string TransactionId { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Type")]
-    public TransactionType Type {
+    public TransactionType Type
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Amount")]
-    public decimal Amount {
+    public decimal Amount
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Status")]
-    public PaymentStatus Status {
+    public PaymentStatus Status
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Timestamp")]
-    public DateTime Timestamp {
+    public DateTime Timestamp
+    {
         get; set;
     }
 
@@ -1474,21 +1665,25 @@ public class PaymentTransaction {
     public string Reference { get; set; } = string.Empty;
 }
 
-public enum TransactionType {
+public enum TransactionType
+{
     Authorization,
     Capture,
     Refund,
     Void,
 }
 
-public class FraudCheckResult {
+public class FraudCheckResult
+{
     [XmlElement(ElementName = "Score")]
-    public double Score {
+    public double Score
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "RiskLevel")]
-    public RiskLevel RiskLevel {
+    public RiskLevel RiskLevel
+    {
         get; set;
     }
 
@@ -1497,17 +1692,19 @@ public class FraudCheckResult {
 
     [XmlArray(ElementName = "Flags")]
     [XmlArrayItem(ElementName = "Flag")]
-    public List<FraudFlag> Flags { get; set; } = new();
+    public List<FraudFlag> Flags { get; set; } = new List<FraudFlag>();
 }
 
-public enum RiskLevel {
+public enum RiskLevel
+{
     Low,
     Medium,
     High,
     Critical,
 }
 
-public class FraudFlag {
+public class FraudFlag
+{
     [XmlElement(ElementName = "Type")]
     public string Type { get; set; } = string.Empty;
 
@@ -1518,7 +1715,8 @@ public class FraudFlag {
     public string Severity { get; set; } = string.Empty;
 }
 
-public class Promotion {
+public class Promotion
+{
     [XmlElement(ElementName = "PromotionId")]
     public string PromotionId { get; set; } = string.Empty;
 
@@ -1526,7 +1724,8 @@ public class Promotion {
     public string Name { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Type")]
-    public PromotionType Type {
+    public PromotionType Type
+    {
         get; set;
     }
 
@@ -1537,30 +1736,35 @@ public class Promotion {
     public string Description { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "DiscountAmount")]
-    public decimal DiscountAmount {
+    public decimal DiscountAmount
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "DiscountPercentage")]
-    public double? DiscountPercentage {
+    public double? DiscountPercentage
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "ValidFrom")]
-    public DateTime ValidFrom {
+    public DateTime ValidFrom
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "ValidUntil")]
-    public DateTime ValidUntil {
+    public DateTime ValidUntil
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Terms")]
-    public PromotionTerms Terms { get; set; } = new();
+    public PromotionTerms Terms { get; set; } = new PromotionTerms();
 }
 
-public enum PromotionType {
+public enum PromotionType
+{
     PercentageDiscount,
     FixedDiscount,
     FreeShipping,
@@ -1569,47 +1773,55 @@ public enum PromotionType {
     LoyaltyReward,
 }
 
-public class PromotionTerms {
+public class PromotionTerms
+{
     [XmlElement(ElementName = "MinOrderValue")]
-    public decimal? MinOrderValue {
+    public decimal? MinOrderValue
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "MaxDiscount")]
-    public decimal? MaxDiscount {
+    public decimal? MaxDiscount
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "UsageLimit")]
-    public int? UsageLimit {
+    public int? UsageLimit
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "CustomerUsageLimit")]
-    public int? CustomerUsageLimit {
+    public int? CustomerUsageLimit
+    {
         get; set;
     }
 
     [XmlArray(ElementName = "EligibleProducts")]
     [XmlArrayItem(ElementName = "ProductId")]
-    public List<string> EligibleProducts { get; set; } = new();
+    public List<string> EligibleProducts { get; set; } = new List<string>();
 
     [XmlArray(ElementName = "ExcludedProducts")]
     [XmlArrayItem(ElementName = "ProductId")]
-    public List<string> ExcludedProducts { get; set; } = new();
+    public List<string> ExcludedProducts { get; set; } = new List<string>();
 }
 
-public class OrderEvent {
+public class OrderEvent
+{
     [XmlElement(ElementName = "EventId")]
     public string EventId { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "Type")]
-    public OrderEventType Type {
+    public OrderEventType Type
+    {
         get; set;
     }
 
     [XmlElement(ElementName = "Timestamp")]
-    public DateTime Timestamp {
+    public DateTime Timestamp
+    {
         get; set;
     }
 
@@ -1623,12 +1835,14 @@ public class OrderEvent {
     public string Details { get; set; } = string.Empty;
 
     [XmlElement(ElementName = "SystemGenerated")]
-    public bool SystemGenerated {
+    public bool SystemGenerated
+    {
         get; set;
     }
 }
 
-public enum OrderEventType {
+public enum OrderEventType
+{
     Created,
     Modified,
     Confirmed,

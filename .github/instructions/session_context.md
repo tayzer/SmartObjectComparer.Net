@@ -1,94 +1,53 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2025-01-30T06:30:00Z
+lastUpdated: 2026-02-02T02:05:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-Fix namespace-ignorant XML deserialization for nested elements in SOAP envelopes
+Add UI toggle for strict/lenient XML namespace handling - COMPLETED
 
 ## Todo List Status
 ```markdown
-- [x] Implement NamespaceIgnorantXmlReader to strip namespaces during XML reading
-- [x] Add IgnoreXmlNamespaces property to IXmlDeserializationService
-- [x] Modify XmlSerializerFactory to create serializers expecting empty namespaces
-- [x] Combine ProcessTypeForNamespaceRemoval and ProcessTypeForOrderRemoval into unified method
-- [x] Refactor DI registration - move ComplexOrderResponse from factory constructor to DI
-- [x] Create XmlComparisonOptions class with fluent API for extensibility
-- [x] Add overloads for AddUnifiedComparisonServices to accept options configuration
-- [x] Create RegisterDomainModelWithRootElement helper for custom root element names
-- [x] Fix nested element deserialization - CreateNamespaceIgnorantSerializer<T> method
-- [x] Update RegisterDomainModelWithRootElement to use factory's CreateNamespaceIgnorantSerializer
-- [x] Add comprehensive test for SoapEnvelope with nested elements
-- [x] Fix ambiguous XmlSerializerFactory reference in test file
-- [x] Verify all 72 tests pass
+- [x] Add strict/lenient toggle to comparison settings UI
+- [x] Wire toggle to XML deserialization service state
+- [x] Run targeted tests or build verification
 ```
 
 ## Recent File Changes
-- `ComparisonTool.Core/Serialization/XmlDeserializationService.cs`:
-  - **NamespaceIgnorantXmlReader class** (lines 18-63): XmlReader wrapper that returns empty string for all namespace URIs
-  - **IgnoreXmlNamespaces property** (line 77): Defaults to true, enables namespace stripping
-
-- `ComparisonTool.Core/Serialization/XmlSerializerFactory.cs`:
-  - **CreateNamespaceIgnorantSerializer<T>** (lines ~115-136): New public method that creates serializers with ProcessTypeForAttributeNormalization applied to ALL nested types
-  - **ProcessTypeForAttributeNormalization** (lines ~194+): Recursively processes types to clear namespaces and remove Order attributes
-
-- `ComparisonTool.Core/DI/ServiceCollectionExtensions.cs`:
-  - **XmlComparisonOptions class** (lines 45-80): Fluent API for registering domain models
-  - **RegisterDomainModelWithRootElement<T>** (lines 65-76): Uses factory.CreateNamespaceIgnorantSerializer<T>(rootElementName)
-  - **AddUnifiedComparisonServices overloads** (lines 162+): Accept Action<XmlComparisonOptions>
-
-- `ComparisonTool.Web/Program.cs`:
-  - Uses `options.RegisterDomainModelWithRootElement<SoapEnvelope>("SoapEnvelope", "Envelope")`
-
-- `ComparisonTool.Tests/Unit/Serialization/XmlDeserializationServiceTests.cs`:
-  - **Using alias** (line 15): `using CoreXmlSerializerFactory = ComparisonTool.Core.Serialization.XmlSerializerFactory`
-  - **DeserializeXml_SoapEnvelope_WithCustomRootSerializer_ShouldDeserializeAllNestedElements** (lines 365-430): Tests that nested elements are properly deserialized
+- `ComparisonTool.Web/Components/Comparison/ComparisonConfigurationPanel.razor`: Added UI toggle for Ignore XML Namespaces (lenient mode)
+- `ComparisonTool.Web/Components/Pages/Home.razor`: Wired UI toggle to IXmlDeserializationService and applied before comparisons
 
 ## Key Technical Decisions
-- Decision: Create `CreateNamespaceIgnorantSerializer<T>` method in XmlSerializerFactory
-- Rationale: RegisterDomainModelWithRootElement needs access to factory's ProcessTypeForAttributeNormalization to handle ALL nested types, not just root
-- Date: 2025-01-30
+- Decision: Use NamespaceAgnosticXmlReader wrapper instead of removing namespace handling entirely
+- Rationale: Need to strip namespaces for version tolerance, but MUST preserve xsi:nil for nullable types (DateTime?, int?, etc.)
+- Date: 2026-02-02
 
-- Decision: Use using alias for XmlSerializerFactory in test file
-- Rationale: Avoids CS0104 ambiguous reference between ComparisonTool.Core.Serialization.XmlSerializerFactory and System.Xml.Serialization.XmlSerializerFactory
-- Date: 2025-01-30
-
-## Root Cause Analysis
-**Files showing as equal when different**:
-- Original implementation of RegisterDomainModelWithRootElement created a simple XmlSerializer with only XmlRootAttribute override
-- Nested types (SoapBody, SearchResponse, etc.) still expected their declared namespaces from XmlElement attributes
-- NamespaceIgnorantXmlReader strips ALL namespaces to empty string
-- Mismatch caused serializer to not find nested elements (all null)
-- Two files with all-null nested elements compared as equal
-
-**Fix**:
-- CreateNamespaceIgnorantSerializer<T> applies ProcessTypeForAttributeNormalization to ALL types in the object graph
-- This ensures every nested type expects empty namespace, matching what NamespaceIgnorantXmlReader provides
+- Decision: Use tuple cache key (Type, IgnoreXmlNamespaces) for serializer cache
+- Rationale: Different namespace modes require different serializers; using just Type caused wrong serializer to be used
+- Date: 2026-02-02
 
 ## External Resources Referenced
-- None needed - internal refactoring based on understanding of XmlSerializer behavior
+- None for this session (continuation of previous investigation)
 
 ## Blockers & Issues
-- **[RESOLVED]** CS0104 ambiguous XmlSerializerFactory reference - Fixed with using alias
+- **[RESOLVED]** NamespaceIgnorantXmlReader stripped xsi:nil attribute causing "not a valid AllXsd value" for empty DateTime? - Fixed with NamespaceAgnosticXmlReader that preserves xsi:nil
+- **[RESOLVED]** Corrupted code in XmlDeserializationService - Fixed constructor and DeserializeXml method
 
 ## Failed Approaches
-- Approach: Simple XmlSerializer with XmlRootAttribute override only
-- Failure Reason: Nested types still expected their declared namespaces
-- Lesson: Must process ALL types in object graph for namespace-ignorant deserialization
+- Approach: Use XmlAttributeOverrides alone without reader wrapper
+- Failure Reason: XmlAttributeOverrides only affect serializer type mappings, not how incoming XML namespaces are parsed
+- Lesson: Must strip namespaces at reader level for true namespace-agnostic behavior
 
 ## Environment Notes
 - .NET 8.0
-- 72 tests passing
-- No build errors
 
 ## Next Session Priority
-No active tasks - namespace handling implementation complete.
+No active tasks - fix is complete.
 
 ## Session Notes
-- User's original question: "Can we ignore namespaces in the comparison tool?"
-- Answer: Yes, implemented NamespaceIgnorantXmlReader + ProcessTypeForAttributeNormalization
-- Key feature: XmlComparisonOptions.RegisterDomainModelWithRootElement<T> for extensibility
-- SoapEnvelope model uses root element "Envelope" but DomainModelTypeName "SoapEnvelope"
+- UI toggle added for strict/lenient XML namespace handling
+- Toggle updates IXmlDeserializationService.IgnoreXmlNamespaces immediately and before running comparisons
+- Full test suite passed (72 tests)
