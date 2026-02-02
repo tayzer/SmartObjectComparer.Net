@@ -1,4 +1,3 @@
-// <copyright file="Models.cs" company="PlaceholderCompany">
 using System.Xml.Serialization;
 
 namespace ComparisonTool.Core.Models;

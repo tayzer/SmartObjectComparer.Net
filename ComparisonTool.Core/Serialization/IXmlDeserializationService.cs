@@ -1,10 +1,10 @@
-// <copyright file="IXmlDeserializationService.cs" company="PlaceholderCompany">
 namespace ComparisonTool.Core.Serialization;
 
 /// <summary>
 /// Interface for XML deserialization operations.
 /// </summary>
-public interface IXmlDeserializationService {
+public interface IXmlDeserializationService
+{
     /// <summary>
     /// Gets or sets whether to ignore XML namespaces during deserialization.
     /// When true, XML documents with any namespace (or no namespace) will deserialize correctly

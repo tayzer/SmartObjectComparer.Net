@@ -1,4 +1,3 @@
-// <copyright file="NamespaceAgnosticXmlReader.cs" company="PlaceholderCompany">
 using System.Xml;
 
 namespace ComparisonTool.Core.Serialization;
@@ -17,9 +16,9 @@ public class NamespaceAgnosticXmlReader : XmlReader
 {
     private const string XsiNamespace = "http://www.w3.org/2001/XMLSchema-instance";
     private const string XsiPrefix = "xsi";
-    
+
     private readonly XmlReader innerReader;
-    
+
     /// <summary>
     /// Initializes a new instance of the <see cref="NamespaceAgnosticXmlReader"/> class.
     /// </summary>
@@ -27,7 +26,7 @@ public class NamespaceAgnosticXmlReader : XmlReader
     public NamespaceAgnosticXmlReader(XmlReader innerReader) => this.innerReader = innerReader ?? throw new ArgumentNullException(nameof(innerReader));
 
     // Properties that need special handling for namespace-agnostic behavior
-    
+
     /// <summary>
     /// Gets the namespace URI. Returns empty for all elements except xsi: attributes.
     /// </summary>
@@ -40,12 +39,12 @@ public class NamespaceAgnosticXmlReader : XmlReader
             {
                 return XsiNamespace;
             }
-            
+
             // Return empty namespace for all other elements/attributes
             return string.Empty;
         }
     }
-    
+
     /// <summary>
     /// Gets the namespace prefix. Returns empty for all elements except xsi: attributes.
     /// </summary>
@@ -58,11 +57,11 @@ public class NamespaceAgnosticXmlReader : XmlReader
             {
                 return XsiPrefix;
             }
-            
+
             return string.Empty;
         }
     }
-    
+
     /// <summary>
     /// Checks if the current node is an xsi:nil or xsi:type attribute that should preserve its namespace.
     /// </summary>
@@ -72,25 +71,25 @@ public class NamespaceAgnosticXmlReader : XmlReader
         {
             return false;
         }
-        
+
         var localName = innerReader.LocalName;
         var prefix = innerReader.Prefix;
-        
+
         // Check for xsi:nil, xsi:type, and other xsi attributes
         if (string.Equals(prefix, XsiPrefix, StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
-        
+
         // Also check by namespace URI in case prefix varies
         if (string.Equals(innerReader.NamespaceURI, XsiNamespace, StringComparison.Ordinal))
         {
             return true;
         }
-        
+
         return false;
     }
-    
+
     // Pass-through properties
     public override XmlNodeType NodeType => innerReader.NodeType;
     public override string LocalName => innerReader.LocalName;
@@ -103,7 +102,7 @@ public class NamespaceAgnosticXmlReader : XmlReader
     public override bool EOF => innerReader.EOF;
     public override ReadState ReadState => innerReader.ReadState;
     public override XmlNameTable NameTable => innerReader.NameTable;
-    
+
     // Navigation methods
     public override bool Read() => innerReader.Read();
     public override bool MoveToElement() => innerReader.MoveToElement();
@@ -113,12 +112,12 @@ public class NamespaceAgnosticXmlReader : XmlReader
     public override bool MoveToAttribute(string name, string? ns) => innerReader.MoveToAttribute(name, ns);
     public override void MoveToAttribute(int i) => innerReader.MoveToAttribute(i);
     public override bool ReadAttributeValue() => innerReader.ReadAttributeValue();
-    
+
     // Attribute access methods
     public override string? GetAttribute(int i) => innerReader.GetAttribute(i);
     public override string? GetAttribute(string name) => innerReader.GetAttribute(name);
     public override string? GetAttribute(string name, string? namespaceURI) => innerReader.GetAttribute(name, namespaceURI);
-    
+
     // Namespace lookup - report empty namespace but preserve xsi
     public override string? LookupNamespace(string prefix)
     {
@@ -126,13 +125,13 @@ public class NamespaceAgnosticXmlReader : XmlReader
         {
             return XsiNamespace;
         }
-        
+
         return string.Empty;
     }
-    
+
     // Resolve entity
     public override void ResolveEntity() => innerReader.ResolveEntity();
-    
+
     // Close/dispose
     protected override void Dispose(bool disposing)
     {

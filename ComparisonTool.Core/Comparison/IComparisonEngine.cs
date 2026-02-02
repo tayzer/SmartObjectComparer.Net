@@ -1,4 +1,3 @@
-// <copyright file="IComparisonEngine.cs" company="PlaceholderCompany">
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
 using KellermanSoftware.CompareNetObjects;
@@ -8,7 +7,8 @@ namespace ComparisonTool.Core.Comparison;
 /// <summary>
 /// Interface for the core comparison engine that handles object-to-object comparisons.
 /// </summary>
-public interface IComparisonEngine {
+public interface IComparisonEngine
+{
     /// <summary>
     /// Performs a comparison between two objects using the specified model type.
     /// </summary>

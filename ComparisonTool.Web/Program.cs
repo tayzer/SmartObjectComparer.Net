@@ -1,4 +1,3 @@
-// <copyright file="Program.cs" company="PlaceholderCompany">
 using System.Xml.Serialization;
 using ComparisonTool.Core.DI;
 using ComparisonTool.Core.Models;
@@ -20,12 +19,14 @@ builder.Host.UseSerilog();
 
 // Add services to the container with proper configuration
 builder.Services
-    .AddUnifiedComparisonServices(builder.Configuration, options => {
+    .AddUnifiedComparisonServices(builder.Configuration, options =>
+    {
         // Register SoapEnvelope with custom root element name
         options.RegisterDomainModelWithRootElement<SoapEnvelope>("SoapEnvelope", "Envelope");
     })
     .AddRazorComponents()
-    .AddInteractiveServerComponents(options => {
+    .AddInteractiveServerComponents(options =>
+    {
         options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(30);
         options.DisconnectedCircuitMaxRetained = 100;
     });
@@ -33,7 +34,8 @@ builder.Services
 // Add MudBlazor services
 builder.Services.AddMudServices();
 
-builder.Services.AddSignalR(options => {
+builder.Services.AddSignalR(options =>
+{
     options.MaximumReceiveMessageSize = 10 * 1024 * 1024;
     options.ClientTimeoutInterval = TimeSpan.FromMinutes(5);
     options.KeepAliveInterval = TimeSpan.FromSeconds(15);
@@ -50,11 +52,13 @@ var app = builder.Build();
 CleanupOldTempFiles();
 
 // Configure the HTTP request pipeline.
-if (!app.Environment.IsDevelopment()) {
+if (!app.Environment.IsDevelopment())
+{
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
     app.UseHsts();
 }
-else {
+else
+{
     app.UseDeveloperExceptionPage();
 }
 
@@ -73,28 +77,36 @@ app.Run();
 /// Cleans up temporary upload files older than 1 day.
 /// Run at startup to avoid race conditions during parallel uploads.
 /// </summary>
-static void CleanupOldTempFiles() {
+static void CleanupOldTempFiles()
+{
     var tempPath = Path.Combine(Path.GetTempPath(), "ComparisonToolUploads");
-    if (!Directory.Exists(tempPath)) {
+    if (!Directory.Exists(tempPath))
+    {
         return;
     }
 
-    try {
+    try
+    {
         // Delete individual batch folders older than 1 day (not the parent folder)
-        foreach (var batchDir in Directory.GetDirectories(tempPath)) {
+        foreach (var batchDir in Directory.GetDirectories(tempPath))
+        {
             var dirInfo = new DirectoryInfo(batchDir);
-            if (dirInfo.CreationTime < DateTime.Now.AddDays(-1)) {
-                try {
+            if (dirInfo.CreationTime < DateTime.Now.AddDays(-1))
+            {
+                try
+                {
                     Directory.Delete(batchDir, true);
                     Log.Information("Cleaned up old temp batch folder: {Folder}", batchDir);
                 }
-                catch (Exception ex) {
+                catch (Exception ex)
+                {
                     Log.Warning(ex, "Failed to clean up temp folder: {Folder}", batchDir);
                 }
             }
         }
     }
-    catch (Exception ex) {
+    catch (Exception ex)
+    {
         Log.Warning(ex, "Error during temp file cleanup");
     }
 }

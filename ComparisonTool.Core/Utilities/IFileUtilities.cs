@@ -1,4 +1,3 @@
-// <copyright file="IFileUtilities.cs" company="PlaceholderCompany">
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Results;
 
@@ -7,7 +6,8 @@ namespace ComparisonTool.Core.Utilities;
 /// <summary>
 /// Interface for file utilities.
 /// </summary>
-public interface IFileUtilities {
+public interface IFileUtilities
+{
     /// <summary>
     /// Creates a memory stream from a file stream.
     /// </summary>

@@ -1,4 +1,3 @@
-// <copyright file="HighPerformanceComparisonPipeline.cs" company="PlaceholderCompany">
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.IO.Hashing;

@@ -1,4 +1,3 @@
-// <copyright file="XmlSerializerFactory.cs" company="PlaceholderCompany">
 using System.Reflection;
 using System.Xml.Serialization;
 using ComparisonTool.Core.Models;

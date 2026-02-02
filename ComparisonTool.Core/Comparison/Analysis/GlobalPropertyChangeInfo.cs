@@ -1,4 +1,3 @@
-// <copyright file="GlobalPropertyChangeInfo.cs" company="PlaceholderCompany">
 namespace ComparisonTool.Core.Comparison.Analysis;
 
 public class GlobalPropertyChangeInfo

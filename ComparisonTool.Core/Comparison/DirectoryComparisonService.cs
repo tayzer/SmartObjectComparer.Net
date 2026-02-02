@@ -1,4 +1,3 @@
-// <copyright file="DirectoryComparisonService.cs" company="PlaceholderCompany">
 using System.Collections.Concurrent;
 using ComparisonTool.Core.Comparison;
 using ComparisonTool.Core.Comparison.Analysis;

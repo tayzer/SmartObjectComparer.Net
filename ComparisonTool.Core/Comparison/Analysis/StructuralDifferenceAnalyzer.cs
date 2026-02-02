@@ -1,4 +1,3 @@
-// <copyright file="StructuralDifferenceAnalyzer.cs" company="PlaceholderCompany">
 using System.Text.RegularExpressions;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.Utilities;

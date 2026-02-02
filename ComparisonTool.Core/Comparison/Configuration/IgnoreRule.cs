@@ -1,4 +1,3 @@
-// <copyright file="IgnoreRule.cs" company="PlaceholderCompany">
 namespace ComparisonTool.Core.Comparison.Configuration;
 
 using System;

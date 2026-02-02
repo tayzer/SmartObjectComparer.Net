@@ -1,4 +1,3 @@
-// <copyright file="FileUtilities.cs" company="PlaceholderCompany">
 using System.Globalization;
 using System.Linq;
 using System.Text;

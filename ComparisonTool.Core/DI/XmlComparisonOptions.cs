@@ -1,4 +1,3 @@
-// <copyright file="XmlComparisonOptions.cs" company="PlaceholderCompany">
 using System.Xml.Serialization;
 using ComparisonTool.Core.Serialization;
 using CoreXmlSerializerFactory = ComparisonTool.Core.Serialization.XmlSerializerFactory;
@@ -11,8 +10,8 @@ namespace ComparisonTool.Core.DI;
 /// </summary>
 public class XmlComparisonOptions
 {
-    private readonly List<(Type Type, Func<XmlSerializer> Factory)> serializerRegistrations = new ();
-    private readonly List<Action<IXmlDeserializationService>> domainModelRegistrations = new ();
+    private readonly List<(Type Type, Func<XmlSerializer> Factory)> serializerRegistrations = new();
+    private readonly List<Action<IXmlDeserializationService>> domainModelRegistrations = new();
 
     /// <summary>
     /// Gets or sets a value indicating whether to ignore XML namespaces during deserialization.
@@ -75,7 +74,8 @@ public class XmlComparisonOptions
             // when ApplySerializerRegistrations is called with access to the factory
             var factory = new CoreXmlSerializerFactory(null);
             return factory.CreateNamespaceIgnorantSerializer<T>(rootElementName);
-        }));
+        }
+        ));
         RegisterDomainModel<T>(modelName);
     }
 

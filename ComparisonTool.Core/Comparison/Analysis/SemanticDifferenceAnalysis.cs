@@ -1,4 +1,3 @@
-// <copyright file="SemanticDifferenceAnalysis.cs" company="PlaceholderCompany">
 namespace ComparisonTool.Core.Comparison.Analysis;
 
 /// <summary>

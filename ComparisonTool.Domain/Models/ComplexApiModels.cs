@@ -1,4 +1,3 @@
-// <copyright file="ComplexApiModels.cs" company="PlaceholderCompany">
 using System.Xml.Serialization;
 
 namespace ComparisonTool.Core.Models;

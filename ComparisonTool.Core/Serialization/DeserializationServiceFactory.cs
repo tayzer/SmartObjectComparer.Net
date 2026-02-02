@@ -1,4 +1,3 @@
-// <copyright file="DeserializationServiceFactory.cs" company="PlaceholderCompany">
 using ComparisonTool.Core.Utilities;
 using Microsoft.Extensions.Logging;
 

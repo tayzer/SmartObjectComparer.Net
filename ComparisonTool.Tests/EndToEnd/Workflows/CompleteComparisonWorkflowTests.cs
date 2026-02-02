@@ -1,4 +1,3 @@
-// <copyright file="CompleteComparisonWorkflowTests.cs" company="PlaceholderCompany">
 using System.Text;
 using ComparisonTool.Core.Comparison;
 using ComparisonTool.Core.Comparison.Configuration;

@@ -1,4 +1,3 @@
-// <copyright file="PerformanceTracker.cs" company="PlaceholderCompany">
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;

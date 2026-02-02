@@ -1,4 +1,3 @@
-// <copyright file="DifferenceCategorizer.cs" company="PlaceholderCompany">
 using System;
 using System.Text.RegularExpressions;
 using KellermanSoftware.CompareNetObjects;

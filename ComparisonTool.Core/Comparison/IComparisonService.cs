@@ -1,4 +1,3 @@
-// <copyright file="IComparisonService.cs" company="PlaceholderCompany">
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Results;
 using KellermanSoftware.CompareNetObjects;
@@ -8,7 +7,8 @@ namespace ComparisonTool.Core.Comparison;
 /// <summary>
 /// Interface for comparison execution.
 /// </summary>
-public interface IComparisonService {
+public interface IComparisonService
+{
     /// <summary>
     /// Compare two XML files using the specified domain model.
     /// </summary>

@@ -1,4 +1,3 @@
-// <copyright file="SemanticDifferenceGroup.cs" company="PlaceholderCompany">
 using KellermanSoftware.CompareNetObjects;
 
 namespace ComparisonTool.Core.Comparison.Analysis;

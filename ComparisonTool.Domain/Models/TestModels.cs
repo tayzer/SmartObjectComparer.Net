@@ -1,4 +1,3 @@
-// <copyright file="TestModels.cs" company="PlaceholderCompany">
 using System.Text.Json.Serialization;
 
 namespace ComparisonTool.Domain.Models;
