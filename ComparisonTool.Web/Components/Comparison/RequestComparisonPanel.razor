@@ -1,0 +1,330 @@
+﻿@using System.Net.Http.Json
+@using ComparisonTool.Core.Comparison.Results
+@using ComparisonTool.Core.RequestComparison.Models
+@using Microsoft.AspNetCore.Components.Forms
+@using MudBlazor
+@inject IHttpClientFactory HttpClientFactory
+@inject ILogger<RequestComparisonPanel> Logger
+
+<MudPaper Elevation="2" Class="pa-4">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h6">Request Comparison</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Default">
+            Upload request files and compare responses from two endpoints.
+        </MudText>
+
+        @* Step 1: Upload Request Files *@
+        <MudPaper Elevation="1" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.subtitle1">Step 1: Upload Request Files</MudText>
+                <InputFile OnChange="HandleFileSelection" multiple accept="*/*" />
+                @if (selectedFiles != null && selectedFiles.Count > 0)
+                {
+                    <MudText Typo="Typo.caption">@selectedFiles.Count files selected</MudText>
+                }
+                <MudButton Variant="Variant.Filled" 
+                           Color="Color.Primary" 
+                           StartIcon="@Icons.Material.Filled.CloudUpload"
+                           OnClick="UploadFiles"
+                           Disabled="@(selectedFiles == null || selectedFiles.Count == 0 || isUploading)">
+                    @if (isUploading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        <text>Uploading...</text>
+                    }
+                    else
+                    {
+                        <text>Upload Request Files</text>
+                    }
+                </MudButton>
+                @if (!string.IsNullOrEmpty(batchId))
+                {
+                    <MudAlert Severity="Severity.Success" Variant="Variant.Outlined">
+                        Uploaded @uploadedCount files. Batch ID: @batchId
+                    </MudAlert>
+                }
+            </MudStack>
+        </MudPaper>
+
+        @* Step 2: Configure Endpoints *@
+        <MudPaper Elevation="1" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.subtitle1">Step 2: Configure Endpoints</MudText>
+                <MudTextField @bind-Value="endpointA" 
+                              Label="Endpoint A URL" 
+                              Placeholder="https://api-a.example.com/endpoint"
+                              Variant="Variant.Outlined" />
+                <MudTextField @bind-Value="endpointB" 
+                              Label="Endpoint B URL" 
+                              Placeholder="https://api-b.example.com/endpoint"
+                              Variant="Variant.Outlined" />
+                
+                <MudExpansionPanels>
+                    <MudExpansionPanel Text="Custom Headers (Optional)">
+                        <MudStack Spacing="2">
+                            <MudText Typo="Typo.subtitle2">Headers for Endpoint A</MudText>
+                            @foreach (var header in headersA)
+                            {
+                                <MudStack Row="true" Spacing="2">
+                                    <MudTextField @bind-Value="header.Key" Label="Header Name" Variant="Variant.Outlined" />
+                                    <MudTextField @bind-Value="header.Value" Label="Header Value" Variant="Variant.Outlined" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="@(() => headersA.Remove(header))" />
+                                </MudStack>
+                            }
+                            <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => headersA.Add(new HeaderPair()))">
+                                Add Header
+                            </MudButton>
+                            
+                            <MudText Typo="Typo.subtitle2">Headers for Endpoint B</MudText>
+                            @foreach (var header in headersB)
+                            {
+                                <MudStack Row="true" Spacing="2">
+                                    <MudTextField @bind-Value="header.Key" Label="Header Name" Variant="Variant.Outlined" />
+                                    <MudTextField @bind-Value="header.Value" Label="Header Value" Variant="Variant.Outlined" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="@(() => headersB.Remove(header))" />
+                                </MudStack>
+                            }
+                            <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => headersB.Add(new HeaderPair()))">
+                                Add Header
+                            </MudButton>
+                        </MudStack>
+                    </MudExpansionPanel>
+                    <MudExpansionPanel Text="Advanced Options">
+                        <MudStack Spacing="2">
+                            <MudNumericField @bind-Value="timeoutMs" 
+                                             Label="Request Timeout (ms)" 
+                                             Min="1000" Max="300000" 
+                                             Variant="Variant.Outlined" />
+                            <MudNumericField @bind-Value="maxConcurrency" 
+                                             Label="Max Concurrency" 
+                                             Min="1" Max="256" 
+                                             Variant="Variant.Outlined" />
+                        </MudStack>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            </MudStack>
+        </MudPaper>
+
+        @* Step 3: Run Comparison *@
+        <MudPaper Elevation="1" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.subtitle1">Step 3: Run Comparison</MudText>
+                <MudButton Variant="Variant.Filled" 
+                           Color="Color.Success" 
+                           StartIcon="@Icons.Material.Filled.PlayArrow"
+                           OnClick="StartComparison"
+                           Disabled="@(!CanStartComparison)">
+                    Start Comparison
+                </MudButton>
+                
+                @if (isRunning)
+                {
+                    <MudProgressLinear Color="Color.Primary" 
+                                       Value="@progressPercent" 
+                                       Striped="true"
+                                       Size="Size.Large" />
+                    <MudText Typo="Typo.body2">@statusMessage</MudText>
+                    <MudButton Variant="Variant.Outlined" 
+                               Color="Color.Warning" 
+                               StartIcon="@Icons.Material.Filled.Cancel"
+                               OnClick="CancelJob">
+                        Cancel
+                    </MudButton>
+                }
+                
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                        @errorMessage
+                    </MudAlert>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter] public EventCallback<MultiFolderComparisonResult> OnComparisonComplete { get; set; }
+
+    private List<IBrowserFile>? selectedFiles;
+    private bool isUploading = false;
+    private string? batchId;
+    private int uploadedCount = 0;
+    
+    private string endpointA = "";
+    private string endpointB = "";
+    private List<HeaderPair> headersA = new();
+    private List<HeaderPair> headersB = new();
+    private int timeoutMs = 30000;
+    private int maxConcurrency = 64;
+    
+    private bool isRunning = false;
+    private string? currentJobId;
+    private int progressPercent = 0;
+    private string? statusMessage;
+    private string? errorMessage;
+    private CancellationTokenSource? cts;
+
+    private bool CanStartComparison => 
+        !string.IsNullOrEmpty(batchId) && 
+        !string.IsNullOrWhiteSpace(endpointA) && 
+        !string.IsNullOrWhiteSpace(endpointB) && 
+        !isRunning;
+
+    private void HandleFileSelection(InputFileChangeEventArgs e)
+    {
+        selectedFiles = e.GetMultipleFiles(10000).ToList();
+        errorMessage = null;
+    }
+
+    private async Task UploadFiles()
+    {
+        if (selectedFiles == null || selectedFiles.Count == 0) return;
+
+        isUploading = true;
+        errorMessage = null;
+        
+        try
+        {
+            using var http = HttpClientFactory.CreateClient();
+            http.BaseAddress = new Uri("https://localhost");
+            
+            using var content = new MultipartFormDataContent();
+            foreach (var file in selectedFiles)
+            {
+                var stream = file.OpenReadStream(maxAllowedSize: 100 * 1024 * 1024);
+                content.Add(new StreamContent(stream), "files", file.Name);
+            }
+
+            var response = await http.PostAsync("/api/requests/batch", content);
+            response.EnsureSuccessStatusCode();
+            
+            var result = await response.Content.ReadFromJsonAsync<RequestBatchUploadResponse>();
+            batchId = result?.BatchId;
+            uploadedCount = result?.Uploaded ?? 0;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Upload failed: {ex.Message}";
+            Logger.LogError(ex, "Failed to upload request files");
+        }
+        finally
+        {
+            isUploading = false;
+        }
+    }
+
+    private async Task StartComparison()
+    {
+        if (!CanStartComparison) return;
+
+        isRunning = true;
+        errorMessage = null;
+        progressPercent = 0;
+        statusMessage = "Starting comparison...";
+        cts = new CancellationTokenSource();
+
+        try
+        {
+            using var http = HttpClientFactory.CreateClient();
+            http.BaseAddress = new Uri("https://localhost");
+
+            var request = new CreateRequestComparisonJobRequest
+            {
+                RequestBatchId = batchId!,
+                EndpointA = endpointA,
+                EndpointB = endpointB,
+                HeadersA = headersA.Where(h => !string.IsNullOrEmpty(h.Key))
+                    .ToDictionary(h => h.Key, h => h.Value ?? ""),
+                HeadersB = headersB.Where(h => !string.IsNullOrEmpty(h.Key))
+                    .ToDictionary(h => h.Key, h => h.Value ?? ""),
+                TimeoutMs = timeoutMs,
+                MaxConcurrency = maxConcurrency
+            };
+
+            var createResponse = await http.PostAsJsonAsync("/api/requests/compare", request);
+            createResponse.EnsureSuccessStatusCode();
+            
+            var createResult = await createResponse.Content.ReadFromJsonAsync<CreateJobResponse>();
+            currentJobId = createResult?.JobId;
+
+            // Poll for status
+            while (!cts.Token.IsCancellationRequested)
+            {
+                await Task.Delay(1000, cts.Token);
+                
+                var statusResponse = await http.GetFromJsonAsync<JobStatusResponse>(
+                    $"/api/requests/compare/{currentJobId}/status");
+                
+                if (statusResponse == null) continue;
+                
+                statusMessage = statusResponse.Message;
+                if (statusResponse.Total > 0)
+                {
+                    progressPercent = (int)(100.0 * statusResponse.Completed / statusResponse.Total);
+                }
+
+                if (statusResponse.Status == "Completed")
+                {
+                    var result = await http.GetFromJsonAsync<MultiFolderComparisonResult>(
+                        $"/api/requests/compare/{currentJobId}/result");
+                    
+                    if (result != null)
+                    {
+                        await OnComparisonComplete.InvokeAsync(result);
+                    }
+                    break;
+                }
+                else if (statusResponse.Status == "Failed")
+                {
+                    errorMessage = statusResponse.Error ?? "Job failed";
+                    break;
+                }
+                else if (statusResponse.Status == "Cancelled")
+                {
+                    statusMessage = "Job was cancelled";
+                    break;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            statusMessage = "Cancelled";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Comparison failed: {ex.Message}";
+            Logger.LogError(ex, "Request comparison failed");
+        }
+        finally
+        {
+            isRunning = false;
+            cts?.Dispose();
+            cts = null;
+        }
+    }
+
+    private async Task CancelJob()
+    {
+        if (string.IsNullOrEmpty(currentJobId)) return;
+        
+        cts?.Cancel();
+        
+        try
+        {
+            using var http = HttpClientFactory.CreateClient();
+            http.BaseAddress = new Uri("https://localhost");
+            await http.PostAsync($"/api/requests/compare/{currentJobId}/cancel", null);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to cancel job");
+        }
+    }
+
+    private class HeaderPair
+    {
+        public string Key { get; set; } = "";
+        public string? Value { get; set; }
+    }
+}
