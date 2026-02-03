@@ -1,5 +1,139 @@
 ﻿---
 applyTo: '**'
+lastUpdated: 2026-02-03T19:10:00Z
+sessionStatus: complete
+---
+
+# Current Session Context
+
+## Active Task
+Expose Request Comparison UI on homepage
+
+## Todo List Status
+```markdown
+- [x] 🔍 Review Home page layout
+- [x] 🧭 Add Request Comparison tab
+- [x] ✅ Build to verify UI changes
+```
+
+## Recent File Changes
+- `ComparisonTool.Web\Components\Pages\Home.razor`: Added tabs for File/Folder vs Request Comparison and feature flag gate
+
+## Key Technical Decisions
+- Decision: Add a MudTabs switcher to expose Request Comparison alongside existing file/folder comparison
+- Rationale: Minimal UI change while preserving existing workflows
+- Date: 2026-02-03
+
+## External Resources Referenced
+- None
+
+## Blockers & Issues
+- None
+
+## Failed Approaches
+- None
+
+## Environment Notes
+- .NET 8.0
+
+## Next Session Priority
+No active tasks
+
+## Session Notes
+- Build succeeded for ComparisonTool.Web (warnings only)---
+applyTo: '**'
+lastUpdated: 2026-02-03T18:45:00Z
+sessionStatus: complete
+---
+
+# Current Session Context
+
+## Active Task
+Extend test data generator to support SoapEnvelope and add a toggle for domain selection
+
+## Todo List Status
+```markdown
+- [x] 🔧 Add domain toggle + SoapEnvelope generator
+- [x] 📝 Add Soap dataset docs and output structure
+- [x] ✅ Build/test generator project
+```
+
+## Recent File Changes
+- ComparisonTool.TestDataGenerator/Program.cs: Added domain toggle, SoapEnvelope generator, SOAP dataset docs, and namespace-aware serialization
+
+## Key Technical Decisions
+- Decision: Support `complex`, `soap`, or `both` via command-line `--domain` flag
+- Rationale: Simple toggle without changing project structure
+- Date: 2026-02-03
+
+## External Resources Referenced
+- https://learn.microsoft.com/en-us/dotnet/api/system.xml.serialization.xmlserializernamespaces?view=net-8.0: Namespace/prefix usage and serialization examples
+- https://learn.microsoft.com/en-us/dotnet/api/system.xml.serialization.xmlserializer?view=net-8.0: Serialize overloads with namespaces
+- Google search blocked (HTTP 451) when attempting to access search results via fetch
+
+## Blockers & Issues
+- None
+
+## Failed Approaches
+- Attempt: Google search via fetch_webpage
+- Failure Reason: HTTP 451 response (blocked)
+- Lesson: Use direct docs links when search is blocked
+
+## Environment Notes
+- .NET 8.0
+
+## Next Session Priority
+No active tasks
+
+## Session Notes
+- Build succeeded for ComparisonTool.TestDataGenerator---
+applyTo: '**'
+lastUpdated: 2026-02-03T18:30:00Z
+sessionStatus: active
+---
+
+# Current Session Context
+
+## Active Task
+Extend test data generator to support SoapEnvelope and add a toggle for domain selection
+
+## Todo List Status
+```markdown
+- [ ] 🔧 Add domain toggle + SoapEnvelope generator
+- [ ] 📝 Add Soap dataset docs and output structure
+- [ ] ✅ Build/test generator project
+```
+
+## Recent File Changes
+- None yet
+
+## Key Technical Decisions
+- Decision: Support `complex`, `soap`, or `both` via command-line `--domain` flag
+- Rationale: Simple toggle without changing project structure
+- Date: 2026-02-03
+
+## External Resources Referenced
+- https://learn.microsoft.com/en-us/dotnet/api/system.xml.serialization.xmlserializernamespaces?view=net-8.0: Namespace/prefix usage and serialization examples
+- https://learn.microsoft.com/en-us/dotnet/api/system.xml.serialization.xmlserializer?view=net-8.0: Serialize overloads with namespaces
+- Google search blocked (HTTP 451) when attempting to access search results via fetch
+
+## Blockers & Issues
+- None
+
+## Failed Approaches
+- Attempt: Google search via fetch_webpage
+- Failure Reason: HTTP 451 response (blocked)
+- Lesson: Use direct docs links when search is blocked
+
+## Environment Notes
+- .NET 8.0
+
+## Next Session Priority
+Implement SoapEnvelope generator and domain selection flag in Program.cs
+
+## Session Notes
+- Need to keep XML namespaces for SoapEnvelope output via XmlSerializerNamespaces---
+applyTo: '**'
 lastUpdated: 2026-02-03T10:45:00Z
 sessionStatus: complete
 ---
