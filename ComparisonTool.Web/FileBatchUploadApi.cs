@@ -160,7 +160,15 @@ public static class FileBatchUploadApi
         app.MapGet("/api/upload/batch/{batchId}", (string batchId) =>
         {
             var tempPath = Path.Combine(Path.GetTempPath(), "ComparisonToolUploads");
-            var batchPath = Path.Combine(tempPath, batchId);
+            var uploadsRoot = Path.GetFullPath(tempPath);
+            var batchPath = Path.GetFullPath(Path.Combine(uploadsRoot, batchId));
+
+            // Ensure the resolved batchPath stays within the uploads root to prevent path traversal
+            if (!batchPath.StartsWith(uploadsRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            {
+                return Results.BadRequest("Invalid batch identifier.");
+            }
+
             var fileListPath = Path.Combine(batchPath, "_filelist.json");
 
             if (!File.Exists(fileListPath))
