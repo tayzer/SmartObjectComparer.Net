@@ -351,7 +351,25 @@
             }
             else
             {
-                <RequestComparisonPanel OnComparisonComplete="HandleRequestComparisonComplete" />
+                <RequestComparisonPanel @ref="requestComparisonPanel" 
+                                        OnComparisonComplete="HandleRequestComparisonComplete"
+                                        OnPropertySelectorOpened="OpenRequestPropertySelector"
+                                        OnTreePropertySelectorOpened="OpenRequestTreePropertySelector" />
+                
+                @* Property Selectors for Request Comparison - placed outside the panel for modal behavior *@
+                <HierarchicalPropertySelector @ref="requestPropertySelector"
+                                              ModelType="@(requestComparisonPanel?.GetSelectedModelType())"
+                                              IgnoredProperties="@(requestComparisonPanel?.IgnoreRules ?? new List<IgnoreRule>())"
+                                              OnPropertyAdded="AddRequestIgnoreRule"
+                                              OnPropertiesBatchAdded="AddRequestIgnoreRulesBatch"
+                                              OnPropertyRemoved="propertyPath => RemoveRequestIgnoreRule(propertyPath)" />
+
+                <ObjectTreePropertySelector @ref="requestTreePropertySelector"
+                                           ModelType="@(requestComparisonPanel?.GetSelectedModelType())"
+                                           IgnoredProperties="@(requestComparisonPanel?.IgnoreRules ?? new List<IgnoreRule>())"
+                                           OnPropertyAdded="AddRequestIgnoreRule"
+                                           OnPropertiesBatchAdded="AddRequestIgnoreRulesBatch"
+                                           OnPropertyRemoved="propertyPath => RemoveRequestIgnoreRule(propertyPath)" />
                 
                 @* Display Request Comparison Results *@
                 @if (RequestComparisonResult != null)
@@ -439,6 +457,11 @@
     private SemanticDifferenceAnalysis RequestComparisonSemanticAnalysis { get; set; }
     private EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult RequestComparisonEnhancedAnalysis { get; set; }
     private ObjectTreePropertySelector treePropertySelector;
+    
+    // Request Comparison selectors
+    private RequestComparisonPanel requestComparisonPanel;
+    private HierarchicalPropertySelector requestPropertySelector;
+    private ObjectTreePropertySelector requestTreePropertySelector;
 
     private bool CanRunFolderComparison =>
         !string.IsNullOrEmpty(SelectedModelName) &&
@@ -591,6 +614,45 @@
     {
         IgnoreRules.Clear();
         ConfigService.ClearIgnoreRules();
+    }
+
+    // Request Comparison selector handlers
+    private async Task OpenRequestPropertySelector()
+    {
+        if (requestPropertySelector != null)
+        {
+            await requestPropertySelector.ShowAsync();
+        }
+    }
+
+    private async Task OpenRequestTreePropertySelector()
+    {
+        if (requestTreePropertySelector != null)
+        {
+            await requestTreePropertySelector.ShowAsync();
+        }
+    }
+
+    private void AddRequestIgnoreRule(IgnoreRule rule)
+    {
+        requestComparisonPanel?.AddIgnoreRule(rule);
+    }
+
+    private void AddRequestIgnoreRulesBatch(IEnumerable<IgnoreRule> rules)
+    {
+        requestComparisonPanel?.AddIgnoreRulesBatch(rules);
+    }
+
+    private void RemoveRequestIgnoreRule(string propertyPath)
+    {
+        if (requestComparisonPanel != null && requestComparisonPanel.IgnoreRules != null)
+        {
+            var rule = requestComparisonPanel.IgnoreRules.FirstOrDefault(r => r.PropertyPath == propertyPath);
+            if (rule != null)
+            {
+                requestComparisonPanel.IgnoreRules.Remove(rule);
+            }
+        }
     }
     
     private async Task BrowseDirectory1()

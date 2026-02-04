@@ -108,69 +108,81 @@
                     
                     <MudExpansionPanel Text="@IgnoreRulesLabel">
                         <MudStack Spacing="2">
-                            @foreach (var rule in ignoreRules)
+                            <MudText Typo="Typo.subtitle2">Tree Navigator (Visual Property Selection)</MudText>
+                            <MudStack Row="true" Spacing="2">
+                                <MudButton Variant="Variant.Outlined" 
+                                           Size="Size.Small"
+                                           StartIcon="@Icons.Material.Filled.List"
+                                           OnClick="OpenPropertySelector" 
+                                           Disabled="@(!IsModelSelected)">
+                                    Simple Property Selector
+                                </MudButton>
+                                <MudButton Variant="Variant.Outlined" 
+                                           Size="Size.Small"
+                                           Color="Color.Success"
+                                           StartIcon="@Icons.Material.Filled.AccountTree"
+                                           OnClick="OpenTreePropertySelector" 
+                                           Disabled="@(!IsModelSelected)">
+                                    Tree Navigator ⭐
+                                </MudButton>
+                            </MudStack>
+                            @if (!IsModelSelected)
                             {
-                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                                    <MudTextField @bind-Value="rule.PropertyPath" 
-                                                  Label="Property Path" 
-                                                  Variant="Variant.Outlined" 
-                                                  Style="flex: 2;" />
-                                    <MudCheckBox @bind-Value="rule.IgnoreCompletely" 
-                                                 Label="Ignore Completely" 
-                                                 Color="Color.Primary" />
-                                    <MudCheckBox @bind-Value="rule.IgnoreCollectionOrder" 
-                                                 Label="Ignore Order" 
-                                                 Color="Color.Primary" />
-                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" 
-                                                   OnClick="@(() => ignoreRules.Remove(rule))" 
-                                                   Color="Color.Error" />
-                                </MudStack>
+                                <MudText Typo="Typo.caption" Color="Color.Default">
+                                    Select a model first to browse and ignore properties.
+                                </MudText>
                             }
-                            <MudButton Variant="Variant.Text" 
-                                       StartIcon="@Icons.Material.Filled.Add" 
-                                       OnClick="@(() => ignoreRules.Add(new IgnoreRuleInput()))">
-                                Add Ignore Rule
-                            </MudButton>
-                        </MudStack>
-                    </MudExpansionPanel>
-                    
-                    <MudExpansionPanel Text="@SmartIgnoreRulesLabel">
-                        <MudStack Spacing="2">
-                            @foreach (var rule in smartIgnoreRules)
-                            {
-                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                                    <MudSelect T="string" 
-                                               @bind-Value="rule.Type" 
-                                               Label="Type" 
-                                               Variant="Variant.Outlined"
-                                               Style="flex: 1;">
-                                        <MudSelectItem Value="@("PropertyName")">Property Name</MudSelectItem>
-                                        <MudSelectItem Value="@("NamePattern")">Name Pattern</MudSelectItem>
-                                        <MudSelectItem Value="@("PropertyType")">Property Type</MudSelectItem>
-                                        <MudSelectItem Value="@("CollectionOrdering")">Collection Ordering</MudSelectItem>
-                                    </MudSelect>
-                                    <MudTextField @bind-Value="rule.Value" 
-                                                  Label="Value" 
-                                                  Variant="Variant.Outlined" 
-                                                  Style="flex: 2;" />
-                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" 
-                                                   OnClick="@(() => smartIgnoreRules.Remove(rule))" 
-                                                   Color="Color.Error" />
-                                </MudStack>
-                            }
-                            <MudButton Variant="Variant.Text" 
-                                       StartIcon="@Icons.Material.Filled.Add" 
-                                       OnClick="@(() => smartIgnoreRules.Add(new SmartIgnoreRuleInput()))">
-                                Add Smart Ignore Rule
-                            </MudButton>
                             
                             <MudDivider Class="my-2" />
-                            <MudText Typo="Typo.caption">Quick Presets:</MudText>
-                            <MudStack Row="true" Spacing="2">
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => ApplySmartIgnorePreset("ID Fields"))">ID Fields</MudButton>
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => ApplySmartIgnorePreset("Timestamps"))">Timestamps</MudButton>
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => ApplySmartIgnorePreset("Metadata"))">Metadata</MudButton>
-                            </MudStack>
+                            
+                            @if (IgnoreRules.Any())
+                            {
+                                <MudPaper Outlined="true" Style="max-height: 200px; overflow-y: auto;">
+                                    @foreach (var rule in IgnoreRules.OrderBy(r => r.PropertyPath))
+                                    {
+                                        <MudStack Row="true" Class="pa-2" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                            <MudText Typo="Typo.body2" Style="font-family: 'Consolas', 'Monaco', monospace; word-break: break-all;">
+                                                @rule.PropertyPath
+                                            </MudText>
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                @if (rule.IgnoreCompletely)
+                                                {
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.VisibilityOff">
+                                                        Ignore
+                                                    </MudChip>
+                                                }
+                                                @if (rule.IgnoreCollectionOrder)
+                                                {
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.SwapVert">
+                                                        Order
+                                                    </MudChip>
+                                                }
+                                                <MudIconButton Icon="@Icons.Material.Filled.Close"
+                                                               Size="Size.Small"
+                                                               Color="Color.Error"
+                                                               OnClick="@(() => RemoveIgnoreRule(rule))" />
+                                            </MudStack>
+                                        </MudStack>
+                                        <MudDivider />
+                                    }
+                                </MudPaper>
+                                <MudButton Variant="Variant.Text" 
+                                           Size="Size.Small"
+                                           Color="Color.Error"
+                                           StartIcon="@Icons.Material.Filled.DeleteSweep"
+                                           OnClick="ClearAllIgnoreRules">
+                                    Clear All Rules
+                                </MudButton>
+                            }
+                            else
+                            {
+                                <MudPaper Outlined="true" Class="pa-4" Style="text-align: center;">
+                                    <MudStack Row="true" Justify="Justify.Center" AlignItems="AlignItems.Center" Spacing="2">
+                                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Default" />
+                                        <MudText Typo="Typo.body2" Color="Color.Default">No ignore rules configured</MudText>
+                                    </MudStack>
+                                </MudPaper>
+                            }
                         </MudStack>
                     </MudExpansionPanel>
                 </MudExpansionPanels>
@@ -325,8 +337,11 @@
     private bool ignoreXmlNamespaces = true;
     private bool enableSemanticAnalysis = true;
     private bool enableEnhancedStructuralAnalysis = true;
-    private List<IgnoreRuleInput> ignoreRules = new();
-    private List<SmartIgnoreRuleInput> smartIgnoreRules = new();
+    public List<IgnoreRule> IgnoreRules { get; set; } = new();
+    
+    // Event callbacks for property selectors
+    [Parameter] public EventCallback OnPropertySelectorOpened { get; set; }
+    [Parameter] public EventCallback OnTreePropertySelectorOpened { get; set; }
     
     // Endpoints
     private string endpointA = "";
@@ -357,8 +372,8 @@
         !string.IsNullOrWhiteSpace(selectedModelName) &&
         !isRunning;
     
-    private string IgnoreRulesLabel => $"Ignore Rules ({ignoreRules.Count} rules)";
-    private string SmartIgnoreRulesLabel => $"Smart Ignore Rules ({smartIgnoreRules.Count} rules)";
+    private bool IsModelSelected => !string.IsNullOrEmpty(selectedModelName);
+    private string IgnoreRulesLabel => $"Ignore Rules ({IgnoreRules.Count} rules)";
 
     protected override void OnInitialized()
     {
@@ -482,20 +497,14 @@
                 IgnoreXmlNamespaces = ignoreXmlNamespaces,
                 EnableSemanticAnalysis = enableSemanticAnalysis,
                 EnableEnhancedStructuralAnalysis = enableEnhancedStructuralAnalysis,
-                IgnoreRules = ignoreRules.Where(r => !string.IsNullOrWhiteSpace(r.PropertyPath))
+                IgnoreRules = IgnoreRules.Where(r => !string.IsNullOrWhiteSpace(r.PropertyPath))
                     .Select(r => new IgnoreRuleDto 
                     { 
                         PropertyPath = r.PropertyPath, 
                         IgnoreCompletely = r.IgnoreCompletely, 
                         IgnoreCollectionOrder = r.IgnoreCollectionOrder 
                     }).ToList(),
-                SmartIgnoreRules = smartIgnoreRules.Where(r => !string.IsNullOrWhiteSpace(r.Value))
-                    .Select(r => new SmartIgnoreRuleDto 
-                    { 
-                        Type = r.Type, 
-                        Value = r.Value, 
-                        Description = r.Description 
-                    }).ToList()
+                SmartIgnoreRules = new List<SmartIgnoreRuleDto>()
             };
 
             var createResponse = await http.PostAsJsonAsync("/api/requests/compare", request);
@@ -642,46 +651,70 @@
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
-    private void ApplySmartIgnorePreset(string presetName)
+    private async Task OpenPropertySelector()
     {
-        switch (presetName)
+        await OnPropertySelectorOpened.InvokeAsync();
+    }
+
+    private async Task OpenTreePropertySelector()
+    {
+        await OnTreePropertySelectorOpened.InvokeAsync();
+    }
+
+    public void AddIgnoreRule(IgnoreRule rule)
+    {
+        var existingRule = IgnoreRules.FirstOrDefault(r => r.PropertyPath == rule.PropertyPath);
+        if (existingRule != null)
         {
-            case "ID Fields":
-                smartIgnoreRules.Add(new SmartIgnoreRuleInput { Type = "PropertyName", Value = "Id", Description = "Ignore ID fields" });
-                smartIgnoreRules.Add(new SmartIgnoreRuleInput { Type = "NamePattern", Value = "*Id", Description = "Ignore properties ending with Id" });
-                smartIgnoreRules.Add(new SmartIgnoreRuleInput { Type = "NamePattern", Value = "*Guid", Description = "Ignore properties ending with Guid" });
-                break;
-            case "Timestamps":
-                smartIgnoreRules.Add(new SmartIgnoreRuleInput { Type = "PropertyType", Value = "System.DateTime", Description = "Ignore DateTime fields" });
-                smartIgnoreRules.Add(new SmartIgnoreRuleInput { Type = "NamePattern", Value = "*Date", Description = "Ignore properties ending with Date" });
-                smartIgnoreRules.Add(new SmartIgnoreRuleInput { Type = "NamePattern", Value = "*Time", Description = "Ignore properties ending with Time" });
-                break;
-            case "Metadata":
-                smartIgnoreRules.Add(new SmartIgnoreRuleInput { Type = "PropertyName", Value = "Version", Description = "Ignore Version fields" });
-                smartIgnoreRules.Add(new SmartIgnoreRuleInput { Type = "PropertyName", Value = "ETag", Description = "Ignore ETag fields" });
-                smartIgnoreRules.Add(new SmartIgnoreRuleInput { Type = "PropertyName", Value = "RequestId", Description = "Ignore RequestId fields" });
-                break;
+            IgnoreRules.Remove(existingRule);
+        }
+        IgnoreRules.Add(rule);
+        StateHasChanged();
+    }
+
+    public void AddIgnoreRulesBatch(IEnumerable<IgnoreRule> rules)
+    {
+        foreach (var rule in rules)
+        {
+            var existingRule = IgnoreRules.FirstOrDefault(r => r.PropertyPath == rule.PropertyPath);
+            if (existingRule != null)
+            {
+                IgnoreRules.Remove(existingRule);
+            }
+            IgnoreRules.Add(rule);
         }
         StateHasChanged();
+    }
+
+    private void RemoveIgnoreRule(IgnoreRule rule)
+    {
+        IgnoreRules.Remove(rule);
+        StateHasChanged();
+    }
+
+    private void ClearAllIgnoreRules()
+    {
+        IgnoreRules.Clear();
+        StateHasChanged();
+    }
+
+    public Type? GetSelectedModelType()
+    {
+        if (string.IsNullOrEmpty(selectedModelName))
+            return null;
+        try
+        {
+            return DeserializationService.GetModelType(selectedModelName);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private class HeaderPair
     {
         public string Key { get; set; } = "";
         public string? Value { get; set; }
-    }
-
-    private class IgnoreRuleInput
-    {
-        public string PropertyPath { get; set; } = "";
-        public bool IgnoreCompletely { get; set; } = true;
-        public bool IgnoreCollectionOrder { get; set; } = false;
-    }
-
-    private class SmartIgnoreRuleInput
-    {
-        public string Type { get; set; } = "PropertyName";
-        public string Value { get; set; } = "";
-        public string? Description { get; set; }
     }
 }

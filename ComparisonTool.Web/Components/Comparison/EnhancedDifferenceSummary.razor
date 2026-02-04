@@ -1,188 +1,165 @@
 ﻿@using ComparisonTool.Core.Comparison.Analysis
 @using ComparisonTool.Core.Comparison.Results
 @using KellermanSoftware.CompareNetObjects
+@using MudBlazor
 @inject IJSRuntime JSRuntime
 
-<div class="card">
-    <div class="card-header">
-        <h4>Comparison Overview</h4>
-    </div>
-    <div class="card-body">
+<MudPaper Elevation="2" Class="pa-4">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h5">Comparison Overview</MudText>
+        
         @if (AreAllEqual)
         {
-            <div class="alert alert-success d-flex align-items-center">
-                <i class="bi bi-check-circle-fill me-3 fs-4"></i>
-                <div>
-                    <strong>@(FolderResult != null ? "All files are identical" : "Files are identical")</strong>
-                    <div class="text-muted">
+            <MudAlert Severity="Severity.Success" Variant="Variant.Filled" Icon="@Icons.Material.Filled.CheckCircle">
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.body1"><strong>@(FolderResult != null ? "All files are identical" : "Files are identical")</strong></MudText>
+                    <MudText Typo="Typo.body2">
                         @if (FolderResult != null)
                         {
-                            <span>No differences found in any of the @TotalFiles compared files.</span>
+                            <text>No differences found in any of the @TotalFiles compared files.</text>
                         }
                         else
                         {
-                            <span>No differences found according to current comparison rules.</span>
+                            <text>No differences found according to current comparison rules.</text>
                         }
-                    </div>
-                </div>
-            </div>
+                    </MudText>
+                </MudStack>
+            </MudAlert>
         }
         else
         {
-            <!-- Additional Context for Folder Comparisons -->
+            @* Additional Context for Folder Comparisons *@
             @if (FolderResult != null)
             {
-                <div class="row mb-3">
-                    <div class="col-12">
-                        <div class="alert alert-light border-0 py-2">
-                            <div class="d-flex align-items-center justify-content-center">
-                                <i class="bi bi-folder2-open me-2 text-primary"></i>
-                                <span class="fw-medium">
-                                    Analyzing @TotalFiles files: 
-                                    <span class="text-success">@(TotalFiles - FilesWithDifferences) identical</span>, 
-                                    <span class="text-warning">@FilesWithDifferences with differences</span>
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.FolderOpen" Size="Size.Small" />
+                        <MudText Typo="Typo.body2">
+                            Analyzing <strong>@TotalFiles</strong> files: 
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text">@(TotalFiles - FilesWithDifferences) identical</MudChip>
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Text">@FilesWithDifferences with differences</MudChip>
+                        </MudText>
+                    </MudStack>
+                </MudAlert>
             }
 
-            <!-- Key Metrics Row -->
-            <div class="row mb-4">
-                <div class="col-md-3">
-                    <div class="text-center">
-                        <div class="display-4 text-warning">@TotalDifferences</div>
-                        <div class="text-muted">Total Differences</div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="text-center">
-                        <div class="display-4 text-info">@AggregatedCategoryCount.Count</div>
-                        <div class="text-muted">Change Types</div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="text-center">
-                        <div class="display-4 text-primary">@AggregatedObjectCount.Count</div>
-                        <div class="text-muted">Affected Objects</div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="text-center">
-                        <div class="display-4 text-secondary">@TotalPatterns</div>
-                        <div class="text-muted">Patterns Found</div>
-                    </div>
-                </div>
-            </div>
+            @* Key Metrics Row *@
+            <MudGrid Spacing="3">
+                <MudItem xs="6" sm="3">
+                    <MudPaper Elevation="0" Outlined="true" Class="pa-3 text-center">
+                        <MudText Typo="Typo.h4" Color="Color.Warning">@TotalDifferences</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Default">Total Differences</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="6" sm="3">
+                    <MudPaper Elevation="0" Outlined="true" Class="pa-3 text-center">
+                        <MudText Typo="Typo.h4" Color="Color.Info">@AggregatedCategoryCount.Count</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Default">Change Types</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="6" sm="3">
+                    <MudPaper Elevation="0" Outlined="true" Class="pa-3 text-center">
+                        <MudText Typo="Typo.h4" Color="Color.Primary">@AggregatedObjectCount.Count</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Default">Affected Objects</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="6" sm="3">
+                    <MudPaper Elevation="0" Outlined="true" Class="pa-3 text-center">
+                        <MudText Typo="Typo.h4" Color="Color.Secondary">@TotalPatterns</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Default">Patterns Found</MudText>
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
 
-            <!-- Top Categories Summary -->
-            <div class="row">
-                <div class="col-md-6">
-                    <h6>Most Common Change Types</h6>
-                    <div class="mb-3">
+            @* Top Categories Summary *@
+            <MudGrid Spacing="3">
+                <MudItem xs="12" md="6">
+                    <MudStack Spacing="2">
+                        <MudText Typo="Typo.subtitle2">Most Common Change Types</MudText>
                         @foreach (var category in AggregatedCategoryCount
-                        .OrderByDescending(c => c.Value)
-                        .Take(3))
+                            .OrderByDescending(c => c.Value)
+                            .Take(3))
                         {
                             var percentage = TotalDifferences > 0 ? Math.Round((double)category.Value / TotalDifferences * 100, 1) : 0;
-                            
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <span class="fw-medium">@FormatCategoryName(category.Key)</span>
-                                <div class="d-flex align-items-center">
-                                    <div class="progress me-2" style="width: 80px; height: 8px;">
-                                        <div class="progress-bar bg-warning" style="width: @(percentage)%"></div>
-                                    </div>
-                                    <span class="text-muted">@category.Value (@percentage%)</span>
-                                </div>
-                            </div>
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.body2">@FormatCategoryName(category.Key)</MudText>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudProgressLinear Value="@percentage" Color="Color.Warning" Style="width: 80px;" Size="Size.Small" />
+                                    <MudText Typo="Typo.caption" Color="Color.Default">@category.Value (@percentage%)</MudText>
+                                </MudStack>
+                            </MudStack>
                         }
-                    </div>
-                </div>
+                    </MudStack>
+                </MudItem>
                 
-                <div class="col-md-6">
-                    <h6>Most Affected Objects</h6>
-                    <div class="mb-3">
+                <MudItem xs="12" md="6">
+                    <MudStack Spacing="2">
+                        <MudText Typo="Typo.subtitle2">Most Affected Objects</MudText>
                         @foreach (var obj in AggregatedObjectCount
-                        .OrderByDescending(o => o.Value)
-                        .Take(3))
+                            .OrderByDescending(o => o.Value)
+                            .Take(3))
                         {
                             var percentage = TotalDifferences > 0 ? Math.Round((double)obj.Value / TotalDifferences * 100, 1) : 0;
-                            
-                            <div class="mb-2">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="fw-medium text-break" style="max-width: 70%; word-break: break-all;" title="@obj.Key">@obj.Key</span>
-                                    <div class="d-flex align-items-center flex-shrink-0">
-                                        <div class="progress me-2" style="width: 60px; height: 8px;">
-                                            <div class="progress-bar bg-primary" style="width: @(percentage)%"></div>
-                                        </div>
-                                        <span class="text-muted small">@obj.Value (@percentage%)</span>
-                                    </div>
-                                </div>
-                            </div>
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.body2" Style="max-width: 70%; word-break: break-all;">
+                                    <MudTooltip Text="@obj.Key">@TruncateText(obj.Key, 30)</MudTooltip>
+                                </MudText>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudProgressLinear Value="@percentage" Color="Color.Primary" Style="width: 60px;" Size="Size.Small" />
+                                    <MudText Typo="Typo.caption" Color="Color.Default">@obj.Value (@percentage%)</MudText>
+                                </MudStack>
+                            </MudStack>
                         }
-                    </div>
-                </div>
-            </div>
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
 
-            <!-- Quick Insights -->
+            @* Quick Insights *@
             @if (TotalPatterns > 0 && AggregatedCategoryCount.Any())
             {
-                <div class="alert alert-light border">
-                    <div class="d-flex align-items-start">
-                        <i class="bi bi-lightbulb me-2 text-warning"></i>
-                        <div>
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Icon="@Icons.Material.Filled.Lightbulb">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.body2">
                             <strong>Key Insight:</strong>
                             @{
-                                var topCategory = AggregatedCategoryCount
-                                .OrderByDescending(c => c.Value)
-                                .First();
+                                var topCategory = AggregatedCategoryCount.OrderByDescending(c => c.Value).First();
                             }
                             @if (FolderResult != null)
                             {
-                                <span>Across @TotalFiles files, @TotalDifferences differences were found. </span>
+                                <text>Across @TotalFiles files, @TotalDifferences differences were found. </text>
                             }
                             Most changes are <strong>@FormatCategoryName(topCategory.Key)</strong> affecting 
                             @topCategory.Value properties@(TotalPatterns > 0 ? $" with {TotalPatterns} distinct patterns identified" : "").
-                        </div>
-                    </div>
-                </div>
+                        </MudText>
+                    </MudStack>
+                </MudAlert>
             }
 
-            <!-- Testing Guidance -->
-            <div class="alert alert-info border-0">
-                <div class="d-flex align-items-start">
-                    <i class="bi bi-info-circle me-2"></i>
-                    <div>
-                        <strong>Testing Focus:</strong>
-                        @if (AggregatedCategoryCount.Any())
+            @* Testing Guidance *@
+            <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true" Icon="@Icons.Material.Filled.Info">
+                <MudText Typo="Typo.body2">
+                    <strong>Testing Focus:</strong>
+                    @if (AggregatedCategoryCount.Any())
+                    {
+                        var topCategory = AggregatedCategoryCount.OrderByDescending(c => c.Value).First();
+                        <text>Concentrate testing on <strong>@FormatCategoryName(topCategory.Key)</strong> changes</text>
+                        
+                        @if (AggregatedObjectCount.Any())
                         {
-                            var topCategory = AggregatedCategoryCount
-                            .OrderByDescending(c => c.Value)
-                            .First();
-                            
-                            <span>Concentrate testing on <strong>@FormatCategoryName(topCategory.Key)</strong> changes</span>
-                            
-                            @if (AggregatedObjectCount.Any())
-                            {
-                                var topObject = AggregatedObjectCount
-                                .OrderByDescending(o => o.Value)
-                                .First();
-                                
-                                <span>, particularly in <strong style="word-break: break-all;">@topObject.Key</strong> objects</span>
-                            }
-                            @if (FolderResult != null)
-                            {
-                                <span> across the @FilesWithDifferences files that have differences</span>
-                            }
-                            <span>.</span>
+                            var topObject = AggregatedObjectCount.OrderByDescending(o => o.Value).First();
+                            <text>, particularly in <strong style="word-break: break-all;">@topObject.Key</strong> objects</text>
                         }
-                    </div>
-                </div>
-            </div>
+                        @if (FolderResult != null)
+                        {
+                            <text> across the @FilesWithDifferences files that have differences</text>
+                        }
+                        <text>.</text>
+                    }
+                </MudText>
+            </MudAlert>
         }
-    </div>
-</div>
+    </MudStack>
+</MudPaper>
 
 @code {
     [Parameter]
