@@ -159,12 +159,23 @@ public static class FileBatchUploadApi
         // Add an endpoint to get the file list for a specific batch
         app.MapGet("/api/upload/batch/{batchId}", (string batchId) =>
         {
+            // Basic validation to prevent obvious path traversal in batchId
+            if (string.IsNullOrWhiteSpace(batchId) ||
+                batchId.Contains("..", StringComparison.Ordinal) ||
+                batchId.Contains(Path.DirectorySeparatorChar, StringComparison.Ordinal) ||
+                batchId.Contains(Path.AltDirectorySeparatorChar, StringComparison.Ordinal))
+            {
+                return Results.BadRequest("Invalid batch identifier.");
+            }
+
             var tempPath = Path.Combine(Path.GetTempPath(), "ComparisonToolUploads");
             var uploadsRoot = Path.GetFullPath(tempPath);
-            var batchPath = Path.GetFullPath(Path.Combine(uploadsRoot, batchId));
+            var uploadsRootNormalized = uploadsRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                + Path.DirectorySeparatorChar;
+            var batchPath = Path.GetFullPath(Path.Combine(uploadsRootNormalized, batchId));
 
             // Ensure the resolved batchPath stays within the uploads root to prevent path traversal
-            if (!batchPath.StartsWith(uploadsRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            if (!batchPath.StartsWith(uploadsRootNormalized, StringComparison.OrdinalIgnoreCase))
             {
                 return Results.BadRequest("Invalid batch identifier.");
             }
