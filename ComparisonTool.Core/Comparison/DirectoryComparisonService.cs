@@ -51,6 +51,7 @@ public class DirectoryComparisonService
         string directory1Path,
         string directory2Path,
         string modelName,
+        bool includeAllFiles = false,
         bool enablePatternAnalysis = true,
         bool enableSemanticAnalysis = true,
         IProgress<ComparisonProgress>? progress = null,
@@ -74,6 +75,7 @@ public class DirectoryComparisonService
             var filePairs = await fileSystemService.CreateFilePairsAsync(
                 directory1Path,
                 directory2Path,
+                includeAllFiles,
                 cancellationToken).ConfigureAwait(false);
 
             if (filePairs.Count == 0)

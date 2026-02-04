@@ -40,6 +40,7 @@ public interface IFileSystemService
     Task<List<(string File1Path, string File2Path, string RelativePath)>> CreateFilePairsAsync(
         string directory1,
         string directory2,
+        bool includeAllFiles = false,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -166,6 +167,7 @@ public class FileSystemService : IFileSystemService
     public async Task<List<(string File1Path, string File2Path, string RelativePath)>> CreateFilePairsAsync(
         string directory1,
         string directory2,
+        bool includeAllFiles = false,
         CancellationToken cancellationToken = default)
     {
         if (!Directory.Exists(directory1))
@@ -180,9 +182,13 @@ public class FileSystemService : IFileSystemService
 
         var result = new List<(string File1Path, string File2Path, string RelativePath)>();
 
-        // Get XML files from both directories
-        var files1 = await GetXmlFilesFromDirectoryAsync(directory1, cancellationToken).ConfigureAwait(false);
-        var files2 = await GetXmlFilesFromDirectoryAsync(directory2, cancellationToken).ConfigureAwait(false);
+        // Get files from both directories
+        var files1 = includeAllFiles
+            ? await GetAllFilesFromDirectoryAsync(directory1, cancellationToken).ConfigureAwait(false)
+            : await GetXmlFilesFromDirectoryAsync(directory1, cancellationToken).ConfigureAwait(false);
+        var files2 = includeAllFiles
+            ? await GetAllFilesFromDirectoryAsync(directory2, cancellationToken).ConfigureAwait(false)
+            : await GetXmlFilesFromDirectoryAsync(directory2, cancellationToken).ConfigureAwait(false);
 
         logger.LogInformation(
             "Creating file pairs from {Count1} files in directory 1 and {Count2} files in directory 2",
@@ -204,6 +210,40 @@ public class FileSystemService : IFileSystemService
         }
 
         logger.LogInformation("Found {Count} matching file pairs", result.Count);
+
+        return result;
+    }
+
+    private async Task<List<(string FilePath, string RelativePath)>> GetAllFilesFromDirectoryAsync(
+        string directoryPath,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Directory.Exists(directoryPath))
+        {
+            throw new DirectoryNotFoundException($"Directory not found: {directoryPath}");
+        }
+
+        var result = new List<(string FilePath, string RelativePath)>();
+
+        await Task.Run(
+            () =>
+            {
+                var files = Directory.GetFiles(directoryPath, "*", SearchOption.AllDirectories)
+                    .Where(file => !Path.GetFileName(file).StartsWith("_", StringComparison.Ordinal));
+
+                foreach (var filePath in files)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    var relativePath = Path.GetRelativePath(directoryPath, filePath);
+                    result.Add((filePath, relativePath));
+                }
+
+                logger.LogInformation(
+                    "Found {Count} files in directory {Directory}",
+                    result.Count,
+                    directoryPath);
+            }, cancellationToken).ConfigureAwait(false);
 
         return result;
     }

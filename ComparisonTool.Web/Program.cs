@@ -1,7 +1,9 @@
 using System.Xml.Serialization;
 using ComparisonTool.Core.DI;
 using ComparisonTool.Core.Models;
+using ComparisonTool.Core.RequestComparison.Services;
 using ComparisonTool.Web;
+using ComparisonTool.Web.Models;
 using ComparisonTool.Web.Components;
 using MudBlazor.Services;
 using Serilog;
@@ -33,6 +35,21 @@ builder.Services
 
 // Add MudBlazor services
 builder.Services.AddMudServices();
+
+// Add HttpClient for request comparison
+builder.Services.AddHttpClient("RequestComparison")
+    .ConfigureHttpClient(client =>
+    {
+        client.Timeout = TimeSpan.FromMinutes(5);
+    });
+
+// Add Request Comparison services
+builder.Services.AddSingleton<RequestFileParserService>();
+builder.Services.AddSingleton<RequestExecutionService>();
+builder.Services.AddSingleton<RequestComparisonJobService>();
+
+builder.Services.Configure<RequestComparisonEndpointOptions>(
+    builder.Configuration.GetSection("RequestComparison:EndpointOptions"));
 
 builder.Services.AddSignalR(options =>
 {
@@ -70,6 +87,7 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
 app.MapFileBatchUploadApi();
+app.MapRequestComparisonApi();
 
 app.Run();
 
@@ -79,34 +97,43 @@ app.Run();
 /// </summary>
 static void CleanupOldTempFiles()
 {
-    var tempPath = Path.Combine(Path.GetTempPath(), "ComparisonToolUploads");
-    if (!Directory.Exists(tempPath))
+    var tempPaths = new[]
     {
-        return;
-    }
+        Path.Combine(Path.GetTempPath(), "ComparisonToolUploads"),
+        Path.Combine(Path.GetTempPath(), "ComparisonToolRequests"),
+        Path.Combine(Path.GetTempPath(), "ComparisonToolJobs")
+    };
 
-    try
+    foreach (var tempPath in tempPaths)
     {
-        // Delete individual batch folders older than 1 day (not the parent folder)
-        foreach (var batchDir in Directory.GetDirectories(tempPath))
+        if (!Directory.Exists(tempPath))
         {
-            var dirInfo = new DirectoryInfo(batchDir);
-            if (dirInfo.CreationTime < DateTime.Now.AddDays(-1))
+            continue;
+        }
+
+        try
+        {
+            // Delete individual batch folders older than 1 day (not the parent folder)
+            foreach (var batchDir in Directory.GetDirectories(tempPath))
             {
-                try
+                var dirInfo = new DirectoryInfo(batchDir);
+                if (dirInfo.CreationTime < DateTime.Now.AddDays(-1))
                 {
-                    Directory.Delete(batchDir, true);
-                    Log.Information("Cleaned up old temp batch folder: {Folder}", batchDir);
-                }
-                catch (Exception ex)
-                {
-                    Log.Warning(ex, "Failed to clean up temp folder: {Folder}", batchDir);
+                    try
+                    {
+                        Directory.Delete(batchDir, true);
+                        Log.Information("Cleaned up old temp batch folder: {Folder}", batchDir);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.Warning(ex, "Failed to clean up temp folder: {Folder}", batchDir);
+                    }
                 }
             }
         }
-    }
-    catch (Exception ex)
-    {
-        Log.Warning(ex, "Error during temp file cleanup");
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Error during temp file cleanup for {Path}", tempPath);
+        }
     }
 }

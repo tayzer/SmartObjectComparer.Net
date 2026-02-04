@@ -9,12 +9,90 @@ namespace ComparisonTool.TestDataGenerator
         private static readonly int FileCount = 4000;
         private static readonly Random Random = new Random(42); // Fixed seed for reproducible results
 
+        private enum TestDataDomain
+        {
+            Unknown = 0,
+            Complex = 1,
+            Soap = 2,
+            Both = 3,
+        }
+
         private static void Main(string[] args)
         {
-            Console.WriteLine("🚀 Generating 4000 Expected and Actual files with ComplexOrderResponse model...");
-            Console.WriteLine("This will thoroughly test performance optimizations with large file sets and ignore rules.");
+            var domain = ParseDomain(args);
 
-            // Find the solution root
+            domain = TestDataDomain.Soap;
+
+            if (domain == TestDataDomain.Unknown)
+            {
+                PrintUsage();
+                return;
+            }
+
+            var solutionRoot = FindSolutionRoot();
+            var domainTestFiles = Path.Combine(solutionRoot, "ComparisonTool.Domain", "TestFiles");
+
+            if (domain == TestDataDomain.Complex || domain == TestDataDomain.Both)
+            {
+                GenerateComplexDataset(domainTestFiles);
+            }
+
+            if (domain == TestDataDomain.Soap || domain == TestDataDomain.Both)
+            {
+                GenerateSoapDataset(domainTestFiles);
+            }
+        }
+
+        private static TestDataDomain ParseDomain(string[] args)
+        {
+            if (args == null || args.Length == 0)
+            {
+                return TestDataDomain.Complex;
+            }
+
+            var normalized = string.Empty;
+            foreach (var arg in args)
+            {
+                if (arg.StartsWith("--domain=", StringComparison.OrdinalIgnoreCase))
+                {
+                    normalized = arg.Substring("--domain=".Length);
+                    break;
+                }
+
+                if (arg.Equals("--domain", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (normalized.Length == 0)
+                {
+                    normalized = arg;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                return TestDataDomain.Complex;
+            }
+
+            normalized = normalized.Trim().ToLowerInvariant();
+            return normalized switch
+            {
+                "complex" => TestDataDomain.Complex,
+                "soap" => TestDataDomain.Soap,
+                "both" => TestDataDomain.Both,
+                _ => TestDataDomain.Unknown,
+            };
+        }
+
+        private static void PrintUsage()
+        {
+            Console.WriteLine("Usage: dotnet run -- [--domain complex|soap|both]");
+            Console.WriteLine("Defaults to 'complex' when no domain is provided.");
+        }
+
+        private static string FindSolutionRoot()
+        {
             var current = AppDomain.CurrentDomain.BaseDirectory;
             var solutionRoot = current;
             var maxUp = 6;
@@ -28,12 +106,18 @@ namespace ComparisonTool.TestDataGenerator
                 solutionRoot = Path.GetFullPath(Path.Combine(solutionRoot, ".."));
             }
 
-            var domainTestFiles = Path.Combine(solutionRoot, "ComparisonTool.Domain", "TestFiles");
+            return solutionRoot;
+        }
+
+        private static void GenerateComplexDataset(string domainTestFiles)
+        {
+            Console.WriteLine("🚀 Generating 4000 Expected and Actual files with ComplexOrderResponse model...");
+            Console.WriteLine("This will thoroughly test performance optimizations with large file sets and ignore rules.");
+
             var outputDir = Path.Combine(domainTestFiles, "4000Files_ComplexModel");
             var actualsDir = Path.Combine(outputDir, "Actuals");
             var expectedsDir = Path.Combine(outputDir, "Expecteds");
 
-            // Create directories
             Directory.CreateDirectory(actualsDir);
             Directory.CreateDirectory(expectedsDir);
 
@@ -42,17 +126,14 @@ namespace ComparisonTool.TestDataGenerator
 
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-            // Generate files in parallel for speed
             Parallel.For(1, FileCount + 1, i =>
             {
                 try
                 {
-                    // Generate base order (Expected)
                     var expectedOrder = GenerateComplexOrder(i, isBaselineVersion: true);
                     var expectedXml = SerializeToXml(expectedOrder);
                     File.WriteAllText(Path.Combine(expectedsDir, $"{i}.xml"), expectedXml, System.Text.Encoding.UTF8);
 
-                    // Generate modified order (Actual) with strategic differences
                     var actualOrder = GenerateComplexOrder(i, isBaselineVersion: false);
                     var actualXml = SerializeToXml(actualOrder);
                     File.WriteAllText(Path.Combine(actualsDir, $"{i}.xml"), actualXml, System.Text.Encoding.UTF8);
@@ -70,8 +151,7 @@ namespace ComparisonTool.TestDataGenerator
 
             stopwatch.Stop();
 
-            // Create documentation
-            CreateDocumentation(outputDir);
+            CreateComplexDocumentation(outputDir);
 
             Console.WriteLine($"🎉 Successfully generated {FileCount * 2} files in {stopwatch.Elapsed.TotalSeconds:F2} seconds!");
             Console.WriteLine($"📊 Average: {(FileCount * 2) / stopwatch.Elapsed.TotalSeconds:F0} files/second");
@@ -82,6 +162,56 @@ namespace ComparisonTool.TestDataGenerator
             Console.WriteLine("2. Compare these 4000 file pairs and measure timing");
             Console.WriteLine("3. Monitor memory usage vs simple models");
             Console.WriteLine("4. Test both with and without ignore rules");
+        }
+
+        private static void GenerateSoapDataset(string domainTestFiles)
+        {
+            Console.WriteLine("🧼 Generating 4000 Expected and Actual files with SoapEnvelope model...");
+            Console.WriteLine("This dataset targets SOAP envelope namespaces, nested collections, and ordering differences.");
+
+            var outputDir = Path.Combine(domainTestFiles, "4000Files_SoapEnvelope");
+            var actualsDir = Path.Combine(outputDir, "Actuals");
+            var expectedsDir = Path.Combine(outputDir, "Expecteds");
+
+            Directory.CreateDirectory(actualsDir);
+            Directory.CreateDirectory(expectedsDir);
+
+            Console.WriteLine($"📁 Output directory: {outputDir}");
+            Console.WriteLine($"⏱️  Generating {FileCount * 2} files...");
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            var namespaces = CreateSoapNamespaces();
+
+            Parallel.For(1, FileCount + 1, i =>
+            {
+                try
+                {
+                    var expectedEnvelope = GenerateSoapEnvelope(i, isBaselineVersion: true);
+                    var expectedXml = SerializeToXml(expectedEnvelope, namespaces);
+                    File.WriteAllText(Path.Combine(expectedsDir, $"{i}.xml"), expectedXml, System.Text.Encoding.UTF8);
+
+                    var actualEnvelope = GenerateSoapEnvelope(i, isBaselineVersion: false);
+                    var actualXml = SerializeToXml(actualEnvelope, namespaces);
+                    File.WriteAllText(Path.Combine(actualsDir, $"{i}.xml"), actualXml, System.Text.Encoding.UTF8);
+
+                    if (i % 500 == 0)
+                    {
+                        Console.WriteLine($"✅ Generated {i * 2} files...");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"❌ Error generating file {i}: {ex.Message}");
+                }
+            });
+
+            stopwatch.Stop();
+
+            CreateSoapDocumentation(outputDir);
+
+            Console.WriteLine($"🎉 Successfully generated {FileCount * 2} files in {stopwatch.Elapsed.TotalSeconds:F2} seconds!");
+            Console.WriteLine($"📊 Average: {(FileCount * 2) / stopwatch.Elapsed.TotalSeconds:F0} files/second");
+            Console.WriteLine($"📁 Files saved to: {outputDir}");
         }
 
         private static ComplexOrderResponse GenerateComplexOrder(int fileIndex, bool isBaselineVersion)
@@ -832,7 +962,98 @@ namespace ComparisonTool.TestDataGenerator
             return entries;
         }
 
-        private static string SerializeToXml<T>(T obj)
+        private static SoapEnvelope GenerateSoapEnvelope(int fileIndex, bool isBaselineVersion)
+        {
+            var response = new SearchResponse
+            {
+                ReportId = isBaselineVersion ? $"RPT-{fileIndex:D6}" : $"RPT-{fileIndex:D6}-A",
+                GeneratedOn = DateTime.UtcNow.AddMinutes(-Random.Next(0, 180)),
+                Summary = GenerateSoapSummary(fileIndex, isBaselineVersion),
+                Results = GenerateSoapResults(Random.Next(3, 8), fileIndex, isBaselineVersion),
+                RelatedItems = GenerateRelatedItems(Random.Next(2, 6), fileIndex, isBaselineVersion),
+            };
+
+            return new SoapEnvelope
+            {
+                Body = new SoapBody
+                {
+                    Response = response,
+                },
+            };
+        }
+
+        private static Summary GenerateSoapSummary(int fileIndex, bool isBaselineVersion)
+        {
+            var total = Random.Next(5, 15);
+            var failures = isBaselineVersion ? Random.Next(0, 3) : Random.Next(1, 4);
+            var successes = Math.Max(0, total - failures);
+
+            return new Summary
+            {
+                TotalResults = total,
+                SuccessCount = successes,
+                FailureCount = failures,
+            };
+        }
+
+        private static List<ResultItem> GenerateSoapResults(int count, int fileIndex, bool isBaselineVersion)
+        {
+            var results = new List<ResultItem>();
+            for (var i = 0; i < count; i++)
+            {
+                var baseScore = Math.Round(Random.NextDouble() * 100, 2);
+                var score = isBaselineVersion ? baseScore : Math.Min(100, baseScore + 0.5);
+
+                results.Add(new ResultItem
+                {
+                    Id = (fileIndex * 100) + i,
+                    Name = isBaselineVersion ? $"Result-{fileIndex}-{i}" : $"Result-{fileIndex}-{i}-Updated",
+                    Score = score,
+                    Details = new Details
+                    {
+                        Description = isBaselineVersion ? $"Description {i}" : $"Updated description {i}",
+                        Status = isBaselineVersion ? "OK" : (i % 2 == 0 ? "WARN" : "OK"),
+                    },
+                    Tags = GenerateSoapTags(i, isBaselineVersion),
+                });
+            }
+
+            return results;
+        }
+
+        private static List<string> GenerateSoapTags(int index, bool isBaselineVersion)
+        {
+            var tags = new List<string> { "core", "search", $"tag-{index}" };
+            if (!isBaselineVersion)
+            {
+                tags.Add("delta");
+            }
+
+            return tags;
+        }
+
+        private static List<RelatedItem> GenerateRelatedItems(int count, int fileIndex, bool isBaselineVersion)
+        {
+            var items = new List<RelatedItem>();
+            for (var i = 0; i < count; i++)
+            {
+                items.Add(new RelatedItem
+                {
+                    ItemId = (fileIndex * 10) + i,
+                    ItemName = isBaselineVersion ? $"Related-{fileIndex}-{i}" : $"Related-{fileIndex}-{i}-Alt",
+                    Relevance = Math.Round(Random.NextDouble(), 4),
+                });
+            }
+
+            if (!isBaselineVersion)
+            {
+                items.Reverse();
+            }
+
+            return items;
+        }
+
+        private static string SerializeToXml<T>(T obj, XmlSerializerNamespaces? namespaces = null)
         {
             var serializer = new XmlSerializer(typeof(T));
 
@@ -850,9 +1071,12 @@ namespace ComparisonTool.TestDataGenerator
 
             using var xmlWriter = XmlWriter.Create(memoryStream, settings);
 
-            // Create namespace settings to avoid extra namespaces
-            var namespaces = new XmlSerializerNamespaces();
-            namespaces.Add(string.Empty, string.Empty); // Remove default namespace
+            if (namespaces == null)
+            {
+                // Create namespace settings to avoid extra namespaces
+                namespaces = new XmlSerializerNamespaces();
+                namespaces.Add(string.Empty, string.Empty); // Remove default namespace
+            }
 
             serializer.Serialize(xmlWriter, obj, namespaces);
             xmlWriter.Flush();
@@ -861,7 +1085,15 @@ namespace ComparisonTool.TestDataGenerator
             return System.Text.Encoding.UTF8.GetString(memoryStream.ToArray());
         }
 
-        private static void CreateDocumentation(string outputDir)
+        private static XmlSerializerNamespaces CreateSoapNamespaces()
+        {
+            var namespaces = new XmlSerializerNamespaces();
+            namespaces.Add("soapenv", "http://schemas.xmlsoap.org/soap/envelope/");
+            namespaces.Add("search", "urn:soap.co.uk/soap:search1");
+            return namespaces;
+        }
+
+        private static void CreateComplexDocumentation(string outputDir)
         {
             var readme = @"# 4000 File Performance Test Dataset
 
@@ -918,6 +1150,44 @@ Metadata.ServerInfo.DeploymentVersion
 
 Generated on: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + @"
 Generator: ComplexOrderResponse model with strategic variations
+";
+
+            File.WriteAllText(Path.Combine(outputDir, "README.md"), readme);
+        }
+
+        private static void CreateSoapDocumentation(string outputDir)
+        {
+            var readme = @"# 4000 File SoapEnvelope Test Dataset
+
+## Overview
+This dataset contains 4000 pairs of SOAP Envelope XML files designed to validate namespace handling, nested collections, and order sensitivity.
+
+## Dataset Characteristics
+- **File Count**: 4000 Expected + 4000 Actual = 8000 total files
+- **Model**: SoapEnvelope (Envelope → Body → SearchResponse)
+- **Size**: Each file ~2-8KB (compact but structured)
+- **Differences**: Strategic variations to test order, content, and namespace handling
+
+## Key Differences Between Expected/Actual Files
+1. **Report IDs**: Suffix added in actual files
+2. **GeneratedOn**: Different timestamps
+3. **Scores**: Slight score increase in actual files
+4. **Details**: Updated description/status values
+5. **Tags**: Additional tag in actual files
+6. **RelatedItems**: Reversed order in actual files
+
+## Performance Testing Recommendations
+
+### Ignore Rules to Test
+```
+GeneratedOn
+Results[*].Details.Description
+Results[*].Score
+RelatedItems[*]
+```
+
+Generated on: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + @"
+Generator: SoapEnvelope model with namespace-aware serialization
 ";
 
             File.WriteAllText(Path.Combine(outputDir, "README.md"), readme);
