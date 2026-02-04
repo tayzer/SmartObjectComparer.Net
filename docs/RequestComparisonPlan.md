@@ -1,75 +1,125 @@
-# Request Comparison Delivery Plan
+# Request Comparison Parity Plan (Home Features)
 
-## One-line Summary
-Deliver a request-based comparison pipeline that executes POST requests to two endpoints with custom headers and reuses existing analysis, optimized for 40k+ requests.
+## One-line Recommendation
+Align Request Comparison with Home by adding model/config/analysis inputs and applying them per job, then render the same results and analysis panels.
 
-## Milestones and Tasks
+## Rationale
+- The request comparison UI/API currently ignores domain model selection, ignore rules, and analysis flags available on Home.
+- Backend jobs run with default config and no per-job ignore rules, which causes parity gaps.
+- Completed request comparisons are not rendered with the same results/analysis UI used on Home.
 
-### M1 — Design & Contracts (Estimate: 2–3 days)
-1. Confirm request file format and header override strategy.
-2. Finalize endpoint contracts and response shapes.
-3. Update documentation and UX wireframes.
+## Scope
+**In scope**
+- Domain model selection and serialization parity.
+- Ignore rules and smart ignore rules parity.
+- Semantic and enhanced structural analysis parity.
+- Folder-of-requests upload and batching parity.
+- Result rendering parity with Home tab.
 
-**Acceptance Criteria**
-- Feature spec approved.
-- API contract agreed.
+**Out of scope**
+- New comparison algorithms.
+- Changes to existing domain models.
+- New external storage backends.
 
-### M2 — Backend Upload + Job API (Estimate: 4–6 days)
-1. Add `POST /api/requests/batch` (multipart) modeled after existing batch upload.
-2. Add job endpoints: create, status, result.
-3. Add server-side validation (content type, file size, path sanitization).
+## Actionable Plan
 
-**Acceptance Criteria**
-- Request batch upload works for 10k files.
-- Job can be created and status polled.
-
-### M3 — Request Execution Pipeline (Estimate: 5–7 days)
-1. Implement bounded concurrency runner.
-2. Add per-request timeout and retry strategy (optional).
-3. Merge headers (global + sidecar) with deterministic precedence.
-4. Stream request bodies and response bodies to disk.
-
-**Acceptance Criteria**
-- 40k requests run without OOM.
-- Responses are persisted in endpoint A/B folders with stable mapping.
-
-### M4 — Comparison + Analysis Integration (Estimate: 3–5 days)
-1. Reuse `DirectoryComparisonService.CompareDirectoriesAsync`.
-2. Store semantic analysis in metadata, as done for folder uploads.
+### P0 — Align UI Inputs (Estimate: M)
+**Tasks**
+1. Add model selector to Request Comparison tab (reuse the model list from Home).
+2. Add `ComparisonConfigurationPanel` to Request Comparison tab.
+3. Add toggles for semantic and enhanced structural analysis.
 
 **Acceptance Criteria**
-- Results appear in the same UI components as current folder comparison.
+- Request Comparison tab exposes the same model/ignore/config options as Home.
+- Selected options are preserved while a job is running.
 
-### M5 — UI Flow (Estimate: 4–6 days)
-1. Add request folder upload panel (uses existing batch upload JS).
-2. Add endpoint configuration inputs + headers editor.
-3. Add progress and cancellation support.
-
-**Acceptance Criteria**
-- User can upload requests, configure endpoints, run, and see results.
-
-### M6 — Tests & Hardening (Estimate: 4–6 days)
-1. Unit tests: header merge, request parsing, status progression.
-2. Integration tests: mocked endpoints + comparison results.
-3. Load test with 10k synthetic requests.
+### P1 — Extend Request Comparison API Contract (Estimate: S)
+**Tasks**
+1. Extend `CreateRequestComparisonJobRequest` to carry:
+	 - `ModelName`
+	 - `IgnoreRules`
+	 - `SmartIgnoreRules`
+	 - `IgnoreCollectionOrder`, `IgnoreStringCase`, `IgnoreXmlNamespaces`
+	 - `EnableSemanticAnalysis`, `EnableEnhancedStructuralAnalysis`
+2. Validate the new fields in the API.
 
 **Acceptance Criteria**
-- Test suite green.
-- Load test meets throughput target.
+- API accepts and validates all configuration fields.
+- UI successfully submits the extended payload.
 
-## Estimates Summary
-- Total: 22–33 dev-days (team size dependent)
+### P2 — Per-Job Configuration Application (Estimate: M–L)
+**Tasks**
+1. Apply ignore rules and smart ignores per job (avoid shared singleton state).
+2. Ensure XML ignore properties are applied based on selected model.
+3. Apply analysis flags when calling `CompareDirectoriesAsync`.
+
+**Acceptance Criteria**
+- Ignore rules affect request comparison results.
+- Smart ignore rules filter differences in request comparisons.
+- Semantic and enhanced structural analysis are computed when enabled.
+
+### P3 — Result Rendering Parity (Estimate: S)
+**Tasks**
+1. Wire Request Comparison completion to the same result views used on Home.
+2. Render semantic groups and enhanced structural analysis panels.
+
+**Acceptance Criteria**
+- Request Comparison results show summary, differences, and analysis panels.
+- Panels appear only when their corresponding toggles are enabled.
+
+### P4 — Folder Upload for Request Batches (Estimate: M)
+**Tasks**
+1. Add folder upload support for request files (multipart upload, preserve paths).
+2. Add file size/type validation parity with Home.
+3. Support large batch uploads and caching.
+
+**Acceptance Criteria**
+- Users can select a folder of requests and upload as a batch.
+- Large batches complete with stable file ordering.
+
+### P5 — Tests & Hardening (Estimate: M)
+**Tasks**
+1. Unit tests for config propagation and job execution path.
+2. Integration tests for request comparison pipeline with mock endpoints.
+3. Regression test for per-job configuration isolation.
+
+**Acceptance Criteria**
+- Tests prove parity with Home behavior for config and analysis.
+- Concurrent jobs don’t override each other’s config.
+
+## Proposed API Payload (Snapshot)
+```json
+{
+	"requestBatchId": "string",
+	"endpointA": "https://api-a.example.com",
+	"endpointB": "https://api-b.example.com",
+	"headersA": { "X-Header": "value" },
+	"headersB": { "X-Header": "value" },
+	"timeoutMs": 30000,
+	"maxConcurrency": 64,
+	"modelName": "ComplexOrderResponse",
+	"ignoreCollectionOrder": false,
+	"ignoreStringCase": false,
+	"ignoreXmlNamespaces": true,
+	"ignoreRules": [ { "propertyPath": "Body.Header", "ignoreCompletely": true } ],
+	"smartIgnoreRules": [ { "type": "PropertyName", "value": "Id" } ],
+	"enableSemanticAnalysis": true,
+	"enableEnhancedStructuralAnalysis": true
+}
+```
+
+## Risks and Dependencies
+**Risks**
+- Shared config service can cause cross-job interference if not isolated.
+- Large batch uploads can stress memory and disk I/O.
+- Long-running jobs need cancellation and status polling reliability.
+
+**Dependencies**
+- Existing comparison configuration services and smart ignore rules.
+- Request comparison API endpoints and job service.
+- UI components used on Home for results and analysis.
 
 ## Rollout Strategy
-- Feature flag: `RequestComparisonEnabled`.
-- Deploy to staging, run load tests, then production.
-
-## Dependencies
-- Existing batch upload infrastructure.
-- Temp storage availability for large response sets.
-- Endpoint SLAs and rate limits.
-
-## Risks
-- **Rate limiting**: handle backoff and concurrency tuning.
-- **Large responses**: disk I/O bottlenecks; requires streaming.
-- **Job duration**: may require background processing and cancellation.
+- Behind `FeatureFlags:RequestComparisonEnabled`.
+- Staging validation with representative request batches.
+- Production rollout with monitoring for job duration and failure rates.

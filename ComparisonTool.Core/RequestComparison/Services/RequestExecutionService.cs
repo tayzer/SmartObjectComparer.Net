@@ -93,12 +93,17 @@ public class RequestExecutionService : IDisposable
             var headersB = MergeHeaders(job.HeadersB, request.Headers);
 
             // Execute both requests in parallel
+            var contentType = string.IsNullOrWhiteSpace(job.ContentTypeOverride)
+                ? request.ContentType
+                : job.ContentTypeOverride;
+
             var (responseA, responseB) = await ExecuteBothEndpointsAsync(
                 job,
                 request,
                 requestBodyStream,
                 headersA,
                 headersB,
+                contentType,
                 cancellationToken).ConfigureAwait(false);
 
             // Generate deterministic response file paths
@@ -148,6 +153,7 @@ public class RequestExecutionService : IDisposable
         Stream requestBodyStream,
         Dictionary<string, string> headersA,
         Dictionary<string, string> headersB,
+        string contentType,
         CancellationToken cancellationToken)
     {
         // Read request body into memory for sending to both endpoints
@@ -158,8 +164,8 @@ public class RequestExecutionService : IDisposable
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(TimeSpan.FromMilliseconds(job.TimeoutMs));
 
-        var taskA = SendRequestAsync(job.EndpointA, requestBody, request.ContentType, headersA, cts.Token);
-        var taskB = SendRequestAsync(job.EndpointB, requestBody, request.ContentType, headersB, cts.Token);
+        var taskA = SendRequestAsync(job.EndpointA, requestBody, contentType, headersA, cts.Token);
+        var taskB = SendRequestAsync(job.EndpointB, requestBody, contentType, headersB, cts.Token);
 
         await Task.WhenAll(taskA, taskB).ConfigureAwait(false);
 

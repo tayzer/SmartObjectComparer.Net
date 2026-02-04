@@ -1,5 +1,94 @@
 ﻿---
 applyTo: '**'
+lastUpdated: 2026-02-04T12:05:00Z
+sessionStatus: complete
+---
+
+# Current Session Context
+
+## Active Task
+Fix XML deserialization error due to mismatched encoding declaration
+
+## Todo List Status
+```markdown
+- [x] Update MockApi XML serialization to UTF-8 declaration
+- [x] Build MockApi (blocked by running process)
+```
+
+## Recent File Changes
+- `ComparisonTool.MockApi/Program.cs`: Serialize XML using UTF-8 encoding (no BOM) to match response bytes
+
+## Key Technical Decisions
+- Decision: Use XmlWriterSettings with UTF-8 and custom StringWriter
+- Rationale: Prevents UTF-16 XML declaration without BOM causing XmlException
+- Date: 2026-02-04
+
+## External Resources Referenced
+- None
+
+## Blockers & Issues
+- **[RESOLVED]** XmlException: "There is no Unicode byte order mark. Cannot switch to Unicode."
+- **[RESOLVED]** Build failure caused by locked MockApi binaries while running
+
+## Failed Approaches
+- None
+
+## Environment Notes
+- .NET 8.0
+
+## Next Session Priority
+No active tasks
+
+## Session Notes
+- Restart MockApi process to pick up XML encoding fix
+---
+applyTo: '**'
+lastUpdated: 2026-02-03T20:55:00Z
+sessionStatus: complete
+---
+
+# Current Session Context
+
+## Active Task
+Fix build error caused by mismatched anonymous types in conditional expression
+
+## Todo List Status
+```markdown
+- [x] 🔍 Locate conditional expression mismatch
+- [x] 🛠️ Unify anonymous type shape in response
+- [x] ✅ Build MockApi project
+- [x] 📝 Update session context status
+```
+
+## Recent File Changes
+- ComparisonTool.MockApi/Program.cs: Always include `diff` property in JSON response to keep anonymous type consistent
+
+## Key Technical Decisions
+- Decision: Always include `diff` property (null when not used)
+- Rationale: Ensures conditional expression has a single anonymous type and compiles
+- Date: 2026-02-03
+
+## External Resources Referenced
+- https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/operators/conditional-operator: Conditional operator type rules
+- https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/language-specification/expressions#1220-conditional-operator: Specification details
+- https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/proposals/csharp-9.0/target-typed-conditional-expression: Target-typed conditional expression behavior
+
+## Blockers & Issues
+- None
+
+## Failed Approaches
+- None
+
+## Environment Notes
+- .NET 8.0
+
+## Next Session Priority
+No active tasks
+
+## Session Notes
+- Conditional JSON response now has a stable anonymous type shape
+- Build succeeded for ComparisonTool.MockApi
+applyTo: '**'
 lastUpdated: 2026-02-03T19:10:00Z
 sessionStatus: complete
 ---

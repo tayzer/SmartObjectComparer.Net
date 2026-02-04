@@ -3,6 +3,7 @@ using ComparisonTool.Core.DI;
 using ComparisonTool.Core.Models;
 using ComparisonTool.Core.RequestComparison.Services;
 using ComparisonTool.Web;
+using ComparisonTool.Web.Models;
 using ComparisonTool.Web.Components;
 using MudBlazor.Services;
 using Serilog;
@@ -46,6 +47,9 @@ builder.Services.AddHttpClient("RequestComparison")
 builder.Services.AddSingleton<RequestFileParserService>();
 builder.Services.AddSingleton<RequestExecutionService>();
 builder.Services.AddSingleton<RequestComparisonJobService>();
+
+builder.Services.Configure<RequestComparisonEndpointOptions>(
+    builder.Configuration.GetSection("RequestComparison:EndpointOptions"));
 
 builder.Services.AddSignalR(options =>
 {

@@ -15,6 +15,7 @@ public static class RequestComparisonApi
     private const int BufferSize = 81920; // 80KB buffer
     private static readonly ArrayPool<byte> BufferPool = ArrayPool<byte>.Shared;
     private static readonly ConcurrentDictionary<string, CancellationTokenSource> JobCancellationTokens = new();
+    private static readonly SemaphoreSlim CacheLock = new(1, 1);
 
     public static void MapRequestComparisonApi(this WebApplication app)
     {
@@ -51,6 +52,11 @@ public static class RequestComparisonApi
         api.MapGet("/batch/{batchId}", GetBatchFiles)
             .WithName("GetRequestBatchFiles")
             .WithDescription("Get the list of files in a request batch");
+
+        // Get batch by cache key
+        api.MapGet("/batch/cache/{cacheKey}", GetBatchByCacheKey)
+            .WithName("GetRequestBatchByCacheKey")
+            .WithDescription("Get a cached request batch by cache key");
     }
 
     private static async Task<IResult> UploadRequestBatch(HttpRequest request)
@@ -62,6 +68,7 @@ public static class RequestComparisonApi
 
         var form = await request.ReadFormAsync().ConfigureAwait(false);
         var files = form.Files;
+        var cacheKey = form["cacheKey"].FirstOrDefault();
         var uploadedFiles = new ConcurrentBag<string>();
         var tempPath = Path.Combine(Path.GetTempPath(), "ComparisonToolRequests");
 
@@ -137,6 +144,12 @@ public static class RequestComparisonApi
 
         var sortedFiles = uploadedFiles.OrderBy(f => f, StringComparer.Ordinal).ToList();
 
+        if (!string.IsNullOrWhiteSpace(cacheKey))
+        {
+            await UpdateCacheIndexAsync(tempPath, cacheKey, batchId, sortedFiles.Count)
+                .ConfigureAwait(false);
+        }
+
         if (sortedFiles.Count > 100)
         {
             var fileListPath = Path.Combine(batchPath, "_filelist.json");
@@ -147,7 +160,9 @@ public static class RequestComparisonApi
             {
                 Uploaded = sortedFiles.Count,
                 BatchId = batchId,
-                FileListPath = fileListPath
+                FileListPath = fileListPath,
+                CacheKey = cacheKey,
+                CacheHit = false
             });
         }
 
@@ -155,7 +170,9 @@ public static class RequestComparisonApi
         {
             Uploaded = sortedFiles.Count,
             BatchId = batchId,
-            Files = sortedFiles
+            Files = sortedFiles,
+            CacheKey = cacheKey,
+            CacheHit = false
         });
     }
 
@@ -280,5 +297,130 @@ public static class RequestComparisonApi
             .ToList();
 
         return Results.Ok(new { files });
+    }
+
+    private static async Task<IResult> GetBatchByCacheKey(string cacheKey)
+    {
+        if (string.IsNullOrWhiteSpace(cacheKey))
+        {
+            return Results.BadRequest("cacheKey is required");
+        }
+
+        var tempPath = Path.Combine(Path.GetTempPath(), "ComparisonToolRequests");
+        var indexPath = GetCacheIndexPath(tempPath);
+
+        var cache = await ReadCacheIndexAsync(indexPath).ConfigureAwait(false);
+        if (!cache.TryGetValue(cacheKey, out var entry))
+        {
+            return Results.NotFound("Cache key not found");
+        }
+
+        var batchPath = Path.Combine(tempPath, entry.BatchId);
+        if (!Directory.Exists(batchPath))
+        {
+            await RemoveCacheEntryAsync(indexPath, cacheKey).ConfigureAwait(false);
+            return Results.NotFound("Cached batch not found");
+        }
+
+        return Results.Ok(new RequestBatchCacheLookupResponse
+        {
+            Found = true,
+            CacheKey = cacheKey,
+            BatchId = entry.BatchId,
+            Uploaded = entry.Uploaded
+        });
+    }
+
+    private static string GetCacheIndexPath(string tempPath) =>
+        Path.Combine(tempPath, "_cache_index.json");
+
+    private static async Task UpdateCacheIndexAsync(
+        string tempPath,
+        string cacheKey,
+        string batchId,
+        int uploadedCount)
+    {
+        var indexPath = GetCacheIndexPath(tempPath);
+        await CacheLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            var cache = await ReadCacheIndexUnsafeAsync(indexPath).ConfigureAwait(false);
+            cache[cacheKey] = new RequestBatchCacheEntry
+            {
+                BatchId = batchId,
+                Uploaded = uploadedCount,
+                UpdatedUtc = DateTimeOffset.UtcNow
+            };
+
+            await WriteCacheIndexUnsafeAsync(indexPath, cache).ConfigureAwait(false);
+        }
+        finally
+        {
+            CacheLock.Release();
+        }
+    }
+
+    private static async Task<Dictionary<string, RequestBatchCacheEntry>> ReadCacheIndexAsync(string indexPath)
+    {
+        await CacheLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            return await ReadCacheIndexUnsafeAsync(indexPath).ConfigureAwait(false);
+        }
+        finally
+        {
+            CacheLock.Release();
+        }
+    }
+
+    private static async Task<Dictionary<string, RequestBatchCacheEntry>> ReadCacheIndexUnsafeAsync(string indexPath)
+    {
+        if (!File.Exists(indexPath))
+        {
+            return new Dictionary<string, RequestBatchCacheEntry>(StringComparer.Ordinal);
+        }
+
+        try
+        {
+            var json = await File.ReadAllTextAsync(indexPath).ConfigureAwait(false);
+            return JsonSerializer.Deserialize<Dictionary<string, RequestBatchCacheEntry>>(json)
+                   ?? new Dictionary<string, RequestBatchCacheEntry>(StringComparer.Ordinal);
+        }
+        catch
+        {
+            return new Dictionary<string, RequestBatchCacheEntry>(StringComparer.Ordinal);
+        }
+    }
+
+    private static async Task WriteCacheIndexUnsafeAsync(
+        string indexPath,
+        Dictionary<string, RequestBatchCacheEntry> cache)
+    {
+        var json = JsonSerializer.Serialize(cache);
+        await File.WriteAllTextAsync(indexPath, json).ConfigureAwait(false);
+    }
+
+    private static async Task RemoveCacheEntryAsync(string indexPath, string cacheKey)
+    {
+        await CacheLock.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            var cache = await ReadCacheIndexUnsafeAsync(indexPath).ConfigureAwait(false);
+            if (cache.Remove(cacheKey))
+            {
+                await WriteCacheIndexUnsafeAsync(indexPath, cache).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            CacheLock.Release();
+        }
+    }
+
+    private sealed record RequestBatchCacheEntry
+    {
+        public required string BatchId { get; init; }
+        public int Uploaded { get; init; }
+        public DateTimeOffset UpdatedUtc { get; init; }
     }
 }

@@ -351,7 +351,49 @@
             }
             else
             {
-                <RequestComparisonPanel />
+                <RequestComparisonPanel OnComparisonComplete="HandleRequestComparisonComplete" />
+                
+                @* Display Request Comparison Results *@
+                @if (RequestComparisonResult != null)
+                {
+                    <MudPaper Elevation="2" Class="pa-4 mt-4">
+                        <MudStack Spacing="3">
+                            <MudText Typo="Typo.h6">Request Comparison Results</MudText>
+
+                            @if (RequestComparisonEnhancedAnalysis != null)
+                            {
+                                <ComparisonRunDetails Analysis="@RequestComparisonEnhancedAnalysis"
+                                                      FolderComparisonResult="@RequestComparisonResult" />
+                            }
+                            else
+                            {
+                                <EnhancedDifferenceSummary Summary="@DifferenceSummary" FolderResult="@RequestComparisonResult" />
+                            }
+
+                            <FileComparisonResults Result="@RequestComparisonResult"
+                                                   SelectedPairIndex="@SelectedRequestPairIndex"
+                                                   OnPairSelected="@SelectRequestPairResult"
+                                                   OnExportAll="@ExportRequestComparisonResults" />
+                        </MudStack>
+                    </MudPaper>
+
+                    @if (RequestComparisonResult != null && SelectedRequestPairIndex >= 0 && DifferenceSummary != null)
+                    {
+                        <DetailedDifferencesView SelectedPair="@RequestComparisonResult.FilePairResults[SelectedRequestPairIndex]"
+                                                 DifferenceSummary="@DifferenceSummary"
+                                                 ComparisonResult="@ComparisonResult"
+                                                 ShowAllDifferences="@ShowAllDifferences"
+                                                 OnToggleShowAll="@ToggleShowAllDifferences"
+                                                 OnExportResults="@ExportRequestComparisonResults"
+                                                 FolderResult="@RequestComparisonResult" />
+                    }
+
+                    @if (RequestComparisonSemanticAnalysis != null)
+                    {
+                        <SemanticGroupsPanel Analysis="@RequestComparisonSemanticAnalysis"
+                                             OnExportAnalysis="@ExportRequestSemanticAnalysisReport" />
+                    }
+                }
             }
         </MudTabPanel>
     </MudTabs>
@@ -390,6 +432,12 @@
     private EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult EnhancedStructuralAnalysis { get; set; }
     private CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
     private HierarchicalPropertySelector propertySelector;
+    
+    // Request Comparison state
+    private MultiFolderComparisonResult RequestComparisonResult { get; set; }
+    private int SelectedRequestPairIndex { get; set; } = -1;
+    private SemanticDifferenceAnalysis RequestComparisonSemanticAnalysis { get; set; }
+    private EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult RequestComparisonEnhancedAnalysis { get; set; }
     private ObjectTreePropertySelector treePropertySelector;
 
     private bool CanRunFolderComparison =>
@@ -604,10 +652,11 @@
                 Directory1Path,
                 Directory2Path,
                 SelectedModelName,
-                false, // Pattern analysis removed
-                EnableSemanticAnalysis,
-                progressReporter,
-                cancellationToken);
+                includeAllFiles: false,
+                enablePatternAnalysis: false, // Pattern analysis removed
+                enableSemanticAnalysis: EnableSemanticAnalysis,
+                progress: progressReporter,
+                cancellationToken: cancellationToken);
                 
             // Select the first result if there are differences
             if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 0)
@@ -814,6 +863,99 @@
     private void ToggleShowAllDifferences()
     {
         ShowAllDifferences = !ShowAllDifferences;
+    }
+    
+    // Request Comparison handlers
+    private async Task HandleRequestComparisonComplete(MultiFolderComparisonResult result)
+    {
+        RequestComparisonResult = result;
+        RequestComparisonSemanticAnalysis = null;
+        RequestComparisonEnhancedAnalysis = null;
+        SelectedRequestPairIndex = -1;
+        
+        // Extract semantic analysis from metadata if available
+        if (result.Metadata.TryGetValue("SemanticAnalysis", out var semanticAnalysisObj))
+        {
+            RequestComparisonSemanticAnalysis = semanticAnalysisObj as SemanticDifferenceAnalysis;
+        }
+        
+        // Extract enhanced structural analysis from metadata if available
+        if (result.Metadata.TryGetValue("EnhancedStructuralAnalysis", out var enhancedAnalysisObj))
+        {
+            RequestComparisonEnhancedAnalysis = enhancedAnalysisObj as EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult;
+        }
+        
+        // Select first result if there are differences
+        if (!result.AllEqual && result.FilePairResults.Count > 0)
+        {
+            await SelectRequestPairResult(0);
+        }
+        
+        StateHasChanged();
+    }
+    
+    private async Task SelectRequestPairResult(int index)
+    {
+        if (RequestComparisonResult == null || index < 0 || index >= RequestComparisonResult.FilePairResults.Count)
+            return;
+            
+        SelectedRequestPairIndex = index;
+        
+        // Update ComparisonResult and DifferenceSummary for display
+        var selectedPair = RequestComparisonResult.FilePairResults[index];
+        ComparisonResult = selectedPair.Result;
+        DifferenceSummary = selectedPair.Summary;
+        
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("scrollToElement", "request-detailed-differences-section");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to scroll to request detailed differences section.");
+        }
+        
+        StateHasChanged();
+    }
+    
+    private async Task ExportRequestComparisonResults()
+    {
+        if (RequestComparisonResult == null)
+            return;
+            
+        try
+        {
+            var filename = $"request_comparison_{DateTime.Now:yyyyMMdd_HHmmss}.json";
+            var json = System.Text.Json.JsonSerializer.Serialize(RequestComparisonResult, 
+                new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            
+            await JSRuntime.InvokeVoidAsync("downloadFile", filename, json, "application/json");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error exporting request comparison results");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error exporting results: {ex.Message}");
+        }
+    }
+    
+    private async Task ExportRequestSemanticAnalysisReport()
+    {
+        if (RequestComparisonSemanticAnalysis == null)
+            return;
+            
+        try
+        {
+            var filename = $"request_semantic_analysis_{DateTime.Now:yyyyMMdd_HHmmss}.json";
+            var json = System.Text.Json.JsonSerializer.Serialize(RequestComparisonSemanticAnalysis, 
+                new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            
+            await JSRuntime.InvokeVoidAsync("downloadFile", filename, json, "application/json");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error exporting request semantic analysis report");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error exporting report: {ex.Message}");
+        }
     }
 
 

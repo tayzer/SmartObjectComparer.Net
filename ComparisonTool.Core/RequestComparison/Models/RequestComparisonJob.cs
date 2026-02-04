@@ -53,6 +53,9 @@ public record RequestComparisonJob
     /// <summary>Gets the headers for endpoint B.</summary>
     public IReadOnlyDictionary<string, string> HeadersB { get; init; } = new Dictionary<string, string>();
 
+    /// <summary>Gets the content type override for request bodies.</summary>
+    public string? ContentTypeOverride { get; init; }
+
     /// <summary>Gets the timeout in milliseconds for each request.</summary>
     public int TimeoutMs { get; init; } = 30000;
 
@@ -85,4 +88,27 @@ public record RequestComparisonJob
 
     /// <summary>Gets or sets the model name for comparison.</summary>
     public string ModelName { get; set; } = "Auto";
+
+    // --- Comparison Configuration Parity with Home ---
+
+    /// <summary>Gets or sets a value indicating whether to ignore collection order.</summary>
+    public bool IgnoreCollectionOrder { get; set; } = false;
+
+    /// <summary>Gets or sets a value indicating whether to ignore string case.</summary>
+    public bool IgnoreStringCase { get; set; } = false;
+
+    /// <summary>Gets or sets a value indicating whether to ignore XML namespaces.</summary>
+    public bool IgnoreXmlNamespaces { get; set; } = true;
+
+    /// <summary>Gets or sets the ignore rules for this job.</summary>
+    public List<IgnoreRuleDto> IgnoreRules { get; set; } = new();
+
+    /// <summary>Gets or sets the smart ignore rules for this job.</summary>
+    public List<SmartIgnoreRuleDto> SmartIgnoreRules { get; set; } = new();
+
+    /// <summary>Gets or sets a value indicating whether semantic analysis is enabled.</summary>
+    public bool EnableSemanticAnalysis { get; set; } = true;
+
+    /// <summary>Gets or sets a value indicating whether enhanced structural analysis is enabled.</summary>
+    public bool EnableEnhancedStructuralAnalysis { get; set; } = true;
 }

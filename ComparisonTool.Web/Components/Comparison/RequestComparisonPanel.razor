@@ -1,10 +1,21 @@
 ﻿@using System.Net.Http.Json
+@using ComparisonTool.Core.Comparison.Configuration
 @using ComparisonTool.Core.Comparison.Results
 @using ComparisonTool.Core.RequestComparison.Models
+@using ComparisonTool.Core.RequestComparison.Services
+@using ComparisonTool.Core.Serialization
+@using ComparisonTool.Web.Models
+@using Microsoft.Extensions.Options
 @using Microsoft.AspNetCore.Components.Forms
 @using MudBlazor
 @inject IHttpClientFactory HttpClientFactory
 @inject ILogger<RequestComparisonPanel> Logger
+@inject NavigationManager NavigationManager
+@inject IConfiguration Configuration
+@inject IOptions<RequestComparisonEndpointOptions> EndpointOptions
+@inject IDeserializationService DeserializationService
+@inject IComparisonConfigurationService ConfigService
+@inject RequestComparisonJobService JobService
 
 <MudPaper Elevation="2" Class="pa-4">
     <MudStack Spacing="3">
@@ -26,7 +37,7 @@
                            Color="Color.Primary" 
                            StartIcon="@Icons.Material.Filled.CloudUpload"
                            OnClick="UploadFiles"
-                           Disabled="@(selectedFiles == null || selectedFiles.Count == 0 || isUploading)">
+                           Disabled="@(selectedFiles == null || selectedFiles.Count == 0 || isUploading || cacheHit)">
                     @if (isUploading)
                     {
                         <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
@@ -43,21 +54,168 @@
                         Uploaded @uploadedCount files. Batch ID: @batchId
                     </MudAlert>
                 }
+                @if (cacheHit && !string.IsNullOrEmpty(batchId))
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                        Cache hit. Using cached batch ID: @batchId
+                    </MudAlert>
+                }
             </MudStack>
         </MudPaper>
 
-        @* Step 2: Configure Endpoints *@
+        @* Step 2: Model & Configuration *@
         <MudPaper Elevation="1" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
             <MudStack Spacing="2">
-                <MudText Typo="Typo.subtitle1">Step 2: Configure Endpoints</MudText>
-                <MudTextField @bind-Value="endpointA" 
-                              Label="Endpoint A URL" 
-                              Placeholder="https://api-a.example.com/endpoint"
-                              Variant="Variant.Outlined" />
-                <MudTextField @bind-Value="endpointB" 
-                              Label="Endpoint B URL" 
-                              Placeholder="https://api-b.example.com/endpoint"
-                              Variant="Variant.Outlined" />
+                <MudText Typo="Typo.subtitle1">Step 2: Model & Configuration</MudText>
+                
+                <MudSelect T="string" 
+                           Label="Select Domain Model" 
+                           Value="selectedModelName"
+                           ValueChanged="@((string val) => selectedModelName = val)"
+                           Variant="Variant.Outlined"
+                           AnchorOrigin="Origin.BottomCenter">
+                    @foreach (var modelName in availableModels)
+                    {
+                        <MudSelectItem Value="@modelName">@modelName</MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudExpansionPanels>
+                    <MudExpansionPanel Text="Comparison Options">
+                        <MudStack Spacing="2">
+                            <MudSwitch @bind-Value="ignoreCollectionOrder" 
+                                       Label="Ignore Collection Order" 
+                                       Color="Color.Primary" />
+                            <MudSwitch @bind-Value="ignoreStringCase" 
+                                       Label="Ignore String Case" 
+                                       Color="Color.Primary" />
+                            <MudSwitch @bind-Value="ignoreXmlNamespaces" 
+                                       Label="Ignore XML Namespaces" 
+                                       Color="Color.Primary" />
+                        </MudStack>
+                    </MudExpansionPanel>
+                    
+                    <MudExpansionPanel Text="Analysis Options">
+                        <MudStack Spacing="2">
+                            <MudSwitch @bind-Value="enableSemanticAnalysis" 
+                                       Label="Enable Semantic Analysis" 
+                                       Color="Color.Success" />
+                            <MudSwitch @bind-Value="enableEnhancedStructuralAnalysis" 
+                                       Label="Enable Enhanced Structural Analysis" 
+                                       Color="Color.Success" />
+                        </MudStack>
+                    </MudExpansionPanel>
+                    
+                    <MudExpansionPanel Text="@IgnoreRulesLabel">
+                        <MudStack Spacing="2">
+                            @foreach (var rule in ignoreRules)
+                            {
+                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                    <MudTextField @bind-Value="rule.PropertyPath" 
+                                                  Label="Property Path" 
+                                                  Variant="Variant.Outlined" 
+                                                  Style="flex: 2;" />
+                                    <MudCheckBox @bind-Value="rule.IgnoreCompletely" 
+                                                 Label="Ignore Completely" 
+                                                 Color="Color.Primary" />
+                                    <MudCheckBox @bind-Value="rule.IgnoreCollectionOrder" 
+                                                 Label="Ignore Order" 
+                                                 Color="Color.Primary" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                                   OnClick="@(() => ignoreRules.Remove(rule))" 
+                                                   Color="Color.Error" />
+                                </MudStack>
+                            }
+                            <MudButton Variant="Variant.Text" 
+                                       StartIcon="@Icons.Material.Filled.Add" 
+                                       OnClick="@(() => ignoreRules.Add(new IgnoreRuleInput()))">
+                                Add Ignore Rule
+                            </MudButton>
+                        </MudStack>
+                    </MudExpansionPanel>
+                    
+                    <MudExpansionPanel Text="@SmartIgnoreRulesLabel">
+                        <MudStack Spacing="2">
+                            @foreach (var rule in smartIgnoreRules)
+                            {
+                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                    <MudSelect T="string" 
+                                               @bind-Value="rule.Type" 
+                                               Label="Type" 
+                                               Variant="Variant.Outlined"
+                                               Style="flex: 1;">
+                                        <MudSelectItem Value="@("PropertyName")">Property Name</MudSelectItem>
+                                        <MudSelectItem Value="@("NamePattern")">Name Pattern</MudSelectItem>
+                                        <MudSelectItem Value="@("PropertyType")">Property Type</MudSelectItem>
+                                        <MudSelectItem Value="@("CollectionOrdering")">Collection Ordering</MudSelectItem>
+                                    </MudSelect>
+                                    <MudTextField @bind-Value="rule.Value" 
+                                                  Label="Value" 
+                                                  Variant="Variant.Outlined" 
+                                                  Style="flex: 2;" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                                   OnClick="@(() => smartIgnoreRules.Remove(rule))" 
+                                                   Color="Color.Error" />
+                                </MudStack>
+                            }
+                            <MudButton Variant="Variant.Text" 
+                                       StartIcon="@Icons.Material.Filled.Add" 
+                                       OnClick="@(() => smartIgnoreRules.Add(new SmartIgnoreRuleInput()))">
+                                Add Smart Ignore Rule
+                            </MudButton>
+                            
+                            <MudDivider Class="my-2" />
+                            <MudText Typo="Typo.caption">Quick Presets:</MudText>
+                            <MudStack Row="true" Spacing="2">
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => ApplySmartIgnorePreset("ID Fields"))">ID Fields</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => ApplySmartIgnorePreset("Timestamps"))">Timestamps</MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => ApplySmartIgnorePreset("Metadata"))">Metadata</MudButton>
+                            </MudStack>
+                        </MudStack>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            </MudStack>
+        </MudPaper>
+
+        @* Step 3: Configure Endpoints *@
+        <MudPaper Elevation="1" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.subtitle1">Step 3: Configure Endpoints</MudText>
+                <MudSelect T="string" Label="Endpoint A" Variant="Variant.Outlined" Value="selectedEndpointA" ValueChanged="OnEndpointAChanged">
+                    @foreach (var option in availableEndpoints)
+                    {
+                        <MudSelectItem Value="@option.Url">@option.Name (@option.Url)</MudSelectItem>
+                    }
+                    @if (allowCustom)
+                    {
+                        <MudSelectItem Value="@CustomEndpointValue">Custom...</MudSelectItem>
+                    }
+                </MudSelect>
+                @if (allowCustom && selectedEndpointA == CustomEndpointValue)
+                {
+                    <MudTextField @bind-Value="endpointA" 
+                                  Label="Endpoint A URL" 
+                                  Placeholder="https://api-a.example.com/endpoint"
+                                  Variant="Variant.Outlined" />
+                }
+
+                <MudSelect T="string" Label="Endpoint B" Variant="Variant.Outlined" Value="selectedEndpointB" ValueChanged="OnEndpointBChanged">
+                    @foreach (var option in availableEndpoints)
+                    {
+                        <MudSelectItem Value="@option.Url">@option.Name (@option.Url)</MudSelectItem>
+                    }
+                    @if (allowCustom)
+                    {
+                        <MudSelectItem Value="@CustomEndpointValue">Custom...</MudSelectItem>
+                    }
+                </MudSelect>
+                @if (allowCustom && selectedEndpointB == CustomEndpointValue)
+                {
+                    <MudTextField @bind-Value="endpointB" 
+                                  Label="Endpoint B URL" 
+                                  Placeholder="https://api-b.example.com/endpoint"
+                                  Variant="Variant.Outlined" />
+                }
                 
                 <MudExpansionPanels>
                     <MudExpansionPanel Text="Custom Headers (Optional)">
@@ -91,6 +249,13 @@
                     </MudExpansionPanel>
                     <MudExpansionPanel Text="Advanced Options">
                         <MudStack Spacing="2">
+                            <MudTextField @bind-Value="contentTypeOverride"
+                                          Label="Content-Type Override"
+                                          Placeholder="application/json"
+                                          Variant="Variant.Outlined" />
+                            <MudText Typo="Typo.caption" Color="Color.Default">
+                                Optional. Overrides the request content type inferred from file extension.
+                            </MudText>
                             <MudNumericField @bind-Value="timeoutMs" 
                                              Label="Request Timeout (ms)" 
                                              Min="1000" Max="300000" 
@@ -105,10 +270,10 @@
             </MudStack>
         </MudPaper>
 
-        @* Step 3: Run Comparison *@
+        @* Step 4: Run Comparison *@
         <MudPaper Elevation="1" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
             <MudStack Spacing="2">
-                <MudText Typo="Typo.subtitle1">Step 3: Run Comparison</MudText>
+                <MudText Typo="Typo.subtitle1">Step 4: Run Comparison</MudText>
                 <MudButton Variant="Variant.Filled" 
                            Color="Color.Success" 
                            StartIcon="@Icons.Material.Filled.PlayArrow"
@@ -145,16 +310,34 @@
 
 @code {
     [Parameter] public EventCallback<MultiFolderComparisonResult> OnComparisonComplete { get; set; }
+    private const string CustomEndpointValue = "__custom__";
 
     private List<IBrowserFile>? selectedFiles;
     private bool isUploading = false;
     private string? batchId;
     private int uploadedCount = 0;
     
+    // Model & Configuration
+    private List<string> availableModels = new();
+    private string selectedModelName = "";
+    private bool ignoreCollectionOrder = false;
+    private bool ignoreStringCase = false;
+    private bool ignoreXmlNamespaces = true;
+    private bool enableSemanticAnalysis = true;
+    private bool enableEnhancedStructuralAnalysis = true;
+    private List<IgnoreRuleInput> ignoreRules = new();
+    private List<SmartIgnoreRuleInput> smartIgnoreRules = new();
+    
+    // Endpoints
     private string endpointA = "";
     private string endpointB = "";
+    private List<RequestComparisonEndpointOption> availableEndpoints = new();
+    private bool allowCustom = true;
+    private string selectedEndpointA = CustomEndpointValue;
+    private string selectedEndpointB = CustomEndpointValue;
     private List<HeaderPair> headersA = new();
     private List<HeaderPair> headersB = new();
+    private string? contentTypeOverride;
     private int timeoutMs = 30000;
     private int maxConcurrency = 64;
     
@@ -164,22 +347,66 @@
     private string? statusMessage;
     private string? errorMessage;
     private CancellationTokenSource? cts;
+    private string? cacheKey;
+    private bool cacheHit = false;
 
     private bool CanStartComparison => 
         !string.IsNullOrEmpty(batchId) && 
         !string.IsNullOrWhiteSpace(endpointA) && 
         !string.IsNullOrWhiteSpace(endpointB) && 
+        !string.IsNullOrWhiteSpace(selectedModelName) &&
         !isRunning;
+    
+    private string IgnoreRulesLabel => $"Ignore Rules ({ignoreRules.Count} rules)";
+    private string SmartIgnoreRulesLabel => $"Smart Ignore Rules ({smartIgnoreRules.Count} rules)";
 
-    private void HandleFileSelection(InputFileChangeEventArgs e)
+    protected override void OnInitialized()
+    {
+        // Load available models
+        availableModels = DeserializationService.GetRegisteredModelNames().ToList();
+        if (availableModels.Count > 0)
+        {
+            selectedModelName = availableModels[0];
+        }
+        
+        var options = EndpointOptions.Value;
+        allowCustom = options.AllowCustom;
+        availableEndpoints = options.Endpoints ?? new List<RequestComparisonEndpointOption>();
+
+        if (availableEndpoints.Count > 0)
+        {
+            selectedEndpointA = availableEndpoints[0].Url;
+            endpointA = availableEndpoints[0].Url;
+
+            selectedEndpointB = availableEndpoints.Count > 1
+                ? availableEndpoints[1].Url
+                : availableEndpoints[0].Url;
+            endpointB = selectedEndpointB;
+        }
+
+        timeoutMs = Configuration.GetValue("RequestComparison:DefaultTimeoutMs", 30000);
+        maxConcurrency = Configuration.GetValue("RequestComparison:MaxConcurrency", 64);
+    }
+
+    private async Task HandleFileSelection(InputFileChangeEventArgs e)
     {
         selectedFiles = e.GetMultipleFiles(10000).ToList();
         errorMessage = null;
+        cacheHit = false;
+        batchId = null;
+        uploadedCount = 0;
+
+        if (selectedFiles.Count > 0)
+        {
+            cacheKey = ComputeCacheKey(selectedFiles);
+            await TryResolveCachedBatchAsync();
+        }
     }
 
     private async Task UploadFiles()
     {
         if (selectedFiles == null || selectedFiles.Count == 0) return;
+        if (cacheHit && !string.IsNullOrEmpty(batchId)) return;
 
         isUploading = true;
         errorMessage = null;
@@ -187,9 +414,13 @@
         try
         {
             using var http = HttpClientFactory.CreateClient();
-            http.BaseAddress = new Uri("https://localhost");
+            http.BaseAddress = new Uri(NavigationManager.BaseUri);
             
             using var content = new MultipartFormDataContent();
+            if (!string.IsNullOrWhiteSpace(cacheKey))
+            {
+                content.Add(new StringContent(cacheKey), "cacheKey");
+            }
             foreach (var file in selectedFiles)
             {
                 var stream = file.OpenReadStream(maxAllowedSize: 100 * 1024 * 1024);
@@ -202,6 +433,7 @@
             var result = await response.Content.ReadFromJsonAsync<RequestBatchUploadResponse>();
             batchId = result?.BatchId;
             uploadedCount = result?.Uploaded ?? 0;
+            cacheHit = result?.CacheHit ?? false;
         }
         catch (Exception ex)
         {
@@ -227,7 +459,7 @@
         try
         {
             using var http = HttpClientFactory.CreateClient();
-            http.BaseAddress = new Uri("https://localhost");
+            http.BaseAddress = new Uri(NavigationManager.BaseUri);
 
             var request = new CreateRequestComparisonJobRequest
             {
@@ -238,8 +470,32 @@
                     .ToDictionary(h => h.Key, h => h.Value ?? ""),
                 HeadersB = headersB.Where(h => !string.IsNullOrEmpty(h.Key))
                     .ToDictionary(h => h.Key, h => h.Value ?? ""),
+                ContentTypeOverride = string.IsNullOrWhiteSpace(contentTypeOverride)
+                    ? null
+                    : contentTypeOverride,
                 TimeoutMs = timeoutMs,
-                MaxConcurrency = maxConcurrency
+                MaxConcurrency = maxConcurrency,
+                // Configuration parity with Home
+                ModelName = selectedModelName,
+                IgnoreCollectionOrder = ignoreCollectionOrder,
+                IgnoreStringCase = ignoreStringCase,
+                IgnoreXmlNamespaces = ignoreXmlNamespaces,
+                EnableSemanticAnalysis = enableSemanticAnalysis,
+                EnableEnhancedStructuralAnalysis = enableEnhancedStructuralAnalysis,
+                IgnoreRules = ignoreRules.Where(r => !string.IsNullOrWhiteSpace(r.PropertyPath))
+                    .Select(r => new IgnoreRuleDto 
+                    { 
+                        PropertyPath = r.PropertyPath, 
+                        IgnoreCompletely = r.IgnoreCompletely, 
+                        IgnoreCollectionOrder = r.IgnoreCollectionOrder 
+                    }).ToList(),
+                SmartIgnoreRules = smartIgnoreRules.Where(r => !string.IsNullOrWhiteSpace(r.Value))
+                    .Select(r => new SmartIgnoreRuleDto 
+                    { 
+                        Type = r.Type, 
+                        Value = r.Value, 
+                        Description = r.Description 
+                    }).ToList()
             };
 
             var createResponse = await http.PostAsJsonAsync("/api/requests/compare", request);
@@ -266,9 +522,7 @@
 
                 if (statusResponse.Status == "Completed")
                 {
-                    var result = await http.GetFromJsonAsync<MultiFolderComparisonResult>(
-                        $"/api/requests/compare/{currentJobId}/result");
-                    
+                    var result = JobService.GetResult(currentJobId!);
                     if (result != null)
                     {
                         await OnComparisonComplete.InvokeAsync(result);
@@ -313,7 +567,7 @@
         try
         {
             using var http = HttpClientFactory.CreateClient();
-            http.BaseAddress = new Uri("https://localhost");
+            http.BaseAddress = new Uri(NavigationManager.BaseUri);
             await http.PostAsync($"/api/requests/compare/{currentJobId}/cancel", null);
         }
         catch (Exception ex)
@@ -322,9 +576,112 @@
         }
     }
 
+    private void OnEndpointAChanged(string value)
+    {
+        selectedEndpointA = value;
+        if (value != CustomEndpointValue)
+        {
+            endpointA = value;
+        }
+    }
+
+    private void OnEndpointBChanged(string value)
+    {
+        selectedEndpointB = value;
+        if (value != CustomEndpointValue)
+        {
+            endpointB = value;
+        }
+    }
+
+    private async Task TryResolveCachedBatchAsync()
+    {
+        if (string.IsNullOrWhiteSpace(cacheKey)) return;
+
+        try
+        {
+            using var http = HttpClientFactory.CreateClient();
+            http.BaseAddress = new Uri(NavigationManager.BaseUri);
+
+            var response = await http.GetAsync($"/api/requests/batch/cache/{cacheKey}");
+            if (!response.IsSuccessStatusCode)
+            {
+                return;
+            }
+
+            var cacheResponse = await response.Content.ReadFromJsonAsync<RequestBatchCacheLookupResponse>();
+            if (cacheResponse?.Found == true && !string.IsNullOrEmpty(cacheResponse.BatchId))
+            {
+                batchId = cacheResponse.BatchId;
+                uploadedCount = cacheResponse.Uploaded;
+                cacheHit = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to resolve cached request batch");
+        }
+    }
+
+    private static string ComputeCacheKey(IEnumerable<IBrowserFile> files)
+    {
+        var ordered = files.OrderBy(f => f.Name, StringComparer.Ordinal);
+        var builder = new System.Text.StringBuilder();
+        foreach (var file in ordered)
+        {
+            builder.Append(file.Name)
+                .Append('|')
+                .Append(file.Size)
+                .Append('|')
+                .Append(file.LastModified.ToUnixTimeMilliseconds())
+                .Append(';');
+        }
+
+        var bytes = System.Text.Encoding.UTF8.GetBytes(builder.ToString());
+        var hash = System.Security.Cryptography.SHA256.HashData(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    private void ApplySmartIgnorePreset(string presetName)
+    {
+        switch (presetName)
+        {
+            case "ID Fields":
+                smartIgnoreRules.Add(new SmartIgnoreRuleInput { Type = "PropertyName", Value = "Id", Description = "Ignore ID fields" });
+                smartIgnoreRules.Add(new SmartIgnoreRuleInput { Type = "NamePattern", Value = "*Id", Description = "Ignore properties ending with Id" });
+                smartIgnoreRules.Add(new SmartIgnoreRuleInput { Type = "NamePattern", Value = "*Guid", Description = "Ignore properties ending with Guid" });
+                break;
+            case "Timestamps":
+                smartIgnoreRules.Add(new SmartIgnoreRuleInput { Type = "PropertyType", Value = "System.DateTime", Description = "Ignore DateTime fields" });
+                smartIgnoreRules.Add(new SmartIgnoreRuleInput { Type = "NamePattern", Value = "*Date", Description = "Ignore properties ending with Date" });
+                smartIgnoreRules.Add(new SmartIgnoreRuleInput { Type = "NamePattern", Value = "*Time", Description = "Ignore properties ending with Time" });
+                break;
+            case "Metadata":
+                smartIgnoreRules.Add(new SmartIgnoreRuleInput { Type = "PropertyName", Value = "Version", Description = "Ignore Version fields" });
+                smartIgnoreRules.Add(new SmartIgnoreRuleInput { Type = "PropertyName", Value = "ETag", Description = "Ignore ETag fields" });
+                smartIgnoreRules.Add(new SmartIgnoreRuleInput { Type = "PropertyName", Value = "RequestId", Description = "Ignore RequestId fields" });
+                break;
+        }
+        StateHasChanged();
+    }
+
     private class HeaderPair
     {
         public string Key { get; set; } = "";
         public string? Value { get; set; }
+    }
+
+    private class IgnoreRuleInput
+    {
+        public string PropertyPath { get; set; } = "";
+        public bool IgnoreCompletely { get; set; } = true;
+        public bool IgnoreCollectionOrder { get; set; } = false;
+    }
+
+    private class SmartIgnoreRuleInput
+    {
+        public string Type { get; set; } = "PropertyName";
+        public string Value { get; set; } = "";
+        public string? Description { get; set; }
     }
 }

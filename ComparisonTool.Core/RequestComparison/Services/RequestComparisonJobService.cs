@@ -1,8 +1,10 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Text.Json;
 using ComparisonTool.Core.Comparison;
+using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.RequestComparison.Models;
+using ComparisonTool.Core.Serialization;
 using ComparisonTool.Web.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -46,13 +48,22 @@ public class RequestComparisonJobService
             EndpointB = new Uri(request.EndpointB),
             HeadersA = request.HeadersA ?? new Dictionary<string, string>(),
             HeadersB = request.HeadersB ?? new Dictionary<string, string>(),
+            ContentTypeOverride = request.ContentTypeOverride,
             TimeoutMs = request.TimeoutMs,
             MaxConcurrency = request.MaxConcurrency,
-            ModelName = request.ModelName ?? "Auto"
+            ModelName = request.ModelName ?? "Auto",
+            // Comparison configuration parity with Home
+            IgnoreCollectionOrder = request.IgnoreCollectionOrder,
+            IgnoreStringCase = request.IgnoreStringCase,
+            IgnoreXmlNamespaces = request.IgnoreXmlNamespaces,
+            IgnoreRules = request.IgnoreRules?.ToList() ?? new List<IgnoreRuleDto>(),
+            SmartIgnoreRules = request.SmartIgnoreRules?.ToList() ?? new List<SmartIgnoreRuleDto>(),
+            EnableSemanticAnalysis = request.EnableSemanticAnalysis,
+            EnableEnhancedStructuralAnalysis = request.EnableEnhancedStructuralAnalysis
         };
 
         _jobs[job.JobId] = job;
-        _logger.LogInformation("Created request comparison job {JobId}", job.JobId);
+        _logger.LogInformation("Created request comparison job {JobId} with model {ModelName}", job.JobId, job.ModelName);
 
         return job;
     }
@@ -132,16 +143,27 @@ public class RequestComparisonJobService
             });
 
             using var scope = _scopeFactory.CreateScope();
+            
+            // Apply per-job configuration settings
+            var configService = scope.ServiceProvider.GetRequiredService<IComparisonConfigurationService>();
+
+            // todo: hardcoded for xml?!?!?!?
+
+            var xmlDeserializationService = scope.ServiceProvider.GetRequiredService<IXmlDeserializationService>();
+            
+            ApplyJobConfiguration(job, configService, xmlDeserializationService);
+            
             var comparisonService = scope.ServiceProvider.GetRequiredService<DirectoryComparisonService>();
 
             var comparisonResult = await comparisonService.CompareDirectoriesAsync(
                 job.ResponsePathA!,
                 job.ResponsePathB!,
                 job.ModelName,
+                includeAllFiles: true,
                 enablePatternAnalysis: true,
-                enableSemanticAnalysis: true,
-                comparisonProgress,
-                cancellationToken).ConfigureAwait(false);
+                enableSemanticAnalysis: job.EnableSemanticAnalysis,
+                progress: comparisonProgress,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             // Store execution metadata in result
             comparisonResult.Metadata["RequestComparisonJobId"] = jobId;
@@ -208,5 +230,66 @@ public class RequestComparisonJobService
         {
             _logger.LogInformation("Cleaned up {Count} old request comparison jobs", oldJobs.Count);
         }
+    }
+
+    /// <summary>
+    /// Applies per-job configuration settings to the comparison services.
+    /// </summary>
+    private void ApplyJobConfiguration(
+        RequestComparisonJob job,
+        IComparisonConfigurationService configService,
+        IXmlDeserializationService xmlDeserializationService)
+    {
+        _logger.LogInformation(
+            "Applying job configuration for {JobId}: IgnoreCollectionOrder={IgnoreCollectionOrder}, IgnoreStringCase={IgnoreStringCase}, IgnoreXmlNamespaces={IgnoreXmlNamespaces}, IgnoreRules={IgnoreRuleCount}, SmartIgnoreRules={SmartIgnoreRuleCount}",
+            job.JobId,
+            job.IgnoreCollectionOrder,
+            job.IgnoreStringCase,
+            job.IgnoreXmlNamespaces,
+            job.IgnoreRules.Count,
+            job.SmartIgnoreRules.Count);
+
+        // Clear existing rules to start fresh for this job
+        configService.ClearIgnoreRules();
+        configService.ClearSmartIgnoreRules();
+
+        // Apply global settings
+        configService.SetIgnoreCollectionOrder(job.IgnoreCollectionOrder);
+        configService.SetIgnoreStringCase(job.IgnoreStringCase);
+        xmlDeserializationService.IgnoreXmlNamespaces = job.IgnoreXmlNamespaces;
+
+        // Apply ignore rules
+        foreach (var ruleDto in job.IgnoreRules)
+        {
+            var rule = new IgnoreRule
+            {
+                PropertyPath = ruleDto.PropertyPath,
+                IgnoreCompletely = ruleDto.IgnoreCompletely,
+                IgnoreCollectionOrder = ruleDto.IgnoreCollectionOrder
+            };
+            configService.AddIgnoreRule(rule);
+        }
+
+        // Apply smart ignore rules
+        foreach (var ruleDto in job.SmartIgnoreRules)
+        {
+            if (Enum.TryParse<SmartIgnoreType>(ruleDto.Type, true, out var ruleType))
+            {
+                var rule = new SmartIgnoreRule
+                {
+                    Type = ruleType,
+                    Value = ruleDto.Value,
+                    Description = ruleDto.Description ?? string.Empty
+                };
+                configService.AddSmartIgnoreRule(rule);
+            }
+            else
+            {
+                _logger.LogWarning("Unknown smart ignore rule type: {Type}", ruleDto.Type);
+            }
+        }
+
+        // Apply all configured settings
+        configService.ApplyConfiguredSettings();
     }
 }
