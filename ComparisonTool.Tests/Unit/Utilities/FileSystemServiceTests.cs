@@ -1,7 +1,3 @@
-// <copyright file="FileSystemServiceTests.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.IO;
 using ComparisonTool.Core.Utilities;
 using FluentAssertions;

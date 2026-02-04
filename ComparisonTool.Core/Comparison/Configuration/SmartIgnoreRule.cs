@@ -1,7 +1,3 @@
-// <copyright file="SmartIgnoreRule.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 namespace ComparisonTool.Core.Comparison.Configuration;
 
 using System;
@@ -20,15 +16,9 @@ public class SmartIgnoreRule
     private readonly ILogger logger;
 
     [JsonConstructor]
-    public SmartIgnoreRule()
-    {
-        logger = NullLogger.Instance;
-    }
+    public SmartIgnoreRule() => logger = NullLogger.Instance;
 
-    public SmartIgnoreRule(ILogger? logger = null)
-    {
-        this.logger = logger ?? NullLogger.Instance;
-    }
+    public SmartIgnoreRule(ILogger? logger = null) => this.logger = logger ?? NullLogger.Instance;
 
     /// <summary>
     /// Gets or sets type of ignore rule.
@@ -57,57 +47,49 @@ public class SmartIgnoreRule
     /// Create a rule to ignore properties by exact name.
     /// </summary>
     /// <returns></returns>
-    public static SmartIgnoreRule ByPropertyName(string propertyName, string? description = null)
-    {
-        return new SmartIgnoreRule
+    public static SmartIgnoreRule ByPropertyName(string propertyName, string? description = null) =>
+        new SmartIgnoreRule
         {
             Type = SmartIgnoreType.PropertyName,
             Value = propertyName,
             Description = description ?? $"Ignore all '{propertyName}' properties",
         };
-    }
 
     /// <summary>
     /// Create a rule to ignore properties by name pattern (supports wildcards).
     /// </summary>
     /// <returns></returns>
-    public static SmartIgnoreRule ByNamePattern(string pattern, string? description = null)
-    {
-        return new SmartIgnoreRule
+    public static SmartIgnoreRule ByNamePattern(string pattern, string? description = null) =>
+        new SmartIgnoreRule
         {
             Type = SmartIgnoreType.NamePattern,
             Value = pattern,
             Description = description ?? $"Ignore properties matching '{pattern}'",
         };
-    }
 
     /// <summary>
     /// Create a rule to ignore properties by type.
     /// </summary>
     /// <returns></returns>
-    public static SmartIgnoreRule ByPropertyType(Type type, string? description = null)
-    {
-        return new SmartIgnoreRule
+    public static SmartIgnoreRule ByPropertyType(Type type, string? description = null) =>
+        new SmartIgnoreRule
         {
             Type = SmartIgnoreType.PropertyType,
             Value = type.FullName,
             Description = description ?? $"Ignore all {type.Name} properties",
         };
-    }
 
     /// <summary>
     /// Create a rule to ignore collection ordering.
     /// </summary>
     /// <returns></returns>
-    public static SmartIgnoreRule IgnoreCollectionOrdering(string description = "Ignore collection item ordering")
-    {
-        return new SmartIgnoreRule
+    public static SmartIgnoreRule IgnoreCollectionOrdering(string description = "Ignore collection item ordering") =>
+        new SmartIgnoreRule
         {
             Type = SmartIgnoreType.CollectionOrdering,
             Value = "true",
             Description = description,
         };
-    }
 }
 
 /// <summary>

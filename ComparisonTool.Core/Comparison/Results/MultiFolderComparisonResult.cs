@@ -1,7 +1,3 @@
-// <copyright file="MultiFolderComparisonResult.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 namespace ComparisonTool.Core.Comparison.Results;
 
 public class MultiFolderComparisonResult

@@ -1,7 +1,3 @@
-// <copyright file="PerformanceTracker.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
@@ -21,10 +17,7 @@ public class PerformanceTracker : IDisposable
     private readonly ConcurrentDictionary<string, long> totalTimes = new ConcurrentDictionary<string, long>(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, Stopwatch> activeOperations = new ConcurrentDictionary<string, Stopwatch>(StringComparer.Ordinal);
 
-    public PerformanceTracker(ILogger<PerformanceTracker> logger)
-    {
-        this.logger = logger;
-    }
+    public PerformanceTracker(ILogger<PerformanceTracker> logger) => this.logger = logger;
 
     /// <summary>
     /// Starts tracking a new operation.
@@ -60,6 +53,8 @@ public class PerformanceTracker : IDisposable
     /// <summary>
     /// Tracks an entire operation from start to finish.
     /// </summary>
+    /// <param name="operationName">Unique name identifying this operation type.</param>
+    /// <param name="action">The action to execute and time.</param>
     public void TrackOperation(string operationName, Action action)
     {
         var stopwatch = Stopwatch.StartNew();
@@ -77,7 +72,10 @@ public class PerformanceTracker : IDisposable
     /// <summary>
     /// Tracks an operation that returns a value.
     /// </summary>
-    /// <returns></returns>
+    /// <typeparam name="T">The return type of the operation.</typeparam>
+    /// <param name="operationName">Unique name identifying this operation type.</param>
+    /// <param name="func">The function to execute and time.</param>
+    /// <returns>The value returned by the operation.</returns>
     public T TrackOperation<T>(string operationName, Func<T> func)
     {
         var stopwatch = Stopwatch.StartNew();
@@ -95,6 +93,8 @@ public class PerformanceTracker : IDisposable
     /// <summary>
     /// Tracks an async operation.
     /// </summary>
+    /// <param name="operationName">Unique name identifying this operation type.</param>
+    /// <param name="task">The task to execute and time.</param>
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task TrackOperationAsync(string operationName, Func<Task> task)
     {
@@ -113,6 +113,9 @@ public class PerformanceTracker : IDisposable
     /// <summary>
     /// Tracks an async operation that returns a value.
     /// </summary>
+    /// <typeparam name="T">The return type of the operation.</typeparam>
+    /// <param name="operationName">Unique name identifying this operation type.</param>
+    /// <param name="task">The task to execute and time.</param>
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task<T> TrackOperationAsync<T>(string operationName, Func<Task<T>> task)
     {
@@ -131,7 +134,7 @@ public class PerformanceTracker : IDisposable
     /// <summary>
     /// Gets all metrics for tracked operations.
     /// </summary>
-    /// <returns></returns>
+    /// <returns>A dictionary of operation metrics keyed by operation name.</returns>
     public Dictionary<string, OperationMetrics> GetMetrics()
     {
         var result = new Dictionary<string, OperationMetrics>(StringComparer.Ordinal);
@@ -164,7 +167,7 @@ public class PerformanceTracker : IDisposable
     /// <summary>
     /// Gets a performance report for all tracked operations.
     /// </summary>
-    /// <returns></returns>
+    /// <returns>A formatted performance report string.</returns>
     public string GetReport()
     {
         var metrics = GetMetrics();

@@ -1,7 +1,3 @@
-// <copyright file="DifferenceSummary.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.Text;
 using KellermanSoftware.CompareNetObjects;
 
@@ -10,12 +6,15 @@ namespace ComparisonTool.Core.Comparison.Analysis;
 /// <summary>
 /// Summary of the comparison differences.
 /// </summary>
-public class DifferenceSummary {
-    public bool AreEqual {
+public class DifferenceSummary
+{
+    public bool AreEqual
+    {
         get; set;
     }
 
-    public int TotalDifferenceCount {
+    public int TotalDifferenceCount
+    {
         get; set;
     }
 
@@ -35,13 +34,15 @@ public class DifferenceSummary {
     /// Generate a human-friendly summary report.
     /// </summary>
     /// <returns></returns>
-    public string GenerateReport() {
+    public string GenerateReport()
+    {
         var sb = new StringBuilder();
 
         sb.AppendLine("# Comparison Summary Report");
         sb.AppendLine();
 
-        if (this.AreEqual) {
+        if (this.AreEqual)
+        {
             sb.AppendLine("**No differences found.** The objects are identical according to current comparison rules.");
             return sb.ToString();
         }
@@ -55,7 +56,8 @@ public class DifferenceSummary {
         sb.AppendLine("| Category | Count | Percentage |");
         sb.AppendLine("|----------|-------|------------|");
 
-        foreach (var category in this.DifferencesByChangeType.OrderByDescending(c => c.Value.Count)) {
+        foreach (var category in this.DifferencesByChangeType.OrderByDescending(c => c.Value.Count))
+        {
             sb.AppendLine($"| {this.FormatCategoryName(category.Key)} | {category.Value.Count} | {this.CategoryPercentages[category.Key]}% |");
         }
 
@@ -64,17 +66,20 @@ public class DifferenceSummary {
         // Summary by root object and category
         sb.AppendLine("## Differences by Root Object and Category");
         sb.AppendLine();
-        foreach (var obj in this.DifferencesByRootObjectAndCategory.OrderByDescending(o => o.Value.SelectMany(v => v.Value).Count())) {
+        foreach (var obj in this.DifferencesByRootObjectAndCategory.OrderByDescending(o => o.Value.SelectMany(v => v.Value).Count()))
+        {
             var total = obj.Value.SelectMany(v => v.Value).Count();
             sb.AppendLine($"### {obj.Key} (Total: {total})");
-            foreach (var cat in obj.Value.OrderByDescending(c => c.Value.Count)) {
+            foreach (var cat in obj.Value.OrderByDescending(c => c.Value.Count))
+            {
                 sb.AppendLine($"- {this.FormatCategoryName(cat.Key)}: {cat.Value.Count}");
                 foreach (var diff in cat.Value.Take(5)) // show up to 5 examples
                 {
                     sb.AppendLine($"    - Property: `{diff.PropertyName}` | Old: `{this.FormatValue(diff.Object1Value)}` | New: `{this.FormatValue(diff.Object2Value)}`");
                 }
 
-                if (cat.Value.Count > 5) {
+                if (cat.Value.Count > 5)
+                {
                     sb.AppendLine($"    ...and {cat.Value.Count - 5} more");
                 }
             }
@@ -87,7 +92,8 @@ public class DifferenceSummary {
         sb.AppendLine();
         sb.AppendLine("| Object | Count | Percentage |");
         sb.AppendLine("|--------|-------|------------|");
-        foreach (var obj in this.DifferencesByRootObject.OrderByDescending(o => o.Value.Count)) {
+        foreach (var obj in this.DifferencesByRootObject.OrderByDescending(o => o.Value.Count))
+        {
             sb.AppendLine($"| {obj.Key} | {obj.Value.Count} | {this.RootObjectPercentages[obj.Key]}% |");
         }
 
@@ -102,7 +108,8 @@ public class DifferenceSummary {
             sb.AppendLine();
             sb.AppendLine("Example differences:");
             sb.AppendLine();
-            foreach (var example in pattern.Examples) {
+            foreach (var example in pattern.Examples)
+            {
                 sb.AppendLine($"- Property: `{example.PropertyName}`");
                 sb.AppendLine($"  - Old: `{this.FormatValue(example.Object1Value)}`");
                 sb.AppendLine($"  - New: `{this.FormatValue(example.Object2Value)}`");
@@ -113,8 +120,10 @@ public class DifferenceSummary {
         return sb.ToString();
     }
 
-    private string FormatCategoryName(DifferenceCategory category) {
-        switch (category) {
+    private string FormatCategoryName(DifferenceCategory category)
+    {
+        switch (category)
+        {
             case DifferenceCategory.NumericValueChanged:
                 return "Numeric Value Changed";
             case DifferenceCategory.DateTimeChanged:
@@ -136,16 +145,20 @@ public class DifferenceSummary {
         }
     }
 
-    private string FormatValue(object value) {
-        if (value == null) {
+    private string FormatValue(object value)
+    {
+        if (value == null)
+        {
             return "null";
         }
 
-        if (value is DateTime dt) {
+        if (value is DateTime dt)
+        {
             return dt.ToString("yyyy-MM-dd HH:mm:ss");
         }
 
-        if (value is string str && str.Length > 50) {
+        if (value is string str && str.Length > 50)
+        {
             return str.Substring(0, 47) + "...";
         }
 

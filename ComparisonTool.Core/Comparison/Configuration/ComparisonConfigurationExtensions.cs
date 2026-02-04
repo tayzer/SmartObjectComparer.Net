@@ -1,7 +1,3 @@
-// <copyright file="ComparisonConfigurationExtensions.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using KellermanSoftware.CompareNetObjects;
 
 namespace ComparisonTool.Core.Comparison.Configuration;
@@ -9,14 +5,17 @@ namespace ComparisonTool.Core.Comparison.Configuration;
 /// <summary>
 /// Extension methods for Comparison Configuration.
 /// </summary>
-public static class ComparisonConfigurationExtensions {
+public static class ComparisonConfigurationExtensions
+{
     /// <summary>
     /// Creates a deep clone of the <see cref="ComparisonConfig"/>.
     /// </summary>
     /// <param name="config"></param>
     /// <returns></returns>
-    public static ComparisonConfig Clone(this ComparisonConfig config) {
-        var clone = new ComparisonConfig() {
+    public static ComparisonConfig Clone(this ComparisonConfig config)
+    {
+        var clone = new ComparisonConfig()
+        {
             MaxDifferences = config.MaxDifferences,
             IgnoreObjectTypes = config.IgnoreObjectTypes,
             ComparePrivateFields = config.ComparePrivateFields,
@@ -26,7 +25,8 @@ public static class ComparisonConfigurationExtensions {
             CaseSensitive = config.CaseSensitive,
         };
 
-        foreach (var variable in config.MembersToIgnore) {
+        foreach (var variable in config.MembersToIgnore)
+        {
             clone.MembersToIgnore.Add(variable);
         }
 

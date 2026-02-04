@@ -1,7 +1,3 @@
-// <copyright file="DifferenceCategorizer.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System;
 using System.Text.RegularExpressions;
 using KellermanSoftware.CompareNetObjects;
@@ -18,10 +14,7 @@ public class DifferenceCategorizer
 
     private readonly ILogger logger;
 
-    public DifferenceCategorizer(ILogger? logger = null)
-    {
-        this.logger = logger;
-    }
+    public DifferenceCategorizer(ILogger? logger = null) => this.logger = logger;
 
     /// <summary>
     /// Creates a structured summary from CompareNETObjects comparison result.
@@ -152,32 +145,18 @@ public class DifferenceCategorizer
         }
     }
 
-    private bool IsNumericDifference(object value1, object value2)
-    {
-        return (value1 is int || value1 is long || value1 is float || value1 is double || value1 is decimal) &&
-               (value2 is int || value2 is long || value2 is float || value2 is double || value2 is decimal);
-    }
+    private bool IsNumericDifference(object value1, object value2) =>
+        (value1 is int || value1 is long || value1 is float || value1 is double || value1 is decimal) &&
+        (value2 is int || value2 is long || value2 is float || value2 is double || value2 is decimal);
 
-    private bool IsDateTimeDifference(object value1, object value2)
-    {
-        return value1 is DateTime && value2 is DateTime;
-    }
+    private bool IsDateTimeDifference(object value1, object value2) => value1 is DateTime && value2 is DateTime;
 
-    private bool IsStringDifference(object value1, object value2)
-    {
-        return value1 is string && value2 is string;
-    }
+    private bool IsStringDifference(object value1, object value2) => value1 is string && value2 is string;
 
-    private bool IsBooleanDifference(object value1, object value2)
-    {
-        return value1 is bool && value2 is bool;
-    }
+    private bool IsBooleanDifference(object value1, object value2) => value1 is bool && value2 is bool;
 
-    private string GetPathPattern(string propertyPath)
-    {
-        // Replace array indices with [*] to generalize the pattern
-        return Regex.Replace(propertyPath, @"\[\d+\]", "[*]", RegexOptions.None, RegexTimeout);
-    }
+    // Replace array indices with [*] to generalize the pattern
+    private string GetPathPattern(string propertyPath) => Regex.Replace(propertyPath, @"\[\d+\]", "[*]", RegexOptions.None, RegexTimeout);
 
     private string GetRootObjectName(string propertyPath)
     {

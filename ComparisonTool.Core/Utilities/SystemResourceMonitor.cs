@@ -1,7 +1,3 @@
-// <copyright file="SystemResourceMonitor.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 namespace ComparisonTool.Core.Utilities;
 
 using System;

@@ -1,13 +1,11 @@
-// <copyright file="SimilarFileGroup.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 namespace ComparisonTool.Core.Comparison.Analysis;
 
-public class SimilarFileGroup {
+public class SimilarFileGroup
+{
     public string GroupName { get; set; } = string.Empty;
 
-    public int FileCount {
+    public int FileCount
+    {
         get; set;
     }
 

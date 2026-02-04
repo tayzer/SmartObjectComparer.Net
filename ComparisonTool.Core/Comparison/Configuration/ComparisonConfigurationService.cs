@@ -1,7 +1,3 @@
-// <copyright file="ComparisonConfigurationService.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -102,19 +98,13 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// <summary>
     /// Set the cache service for invalidating cached results when configuration changes.
     /// </summary>
-    public void SetCacheService(ComparisonResultCacheService cacheService)
-    {
-        this.cacheService = cacheService;
-    }
+    public void SetCacheService(ComparisonResultCacheService cacheService) => this.cacheService = cacheService;
 
     /// <summary>
     /// Get the current comparison configuration.
     /// </summary>
     /// <returns></returns>
-    public ComparisonConfig GetCurrentConfig()
-    {
-        return compareLogic.Config;
-    }
+    public ComparisonConfig GetCurrentConfig() => compareLogic.Config;
 
     /// <summary>
     /// Get the compare logic instance.
@@ -231,10 +221,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// Get whether collection order is being ignored.
     /// </summary>
     /// <returns></returns>
-    public bool GetIgnoreCollectionOrder()
-    {
-        return compareLogic.Config.IgnoreCollectionOrder;
-    }
+    public bool GetIgnoreCollectionOrder() => compareLogic.Config.IgnoreCollectionOrder;
 
     /// <summary>
     /// Configure whether to ignore string case.
@@ -257,10 +244,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// Get whether string case is being ignored.
     /// </summary>
     /// <returns></returns>
-    public bool GetIgnoreStringCase()
-    {
-        return !compareLogic.Config.CaseSensitive;
-    }
+    public bool GetIgnoreStringCase() => !compareLogic.Config.CaseSensitive;
 
     /// <summary>
     /// Configure the comparer to ignore specific properties.
@@ -399,22 +383,17 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// Get all currently ignored properties.
     /// </summary>
     /// <returns></returns>
-    public IReadOnlyList<string> GetIgnoredProperties()
-    {
-        return AllIgnoreRules
+    public IReadOnlyList<string> GetIgnoredProperties() =>
+        AllIgnoreRules
             .Where(r => r.IgnoreCompletely)
             .Select(r => r.PropertyPath)
             .ToList();
-    }
 
     /// <summary>
     /// Get all ignore rules.
     /// </summary>
     /// <returns></returns>
-    public IReadOnlyList<IgnoreRule> GetIgnoreRules()
-    {
-        return AllIgnoreRules.ToList();
-    }
+    public IReadOnlyList<IgnoreRule> GetIgnoreRules() => AllIgnoreRules.ToList();
 
     /// <summary>
     /// Clear all ignore rules.
@@ -579,19 +558,13 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// Get all smart ignore rules.
     /// </summary>
     /// <returns></returns>
-    public IReadOnlyList<SmartIgnoreRule> GetSmartIgnoreRules()
-    {
-        return smartIgnoreRules.ToList();
-    }
+    public IReadOnlyList<SmartIgnoreRule> GetSmartIgnoreRules() => smartIgnoreRules.ToList();
 
     /// <summary>
     /// Filter differences using smart ignore rules.
     /// </summary>
     /// <returns></returns>
-    public ComparisonResult FilterSmartIgnoredDifferences(ComparisonResult result, Type? modelType = null)
-    {
-        return smartIgnoreProcessor.FilterResult(result, smartIgnoreRules, modelType);
-    }
+    public ComparisonResult FilterSmartIgnoredDifferences(ComparisonResult result, Type? modelType = null) => smartIgnoreProcessor.FilterResult(result, smartIgnoreRules, modelType);
 
     /// <summary>
     /// Normalize values of specified properties throughout an object graph.
@@ -1564,11 +1537,9 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
                 collectionPrefixes.Count);
         }
 
-        public override bool IsTypeMatch(Type type1, Type type2)
-        {
+        public override bool IsTypeMatch(Type type1, Type type2) =>
             // Handle all property comparisons to filter at the right level
-            return true;
-        }
+            true;
 
         public override void CompareType(CompareParms parms)
         {

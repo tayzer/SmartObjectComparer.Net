@@ -1,7 +1,3 @@
-// <copyright file="HighPerformanceComparisonPipeline.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.IO.Hashing;
@@ -29,7 +25,7 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
     private readonly ILogger<HighPerformanceComparisonPipeline> logger;
     private readonly IComparisonConfigurationService configService;
     private readonly IXmlDeserializationService deserializationService;
-    private readonly DeserializationServiceFactory deserializationFactory;
+    private readonly DeserializationServiceFactory? deserializationFactory;
     private readonly PerformanceTracker performanceTracker;
 
     // OPTIMIZATION 1: Reuse CompareLogic instances per thread to avoid allocation
@@ -79,6 +75,7 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
     /// <summary>
     /// Generate a fast hash for cache key using XxHash64.
     /// </summary>
+    /// <param name="stream">The stream to hash.</param>
     /// <returns>Base64-encoded hash string.</returns>
     public static string GenerateFastHash(Stream stream)
     {
@@ -108,7 +105,11 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
     /// <summary>
     /// Compare files using a high-performance producer-consumer pipeline.
     /// </summary>
-    /// <returns><placeholder>A <see cref="Task"/> representing the asynchronous operation.</placeholder></returns>
+    /// <param name="filePairs">File pairs to compare.</param>
+    /// <param name="modelName">Name of the registered model.</param>
+    /// <param name="progress">Optional progress reporter.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     public async Task<MultiFolderComparisonResult> CompareFilesAsync(
         IReadOnlyList<(string File1Path, string File2Path, string RelativePath)> filePairs,
         string modelName,
@@ -212,10 +213,7 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
         };
     }
 
-    public void Dispose()
-    {
-        threadLocalCompareLogic?.Dispose();
-    }
+    public void Dispose() => threadLocalCompareLogic?.Dispose();
 
     /// <summary>
     /// Stage 1: Read files and deserialize (I/O-bound).
@@ -225,9 +223,7 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
         Func<Stream, object> deserializer,
         ChannelWriter<DeserializedFilePair> writer,
         CancellationToken cancellationToken)
-    {
-        // Use Parallel.ForEachAsync for optimal I/O parallelism
-        await Parallel.ForEachAsync(
+        => await Parallel.ForEachAsync(
             filePairs,
             new ParallelOptions
             {
@@ -275,7 +271,6 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
                     await writer.WriteAsync(errorPair, ct).ConfigureAwait(false);
                 }
             }).ConfigureAwait(false);
-    }
 
     /// <summary>
     /// Deserialize both files concurrently for maximum I/O throughput.
@@ -343,10 +338,10 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
             try
             {
                 // OPTIMIZATION: Reuse thread-local CompareLogic
-                var compareLogic = threadLocalCompareLogic.Value;
+                var compareLogic = threadLocalCompareLogic.Value!;
 
                 // Perform comparison
-                var result = compareLogic.Compare(pair.Object1, pair.Object2);
+                var result = compareLogic.Compare(pair.Object1!, pair.Object2!);
 
                 // Filter ignored differences
                 result = configService.FilterSmartIgnoredDifferences(result, modelType);
@@ -444,17 +439,17 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
     /// <summary>
     /// Get or create a cached deserializer delegate for the model type.
     /// </summary>
-    private Func<Stream, object> GetOrCreateDeserializer(Type modelType)
-    {
-        return cachedDeserializers.GetOrAdd(modelType, type =>
+    private Func<Stream, object> GetOrCreateDeserializer(Type modelType) =>
+        cachedDeserializers.GetOrAdd(modelType, type =>
         {
-            var method = typeof(IXmlDeserializationService)
+            var methodInfo = typeof(IXmlDeserializationService)
                 .GetMethod(nameof(IXmlDeserializationService.DeserializeXml))
-                .MakeGenericMethod(type);
+                ?? throw new InvalidOperationException("DeserializeXml method was not found.");
+            var method = methodInfo.MakeGenericMethod(type);
 
-            return stream => method.Invoke(deserializationService, new object[] { stream });
+            return stream => method.Invoke(deserializationService, new object[] { stream })
+                ?? throw new InvalidOperationException("Deserialization returned null.");
         });
-    }
 
     /// <summary>
     /// Internal class for passing deserialized objects between pipeline stages.
@@ -476,12 +471,12 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
             get; init;
         }
 
-        required public object Object1
+        public object? Object1
         {
             get; init;
         }
 
-        required public object Object2
+        public object? Object2
         {
             get; init;
         }

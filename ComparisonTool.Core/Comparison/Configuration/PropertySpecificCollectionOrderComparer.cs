@@ -1,7 +1,3 @@
-// <copyright file="PropertySpecificCollectionOrderComparer.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 namespace ComparisonTool.Core.Comparison.Configuration;
 
 using System;
@@ -64,10 +60,7 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
     /// Get performance statistics for monitoring.
     /// </summary>
     /// <returns>Number of comparisons performed.</returns>
-    public static int GetComparisonCount()
-    {
-        return comparisonCount;
-    }
+    public static int GetComparisonCount() => comparisonCount;
 
     /// <summary>
     /// Check if this comparer handles the specified types.

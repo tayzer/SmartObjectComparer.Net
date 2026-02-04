@@ -1,19 +1,19 @@
-// <copyright file="ComparisonPatternAnalysis.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 namespace ComparisonTool.Core.Comparison.Analysis;
 
-public class ComparisonPatternAnalysis {
-    public int TotalFilesPaired {
+public class ComparisonPatternAnalysis
+{
+    public int TotalFilesPaired
+    {
         get; set;
     }
 
-    public int FilesWithDifferences {
+    public int FilesWithDifferences
+    {
         get; set;
     }
 
-    public int TotalDifferences {
+    public int TotalDifferences
+    {
         get; set;
     }
 

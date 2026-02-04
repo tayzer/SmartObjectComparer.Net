@@ -1,7 +1,3 @@
-// <copyright file="ComparisonOrchestrator.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.Collections.Concurrent;
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Configuration;
@@ -82,9 +78,8 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
         string modelName,
         string oldFilePath,
         string newFilePath,
-        CancellationToken cancellationToken = default)
-    {
-        return await performanceTracker.TrackOperationAsync("CompareXmlFilesWithCaching", async () =>
+        CancellationToken cancellationToken = default) =>
+        await performanceTracker.TrackOperationAsync("CompareXmlFilesWithCaching", async () =>
         {
             try
             {
@@ -156,7 +151,6 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                 throw;
             }
         }).ConfigureAwait(false);
-    }
 
     /// <summary>
     /// Compare two XML files using the specified domain model.
@@ -166,9 +160,8 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
         Stream oldXmlStream,
         Stream newXmlStream,
         string modelName,
-        CancellationToken cancellationToken = default)
-    {
-        return await performanceTracker.TrackOperationAsync("CompareXmlFilesAsync", async () =>
+        CancellationToken cancellationToken = default) =>
+        await performanceTracker.TrackOperationAsync("CompareXmlFilesAsync", async () =>
         {
             try
             {
@@ -220,7 +213,6 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                 throw;
             }
         }).ConfigureAwait(false);
-    }
 
     /// <summary>
     /// Compare two files with auto-format detection (supports XML and JSON) with caching.
@@ -495,9 +487,8 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
         string modelName,
         int batchSize = 25,
         IProgress<(int Completed, int Total)>? progress = null,
-        CancellationToken cancellationToken = default)
-    {
-        return await performanceTracker.TrackOperationAsync("CompareFoldersInBatchesAsync", async () =>
+        CancellationToken cancellationToken = default) =>
+        await performanceTracker.TrackOperationAsync("CompareFoldersInBatchesAsync", async () =>
         {
             logger.LogInformation(
                 "Starting batch comparison of {Count1} files from folder 1 and {Count2} files from folder 2",
@@ -728,7 +719,6 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
 
             return result;
         }).ConfigureAwait(false);
-    }
 
     /// <summary>
     /// Calculate optimal batch size based on file count and system resources.

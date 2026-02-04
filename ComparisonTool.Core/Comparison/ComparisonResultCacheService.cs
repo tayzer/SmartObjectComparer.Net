@@ -1,9 +1,3 @@
-// <copyright file="ComparisonResultCacheService.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
-namespace ComparisonTool.Core.Comparison;
-
 using System;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
@@ -14,6 +8,8 @@ using ComparisonTool.Core.Utilities;
 using KellermanSoftware.CompareNetObjects;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+
+namespace ComparisonTool.Core.Comparison;
 
 /// <summary>
 /// Cached comparison result with metadata.
@@ -149,9 +145,8 @@ public class ComparisonResultCacheService
     /// Generate a configuration fingerprint for caching based on ignore rules and global settings.
     /// </summary>
     /// <returns></returns>
-    public string GenerateConfigurationFingerprint(IComparisonConfigurationService configService)
-    {
-        return performanceTracker.TrackOperation("Generate_Config_Fingerprint", () =>
+    public string GenerateConfigurationFingerprint(IComparisonConfigurationService configService) =>
+        performanceTracker.TrackOperation("Generate_Config_Fingerprint", () =>
         {
             try
             {
@@ -201,16 +196,14 @@ public class ComparisonResultCacheService
                 return DateTime.UtcNow.Ticks.ToString();
             }
         });
-    }
 
     /// <summary>
     /// Generate a file content hash for caching.
     /// PERFORMANCE OPTIMIZATION: Use XxHash64 for 2-3x faster hashing than SHA256.
     /// </summary>
     /// <returns></returns>
-    public string GenerateFileHash(Stream fileStream)
-    {
-        return performanceTracker.TrackOperation("Generate_File_Hash", () =>
+    public string GenerateFileHash(Stream fileStream) =>
+        performanceTracker.TrackOperation("Generate_File_Hash", () =>
         {
             try
             {
@@ -243,7 +236,6 @@ public class ComparisonResultCacheService
                 return $"{fileStream.Length}_{DateTime.UtcNow.Ticks}";
             }
         });
-    }
 
     /// <summary>
     /// Try to get a cached comparison result.

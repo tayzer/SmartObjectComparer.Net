@@ -1,7 +1,3 @@
-// <copyright file="FileUtilities.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -19,10 +15,7 @@ public class FileUtilities : IFileUtilities
 {
     private readonly ILogger<FileUtilities> logger;
 
-    public FileUtilities(ILogger<FileUtilities> logger)
-    {
-        this.logger = logger;
-    }
+    public FileUtilities(ILogger<FileUtilities> logger) => this.logger = logger;
 
     /// <summary>
     /// Creates a memory stream from a file stream.
@@ -424,14 +417,10 @@ public class FileUtilities : IFileUtilities
         }
     }
 
-    private static void AppendLineInvariant(StringBuilder sb, string format, params object[] args)
-    {
-        sb.AppendLine(string.Format(CultureInfo.InvariantCulture, format, args));
-    }
+    private static void AppendLineInvariant(StringBuilder sb, string format, params object[] args) => sb.AppendLine(string.Format(CultureInfo.InvariantCulture, format, args));
 
-    private static string FormatCategoryName(DifferenceCategory category)
-    {
-        return category switch
+    private static string FormatCategoryName(DifferenceCategory category) =>
+        category switch
         {
             DifferenceCategory.NumericValueChanged => "Numeric Value Changed",
             DifferenceCategory.DateTimeChanged => "Date/Time Changed",
@@ -443,7 +432,6 @@ public class FileUtilities : IFileUtilities
             DifferenceCategory.ValueChanged => "Value Changed",
             _ => "Other"
         };
-    }
 
     private static string FormatValue(object value, int maxLength = 100)
     {

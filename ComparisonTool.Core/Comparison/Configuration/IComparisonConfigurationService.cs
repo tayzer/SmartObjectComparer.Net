@@ -1,7 +1,3 @@
-// <copyright file="IComparisonConfigurationService.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using KellermanSoftware.CompareNetObjects;
 
 namespace ComparisonTool.Core.Comparison.Configuration;
@@ -9,7 +5,8 @@ namespace ComparisonTool.Core.Comparison.Configuration;
 /// <summary>
 /// Interface for comparison configuration management.
 /// </summary>
-public interface IComparisonConfigurationService {
+public interface IComparisonConfigurationService
+{
     /// <summary>
     /// Get the current comparison configuration.
     /// </summary>

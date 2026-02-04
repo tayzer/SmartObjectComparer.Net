@@ -1,7 +1,3 @@
-// <copyright file="FolderBrowserService.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.Runtime.InteropServices;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Logging;
@@ -57,12 +53,10 @@ public static class FolderBrowserService
     /// </summary>
     /// <returns></returns>
     [JSInvokable]
-    public static bool IsDesktopEnvironment()
-    {
-        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ||
-               RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ||
-               RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
-    }
+    public static bool IsDesktopEnvironment() =>
+        RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ||
+        RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ||
+        RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
 
     /// <summary>
     /// Opens a Windows folder browser dialog.

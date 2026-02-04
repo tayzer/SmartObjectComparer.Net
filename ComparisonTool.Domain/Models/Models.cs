@@ -1,7 +1,3 @@
-// <copyright file="Models.cs" company="PlaceholderCompany">
-// Copyright (c) PlaceholderCompany. All rights reserved.
-// </copyright>
-
 using System.Xml.Serialization;
 
 namespace ComparisonTool.Core.Models;
