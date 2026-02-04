@@ -396,6 +396,12 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     public IReadOnlyList<IgnoreRule> GetIgnoreRules() => AllIgnoreRules.ToList();
 
     /// <summary>
+    /// Get ignore rules that should be visible to users (excludes auto rules like XmlIgnore).
+    /// </summary>
+    /// <returns></returns>
+    public IReadOnlyList<IgnoreRule> GetUserIgnoreRules() => ignoreRules.ToList();
+
+    /// <summary>
     /// Clear all ignore rules.
     /// </summary>
     public void ClearIgnoreRules()
