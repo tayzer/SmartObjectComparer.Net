@@ -1,88 +1,48 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2025-02-05T16:15:00Z
+lastUpdated: 2026-02-04T00:45:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-Request Comparison (A/B) UI improvements - COMPLETED
+Hide XmlIgnore auto-rules from UI while preserving comparison behavior
 
 ## Todo List Status
 ```markdown
-- [x] Replace ignore rules in RequestComparisonPanel with Tree Navigator/Simple Property Selector pattern
-- [x] Restyle EnhancedDifferenceSummary with MudBlazor components
-- [x] Restyle SemanticGroupsPanel with MudBlazor components
-- [x] Wire up selectors in Home.razor for Request Comparison tab
-- [x] Build and validate all changes compile successfully
+- [x] 🧩 Add user-visible ignore rules API
+- [x] 🧭 Update UI to use user-visible rules
+- [x] 🧪 Update/extend tests for visibility split
 ```
 
 ## Recent File Changes
-- `ComparisonTool.Web/Components/Comparison/RequestComparisonPanel.razor`: 
-  - Replaced manual ignore rule expansion panels with Tree Navigator buttons
-  - Changed internal `ignoreRules` from `List<IgnoreRuleInput>` to `List<IgnoreRule>`
-  - Added `OnPropertySelectorOpened`, `OnTreePropertySelectorOpened` EventCallback parameters
-  - Added `AddIgnoreRule()`, `AddIgnoreRulesBatch()`, `RemoveIgnoreRule()`, `ClearAllIgnoreRules()`, `GetSelectedModelType()` public methods
-  - Made `IgnoreRules` property public for external access
-
-- `ComparisonTool.Web/Components/Comparison/EnhancedDifferenceSummary.razor`:
-  - Converted from Bootstrap to MudBlazor components
-  - Replaced `<div class="card">` with `<MudPaper>`
-  - Replaced `<div class="alert">` with `<MudAlert>`
-  - Replaced `<div class="row">/<div class="col-md-*">` with `<MudGrid>/<MudItem>`
-  - Replaced `<div class="progress">` with `<MudProgressLinear>`
-  - Added `@using MudBlazor` directive
-
-- `ComparisonTool.Web/Components/Comparison/SemanticGroupsPanel.razor`:
-  - Converted from Bootstrap to MudBlazor components
-  - Replaced Bootstrap table with `<MudSimpleTable>`
-  - Replaced Bootstrap progress bars with `<MudProgressLinear>`
-  - Replaced Bootstrap buttons with `<MudButton>`
-  - Replaced Bootstrap alerts with `<MudAlert>`
-  - Replaced Bootstrap cards with `<MudPaper>`
-  - Changed `GetConfidenceColorClass()` to `GetConfidenceColor()` returning MudBlazor Color enum
-
-- `ComparisonTool.Web/Components/Pages/Home.razor`:
-  - Added `@ref="requestComparisonPanel"` to RequestComparisonPanel
-  - Added `OnPropertySelectorOpened` and `OnTreePropertySelectorOpened` callbacks
-  - Added `HierarchicalPropertySelector` for Request Comparison (`requestPropertySelector`)
-  - Added `ObjectTreePropertySelector` for Request Comparison (`requestTreePropertySelector`)
-  - Added field references: `requestComparisonPanel`, `requestPropertySelector`, `requestTreePropertySelector`
-  - Added handler methods: `OpenRequestPropertySelector()`, `OpenRequestTreePropertySelector()`, `AddRequestIgnoreRule()`, `AddRequestIgnoreRulesBatch()`, `RemoveRequestIgnoreRule()`
+- ComparisonTool.Core/Comparison/Configuration/IComparisonConfigurationService.cs: Added GetUserIgnoreRules for UI-visible rules
+- ComparisonTool.Core/Comparison/Configuration/ComparisonConfigurationService.cs: Implemented GetUserIgnoreRules excluding XmlIgnore rules
+- ComparisonTool.Web/Components/Pages/Home.razor: Initialize UI ignore rules from GetUserIgnoreRules
+- ComparisonTool.Tests/Unit/Core/ComparisonConfigurationServiceTests.cs: Added tests for user-visible rule filtering
 
 ## Key Technical Decisions
-- Decision: Reuse existing HierarchicalPropertySelector and ObjectTreePropertySelector components for Request Comparison
-- Rationale: Maintains consistency with File/Folder Comparison tab; leverages existing tested functionality
-- Date: 2025-02-05
-
-- Decision: Made RequestComparisonPanel.IgnoreRules public with { get; set; }
-- Rationale: Allows Home.razor to pass the list to the selector components while the panel manages the state
-- Date: 2025-02-05
+- None
 
 ## External Resources Referenced
-- MudBlazor documentation (attempted but blocked by JS requirements)
-- Existing codebase patterns for Tree Navigator implementation
+- https://learn.microsoft.com/en-us/dotnet/api/system.xml.serialization.xmlignoreattribute?view=net-8.0: XmlIgnoreAttribute behavior and usage
+- https://learn.microsoft.com/en-us/dotnet/standard/serialization/attributes-that-control-xml-serialization: List of XML serialization attributes
 
 ## Blockers & Issues
-- **[RESOLVED]** Build error RZ10010: Conflicting `OnClick` and `@onclick:stopPropagation` on MudButton - Fixed by removing stopPropagation directive
-- **[RESOLVED]** Google search blocked by JavaScript requirement - Used direct analysis of existing code patterns instead
+- None
 
 ## Failed Approaches
 - None
 
 ## Environment Notes
-- .NET 8.0, Blazor Server with MudBlazor
-- Build succeeded with 127 pre-existing warnings (not introduced by these changes)
+- .NET 8.0
 
 ## Next Session Priority
-No active tasks - all requested improvements completed
+No active tasks
 
 ## Session Notes
-Implementation complete. The Request Comparison (A/B) tab now:
-1. Uses Tree Navigator and Simple Property Selector instead of manual ignore rule inputs
-2. Has properly styled "Comparison Overview" section using MudBlazor components (MudPaper, MudAlert, MudGrid, MudProgressLinear)
-3. Has properly styled "Semantic Difference Groups" section using MudBlazor components (MudPaper, MudSimpleTable, MudButton, MudAlert, MudProgressLinear)
+- UI now excludes XmlIgnore auto rules from displayed ignore rules while keeping comparison behavior
 
 ---
 # Previous Session Archive

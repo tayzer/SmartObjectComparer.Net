@@ -308,6 +308,38 @@ public class ComparisonConfigurationServiceTests
     }
 
     [TestMethod]
+    public void GetUserIgnoreRules_WithUserRule_ShouldReturnRule()
+    {
+        // Arrange
+        var rule = new IgnoreRule
+        {
+            PropertyPath = "UserProperty",
+            IgnoreCompletely = true,
+        };
+
+        this.service.AddIgnoreRule(rule);
+
+        // Act
+        var userRules = this.service.GetUserIgnoreRules();
+
+        // Assert
+        userRules.Should().ContainSingle(r => r.PropertyPath == "UserProperty");
+    }
+
+    [TestMethod]
+    public void GetUserIgnoreRules_ShouldExcludeXmlIgnoreRules()
+    {
+        // Arrange
+        this.service.AddXmlIgnorePropertiesToIgnoreList(typeof(TestClassWithXmlIgnore));
+
+        // Act
+        var userRules = this.service.GetUserIgnoreRules();
+
+        // Assert
+        userRules.Should().NotContain(r => r.PropertyPath == "IgnoredProperty");
+    }
+
+    [TestMethod]
     public void AddXmlIgnorePropertiesToIgnoreList_WithType_ShouldAddXmlIgnoreProperties()
     {
         // Act
