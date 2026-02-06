@@ -486,14 +486,14 @@
             IgnoreStringCase = ConfigService.GetIgnoreStringCase();
             IgnoreXmlNamespaces = XmlDeserializationService.IgnoreXmlNamespaces;
 
-            foreach (var prop in ConfigService.GetIgnoredProperties())
-            {
-                IgnoreRules.Add(new IgnoreRule
-                    {
-                        PropertyPath = prop,
-                        IgnoreCompletely = true
-                    });
-            }
+            IgnoreRules = ConfigService.GetUserIgnoreRules()
+                .Select(rule => new IgnoreRule
+                {
+                    PropertyPath = rule.PropertyPath,
+                    IgnoreCompletely = rule.IgnoreCompletely,
+                    IgnoreCollectionOrder = rule.IgnoreCollectionOrder,
+                })
+                .ToList();
         }
         catch (Exception ex)
         {

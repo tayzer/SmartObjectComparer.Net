@@ -82,6 +82,12 @@ public interface IComparisonConfigurationService
     IReadOnlyList<IgnoreRule> GetIgnoreRules();
 
     /// <summary>
+    /// Get ignore rules that should be visible to users (excludes auto rules like XmlIgnore).
+    /// </summary>
+    /// <returns></returns>
+    IReadOnlyList<IgnoreRule> GetUserIgnoreRules();
+
+    /// <summary>
     /// Clear all ignore rules.
     /// </summary>
     void ClearIgnoreRules();
