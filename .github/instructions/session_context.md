@@ -1,53 +1,62 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2025-02-05T16:15:00Z
+lastUpdated: 2026-02-06T00:00:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-Request Comparison (A/B) UI improvements - COMPLETED
+Debug Request Comparison tab click not responding - COMPLETED
 
 ## Todo List Status
 ```markdown
-- [x] Replace ignore rules in RequestComparisonPanel with Tree Navigator/Simple Property Selector pattern
-- [x] Restyle EnhancedDifferenceSummary with MudBlazor components
-- [x] Restyle SemanticGroupsPanel with MudBlazor components
-- [x] Wire up selectors in Home.razor for Request Comparison tab
-- [x] Build and validate all changes compile successfully
+- [x] 🧭 Locate Request Comparison tab wiring in Home.razor
+- [x] 🔍 Inspect RequestComparisonPanel for blocking UI/overlay or lifecycle issues
+- [x] 🛠️ Implement fix and verify tab click works
+- [x] ✅ Build and sanity-check UI
 ```
 
 ## Recent File Changes
-- `ComparisonTool.Web/Components/Comparison/RequestComparisonPanel.razor`: 
-  - Replaced manual ignore rule expansion panels with Tree Navigator buttons
-  - Changed internal `ignoreRules` from `List<IgnoreRuleInput>` to `List<IgnoreRule>`
-  - Added `OnPropertySelectorOpened`, `OnTreePropertySelectorOpened` EventCallback parameters
-  - Added `AddIgnoreRule()`, `AddIgnoreRulesBatch()`, `RemoveIgnoreRule()`, `ClearAllIgnoreRules()`, `GetSelectedModelType()` public methods
-  - Made `IgnoreRules` property public for external access
+- `ComparisonTool.Web/Components/Pages/Home.razor` (Line ~33): Added `@bind-ActivePanelIndex` and `activeTabIndex` to preserve tab selection on re-render
 
-- `ComparisonTool.Web/Components/Comparison/EnhancedDifferenceSummary.razor`:
-  - Converted from Bootstrap to MudBlazor components
-  - Replaced `<div class="card">` with `<MudPaper>`
-  - Replaced `<div class="alert">` with `<MudAlert>`
-  - Replaced `<div class="row">/<div class="col-md-*">` with `<MudGrid>/<MudItem>`
-  - Replaced `<div class="progress">` with `<MudProgressLinear>`
-  - Added `@using MudBlazor` directive
+## Key Technical Decisions
+- Decision: Use SignalR for real-time progress updates instead of polling
+- Rationale: Already configured in Program.cs, native Blazor integration, lower latency than polling
+- Date: 2026-02-04
 
-- `ComparisonTool.Web/Components/Comparison/SemanticGroupsPanel.razor`:
-  - Converted from Bootstrap to MudBlazor components
-  - Replaced Bootstrap table with `<MudSimpleTable>`
-  - Replaced Bootstrap progress bars with `<MudProgressLinear>`
-  - Replaced Bootstrap buttons with `<MudButton>`
-  - Replaced Bootstrap alerts with `<MudAlert>`
-  - Replaced Bootstrap cards with `<MudPaper>`
-  - Changed `GetConfidenceColorClass()` to `GetConfidenceColor()` returning MudBlazor Color enum
+- Decision: Use 250ms throttling for progress updates during Executing phase
+- Rationale: Prevents UI flooding when many API calls are made in quick succession
+- Date: 2026-02-05
 
-- `ComparisonTool.Web/Components/Pages/Home.razor`:
-  - Added `@ref="requestComparisonPanel"` to RequestComparisonPanel
-  - Added `OnPropertySelectorOpened` and `OnTreePropertySelectorOpened` callbacks
-  - Added `HierarchicalPropertySelector` for Request Comparison (`requestPropertySelector`)
-  - Added `ObjectTreePropertySelector` for Request Comparison (`requestTreePropertySelector`)
+- Decision: Group-based SignalR subscriptions by JobId
+- Rationale: Allows multiple clients to subscribe to the same job and efficiently target updates
+- Date: 2026-02-05
+
+## External Resources Referenced
+- [MudBlazor Tabs](https://mudblazor.com/components/tabs): Reviewed usage patterns for tab selection and active index binding
+- [MudBlazor Tabs (Jina AI mirror)](https://r.jina.ai/https://mudblazor.com/components/tabs): Used for readable page content
+- [Google Search (blocked)](https://www.google.com/search?q=MudBlazor+MudTabs+click+not+working+Blazor+Server): JS required; used direct docs instead
+
+## Blockers & Issues
+- None
+
+## Failed Approaches
+- None
+
+## Environment Notes
+- SignalR already configured in Program.cs with max message size and timeouts
+- Added Microsoft.AspNetCore.SignalR.Client v10.0.2 package for Blazor client
+
+## Next Session Priority
+No active tasks
+
+## Session Notes
+Created a detailed implementation plan for adding real-time progress tracking to the Request Comparison feature. The plan includes:
+- 11 tasks across 3 phases (Backend infrastructure, API wiring, Frontend integration)
+- 10 files to create or modify
+- Estimated 6-8 hours of development
+- Risk mitigations for connection drops, event flooding, and memory leaks
   - Added field references: `requestComparisonPanel`, `requestPropertySelector`, `requestTreePropertySelector`
   - Added handler methods: `OpenRequestPropertySelector()`, `OpenRequestTreePropertySelector()`, `AddRequestIgnoreRule()`, `AddRequestIgnoreRulesBatch()`, `RemoveRequestIgnoreRule()`
 

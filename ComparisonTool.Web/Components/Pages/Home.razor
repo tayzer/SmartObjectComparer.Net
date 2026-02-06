@@ -46,7 +46,7 @@
         </MudStack>
     </MudPaper>
 
-    <MudTabs Rounded="true" Border="true">
+    <MudTabs Rounded="true" Border="true" @bind-ActivePanelIndex="activeTabIndex">
         <MudTabPanel Text="File/Folder Comparison">
             <!-- Mode Switch Section -->
             <MudPaper Elevation="2" Class="pa-4">
@@ -428,6 +428,7 @@
     private bool EnableEnhancedStructuralAnalysis { get; set; } = true;
     private bool UseDirectoryMode { get; set; } = false;
     private bool RequestComparisonEnabled => Configuration.GetValue("FeatureFlags:RequestComparisonEnabled", false);
+    private int activeTabIndex { get; set; } = 0;
     
     // Directory mode properties
     private string Directory1Path { get; set; }

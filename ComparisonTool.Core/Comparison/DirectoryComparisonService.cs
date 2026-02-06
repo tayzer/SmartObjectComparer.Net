@@ -7,7 +7,7 @@ using ComparisonTool.Core.Serialization;
 using ComparisonTool.Core.Utilities;
 using Microsoft.Extensions.Logging;
 
-namespace ComparisonTool.Web.Services;
+namespace ComparisonTool.Core.Comparison;
 
 /// <summary>
 /// Service that handles directory-based XML comparisons to efficiently process large sets of files.

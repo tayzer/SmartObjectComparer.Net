@@ -178,7 +178,8 @@ public static class RequestComparisonApi
 
     private static async Task<IResult> CreateComparisonJob(
         [FromBody] CreateRequestComparisonJobRequest request,
-        [FromServices] RequestComparisonJobService jobService)
+        [FromServices] RequestComparisonJobService jobService,
+        [FromServices] IComparisonProgressPublisher progressPublisher)
     {
         // Validate request
         if (string.IsNullOrEmpty(request.RequestBatchId))
@@ -197,6 +198,16 @@ public static class RequestComparisonApi
         }
 
         var job = jobService.CreateJob(request);
+
+        // Publish initial progress event
+        await progressPublisher.PublishAsync(new ComparisonProgressUpdate
+        {
+            JobId = job.JobId,
+            Phase = ComparisonPhase.Initializing,
+            PercentComplete = 0,
+            Message = "Job created, initializing...",
+            Timestamp = DateTimeOffset.UtcNow
+        });
 
         // Start job execution in background
         var cts = new CancellationTokenSource();

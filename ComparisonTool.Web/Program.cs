@@ -3,11 +3,15 @@ using ComparisonTool.Core.DI;
 using ComparisonTool.Core.Models;
 using ComparisonTool.Core.RequestComparison.Services;
 using ComparisonTool.Web;
+using ComparisonTool.Web.Hubs;
 using ComparisonTool.Web.Models;
 using ComparisonTool.Web.Components;
+using ComparisonTool.Web.Services;
 using MudBlazor.Services;
 using Serilog;
 
+try
+{
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure Serilog
@@ -46,7 +50,9 @@ builder.Services.AddHttpClient("RequestComparison")
 // Add Request Comparison services
 builder.Services.AddSingleton<RequestFileParserService>();
 builder.Services.AddSingleton<RequestExecutionService>();
+builder.Services.AddSingleton<IComparisonProgressPublisher, SignalRProgressPublisher>();
 builder.Services.AddSingleton<RequestComparisonJobService>();
+builder.Services.AddScoped<ComparisonProgressService>();
 
 builder.Services.Configure<RequestComparisonEndpointOptions>(
     builder.Configuration.GetSection("RequestComparison:EndpointOptions"));
@@ -86,10 +92,20 @@ app.UseAntiforgery();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
+// Map SignalR hub for comparison progress
+app.MapHub<ComparisonProgressHub>("/hubs/comparison-progress");
+
 app.MapFileBatchUploadApi();
 app.MapRequestComparisonApi();
 
 app.Run();
+}
+catch (Exception ex)
+{
+    Console.WriteLine($"[FATAL] Application failed to start: {ex}");
+    Console.Out.Flush();
+    throw;
+}
 
 /// <summary>
 /// Cleans up temporary upload files older than 1 day.
