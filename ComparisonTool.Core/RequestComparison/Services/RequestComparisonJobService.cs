@@ -223,34 +223,99 @@ public class RequestComparisonJobService
             if (successPairs.Count > 0)
             {
                 // Phase 3a: Domain-model comparison for BothSuccess pairs (existing pipeline)
-                var comparisonProgress = new Progress<ComparisonProgress>(p =>
+                // Create temporary directories with only success response files to avoid
+                // domain-model comparison attempting to deserialize non-success responses
+                var tempDirA = Path.Combine(Path.GetTempPath(), $"success_responses_a_{jobId}");
+                var tempDirB = Path.Combine(Path.GetTempPath(), $"success_responses_b_{jobId}");
+
+                try
                 {
-                    job.StatusMessage = p.Status;
-                    progress?.Report((p.Completed, p.Total, p.Status));
-                    // Calculate percent: 75% + (20% * completed/total) — reserve last 5% for raw text comparison
-                    var percent = 75 + (int)(20.0 * p.Completed / Math.Max(1, p.Total));
-                    _ = PublishProgressAsync(jobId, ComparisonPhase.Comparing, Math.Min(percent, 95), p.Status, p.Completed, p.Total);
-                });
+                    Directory.CreateDirectory(tempDirA);
+                    Directory.CreateDirectory(tempDirB);
 
-                using var scope = _scopeFactory.CreateScope();
+                    // Copy success response files to temp directories in parallel
+                    var copyTasks = successPairs.Select(async successPair =>
+                    {
+                        var exec = successPair.Execution;
+                        if (exec.ResponsePathA != null && exec.ResponsePathB != null &&
+                            File.Exists(exec.ResponsePathA) && File.Exists(exec.ResponsePathB))
+                        {
+                            var relativePath = exec.Request.RelativePath;
+                            // Sanitize path: remove path traversal attempts and normalize separators
+                            var sanitizedPath = relativePath
+                                .Replace("..", "_")
+                                .Replace('/', Path.DirectorySeparatorChar)
+                                .Replace('\\', Path.DirectorySeparatorChar)
+                                .TrimStart(Path.DirectorySeparatorChar);
 
-                // Apply per-job configuration settings
-                var configService = scope.ServiceProvider.GetRequiredService<IComparisonConfigurationService>();
-                var xmlDeserializationService = scope.ServiceProvider.GetRequiredService<IXmlDeserializationService>();
+                            var targetPathA = Path.Combine(tempDirA, sanitizedPath);
+                            var targetPathB = Path.Combine(tempDirB, sanitizedPath);
 
-                ApplyJobConfiguration(job, configService, xmlDeserializationService);
+                            // Ensure subdirectories exist
+                            Directory.CreateDirectory(Path.GetDirectoryName(targetPathA)!);
+                            Directory.CreateDirectory(Path.GetDirectoryName(targetPathB)!);
 
-                var comparisonService = scope.ServiceProvider.GetRequiredService<DirectoryComparisonService>();
+                            // Copy files asynchronously
+                            await Task.WhenAll(
+                                CopyFileAsync(exec.ResponsePathA, targetPathA, cancellationToken),
+                                CopyFileAsync(exec.ResponsePathB, targetPathB, cancellationToken)).ConfigureAwait(false);
+                        }
+                    }).ToList();
 
-                comparisonResult = await comparisonService.CompareDirectoriesAsync(
-                    job.ResponsePathA!,
-                    job.ResponsePathB!,
-                    job.ModelName,
-                    includeAllFiles: true,
-                    enablePatternAnalysis: true,
-                    enableSemanticAnalysis: job.EnableSemanticAnalysis,
-                    progress: comparisonProgress,
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
+                    await Task.WhenAll(copyTasks).ConfigureAwait(false);
+
+                    var comparisonProgress = new Progress<ComparisonProgress>(p =>
+                    {
+                        job.StatusMessage = p.Status;
+                        progress?.Report((p.Completed, p.Total, p.Status));
+                        // Calculate percent: 75% + (20% * completed/total) — reserve last 5% for raw text comparison
+                        var percent = 75 + (int)(20.0 * p.Completed / Math.Max(1, p.Total));
+                        _ = PublishProgressAsync(jobId, ComparisonPhase.Comparing, Math.Min(percent, 95), p.Status, p.Completed, p.Total);
+                    });
+
+                    using var scope = _scopeFactory.CreateScope();
+
+                    // Apply per-job configuration settings
+                    var configService = scope.ServiceProvider.GetRequiredService<IComparisonConfigurationService>();
+                    var xmlDeserializationService = scope.ServiceProvider.GetRequiredService<IXmlDeserializationService>();
+
+                    ApplyJobConfiguration(job, configService, xmlDeserializationService);
+
+                    var comparisonService = scope.ServiceProvider.GetRequiredService<DirectoryComparisonService>();
+
+                    comparisonResult = await comparisonService.CompareDirectoriesAsync(
+                        tempDirA,
+                        tempDirB,
+                        job.ModelName,
+                        includeAllFiles: true,
+                        enablePatternAnalysis: true,
+                        enableSemanticAnalysis: job.EnableSemanticAnalysis,
+                        progress: comparisonProgress,
+                        cancellationToken: cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    // Clean up temporary directories
+                    try
+                    {
+                        if (Directory.Exists(tempDirA))
+                            Directory.Delete(tempDirA, recursive: true);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to delete temporary directory {TempDir}", tempDirA);
+                    }
+
+                    try
+                    {
+                        if (Directory.Exists(tempDirB))
+                            Directory.Delete(tempDirB, recursive: true);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to delete temporary directory {TempDir}", tempDirB);
+                    }
+                }
             }
             else
             {
@@ -291,8 +356,8 @@ public class RequestComparisonJobService
                 {
                     comparisonResult.FilePairResults.Add(new FilePairComparisonResult
                     {
-                        File1Name = failed.Execution.Request.RelativePath,
-                        File2Name = failed.Execution.Request.RelativePath,
+                        File1Name = Path.GetFileName(failed.Execution.Request.RelativePath),
+                        File2Name = Path.GetFileName(failed.Execution.Request.RelativePath),
                         ErrorMessage = failed.Execution.ErrorMessage ?? "Request execution failed",
                         ErrorType = "HttpRequestException",
                         PairOutcome = RequestPairOutcome.OneOrBothFailed,
@@ -463,5 +528,27 @@ public class RequestComparisonJobService
 
         // Apply all configured settings
         configService.ApplyConfiguredSettings();
+    }
+
+    private static async Task CopyFileAsync(string sourcePath, string destinationPath, CancellationToken cancellationToken)
+    {
+        const int bufferSize = 81920; // 80KB buffer
+        await using var sourceStream = new FileStream(
+            sourcePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        await using var destinationStream = new FileStream(
+            destinationPath,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.None,
+            bufferSize,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        await sourceStream.CopyToAsync(destinationStream, bufferSize, cancellationToken).ConfigureAwait(false);
     }
 }

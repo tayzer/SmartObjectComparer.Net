@@ -54,13 +54,13 @@
                     </MudSelectItem>
                     @if (HasHttpStatusData)
                     {
-                        <MudSelectItem Value='"StatusMismatch"'>
+                        <MudSelectItem Value="@("StatusMismatch")">
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                 <MudIcon Icon="@Icons.Material.Filled.SyncProblem" Color="Color.Warning" Size="Size.Small" />
                                 <span>Status Mismatch</span>
                             </MudStack>
                         </MudSelectItem>
-                        <MudSelectItem Value='"NonSuccess"'>
+                        <MudSelectItem Value="@("NonSuccess")">
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                 <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Color="Color.Error" Size="Size.Small" />
                                 <span>Non-Success</span>

@@ -38,7 +38,7 @@ public class RawTextComparisonService
         CancellationToken cancellationToken = default)
     {
         var exec = classified.Execution;
-        var fileName = exec.Request.RelativePath;
+        var fileName = Path.GetFileName(exec.Request.RelativePath);
 
         var pairResult = new FilePairComparisonResult
         {
