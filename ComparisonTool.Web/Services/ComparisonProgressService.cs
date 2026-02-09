@@ -41,38 +41,59 @@ public class ComparisonProgressService : IAsyncDisposable
     /// </summary>
     public async Task StartAsync()
     {
-        if (_hubConnection != null)
+        // Build the hub connection once, and reuse it across restarts.
+        if (_hubConnection == null)
+        {
+            _hubConnection = new HubConnectionBuilder()
+                .WithUrl(_navigationManager.ToAbsoluteUri("/hubs/comparison-progress"))
+                .WithAutomaticReconnect(new[] { TimeSpan.Zero, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10) })
+                .Build();
+
+            _hubConnection.On<ComparisonProgressUpdate>("ProgressUpdate", update =>
+            {
+                _logger.LogTrace("Received progress update for job {JobId}: {Phase} {Percent}%", 
+                    update.JobId, update.Phase, update.PercentComplete);
+                OnProgressUpdate?.Invoke(update);
+            });
+
+            _hubConnection.Reconnecting += error =>
+            {
+                _logger.LogWarning(error, "SignalR connection lost, attempting to reconnect...");
+                return Task.CompletedTask;
+            };
+
+            _hubConnection.Reconnected += async connectionId =>
+            {
+                _logger.LogInformation("SignalR reconnected with connection ID: {ConnectionId}", connectionId);
+                if (!string.IsNullOrEmpty(_currentJobId))
+                {
+                    try
+                    {
+                        await _hubConnection!.InvokeAsync("SubscribeToJob", _currentJobId);
+                        _logger.LogDebug("Re-subscribed to job {JobId} after reconnection", _currentJobId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Failed to re-subscribe to job {JobId} after reconnection", _currentJobId);
+                    }
+                }
+            };
+        }
+
+        // If already connected, nothing to do.
+        if (_hubConnection.State == HubConnectionState.Connected)
         {
             return;
         }
 
-        _hubConnection = new HubConnectionBuilder()
-            .WithUrl(_navigationManager.ToAbsoluteUri("/hubs/comparison-progress"))
-            .WithAutomaticReconnect(new[] { TimeSpan.Zero, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10) })
-            .Build();
-
-        _hubConnection.On<ComparisonProgressUpdate>("ProgressUpdate", update =>
+        // Avoid calling StartAsync when the connection is in an intermediate state
+        // (Connecting/Reconnecting), which would throw InvalidOperationException.
+        if (_hubConnection.State == HubConnectionState.Connecting ||
+            _hubConnection.State == HubConnectionState.Reconnecting)
         {
-            _logger.LogTrace("Received progress update for job {JobId}: {Phase} {Percent}%", 
-                update.JobId, update.Phase, update.PercentComplete);
-            OnProgressUpdate?.Invoke(update);
-        });
-
-        _hubConnection.Reconnecting += error =>
-        {
-            _logger.LogWarning(error, "SignalR connection lost, attempting to reconnect...");
-            return Task.CompletedTask;
-        };
-
-        _hubConnection.Reconnected += connectionId =>
-        {
-            _logger.LogInformation("SignalR reconnected with connection ID: {ConnectionId}", connectionId);
-            if (!string.IsNullOrEmpty(_currentJobId))
-            {
-                _ = _hubConnection.InvokeAsync("SubscribeToJob", _currentJobId);
-            }
-            return Task.CompletedTask;
-        };
+            _logger.LogDebug("SignalR connection is currently {State}; skipping StartAsync.", _hubConnection.State);
+            return;
+        }
 
         try
         {
