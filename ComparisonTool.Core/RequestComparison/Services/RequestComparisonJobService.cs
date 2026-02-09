@@ -223,34 +223,96 @@ public class RequestComparisonJobService
             if (successPairs.Count > 0)
             {
                 // Phase 3a: Domain-model comparison for BothSuccess pairs (existing pipeline)
-                var comparisonProgress = new Progress<ComparisonProgress>(p =>
+                // Create temporary directories with only success response files to avoid
+                // domain-model comparison attempting to deserialize non-success responses
+                var tempDirA = Path.Combine(Path.GetTempPath(), $"success_responses_a_{jobId}");
+                var tempDirB = Path.Combine(Path.GetTempPath(), $"success_responses_b_{jobId}");
+
+                try
                 {
-                    job.StatusMessage = p.Status;
-                    progress?.Report((p.Completed, p.Total, p.Status));
-                    // Calculate percent: 75% + (20% * completed/total) — reserve last 5% for raw text comparison
-                    var percent = 75 + (int)(20.0 * p.Completed / Math.Max(1, p.Total));
-                    _ = PublishProgressAsync(jobId, ComparisonPhase.Comparing, Math.Min(percent, 95), p.Status, p.Completed, p.Total);
-                });
+                    Directory.CreateDirectory(tempDirA);
+                    Directory.CreateDirectory(tempDirB);
 
-                using var scope = _scopeFactory.CreateScope();
+                    // Create hard links for success response files only
+                    foreach (var successPair in successPairs)
+                    {
+                        var exec = successPair.Execution;
+                        if (exec.ResponsePathA != null && exec.ResponsePathB != null &&
+                            File.Exists(exec.ResponsePathA) && File.Exists(exec.ResponsePathB))
+                        {
+                            var relativePath = exec.Request.RelativePath;
+                            // Sanitize path: remove path traversal attempts and normalize separators
+                            var sanitizedPath = relativePath
+                                .Replace("..", "_")
+                                .Replace('/', Path.DirectorySeparatorChar)
+                                .Replace('\\', Path.DirectorySeparatorChar)
+                                .TrimStart(Path.DirectorySeparatorChar);
+                            
+                            var targetPathA = Path.Combine(tempDirA, sanitizedPath);
+                            var targetPathB = Path.Combine(tempDirB, sanitizedPath);
 
-                // Apply per-job configuration settings
-                var configService = scope.ServiceProvider.GetRequiredService<IComparisonConfigurationService>();
-                var xmlDeserializationService = scope.ServiceProvider.GetRequiredService<IXmlDeserializationService>();
+                            // Ensure subdirectories exist
+                            Directory.CreateDirectory(Path.GetDirectoryName(targetPathA)!);
+                            Directory.CreateDirectory(Path.GetDirectoryName(targetPathB)!);
 
-                ApplyJobConfiguration(job, configService, xmlDeserializationService);
+                            // Copy files to temp directories
+                            File.Copy(exec.ResponsePathA, targetPathA, overwrite: true);
+                            File.Copy(exec.ResponsePathB, targetPathB, overwrite: true);
+                        }
+                    }
 
-                var comparisonService = scope.ServiceProvider.GetRequiredService<DirectoryComparisonService>();
+                    var comparisonProgress = new Progress<ComparisonProgress>(p =>
+                    {
+                        job.StatusMessage = p.Status;
+                        progress?.Report((p.Completed, p.Total, p.Status));
+                        // Calculate percent: 75% + (20% * completed/total) — reserve last 5% for raw text comparison
+                        var percent = 75 + (int)(20.0 * p.Completed / Math.Max(1, p.Total));
+                        _ = PublishProgressAsync(jobId, ComparisonPhase.Comparing, Math.Min(percent, 95), p.Status, p.Completed, p.Total);
+                    });
 
-                comparisonResult = await comparisonService.CompareDirectoriesAsync(
-                    job.ResponsePathA!,
-                    job.ResponsePathB!,
-                    job.ModelName,
-                    includeAllFiles: true,
-                    enablePatternAnalysis: true,
-                    enableSemanticAnalysis: job.EnableSemanticAnalysis,
-                    progress: comparisonProgress,
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
+                    using var scope = _scopeFactory.CreateScope();
+
+                    // Apply per-job configuration settings
+                    var configService = scope.ServiceProvider.GetRequiredService<IComparisonConfigurationService>();
+                    var xmlDeserializationService = scope.ServiceProvider.GetRequiredService<IXmlDeserializationService>();
+
+                    ApplyJobConfiguration(job, configService, xmlDeserializationService);
+
+                    var comparisonService = scope.ServiceProvider.GetRequiredService<DirectoryComparisonService>();
+
+                    comparisonResult = await comparisonService.CompareDirectoriesAsync(
+                        tempDirA,
+                        tempDirB,
+                        job.ModelName,
+                        includeAllFiles: true,
+                        enablePatternAnalysis: true,
+                        enableSemanticAnalysis: job.EnableSemanticAnalysis,
+                        progress: comparisonProgress,
+                        cancellationToken: cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    // Clean up temporary directories
+                    try
+                    {
+                        if (Directory.Exists(tempDirA))
+                            Directory.Delete(tempDirA, recursive: true);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to delete temporary directory {TempDir}", tempDirA);
+                    }
+
+                    try
+                    {
+                        if (Directory.Exists(tempDirB))
+                            Directory.Delete(tempDirB, recursive: true);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to delete temporary directory {TempDir}", tempDirB);
+                    }
+                }
             }
             else
             {
@@ -291,8 +353,8 @@ public class RequestComparisonJobService
                 {
                     comparisonResult.FilePairResults.Add(new FilePairComparisonResult
                     {
-                        File1Name = failed.Execution.Request.RelativePath,
-                        File2Name = failed.Execution.Request.RelativePath,
+                        File1Name = Path.GetFileName(failed.Execution.Request.RelativePath),
+                        File2Name = Path.GetFileName(failed.Execution.Request.RelativePath),
                         ErrorMessage = failed.Execution.ErrorMessage ?? "Request execution failed",
                         ErrorType = "HttpRequestException",
                         PairOutcome = RequestPairOutcome.OneOrBothFailed,

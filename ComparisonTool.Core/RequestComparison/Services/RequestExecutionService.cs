@@ -191,10 +191,10 @@ public class RequestExecutionService : IDisposable
         }
 
         using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken).ConfigureAwait(false);
-        var content2 = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+        var content = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
         var responseContentType = response.Content.Headers.ContentType?.MediaType;
 
-        return (response.StatusCode, content2, responseContentType);
+        return (response.StatusCode, content, responseContentType);
     }
 
     private async Task SaveResponseAsync(byte[] content, string path, CancellationToken cancellationToken)
