@@ -5,7 +5,6 @@ using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.RequestComparison.Models;
 using ComparisonTool.Core.Serialization;
-using ComparisonTool.Web.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -20,19 +19,73 @@ public class RequestComparisonJobService
     private readonly RequestExecutionService _executionService;
     private readonly RequestFileParserService _parserService;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IComparisonProgressPublisher? _progressPublisher;
     private readonly ConcurrentDictionary<string, RequestComparisonJob> _jobs = new();
     private readonly ConcurrentDictionary<string, MultiFolderComparisonResult> _results = new();
+    private readonly ConcurrentDictionary<string, DateTimeOffset> _lastProgressUpdate = new();
+    private static readonly TimeSpan ProgressThrottleInterval = TimeSpan.FromMilliseconds(250);
 
     public RequestComparisonJobService(
         ILogger<RequestComparisonJobService> logger,
         RequestExecutionService executionService,
         RequestFileParserService parserService,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory,
+        IComparisonProgressPublisher? progressPublisher = null)
     {
         _logger = logger;
         _executionService = executionService;
         _parserService = parserService;
         _scopeFactory = scopeFactory;
+        _progressPublisher = progressPublisher;
+    }
+
+    /// <summary>
+    /// Publishes a progress update with optional throttling for high-frequency phases.
+    /// </summary>
+    private async Task PublishProgressAsync(
+        string jobId,
+        ComparisonPhase phase,
+        int percent,
+        string message,
+        int? completed = null,
+        int? total = null,
+        string? error = null,
+        bool forcePublish = false)
+    {
+        if (_progressPublisher == null) return;
+
+        // Throttle updates during high-frequency phases (Executing)
+        if (!forcePublish && phase == ComparisonPhase.Executing)
+        {
+            var now = DateTimeOffset.UtcNow;
+            if (_lastProgressUpdate.TryGetValue(jobId, out var lastUpdate) &&
+                now - lastUpdate < ProgressThrottleInterval)
+            {
+                return;
+            }
+            _lastProgressUpdate[jobId] = now;
+        }
+
+        var update = new ComparisonProgressUpdate
+        {
+            JobId = jobId,
+            Phase = phase,
+            PercentComplete = percent,
+            Message = message,
+            Timestamp = DateTimeOffset.UtcNow,
+            CompletedItems = completed,
+            TotalItems = total,
+            ErrorMessage = error
+        };
+
+        try
+        {
+            await _progressPublisher.PublishAsync(update);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to publish progress update for job {JobId}", jobId);
+        }
     }
 
     /// <summary>
@@ -95,10 +148,11 @@ public class RequestComparisonJobService
 
         try
         {
-            // Phase 1: Parse request files
+            // Phase 1: Parse request files (0-5%)
             job.Status = RequestComparisonStatus.Uploading;
             job.StatusMessage = "Parsing request files...";
             progress?.Report((0, 0, "Parsing request files..."));
+            await PublishProgressAsync(jobId, ComparisonPhase.Parsing, 0, "Parsing request files...", forcePublish: true);
 
             var requests = await _parserService.ParseRequestBatchAsync(
                 job.RequestBatchId,
@@ -106,16 +160,21 @@ public class RequestComparisonJobService
 
             job.TotalRequests = requests.Count;
             _logger.LogInformation("Parsed {Count} request files for job {JobId}", requests.Count, jobId);
+            await PublishProgressAsync(jobId, ComparisonPhase.Parsing, 5, $"Parsed {requests.Count} request files", requests.Count, requests.Count, forcePublish: true);
 
-            // Phase 2: Execute requests
+            // Phase 2: Execute requests (5-75%)
             job.Status = RequestComparisonStatus.Executing;
             job.StatusMessage = "Executing requests...";
+            await PublishProgressAsync(jobId, ComparisonPhase.Executing, 5, "Starting request execution...", 0, requests.Count, forcePublish: true);
 
             var executionProgress = new Progress<(int Completed, int Total, string Message)>(p =>
             {
                 job.CompletedRequests = p.Completed;
                 job.StatusMessage = p.Message;
                 progress?.Report(p);
+                // Calculate percent: 5% + (70% * completed/total)
+                var percent = 5 + (int)(70.0 * p.Completed / Math.Max(1, p.Total));
+                _ = PublishProgressAsync(jobId, ComparisonPhase.Executing, percent, p.Message, p.Completed, p.Total);
             });
 
             var executionResults = await _executionService.ExecuteRequestsAsync(
@@ -130,16 +189,21 @@ public class RequestComparisonJobService
                 successCount,
                 executionResults.Count,
                 jobId);
+            await PublishProgressAsync(jobId, ComparisonPhase.Executing, 75, $"Executed {successCount}/{executionResults.Count} requests successfully", executionResults.Count, executionResults.Count, forcePublish: true);
 
-            // Phase 3: Compare responses
+            // Phase 3: Compare responses (75-100%)
             job.Status = RequestComparisonStatus.Comparing;
             job.StatusMessage = "Comparing responses...";
             progress?.Report((job.TotalRequests, job.TotalRequests, "Comparing responses..."));
+            await PublishProgressAsync(jobId, ComparisonPhase.Comparing, 75, "Starting response comparison...", forcePublish: true);
 
             var comparisonProgress = new Progress<ComparisonProgress>(p =>
             {
                 job.StatusMessage = p.Status;
                 progress?.Report((p.Completed, p.Total, p.Status));
+                // Calculate percent: 75% + (25% * completed/total)
+                var percent = 75 + (int)(25.0 * p.Completed / Math.Max(1, p.Total));
+                _ = PublishProgressAsync(jobId, ComparisonPhase.Comparing, Math.Min(percent, 99), p.Status, p.Completed, p.Total);
             });
 
             using var scope = _scopeFactory.CreateScope();
@@ -178,14 +242,18 @@ public class RequestComparisonJobService
             job.Status = RequestComparisonStatus.Completed;
             job.StatusMessage = "Comparison completed";
             progress?.Report((job.TotalRequests, job.TotalRequests, "Comparison completed"));
+            await PublishProgressAsync(jobId, ComparisonPhase.Completed, 100, "Comparison completed successfully", job.TotalRequests, job.TotalRequests, forcePublish: true);
 
             _logger.LogInformation("Completed request comparison job {JobId}", jobId);
+            _lastProgressUpdate.TryRemove(jobId, out _);
         }
         catch (OperationCanceledException)
         {
             job.Status = RequestComparisonStatus.Cancelled;
             job.StatusMessage = "Job was cancelled";
+            await PublishProgressAsync(jobId, ComparisonPhase.Cancelled, job.CompletedRequests * 100 / Math.Max(1, job.TotalRequests), "Job was cancelled", forcePublish: true);
             _logger.LogWarning("Request comparison job {JobId} was cancelled", jobId);
+            _lastProgressUpdate.TryRemove(jobId, out _);
             throw;
         }
         catch (Exception ex)
@@ -193,7 +261,9 @@ public class RequestComparisonJobService
             job.Status = RequestComparisonStatus.Failed;
             job.ErrorMessage = ex.Message;
             job.StatusMessage = $"Failed: {ex.Message}";
+            await PublishProgressAsync(jobId, ComparisonPhase.Failed, job.CompletedRequests * 100 / Math.Max(1, job.TotalRequests), $"Failed: {ex.Message}", error: ex.Message, forcePublish: true);
             _logger.LogError(ex, "Request comparison job {JobId} failed", jobId);
+            _lastProgressUpdate.TryRemove(jobId, out _);
             throw;
         }
     }

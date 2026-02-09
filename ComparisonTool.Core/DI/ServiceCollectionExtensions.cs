@@ -4,7 +4,6 @@ using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Models;
 using ComparisonTool.Core.Serialization;
 using ComparisonTool.Core.Utilities;
-using ComparisonTool.Web.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;

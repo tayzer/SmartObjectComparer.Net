@@ -178,7 +178,9 @@ public static class RequestComparisonApi
 
     private static async Task<IResult> CreateComparisonJob(
         [FromBody] CreateRequestComparisonJobRequest request,
-        [FromServices] RequestComparisonJobService jobService)
+        [FromServices] RequestComparisonJobService jobService,
+        [FromServices] IComparisonProgressPublisher progressPublisher,
+        [FromServices] ILoggerFactory loggerFactory)
     {
         // Validate request
         if (string.IsNullOrEmpty(request.RequestBatchId))
@@ -197,6 +199,24 @@ public static class RequestComparisonApi
         }
 
         var job = jobService.CreateJob(request);
+
+        // Publish initial progress event (best-effort, don't block job creation)
+        try
+        {
+            await progressPublisher.PublishAsync(new ComparisonProgressUpdate
+            {
+                JobId = job.JobId,
+                Phase = ComparisonPhase.Initializing,
+                PercentComplete = 0,
+                Message = "Job created, initializing...",
+                Timestamp = DateTimeOffset.UtcNow
+            });
+        }
+        catch (Exception ex)
+        {
+            var logger = loggerFactory.CreateLogger("RequestComparisonApi");
+            logger.LogWarning(ex, "Failed to publish initial progress for job {JobId}", job.JobId);
+        }
 
         // Start job execution in background
         var cts = new CancellationTokenSource();

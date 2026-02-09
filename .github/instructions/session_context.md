@@ -1,33 +1,42 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2026-02-04T00:45:00Z
+lastUpdated: 2026-02-06T00:00:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-Hide XmlIgnore auto-rules from UI while preserving comparison behavior
+Debug Request Comparison tab click not responding - COMPLETED
 
 ## Todo List Status
 ```markdown
-- [x] 🧩 Add user-visible ignore rules API
-- [x] 🧭 Update UI to use user-visible rules
-- [x] 🧪 Update/extend tests for visibility split
+- [x] 🧭 Locate Request Comparison tab wiring in Home.razor
+- [x] 🔍 Inspect RequestComparisonPanel for blocking UI/overlay or lifecycle issues
+- [x] 🛠️ Implement fix and verify tab click works
+- [x] ✅ Build and sanity-check UI
 ```
 
 ## Recent File Changes
-- ComparisonTool.Core/Comparison/Configuration/IComparisonConfigurationService.cs: Added GetUserIgnoreRules for UI-visible rules
-- ComparisonTool.Core/Comparison/Configuration/ComparisonConfigurationService.cs: Implemented GetUserIgnoreRules excluding XmlIgnore rules
-- ComparisonTool.Web/Components/Pages/Home.razor: Initialize UI ignore rules from GetUserIgnoreRules
-- ComparisonTool.Tests/Unit/Core/ComparisonConfigurationServiceTests.cs: Added tests for user-visible rule filtering
+- `ComparisonTool.Web/Components/Pages/Home.razor` (Line ~33): Added `@bind-ActivePanelIndex` and `activeTabIndex` to preserve tab selection on re-render
 
 ## Key Technical Decisions
-- None
+- Decision: Use SignalR for real-time progress updates instead of polling
+- Rationale: Already configured in Program.cs, native Blazor integration, lower latency than polling
+- Date: 2026-02-04
+
+- Decision: Use 250ms throttling for progress updates during Executing phase
+- Rationale: Prevents UI flooding when many API calls are made in quick succession
+- Date: 2026-02-05
+
+- Decision: Group-based SignalR subscriptions by JobId
+- Rationale: Allows multiple clients to subscribe to the same job and efficiently target updates
+- Date: 2026-02-05
 
 ## External Resources Referenced
-- https://learn.microsoft.com/en-us/dotnet/api/system.xml.serialization.xmlignoreattribute?view=net-8.0: XmlIgnoreAttribute behavior and usage
-- https://learn.microsoft.com/en-us/dotnet/standard/serialization/attributes-that-control-xml-serialization: List of XML serialization attributes
+- [MudBlazor Tabs](https://mudblazor.com/components/tabs): Reviewed usage patterns for tab selection and active index binding
+- [MudBlazor Tabs (Jina AI mirror)](https://r.jina.ai/https://mudblazor.com/components/tabs): Used for readable page content
+- [Google Search (blocked)](https://www.google.com/search?q=MudBlazor+MudTabs+click+not+working+Blazor+Server): JS required; used direct docs instead
 
 ## Blockers & Issues
 - None
@@ -36,13 +45,53 @@ Hide XmlIgnore auto-rules from UI while preserving comparison behavior
 - None
 
 ## Environment Notes
-- .NET 8.0
+- SignalR already configured in Program.cs with max message size and timeouts
+- Added Microsoft.AspNetCore.SignalR.Client v8.0.23 package for Blazor client
 
 ## Next Session Priority
 No active tasks
 
 ## Session Notes
-- UI now excludes XmlIgnore auto rules from displayed ignore rules while keeping comparison behavior
+Created a detailed implementation plan for adding real-time progress tracking to the Request Comparison feature. The plan includes:
+- 11 tasks across 3 phases (Backend infrastructure, API wiring, Frontend integration)
+- 10 files to create or modify
+- Estimated 6-8 hours of development
+- Risk mitigations for connection drops, event flooding, and memory leaks
+  - Added field references: `requestComparisonPanel`, `requestPropertySelector`, `requestTreePropertySelector`
+  - Added handler methods: `OpenRequestPropertySelector()`, `OpenRequestTreePropertySelector()`, `AddRequestIgnoreRule()`, `AddRequestIgnoreRulesBatch()`, `RemoveRequestIgnoreRule()`
+
+## Key Technical Decisions
+- Decision: Reuse existing HierarchicalPropertySelector and ObjectTreePropertySelector components for Request Comparison
+- Rationale: Maintains consistency with File/Folder Comparison tab; leverages existing tested functionality
+- Date: 2025-02-05
+
+- Decision: Made RequestComparisonPanel.IgnoreRules public with { get; set; }
+- Rationale: Allows Home.razor to pass the list to the selector components while the panel manages the state
+- Date: 2025-02-05
+
+## External Resources Referenced
+- MudBlazor documentation (attempted but blocked by JS requirements)
+- Existing codebase patterns for Tree Navigator implementation
+
+## Blockers & Issues
+- **[RESOLVED]** Build error RZ10010: Conflicting `OnClick` and `@onclick:stopPropagation` on MudButton - Fixed by removing stopPropagation directive
+- **[RESOLVED]** Google search blocked by JavaScript requirement - Used direct analysis of existing code patterns instead
+
+## Failed Approaches
+- None
+
+## Environment Notes
+- .NET 8.0, Blazor Server with MudBlazor
+- Build succeeded with 127 pre-existing warnings (not introduced by these changes)
+
+## Next Session Priority
+No active tasks - all requested improvements completed
+
+## Session Notes
+Implementation complete. The Request Comparison (A/B) tab now:
+1. Uses Tree Navigator and Simple Property Selector instead of manual ignore rule inputs
+2. Has properly styled "Comparison Overview" section using MudBlazor components (MudPaper, MudAlert, MudGrid, MudProgressLinear)
+3. Has properly styled "Semantic Difference Groups" section using MudBlazor components (MudPaper, MudSimpleTable, MudButton, MudAlert, MudProgressLinear)
 
 ---
 # Previous Session Archive
