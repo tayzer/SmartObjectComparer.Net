@@ -18,6 +18,7 @@ public class RequestComparisonJobService
     private readonly ILogger<RequestComparisonJobService> _logger;
     private readonly RequestExecutionService _executionService;
     private readonly RequestFileParserService _parserService;
+    private readonly RawTextComparisonService _rawTextComparisonService;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IComparisonProgressPublisher? _progressPublisher;
     private readonly ConcurrentDictionary<string, RequestComparisonJob> _jobs = new();
@@ -29,12 +30,14 @@ public class RequestComparisonJobService
         ILogger<RequestComparisonJobService> logger,
         RequestExecutionService executionService,
         RequestFileParserService parserService,
+        RawTextComparisonService rawTextComparisonService,
         IServiceScopeFactory scopeFactory,
         IComparisonProgressPublisher? progressPublisher = null)
     {
         _logger = logger;
         _executionService = executionService;
         _parserService = parserService;
+        _rawTextComparisonService = rawTextComparisonService;
         _scopeFactory = scopeFactory;
         _progressPublisher = progressPublisher;
     }
@@ -191,46 +194,210 @@ public class RequestComparisonJobService
                 jobId);
             await PublishProgressAsync(jobId, ComparisonPhase.Executing, 75, $"Executed {successCount}/{executionResults.Count} requests successfully", executionResults.Count, executionResults.Count, forcePublish: true);
 
+            // Phase 2.5: Classify execution results by HTTP outcome
+            var classified = ExecutionResultClassifier.ClassifyAll(executionResults);
+            var outcomeSummary = ExecutionResultClassifier.Summarize(classified);
+
+            var successPairs = classified.Where(c => c.Outcome == RequestPairOutcome.BothSuccess).ToList();
+            var nonSuccessPairs = classified.Where(c =>
+                c.Outcome == RequestPairOutcome.StatusCodeMismatch ||
+                c.Outcome == RequestPairOutcome.BothNonSuccess).ToList();
+            var failedPairs = classified.Where(c => c.Outcome == RequestPairOutcome.OneOrBothFailed).ToList();
+
+            _logger.LogInformation(
+                "Job {JobId} classification: BothSuccess={BothSuccess}, StatusCodeMismatch={StatusCodeMismatch}, BothNonSuccess={BothNonSuccess}, OneOrBothFailed={Failed}",
+                jobId,
+                outcomeSummary.BothSuccess,
+                outcomeSummary.StatusCodeMismatch,
+                outcomeSummary.BothNonSuccess,
+                outcomeSummary.OneOrBothFailed);
+
             // Phase 3: Compare responses (75-100%)
             job.Status = RequestComparisonStatus.Comparing;
             job.StatusMessage = "Comparing responses...";
             progress?.Report((job.TotalRequests, job.TotalRequests, "Comparing responses..."));
             await PublishProgressAsync(jobId, ComparisonPhase.Comparing, 75, "Starting response comparison...", forcePublish: true);
 
-            var comparisonProgress = new Progress<ComparisonProgress>(p =>
+            MultiFolderComparisonResult comparisonResult;
+
+            if (successPairs.Count > 0)
             {
-                job.StatusMessage = p.Status;
-                progress?.Report((p.Completed, p.Total, p.Status));
-                // Calculate percent: 75% + (25% * completed/total)
-                var percent = 75 + (int)(25.0 * p.Completed / Math.Max(1, p.Total));
-                _ = PublishProgressAsync(jobId, ComparisonPhase.Comparing, Math.Min(percent, 99), p.Status, p.Completed, p.Total);
-            });
+                // Phase 3a: Domain-model comparison for BothSuccess pairs (existing pipeline)
+                // Create temporary directories with only success response files to avoid
+                // domain-model comparison attempting to deserialize non-success responses
+                var tempDirA = Path.Combine(Path.GetTempPath(), $"success_responses_a_{jobId}");
+                var tempDirB = Path.Combine(Path.GetTempPath(), $"success_responses_b_{jobId}");
 
-            using var scope = _scopeFactory.CreateScope();
-            
-            // Apply per-job configuration settings
-            var configService = scope.ServiceProvider.GetRequiredService<IComparisonConfigurationService>();
+                try
+                {
+                    Directory.CreateDirectory(tempDirA);
+                    Directory.CreateDirectory(tempDirB);
 
-            // todo: hardcoded for xml?!?!?!?
+                    // Copy success response files to temp directories in parallel
+                    var copyTasks = successPairs.Select(async successPair =>
+                    {
+                        var exec = successPair.Execution;
+                        if (exec.ResponsePathA != null && exec.ResponsePathB != null &&
+                            File.Exists(exec.ResponsePathA) && File.Exists(exec.ResponsePathB))
+                        {
+                            var relativePath = exec.Request.RelativePath;
+                            // Sanitize path: remove path traversal attempts and normalize separators
+                            var sanitizedPath = relativePath
+                                .Replace("..", "_")
+                                .Replace('/', Path.DirectorySeparatorChar)
+                                .Replace('\\', Path.DirectorySeparatorChar)
+                                .TrimStart(Path.DirectorySeparatorChar);
 
-            var xmlDeserializationService = scope.ServiceProvider.GetRequiredService<IXmlDeserializationService>();
-            
-            ApplyJobConfiguration(job, configService, xmlDeserializationService);
-            
-            var comparisonService = scope.ServiceProvider.GetRequiredService<DirectoryComparisonService>();
+                            var targetPathA = Path.Combine(tempDirA, sanitizedPath);
+                            var targetPathB = Path.Combine(tempDirB, sanitizedPath);
 
-            var comparisonResult = await comparisonService.CompareDirectoriesAsync(
-                job.ResponsePathA!,
-                job.ResponsePathB!,
-                job.ModelName,
-                includeAllFiles: true,
-                enablePatternAnalysis: true,
-                enableSemanticAnalysis: job.EnableSemanticAnalysis,
-                progress: comparisonProgress,
-                cancellationToken: cancellationToken).ConfigureAwait(false);
+                            // Ensure subdirectories exist
+                            Directory.CreateDirectory(Path.GetDirectoryName(targetPathA)!);
+                            Directory.CreateDirectory(Path.GetDirectoryName(targetPathB)!);
+
+                            // Copy files asynchronously
+                            await Task.WhenAll(
+                                CopyFileAsync(exec.ResponsePathA, targetPathA, cancellationToken),
+                                CopyFileAsync(exec.ResponsePathB, targetPathB, cancellationToken)).ConfigureAwait(false);
+                        }
+                    }).ToList();
+
+                    await Task.WhenAll(copyTasks).ConfigureAwait(false);
+
+                    var comparisonProgress = new Progress<ComparisonProgress>(p =>
+                    {
+                        job.StatusMessage = p.Status;
+                        progress?.Report((p.Completed, p.Total, p.Status));
+                        // Calculate percent: 75% + (20% * completed/total) — reserve last 5% for raw text comparison
+                        var percent = 75 + (int)(20.0 * p.Completed / Math.Max(1, p.Total));
+                        _ = PublishProgressAsync(jobId, ComparisonPhase.Comparing, Math.Min(percent, 95), p.Status, p.Completed, p.Total);
+                    });
+
+                    using var scope = _scopeFactory.CreateScope();
+
+                    // Apply per-job configuration settings
+                    var configService = scope.ServiceProvider.GetRequiredService<IComparisonConfigurationService>();
+                    var xmlDeserializationService = scope.ServiceProvider.GetRequiredService<IXmlDeserializationService>();
+
+                    ApplyJobConfiguration(job, configService, xmlDeserializationService);
+
+                    var comparisonService = scope.ServiceProvider.GetRequiredService<DirectoryComparisonService>();
+
+                    comparisonResult = await comparisonService.CompareDirectoriesAsync(
+                        tempDirA,
+                        tempDirB,
+                        job.ModelName,
+                        includeAllFiles: true,
+                        enablePatternAnalysis: true,
+                        enableSemanticAnalysis: job.EnableSemanticAnalysis,
+                        progress: comparisonProgress,
+                        cancellationToken: cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    // Clean up temporary directories
+                    try
+                    {
+                        if (Directory.Exists(tempDirA))
+                            Directory.Delete(tempDirA, recursive: true);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to delete temporary directory {TempDir}", tempDirA);
+                    }
+
+                    try
+                    {
+                        if (Directory.Exists(tempDirB))
+                            Directory.Delete(tempDirB, recursive: true);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to delete temporary directory {TempDir}", tempDirB);
+                    }
+                }
+            }
+            else
+            {
+                // No success pairs — create an empty result container
+                comparisonResult = new MultiFolderComparisonResult
+                {
+                    TotalPairsCompared = 0,
+                    AllEqual = false,
+                    FilePairResults = new List<FilePairComparisonResult>(),
+                    Metadata = new Dictionary<string, object>(StringComparer.Ordinal),
+                };
+            }
+
+            // Phase 3b: Raw text comparison for StatusCodeMismatch + BothNonSuccess pairs
+            if (nonSuccessPairs.Count > 0)
+            {
+                await PublishProgressAsync(jobId, ComparisonPhase.Comparing, 95,
+                    $"Comparing {nonSuccessPairs.Count} non-success response pairs as raw text...", forcePublish: true);
+
+                var rawTextResults = await _rawTextComparisonService.CompareAllRawAsync(
+                    nonSuccessPairs,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+
+                comparisonResult.FilePairResults.AddRange(rawTextResults);
+                comparisonResult.AllEqual = false; // Non-success pairs always count as 'not all equal'
+                comparisonResult.TotalPairsCompared += rawTextResults.Count;
+
+                _logger.LogInformation(
+                    "Raw text comparison completed for {Count} non-success pairs in job {JobId}",
+                    rawTextResults.Count,
+                    jobId);
+            }
+
+            // Phase 3c: Add error records for OneOrBothFailed pairs
+            if (failedPairs.Count > 0)
+            {
+                foreach (var failed in failedPairs)
+                {
+                    comparisonResult.FilePairResults.Add(new FilePairComparisonResult
+                    {
+                        File1Name = Path.GetFileName(failed.Execution.Request.RelativePath),
+                        File2Name = Path.GetFileName(failed.Execution.Request.RelativePath),
+                        ErrorMessage = failed.Execution.ErrorMessage ?? "Request execution failed",
+                        ErrorType = "HttpRequestException",
+                        PairOutcome = RequestPairOutcome.OneOrBothFailed,
+                    });
+                }
+
+                comparisonResult.AllEqual = false;
+                comparisonResult.TotalPairsCompared += failedPairs.Count;
+            }
+
+            // Stamp BothSuccess pair outcomes onto their FilePairComparisonResults
+            // (non-success pairs already have PairOutcome set by the raw text service)
+            foreach (var pairResult in comparisonResult.FilePairResults)
+            {
+                if (pairResult.PairOutcome == null)
+                {
+                    // This is a domain-model comparison result — find its execution result
+                    var execResult = successPairs.FirstOrDefault(c =>
+                        string.Equals(
+                            Path.GetFileName(c.Execution.Request.RelativePath),
+                            pairResult.File1Name,
+                            StringComparison.OrdinalIgnoreCase));
+
+                    if (execResult != null)
+                    {
+                        pairResult.PairOutcome = RequestPairOutcome.BothSuccess;
+                        pairResult.HttpStatusCodeA = execResult.Execution.StatusCodeA;
+                        pairResult.HttpStatusCodeB = execResult.Execution.StatusCodeB;
+                    }
+                }
+            }
+
+            // Sort all results by filename for consistent ordering
+            comparisonResult.FilePairResults = comparisonResult.FilePairResults
+                .OrderBy(r => r.File1Name, StringComparer.Ordinal)
+                .ToList();
 
             // Store execution metadata in result
             comparisonResult.Metadata["RequestComparisonJobId"] = jobId;
+            comparisonResult.Metadata["ExecutionOutcomeSummary"] = outcomeSummary;
             comparisonResult.Metadata["ExecutionResults"] = executionResults
                 .Where(r => !r.Success)
                 .Select(r => new { r.Request.RelativePath, r.ErrorMessage })
@@ -361,5 +528,27 @@ public class RequestComparisonJobService
 
         // Apply all configured settings
         configService.ApplyConfiguredSettings();
+    }
+
+    private static async Task CopyFileAsync(string sourcePath, string destinationPath, CancellationToken cancellationToken)
+    {
+        const int bufferSize = 81920; // 80KB buffer
+        await using var sourceStream = new FileStream(
+            sourcePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        await using var destinationStream = new FileStream(
+            destinationPath,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.None,
+            bufferSize,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        await sourceStream.CopyToAsync(destinationStream, bufferSize, cancellationToken).ConfigureAwait(false);
     }
 }

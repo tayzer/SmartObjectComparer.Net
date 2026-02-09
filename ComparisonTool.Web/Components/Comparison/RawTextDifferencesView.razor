@@ -1,0 +1,224 @@
+@namespace ComparisonTool.Web.Components.Comparison
+@using ComparisonTool.Core.Comparison.Results
+@using ComparisonTool.Core.RequestComparison.Models
+@using MudBlazor
+
+<style>
+    .raw-diff-line-a {
+        background-color: rgba(211, 47, 47, 0.08) !important;
+        border-left: 3px solid #d32f2f !important;
+    }
+
+    .raw-diff-line-b {
+        background-color: rgba(46, 125, 50, 0.08) !important;
+        border-left: 3px solid #2e7d32 !important;
+    }
+
+    .raw-diff-line-modified {
+        background-color: rgba(245, 124, 0, 0.08) !important;
+        border-left: 3px solid #f57c00 !important;
+    }
+
+    .raw-diff-line-status {
+        background-color: rgba(156, 39, 176, 0.08) !important;
+        border-left: 3px solid #9c27b0 !important;
+    }
+
+    .raw-diff-text {
+        font-family: 'Consolas', 'Monaco', monospace;
+        font-size: 0.825rem;
+        white-space: pre-wrap;
+        word-break: break-all;
+    }
+</style>
+
+<MudPaper Elevation="2" Class="mt-4" id="request-detailed-differences-section">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pa-3"
+              Style="background: var(--mud-palette-surface);">
+        <MudStack Spacing="0">
+            <MudText Typo="Typo.h6">
+                <MudIcon Icon="@Icons.Material.Filled.Code" Class="mr-2" />
+                Raw Response Comparison
+            </MudText>
+            <MudText Typo="Typo.caption" Color="Color.Default">
+                @SelectedPair.File1Name — Non-success response comparison
+            </MudText>
+        </MudStack>
+        <MudButton Variant="Variant.Outlined"
+                   Color="Color.Primary"
+                   Size="Size.Small"
+                   StartIcon="@Icons.Material.Filled.Download"
+                   OnClick="ExportResults">
+            Export This Result
+        </MudButton>
+    </MudStack>
+    <MudDivider />
+
+    @* HTTP Status Code Banner *@
+    @if (SelectedPair.HttpStatusCodeA.HasValue && SelectedPair.HttpStatusCodeB.HasValue)
+    {
+        <div class="pa-4">
+            <MudAlert Severity="@GetBannerSeverity()" Variant="Variant.Outlined" Class="mb-3">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                    <MudText Typo="Typo.body1"><strong>HTTP Status Codes:</strong></MudText>
+                    <MudChip T="string" Size="Size.Medium"
+                             Color="@GetStatusCodeColor(SelectedPair.HttpStatusCodeA.Value)"
+                             Variant="Variant.Filled">
+                        Endpoint A: @SelectedPair.HttpStatusCodeA
+                    </MudChip>
+                    @if (SelectedPair.HttpStatusCodeA != SelectedPair.HttpStatusCodeB)
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.SyncProblem" Color="Color.Warning" />
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.DragHandle" Color="Color.Default" />
+                    }
+                    <MudChip T="string" Size="Size.Medium"
+                             Color="@GetStatusCodeColor(SelectedPair.HttpStatusCodeB.Value)"
+                             Variant="Variant.Filled">
+                        Endpoint B: @SelectedPair.HttpStatusCodeB
+                    </MudChip>
+                </MudStack>
+            </MudAlert>
+
+            @if (SelectedPair.PairOutcome == RequestPairOutcome.StatusCodeMismatch)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true" Class="mb-3">
+                    <strong>Status code mismatch detected.</strong> One endpoint returned a success response while the other did not.
+                    Response bodies are compared as raw text below.
+                </MudAlert>
+            }
+            else if (SelectedPair.PairOutcome == RequestPairOutcome.BothNonSuccess)
+            {
+                <MudAlert Severity="Severity.Error" Variant="Variant.Text" Dense="true" Class="mb-3">
+                    <strong>Both endpoints returned non-success responses.</strong> Neither endpoint processed the request successfully.
+                    Error response bodies are compared as raw text below.
+                </MudAlert>
+            }
+        </div>
+    }
+
+    @* Raw Text Differences *@
+    @if (SelectedPair.RawTextDifferences != null && SelectedPair.RawTextDifferences.Count > 0)
+    {
+        <div class="pa-4">
+            <MudText Typo="Typo.subtitle1" Class="mb-3">
+                <MudIcon Icon="@Icons.Material.Filled.Difference" Class="mr-1" Size="Size.Small" />
+                @SelectedPair.RawTextDifferences.Count Differences Found
+            </MudText>
+
+            <MudSimpleTable Dense="true" Hover="true" Striped="false" Style="overflow-x: auto;">
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">Type</th>
+                        <th style="width: 70px;">Line</th>
+                        <th>Endpoint A</th>
+                        <th>Endpoint B</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var diff in SelectedPair.RawTextDifferences)
+                    {
+                        <tr class="@GetDiffRowClass(diff)">
+                            <td>
+                                @switch (diff.Type)
+                                {
+                                    case RawTextDifferenceType.StatusCodeDifference:
+                                        <MudIcon Icon="@Icons.Material.Filled.Http" Size="Size.Small" Color="Color.Secondary" />
+                                        break;
+                                    case RawTextDifferenceType.OnlyInA:
+                                        <MudIcon Icon="@Icons.Material.Filled.RemoveCircleOutline" Size="Size.Small" Color="Color.Error" />
+                                        break;
+                                    case RawTextDifferenceType.OnlyInB:
+                                        <MudIcon Icon="@Icons.Material.Filled.AddCircleOutline" Size="Size.Small" Color="Color.Success" />
+                                        break;
+                                    case RawTextDifferenceType.Modified:
+                                        <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Warning" />
+                                        break;
+                                }
+                            </td>
+                            <td>
+                                @if (diff.LineNumberA.HasValue && diff.LineNumberB.HasValue)
+                                {
+                                    <span>@diff.LineNumberA / @diff.LineNumberB</span>
+                                }
+                                else if (diff.LineNumberA.HasValue)
+                                {
+                                    <span>@diff.LineNumberA / —</span>
+                                }
+                                else if (diff.LineNumberB.HasValue)
+                                {
+                                    <span>— / @diff.LineNumberB</span>
+                                }
+                            </td>
+                            <td>
+                                <span class="raw-diff-text">@(diff.TextA ?? "—")</span>
+                            </td>
+                            <td>
+                                <span class="raw-diff-text">@(diff.TextB ?? "—")</span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </div>
+    }
+    else if (SelectedPair.RawTextDifferences != null && SelectedPair.RawTextDifferences.Count == 0)
+    {
+        <div class="pa-4">
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                Response bodies are identical. The difference is only in HTTP status codes.
+            </MudAlert>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(SelectedPair.ErrorMessage))
+    {
+        <div class="pa-4">
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                @SelectedPair.ErrorMessage
+            </MudAlert>
+        </div>
+    }
+</MudPaper>
+
+@code {
+    [Parameter]
+    public FilePairComparisonResult SelectedPair { get; set; } = null!;
+
+    [Parameter]
+    public EventCallback OnExportResults { get; set; }
+
+    private static Color GetStatusCodeColor(int statusCode) => statusCode switch
+    {
+        >= 200 and < 300 => Color.Success,
+        >= 300 and < 400 => Color.Info,
+        >= 400 and < 500 => Color.Warning,
+        >= 500 => Color.Error,
+        _ => Color.Default,
+    };
+
+    private Severity GetBannerSeverity()
+    {
+        if (SelectedPair.PairOutcome == RequestPairOutcome.StatusCodeMismatch)
+            return Severity.Warning;
+        if (SelectedPair.PairOutcome == RequestPairOutcome.BothNonSuccess)
+            return Severity.Error;
+        return Severity.Info;
+    }
+
+    private static string GetDiffRowClass(RawTextDifference diff) => diff.Type switch
+    {
+        RawTextDifferenceType.StatusCodeDifference => "raw-diff-line-status",
+        RawTextDifferenceType.OnlyInA => "raw-diff-line-a",
+        RawTextDifferenceType.OnlyInB => "raw-diff-line-b",
+        RawTextDifferenceType.Modified => "raw-diff-line-modified",
+        _ => "",
+    };
+
+    private async Task ExportResults()
+    {
+        await OnExportResults.InvokeAsync();
+    }
+}

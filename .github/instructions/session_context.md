@@ -1,24 +1,41 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2026-02-06T00:00:00Z
+lastUpdated: 2026-02-09T00:00:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-Debug Request Comparison tab click not responding - COMPLETED
+Implement Non-Success Response Comparison feature - COMPLETED
 
 ## Todo List Status
 ```markdown
-- [x] 🧭 Locate Request Comparison tab wiring in Home.razor
-- [x] 🔍 Inspect RequestComparisonPanel for blocking UI/overlay or lifecycle issues
-- [x] 🛠️ Implement fix and verify tab click works
-- [x] ✅ Build and sanity-check UI
+- [x] Task 1: RequestPairOutcome enum + ClassifiedExecutionResult + ExecutionOutcomeSummary + ExecutionResultClassifier
+- [x] Task 2: Add ContentTypeA/ContentTypeB on RequestExecutionResult
+- [x] Task 3: Capture Content-Type in RequestExecutionService.SendRequestAsync
+- [x] Task 4: Implement RawTextComparisonService (line-by-line diff with truncation)
+- [x] Task 5: Add PairOutcome/HttpStatusCode/RawTextDifferences to FilePairComparisonResult
+- [x] Task 6: Rewrite ExecuteJobAsync with classification-based routing (Phase 2.5/3a/3b/3c)
+- [x] Task 7: Update UI (FileComparisonResults grid, RawTextDifferencesView component, Home.razor outcome banner)
+- [x] Task 8: Write unit tests (45 tests: ExecutionResultClassifierTests + RawTextComparisonServiceTests)
+- [x] Task 9: Build and run all tests (136 total, 0 failures)
 ```
 
 ## Recent File Changes
-- `ComparisonTool.Web/Components/Pages/Home.razor` (Line ~33): Added `@bind-ActivePanelIndex` and `activeTabIndex` to preserve tab selection on re-render
+- `ComparisonTool.Core/RequestComparison/Models/ExecutionResultClassification.cs` (NEW): RequestPairOutcome enum, ClassifiedExecutionResult, ExecutionOutcomeSummary, ExecutionResultClassifier
+- `ComparisonTool.Core/Comparison/Results/RawTextDifference.cs` (NEW): RawTextDifferenceType enum, RawTextDifference class
+- `ComparisonTool.Core/RequestComparison/Services/RawTextComparisonService.cs` (NEW): Raw text body comparison with 5KB truncation, 100 max diff lines
+- `ComparisonTool.Web/Components/Comparison/RawTextDifferencesView.razor` (NEW): Blazor component for displaying raw text diffs
+- `ComparisonTool.Core/RequestComparison/Models/RequestFileInfo.cs`: Added ContentTypeA/ContentTypeB
+- `ComparisonTool.Core/Comparison/Results/FilePairComparisonResult.cs`: Added HttpStatusCodeA/B, PairOutcome, RawTextDifferences
+- `ComparisonTool.Core/RequestComparison/Services/RequestExecutionService.cs`: Return contentType from SendRequestAsync
+- `ComparisonTool.Core/RequestComparison/Services/RequestComparisonJobService.cs`: Classification-based routing in ExecuteJobAsync
+- `ComparisonTool.Web/Program.cs`: Registered RawTextComparisonService
+- `ComparisonTool.Web/Components/Comparison/FileComparisonResults.razor`: Status column, filters, outcome badges
+- `ComparisonTool.Web/Components/Pages/Home.razor`: ExecutionOutcomeSummary banner, RawTextDifferencesView rendering
+- `ComparisonTool.Tests/Unit/RequestComparison/ExecutionResultClassifierTests.cs` (NEW): 22 tests for classifier
+- `ComparisonTool.Tests/Unit/RequestComparison/RawTextComparisonServiceTests.cs` (NEW): 23 tests for raw text comparison
 
 ## Key Technical Decisions
 - Decision: Use SignalR for real-time progress updates instead of polling

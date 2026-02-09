@@ -50,6 +50,7 @@ builder.Services.AddHttpClient("RequestComparison")
 // Add Request Comparison services
 builder.Services.AddSingleton<RequestFileParserService>();
 builder.Services.AddSingleton<RequestExecutionService>();
+builder.Services.AddSingleton<RawTextComparisonService>();
 builder.Services.AddSingleton<IComparisonProgressPublisher, SignalRProgressPublisher>();
 builder.Services.AddSingleton<RequestComparisonJobService>();
 builder.Services.AddScoped<ComparisonProgressService>();
