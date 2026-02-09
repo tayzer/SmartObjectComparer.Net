@@ -78,7 +78,14 @@ public class RequestComparisonJobService
             ErrorMessage = error
         };
 
-        await _progressPublisher.PublishAsync(update);
+        try
+        {
+            await _progressPublisher.PublishAsync(update);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to publish progress update for job {JobId}", jobId);
+        }
     }
 
     /// <summary>

@@ -46,7 +46,7 @@ Debug Request Comparison tab click not responding - COMPLETED
 
 ## Environment Notes
 - SignalR already configured in Program.cs with max message size and timeouts
-- Added Microsoft.AspNetCore.SignalR.Client v10.0.2 package for Blazor client
+- Added Microsoft.AspNetCore.SignalR.Client v8.0.23 package for Blazor client
 
 ## Next Session Priority
 No active tasks

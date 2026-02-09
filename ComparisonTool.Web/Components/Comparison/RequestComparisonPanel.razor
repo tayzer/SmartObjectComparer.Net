@@ -762,6 +762,12 @@
 
     private void HandleProgressUpdate(ComparisonProgressUpdate update)
     {
+        // Ignore updates that don't belong to the current job
+        if (update.JobId != currentJobId)
+        {
+            return;
+        }
+
         InvokeAsync(() =>
         {
             // Only update if progress is moving forward (or it's a phase change)
