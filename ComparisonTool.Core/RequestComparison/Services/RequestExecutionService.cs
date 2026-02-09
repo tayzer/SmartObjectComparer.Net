@@ -127,6 +127,8 @@ public class RequestExecutionService : IDisposable
                 Success = true,
                 StatusCodeA = (int)responseA.statusCode,
                 StatusCodeB = (int)responseB.statusCode,
+                ContentTypeA = responseA.contentType,
+                ContentTypeB = responseB.contentType,
                 ResponsePathA = responsePathA,
                 ResponsePathB = responsePathB,
                 DurationMs = stopwatch.ElapsedMilliseconds
@@ -147,7 +149,7 @@ public class RequestExecutionService : IDisposable
         }
     }
 
-    private async Task<((System.Net.HttpStatusCode statusCode, byte[] content) responseA, (System.Net.HttpStatusCode statusCode, byte[] content) responseB)> ExecuteBothEndpointsAsync(
+    private async Task<((System.Net.HttpStatusCode statusCode, byte[] content, string? contentType) responseA, (System.Net.HttpStatusCode statusCode, byte[] content, string? contentType) responseB)> ExecuteBothEndpointsAsync(
         RequestComparisonJob job,
         RequestFileInfo request,
         Stream requestBodyStream,
@@ -172,7 +174,7 @@ public class RequestExecutionService : IDisposable
         return (await taskA, await taskB);
     }
 
-    private async Task<(System.Net.HttpStatusCode statusCode, byte[] content)> SendRequestAsync(
+    private async Task<(System.Net.HttpStatusCode statusCode, byte[] content, string? contentType)> SendRequestAsync(
         Uri endpoint,
         byte[] body,
         string contentType,
@@ -189,9 +191,10 @@ public class RequestExecutionService : IDisposable
         }
 
         using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken).ConfigureAwait(false);
-        var content = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+        var content2 = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
+        var responseContentType = response.Content.Headers.ContentType?.MediaType;
 
-        return (response.StatusCode, content);
+        return (response.StatusCode, content2, responseContentType);
     }
 
     private async Task SaveResponseAsync(byte[] content, string path, CancellationToken cancellationToken)

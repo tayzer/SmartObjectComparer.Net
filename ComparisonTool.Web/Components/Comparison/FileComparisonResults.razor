@@ -1,6 +1,7 @@
 ﻿@namespace ComparisonTool.Web.Components.Comparison
 @using ComparisonTool.Core
 @using ComparisonTool.Core.Comparison.Results
+@using ComparisonTool.Core.RequestComparison.Models
 
 <MudPaper Elevation="2" Class="mt-4">
     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pa-3" Style="background: var(--mud-palette-surface);">
@@ -51,6 +52,21 @@
                             <span>Error</span>
                         </MudStack>
                     </MudSelectItem>
+                    @if (HasHttpStatusData)
+                    {
+                        <MudSelectItem Value='"StatusMismatch"'>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.SyncProblem" Color="Color.Warning" Size="Size.Small" />
+                                <span>Status Mismatch</span>
+                            </MudStack>
+                        </MudSelectItem>
+                        <MudSelectItem Value='"NonSuccess"'>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Color="Color.Error" Size="Size.Small" />
+                                <span>Non-Success</span>
+                            </MudStack>
+                        </MudSelectItem>
+                    }
                 </MudSelect>
                 
                 <MudSelect T="string" @bind-Value="SelectedGroupFilter" Label="Category/Pattern" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 200px;">
@@ -73,6 +89,18 @@
                     {
                         <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.Warning">
                             @GetErrorCount() Errors
+                        </MudChip>
+                    }
+                    @if (GetStatusCodeMismatchCount() > 0)
+                    {
+                        <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.SyncProblem">
+                            @GetStatusCodeMismatchCount() Status Mismatches
+                        </MudChip>
+                    }
+                    @if (GetBothNonSuccessCount() > 0)
+                    {
+                        <MudChip T="string" Color="Color.Error" Size="Size.Small" Icon="@Icons.Material.Filled.ErrorOutline">
+                            @GetBothNonSuccessCount() Both Non-Success
                         </MudChip>
                     }
                 </MudStack>
@@ -106,7 +134,25 @@
                     <Columns>
                         <TemplateColumn Title="Status" Sortable="true">
                             <CellTemplate>
-                                @if (context.Item.HasError)
+                                @if (context.Item.PairOutcome == RequestPairOutcome.StatusCodeMismatch)
+                                {
+                                    <MudTooltip Text="@($"Status code mismatch: A={context.Item.HttpStatusCodeA}, B={context.Item.HttpStatusCodeB}")">
+                                        <MudIcon Icon="@Icons.Material.Filled.SyncProblem" Color="Color.Warning" />
+                                    </MudTooltip>
+                                }
+                                else if (context.Item.PairOutcome == RequestPairOutcome.BothNonSuccess)
+                                {
+                                    <MudTooltip Text="@($"Both returned non-success: A={context.Item.HttpStatusCodeA}, B={context.Item.HttpStatusCodeB}")">
+                                        <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Color="Color.Error" />
+                                    </MudTooltip>
+                                }
+                                else if (context.Item.PairOutcome == RequestPairOutcome.OneOrBothFailed)
+                                {
+                                    <MudTooltip Text="@context.Item.ErrorMessage">
+                                        <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" />
+                                    </MudTooltip>
+                                }
+                                else if (context.Item.HasError)
                                 {
                                     <MudTooltip Text="@context.Item.ErrorMessage">
                                         <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" />
@@ -124,6 +170,24 @@
                         </TemplateColumn>
                         <PropertyColumn Property="x => x.File1Name" Title="Expected File" Sortable="true" />
                         <PropertyColumn Property="x => x.File2Name" Title="Actual File" Sortable="true" />
+                        @if (HasHttpStatusData)
+                        {
+                            <TemplateColumn Title="HTTP Status" Sortable="true">
+                                <CellTemplate>
+                                    @if (context.Item.HttpStatusCodeA.HasValue && context.Item.HttpStatusCodeB.HasValue)
+                                    {
+                                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                            <MudChip T="string" Size="Size.Small" Color="@GetStatusCodeColor(context.Item.HttpStatusCodeA.Value)" Variant="Variant.Outlined">
+                                                A: @context.Item.HttpStatusCodeA
+                                            </MudChip>
+                                            <MudChip T="string" Size="Size.Small" Color="@GetStatusCodeColor(context.Item.HttpStatusCodeB.Value)" Variant="Variant.Outlined">
+                                                B: @context.Item.HttpStatusCodeB
+                                            </MudChip>
+                                        </MudStack>
+                                    }
+                                </CellTemplate>
+                            </TemplateColumn>
+                        }
                         <PropertyColumn Property="x => x.DifferenceCount" Title="Differences" Sortable="true">
                             <CellTemplate>
                                 @if (context.Item.HasError)
@@ -207,6 +271,9 @@
         public string ErrorMessage { get; set; } = "";
         public int DifferenceCount { get; set; }
         public string Category { get; set; } = "";
+        public int? HttpStatusCodeA { get; set; }
+        public int? HttpStatusCodeB { get; set; }
+        public RequestPairOutcome? PairOutcome { get; set; }
     }
     
     private List<string> AvailableGroups => Result?.FilePairResults?
@@ -228,6 +295,10 @@
             results = results.Where(x => !x.Result.HasError && !x.Result.AreEqual);
         else if (StatusFilter == "Error")
             results = results.Where(x => x.Result.HasError);
+        else if (StatusFilter == "StatusMismatch")
+            results = results.Where(x => x.Result.PairOutcome == RequestPairOutcome.StatusCodeMismatch);
+        else if (StatusFilter == "NonSuccess")
+            results = results.Where(x => x.Result.PairOutcome == RequestPairOutcome.BothNonSuccess || x.Result.PairOutcome == RequestPairOutcome.OneOrBothFailed);
         
         if (SelectedGroupFilter != "All")
             results = results.Where(x => (x.Result.Summary?.CommonPatterns?.FirstOrDefault()?.Pattern ?? "Uncategorized") == SelectedGroupFilter);
@@ -247,15 +318,37 @@
                 AreEqual = x.Result.AreEqual,
                 HasError = x.Result.HasError,
                 ErrorMessage = x.Result.ErrorMessage ?? "",
-                DifferenceCount = x.Result.Summary?.TotalDifferenceCount ?? 0,
-                Category = x.Result.Summary?.CommonPatterns?.FirstOrDefault()?.Pattern ?? "Uncategorized"
+                DifferenceCount = x.Result.RawTextDifferences?.Count ?? x.Result.Summary?.TotalDifferenceCount ?? 0,
+                Category = x.Result.Summary?.CommonPatterns?.FirstOrDefault()?.Pattern ?? "Uncategorized",
+                HttpStatusCodeA = x.Result.HttpStatusCodeA,
+                HttpStatusCodeB = x.Result.HttpStatusCodeB,
+                PairOutcome = x.Result.PairOutcome,
             });
     }
     
     private int GetEqualCount() => Result?.FilePairResults?.Count(r => !r.HasError && r.AreEqual) ?? 0;
     private int GetDifferentCount() => Result?.FilePairResults?.Count(r => !r.HasError && !r.AreEqual) ?? 0;
     private int GetErrorCount() => Result?.FilePairResults?.Count(r => r.HasError) ?? 0;
+    private int GetStatusCodeMismatchCount() => Result?.FilePairResults?.Count(r => r.PairOutcome == RequestPairOutcome.StatusCodeMismatch) ?? 0;
+    private int GetBothNonSuccessCount() => Result?.FilePairResults?.Count(r => r.PairOutcome == RequestPairOutcome.BothNonSuccess) ?? 0;
     private int GetTotalFilteredCount() => GetFilteredResultsWithOriginalIndex().Count();
+
+    /// <summary>
+    /// Whether any file pair results contain HTTP status code data (request comparison mode).
+    /// </summary>
+    private bool HasHttpStatusData => Result?.FilePairResults?.Any(r => r.PairOutcome != null) ?? false;
+
+    /// <summary>
+    /// Returns a MudBlazor color for an HTTP status code.
+    /// </summary>
+    private static Color GetStatusCodeColor(int statusCode) => statusCode switch
+    {
+        >= 200 and < 300 => Color.Success,
+        >= 300 and < 400 => Color.Info,
+        >= 400 and < 500 => Color.Warning,
+        >= 500 => Color.Error,
+        _ => Color.Default,
+    };
     
     private string GetRowClass(FileResultGridItem item, int index)
     {

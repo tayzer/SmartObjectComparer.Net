@@ -378,6 +378,41 @@
                         <MudStack Spacing="3">
                             <MudText Typo="Typo.h6">Request Comparison Results</MudText>
 
+                            @* Execution Outcome Summary (non-200 awareness) *@
+                            @{
+                                var hasOutcomeSummary = RequestComparisonResult.Metadata.TryGetValue("ExecutionOutcomeSummary", out var outcomeSummaryObj);
+                                var outcomeSummary = outcomeSummaryObj as ComparisonTool.Core.RequestComparison.Models.ExecutionOutcomeSummary;
+                            }
+                            @if (hasOutcomeSummary && outcomeSummary != null && (outcomeSummary.StatusCodeMismatch > 0 || outcomeSummary.BothNonSuccess > 0 || outcomeSummary.OneOrBothFailed > 0))
+                            {
+                                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                                    <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Class="flex-wrap">
+                                        <MudText Typo="Typo.body2"><strong>Execution Summary:</strong></MudText>
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.CheckCircle">
+                                            @outcomeSummary.BothSuccess Both OK
+                                        </MudChip>
+                                        @if (outcomeSummary.StatusCodeMismatch > 0)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.SyncProblem">
+                                                @outcomeSummary.StatusCodeMismatch Status Mismatch
+                                            </MudChip>
+                                        }
+                                        @if (outcomeSummary.BothNonSuccess > 0)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.ErrorOutline">
+                                                @outcomeSummary.BothNonSuccess Both Non-Success
+                                            </MudChip>
+                                        }
+                                        @if (outcomeSummary.OneOrBothFailed > 0)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Warning">
+                                                @outcomeSummary.OneOrBothFailed Failed
+                                            </MudChip>
+                                        }
+                                    </MudStack>
+                                </MudAlert>
+                            }
+
                             @if (RequestComparisonEnhancedAnalysis != null)
                             {
                                 <ComparisonRunDetails Analysis="@RequestComparisonEnhancedAnalysis"
@@ -404,6 +439,12 @@
                                                  OnToggleShowAll="@ToggleShowAllDifferences"
                                                  OnExportResults="@ExportRequestComparisonResults"
                                                  FolderResult="@RequestComparisonResult" />
+                    }
+                    else if (RequestComparisonResult != null && SelectedRequestPairIndex >= 0 &&
+                             RequestComparisonResult.FilePairResults[SelectedRequestPairIndex].RawTextDifferences != null)
+                    {
+                        <RawTextDifferencesView SelectedPair="@RequestComparisonResult.FilePairResults[SelectedRequestPairIndex]"
+                                                OnExportResults="@ExportRequestComparisonResults" />
                     }
 
                     @if (RequestComparisonSemanticAnalysis != null)

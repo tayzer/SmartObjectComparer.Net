@@ -53,6 +53,12 @@ public record RequestExecutionResult
     /// <summary>Gets the response file path for endpoint B.</summary>
     public string? ResponsePathB { get; init; }
 
+    /// <summary>Gets the Content-Type header from endpoint A's response.</summary>
+    public string? ContentTypeA { get; init; }
+
+    /// <summary>Gets the Content-Type header from endpoint B's response.</summary>
+    public string? ContentTypeB { get; init; }
+
     /// <summary>Gets the error message if failed.</summary>
     public string? ErrorMessage { get; init; }
 

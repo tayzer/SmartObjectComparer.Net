@@ -2,6 +2,7 @@ using System.Text;
 using System.Xml;
 using System.Xml.Serialization;
 using ComparisonTool.Core.Models;
+using Microsoft.AspNetCore.Http.HttpResults;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,6 +22,8 @@ app.MapPost("/api/mock/a", async (HttpRequest request) =>
 
 app.MapPost("/api/mock/b", async (HttpRequest request) =>
 {
+    return Results.BadRequest(new { error = "Simulated error response for testing" });
+
     var body = await new StreamReader(request.Body).ReadToEndAsync();
     var contentType = request.ContentType ?? "text/plain";
 
