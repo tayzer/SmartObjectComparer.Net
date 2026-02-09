@@ -75,7 +75,6 @@ public class ComparisonProgressService : IAsyncDisposable
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, "Failed to re-subscribe to job {JobId} after reconnection", _currentJobId);
-                        throw;
                     }
                 }
             };
