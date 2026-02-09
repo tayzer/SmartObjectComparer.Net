@@ -233,8 +233,8 @@ public class RequestComparisonJobService
                     Directory.CreateDirectory(tempDirA);
                     Directory.CreateDirectory(tempDirB);
 
-                    // Create hard links for success response files only
-                    foreach (var successPair in successPairs)
+                    // Copy success response files to temp directories in parallel
+                    var copyTasks = successPairs.Select(async successPair =>
                     {
                         var exec = successPair.Execution;
                         if (exec.ResponsePathA != null && exec.ResponsePathB != null &&
@@ -247,7 +247,7 @@ public class RequestComparisonJobService
                                 .Replace('/', Path.DirectorySeparatorChar)
                                 .Replace('\\', Path.DirectorySeparatorChar)
                                 .TrimStart(Path.DirectorySeparatorChar);
-                            
+
                             var targetPathA = Path.Combine(tempDirA, sanitizedPath);
                             var targetPathB = Path.Combine(tempDirB, sanitizedPath);
 
@@ -255,11 +255,14 @@ public class RequestComparisonJobService
                             Directory.CreateDirectory(Path.GetDirectoryName(targetPathA)!);
                             Directory.CreateDirectory(Path.GetDirectoryName(targetPathB)!);
 
-                            // Copy files to temp directories
-                            File.Copy(exec.ResponsePathA, targetPathA, overwrite: true);
-                            File.Copy(exec.ResponsePathB, targetPathB, overwrite: true);
+                            // Copy files asynchronously
+                            await Task.WhenAll(
+                                CopyFileAsync(exec.ResponsePathA, targetPathA, cancellationToken),
+                                CopyFileAsync(exec.ResponsePathB, targetPathB, cancellationToken)).ConfigureAwait(false);
                         }
-                    }
+                    }).ToList();
+
+                    await Task.WhenAll(copyTasks).ConfigureAwait(false);
 
                     var comparisonProgress = new Progress<ComparisonProgress>(p =>
                     {
@@ -525,5 +528,27 @@ public class RequestComparisonJobService
 
         // Apply all configured settings
         configService.ApplyConfiguredSettings();
+    }
+
+    private static async Task CopyFileAsync(string sourcePath, string destinationPath, CancellationToken cancellationToken)
+    {
+        const int bufferSize = 81920; // 80KB buffer
+        await using var sourceStream = new FileStream(
+            sourcePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        await using var destinationStream = new FileStream(
+            destinationPath,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.None,
+            bufferSize,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        await sourceStream.CopyToAsync(destinationStream, bufferSize, cancellationToken).ConfigureAwait(false);
     }
 }
