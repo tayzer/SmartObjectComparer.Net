@@ -1,0 +1,31 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+    <soap:Body>
+        <soap:Fault>
+            <faultcode>soap:Server</faultcode>
+            <faultstring>System.ServiceModel.FaultException: The order processing service encountered an internal error while retrieving order ORD-ERR002. Please retry the request or contact support if the issue persists.</faultstring>
+            <detail>
+                <ServiceFault xmlns="urn:example.co.uk/soap:faults">
+                    <ErrorCode>SVC-5001</ErrorCode>
+                    <ErrorCategory>InternalServerError</ErrorCategory>
+                    <Timestamp>2025-06-26T12:05:33.4821000Z</Timestamp>
+                    <CorrelationId>a3f7c912-4e8b-4d2a-9f1c-6b8e3d7a5c01</CorrelationId>
+                    <ServiceName>OrderManagementService</ServiceName>
+                    <OperationName>GetOrderDetails</OperationName>
+                    <ServerIdentifier>srv-err-002</ServerIdentifier>
+                    <StackTrace>
+                        at Example.Services.OrderManagement.OrderRepository.GetByIdAsync(String orderId)
+                        at Example.Services.OrderManagement.OrderService.ProcessOrderRequest(OrderRequest request)
+                        at Example.Services.OrderManagement.OrderManagementEndpoint.Execute(GetOrderDetailsRequest request)
+                    </StackTrace>
+                    <InnerException>
+                        <Type>System.Data.SqlClient.SqlException</Type>
+                        <Message>Execution Timeout Expired. The timeout period elapsed prior to completion of the operation or the server is not responding.</Message>
+                        <ErrorNumber>-2</ErrorNumber>
+                    </InnerException>
+                    <RetryAfterSeconds>30</RetryAfterSeconds>
+                </ServiceFault>
+            </detail>
+        </soap:Fault>
+    </soap:Body>
+</soap:Envelope>

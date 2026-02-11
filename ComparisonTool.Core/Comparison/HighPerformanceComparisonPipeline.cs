@@ -327,6 +327,8 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
                 {
                     File1Name = Path.GetFileName(pair.File1Path),
                     File2Name = Path.GetFileName(pair.File2Path),
+                    File1Path = pair.File1Path,
+                    File2Path = pair.File2Path,
                     ErrorMessage = pair.ErrorMessage,
                     ErrorType = pair.ErrorType,
                 };
@@ -357,6 +359,8 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
                     {
                         File1Name = Path.GetFileName(pair.File1Path),
                         File2Name = Path.GetFileName(pair.File2Path),
+                        File1Path = pair.File1Path,
+                        File2Path = pair.File2Path,
                         Result = result,
                         Summary = summary,
                     };
@@ -377,6 +381,8 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
                 {
                     File1Name = Path.GetFileName(pair.File1Path),
                     File2Name = Path.GetFileName(pair.File2Path),
+                    File1Path = pair.File1Path,
+                    File2Path = pair.File2Path,
                     ErrorMessage = ex.Message,
                     ErrorType = ex.GetType().Name,
                 };

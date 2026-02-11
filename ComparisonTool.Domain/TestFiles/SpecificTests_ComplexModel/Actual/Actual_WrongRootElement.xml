@@ -1,0 +1,42 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<InventoryManifest xmlns="urn:warehouse.example.com/inventory:v3">
+    <ManifestId>MAN-20250626-001</ManifestId>
+    <GeneratedAt>2025-06-26T12:00:00Z</GeneratedAt>
+    <Warehouse>
+        <WarehouseId>WH-EAST-01</WarehouseId>
+        <Location>New York, NY</Location>
+        <Capacity>50000</Capacity>
+    </Warehouse>
+    <Products>
+        <Product>
+            <SKU>SKU-10001</SKU>
+            <Name>Widget Alpha</Name>
+            <QuantityOnHand>342</QuantityOnHand>
+            <ReorderPoint>100</ReorderPoint>
+            <UnitPrice>14.99</UnitPrice>
+            <Category>Electronics</Category>
+        </Product>
+        <Product>
+            <SKU>SKU-10002</SKU>
+            <Name>Gadget Beta</Name>
+            <QuantityOnHand>87</QuantityOnHand>
+            <ReorderPoint>50</ReorderPoint>
+            <UnitPrice>29.99</UnitPrice>
+            <Category>Accessories</Category>
+        </Product>
+        <Product>
+            <SKU>SKU-10003</SKU>
+            <Name>Component Gamma</Name>
+            <QuantityOnHand>1205</QuantityOnHand>
+            <ReorderPoint>200</ReorderPoint>
+            <UnitPrice>3.50</UnitPrice>
+            <Category>Hardware</Category>
+        </Product>
+    </Products>
+    <Summary>
+        <TotalProducts>3</TotalProducts>
+        <TotalQuantity>1634</TotalQuantity>
+        <TotalValue>12834.83</TotalValue>
+        <LastAuditDate>2025-06-25</LastAuditDate>
+    </Summary>
+</InventoryManifest>

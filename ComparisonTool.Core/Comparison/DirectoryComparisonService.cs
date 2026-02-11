@@ -173,6 +173,8 @@ public class DirectoryComparisonService
                             {
                                 File1Name = Path.GetFileName(relativePath),
                                 File2Name = Path.GetFileName(relativePath),
+                                File1Path = file1Path,
+                                File2Path = file2Path,
                                 Result = comparisonResult,
                                 Summary = summary,
                             };
@@ -210,6 +212,8 @@ public class DirectoryComparisonService
                             {
                                 File1Name = Path.GetFileName(relativePath),
                                 File2Name = Path.GetFileName(relativePath),
+                                File1Path = file1Path,
+                                File2Path = file2Path,
                                 ErrorMessage = ex.Message,
                                 ErrorType = ex.GetType().Name,
                             };
@@ -440,6 +444,8 @@ public class DirectoryComparisonService
                                 {
                                     File1Name = file1Name,
                                     File2Name = file2Name,
+                                    File1Path = file1Path,
+                                    File2Path = file2Path,
                                     Result = comparisonResult,
                                     Summary = summary,
                                 };
@@ -474,6 +480,8 @@ public class DirectoryComparisonService
                             {
                                 File1Name = file1Name,
                                 File2Name = file2Name,
+                                File1Path = file1Path,
+                                File2Path = file2Path,
                                 ErrorMessage = ex.Message,
                                 ErrorType = ex.GetType().Name,
                             };
