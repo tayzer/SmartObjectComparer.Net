@@ -34,8 +34,8 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
     // OPTIMIZATION 2: Pool DifferenceCategorizer instances
     private readonly ObjectPool<DifferenceCategorizer> categorizerPool;
 
-    // OPTIMIZATION 3: Cache reflection method info
-    private readonly ConcurrentDictionary<Type, Func<Stream, object>> cachedDeserializers = new ConcurrentDictionary<Type, Func<Stream, object>>();
+    // OPTIMIZATION 3: Cache deserialization delegate per type
+    private readonly ConcurrentDictionary<Type, Func<Stream, DeserializationResult>> cachedDeserializers = new ConcurrentDictionary<Type, Func<Stream, DeserializationResult>>();
 
     // Pipeline configuration
     private readonly int ioParallelism;
@@ -220,7 +220,7 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
     /// </summary>
     private async Task RunDeserializationStageAsync(
         IReadOnlyList<(string File1Path, string File2Path, string RelativePath)> filePairs,
-        Func<Stream, object> deserializer,
+        Func<Stream, DeserializationResult> deserializer,
         ChannelWriter<DeserializedFilePair> writer,
         CancellationToken cancellationToken)
         => await Parallel.ForEachAsync(
@@ -236,27 +236,61 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
 
                 try
                 {
-                    // OPTIMIZATION: Read both files in parallel
-                    var (obj1, obj2) = await DeserializeBothFilesAsync(
+                    // OPTIMIZATION: Read and deserialize both files in parallel using TryDeserialize
+                    // which pre-validates root elements and catches exceptions internally —
+                    // no InvalidOperationException propagates to the debugger.
+                    var (result1, result2) = await DeserializeBothFilesAsync(
                         file1Path, file2Path, deserializer, ct).ConfigureAwait(false);
+
+                    // Check for deserialization failures (returned as result, not as exception)
+                    if (!result1.Success || !result2.Success)
+                    {
+                        var errorMessages = new List<string>();
+                        if (!result1.Success)
+                        {
+                            errorMessages.Add($"File 1: {result1.ErrorMessage}");
+                        }
+
+                        if (!result2.Success)
+                        {
+                            errorMessages.Add($"File 2: {result2.ErrorMessage}");
+                        }
+
+                        var combinedError = string.Join(" | ", errorMessages);
+                        logger.LogWarning("Deserialization failed for file pair {Path}: {Error}", relativePath, combinedError);
+
+                        var errorPair = new DeserializedFilePair
+                        {
+                            File1Path = file1Path,
+                            File2Path = file2Path,
+                            RelativePath = relativePath,
+                            Object1 = null,
+                            Object2 = null,
+                            ErrorMessage = combinedError,
+                            ErrorType = "DeserializationError",
+                        };
+
+                        await writer.WriteAsync(errorPair, ct).ConfigureAwait(false);
+                        return;
+                    }
 
                     var deserializedPair = new DeserializedFilePair
                     {
                         File1Path = file1Path,
                         File2Path = file2Path,
                         RelativePath = relativePath,
-                        Object1 = obj1,
-                        Object2 = obj2,
+                        Object1 = result1.Value,
+                        Object2 = result2.Value,
                     };
 
                     await writer.WriteAsync(deserializedPair, ct).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "Error deserializing file pair: {Path}: {Message}", relativePath, ex.Message);
+                    // This catch is now only for truly unexpected errors (I/O failures, etc.)
+                    // Deserialization errors are handled above via DeserializationResult.
+                    logger.LogError(ex, "Unexpected error processing file pair: {Path}: {Message}", relativePath, ex.Message);
 
-                    // CRITICAL FIX: Pass error information to the comparison stage
-                    // so it can be properly reported instead of silently skipped
                     var errorPair = new DeserializedFilePair
                     {
                         File1Path = file1Path,
@@ -276,10 +310,10 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
     /// Deserialize both files concurrently for maximum I/O throughput.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private async Task<(object, object)> DeserializeBothFilesAsync(
+    private async Task<(DeserializationResult, DeserializationResult)> DeserializeBothFilesAsync(
         string file1Path,
         string file2Path,
-        Func<Stream, object> deserializer,
+        Func<Stream, DeserializationResult> deserializer,
         CancellationToken ct)
     {
         // OPTIMIZATION: Read and deserialize both files in parallel
@@ -295,7 +329,7 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
     /// Read file and deserialize with optimal buffer size.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private object ReadAndDeserialize(string filePath, Func<Stream, object> deserializer)
+    private DeserializationResult ReadAndDeserialize(string filePath, Func<Stream, DeserializationResult> deserializer)
     {
         // OPTIMIZATION: Use FileOptions.SequentialScan for hint to OS
         using var stream = new FileStream(
@@ -374,7 +408,8 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error comparing file pair: {Path}: {Message}", pair.RelativePath, ex.Message);
+                var unwrapped = ExceptionUnwrapper.Unwrap(ex);
+                logger.LogError(ex, "Error comparing file pair: {Path}: {Message}", pair.RelativePath, unwrapped.Message);
 
                 // CRITICAL FIX: Create an error result instead of silently skipping
                 var errorResult = new FilePairComparisonResult
@@ -383,8 +418,8 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
                     File2Name = Path.GetFileName(pair.File2Path),
                     File1Path = pair.File1Path,
                     File2Path = pair.File2Path,
-                    ErrorMessage = ex.Message,
-                    ErrorType = ex.GetType().Name,
+                    ErrorMessage = ExceptionUnwrapper.GetDetailedMessage(ex),
+                    ErrorType = unwrapped.GetType().Name,
                 };
 
                 await writer.WriteAsync(errorResult, cancellationToken).ConfigureAwait(false);
@@ -444,18 +479,14 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
 
     /// <summary>
     /// Get or create a cached deserializer delegate for the model type.
+    /// Uses <see cref="IXmlDeserializationService.TryDeserializeXml"/> directly instead of
+    /// reflection-based <see cref="IXmlDeserializationService.DeserializeXml{T}"/>,
+    /// eliminating both the reflection overhead and the exception throwing for expected
+    /// failures like SOAP faults or wrong root elements.
     /// </summary>
-    private Func<Stream, object> GetOrCreateDeserializer(Type modelType) =>
+    private Func<Stream, DeserializationResult> GetOrCreateDeserializer(Type modelType) =>
         cachedDeserializers.GetOrAdd(modelType, type =>
-        {
-            var methodInfo = typeof(IXmlDeserializationService)
-                .GetMethod(nameof(IXmlDeserializationService.DeserializeXml))
-                ?? throw new InvalidOperationException("DeserializeXml method was not found.");
-            var method = methodInfo.MakeGenericMethod(type);
-
-            return stream => method.Invoke(deserializationService, new object[] { stream })
-                ?? throw new InvalidOperationException("Deserialization returned null.");
-        });
+            stream => deserializationService.TryDeserializeXml(stream, type));
 
     /// <summary>
     /// Internal class for passing deserialized objects between pipeline stages.

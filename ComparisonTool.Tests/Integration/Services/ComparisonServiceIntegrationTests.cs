@@ -336,9 +336,13 @@ public class ComparisonServiceIntegrationTests
         string scenarioDescription)
     {
         // These file pairs exercise scenarios where the Actual side has content that
-        // cannot be deserialized as a ComplexOrderResponse. In the File/Folder Comparison
-        // UI, these errors are caught by DirectoryComparisonService and rendered via
-        // ErrorDetailView.razor. At the ComparisonService level, they throw.
+        // cannot be deserialized as a ComplexOrderResponse. Deserialization uses
+        // TryDeserializeXml which pre-validates the root element, catching SOAP faults
+        // and wrong schemas WITHOUT throwing from XmlSerializer.Deserialize().
+        // The pre-validation failure is returned as a DeserializationResult.Failure,
+        // then the orchestrator wraps it in an InvalidOperationException for callers
+        // that expect exceptions (like this test). In the File/Folder Comparison UI,
+        // errors are caught by DirectoryComparisonService and rendered via ErrorDetailView.razor.
         var testRoot = GetSpecificComplexModelTestRoot();
         var actualPath = Path.Combine(testRoot, "Actual", actualFileName);
         var expectedPath = Path.Combine(testRoot, "Expected", expectedFileName);
@@ -389,7 +393,7 @@ public class ComparisonServiceIntegrationTests
 
         // Act & Assert
         var action = () => comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestModel");
-        await action.Should().ThrowAsync<System.Reflection.TargetInvocationException>(); // Exception is wrapped when called through reflection
+        await action.Should().ThrowAsync<InvalidOperationException>(); // TryDeserializeXml catches the XML parsing error internally and returns Failure; orchestrator wraps in InvalidOperationException
     }
 
     [TestMethod]

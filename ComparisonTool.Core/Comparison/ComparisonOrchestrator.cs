@@ -105,40 +105,42 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                 // Check if model exists (will throw if not found)
                 var modelType = deserializationService.GetModelType(modelName);
 
-                var deserializeMethod = typeof(IXmlDeserializationService)
-                    .GetMethod(nameof(IXmlDeserializationService.DeserializeXml))
-                    .MakeGenericMethod(modelType);
-
-                // CRITICAL FIX: Eliminate cloning entirely - use original deserialized objects
-                var oldResponse = await performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}", async () =>
+                // Use TryDeserializeXml to avoid exceptions from XmlSerializer.Deserialize
+                // for expected failures (SOAP faults, wrong root elements, malformed XML).
+                var oldResult = await performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}", async () =>
                 {
                     return await Task.Run(
                         () =>
                         {
                             oldXmlStream.Position = 0;
-                            return deserializeMethod.Invoke(deserializationService, new object[] { oldXmlStream });
+                            return deserializationService.TryDeserializeXml(oldXmlStream, modelType);
                         }, cancellationToken).ConfigureAwait(false);
                 }).ConfigureAwait(false);
 
-                var newResponse = await performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}", async () =>
+                if (!oldResult.Success)
+                {
+                    throw new InvalidOperationException(
+                        $"Failed to deserialize old XML: {oldResult.ErrorMessage}");
+                }
+
+                var newResult = await performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}", async () =>
                 {
                     return await Task.Run(
                         () =>
                         {
                             newXmlStream.Position = 0;
-                            return deserializeMethod.Invoke(deserializationService, new object[] { newXmlStream });
+                            return deserializationService.TryDeserializeXml(newXmlStream, modelType);
                         }, cancellationToken).ConfigureAwait(false);
                 }).ConfigureAwait(false);
 
-                // Validate deserialization results
-                if (oldResponse == null || newResponse == null)
+                if (!newResult.Success)
                 {
-                    logger.LogError("Deserialization returned null for model {ModelName}", modelName);
-                    throw new InvalidOperationException($"Deserialization returned null for model {modelName}");
+                    throw new InvalidOperationException(
+                        $"Failed to deserialize new XML: {newResult.ErrorMessage}");
                 }
 
                 // Use the comparison engine for the actual comparison
-                var result = await comparisonEngine.CompareObjectsAsync(oldResponse, newResponse, modelType, cancellationToken).ConfigureAwait(false);
+                var result = await comparisonEngine.CompareObjectsAsync(oldResult.Value!, newResult.Value!, modelType, cancellationToken).ConfigureAwait(false);
 
                 // Cache the result for future use
                 cacheService.CacheComparison(file1Hash, file2Hash, configFingerprint, result);
@@ -170,40 +172,41 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                 // Check if model exists (will throw if not found)
                 var modelType = deserializationService.GetModelType(modelName);
 
-                var deserializeMethod = typeof(IXmlDeserializationService)
-                    .GetMethod(nameof(IXmlDeserializationService.DeserializeXml))
-                    .MakeGenericMethod(modelType);
-
-                // CRITICAL FIX: Eliminate cloning entirely - use original deserialized objects
-                var oldResponse = await performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}", async () =>
+                // Use TryDeserializeXml to avoid exceptions from XmlSerializer.Deserialize
+                var oldResult = await performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}", async () =>
                 {
                     return await Task.Run(
                         () =>
                         {
                             oldXmlStream.Position = 0;
-                            return deserializeMethod.Invoke(deserializationService, new object[] { oldXmlStream });
+                            return deserializationService.TryDeserializeXml(oldXmlStream, modelType);
                         }, cancellationToken).ConfigureAwait(false);
                 }).ConfigureAwait(false);
 
-                var newResponse = await performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}", async () =>
+                if (!oldResult.Success)
+                {
+                    throw new InvalidOperationException(
+                        $"Failed to deserialize old XML: {oldResult.ErrorMessage}");
+                }
+
+                var newResult = await performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}", async () =>
                 {
                     return await Task.Run(
                         () =>
                         {
                             newXmlStream.Position = 0;
-                            return deserializeMethod.Invoke(deserializationService, new object[] { newXmlStream });
+                            return deserializationService.TryDeserializeXml(newXmlStream, modelType);
                         }, cancellationToken).ConfigureAwait(false);
                 }).ConfigureAwait(false);
 
-                // Validate deserialization results
-                if (oldResponse == null || newResponse == null)
+                if (!newResult.Success)
                 {
-                    logger.LogError("Deserialization returned null for model {ModelName}", modelName);
-                    throw new InvalidOperationException($"Deserialization returned null for model {modelName}");
+                    throw new InvalidOperationException(
+                        $"Failed to deserialize new XML: {newResult.ErrorMessage}");
                 }
 
                 // Use the comparison engine for the actual comparison
-                var result = await comparisonEngine.CompareObjectsAsync(oldResponse, newResponse, modelType, cancellationToken).ConfigureAwait(false);
+                var result = await comparisonEngine.CompareObjectsAsync(oldResult.Value!, newResult.Value!, modelType, cancellationToken).ConfigureAwait(false);
 
                 return result;
             }
@@ -276,42 +279,43 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                 // Check if model exists (will throw if not found)
                 var modelType = deserializationService.GetModelType(modelName);
 
-                // Deserialize both files using the proper domain type
-                var oldResponse = await performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}_{oldFormat}", async () =>
+                // Use TryDeserialize to avoid exceptions from XmlSerializer.Deserialize
+                // for expected failures (SOAP faults, wrong root elements, malformed XML).
+                // This prevents the VS debugger from breaking on first-chance exceptions.
+                var oldResult = await performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}_{oldFormat}", async () =>
                 {
                     return await Task.Run(
                         () =>
                         {
                             oldFileStream.Position = 0;
-
-                            // Use the proper domain type instead of object to avoid JsonElement issues
-                            var deserializeMethod = deserializationService.GetType().GetMethod("Deserialize").MakeGenericMethod(modelType);
-                            return deserializeMethod.Invoke(deserializationService, new object[] { oldFileStream, oldFormat });
+                            return deserializationService.TryDeserialize(oldFileStream, modelType, oldFormat);
                         }, cancellationToken).ConfigureAwait(false);
                 }).ConfigureAwait(false);
 
-                var newResponse = await performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}_{newFormat}", async () =>
+                if (!oldResult.Success)
+                {
+                    throw new InvalidOperationException(
+                        $"Failed to deserialize old file ({oldFilePath}): {oldResult.ErrorMessage}");
+                }
+
+                var newResult = await performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}_{newFormat}", async () =>
                 {
                     return await Task.Run(
                         () =>
                         {
                             newFileStream.Position = 0;
-
-                            // Use the proper domain type instead of object to avoid JsonElement issues
-                            var deserializeMethod = deserializationService.GetType().GetMethod("Deserialize").MakeGenericMethod(modelType);
-                            return deserializeMethod.Invoke(deserializationService, new object[] { newFileStream, newFormat });
+                            return deserializationService.TryDeserialize(newFileStream, modelType, newFormat);
                         }, cancellationToken).ConfigureAwait(false);
                 }).ConfigureAwait(false);
 
-                // Validate deserialization results
-                if (oldResponse == null || newResponse == null)
+                if (!newResult.Success)
                 {
-                    logger.LogError("Deserialization returned null for model {ModelName}", modelName);
-                    throw new InvalidOperationException($"Deserialization returned null for model {modelName}");
+                    throw new InvalidOperationException(
+                        $"Failed to deserialize new file ({newFilePath}): {newResult.ErrorMessage}");
                 }
 
                 // Use the comparison engine for the actual comparison
-                var result = await comparisonEngine.CompareObjectsAsync(oldResponse, newResponse, modelType, cancellationToken).ConfigureAwait(false);
+                var result = await comparisonEngine.CompareObjectsAsync(oldResult.Value!, newResult.Value!, modelType, cancellationToken).ConfigureAwait(false);
 
                 // Cache the result for future use
                 cacheService.CacheComparison(file1Hash, file2Hash, configFingerprint, result);
@@ -366,42 +370,41 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                 // Check if model exists (will throw if not found)
                 var modelType = deserializationService.GetModelType(modelName);
 
-                // Deserialize both files using the proper domain type
-                var oldResponse = await performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}_{oldFormat}", async () =>
+                // Use TryDeserialize to avoid exceptions from XmlSerializer.Deserialize
+                var oldResult = await performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}_{oldFormat}", async () =>
                 {
                     return await Task.Run(
                         () =>
                         {
                             oldFileStream.Position = 0;
-
-                            // Use the proper domain type instead of object to avoid JsonElement issues
-                            var deserializeMethod = deserializationService.GetType().GetMethod("Deserialize").MakeGenericMethod(modelType);
-                            return deserializeMethod.Invoke(deserializationService, new object[] { oldFileStream, oldFormat });
+                            return deserializationService.TryDeserialize(oldFileStream, modelType, oldFormat);
                         }, cancellationToken).ConfigureAwait(false);
                 }).ConfigureAwait(false);
 
-                var newResponse = await performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}_{newFormat}", async () =>
+                if (!oldResult.Success)
+                {
+                    throw new InvalidOperationException(
+                        $"Failed to deserialize old file ({oldFilePath}): {oldResult.ErrorMessage}");
+                }
+
+                var newResult = await performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}_{newFormat}", async () =>
                 {
                     return await Task.Run(
                         () =>
                         {
                             newFileStream.Position = 0;
-
-                            // Use the proper domain type instead of object to avoid JsonElement issues
-                            var deserializeMethod = deserializationService.GetType().GetMethod("Deserialize").MakeGenericMethod(modelType);
-                            return deserializeMethod.Invoke(deserializationService, new object[] { newFileStream, newFormat });
+                            return deserializationService.TryDeserialize(newFileStream, modelType, newFormat);
                         }, cancellationToken).ConfigureAwait(false);
                 }).ConfigureAwait(false);
 
-                // Validate deserialization results
-                if (oldResponse == null || newResponse == null)
+                if (!newResult.Success)
                 {
-                    logger.LogError("Deserialization returned null for model {ModelName}", modelName);
-                    throw new InvalidOperationException($"Deserialization returned null for model {modelName}");
+                    throw new InvalidOperationException(
+                        $"Failed to deserialize new file ({newFilePath}): {newResult.ErrorMessage}");
                 }
 
                 // Use the comparison engine for the actual comparison
-                return await comparisonEngine.CompareObjectsAsync(oldResponse, newResponse, modelType, cancellationToken).ConfigureAwait(false);
+                return await comparisonEngine.CompareObjectsAsync(oldResult.Value!, newResult.Value!, modelType, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -628,6 +631,8 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                                     {
                                         File1Name = file1Name,
                                         File2Name = file2Name,
+                                        File1Path = file1Path,
+                                        File2Path = file2Path,
                                         Result = comparisonResult,
                                         Summary = summary,
                                     };
@@ -648,20 +653,23 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                             }
                             catch (Exception ex)
                             {
+                                var unwrapped = ExceptionUnwrapper.Unwrap(ex);
                                 logger.LogError(
                                     ex,
                                     "Error comparing files {File1} and {File2}: {Message}",
                                     file1Path,
                                     file2Path,
-                                    ex.Message);
+                                    unwrapped.Message);
 
                                 // CRITICAL FIX: Create an error result instead of silently skipping
                                 var errorResult = new FilePairComparisonResult
                                 {
                                     File1Name = file1Name,
                                     File2Name = file2Name,
-                                    ErrorMessage = ex.Message,
-                                    ErrorType = ex.GetType().Name,
+                                    File1Path = file1Path,
+                                    File2Path = file2Path,
+                                    ErrorMessage = ExceptionUnwrapper.GetDetailedMessage(ex),
+                                    ErrorType = unwrapped.GetType().Name,
                                 };
 
                                 filePairResults.Add(errorResult);

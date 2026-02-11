@@ -1,102 +1,78 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2026-02-11T00:00:00Z
+lastUpdated: 2026-02-11T12:00:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-Add error-scenario E2E test files for FileFolderErrorDetailView - COMPLETED
+Prevent VS debugger breaks by eliminating exceptions from XmlSerializer.Deserialize — COMPLETED
 
 ## Todo List Status
 ```markdown
-- [x] Task 1: Create 4 error-scenario A/B file pairs in SpecificTests_ComplexModel
-- [x] Task 2: Add DataRow entries to integration test for error scenarios
-- [x] Task 3: Build and run all tests (146 total, 0 failures)
+- [x] Task 1: Create DeserializationResult record type
+- [x] Task 2: Add non-generic serializer support to XmlSerializerFactory
+- [x] Task 3: Add TryDeserializeXml to IXmlDeserializationService
+- [x] Task 4: Implement TryDeserializeXml in XmlDeserializationService
+- [x] Task 5: Add TryDeserialize to IDeserializationService + adapter
+- [x] Task 6: Update HighPerformanceComparisonPipeline
+- [x] Task 7: Update ComparisonOrchestrator batch paths
+- [x] Task 8: Update integration tests
+- [x] Task 9: Build and run all tests (147 total, 0 failures)
+- [x] Task 10: Update session context
 ```
 
 ## Recent File Changes
-- `ComparisonTool.Domain/Models/FilePairComparisonResult.cs`: Added File1Path/File2Path nullable string properties
-- `ComparisonTool.Core/Comparison/DirectoryComparisonService.cs`: Populate File1Path/File2Path in 4 result creation sites
-- `ComparisonTool.Core/Comparison/HighPerformanceComparisonPipeline.cs`: Populate File1Path/File2Path in 3 result creation sites
-- `ComparisonTool.Core/RequestComparison/Services/RawTextComparisonService.cs`: Added CompareFilesRawAsync method for local file diffs
-- `ComparisonTool.Web/Components/Comparison/ErrorDetailView.razor` (NEW): Error detail Blazor component with diagnostics and raw diff table
-- `ComparisonTool.Web/Components/Pages/Home.razor`: Injected RawTextComparisonService, added error/normal routing split, compute raw diffs on error pair selection
-- `ComparisonTool.Tests/Unit/RequestComparison/RawTextComparisonServiceTests.cs`: Added 6 tests for CompareFilesRawAsync
+- `ComparisonTool.Core/Serialization/DeserializationResult.cs` (NEW): Result type for exception-free deserialization with Ok/Failure factory methods
+- `ComparisonTool.Core/Serialization/IXmlDeserializationService.cs`: Added TryDeserializeXml(Stream, Type) method
+- `ComparisonTool.Core/Serialization/XmlDeserializationService.cs`: Added TryDeserializeXml with root element pre-validation via CanDeserialize, GetCachedSerializerForType, GetExpectedRootElementName
+- `ComparisonTool.Core/Serialization/XmlSerializerFactory.cs`: Added non-generic GetSerializer(Type, bool), CreateDefaultSerializer(Type), CreateStrictSerializer(Type)
+- `ComparisonTool.Core/Serialization/IDeserializationService.cs`: Added TryDeserialize(Stream, Type, SerializationFormat?) method
+- `ComparisonTool.Core/Serialization/DeserializationServiceFactory.cs`: Added TryDeserialize to XmlDeserializationServiceAdapter and UnifiedDeserializationService
+- `ComparisonTool.Core/Serialization/JsonDeserializationService.cs`: Added TryDeserialize with try-catch wrapper
+- `ComparisonTool.Core/Comparison/HighPerformanceComparisonPipeline.cs`: Changed GetOrCreateDeserializer to call TryDeserializeXml directly (no reflection), updated ReadAndDeserialize/DeserializeBothFilesAsync/RunDeserializationStageAsync to use DeserializationResult
+- `ComparisonTool.Core/Comparison/ComparisonOrchestrator.cs`: Replaced all reflection-based DeserializeXml/Deserialize calls with direct TryDeserializeXml/TryDeserialize calls in CompareXmlFilesWithCachingAsync, CompareXmlFilesAsync, CompareFilesWithCachingAsync, CompareFilesAsync
+- `ComparisonTool.Tests/Integration/Services/ComparisonServiceIntegrationTests.cs`: Updated comments to reflect new TryDeserialize behavior
 
 ## Key Technical Decisions
-- Decision: Use SignalR for real-time progress updates instead of polling
-- Rationale: Already configured in Program.cs, native Blazor integration, lower latency than polling
-- Date: 2026-02-04
+- Decision: Pre-validate XML root element using XmlSerializer.CanDeserialize() before attempting full deserialization
+- Rationale: Prevents InvalidOperationException from being thrown by XmlSerializer.Deserialize() for common failures (SOAP faults, wrong schemas). VS debugger won't break on first-chance exceptions since no exception is thrown.
+- Date: 2026-02-11
 
-- Decision: Use 250ms throttling for progress updates during Executing phase
-- Rationale: Prevents UI flooding when many API calls are made in quick succession
-- Date: 2026-02-05
+- Decision: Return DeserializationResult instead of throwing from TryDeserializeXml
+- Rationale: Allows callers (Pipeline, Orchestrator) to handle deserialization failures as data flow rather than exception flow. Pipeline handles errors directly (no exception at all); Orchestrator wraps in InvalidOperationException for backward compatibility with existing catch blocks.
+- Date: 2026-02-11
 
-- Decision: Group-based SignalR subscriptions by JobId
-- Rationale: Allows multiple clients to subscribe to the same job and efficiently target updates
-- Date: 2026-02-05
+- Decision: Eliminate reflection-based MethodInfo.Invoke for deserialization entirely
+- Rationale: TryDeserializeXml(Stream, Type) is non-generic, so no reflection needed. This also eliminates TargetInvocationException wrapper issues.
+- Date: 2026-02-11
 
 ## External Resources Referenced
-- [MudBlazor Tabs](https://mudblazor.com/components/tabs): Reviewed usage patterns for tab selection and active index binding
-- [MudBlazor Tabs (Jina AI mirror)](https://r.jina.ai/https://mudblazor.com/components/tabs): Used for readable page content
-- [Google Search (blocked)](https://www.google.com/search?q=MudBlazor+MudTabs+click+not+working+Blazor+Server): JS required; used direct docs instead
+- None needed for this change
 
 ## Blockers & Issues
 - None
 
 ## Failed Approaches
-- None
+- Previous approach: ExceptionUnwrapper.InvokeUnwrapped() — fixed error messages but exceptions still thrown from XmlSerializer.Deserialize, causing VS debugger breaks
+- Lesson: Must prevent the exception from being thrown in the first place, not just handle it better after the fact
 
 ## Environment Notes
-- SignalR already configured in Program.cs with max message size and timeouts
-- Added Microsoft.AspNetCore.SignalR.Client v8.0.23 package for Blazor client
+- .NET 8.0, 147 tests passing
+- All InvokeUnwrapped calls replaced with direct TryDeserialize calls
+- ExceptionUnwrapper still used in batch error catch blocks (for non-deserialization errors)
 
 ## Next Session Priority
 No active tasks
 
 ## Session Notes
-Created a detailed implementation plan for adding real-time progress tracking to the Request Comparison feature. The plan includes:
-- 11 tasks across 3 phases (Backend infrastructure, API wiring, Frontend integration)
-- 10 files to create or modify
-- Estimated 6-8 hours of development
-- Risk mitigations for connection drops, event flooding, and memory leaks
-  - Added field references: `requestComparisonPanel`, `requestPropertySelector`, `requestTreePropertySelector`
-  - Added handler methods: `OpenRequestPropertySelector()`, `OpenRequestTreePropertySelector()`, `AddRequestIgnoreRule()`, `AddRequestIgnoreRulesBatch()`, `RemoveRequestIgnoreRule()`
-
-## Key Technical Decisions
-- Decision: Reuse existing HierarchicalPropertySelector and ObjectTreePropertySelector components for Request Comparison
-- Rationale: Maintains consistency with File/Folder Comparison tab; leverages existing tested functionality
-- Date: 2025-02-05
-
-- Decision: Made RequestComparisonPanel.IgnoreRules public with { get; set; }
-- Rationale: Allows Home.razor to pass the list to the selector components while the panel manages the state
-- Date: 2025-02-05
-
-## External Resources Referenced
-- MudBlazor documentation (attempted but blocked by JS requirements)
-- Existing codebase patterns for Tree Navigator implementation
-
-## Blockers & Issues
-- **[RESOLVED]** Build error RZ10010: Conflicting `OnClick` and `@onclick:stopPropagation` on MudButton - Fixed by removing stopPropagation directive
-- **[RESOLVED]** Google search blocked by JavaScript requirement - Used direct analysis of existing code patterns instead
-
-## Failed Approaches
-- None
-
-## Environment Notes
-- .NET 8.0, Blazor Server with MudBlazor
-- Build succeeded with 127 pre-existing warnings (not introduced by these changes)
-
-## Next Session Priority
-No active tasks - all requested improvements completed
-
-## Session Notes
-Implementation complete. The Request Comparison (A/B) tab now:
-1. Uses Tree Navigator and Simple Property Selector instead of manual ignore rule inputs
-2. Has properly styled "Comparison Overview" section using MudBlazor components (MudPaper, MudAlert, MudGrid, MudProgressLinear)
-3. Has properly styled "Semantic Difference Groups" section using MudBlazor components (MudPaper, MudSimpleTable, MudButton, MudAlert, MudProgressLinear)
+Complete elimination of XmlSerializer.Deserialize() exception propagation for folder comparisons:
+- SOAP faults: caught by CanDeserialize (root element <Envelope> vs expected <OrderManagementResponse>) — NO exception thrown
+- Wrong root elements: caught by CanDeserialize — NO exception thrown
+- Empty files: caught by stream length check — NO exception thrown
+- Malformed XML: caught by MoveToContent() in pre-validation — NO exception thrown
+- Deep structure issues (post root element): caught by try-catch inside TryDeserializeXml — exception caught at lowest level
 
 ---
 # Previous Session Archive

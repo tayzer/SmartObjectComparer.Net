@@ -208,6 +208,43 @@ public class JsonDeserializationService : IDeserializationService
     }
 
     /// <summary>
+    /// Attempts to deserialize a JSON stream without throwing exceptions for expected failures.
+    /// </summary>
+    public DeserializationResult TryDeserialize(Stream stream, Type modelType, SerializationFormat? format = null)
+    {
+        if (stream == null)
+        {
+            return DeserializationResult.Failure("JSON stream cannot be null.");
+        }
+
+        if (format.HasValue && format.Value != SerializationFormat.Json)
+        {
+            return DeserializationResult.Failure(
+                $"JsonDeserializationService only supports JSON format, but {format.Value} was specified.");
+        }
+
+        try
+        {
+            stream.Position = 0;
+            var result = JsonSerializer.Deserialize(stream, modelType, serializerOptions);
+            if (result == null)
+            {
+                return DeserializationResult.Failure($"Deserialization of type {modelType.Name} returned null.");
+            }
+
+            return DeserializationResult.Ok(result);
+        }
+        catch (JsonException ex)
+        {
+            return DeserializationResult.Failure($"Invalid JSON format: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            return DeserializationResult.Failure($"JSON deserialization error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
     /// Clone object efficiently using JSON serialization.
     /// </summary>
     /// <typeparam name="T">Type to clone.</typeparam>
