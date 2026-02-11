@@ -1,42 +1,30 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2026-02-11T15:00:00Z
+lastUpdated: 2026-02-11T18:00:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-Fix failing error-scenario integration tests (missing XML test files) — COMPLETED
+Document CLI request comparison flags in README — COMPLETED
 
 ## Todo List Status
 ```markdown
-- [x] 🧭 Confirm failing test cause
-- [x] 🧩 Align error-scenario test data
-- [x] 🗂️ Add missing error-scenario files
-- [x] ✅ Run targeted tests
-- [x] 📝 Update session context
+- [x] 📝 Add request CLI flags to README
+- [x] ✅ Update session context
 ```
 
 ## Recent File Changes
-- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Actual/Actual_MalformedXml.xml`: Added malformed XML fixture for error scenario tests
-- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Actual/Actual_TruncatedXml.xml`: Added truncated XML fixture for error scenario tests
-- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Actual/Actual_WrongRootElement.xml`: Added wrong-root XML fixture for error scenario tests
-- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Actual/Actual_EmptyFile.xml`: Added zero-byte XML fixture for empty file scenario
-- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Expected/Expected_MalformedXml.xml`: Added minimal valid expected XML for malformed scenario
-- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Expected/Expected_TruncatedXml.xml`: Added minimal valid expected XML for truncated scenario
-- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Expected/Expected_EmptyFile.xml`: Added minimal valid expected XML for empty file scenario
-- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Expected/Expected_WrongRootElement.xml`: Added minimal valid expected XML for wrong root scenario
+- `README.md`: Added CLI request comparison example with `--ignore-rules` and `--content-type`, plus IgnoreRuleDto JSON sample
 
 ## Key Technical Decisions
-- Decision: Use `FilePairComparisonResult.AreEqual` property instead of manually checking `pair.Summary?.AreEqual`
-- Rationale: `AreEqual` correctly returns `false` when Summary is null (raw text comparison results) by design: `!HasError && (Summary?.AreEqual ?? false)`. This is consistent with `FileComparisonResults.razor` which already uses `r.AreEqual` for its `GetEqualCount()`/`GetDifferentCount()` methods.
+- Decision: Document IgnoreRuleDto JSON format in README for CLI usage
+- Rationale: Ensures CLI users have a copy-paste example for `--ignore-rules`
 - Date: 2026-02-11
 
 ## External Resources Referenced
-- https://www.google.com/search?q=FluentAssertions+ThrowAsync+MSTest+should+throw+exception+async+task: Search attempt (blocked by Google enablejs interstitial)
-- https://fluentassertions.com/exceptions/: FluentAssertions async exception assertion guidance
-- https://fluentassertions.com/introduction: FluentAssertions framework detection and usage overview
+- None
 
 ## Blockers & Issues
 - None
@@ -46,13 +34,12 @@ Fix failing error-scenario integration tests (missing XML test files) — COMPLE
 
 ## Environment Notes
 - .NET 8.0
-- Targeted test run: CompareXmlFilesAsync_WithErrorScenarioFiles_ShouldThrowOnDeserialization (5/5 passed)
 
 ## Next Session Priority
 No active tasks
 
 ## Session Notes
-Failing integration tests were caused by missing XML fixture files referenced by the data rows in ComparisonServiceIntegrationTests. Added the missing actual/expected XML fixtures, including a zero-byte empty file, then re-ran the targeted data test (all 5 cases passed).
+Updated README with CLI request comparison flags for ignore rules JSON and content-type override.
 
 ---
 # Previous Session Archive

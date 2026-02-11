@@ -14,6 +14,8 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.MapPost("/api/mock/a", async (HttpRequest request) =>
 {
+    return Results.StatusCode(statusCode:StatusCodes.Status500InternalServerError);
+
     var body = await new StreamReader(request.Body).ReadToEndAsync();
     var contentType = request.ContentType ?? "text/plain";
 
