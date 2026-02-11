@@ -173,6 +173,8 @@ public class DirectoryComparisonService
                             {
                                 File1Name = Path.GetFileName(relativePath),
                                 File2Name = Path.GetFileName(relativePath),
+                                File1Path = file1Path,
+                                File2Path = file2Path,
                                 Result = comparisonResult,
                                 Summary = summary,
                             };
@@ -201,7 +203,8 @@ public class DirectoryComparisonService
                         }
                         catch (Exception ex)
                         {
-                            logger.LogError(ex, "Error comparing file pair {Path}: {Message}", relativePath, ex.Message);
+                            var unwrapped = ExceptionUnwrapper.Unwrap(ex);
+                            logger.LogError(ex, "Error comparing file pair {Path}: {Message}", relativePath, unwrapped.Message);
 
                             // CRITICAL FIX: Create an error result instead of silently skipping
                             // This ensures files with errors (FileNotFound, deserialization failures, etc.)
@@ -210,8 +213,10 @@ public class DirectoryComparisonService
                             {
                                 File1Name = Path.GetFileName(relativePath),
                                 File2Name = Path.GetFileName(relativePath),
-                                ErrorMessage = ex.Message,
-                                ErrorType = ex.GetType().Name,
+                                File1Path = file1Path,
+                                File2Path = file2Path,
+                                ErrorMessage = ExceptionUnwrapper.GetDetailedMessage(ex),
+                                ErrorType = unwrapped.GetType().Name,
                             };
 
                             filePairResults.Add(errorResult);
@@ -440,6 +445,8 @@ public class DirectoryComparisonService
                                 {
                                     File1Name = file1Name,
                                     File2Name = file2Name,
+                                    File1Path = file1Path,
+                                    File2Path = file2Path,
                                     Result = comparisonResult,
                                     Summary = summary,
                                 };
@@ -461,21 +468,24 @@ public class DirectoryComparisonService
                         }
                         catch (Exception ex)
                         {
+                            var unwrapped = ExceptionUnwrapper.Unwrap(ex);
                             logger.LogError(
                                 ex,
                                 "Error comparing file pair at index {Index}: {File1} vs {File2}: {Message}",
                                 index,
                                 file1Name,
                                 file2Name,
-                                ex.Message);
+                                unwrapped.Message);
 
                             // CRITICAL FIX: Create an error result instead of silently skipping
                             var errorResult = new FilePairComparisonResult
                             {
                                 File1Name = file1Name,
                                 File2Name = file2Name,
-                                ErrorMessage = ex.Message,
-                                ErrorType = ex.GetType().Name,
+                                File1Path = file1Path,
+                                File2Path = file2Path,
+                                ErrorMessage = ExceptionUnwrapper.GetDetailedMessage(ex),
+                                ErrorType = unwrapped.GetType().Name,
                             };
 
                             filePairResults.Add(errorResult);

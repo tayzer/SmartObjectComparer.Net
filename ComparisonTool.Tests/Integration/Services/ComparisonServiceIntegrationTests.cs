@@ -324,6 +324,44 @@ public class ComparisonServiceIntegrationTests
             "SpecificTests_ComplexModel");
     }
 
+    [DataTestMethod]
+    [DataRow("Actual_MalformedXml.xml", "Expected_MalformedXml.xml", "Malformed XML with unclosed tags")]
+    [DataRow("Actual_TruncatedXml.xml", "Expected_TruncatedXml.xml", "Truncated XML cut off mid-element")]
+    [DataRow("Actual_EmptyFile.xml", "Expected_EmptyFile.xml", "Empty file with no content")]
+    [DataRow("Actual_WrongRootElement.xml", "Expected_WrongRootElement.xml", "Wrong root element / different schema")]
+    [DataRow("Actual_FaultException.xml", "Expected_FaultException.xml", "SOAP fault exception response instead of expected data")]
+    public async Task CompareXmlFilesAsync_WithErrorScenarioFiles_ShouldThrowOnDeserialization(
+        string actualFileName,
+        string expectedFileName,
+        string scenarioDescription)
+    {
+        // These file pairs exercise scenarios where the Actual side has content that
+        // cannot be deserialized as a ComplexOrderResponse. Deserialization uses
+        // TryDeserializeXml which pre-validates the root element, catching SOAP faults
+        // and wrong schemas WITHOUT throwing from XmlSerializer.Deserialize().
+        // The pre-validation failure is returned as a DeserializationResult.Failure,
+        // then the orchestrator wraps it in an InvalidOperationException for callers
+        // that expect exceptions (like this test). In the File/Folder Comparison UI,
+        // errors are caught by DirectoryComparisonService and rendered via ErrorDetailView.razor.
+        var testRoot = GetSpecificComplexModelTestRoot();
+        var actualPath = Path.Combine(testRoot, "Actual", actualFileName);
+        var expectedPath = Path.Combine(testRoot, "Expected", expectedFileName);
+
+        File.Exists(actualPath).Should().BeTrue($"Actual file should exist for scenario: {scenarioDescription}");
+        File.Exists(expectedPath).Should().BeTrue($"Expected file should exist for scenario: {scenarioDescription}");
+
+        using var actualStream = File.OpenRead(actualPath);
+        using var expectedStream = File.OpenRead(expectedPath);
+
+        var action = () => comparisonService.CompareXmlFilesAsync(
+            actualStream,
+            expectedStream,
+            "ComplexOrderResponse");
+
+        await action.Should().ThrowAsync<Exception>(
+            $"Deserialization should fail for scenario: {scenarioDescription}");
+    }
+
     [TestMethod]
     public async Task CompareXmlFilesAsync_WithUnregisteredModel_ShouldThrowException()
     {
@@ -355,7 +393,7 @@ public class ComparisonServiceIntegrationTests
 
         // Act & Assert
         var action = () => comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestModel");
-        await action.Should().ThrowAsync<System.Reflection.TargetInvocationException>(); // Exception is wrapped when called through reflection
+        await action.Should().ThrowAsync<InvalidOperationException>(); // TryDeserializeXml catches the XML parsing error internally and returns Failure; orchestrator wraps in InvalidOperationException
     }
 
     [TestMethod]

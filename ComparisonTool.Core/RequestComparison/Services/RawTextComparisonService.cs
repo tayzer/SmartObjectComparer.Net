@@ -136,6 +136,51 @@ public class RawTextComparisonService
     }
 
     /// <summary>
+    /// Compares two files on disk as raw text. Used as a fallback when domain-model
+    /// deserialization fails for file/folder comparison.
+    /// </summary>
+    /// <param name="file1Path">Full path to the first file (may be null or missing).</param>
+    /// <param name="file2Path">Full path to the second file (may be null or missing).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A list of raw text differences between the two files.</returns>
+    public async Task<List<RawTextDifference>> CompareFilesRawAsync(
+        string? file1Path,
+        string? file2Path,
+        CancellationToken cancellationToken = default)
+    {
+        var diffs = new List<RawTextDifference>();
+
+        var bodyA = await ReadResponseBodyAsync(file1Path, cancellationToken).ConfigureAwait(false);
+        var bodyB = await ReadResponseBodyAsync(file2Path, cancellationToken).ConfigureAwait(false);
+
+        // If both files are missing/empty, nothing to diff
+        if (bodyA.lines.Length == 0 && bodyB.lines.Length == 0)
+        {
+            return diffs;
+        }
+
+        var textDiffs = ComputeLineDifferences(bodyA.lines, bodyB.lines);
+        diffs.AddRange(textDiffs);
+
+        if (bodyA.wasTruncated || bodyB.wasTruncated)
+        {
+            diffs.Add(new RawTextDifference
+            {
+                Type = RawTextDifferenceType.Modified,
+                Description = $"File content truncated to {MaxBodyBytes / 1024} KB for comparison.",
+            });
+        }
+
+        logger.LogDebug(
+            "Raw file comparison: {File1} vs {File2}: {DiffCount} differences",
+            file1Path ?? "(null)",
+            file2Path ?? "(null)",
+            diffs.Count);
+
+        return diffs;
+    }
+
+    /// <summary>
     /// Reads a response body from disk, truncating to <see cref="MaxBodyBytes"/>.
     /// </summary>
     private static async Task<(string[] lines, bool wasTruncated)> ReadResponseBodyAsync(

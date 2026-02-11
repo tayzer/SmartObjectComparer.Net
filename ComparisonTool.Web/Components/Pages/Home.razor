@@ -4,6 +4,7 @@
 @using ComparisonTool.Core.Comparison.Analysis
 @using ComparisonTool.Core.Comparison.Configuration
 @using ComparisonTool.Core.Comparison.Results
+@using ComparisonTool.Core.RequestComparison.Services
 @using ComparisonTool.Core.Serialization
 @using ComparisonTool.Core.Utilities
 @using ComparisonTool.Web.Components.Comparison
@@ -26,6 +27,7 @@
 @inject PerformanceTracker PerformanceTracker
 @inject SystemResourceMonitor ResourceMonitor
 @inject ComparisonResultCacheService CacheService
+@inject RawTextComparisonService RawTextComparisonService
 @inject IConfiguration Configuration
 
 <MudStack Spacing="4">
@@ -292,15 +294,25 @@
                                        OnExportAll="@ExportAllFolderResults" />
             }
 
-            @if (FolderComparisonResult != null && SelectedPairIndex >= 0 && DifferenceSummary != null)
+            @if (FolderComparisonResult != null && SelectedPairIndex >= 0)
             {
-                <DetailedDifferencesView SelectedPair="@FolderComparisonResult.FilePairResults[SelectedPairIndex]"
-                                         DifferenceSummary="@DifferenceSummary"
-                                         ComparisonResult="@ComparisonResult"
-                                         ShowAllDifferences="@ShowAllDifferences"
-                                         OnToggleShowAll="@ToggleShowAllDifferences"
-                                         OnExportResults="@ExportFolderResults"
-                                         FolderResult="@FolderComparisonResult" />
+                var selectedFolderPair = FolderComparisonResult.FilePairResults[SelectedPairIndex];
+
+                @if (selectedFolderPair.HasError)
+                {
+                    <ErrorDetailView SelectedPair="@selectedFolderPair"
+                                     RawFileDifferences="@FolderRawFileDifferences" />
+                }
+                else if (DifferenceSummary != null)
+                {
+                    <DetailedDifferencesView SelectedPair="@selectedFolderPair"
+                                             DifferenceSummary="@DifferenceSummary"
+                                             ComparisonResult="@ComparisonResult"
+                                             ShowAllDifferences="@ShowAllDifferences"
+                                             OnToggleShowAll="@ToggleShowAllDifferences"
+                                             OnExportResults="@ExportFolderResults"
+                                             FolderResult="@FolderComparisonResult" />
+                }
             }
 
             @if (EnableEnhancedStructuralAnalysis && FolderComparisonResult != null && !FolderComparisonResult.AllEqual && EnhancedStructuralAnalysis == null)
@@ -488,6 +500,7 @@
     private bool ShowAllDifferences { get; set; } = false;
     private MultiFolderComparisonResult FolderComparisonResult { get; set; }
     private int SelectedPairIndex { get; set; } = -1;
+    private List<RawTextDifference>? FolderRawFileDifferences { get; set; }
     private SemanticDifferenceAnalysis SemanticAnalysis { get; set; }
     private EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult EnhancedStructuralAnalysis { get; set; }
     private CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
@@ -950,7 +963,26 @@
         var selectedPair = FolderComparisonResult.FilePairResults[index];
         ComparisonResult = selectedPair.Result;
         DifferenceSummary = selectedPair.Summary;
-        
+
+        // Compute raw file diff for error detail view when the pair has an error
+        if (selectedPair.HasError && !string.IsNullOrEmpty(selectedPair.File1Path))
+        {
+            try
+            {
+                FolderRawFileDifferences = await RawTextComparisonService.CompareFilesRawAsync(
+                    selectedPair.File1Path, selectedPair.File2Path);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Failed to compute raw file differences for error detail view.");
+                FolderRawFileDifferences = null;
+            }
+        }
+        else
+        {
+            FolderRawFileDifferences = null;
+        }
+
         // Scroll to the detailed differences section after selection
         try
         {

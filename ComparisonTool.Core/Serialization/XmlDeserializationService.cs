@@ -165,6 +165,112 @@ public class XmlDeserializationService : IXmlDeserializationService
     }
 
     /// <summary>
+    /// Attempts to deserialize an XML stream to the specified model type without throwing exceptions
+    /// for expected failure cases. Pre-validates the root element using <see cref="XmlSerializer.CanDeserialize"/>
+    /// to catch SOAP faults, wrong root elements, empty files, and malformed XML before the serializer
+    /// has a chance to throw <see cref="InvalidOperationException"/>.
+    /// </summary>
+    /// <param name="xmlStream">The XML stream to deserialize.</param>
+    /// <param name="modelType">The target model type (resolved at runtime).</param>
+    /// <returns>A <see cref="DeserializationResult"/> containing the object or a descriptive error message.</returns>
+    public DeserializationResult TryDeserializeXml(Stream xmlStream, Type modelType)
+    {
+        if (xmlStream == null)
+        {
+            return DeserializationResult.Failure("XML stream cannot be null.");
+        }
+
+        if (xmlStream.Length == 0)
+        {
+            return DeserializationResult.Failure(
+                "XML stream is empty (0 bytes). The file may be empty or corrupt.");
+        }
+
+        try
+        {
+            xmlStream.Position = 0;
+
+            // Get a properly configured serializer for this type (respects IgnoreXmlNamespaces mode)
+            var serializer = GetCachedSerializerForType(modelType);
+
+            // Step 1: Pre-validate by reading the root element and checking CanDeserialize.
+            // This catches root element mismatches (SOAP faults, wrong schemas) WITHOUT throwing.
+            using (var preCheckReader = XmlReader.Create(xmlStream, GetOptimizedReaderSettings()))
+            {
+                XmlReader effectiveReader = preCheckReader;
+                if (IgnoreXmlNamespaces)
+                {
+                    effectiveReader = new NamespaceAgnosticXmlReader(preCheckReader);
+                }
+
+                try
+                {
+                    effectiveReader.MoveToContent();
+                }
+                catch (XmlException ex)
+                {
+                    return DeserializationResult.Failure($"Malformed XML: {ex.Message}");
+                }
+
+                if (!serializer.CanDeserialize(effectiveReader))
+                {
+                    var actualRoot = effectiveReader.LocalName;
+                    var actualNs = effectiveReader.NamespaceURI;
+                    var expectedRoot = GetExpectedRootElementName(modelType);
+
+                    var detail = string.IsNullOrEmpty(actualNs)
+                        ? $"<{actualRoot}>"
+                        : $"<{actualRoot} xmlns='{actualNs}'>";
+
+                    return DeserializationResult.Failure(
+                        $"Root element mismatch: found {detail} but expected <{expectedRoot}>. " +
+                        "The file may contain a SOAP fault, error response, or different schema.");
+                }
+            }
+
+            // Step 2: Root element matches — perform full deserialization.
+            // Reset the stream and create a fresh reader.
+            xmlStream.Position = 0;
+            using var baseReader = XmlReader.Create(xmlStream, GetOptimizedReaderSettings());
+            XmlReader deserializeReader = baseReader;
+            if (IgnoreXmlNamespaces)
+            {
+                deserializeReader = new NamespaceAgnosticXmlReader(baseReader);
+                logger.LogDebug("Using namespace-agnostic reader for type {Type} (xsi:nil preserved)", modelType.Name);
+            }
+
+            var result = serializer.Deserialize(deserializeReader);
+            if (result == null)
+            {
+                return DeserializationResult.Failure(
+                    $"Deserialization of type {modelType.Name} returned null.");
+            }
+
+            return DeserializationResult.Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Shouldn't normally reach here since CanDeserialize pre-validates,
+            // but handle gracefully for edge cases (e.g., XML structure issues deeper than root).
+            var message = ex.InnerException != null
+                ? $"{ex.Message} → {ex.InnerException.Message}"
+                : ex.Message;
+            logger.LogWarning(ex, "Deserialization error for type {Type} (past pre-validation): {Message}", modelType.Name, message);
+            return DeserializationResult.Failure($"Deserialization error: {message}");
+        }
+        catch (XmlException ex)
+        {
+            logger.LogWarning(ex, "XML parsing error for type {Type}: {Message}", modelType.Name, ex.Message);
+            return DeserializationResult.Failure($"XML parsing error: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Unexpected error during TryDeserializeXml for type {Type}", modelType.Name);
+            return DeserializationResult.Failure($"Unexpected error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
     /// Clone object efficiently using serialization.
     /// </summary>
     /// <typeparam name="T">The type to clone.</typeparam>
@@ -338,6 +444,53 @@ public class XmlDeserializationService : IXmlDeserializationService
 
             return serializer;
         });
+    }
+
+    /// <summary>
+    /// Non-generic version of <see cref="GetCachedSerializer{T}"/> that creates and caches
+    /// a properly configured serializer for a runtime-resolved type. Used by
+    /// <see cref="TryDeserializeXml"/> where the model type is not known at compile time.
+    /// </summary>
+    private XmlSerializer GetCachedSerializerForType(Type type)
+    {
+        var threadLocalCache = threadLocalSerializerCache.Value
+            ?? throw new InvalidOperationException("Thread-local serializer cache is not initialized.");
+
+        var cacheKey = (type, IgnoreXmlNamespaces);
+
+        return threadLocalCache.GetOrAdd(cacheKey, _ =>
+        {
+            var serializer = serializerFactory.GetSerializer(type, IgnoreXmlNamespaces);
+
+            serializer.UnknownElement += (sender, e) =>
+                logger.LogDebug(
+                    "Unknown XML element encountered: {ElementName} at line {LineNumber}, position {LinePosition}. This element will be ignored during deserialization.",
+                    e.Element.Name,
+                    e.LineNumber,
+                    e.LinePosition);
+
+            serializer.UnknownAttribute += (sender, e) =>
+                logger.LogDebug(
+                    "Unknown XML attribute encountered: {AttributeName} at line {LineNumber}, position {LinePosition}. This attribute will be ignored during deserialization.",
+                    e.Attr.Name,
+                    e.LineNumber,
+                    e.LinePosition);
+
+            return serializer;
+        });
+    }
+
+    /// <summary>
+    /// Gets the expected root element name for a model type by inspecting its
+    /// <see cref="XmlRootAttribute"/>. Falls back to the type name if no attribute is present.
+    /// </summary>
+    private static string GetExpectedRootElementName(Type modelType)
+    {
+        var xmlRootAttr = modelType
+            .GetCustomAttributes(typeof(XmlRootAttribute), true)
+            .FirstOrDefault() as XmlRootAttribute;
+
+        return xmlRootAttr?.ElementName ?? modelType.Name;
     }
 
     /// <summary>

@@ -1,59 +1,42 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2026-02-09T00:00:00Z
+lastUpdated: 2026-02-11T15:00:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-Implement Non-Success Response Comparison feature - COMPLETED
+Fix failing error-scenario integration tests (missing XML test files) — COMPLETED
 
 ## Todo List Status
 ```markdown
-- [x] Task 1: RequestPairOutcome enum + ClassifiedExecutionResult + ExecutionOutcomeSummary + ExecutionResultClassifier
-- [x] Task 2: Add ContentTypeA/ContentTypeB on RequestExecutionResult
-- [x] Task 3: Capture Content-Type in RequestExecutionService.SendRequestAsync
-- [x] Task 4: Implement RawTextComparisonService (line-by-line diff with truncation)
-- [x] Task 5: Add PairOutcome/HttpStatusCode/RawTextDifferences to FilePairComparisonResult
-- [x] Task 6: Rewrite ExecuteJobAsync with classification-based routing (Phase 2.5/3a/3b/3c)
-- [x] Task 7: Update UI (FileComparisonResults grid, RawTextDifferencesView component, Home.razor outcome banner)
-- [x] Task 8: Write unit tests (45 tests: ExecutionResultClassifierTests + RawTextComparisonServiceTests)
-- [x] Task 9: Build and run all tests (136 total, 0 failures)
+- [x] 🧭 Confirm failing test cause
+- [x] 🧩 Align error-scenario test data
+- [x] 🗂️ Add missing error-scenario files
+- [x] ✅ Run targeted tests
+- [x] 📝 Update session context
 ```
 
 ## Recent File Changes
-- `ComparisonTool.Core/RequestComparison/Models/ExecutionResultClassification.cs` (NEW): RequestPairOutcome enum, ClassifiedExecutionResult, ExecutionOutcomeSummary, ExecutionResultClassifier
-- `ComparisonTool.Core/Comparison/Results/RawTextDifference.cs` (NEW): RawTextDifferenceType enum, RawTextDifference class
-- `ComparisonTool.Core/RequestComparison/Services/RawTextComparisonService.cs` (NEW): Raw text body comparison with 5KB truncation, 100 max diff lines
-- `ComparisonTool.Web/Components/Comparison/RawTextDifferencesView.razor` (NEW): Blazor component for displaying raw text diffs
-- `ComparisonTool.Core/RequestComparison/Models/RequestFileInfo.cs`: Added ContentTypeA/ContentTypeB
-- `ComparisonTool.Core/Comparison/Results/FilePairComparisonResult.cs`: Added HttpStatusCodeA/B, PairOutcome, RawTextDifferences
-- `ComparisonTool.Core/RequestComparison/Services/RequestExecutionService.cs`: Return contentType from SendRequestAsync
-- `ComparisonTool.Core/RequestComparison/Services/RequestComparisonJobService.cs`: Classification-based routing in ExecuteJobAsync
-- `ComparisonTool.Web/Program.cs`: Registered RawTextComparisonService
-- `ComparisonTool.Web/Components/Comparison/FileComparisonResults.razor`: Status column, filters, outcome badges
-- `ComparisonTool.Web/Components/Pages/Home.razor`: ExecutionOutcomeSummary banner, RawTextDifferencesView rendering
-- `ComparisonTool.Tests/Unit/RequestComparison/ExecutionResultClassifierTests.cs` (NEW): 22 tests for classifier
-- `ComparisonTool.Tests/Unit/RequestComparison/RawTextComparisonServiceTests.cs` (NEW): 23 tests for raw text comparison
+- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Actual/Actual_MalformedXml.xml`: Added malformed XML fixture for error scenario tests
+- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Actual/Actual_TruncatedXml.xml`: Added truncated XML fixture for error scenario tests
+- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Actual/Actual_WrongRootElement.xml`: Added wrong-root XML fixture for error scenario tests
+- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Actual/Actual_EmptyFile.xml`: Added zero-byte XML fixture for empty file scenario
+- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Expected/Expected_MalformedXml.xml`: Added minimal valid expected XML for malformed scenario
+- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Expected/Expected_TruncatedXml.xml`: Added minimal valid expected XML for truncated scenario
+- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Expected/Expected_EmptyFile.xml`: Added minimal valid expected XML for empty file scenario
+- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Expected/Expected_WrongRootElement.xml`: Added minimal valid expected XML for wrong root scenario
 
 ## Key Technical Decisions
-- Decision: Use SignalR for real-time progress updates instead of polling
-- Rationale: Already configured in Program.cs, native Blazor integration, lower latency than polling
-- Date: 2026-02-04
-
-- Decision: Use 250ms throttling for progress updates during Executing phase
-- Rationale: Prevents UI flooding when many API calls are made in quick succession
-- Date: 2026-02-05
-
-- Decision: Group-based SignalR subscriptions by JobId
-- Rationale: Allows multiple clients to subscribe to the same job and efficiently target updates
-- Date: 2026-02-05
+- Decision: Use `FilePairComparisonResult.AreEqual` property instead of manually checking `pair.Summary?.AreEqual`
+- Rationale: `AreEqual` correctly returns `false` when Summary is null (raw text comparison results) by design: `!HasError && (Summary?.AreEqual ?? false)`. This is consistent with `FileComparisonResults.razor` which already uses `r.AreEqual` for its `GetEqualCount()`/`GetDifferentCount()` methods.
+- Date: 2026-02-11
 
 ## External Resources Referenced
-- [MudBlazor Tabs](https://mudblazor.com/components/tabs): Reviewed usage patterns for tab selection and active index binding
-- [MudBlazor Tabs (Jina AI mirror)](https://r.jina.ai/https://mudblazor.com/components/tabs): Used for readable page content
-- [Google Search (blocked)](https://www.google.com/search?q=MudBlazor+MudTabs+click+not+working+Blazor+Server): JS required; used direct docs instead
+- https://www.google.com/search?q=FluentAssertions+ThrowAsync+MSTest+should+throw+exception+async+task: Search attempt (blocked by Google enablejs interstitial)
+- https://fluentassertions.com/exceptions/: FluentAssertions async exception assertion guidance
+- https://fluentassertions.com/introduction: FluentAssertions framework detection and usage overview
 
 ## Blockers & Issues
 - None
@@ -62,53 +45,14 @@ Implement Non-Success Response Comparison feature - COMPLETED
 - None
 
 ## Environment Notes
-- SignalR already configured in Program.cs with max message size and timeouts
-- Added Microsoft.AspNetCore.SignalR.Client v8.0.23 package for Blazor client
+- .NET 8.0
+- Targeted test run: CompareXmlFilesAsync_WithErrorScenarioFiles_ShouldThrowOnDeserialization (5/5 passed)
 
 ## Next Session Priority
 No active tasks
 
 ## Session Notes
-Created a detailed implementation plan for adding real-time progress tracking to the Request Comparison feature. The plan includes:
-- 11 tasks across 3 phases (Backend infrastructure, API wiring, Frontend integration)
-- 10 files to create or modify
-- Estimated 6-8 hours of development
-- Risk mitigations for connection drops, event flooding, and memory leaks
-  - Added field references: `requestComparisonPanel`, `requestPropertySelector`, `requestTreePropertySelector`
-  - Added handler methods: `OpenRequestPropertySelector()`, `OpenRequestTreePropertySelector()`, `AddRequestIgnoreRule()`, `AddRequestIgnoreRulesBatch()`, `RemoveRequestIgnoreRule()`
-
-## Key Technical Decisions
-- Decision: Reuse existing HierarchicalPropertySelector and ObjectTreePropertySelector components for Request Comparison
-- Rationale: Maintains consistency with File/Folder Comparison tab; leverages existing tested functionality
-- Date: 2025-02-05
-
-- Decision: Made RequestComparisonPanel.IgnoreRules public with { get; set; }
-- Rationale: Allows Home.razor to pass the list to the selector components while the panel manages the state
-- Date: 2025-02-05
-
-## External Resources Referenced
-- MudBlazor documentation (attempted but blocked by JS requirements)
-- Existing codebase patterns for Tree Navigator implementation
-
-## Blockers & Issues
-- **[RESOLVED]** Build error RZ10010: Conflicting `OnClick` and `@onclick:stopPropagation` on MudButton - Fixed by removing stopPropagation directive
-- **[RESOLVED]** Google search blocked by JavaScript requirement - Used direct analysis of existing code patterns instead
-
-## Failed Approaches
-- None
-
-## Environment Notes
-- .NET 8.0, Blazor Server with MudBlazor
-- Build succeeded with 127 pre-existing warnings (not introduced by these changes)
-
-## Next Session Priority
-No active tasks - all requested improvements completed
-
-## Session Notes
-Implementation complete. The Request Comparison (A/B) tab now:
-1. Uses Tree Navigator and Simple Property Selector instead of manual ignore rule inputs
-2. Has properly styled "Comparison Overview" section using MudBlazor components (MudPaper, MudAlert, MudGrid, MudProgressLinear)
-3. Has properly styled "Semantic Difference Groups" section using MudBlazor components (MudPaper, MudSimpleTable, MudButton, MudAlert, MudProgressLinear)
+Failing integration tests were caused by missing XML fixture files referenced by the data rows in ComparisonServiceIntegrationTests. Added the missing actual/expected XML fixtures, including a zero-byte empty file, then re-ran the targeted data test (all 5 cases passed).
 
 ---
 # Previous Session Archive

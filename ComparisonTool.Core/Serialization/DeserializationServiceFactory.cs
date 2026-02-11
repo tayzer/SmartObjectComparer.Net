@@ -196,6 +196,17 @@ internal class XmlDeserializationServiceAdapter : IDeserializationService
         return xmlService.DeserializeXml<T>(stream);
     }
 
+    public DeserializationResult TryDeserialize(Stream stream, Type modelType, SerializationFormat? format = null)
+    {
+        if (format.HasValue && format.Value != SerializationFormat.Xml)
+        {
+            return DeserializationResult.Failure(
+                $"XmlDeserializationService only supports XML format, but {format.Value} was specified.");
+        }
+
+        return xmlService.TryDeserializeXml(stream, modelType);
+    }
+
     public T CloneObject<T>(T source) => xmlService.CloneObject<T>(source);
 
     public void ClearDeserializationCache() => xmlService.ClearDeserializationCache();
@@ -318,6 +329,22 @@ internal class UnifiedDeserializationService : IDeserializationService
         }
 
         return service.Deserialize<T>(stream, format);
+    }
+
+    public DeserializationResult TryDeserialize(Stream stream, Type modelType, SerializationFormat? format = null)
+    {
+        IDeserializationService service;
+
+        if (format.HasValue)
+        {
+            service = factory.GetService(format.Value);
+        }
+        else
+        {
+            service = factory.GetServiceFromContent(stream);
+        }
+
+        return service.TryDeserialize(stream, modelType, format);
     }
 
     public T CloneObject<T>(T source)

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<OrderManagementResponse xmlns="urn:example.co.uk/soap:version7">
+  <RequestId>REQ-MALFORMED-001</RequestId>
+  <OrderData>
+    <OrderId>ORD-MALFORMED-001</OrderId>
+  <!-- Missing closing tags on purpose to simulate malformed XML

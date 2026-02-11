@@ -361,4 +361,84 @@ public class RawTextComparisonServiceTests
         result.File1Name.Should().Be("test.xml");
         result.File2Name.Should().Be("test.xml");
     }
+
+    // --- CompareFilesRawAsync tests ---
+
+    private (string file1, string file2) CreatePlainFiles(string contentA, string contentB)
+    {
+        var file1 = Path.Combine(tempDir, $"fileA_{Guid.NewGuid():N}.xml");
+        var file2 = Path.Combine(tempDir, $"fileB_{Guid.NewGuid():N}.xml");
+        File.WriteAllText(file1, contentA);
+        File.WriteAllText(file2, contentB);
+        return (file1, file2);
+    }
+
+    [TestMethod]
+    public async Task CompareFilesRawAsync_IdenticalFiles_ReturnsNoDifferences()
+    {
+        var content = "<root><item>Hello</item></root>";
+        var (file1, file2) = CreatePlainFiles(content, content);
+
+        var diffs = await service.CompareFilesRawAsync(file1, file2);
+
+        diffs.Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public async Task CompareFilesRawAsync_DifferentContent_ReturnsDifferences()
+    {
+        var (file1, file2) = CreatePlainFiles(
+            "<root><item>Old</item></root>",
+            "<root><item>New</item></root>");
+
+        var diffs = await service.CompareFilesRawAsync(file1, file2);
+
+        diffs.Should().NotBeEmpty();
+        diffs.Should().Contain(d => d.Type == RawTextDifferenceType.Modified);
+    }
+
+    [TestMethod]
+    public async Task CompareFilesRawAsync_BothPathsNull_ReturnsEmpty()
+    {
+        var diffs = await service.CompareFilesRawAsync(null, null);
+
+        diffs.Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public async Task CompareFilesRawAsync_MissingFile_ReturnsAllAsAdded()
+    {
+        var (file1, _) = CreatePlainFiles("<root>content</root>", "");
+        var missingPath = Path.Combine(tempDir, "nonexistent.xml");
+
+        var diffs = await service.CompareFilesRawAsync(file1, missingPath);
+
+        diffs.Should().NotBeEmpty();
+        diffs.Should().Contain(d => d.Type == RawTextDifferenceType.OnlyInA);
+    }
+
+    [TestMethod]
+    public async Task CompareFilesRawAsync_LargeFile_AddsTruncationNotice()
+    {
+        // Create a file larger than 5 KB (MaxBodyBytes)
+        var largeContent = new string('X', 6 * 1024);
+        var (file1, file2) = CreatePlainFiles(largeContent, "small");
+
+        var diffs = await service.CompareFilesRawAsync(file1, file2);
+
+        diffs.Should().NotBeEmpty();
+        diffs.Should().Contain(d => d.Description != null && d.Description.Contains("truncated"));
+    }
+
+    [TestMethod]
+    public async Task CompareFilesRawAsync_RespectsCancel()
+    {
+        var (file1, file2) = CreatePlainFiles("a", "b");
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var act = () => service.CompareFilesRawAsync(file1, file2, cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
 }

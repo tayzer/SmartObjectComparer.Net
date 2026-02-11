@@ -1,0 +1,240 @@
+@namespace ComparisonTool.Web.Components.Comparison
+@using ComparisonTool.Core.Comparison.Results
+@using MudBlazor
+
+<MudPaper Elevation="2" Class="mt-4" id="detailed-differences-section">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pa-3" Style="background: var(--mud-palette-surface);">
+        <MudStack Spacing="0">
+            <MudText Typo="Typo.h6">
+                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Class="mr-2" />
+                Comparison Error
+            </MudText>
+            <MudText Typo="Typo.caption" Color="Color.Default">
+                @SelectedPair.File1Name vs @SelectedPair.File2Name
+            </MudText>
+        </MudStack>
+    </MudStack>
+    <MudDivider />
+
+    <div class="pa-4">
+        <MudStack Spacing="3">
+
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="false">
+                <MudStack Spacing="1">
+                    @if (!string.IsNullOrEmpty(SelectedPair.ErrorType))
+                    {
+                        <MudText Typo="Typo.subtitle2">
+                            <strong>Error Type:</strong> @SelectedPair.ErrorType
+                        </MudText>
+                    }
+                    <MudText Typo="Typo.body2" Style="word-break: break-word;">
+                        @SelectedPair.ErrorMessage
+                    </MudText>
+                </MudStack>
+            </MudAlert>
+
+            <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true">
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.subtitle2"><strong>Diagnostic Tips</strong></MudText>
+                    <MudList T="string" Dense="true">
+                        @foreach (var tip in GetDiagnosticTips())
+                        {
+                            <MudListItem T="string" Icon="@Icons.Material.Filled.ChevronRight" IconSize="Size.Small" Dense="true">
+                                <MudText Typo="Typo.body2">@tip</MudText>
+                            </MudListItem>
+                        }
+                    </MudList>
+                </MudStack>
+            </MudAlert>
+
+            @if (RawFileDifferences != null)
+            {
+                <MudPaper Elevation="1">
+                    <MudStack Row="true"
+                              Justify="Justify.SpaceBetween"
+                              AlignItems="AlignItems.Center"
+                              Class="pa-3 cursor-pointer"
+                              Style="background: var(--mud-palette-background-grey);"
+                              @onclick="ToggleRawPreview">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@(showRawPreview ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ChevronRight)" />
+                            <MudText Typo="Typo.subtitle1"><strong>Raw File Content</strong></MudText>
+                            @if (RawFileDifferences.Count == 0)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success">Files identical</MudChip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning">@RawFileDifferences.Count differences</MudChip>
+                            }
+                        </MudStack>
+                    </MudStack>
+
+                    @if (showRawPreview)
+                    {
+                        <MudDivider />
+                        <div class="pa-3">
+                            @if (RawFileDifferences.Count == 0)
+                            {
+                                <MudAlert Severity="Severity.Success" Variant="Variant.Text" Dense="true">
+                                    The raw file contents are identical. The error occurred during deserialization, not in the file content itself.
+                                </MudAlert>
+                            }
+                            else
+                            {
+                                <MudSimpleTable Dense="true" Hover="true" Striped="false" Style="overflow-x: auto;">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 80px;">Line</th>
+                                            <th style="width: 70px;">Type</th>
+                                            <th>Expected (A)</th>
+                                            <th>Actual (B)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var diff in RawFileDifferences)
+                                        {
+                                            <tr class="@GetRowClass(diff.Type)">
+                                                <td>
+                                                    @if (diff.LineNumberA.HasValue && diff.LineNumberB.HasValue)
+                                                    {
+                                                        <span>@diff.LineNumberA / @diff.LineNumberB</span>
+                                                    }
+                                                    else if (diff.LineNumberA.HasValue)
+                                                    {
+                                                        <span>@diff.LineNumberA</span>
+                                                    }
+                                                    else if (diff.LineNumberB.HasValue)
+                                                    {
+                                                        <span>@diff.LineNumberB</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    <MudChip T="string" Size="Size.Small" Color="@GetTypeColor(diff.Type)" Variant="Variant.Outlined">
+                                                        @GetTypeLabel(diff.Type)
+                                                    </MudChip>
+                                                </td>
+                                                <td>
+                                                    <code style="font-size: 0.825rem; white-space: pre-wrap;">@(diff.TextA ?? "")</code>
+                                                </td>
+                                                <td>
+                                                    <code style="font-size: 0.825rem; white-space: pre-wrap;">@(diff.TextB ?? "")</code>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+                            }
+                        </div>
+                    }
+                </MudPaper>
+            }
+            else if (!string.IsNullOrEmpty(SelectedPair.File1Path) || !string.IsNullOrEmpty(SelectedPair.File2Path))
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Text" Dense="true">
+                    Raw file preview is loading or unavailable.
+                </MudAlert>
+            }
+
+        </MudStack>
+    </div>
+</MudPaper>
+
+@code {
+    [Parameter]
+    public FilePairComparisonResult SelectedPair { get; set; } = null!;
+
+    [Parameter]
+    public List<RawTextDifference>? RawFileDifferences { get; set; }
+
+    private bool showRawPreview;
+
+    private void ToggleRawPreview()
+    {
+        showRawPreview = !showRawPreview;
+    }
+
+    private List<string> GetDiagnosticTips()
+    {
+        var tips = new List<string>();
+        var errorType = SelectedPair.ErrorType ?? "";
+        var errorMsg = SelectedPair.ErrorMessage ?? "";
+
+        if (errorType == "FileNotFoundException" || errorMsg.Contains("not find file", StringComparison.OrdinalIgnoreCase))
+        {
+            tips.Add("The file does not exist at the expected path. Verify the directory structure.");
+        }
+
+        if (errorMsg.Contains("XML", StringComparison.OrdinalIgnoreCase) || errorMsg.Contains("error in XML document", StringComparison.OrdinalIgnoreCase))
+        {
+            tips.Add("The file may contain malformed XML. Check for syntax errors, missing closing tags, or invalid characters.");
+        }
+
+        if (errorMsg.Contains("null", StringComparison.OrdinalIgnoreCase) || errorMsg.Contains("Deserialization returned null", StringComparison.OrdinalIgnoreCase))
+        {
+            tips.Add("Deserialization succeeded but returned null. Check that the XML root element name matches the domain model.");
+        }
+
+        if (errorMsg.Contains("JSON", StringComparison.OrdinalIgnoreCase))
+        {
+            tips.Add("The file may contain invalid JSON. Check for syntax errors or unexpected content.");
+        }
+
+        if (errorMsg.Contains("format", StringComparison.OrdinalIgnoreCase))
+        {
+            tips.Add("There may be a format mismatch between the two files (e.g., one is XML and the other is JSON).");
+        }
+
+        // Always include general tips
+        tips.Add("Check that the selected domain model matches the file format.");
+        tips.Add("Verify the file is not empty, truncated, or contains an error page instead of expected content.");
+
+        if (!string.IsNullOrEmpty(SelectedPair.File1Path))
+        {
+            tips.Add("Expand the 'Raw File Content' section below to inspect the actual file content.");
+        }
+
+        return tips;
+    }
+
+    private static string GetRowClass(RawTextDifferenceType type) => type switch
+    {
+        RawTextDifferenceType.OnlyInA => "raw-diff-line-a",
+        RawTextDifferenceType.OnlyInB => "raw-diff-line-b",
+        RawTextDifferenceType.Modified => "raw-diff-line-modified",
+        _ => "",
+    };
+
+    private static Color GetTypeColor(RawTextDifferenceType type) => type switch
+    {
+        RawTextDifferenceType.OnlyInA => Color.Error,
+        RawTextDifferenceType.OnlyInB => Color.Success,
+        RawTextDifferenceType.Modified => Color.Warning,
+        _ => Color.Default,
+    };
+
+    private static string GetTypeLabel(RawTextDifferenceType type) => type switch
+    {
+        RawTextDifferenceType.OnlyInA => "Only A",
+        RawTextDifferenceType.OnlyInB => "Only B",
+        RawTextDifferenceType.Modified => "Modified",
+        _ => type.ToString(),
+    };
+}
+
+<style>
+    .raw-diff-line-a {
+        background-color: rgba(211, 47, 47, 0.08) !important;
+        border-left: 3px solid #d32f2f !important;
+    }
+
+    .raw-diff-line-b {
+        background-color: rgba(46, 125, 50, 0.08) !important;
+        border-left: 3px solid #2e7d32 !important;
+    }
+
+    .raw-diff-line-modified {
+        background-color: rgba(245, 124, 0, 0.08) !important;
+        border-left: 3px solid #f57c00 !important;
+    }
+</style>

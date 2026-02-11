@@ -46,6 +46,16 @@ public interface IDeserializationService
         where T : class;
 
     /// <summary>
+    /// Attempts to deserialize a stream to the specified model type without throwing exceptions
+    /// for expected failure cases (SOAP faults, wrong root elements, empty files, malformed data).
+    /// </summary>
+    /// <param name="stream">Stream containing the serialized data.</param>
+    /// <param name="modelType">The target model type (resolved at runtime).</param>
+    /// <param name="format">Optional explicit format.</param>
+    /// <returns>A <see cref="DeserializationResult"/> containing the object or an error message.</returns>
+    DeserializationResult TryDeserialize(Stream stream, Type modelType, SerializationFormat? format = null);
+
+    /// <summary>
     /// Clone object efficiently using serialization.
     /// </summary>
     /// <typeparam name="T">Type to clone.</typeparam>

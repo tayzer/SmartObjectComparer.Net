@@ -34,6 +34,22 @@ public interface IXmlDeserializationService
     T DeserializeXml<T>(Stream xmlStream)
         where T : class;
 
+    /// <summary>
+    /// Attempts to deserialize an XML stream to the specified model type without throwing exceptions
+    /// for expected failure cases (SOAP faults, wrong root elements, empty files, malformed XML).
+    /// <para>
+    /// This method pre-validates the XML root element before attempting full deserialization,
+    /// preventing <see cref="System.InvalidOperationException"/> from being thrown by
+    /// <see cref="System.Xml.Serialization.XmlSerializer.Deserialize(System.Xml.XmlReader)"/>.
+    /// This is critical for folder comparisons where SOAP faults are expected and should not
+    /// cause the VS debugger to break on first-chance exceptions.
+    /// </para>
+    /// </summary>
+    /// <param name="xmlStream">The XML stream to deserialize.</param>
+    /// <param name="modelType">The target model type (resolved at runtime).</param>
+    /// <returns>A <see cref="DeserializationResult"/> containing the object or an error message.</returns>
+    DeserializationResult TryDeserializeXml(Stream xmlStream, Type modelType);
+
     T CloneObject<T>(T source);
 
     /// <summary>

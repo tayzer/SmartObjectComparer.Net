@@ -10,6 +10,17 @@ public class FilePairComparisonResult
 
     public string File2Name { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Gets or sets the full path to file 1. Used for raw file preview on error.
+    /// Null for request comparison results (which use response paths on the execution result).
+    /// </summary>
+    public string? File1Path { get; set; }
+
+    /// <summary>
+    /// Gets or sets the full path to file 2. Used for raw file preview on error.
+    /// </summary>
+    public string? File2Path { get; set; }
+
     public ComparisonResult? Result
     {
         get; set;
