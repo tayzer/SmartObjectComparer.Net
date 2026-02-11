@@ -1,78 +1,58 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2026-02-11T12:00:00Z
+lastUpdated: 2026-02-11T15:00:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-Prevent VS debugger breaks by eliminating exceptions from XmlSerializer.Deserialize — COMPLETED
+Fix failing error-scenario integration tests (missing XML test files) — COMPLETED
 
 ## Todo List Status
 ```markdown
-- [x] Task 1: Create DeserializationResult record type
-- [x] Task 2: Add non-generic serializer support to XmlSerializerFactory
-- [x] Task 3: Add TryDeserializeXml to IXmlDeserializationService
-- [x] Task 4: Implement TryDeserializeXml in XmlDeserializationService
-- [x] Task 5: Add TryDeserialize to IDeserializationService + adapter
-- [x] Task 6: Update HighPerformanceComparisonPipeline
-- [x] Task 7: Update ComparisonOrchestrator batch paths
-- [x] Task 8: Update integration tests
-- [x] Task 9: Build and run all tests (147 total, 0 failures)
-- [x] Task 10: Update session context
+- [x] 🧭 Confirm failing test cause
+- [x] 🧩 Align error-scenario test data
+- [x] 🗂️ Add missing error-scenario files
+- [x] ✅ Run targeted tests
+- [x] 📝 Update session context
 ```
 
 ## Recent File Changes
-- `ComparisonTool.Core/Serialization/DeserializationResult.cs` (NEW): Result type for exception-free deserialization with Ok/Failure factory methods
-- `ComparisonTool.Core/Serialization/IXmlDeserializationService.cs`: Added TryDeserializeXml(Stream, Type) method
-- `ComparisonTool.Core/Serialization/XmlDeserializationService.cs`: Added TryDeserializeXml with root element pre-validation via CanDeserialize, GetCachedSerializerForType, GetExpectedRootElementName
-- `ComparisonTool.Core/Serialization/XmlSerializerFactory.cs`: Added non-generic GetSerializer(Type, bool), CreateDefaultSerializer(Type), CreateStrictSerializer(Type)
-- `ComparisonTool.Core/Serialization/IDeserializationService.cs`: Added TryDeserialize(Stream, Type, SerializationFormat?) method
-- `ComparisonTool.Core/Serialization/DeserializationServiceFactory.cs`: Added TryDeserialize to XmlDeserializationServiceAdapter and UnifiedDeserializationService
-- `ComparisonTool.Core/Serialization/JsonDeserializationService.cs`: Added TryDeserialize with try-catch wrapper
-- `ComparisonTool.Core/Comparison/HighPerformanceComparisonPipeline.cs`: Changed GetOrCreateDeserializer to call TryDeserializeXml directly (no reflection), updated ReadAndDeserialize/DeserializeBothFilesAsync/RunDeserializationStageAsync to use DeserializationResult
-- `ComparisonTool.Core/Comparison/ComparisonOrchestrator.cs`: Replaced all reflection-based DeserializeXml/Deserialize calls with direct TryDeserializeXml/TryDeserialize calls in CompareXmlFilesWithCachingAsync, CompareXmlFilesAsync, CompareFilesWithCachingAsync, CompareFilesAsync
-- `ComparisonTool.Tests/Integration/Services/ComparisonServiceIntegrationTests.cs`: Updated comments to reflect new TryDeserialize behavior
+- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Actual/Actual_MalformedXml.xml`: Added malformed XML fixture for error scenario tests
+- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Actual/Actual_TruncatedXml.xml`: Added truncated XML fixture for error scenario tests
+- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Actual/Actual_WrongRootElement.xml`: Added wrong-root XML fixture for error scenario tests
+- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Actual/Actual_EmptyFile.xml`: Added zero-byte XML fixture for empty file scenario
+- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Expected/Expected_MalformedXml.xml`: Added minimal valid expected XML for malformed scenario
+- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Expected/Expected_TruncatedXml.xml`: Added minimal valid expected XML for truncated scenario
+- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Expected/Expected_EmptyFile.xml`: Added minimal valid expected XML for empty file scenario
+- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Expected/Expected_WrongRootElement.xml`: Added minimal valid expected XML for wrong root scenario
 
 ## Key Technical Decisions
-- Decision: Pre-validate XML root element using XmlSerializer.CanDeserialize() before attempting full deserialization
-- Rationale: Prevents InvalidOperationException from being thrown by XmlSerializer.Deserialize() for common failures (SOAP faults, wrong schemas). VS debugger won't break on first-chance exceptions since no exception is thrown.
-- Date: 2026-02-11
-
-- Decision: Return DeserializationResult instead of throwing from TryDeserializeXml
-- Rationale: Allows callers (Pipeline, Orchestrator) to handle deserialization failures as data flow rather than exception flow. Pipeline handles errors directly (no exception at all); Orchestrator wraps in InvalidOperationException for backward compatibility with existing catch blocks.
-- Date: 2026-02-11
-
-- Decision: Eliminate reflection-based MethodInfo.Invoke for deserialization entirely
-- Rationale: TryDeserializeXml(Stream, Type) is non-generic, so no reflection needed. This also eliminates TargetInvocationException wrapper issues.
+- Decision: Use `FilePairComparisonResult.AreEqual` property instead of manually checking `pair.Summary?.AreEqual`
+- Rationale: `AreEqual` correctly returns `false` when Summary is null (raw text comparison results) by design: `!HasError && (Summary?.AreEqual ?? false)`. This is consistent with `FileComparisonResults.razor` which already uses `r.AreEqual` for its `GetEqualCount()`/`GetDifferentCount()` methods.
 - Date: 2026-02-11
 
 ## External Resources Referenced
-- None needed for this change
+- https://www.google.com/search?q=FluentAssertions+ThrowAsync+MSTest+should+throw+exception+async+task: Search attempt (blocked by Google enablejs interstitial)
+- https://fluentassertions.com/exceptions/: FluentAssertions async exception assertion guidance
+- https://fluentassertions.com/introduction: FluentAssertions framework detection and usage overview
 
 ## Blockers & Issues
 - None
 
 ## Failed Approaches
-- Previous approach: ExceptionUnwrapper.InvokeUnwrapped() — fixed error messages but exceptions still thrown from XmlSerializer.Deserialize, causing VS debugger breaks
-- Lesson: Must prevent the exception from being thrown in the first place, not just handle it better after the fact
+- None
 
 ## Environment Notes
-- .NET 8.0, 147 tests passing
-- All InvokeUnwrapped calls replaced with direct TryDeserialize calls
-- ExceptionUnwrapper still used in batch error catch blocks (for non-deserialization errors)
+- .NET 8.0
+- Targeted test run: CompareXmlFilesAsync_WithErrorScenarioFiles_ShouldThrowOnDeserialization (5/5 passed)
 
 ## Next Session Priority
 No active tasks
 
 ## Session Notes
-Complete elimination of XmlSerializer.Deserialize() exception propagation for folder comparisons:
-- SOAP faults: caught by CanDeserialize (root element <Envelope> vs expected <OrderManagementResponse>) — NO exception thrown
-- Wrong root elements: caught by CanDeserialize — NO exception thrown
-- Empty files: caught by stream length check — NO exception thrown
-- Malformed XML: caught by MoveToContent() in pre-validation — NO exception thrown
-- Deep structure issues (post root element): caught by try-catch inside TryDeserializeXml — exception caught at lowest level
+Failing integration tests were caused by missing XML fixture files referenced by the data rows in ComparisonServiceIntegrationTests. Added the missing actual/expected XML fixtures, including a zero-byte empty file, then re-ran the targeted data test (all 5 cases passed).
 
 ---
 # Previous Session Archive

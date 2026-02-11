@@ -171,7 +171,7 @@
     // Computed properties for aggregated folder statistics
     private int TotalDifferences => FolderResult?.FilePairResults?.Sum(pair => pair.Summary?.TotalDifferenceCount ?? 0) ?? Summary.TotalDifferenceCount;
 
-    private int FilesWithDifferences => FolderResult?.FilePairResults?.Count(pair => pair.Summary != null && !pair.Summary.AreEqual) ?? (Summary.AreEqual ? 0 : 1);
+    private int FilesWithDifferences => FolderResult?.FilePairResults?.Count(pair => !pair.AreEqual) ?? (Summary.AreEqual ? 0 : 1);
 
     private int TotalFiles => FolderResult?.FilePairResults?.Count ?? 1;
 

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<OrderManagementResponse xmlns="urn:example.co.uk/soap:version7">
+  <RequestId>REQ-TRUNC-001</RequestId>
+  <OrderData>
+    <OrderId>ORD-TRUNC-001</OrderId>
+    <Status>Processing</Status>
+  <!-- Truncated mid-element to simulate a cut-off file
