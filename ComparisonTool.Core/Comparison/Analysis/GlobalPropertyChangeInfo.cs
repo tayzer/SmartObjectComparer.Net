@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ComparisonTool.Core.Comparison.Analysis;
 
 public class GlobalPropertyChangeInfo
@@ -19,6 +21,7 @@ public class GlobalPropertyChangeInfo
     /// <summary>
     /// Gets the occurrence count value reference for Interlocked operations.
     /// </summary>
+    [JsonIgnore]
     public ref int OccurrenceCountRef => ref occurrenceCountValue;
 
     public IDictionary<string, string> CommonChanges { get; set; } = new Dictionary<string, string>(StringComparer.Ordinal);

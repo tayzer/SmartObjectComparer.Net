@@ -1,36 +1,42 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2026-02-11T18:00:00Z
+lastUpdated: 2026-02-12T00:20:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-Document CLI request comparison flags in README — COMPLETED
+Fix JSON report serialization crash caused by ref properties in analysis models
 
 ## Todo List Status
 ```markdown
-- [x] 📝 Add request CLI flags to README
-- [x] ✅ Update session context
+- [x] 🛠️ Add JsonIgnore to ref properties
+- [x] 🔍 Confirm report serialization path
+- [x] ✅ Run targeted tests
+- [x] 📝 Update session context
 ```
 
 ## Recent File Changes
-- `README.md`: Added CLI request comparison example with `--ignore-rules` and `--content-type`, plus IgnoreRuleDto JSON sample
+- `ComparisonTool.Core/Comparison/Analysis/GlobalPatternInfo.cs`: Added `JsonIgnore` to ref-returning counter properties
+- `ComparisonTool.Core/Comparison/Analysis/GlobalPropertyChangeInfo.cs`: Added `JsonIgnore` to ref-returning counter property
 
 ## Key Technical Decisions
-- Decision: Document IgnoreRuleDto JSON format in README for CLI usage
-- Rationale: Ensures CLI users have a copy-paste example for `--ignore-rules`
-- Date: 2026-02-11
+- Decision: Use `JsonIgnore` on ref-returning properties used only for Interlocked operations
+- Rationale: System.Text.Json cannot serialize ref/pointer-like properties; ignore them for reporting
+- Date: 2026-02-12
 
 ## External Resources Referenced
-- None
+- https://learn.microsoft.com/en-us/dotnet/standard/serialization/system-text-json/ignore-properties: JsonIgnore usage and ignore options
+- https://learn.microsoft.com/en-us/dotnet/api/system.text.json.serialization.jsonignoreattribute: JsonIgnoreAttribute reference
+- https://learn.microsoft.com/en-us/dotnet/api/system.text.json.serialization.jsonignorecondition: JsonIgnoreCondition enum
+- https://learn.microsoft.com/en-us/dotnet/standard/serialization/system-text-json/overview: System.Text.Json overview
 
 ## Blockers & Issues
 - None
 
 ## Failed Approaches
-- None
+- Google search result page blocked (redirect to enablejs)
 
 ## Environment Notes
 - .NET 8.0
@@ -39,7 +45,7 @@ Document CLI request comparison flags in README — COMPLETED
 No active tasks
 
 ## Session Notes
-Updated README with CLI request comparison flags for ignore rules JSON and content-type override.
+Added `JsonIgnore` attributes to ref-returning properties used only for Interlocked operations to avoid System.Text.Json serialization failures. All tests passed (147).
 
 ---
 # Previous Session Archive

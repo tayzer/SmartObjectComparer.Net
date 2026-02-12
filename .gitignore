@@ -368,3 +368,4 @@ FodyWeavers.xsd
 
 # Ignore PerformanceReports output folder for the web project
 ComparisonTool.Web/PerformanceReports/
+/reports

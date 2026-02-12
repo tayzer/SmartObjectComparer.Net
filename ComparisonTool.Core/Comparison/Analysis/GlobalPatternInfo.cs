@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using KellermanSoftware.CompareNetObjects;
 
 namespace ComparisonTool.Core.Comparison.Analysis;
@@ -26,6 +27,7 @@ public class GlobalPatternInfo
     /// <summary>
     /// Gets the occurrence count value reference for Interlocked operations.
     /// </summary>
+    [JsonIgnore]
     public ref int OccurrenceCountRef => ref occurrenceCountValue;
 
     /// <summary>
@@ -40,6 +42,7 @@ public class GlobalPatternInfo
     /// <summary>
     /// Gets the file count value reference for Interlocked operations.
     /// </summary>
+    [JsonIgnore]
     public ref int FileCountRef => ref fileCountValue;
 
     public IList<string> AffectedFiles { get; set; } = new List<string>();
