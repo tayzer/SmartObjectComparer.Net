@@ -1,4 +1,4 @@
-# Comparison Tool
+    # Comparison Tool
 
 ## Overview
 
@@ -97,13 +97,69 @@ Tracks consistent value changes across properties, helping identify configuratio
 - Web browser (for the UI)
 - Domain model assemblies for your data types
 
-### Basic Usage
+### **Basic Usage**
+
+#### Web UI
 
 1. **Configure Domain Models**: Register your domain models for deserialization
 2. **Set Comparison Rules**: Define ignore rules and comparison preferences
 3. **Load Data**: Upload files or specify directories to compare
 4. **Run Analysis**: Execute comparison with desired analysis types enabled
 5. **Review Results**: Use the interactive UI to explore patterns and differences
+
+#### CLI
+
+The ComparisonTool CLI lets you run folder and request comparisons from the command line without hosting the web UI.
+
+**Install / Build:**
+```bash
+dotnet build ComparisonTool.Cli/ComparisonTool.Cli.csproj -c Release
+```
+
+**Folder comparison** — compare two directories of XML/JSON files:
+```bash
+comparisontool folder <expected-dir> <actual-dir> -m ComplexOrderResponse \
+  -f Console Json Markdown -o ./reports
+```
+
+**Request comparison** — fire requests at two endpoints and diff the responses (with ignore rules + content-type override):
+```bash
+comparisontool request <request-dir> \
+  -a https://host-a/api/endpoint \
+  -b https://host-b/api/endpoint \
+  -m ComplexOrderResponse -c 32 --timeout 60000 \
+  --ignore-rules ./ignore-rules.json \
+  --content-type application/json \
+  --ignore-collection-order --ignore-namespaces \
+  -f Console Json -o ./reports
+```
+
+**Ignore rules JSON** (array of `IgnoreRuleDto`):
+```json
+[
+  {
+    "propertyPath": "Order.Id",
+    "ignoreCompletely": true,
+    "ignoreCollectionOrder": false
+  },
+  {
+    "propertyPath": "Order.Items",
+    "ignoreCompletely": false,
+    "ignoreCollectionOrder": true
+  }
+]
+```
+
+Run `comparisontool --help`, `comparisontool folder --help`, or `comparisontool request --help` for full option details.
+
+**Exit codes:**
+| Code | Meaning |
+|------|---------|
+| 0 | All pairs are equal |
+| 1 | Error (bad input, runtime failure) |
+| 2 | Comparison completed with differences |
+
+**Configuration:** The CLI reads `appsettings.json` from its output directory (same sections as the web host: `ComparisonSettings`, `RequestComparison`). Override individual settings via environment variables prefixed with `CT_`.
 
 ### Example Workflow
 ```

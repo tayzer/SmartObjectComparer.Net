@@ -1,58 +1,51 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2026-02-11T15:00:00Z
+lastUpdated: 2026-02-12T00:20:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-Fix failing error-scenario integration tests (missing XML test files) — COMPLETED
+Fix JSON report serialization crash caused by ref properties in analysis models
 
 ## Todo List Status
 ```markdown
-- [x] 🧭 Confirm failing test cause
-- [x] 🧩 Align error-scenario test data
-- [x] 🗂️ Add missing error-scenario files
+- [x] 🛠️ Add JsonIgnore to ref properties
+- [x] 🔍 Confirm report serialization path
 - [x] ✅ Run targeted tests
 - [x] 📝 Update session context
 ```
 
 ## Recent File Changes
-- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Actual/Actual_MalformedXml.xml`: Added malformed XML fixture for error scenario tests
-- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Actual/Actual_TruncatedXml.xml`: Added truncated XML fixture for error scenario tests
-- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Actual/Actual_WrongRootElement.xml`: Added wrong-root XML fixture for error scenario tests
-- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Actual/Actual_EmptyFile.xml`: Added zero-byte XML fixture for empty file scenario
-- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Expected/Expected_MalformedXml.xml`: Added minimal valid expected XML for malformed scenario
-- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Expected/Expected_TruncatedXml.xml`: Added minimal valid expected XML for truncated scenario
-- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Expected/Expected_EmptyFile.xml`: Added minimal valid expected XML for empty file scenario
-- `ComparisonTool.Domain/TestFiles/SpecificTests_ComplexModel/Expected/Expected_WrongRootElement.xml`: Added minimal valid expected XML for wrong root scenario
+- `ComparisonTool.Core/Comparison/Analysis/GlobalPatternInfo.cs`: Added `JsonIgnore` to ref-returning counter properties
+- `ComparisonTool.Core/Comparison/Analysis/GlobalPropertyChangeInfo.cs`: Added `JsonIgnore` to ref-returning counter property
 
 ## Key Technical Decisions
-- Decision: Use `FilePairComparisonResult.AreEqual` property instead of manually checking `pair.Summary?.AreEqual`
-- Rationale: `AreEqual` correctly returns `false` when Summary is null (raw text comparison results) by design: `!HasError && (Summary?.AreEqual ?? false)`. This is consistent with `FileComparisonResults.razor` which already uses `r.AreEqual` for its `GetEqualCount()`/`GetDifferentCount()` methods.
-- Date: 2026-02-11
+- Decision: Use `JsonIgnore` on ref-returning properties used only for Interlocked operations
+- Rationale: System.Text.Json cannot serialize ref/pointer-like properties; ignore them for reporting
+- Date: 2026-02-12
 
 ## External Resources Referenced
-- https://www.google.com/search?q=FluentAssertions+ThrowAsync+MSTest+should+throw+exception+async+task: Search attempt (blocked by Google enablejs interstitial)
-- https://fluentassertions.com/exceptions/: FluentAssertions async exception assertion guidance
-- https://fluentassertions.com/introduction: FluentAssertions framework detection and usage overview
+- https://learn.microsoft.com/en-us/dotnet/standard/serialization/system-text-json/ignore-properties: JsonIgnore usage and ignore options
+- https://learn.microsoft.com/en-us/dotnet/api/system.text.json.serialization.jsonignoreattribute: JsonIgnoreAttribute reference
+- https://learn.microsoft.com/en-us/dotnet/api/system.text.json.serialization.jsonignorecondition: JsonIgnoreCondition enum
+- https://learn.microsoft.com/en-us/dotnet/standard/serialization/system-text-json/overview: System.Text.Json overview
 
 ## Blockers & Issues
 - None
 
 ## Failed Approaches
-- None
+- Google search result page blocked (redirect to enablejs)
 
 ## Environment Notes
 - .NET 8.0
-- Targeted test run: CompareXmlFilesAsync_WithErrorScenarioFiles_ShouldThrowOnDeserialization (5/5 passed)
 
 ## Next Session Priority
 No active tasks
 
 ## Session Notes
-Failing integration tests were caused by missing XML fixture files referenced by the data rows in ComparisonServiceIntegrationTests. Added the missing actual/expected XML fixtures, including a zero-byte empty file, then re-ran the targeted data test (all 5 cases passed).
+Added `JsonIgnore` attributes to ref-returning properties used only for Interlocked operations to avoid System.Text.Json serialization failures. All tests passed (147).
 
 ---
 # Previous Session Archive
