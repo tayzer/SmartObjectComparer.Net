@@ -1,4 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<OrderManagementResponse xmlns="urn:example.co.uk/soap:version7">
-  <RequestId>REQ-EXPECTED-WRONGROOT-001</RequestId>
-</OrderManagementResponse>

@@ -37,4 +37,9 @@ public class ReportContext
 
     /// <summary>Gets or sets the model name used for comparison.</summary>
     public string? ModelName { get; set; }
+
+    /// <summary>
+    /// Gets or sets the computed summary of most affected fields across structured differences.
+    /// </summary>
+    public MostAffectedFieldsSummary MostAffectedFields { get; set; } = MostAffectedFieldsSummary.Empty;
 }

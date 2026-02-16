@@ -8,6 +8,8 @@ namespace ComparisonTool.Cli.Reporting;
 /// </summary>
 public static class JsonReportWriter
 {
+    private const int MostAffectedFieldsLimit = 15;
+
     private static readonly JsonSerializerOptions SerializerOptions = new ()
     {
         WriteIndented = true,
@@ -22,6 +24,7 @@ public static class JsonReportWriter
     {
         var result = context.Result;
         var pairs = result.FilePairResults;
+        var mostAffected = context.MostAffectedFields;
 
         var report = new
         {
@@ -41,6 +44,21 @@ public static class JsonReportWriter
                 equalCount = pairs.Count(p => p.AreEqual),
                 differentCount = pairs.Count(p => !p.AreEqual && !p.HasError),
                 errorCount = pairs.Count(p => p.HasError),
+            },
+            mostAffectedFields = new
+            {
+                top = MostAffectedFieldsLimit,
+                structuredPairCount = mostAffected.StructuredPairCount,
+                excludedRawTextPairCount = mostAffected.ExcludedRawTextPairCount,
+                fields = mostAffected.Fields
+                    .Take(MostAffectedFieldsLimit)
+                    .Select(field => new
+                    {
+                        fieldPath = field.FieldPath,
+                        affectedPairCount = field.AffectedPairCount,
+                        occurrenceCount = field.OccurrenceCount,
+                    })
+                    .ToList(),
             },
             filePairs = pairs.Select(p => new
             {
