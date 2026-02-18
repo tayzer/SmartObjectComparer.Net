@@ -172,6 +172,7 @@ public static class FolderCompareCommand
             Directory1 = dir1.FullName,
             Directory2 = dir2.FullName,
             ModelName = modelName,
+            MostAffectedFields = MostAffectedFieldsAggregator.Build(result),
         };
 
         var resolvedOutputDir = outputDir?.FullName ?? Directory.GetCurrentDirectory();

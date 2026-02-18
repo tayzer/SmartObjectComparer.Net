@@ -293,6 +293,7 @@ public static class RequestCompareCommand
             EndpointB = endpointB,
             ModelName = modelName,
             JobId = job.JobId,
+            MostAffectedFields = MostAffectedFieldsAggregator.Build(result),
         };
 
         var resolvedOutputDir = outputDir?.FullName ?? Directory.GetCurrentDirectory();

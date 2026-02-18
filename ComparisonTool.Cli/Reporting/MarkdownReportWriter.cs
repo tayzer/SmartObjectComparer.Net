@@ -7,6 +7,8 @@ namespace ComparisonTool.Cli.Reporting;
 /// </summary>
 public static class MarkdownReportWriter
 {
+    private const int MostAffectedFieldsLimit = 15;
+
     /// <summary>
     /// Writes the comparison result as a Markdown report.
     /// </summary>
@@ -61,6 +63,35 @@ public static class MarkdownReportWriter
         sb.AppendLine($"| Errors | {errorCount} |");
         sb.AppendLine($"| All equal | {(result.AllEqual ? "Yes" : "**No**")} |");
         sb.AppendLine();
+
+        // Most affected fields
+        sb.AppendLine("## Most Affected Fields");
+        sb.AppendLine();
+
+        var mostAffectedFields = context.MostAffectedFields.Fields.Take(MostAffectedFieldsLimit).ToList();
+        if (mostAffectedFields.Count == 0)
+        {
+            sb.AppendLine("No structured field differences were found.");
+            sb.AppendLine();
+        }
+        else
+        {
+            sb.AppendLine("| Field | Affected Pairs | Occurrences |");
+            sb.AppendLine("|-------|----------------|-------------|");
+
+            foreach (var field in mostAffectedFields)
+            {
+                sb.AppendLine($"| `{EscapeMarkdown(field.FieldPath)}` | {field.AffectedPairCount} | {field.OccurrenceCount} |");
+            }
+
+            sb.AppendLine();
+        }
+
+        if (context.MostAffectedFields.ExcludedRawTextPairCount > 0)
+        {
+            sb.AppendLine($"*Excluded raw-text-only pairs: {context.MostAffectedFields.ExcludedRawTextPairCount}*  ");
+            sb.AppendLine();
+        }
 
         // File pair results table
         sb.AppendLine("## File Pairs");
