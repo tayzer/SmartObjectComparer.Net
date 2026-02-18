@@ -20,52 +20,48 @@ public static class FolderCompareCommand
     /// </summary>
     public static Command Create(IConfiguration configuration)
     {
-        var dir1Arg = new Argument<DirectoryInfo>("directory1", "Path to the first (expected) directory");
-        var dir2Arg = new Argument<DirectoryInfo>("directory2", "Path to the second (actual) directory");
+        var dir1Arg = new Argument<DirectoryInfo>("directory1") { Description = "Path to the first (expected) directory" };
+        var dir2Arg = new Argument<DirectoryInfo>("directory2") { Description = "Path to the second (actual) directory" };
 
-        var modelOption = new Option<string>(
-            aliases: new[] { "--model", "-m" },
-            description: "Domain model name for deserialization (e.g. ComplexOrderResponse, SoapEnvelope)")
+        var modelOption = new Option<string>("--model", "-m")
         {
-            IsRequired = true,
+            Description = "Domain model name for deserialization (e.g. ComplexOrderResponse, SoapEnvelope)",
+            Required = true,
         };
 
-        var includeAllOption = new Option<bool>(
-            aliases: new[] { "--include-all" },
-            description: "Include files that exist in only one directory")
+        var includeAllOption = new Option<bool>("--include-all")
         {
+            Description = "Include files that exist in only one directory",
             Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => false,
         };
-        includeAllOption.SetDefaultValue(false);
 
-        var patternAnalysisOption = new Option<bool>(
-            aliases: new[] { "--pattern-analysis" },
-            description: "Enable pattern analysis on results")
+        var patternAnalysisOption = new Option<bool>("--pattern-analysis")
         {
+            Description = "Enable pattern analysis on results",
             Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => true,
         };
-        patternAnalysisOption.SetDefaultValue(true);
 
-        var semanticAnalysisOption = new Option<bool>(
-            aliases: new[] { "--semantic-analysis" },
-            description: "Enable semantic difference analysis")
+        var semanticAnalysisOption = new Option<bool>("--semantic-analysis")
         {
+            Description = "Enable semantic difference analysis",
             Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => true,
         };
-        semanticAnalysisOption.SetDefaultValue(true);
 
-        var outputOption = new Option<DirectoryInfo?>(
-            aliases: new[] { "--output", "-o" },
-            description: "Directory for report output files (JSON/Markdown). Defaults to current directory");
-
-        var formatOption = new Option<OutputFormat[]>(
-            aliases: new[] { "--format", "-f", },
-            description: "Output format(s): Console, Json, Markdown. Multiple allowed")
+        var outputOption = new Option<DirectoryInfo?>("--output", "-o")
         {
+            Description = "Directory for report output files (JSON/Markdown). Defaults to current directory",
+        };
+
+        var formatOption = new Option<OutputFormat[]>("--format", "-f")
+        {
+            Description = "Output format(s): Console, Json, Markdown. Multiple allowed",
             Arity = ArgumentArity.OneOrMore,
             AllowMultipleArgumentsPerToken = true,
+            DefaultValueFactory = _ => new[] { OutputFormat.Console },
         };
-        formatOption.SetDefaultValue(new[] { OutputFormat.Console, });
 
         var command = new Command("folder", "Compare two directories of XML/JSON files")
         {
@@ -79,19 +75,18 @@ public static class FolderCompareCommand
             formatOption,
         };
 
-        command.SetHandler(async (context) =>
+        command.SetAction(async (parseResult, cancellationToken) =>
         {
-            var dir1 = context.ParseResult.GetValueForArgument(dir1Arg);
-            var dir2 = context.ParseResult.GetValueForArgument(dir2Arg);
-            var model = context.ParseResult.GetValueForOption(modelOption)!;
-            var includeAll = context.ParseResult.GetValueForOption(includeAllOption);
-            var patternAnalysis = context.ParseResult.GetValueForOption(patternAnalysisOption);
-            var semanticAnalysis = context.ParseResult.GetValueForOption(semanticAnalysisOption);
-            var outputDir = context.ParseResult.GetValueForOption(outputOption);
-            var formats = context.ParseResult.GetValueForOption(formatOption) ?? new[] { OutputFormat.Console };
-            var cancellationToken = context.GetCancellationToken();
+            var dir1 = parseResult.GetValue(dir1Arg);
+            var dir2 = parseResult.GetValue(dir2Arg);
+            var model = parseResult.GetValue(modelOption)!;
+            var includeAll = parseResult.GetValue(includeAllOption);
+            var patternAnalysis = parseResult.GetValue(patternAnalysisOption);
+            var semanticAnalysis = parseResult.GetValue(semanticAnalysisOption);
+            var outputDir = parseResult.GetValue(outputOption);
+            var formats = parseResult.GetValue(formatOption) ?? new[] { OutputFormat.Console };
 
-            context.ExitCode = await ExecuteAsync(
+            return await ExecuteAsync(
                 configuration,
                 dir1!,
                 dir2!,
