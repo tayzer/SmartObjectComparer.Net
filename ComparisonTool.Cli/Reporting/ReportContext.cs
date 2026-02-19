@@ -42,4 +42,12 @@ public class ReportContext
     /// Gets or sets the computed summary of most affected fields across structured differences.
     /// </summary>
     public MostAffectedFieldsSummary MostAffectedFields { get; set; } = MostAffectedFieldsSummary.Empty;
+
+    /// <summary>
+    /// Gets or sets the maximum number of file pairs per markdown page.
+    /// When greater than zero, overflow pairs are written to detail pages in a subdirectory.
+    /// When zero, all pairs are written to a single file with no pagination.
+    /// Defaults to <c>50</c>.
+    /// </summary>
+    public int MarkdownPageSize { get; set; } = 50;
 }

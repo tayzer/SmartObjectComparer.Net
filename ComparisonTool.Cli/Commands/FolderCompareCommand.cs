@@ -63,6 +63,21 @@ public static class FolderCompareCommand
             DefaultValueFactory = _ => new[] { OutputFormat.Console },
         };
 
+        var pageSizeOption = new Option<int>("--page-size")
+        {
+            Description = "Max file pairs per markdown page (0 = no pagination, all in one file)",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => 50,
+        };
+        pageSizeOption.Validators.Add(result =>
+        {
+            var value = result.GetValue(pageSizeOption);
+            if (value < 0)
+            {
+                result.AddError("Page size must be 0 (no pagination) or a positive number");
+            }
+        });
+
         var command = new Command("folder", "Compare two directories of XML/JSON files")
         {
             dir1Arg,
@@ -73,6 +88,7 @@ public static class FolderCompareCommand
             semanticAnalysisOption,
             outputOption,
             formatOption,
+            pageSizeOption,
         };
 
         command.SetAction(async (parseResult, cancellationToken) =>
@@ -85,6 +101,7 @@ public static class FolderCompareCommand
             var semanticAnalysis = parseResult.GetValue(semanticAnalysisOption);
             var outputDir = parseResult.GetValue(outputOption);
             var formats = parseResult.GetValue(formatOption) ?? new[] { OutputFormat.Console };
+            var pageSize = parseResult.GetValue(pageSizeOption);
 
             return await ExecuteAsync(
                 configuration,
@@ -96,6 +113,7 @@ public static class FolderCompareCommand
                 semanticAnalysis,
                 outputDir,
                 formats,
+                pageSize,
                 cancellationToken);
         });
 
@@ -112,6 +130,7 @@ public static class FolderCompareCommand
         bool semanticAnalysis,
         DirectoryInfo? outputDir,
         OutputFormat[] formats,
+        int markdownPageSize,
         CancellationToken cancellationToken)
     {
         if (!dir1.Exists)
@@ -168,6 +187,7 @@ public static class FolderCompareCommand
             Directory2 = dir2.FullName,
             ModelName = modelName,
             MostAffectedFields = MostAffectedFieldsAggregator.Build(result),
+            MarkdownPageSize = markdownPageSize,
         };
 
         var resolvedOutputDir = outputDir?.FullName ?? Directory.GetCurrentDirectory();
@@ -187,8 +207,9 @@ public static class FolderCompareCommand
                     break;
                 case OutputFormat.Markdown:
                     var mdPath = Path.Combine(resolvedOutputDir, $"comparison-result-{DateTime.Now:yyyyMMdd-HHmmss}.md");
-                    await MarkdownReportWriter.WriteAsync(reportContext, mdPath);
-                    Console.WriteLine($"  Markdown report: {mdPath}");
+                    var pageCount = await MarkdownReportWriter.WriteAsync(reportContext, mdPath);
+                    var pageSuffix = pageCount > 0 ? $" (+{pageCount} detail pages)" : string.Empty;
+                    Console.WriteLine($"  Markdown report: {mdPath}{pageSuffix}");
                     break;
             }
         }
