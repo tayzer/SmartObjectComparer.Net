@@ -1,3 +1,4 @@
+using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.RequestComparison.Models;
 using Microsoft.Extensions.Logging;
@@ -77,14 +78,6 @@ public class RawTextComparisonService
         var textDiffs = ComputeLineDifferences(bodyA.lines, bodyB.lines);
         pairResult.RawTextDifferences.AddRange(textDiffs);
 
-        // If bodies are identical (even though status codes differ), note that
-        if (textDiffs.Count == 0 && exec.StatusCodeA == exec.StatusCodeB)
-        {
-            // Both non-success with identical bodies — flag as a warning
-            pairResult.ErrorMessage = $"Both endpoints returned {exec.StatusCodeA} with identical error bodies";
-            pairResult.ErrorType = "BothNonSuccessIdentical";
-        }
-
         // If bodies were truncated, add a notice
         if (bodyA.wasTruncated || bodyB.wasTruncated)
         {
@@ -94,6 +87,19 @@ public class RawTextComparisonService
                 Description = $"Response body truncated to {MaxBodyBytes / 1024} KB for comparison. Full bodies saved to disk.",
             });
         }
+
+        var bodiesAreEqual = textDiffs.Count == 0;
+        var hasStatusMismatch = exec.StatusCodeA != exec.StatusCodeB;
+        var isTruncated = bodyA.wasTruncated || bodyB.wasTruncated;
+
+        pairResult.Summary = new DifferenceSummary
+        {
+            AreEqual = classified.Outcome == RequestPairOutcome.BothNonSuccess
+                && !hasStatusMismatch
+                && bodiesAreEqual
+                && !isTruncated,
+            TotalDifferenceCount = pairResult.RawTextDifferences.Count,
+        };
 
         logger.LogDebug(
             "Raw text comparison for {FileName}: {DiffCount} differences, A={StatusA} B={StatusB}",

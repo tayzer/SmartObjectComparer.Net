@@ -340,7 +340,6 @@ public class RequestComparisonJobService
                     cancellationToken: cancellationToken).ConfigureAwait(false);
 
                 comparisonResult.FilePairResults.AddRange(rawTextResults);
-                comparisonResult.AllEqual = false; // Non-success pairs always count as 'not all equal'
                 comparisonResult.TotalPairsCompared += rawTextResults.Count;
 
                 _logger.LogInformation(
@@ -394,6 +393,9 @@ public class RequestComparisonJobService
             comparisonResult.FilePairResults = comparisonResult.FilePairResults
                 .OrderBy(r => r.File1Name, StringComparer.Ordinal)
                 .ToList();
+
+            comparisonResult.AllEqual = comparisonResult.FilePairResults.Count > 0
+                && comparisonResult.FilePairResults.All(r => r.AreEqual);
 
             // Store execution metadata in result
             comparisonResult.Metadata["RequestComparisonJobId"] = jobId;
