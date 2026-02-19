@@ -31,7 +31,7 @@ public static class Program
         try
         {
             var rootCommand = BuildRootCommand(configuration);
-            return await rootCommand.InvokeAsync(args);
+            return await rootCommand.Parse(args).InvokeAsync();
         }
         catch (Exception ex)
         {

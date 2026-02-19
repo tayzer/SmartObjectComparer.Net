@@ -93,7 +93,7 @@ Tracks consistent value changes across properties, helping identify configuratio
 ## Getting Started
 
 ### Prerequisites
-- .NET 8.0 or later
+- .NET 10.0 or later
 - Web browser (for the UI)
 - Domain model assemblies for your data types
 

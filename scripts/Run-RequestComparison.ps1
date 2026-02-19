@@ -41,7 +41,7 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $cliProject = Join-Path $repoRoot "ComparisonTool.Cli\ComparisonTool.Cli.csproj"
-$publishDir = Join-Path $repoRoot "ComparisonTool.Cli\bin\Release\net8.0\publish"
+$publishDir = Join-Path $repoRoot "ComparisonTool.Cli\bin\Release\net10.0\publish"
 $exePath = Join-Path $publishDir "comparisontool.exe"
 
 Write-Host "Building CLI project..."

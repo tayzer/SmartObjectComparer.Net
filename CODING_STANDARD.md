@@ -20,7 +20,7 @@ This document defines the coding conventions, style guidelines, and recommended 
 Keep code consistent and easy to read across contributors, reduce churn in code reviews, and enable automatic enforcement using editor config and analyzers.
 
 ## GENERAL GUIDELINES
-- Follow idiomatic modern C# (target frameworks in the repo, e.g., .NET 8). Prefer clarity over cleverness.
+- Follow idiomatic modern C# (target frameworks in the repo, e.g., .NET 10). Prefer clarity over cleverness.
 - Keep methods small and focused. If a method exceeds ~100 lines or has more than one responsibility, consider refactoring.
 - Use dependency injection for services. Avoid static/global mutable state.
 - Write XML documentation comments for public APIs and library methods.

@@ -20,108 +20,102 @@ public static class RequestCompareCommand
     /// </summary>
     public static Command Create(IConfiguration configuration)
     {
-        var requestDirArg = new Argument<DirectoryInfo>(
-            "request-directory",
-            "Path to a directory containing request body files (XML/JSON)");
-
-        var endpointAOption = new Option<string>(
-            aliases: new[] { "--endpoint-a", "-a" },
-            description: "URL of the first endpoint")
+        var requestDirArg = new Argument<DirectoryInfo>("request-directory")
         {
-            IsRequired = true,
+            Description = "Path to a directory containing request body files (XML/JSON)",
         };
 
-        var endpointBOption = new Option<string>(
-            aliases: new[] { "--endpoint-b", "-b" },
-            description: "URL of the second endpoint")
+        var endpointAOption = new Option<string>("--endpoint-a", "-a")
         {
-            IsRequired = true,
+            Description = "URL of the first endpoint",
+            Required = true,
         };
 
-        var modelOption = new Option<string>(
-            aliases: new[] { "--model", "-m" },
-            description: "Domain model name for response comparison (default: Auto)")
+        var endpointBOption = new Option<string>("--endpoint-b", "-b")
         {
+            Description = "URL of the second endpoint",
+            Required = true,
+        };
+
+        var modelOption = new Option<string>("--model", "-m")
+        {
+            Description = "Domain model name for response comparison (default: Auto)",
             Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => "Auto",
         };
-        modelOption.SetDefaultValue("Auto");
 
-        var concurrencyOption = new Option<int>(
-            aliases: new[] { "--concurrency", "-c" },
-            description: "Maximum concurrent requests (1-256)")
+        var concurrencyOption = new Option<int>("--concurrency", "-c")
         {
+            Description = "Maximum concurrent requests (1-256)",
             Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => 64,
         };
-        concurrencyOption.SetDefaultValue(64);
-        concurrencyOption.AddValidator(result =>
+        concurrencyOption.Validators.Add(result =>
         {
-            var value = result.GetValueForOption(concurrencyOption);
+            var value = result.GetValue(concurrencyOption);
             if (value < 1 || value > 256)
             {
-                result.ErrorMessage = "Concurrency must be between 1 and 256";
+                result.AddError("Concurrency must be between 1 and 256");
             }
         });
 
-        var timeoutOption = new Option<int>(
-            aliases: new[] { "--timeout" },
-            description: "Request timeout in milliseconds (1000-300000)")
+        var timeoutOption = new Option<int>("--timeout")
         {
+            Description = "Request timeout in milliseconds (1000-300000)",
             Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => 30000,
         };
-        timeoutOption.SetDefaultValue(30000);
 
-        var ignoreCollectionOrderOption = new Option<bool>(
-            aliases: new[] { "--ignore-collection-order" },
-            description: "Ignore collection ordering during comparison")
+        var ignoreCollectionOrderOption = new Option<bool>("--ignore-collection-order")
         {
+            Description = "Ignore collection ordering during comparison",
             Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => false,
         };
-        ignoreCollectionOrderOption.SetDefaultValue(false);
 
-        var ignoreCaseOption = new Option<bool>(
-            aliases: new[] { "--ignore-case" },
-            description: "Ignore string case during comparison")
+        var ignoreCaseOption = new Option<bool>("--ignore-case")
         {
+            Description = "Ignore string case during comparison",
             Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => false,
         };
-        ignoreCaseOption.SetDefaultValue(false);
 
-        var ignoreNamespacesOption = new Option<bool>(
-            aliases: new[] { "--ignore-namespaces" },
-            description: "Ignore XML namespaces during deserialization")
+        var ignoreNamespacesOption = new Option<bool>("--ignore-namespaces")
         {
+            Description = "Ignore XML namespaces during deserialization",
             Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => true,
         };
-        ignoreNamespacesOption.SetDefaultValue(true);
 
-        var semanticAnalysisOption = new Option<bool>(
-            aliases: new[] { "--semantic-analysis" },
-            description: "Enable semantic difference analysis")
+        var semanticAnalysisOption = new Option<bool>("--semantic-analysis")
         {
+            Description = "Enable semantic difference analysis",
             Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => true,
         };
-        semanticAnalysisOption.SetDefaultValue(true);
 
-        var ignoreRulesFileOption = new Option<FileInfo?>(
-            aliases: new[] { "--ignore-rules" },
-            description: "Path to JSON file containing IgnoreRuleDto definitions");
-
-        var contentTypeOption = new Option<string?>(
-            aliases: new[] { "--content-type" },
-            description: "Override Content-Type header for all request bodies");
-
-        var outputOption = new Option<DirectoryInfo?>(
-            aliases: new[] { "--output", "-o" },
-            description: "Directory for report output files. Defaults to current directory");
-
-        var formatOption = new Option<OutputFormat[]>(
-            aliases: new[] { "--format", "-f" },
-            description: "Output format(s): Console, Json, Markdown. Multiple allowed")
+        var ignoreRulesFileOption = new Option<FileInfo?>("--ignore-rules")
         {
+            Description = "Path to JSON file containing IgnoreRuleDto definitions",
+        };
+
+        var contentTypeOption = new Option<string?>("--content-type")
+        {
+            Description = "Override Content-Type header for all request bodies",
+        };
+
+        var outputOption = new Option<DirectoryInfo?>("--output", "-o")
+        {
+            Description = "Directory for report output files. Defaults to current directory",
+        };
+
+        var formatOption = new Option<OutputFormat[]>("--format", "-f")
+        {
+            Description = "Output format(s): Console, Json, Markdown. Multiple allowed",
             Arity = ArgumentArity.OneOrMore,
             AllowMultipleArgumentsPerToken = true,
+            DefaultValueFactory = _ => new[] { OutputFormat.Console },
         };
-        formatOption.SetDefaultValue(new[] { OutputFormat.Console, });
 
         var command = new Command("request", "Execute requests against two endpoints and compare responses")
         {
@@ -141,25 +135,24 @@ public static class RequestCompareCommand
             formatOption,
         };
 
-        command.SetHandler(async (context) =>
+        command.SetAction(async (parseResult, cancellationToken) =>
         {
-            var requestDir = context.ParseResult.GetValueForArgument(requestDirArg);
-            var endpointA = context.ParseResult.GetValueForOption(endpointAOption)!;
-            var endpointB = context.ParseResult.GetValueForOption(endpointBOption)!;
-            var model = context.ParseResult.GetValueForOption(modelOption)!;
-            var concurrency = context.ParseResult.GetValueForOption(concurrencyOption);
-            var timeout = context.ParseResult.GetValueForOption(timeoutOption);
-            var ignoreCollectionOrder = context.ParseResult.GetValueForOption(ignoreCollectionOrderOption);
-            var ignoreCase = context.ParseResult.GetValueForOption(ignoreCaseOption);
-            var ignoreNamespaces = context.ParseResult.GetValueForOption(ignoreNamespacesOption);
-            var semanticAnalysis = context.ParseResult.GetValueForOption(semanticAnalysisOption);
-            var ignoreRulesFile = context.ParseResult.GetValueForOption(ignoreRulesFileOption);
-            var contentTypeOverride = context.ParseResult.GetValueForOption(contentTypeOption);
-            var outputDir = context.ParseResult.GetValueForOption(outputOption);
-            var formats = context.ParseResult.GetValueForOption(formatOption) ?? new[] { OutputFormat.Console };
-            var cancellationToken = context.GetCancellationToken();
+            var requestDir = parseResult.GetValue(requestDirArg);
+            var endpointA = parseResult.GetValue(endpointAOption)!;
+            var endpointB = parseResult.GetValue(endpointBOption)!;
+            var model = parseResult.GetValue(modelOption)!;
+            var concurrency = parseResult.GetValue(concurrencyOption);
+            var timeout = parseResult.GetValue(timeoutOption);
+            var ignoreCollectionOrder = parseResult.GetValue(ignoreCollectionOrderOption);
+            var ignoreCase = parseResult.GetValue(ignoreCaseOption);
+            var ignoreNamespaces = parseResult.GetValue(ignoreNamespacesOption);
+            var semanticAnalysis = parseResult.GetValue(semanticAnalysisOption);
+            var ignoreRulesFile = parseResult.GetValue(ignoreRulesFileOption);
+            var contentTypeOverride = parseResult.GetValue(contentTypeOption);
+            var outputDir = parseResult.GetValue(outputOption);
+            var formats = parseResult.GetValue(formatOption) ?? new[] { OutputFormat.Console };
 
-            context.ExitCode = await ExecuteAsync(
+            return await ExecuteAsync(
                 configuration,
                 requestDir!,
                 endpointA,

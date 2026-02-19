@@ -1,19 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
-
   <ItemGroup>
     <None Remove="TestFiles\1File_ComplexModel\Actual\Actual.xml" />
     <None Remove="TestFiles\1File_ComplexModel\Expected\Expected.xml" />
   </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="StyleCop.Analyzers" Version="1.1.118" PrivateAssets="all" />
-  </ItemGroup>
 
   <ItemGroup>
     <Content Include="NewFile.xml">
