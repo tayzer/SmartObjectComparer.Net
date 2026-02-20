@@ -111,6 +111,7 @@ public class RequestComparisonJobService
             // Comparison configuration parity with Home
             IgnoreCollectionOrder = request.IgnoreCollectionOrder,
             IgnoreStringCase = request.IgnoreStringCase,
+            IgnoreTrailingWhitespaceAtEnd = request.IgnoreTrailingWhitespaceAtEnd,
             IgnoreXmlNamespaces = request.IgnoreXmlNamespaces,
             IgnoreRules = request.IgnoreRules?.ToList() ?? new List<IgnoreRuleDto>(),
             SmartIgnoreRules = request.SmartIgnoreRules?.ToList() ?? new List<SmartIgnoreRuleDto>(),
@@ -500,10 +501,11 @@ public class RequestComparisonJobService
         IXmlDeserializationService xmlDeserializationService)
     {
         _logger.LogInformation(
-            "Applying job configuration for {JobId}: IgnoreCollectionOrder={IgnoreCollectionOrder}, IgnoreStringCase={IgnoreStringCase}, IgnoreXmlNamespaces={IgnoreXmlNamespaces}, IgnoreRules={IgnoreRuleCount}, SmartIgnoreRules={SmartIgnoreRuleCount}",
+            "Applying job configuration for {JobId}: IgnoreCollectionOrder={IgnoreCollectionOrder}, IgnoreStringCase={IgnoreStringCase}, IgnoreTrailingWhitespaceAtEnd={IgnoreTrailingWhitespaceAtEnd}, IgnoreXmlNamespaces={IgnoreXmlNamespaces}, IgnoreRules={IgnoreRuleCount}, SmartIgnoreRules={SmartIgnoreRuleCount}",
             job.JobId,
             job.IgnoreCollectionOrder,
             job.IgnoreStringCase,
+            job.IgnoreTrailingWhitespaceAtEnd,
             job.IgnoreXmlNamespaces,
             job.IgnoreRules.Count,
             job.SmartIgnoreRules.Count);
@@ -515,6 +517,7 @@ public class RequestComparisonJobService
         // Apply global settings
         configService.SetIgnoreCollectionOrder(job.IgnoreCollectionOrder);
         configService.SetIgnoreStringCase(job.IgnoreStringCase);
+        configService.SetIgnoreTrailingWhitespaceAtEnd(job.IgnoreTrailingWhitespaceAtEnd);
         xmlDeserializationService.IgnoreXmlNamespaces = job.IgnoreXmlNamespaces;
 
         // Apply ignore rules

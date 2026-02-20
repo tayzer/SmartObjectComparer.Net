@@ -97,6 +97,9 @@ public record RequestComparisonJob
     /// <summary>Gets or sets a value indicating whether to ignore string case.</summary>
     public bool IgnoreStringCase { get; set; } = false;
 
+    /// <summary>Gets or sets a value indicating whether to ignore trailing spaces and tabs at the end of strings.</summary>
+    public bool IgnoreTrailingWhitespaceAtEnd { get; set; } = false;
+
     /// <summary>Gets or sets a value indicating whether to ignore XML namespaces.</summary>
     public bool IgnoreXmlNamespaces { get; set; } = true;
 

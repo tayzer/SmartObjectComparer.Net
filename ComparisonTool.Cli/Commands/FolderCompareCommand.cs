@@ -50,6 +50,13 @@ public static class FolderCompareCommand
             DefaultValueFactory = _ => true,
         };
 
+        var ignoreTrailingWhitespaceOption = new Option<bool>("--ignore-trailing-whitespace-end")
+        {
+            Description = "Ignore trailing spaces and tabs at the end of strings during comparison",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => false,
+        };
+
         var outputOption = new Option<DirectoryInfo?>("--output", "-o")
         {
             Description = "Directory for report output files (JSON/Markdown). Defaults to current directory",
@@ -86,6 +93,7 @@ public static class FolderCompareCommand
             includeAllOption,
             patternAnalysisOption,
             semanticAnalysisOption,
+            ignoreTrailingWhitespaceOption,
             outputOption,
             formatOption,
             pageSizeOption,
@@ -99,6 +107,7 @@ public static class FolderCompareCommand
             var includeAll = parseResult.GetValue(includeAllOption);
             var patternAnalysis = parseResult.GetValue(patternAnalysisOption);
             var semanticAnalysis = parseResult.GetValue(semanticAnalysisOption);
+            var ignoreTrailingWhitespaceAtEnd = parseResult.GetValue(ignoreTrailingWhitespaceOption);
             var outputDir = parseResult.GetValue(outputOption);
             var formats = parseResult.GetValue(formatOption) ?? new[] { OutputFormat.Console };
             var pageSize = parseResult.GetValue(pageSizeOption);
@@ -111,6 +120,7 @@ public static class FolderCompareCommand
                 includeAll,
                 patternAnalysis,
                 semanticAnalysis,
+                ignoreTrailingWhitespaceAtEnd,
                 outputDir,
                 formats,
                 pageSize,
@@ -128,6 +138,7 @@ public static class FolderCompareCommand
         bool includeAll,
         bool patternAnalysis,
         bool semanticAnalysis,
+        bool ignoreTrailingWhitespaceAtEnd,
         DirectoryInfo? outputDir,
         OutputFormat[] formats,
         int markdownPageSize,
@@ -154,7 +165,10 @@ public static class FolderCompareCommand
         await using var serviceProvider = ServiceProviderFactory.CreateServiceProvider(configuration);
         using var scope = serviceProvider.CreateScope();
 
+        var configService = scope.ServiceProvider.GetRequiredService<IComparisonConfigurationService>();
         var comparisonService = scope.ServiceProvider.GetRequiredService<DirectoryComparisonService>();
+
+        configService.SetIgnoreTrailingWhitespaceAtEnd(ignoreTrailingWhitespaceAtEnd);
 
         var progress = new Progress<ComparisonProgress>(p =>
         {

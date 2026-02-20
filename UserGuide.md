@@ -65,6 +65,7 @@ The application's interface is divided into several sections:
 1. **Basic Settings**:
    - **Ignore Collection Ordering**: Enable this if the order of items in collections doesn't matter
    - **Ignore String Case**: Enable this for case-insensitive string comparison
+   - **Ignore Trailing Spaces/Tabs at End of Strings**: Ignore differences caused only by trailing spaces or tabs
    - **Enable Cross-File Pattern Analysis**: Keep this enabled to get insights across multiple file pairs
 
 2. **Property-Specific Rules** (Optional):
@@ -74,6 +75,7 @@ The application's interface is divided into several sections:
      - **Ignore this property completely**: The property will be excluded from comparison
      - **Ignore collection ordering** (for collections): Order of items won't affect the comparison
      - **Ignore case sensitivity** (for strings): Case differences will be ignored
+   - **Ignore trailing spaces/tabs at end** (global setting): Trailing whitespace-only string differences are ignored
    - Click "Add to Ignore List" to apply the rule
    - You can add multiple property rules
    - Click "Close" when finished

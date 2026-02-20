@@ -154,6 +154,7 @@ public class ComparisonResultCacheService
                 {
                     GlobalIgnoreCollectionOrder = configService.GetIgnoreCollectionOrder(),
                     GlobalIgnoreStringCase = configService.GetIgnoreStringCase(),
+                    GlobalIgnoreTrailingWhitespaceAtEnd = configService.GetIgnoreTrailingWhitespaceAtEnd(),
                     IgnoreRules = configService.GetIgnoreRules()
                         .OrderBy(r => r.PropertyPath, StringComparer.Ordinal) // Ensure consistent ordering
                         .Select(r => new { r.PropertyPath, r.IgnoreCompletely, r.IgnoreCollectionOrder })

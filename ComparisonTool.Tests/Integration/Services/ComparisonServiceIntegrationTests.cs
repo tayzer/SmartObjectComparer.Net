@@ -47,6 +47,7 @@ public class ComparisonServiceIntegrationTests
             MaxDifferences = 1000,
             DefaultIgnoreCollectionOrder = true,
             DefaultIgnoreStringCase = false,
+            DefaultIgnoreTrailingWhitespaceAtEnd = false,
         };
 
         configService = new ComparisonConfigurationService(mockConfigLogger.Object, Options.Create(configOptions));
@@ -257,6 +258,36 @@ public class ComparisonServiceIntegrationTests
 
         // Act
         var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "ComplexTestModel");
+
+        // Assert
+        result.Should().NotBeNull();
+        result.Differences.Should().BeEmpty();
+        result.AreEqual.Should().BeTrue();
+    }
+
+    [TestMethod]
+    public async Task CompareXmlFilesAsync_WithTrailingWhitespaceIgnored_ShouldTreatValuesAsEqual()
+    {
+        // Arrange
+        var xml1 = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TestModel>
+    <StringProperty>Value</StringProperty>
+    <IntProperty>42</IntProperty>
+</TestModel>";
+
+        var xml2 = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<TestModel>
+    <StringProperty>Value   </StringProperty>
+    <IntProperty>42</IntProperty>
+</TestModel>";
+
+        using var stream1 = new MemoryStream(Encoding.UTF8.GetBytes(xml1));
+        using var stream2 = new MemoryStream(Encoding.UTF8.GetBytes(xml2));
+
+        configService.SetIgnoreTrailingWhitespaceAtEnd(true);
+
+        // Act
+        var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestModel");
 
         // Assert
         result.Should().NotBeNull();

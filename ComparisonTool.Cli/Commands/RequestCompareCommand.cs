@@ -80,6 +80,13 @@ public static class RequestCompareCommand
             DefaultValueFactory = _ => false,
         };
 
+        var ignoreTrailingWhitespaceOption = new Option<bool>("--ignore-trailing-whitespace-end")
+        {
+            Description = "Ignore trailing spaces and tabs at the end of strings during comparison",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => false,
+        };
+
         var ignoreNamespacesOption = new Option<bool>("--ignore-namespaces")
         {
             Description = "Ignore XML namespaces during deserialization",
@@ -142,6 +149,7 @@ public static class RequestCompareCommand
             timeoutOption,
             ignoreCollectionOrderOption,
             ignoreCaseOption,
+            ignoreTrailingWhitespaceOption,
             ignoreNamespacesOption,
             semanticAnalysisOption,
             ignoreRulesFileOption,
@@ -161,6 +169,7 @@ public static class RequestCompareCommand
             var timeout = parseResult.GetValue(timeoutOption);
             var ignoreCollectionOrder = parseResult.GetValue(ignoreCollectionOrderOption);
             var ignoreCase = parseResult.GetValue(ignoreCaseOption);
+            var ignoreTrailingWhitespaceAtEnd = parseResult.GetValue(ignoreTrailingWhitespaceOption);
             var ignoreNamespaces = parseResult.GetValue(ignoreNamespacesOption);
             var semanticAnalysis = parseResult.GetValue(semanticAnalysisOption);
             var ignoreRulesFile = parseResult.GetValue(ignoreRulesFileOption);
@@ -179,6 +188,7 @@ public static class RequestCompareCommand
                 timeout,
                 ignoreCollectionOrder,
                 ignoreCase,
+                ignoreTrailingWhitespaceAtEnd,
                 ignoreNamespaces,
                 semanticAnalysis,
                 ignoreRulesFile,
@@ -202,6 +212,7 @@ public static class RequestCompareCommand
         int timeoutMs,
         bool ignoreCollectionOrder,
         bool ignoreCase,
+        bool ignoreTrailingWhitespaceAtEnd,
         bool ignoreNamespaces,
         bool semanticAnalysis,
         FileInfo? ignoreRulesFile,
@@ -253,6 +264,7 @@ public static class RequestCompareCommand
             ModelName = modelName,
             IgnoreCollectionOrder = ignoreCollectionOrder,
             IgnoreStringCase = ignoreCase,
+            IgnoreTrailingWhitespaceAtEnd = ignoreTrailingWhitespaceAtEnd,
             IgnoreXmlNamespaces = ignoreNamespaces,
             EnableSemanticAnalysis = semanticAnalysis,
             IgnoreRules = ignoreRulesResult.IgnoreRules,

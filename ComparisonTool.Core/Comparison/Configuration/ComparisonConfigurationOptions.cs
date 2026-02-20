@@ -10,4 +10,6 @@ public class ComparisonConfigurationOptions
     public bool DefaultIgnoreCollectionOrder { get; set; } = false;
 
     public bool DefaultIgnoreStringCase { get; set; } = false;
+
+    public bool DefaultIgnoreTrailingWhitespaceAtEnd { get; set; } = false;
 }

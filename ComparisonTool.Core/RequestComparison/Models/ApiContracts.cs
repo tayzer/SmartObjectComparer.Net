@@ -49,6 +49,9 @@ public record CreateRequestComparisonJobRequest
     /// <summary>Gets a value indicating whether to ignore string case during comparison.</summary>
     public bool IgnoreStringCase { get; init; } = false;
 
+    /// <summary>Gets a value indicating whether to ignore trailing spaces and tabs at the end of strings.</summary>
+    public bool IgnoreTrailingWhitespaceAtEnd { get; init; } = false;
+
     /// <summary>Gets a value indicating whether to ignore XML namespaces during deserialization.</summary>
     public bool IgnoreXmlNamespaces { get; init; } = true;
 
