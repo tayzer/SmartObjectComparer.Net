@@ -142,7 +142,7 @@ public class RawTextComparisonServiceTests
     }
 
     [TestMethod]
-    public async Task CompareRawAsync_BothNonSuccess_IdenticalBodies_FlagsAsIdentical()
+    public async Task CompareRawAsync_BothNonSuccess_IdenticalBodies_CountsAsEqual()
     {
         var (pathA, pathB) = CreateResponseFiles("error body", "error body");
         var classified = CreateClassified(
@@ -151,8 +151,10 @@ public class RawTextComparisonServiceTests
 
         var result = await service.CompareRawAsync(classified);
 
-        result.ErrorType.Should().Be("BothNonSuccessIdentical");
-        result.ErrorMessage.Should().Contain("identical error bodies");
+        result.ErrorMessage.Should().BeNull();
+        result.HasError.Should().BeFalse();
+        result.Summary.Should().NotBeNull();
+        result.AreEqual.Should().BeTrue();
     }
 
     [TestMethod]
@@ -165,6 +167,7 @@ public class RawTextComparisonServiceTests
 
         var result = await service.CompareRawAsync(classified);
 
+        result.AreEqual.Should().BeFalse();
         result.RawTextDifferences.Should().Contain(d =>
             d.Type == RawTextDifferenceType.Modified ||
             d.Type == RawTextDifferenceType.OnlyInA ||
@@ -184,6 +187,7 @@ public class RawTextComparisonServiceTests
         var result = await service.CompareRawAsync(classified);
 
         // Should have only the status code diff, no body diffs
+        result.AreEqual.Should().BeFalse();
         result.RawTextDifferences.Should().HaveCount(1);
         result.RawTextDifferences[0].Type.Should().Be(RawTextDifferenceType.StatusCodeDifference);
     }

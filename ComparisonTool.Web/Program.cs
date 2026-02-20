@@ -54,6 +54,7 @@ builder.Services.AddSingleton<RawTextComparisonService>();
 builder.Services.AddSingleton<IComparisonProgressPublisher, SignalRProgressPublisher>();
 builder.Services.AddSingleton<RequestComparisonJobService>();
 builder.Services.AddScoped<ComparisonProgressService>();
+builder.Services.AddScoped<RawContentService>();
 
 builder.Services.Configure<RequestComparisonEndpointOptions>(
     builder.Configuration.GetSection("RequestComparison:EndpointOptions"));

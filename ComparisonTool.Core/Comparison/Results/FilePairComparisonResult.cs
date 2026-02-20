@@ -21,6 +21,12 @@ public class FilePairComparisonResult
     /// </summary>
     public string? File2Path { get; set; }
 
+    /// <summary>
+    /// Gets or sets the request relative path associated with this pair.
+    /// Used as a stable internal identity for request comparison results when file names are duplicated.
+    /// </summary>
+    public string? RequestRelativePath { get; set; }
+
     public ComparisonResult? Result
     {
         get; set;

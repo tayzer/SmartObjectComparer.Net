@@ -4,6 +4,7 @@
 @using ComparisonTool.Core.Comparison.Analysis
 @using ComparisonTool.Core.Comparison.Configuration
 @using ComparisonTool.Core.Comparison.Results
+@using ComparisonTool.Core.RequestComparison.Models
 @using ComparisonTool.Core.RequestComparison.Services
 @using ComparisonTool.Core.Serialization
 @using ComparisonTool.Core.Utilities
@@ -248,7 +249,8 @@
                     @if (EnhancedStructuralAnalysis != null)
                     {
                         <ComparisonRunDetails Analysis="@EnhancedStructuralAnalysis"
-                                              FolderComparisonResult="@FolderComparisonResult" />
+                                              FolderComparisonResult="@FolderComparisonResult"
+                                              OnFileSelected="@HandleInspectorFileSelected" />
                     }
                     else if (!FolderComparisonResult.AllEqual)
                     {
@@ -428,7 +430,23 @@
                             @if (RequestComparisonEnhancedAnalysis != null)
                             {
                                 <ComparisonRunDetails Analysis="@RequestComparisonEnhancedAnalysis"
-                                                      FolderComparisonResult="@RequestComparisonResult" />
+                                                      FolderComparisonResult="@RequestComparisonResult"
+                                                      OnFileSelected="@HandleRequestInspectorFileSelected" />
+                            }
+                            else if (EnableEnhancedStructuralAnalysis && !RequestComparisonResult.AllEqual)
+                            {
+                                <MudPaper Elevation="2" Class="pa-4">
+                                    <MudStack Spacing="3">
+                                        <MudText Typo="Typo.h5">Comparison Overview</MudText>
+                                        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="py-6">
+                                            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+                                            <MudText Typo="Typo.h6" Class="mt-3">Generating Enhanced Analysis...</MudText>
+                                            <MudText Typo="Typo.body2" Color="Color.Default">
+                                                Please wait while we analyze structural patterns and categorize differences.
+                                            </MudText>
+                                        </MudStack>
+                                    </MudStack>
+                                </MudPaper>
                             }
                             else
                             {
@@ -442,21 +460,49 @@
                         </MudStack>
                     </MudPaper>
 
-                    @if (RequestComparisonResult != null && SelectedRequestPairIndex >= 0 && DifferenceSummary != null)
+                    @if (RequestComparisonResult != null && SelectedRequestPairIndex >= 0)
                     {
-                        <DetailedDifferencesView SelectedPair="@RequestComparisonResult.FilePairResults[SelectedRequestPairIndex]"
-                                                 DifferenceSummary="@DifferenceSummary"
-                                                 ComparisonResult="@ComparisonResult"
-                                                 ShowAllDifferences="@ShowAllDifferences"
-                                                 OnToggleShowAll="@ToggleShowAllDifferences"
-                                                 OnExportResults="@ExportRequestComparisonResults"
-                                                 FolderResult="@RequestComparisonResult" />
+                        var selectedRequestPair = RequestComparisonResult.FilePairResults[SelectedRequestPairIndex];
+
+                        @if (selectedRequestPair.HasError)
+                        {
+                            <ErrorDetailView SelectedPair="@selectedRequestPair"
+                                             RawFileDifferences="@RequestRawFileDifferences" />
+                        }
+                        else if (ShouldRenderRawRequestDetail(selectedRequestPair))
+                        {
+                            <RawTextDifferencesView SelectedPair="@selectedRequestPair"
+                                                    OnExportResults="@ExportRequestSelectedPairResults" />
+                        }
+                        else if (DifferenceSummary != null)
+                        {
+                            <DetailedDifferencesView SelectedPair="@selectedRequestPair"
+                                                     DifferenceSummary="@DifferenceSummary"
+                                                     ComparisonResult="@ComparisonResult"
+                                                     ShowAllDifferences="@ShowAllDifferences"
+                                                     OnToggleShowAll="@ToggleShowAllDifferences"
+                                                     OnExportResults="@ExportRequestSelectedPairResults"
+                                                     FolderResult="@RequestComparisonResult" />
+                        }
                     }
-                    else if (RequestComparisonResult != null && SelectedRequestPairIndex >= 0 &&
-                             RequestComparisonResult.FilePairResults[SelectedRequestPairIndex].RawTextDifferences != null)
+
+                    @if (EnableEnhancedStructuralAnalysis && RequestComparisonResult != null && !RequestComparisonResult.AllEqual && RequestComparisonEnhancedAnalysis == null)
                     {
-                        <RawTextDifferencesView SelectedPair="@RequestComparisonResult.FilePairResults[SelectedRequestPairIndex]"
-                                                OnExportResults="@ExportRequestComparisonResults" />
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">
+                            <MudStack Spacing="2">
+                                <MudText Typo="Typo.h6">Enhanced Structural Analysis</MudText>
+                                <MudText Typo="Typo.body2">
+                                    Enhanced structural analysis is enabled but no patterns were found or the analysis didn't run.
+                                </MudText>
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Success"
+                                           Size="Size.Small"
+                                           OnClick="GenerateRequestEnhancedStructuralAnalysis"
+                                           aria-label="Run request enhanced structural analysis">
+                                    Run Enhanced Structural Analysis
+                                </MudButton>
+                            </MudStack>
+                        </MudAlert>
                     }
 
                     @if (RequestComparisonSemanticAnalysis != null)
@@ -511,6 +557,7 @@
     private int SelectedRequestPairIndex { get; set; } = -1;
     private SemanticDifferenceAnalysis RequestComparisonSemanticAnalysis { get; set; }
     private EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult RequestComparisonEnhancedAnalysis { get; set; }
+    private List<RawTextDifference>? RequestRawFileDifferences { get; set; }
     private ObjectTreePropertySelector treePropertySelector;
     
     // Request Comparison selectors
@@ -1007,6 +1054,7 @@
         RequestComparisonResult = result;
         RequestComparisonSemanticAnalysis = null;
         RequestComparisonEnhancedAnalysis = null;
+        RequestRawFileDifferences = null;
         SelectedRequestPairIndex = -1;
         
         // Extract semantic analysis from metadata if available
@@ -1019,6 +1067,11 @@
         if (result.Metadata.TryGetValue("EnhancedStructuralAnalysis", out var enhancedAnalysisObj))
         {
             RequestComparisonEnhancedAnalysis = enhancedAnalysisObj as EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult;
+        }
+
+        if (EnableEnhancedStructuralAnalysis && !result.AllEqual && RequestComparisonEnhancedAnalysis == null)
+        {
+            await GenerateRequestEnhancedStructuralAnalysis();
         }
         
         // Select first result if there are differences
@@ -1041,17 +1094,79 @@
         var selectedPair = RequestComparisonResult.FilePairResults[index];
         ComparisonResult = selectedPair.Result;
         DifferenceSummary = selectedPair.Summary;
+
+        if (selectedPair.HasError && !string.IsNullOrEmpty(selectedPair.File1Path))
+        {
+            try
+            {
+                RequestRawFileDifferences = await RawTextComparisonService.CompareFilesRawAsync(
+                    selectedPair.File1Path,
+                    selectedPair.File2Path);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Failed to compute raw file differences for request error detail view.");
+                RequestRawFileDifferences = null;
+            }
+        }
+        else
+        {
+            RequestRawFileDifferences = null;
+        }
+
+        var detailSectionId = GetRequestDetailSectionId(selectedPair);
         
         try
         {
-            await JSRuntime.InvokeVoidAsync("scrollToElement", "request-detailed-differences-section");
+            await JSRuntime.InvokeVoidAsync("scrollToElement", detailSectionId);
         }
         catch (Exception ex)
         {
-            Logger.LogWarning(ex, "Failed to scroll to request detailed differences section.");
+            Logger.LogWarning(ex, "Failed to scroll to request detailed differences section {SectionId}.", detailSectionId);
         }
         
         StateHasChanged();
+    }
+    
+    /// <summary>
+    /// Handles file selection from the inspector tabs in the File/Folder comparison.
+    /// Resolves the file name to a pair index and scrolls to the detailed differences section.
+    /// </summary>
+    private async Task HandleInspectorFileSelected(string fileName)
+    {
+        if (FolderComparisonResult?.FilePairResults == null || string.IsNullOrEmpty(fileName))
+            return;
+            
+        var index = FolderComparisonResult.FilePairResults.FindIndex(p => 
+            string.Equals(p.File1Name, fileName, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(p.File2Name, fileName, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals($"{p.File1Name} vs {p.File2Name}", fileName, StringComparison.OrdinalIgnoreCase));
+            
+        if (index >= 0)
+        {
+            await SelectPairResult(index);
+        }
+    }
+    
+    /// <summary>
+    /// Handles file selection from the inspector tabs in the Request Comparison.
+    /// Resolves the file name to a pair index and scrolls to the detailed differences section.
+    /// </summary>
+    private async Task HandleRequestInspectorFileSelected(string fileName)
+    {
+        if (RequestComparisonResult?.FilePairResults == null || string.IsNullOrEmpty(fileName))
+            return;
+            
+        var index = RequestComparisonResult.FilePairResults.FindIndex(p => 
+            string.Equals(p.RequestRelativePath, fileName, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(p.File1Name, fileName, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(p.File2Name, fileName, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals($"{p.File1Name} vs {p.File2Name}", fileName, StringComparison.OrdinalIgnoreCase));
+            
+        if (index >= 0)
+        {
+            await SelectRequestPairResult(index);
+        }
     }
     
     private async Task ExportRequestComparisonResults()
@@ -1071,6 +1186,76 @@
         {
             Logger.LogError(ex, "Error exporting request comparison results");
             await JSRuntime.InvokeVoidAsync("alert", $"Error exporting results: {ex.Message}");
+        }
+    }
+
+    private async Task ExportRequestSelectedPairResults()
+    {
+        if (RequestComparisonResult == null || SelectedRequestPairIndex < 0 || SelectedRequestPairIndex >= RequestComparisonResult.FilePairResults.Count)
+            return;
+
+        try
+        {
+            var selectedPair = RequestComparisonResult.FilePairResults[SelectedRequestPairIndex];
+            var filenameBase = !string.IsNullOrWhiteSpace(selectedPair.RequestRelativePath)
+                ? SanitizeExportFileName(selectedPair.RequestRelativePath)
+                : $"{Path.GetFileNameWithoutExtension(selectedPair.File1Name)}-vs-{Path.GetFileNameWithoutExtension(selectedPair.File2Name)}";
+
+            var filename = $"request_comparison_pair_{filenameBase}_{DateTime.Now:yyyyMMdd_HHmmss}.json";
+            var json = System.Text.Json.JsonSerializer.Serialize(selectedPair,
+                new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+
+            await JSRuntime.InvokeVoidAsync("downloadFile", filename, json, "application/json");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error exporting selected request comparison result");
+            await JSRuntime.InvokeVoidAsync("alert", $"Error exporting selected result: {ex.Message}");
+        }
+    }
+
+    private static string SanitizeExportFileName(string value)
+    {
+        var invalidChars = Path.GetInvalidFileNameChars();
+        var sanitized = new string(value.Select(c => invalidChars.Contains(c) ? '_' : c).ToArray());
+        return sanitized.Replace('/', '_').Replace('\\', '_');
+    }
+
+    private static bool ShouldRenderRawRequestDetail(FilePairComparisonResult selectedPair)
+    {
+        return selectedPair.PairOutcome == RequestPairOutcome.StatusCodeMismatch ||
+               selectedPair.PairOutcome == RequestPairOutcome.BothNonSuccess ||
+               (selectedPair.RawTextDifferences != null && selectedPair.RawTextDifferences.Count > 0);
+    }
+
+    private static string GetRequestDetailSectionId(FilePairComparisonResult selectedPair)
+    {
+        return ShouldRenderRawRequestDetail(selectedPair)
+            ? "request-detailed-differences-section"
+            : "detailed-differences-section";
+    }
+
+    private async Task GenerateRequestEnhancedStructuralAnalysis()
+    {
+        if (RequestComparisonResult == null)
+            return;
+
+        try
+        {
+            Logger.LogInformation("Starting request enhanced structural pattern analysis...");
+            var enhancedStructuralAnalyzer = new EnhancedStructuralDifferenceAnalyzer(RequestComparisonResult, Logger);
+            RequestComparisonEnhancedAnalysis = enhancedStructuralAnalyzer.AnalyzeStructuralPatterns();
+
+            if (RequestComparisonResult.Metadata.ContainsKey("EnhancedStructuralAnalysis"))
+                RequestComparisonResult.Metadata["EnhancedStructuralAnalysis"] = RequestComparisonEnhancedAnalysis;
+            else
+                RequestComparisonResult.Metadata.Add("EnhancedStructuralAnalysis", RequestComparisonEnhancedAnalysis);
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error generating request enhanced structural pattern analysis");
         }
     }
     

@@ -1,0 +1,335 @@
+@namespace ComparisonTool.Web.Components.Comparison
+@using ComparisonTool.Core.Comparison.Analysis
+@using ComparisonTool.Core.Comparison.Results
+@using KellermanSoftware.CompareNetObjects
+
+<MudPaper Elevation="2" Class="mt-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pa-3" Style="background: var(--mud-palette-surface);">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">Top 20 Affected Objects</MudText>
+            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text">
+                @GetTotalObjectCount() unique objects
+            </MudChip>
+        </MudStack>
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+            <MudButton Variant="Variant.Outlined" 
+                       Size="Size.Small" 
+                       StartIcon="@(IsCollapsed ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ExpandLess)"
+                       OnClick="() => IsCollapsed = !IsCollapsed">
+                @(IsCollapsed ? "Expand" : "Collapse")
+            </MudButton>
+        </MudStack>
+    </MudStack>
+    
+    @if (!IsCollapsed)
+    {
+        <MudDivider />
+        <div class="pa-4">
+            <!-- Depth Toggle -->
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Aggregation level:</MudText>
+                <MudToggleGroup T="string" @bind-Value="selectedDepth" Style="height: 36px;" Outlined="true" Size="Size.Small" Color="Color.Primary">
+                    <MudToggleItem Value="@("leaf")" Text="Property Level" />
+                    <MudToggleItem Value="@("parent")" Text="Object Level" />
+                </MudToggleGroup>
+                <MudTooltip Text="@GetDepthExplanation()">
+                    <MudIcon Icon="@Icons.Material.Filled.HelpOutline" Size="Size.Small" Color="Color.Secondary" />
+                </MudTooltip>
+            </MudStack>
+            
+            @{
+                var topItems = GetTopAffectedItems();
+            }
+            
+            @if (topItems.Any())
+            {
+                var maxCount = topItems.First().OccurrenceCount;
+                
+                <MudSimpleTable Dense="true" Hover="true" Striped="true" Style="overflow-x: auto;">
+                    <thead>
+                        <tr>
+                            <th style="width: 40px;">#</th>
+                            <th>@(selectedDepth == "leaf" ? "Property Path" : "Object Path")</th>
+                            <th style="width: 100px;">Occurrences</th>
+                            <th style="width: 80px;">Files</th>
+                            <th style="width: 80px;">Severity</th>
+                            <th style="min-width: 200px;">Frequency</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (var i = 0; i < topItems.Count; i++)
+                        {
+                            var item = topItems[i];
+                            var rank = i + 1;
+                            <tr>
+                                <td>
+                                    @if (rank <= 3)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled" Style="min-width: 28px;">
+                                            @rank
+                                        </MudChip>
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">@rank</MudText>
+                                    }
+                                </td>
+                                <td>
+                                    <MudTooltip Text="@item.FullPath">
+                                        <code style="font-size: 0.85rem;">@TruncatePath(item.FullPath, 60)</code>
+                                    </MudTooltip>
+                                </td>
+                                <td>
+                                    <MudChip T="string" Size="Size.Small" Color="@GetCountColor(item.OccurrenceCount, maxCount)">
+                                        @item.OccurrenceCount
+                                    </MudChip>
+                                </td>
+                                <td>
+                                    <MudText Typo="Typo.body2">@item.FileCount</MudText>
+                                </td>
+                                <td>
+                                    <MudChip T="string" Size="Size.Small" Color="@GetSeverityColor(item.OccurrenceCount, maxCount)" Variant="Variant.Outlined">
+                                        @GetSeverityLabel(item.OccurrenceCount, maxCount)
+                                    </MudChip>
+                                </td>
+                                <td>
+                                    <MudProgressLinear Value="@GetRelativePercent(item.OccurrenceCount, maxCount)" 
+                                                       Color="@GetCountColor(item.OccurrenceCount, maxCount)" 
+                                                       Class="my-1" 
+                                                       Rounded="true" 
+                                                       Size="Size.Medium" />
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Success" Variant="Variant.Text">
+                    No differences found to analyze.
+                </MudAlert>
+            }
+        </div>
+    }
+</MudPaper>
+
+@code {
+    [Parameter]
+    public MultiFolderComparisonResult? FolderResult { get; set; }
+    
+    [Parameter]
+    public EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult? Analysis { get; set; }
+    
+    private bool IsCollapsed { get; set; } = false;
+    private string selectedDepth = "leaf";
+    
+    // Cached computation results
+    private List<AffectedObjectItem>? cachedLeafItems;
+    private List<AffectedObjectItem>? cachedParentItems;
+    private string? lastResultHash;
+    
+    public class AffectedObjectItem
+    {
+        public string FullPath { get; set; } = "";
+        public int OccurrenceCount { get; set; }
+        public int FileCount { get; set; }
+    }
+    
+    private List<AffectedObjectItem> GetTopAffectedItems()
+    {
+        EnsureCacheValid();
+        return selectedDepth == "leaf" ? cachedLeafItems! : cachedParentItems!;
+    }
+    
+    private int GetTotalObjectCount()
+    {
+        EnsureCacheValid();
+        return selectedDepth == "leaf" 
+            ? cachedLeafItems?.Count ?? 0 
+            : cachedParentItems?.Count ?? 0;
+    }
+    
+    private void EnsureCacheValid()
+    {
+        var hash = $"{FolderResult?.FilePairResults?.Count}_{Analysis?.TotalDifferencesFound}";
+        if (hash == lastResultHash && cachedLeafItems != null && cachedParentItems != null)
+            return;
+        
+        lastResultHash = hash;
+        ComputeAffectedObjects();
+    }
+    
+    private void ComputeAffectedObjects()
+    {
+        var leafAggregation = new Dictionary<string, (int count, HashSet<string> files)>(StringComparer.OrdinalIgnoreCase);
+        var parentAggregation = new Dictionary<string, (int count, HashSet<string> files)>(StringComparer.OrdinalIgnoreCase);
+        
+        // Strategy 1: Use enhanced analysis patterns if available (covers both file/folder and request comparison)
+        if (Analysis?.AllPatterns != null)
+        {
+            foreach (var pattern in Analysis.AllPatterns)
+            {
+                var leafPath = ExtractLeafPath(pattern.FullPattern);
+                var parentPath = ExtractParentPath(leafPath);
+                
+                if (!leafAggregation.ContainsKey(leafPath))
+                    leafAggregation[leafPath] = (0, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+                
+                var leafEntry = leafAggregation[leafPath];
+                leafEntry.count += pattern.OccurenceCount;
+                foreach (var f in pattern.AffectedFiles) leafEntry.files.Add(f);
+                leafAggregation[leafPath] = leafEntry;
+                
+                if (!string.IsNullOrEmpty(parentPath))
+                {
+                    if (!parentAggregation.ContainsKey(parentPath))
+                        parentAggregation[parentPath] = (0, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+                    
+                    var parentEntry = parentAggregation[parentPath];
+                    parentEntry.count += pattern.OccurenceCount;
+                    foreach (var f in pattern.AffectedFiles) parentEntry.files.Add(f);
+                    parentAggregation[parentPath] = parentEntry;
+                }
+            }
+        }
+        // Strategy 2: Fall back to raw differences from file pair results
+        else if (FolderResult?.FilePairResults != null)
+        {
+            foreach (var pair in FolderResult.FilePairResults.Where(p => !p.HasError && !p.AreEqual))
+            {
+                var fileName = pair.File1Name;
+                var differences = pair.Result?.Differences ?? Enumerable.Empty<Difference>();
+                
+                foreach (var diff in differences)
+                {
+                    var leafPath = NormalizePath(diff.PropertyName);
+                    var parentPath = ExtractParentPath(leafPath);
+                    
+                    if (!leafAggregation.ContainsKey(leafPath))
+                        leafAggregation[leafPath] = (0, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+                    
+                    var leafEntry = leafAggregation[leafPath];
+                    leafEntry.count += 1;
+                    leafEntry.files.Add(fileName);
+                    leafAggregation[leafPath] = leafEntry;
+                    
+                    if (!string.IsNullOrEmpty(parentPath))
+                    {
+                        if (!parentAggregation.ContainsKey(parentPath))
+                            parentAggregation[parentPath] = (0, new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+                        
+                        var parentEntry = parentAggregation[parentPath];
+                        parentEntry.count += 1;
+                        parentEntry.files.Add(fileName);
+                        parentAggregation[parentPath] = parentEntry;
+                    }
+                }
+            }
+        }
+        
+        cachedLeafItems = leafAggregation
+            .Select(kvp => new AffectedObjectItem 
+            { 
+                FullPath = kvp.Key, 
+                OccurrenceCount = kvp.Value.count, 
+                FileCount = kvp.Value.files.Count 
+            })
+            .OrderByDescending(x => x.OccurrenceCount)
+            .Take(20)
+            .ToList();
+        
+        cachedParentItems = parentAggregation
+            .Select(kvp => new AffectedObjectItem 
+            { 
+                FullPath = kvp.Key, 
+                OccurrenceCount = kvp.Value.count, 
+                FileCount = kvp.Value.files.Count 
+            })
+            .OrderByDescending(x => x.OccurrenceCount)
+            .Take(20)
+            .ToList();
+    }
+    
+    private static string NormalizePath(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return path;
+        // Remove array indices like [0], [1], [*]
+        return System.Text.RegularExpressions.Regex.Replace(path, @"\[\d*\*?\]", "");
+    }
+    
+    private static string ExtractLeafPath(string fullPattern)
+    {
+        var normalized = NormalizePath(fullPattern);
+        // Remove any suffix after underscore (pattern metadata)
+        var underscoreIdx = normalized.IndexOf('_');
+        if (underscoreIdx > 0 && !normalized.Contains('.'))
+            normalized = normalized.Substring(0, underscoreIdx);
+        else if (underscoreIdx > 0)
+        {
+            var afterUnderscore = normalized.Substring(underscoreIdx);
+            if (!afterUnderscore.Contains('.'))
+                normalized = normalized.Substring(0, underscoreIdx);
+        }
+        return normalized;
+    }
+    
+    private static string ExtractParentPath(string path)
+    {
+        if (string.IsNullOrEmpty(path)) return "";
+        var lastDot = path.LastIndexOf('.');
+        return lastDot > 0 ? path.Substring(0, lastDot) : "";
+    }
+    
+    private static string TruncatePath(string path, int maxLength)
+    {
+        if (string.IsNullOrEmpty(path) || path.Length <= maxLength) return path;
+        return "..." + path.Substring(path.Length - maxLength + 3);
+    }
+    
+    private static double GetRelativePercent(int count, int maxCount)
+    {
+        return maxCount > 0 ? (double)count / maxCount * 100 : 0;
+    }
+    
+    private static Color GetCountColor(int count, int maxCount)
+    {
+        var ratio = maxCount > 0 ? (double)count / maxCount : 0;
+        return ratio switch
+        {
+            >= 0.7 => Color.Error,
+            >= 0.4 => Color.Warning,
+            _ => Color.Info
+        };
+    }
+    
+    private static Color GetSeverityColor(int count, int maxCount)
+    {
+        var ratio = maxCount > 0 ? (double)count / maxCount : 0;
+        return ratio switch
+        {
+            >= 0.7 => Color.Error,
+            >= 0.4 => Color.Warning,
+            _ => Color.Info
+        };
+    }
+    
+    private static string GetSeverityLabel(int count, int maxCount)
+    {
+        var ratio = maxCount > 0 ? (double)count / maxCount : 0;
+        return ratio switch
+        {
+            >= 0.7 => "High",
+            >= 0.4 => "Medium",
+            _ => "Low"
+        };
+    }
+    
+    private string GetDepthExplanation()
+    {
+        return selectedDepth == "leaf"
+            ? "Shows the exact property paths where differences occur (e.g., Policy.Insured.Address.City)"
+            : "Groups by the parent object containing differing properties (e.g., Policy.Insured.Address)";
+    }
+}

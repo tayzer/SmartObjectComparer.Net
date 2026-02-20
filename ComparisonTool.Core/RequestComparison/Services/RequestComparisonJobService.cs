@@ -340,7 +340,6 @@ public class RequestComparisonJobService
                     cancellationToken: cancellationToken).ConfigureAwait(false);
 
                 comparisonResult.FilePairResults.AddRange(rawTextResults);
-                comparisonResult.AllEqual = false; // Non-success pairs always count as 'not all equal'
                 comparisonResult.TotalPairsCompared += rawTextResults.Count;
 
                 _logger.LogInformation(
@@ -358,6 +357,7 @@ public class RequestComparisonJobService
                     {
                         File1Name = Path.GetFileName(failed.Execution.Request.RelativePath),
                         File2Name = Path.GetFileName(failed.Execution.Request.RelativePath),
+                        RequestRelativePath = failed.Execution.Request.RelativePath,
                         ErrorMessage = failed.Execution.ErrorMessage ?? "Request execution failed",
                         ErrorType = "HttpRequestException",
                         PairOutcome = RequestPairOutcome.OneOrBothFailed,
@@ -377,15 +377,34 @@ public class RequestComparisonJobService
                     // This is a domain-model comparison result — find its execution result
                     var execResult = successPairs.FirstOrDefault(c =>
                         string.Equals(
-                            Path.GetFileName(c.Execution.Request.RelativePath),
-                            pairResult.File1Name,
+                            c.Execution.Request.RelativePath,
+                            pairResult.RequestRelativePath,
                             StringComparison.OrdinalIgnoreCase));
+
+                    if (execResult == null)
+                    {
+                        execResult = successPairs.FirstOrDefault(c =>
+                            string.Equals(
+                                Path.GetFileName(c.Execution.Request.RelativePath),
+                                pairResult.File1Name,
+                                StringComparison.OrdinalIgnoreCase));
+                    }
 
                     if (execResult != null)
                     {
+                        pairResult.RequestRelativePath = execResult.Execution.Request.RelativePath;
                         pairResult.PairOutcome = RequestPairOutcome.BothSuccess;
                         pairResult.HttpStatusCodeA = execResult.Execution.StatusCodeA;
                         pairResult.HttpStatusCodeB = execResult.Execution.StatusCodeB;
+
+                        // Propagate original response file paths for side-by-side raw content viewing.
+                        // The temp directory paths set by DirectoryComparisonService are deleted after comparison,
+                        // so we remap to the original response files which persist for the job lifetime.
+                        if (execResult.Execution.ResponsePathA != null && execResult.Execution.ResponsePathB != null)
+                        {
+                            pairResult.File1Path = execResult.Execution.ResponsePathA;
+                            pairResult.File2Path = execResult.Execution.ResponsePathB;
+                        }
                     }
                 }
             }
@@ -394,6 +413,9 @@ public class RequestComparisonJobService
             comparisonResult.FilePairResults = comparisonResult.FilePairResults
                 .OrderBy(r => r.File1Name, StringComparer.Ordinal)
                 .ToList();
+
+            comparisonResult.AllEqual = comparisonResult.FilePairResults.Count > 0
+                && comparisonResult.FilePairResults.All(r => r.AreEqual);
 
             // Store execution metadata in result
             comparisonResult.Metadata["RequestComparisonJobId"] = jobId;
