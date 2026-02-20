@@ -1,6 +1,6 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2026-02-20T12:00:00Z
+lastUpdated: 2026-02-20T13:00:00Z
 sessionStatus: complete
 ---
 
@@ -44,7 +44,15 @@ Fix synchronized scrolling in side-by-side full file comparison view
 No active tasks
 
 ## Session Notes
-Implemented robust synchronized scrolling for side-by-side diff panels with client-side bidirectional listeners, component-scoped unique panel IDs, and listener cleanup on dispose. Build succeeded and tests passed (143/143).
+Implemented robust synchronized scrolling for side-by-side diff panels with client-side bidirectional listeners, component-scoped unique panel IDs, listener cleanup, and lifecycle-based rebind when pairs/content change. Added paged grid selection synchronization so inspector-selected pairs auto-navigate to the correct page and highlight in Expected vs Actual results. Build succeeded and tests passed (143/143).
+
+Hosting feasibility review (2026-02-20): Current `ComparisonTool.Web` is a server-rendered Blazor app using Interactive Server render mode, SignalR hub endpoints, server-side file upload APIs, temp filesystem persistence, and background job execution. It is not directly deployable as a pure static web app without refactoring to Blazor WebAssembly + externalized backend services.
+
+External docs reviewed:
+- https://learn.microsoft.com/en-us/aspnet/core/blazor/components/render-modes?view=aspnetcore-9.0
+- https://learn.microsoft.com/en-us/azure/static-web-apps/overview
+- https://learn.microsoft.com/en-us/azure/static-web-apps/deploy-blazor
+- https://learn.microsoft.com/en-us/azure/static-web-apps/functions-bring-your-own
 
 ---
 # Previous Session Archive

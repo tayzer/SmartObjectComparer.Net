@@ -357,6 +357,7 @@ public class RequestComparisonJobService
                     {
                         File1Name = Path.GetFileName(failed.Execution.Request.RelativePath),
                         File2Name = Path.GetFileName(failed.Execution.Request.RelativePath),
+                        RequestRelativePath = failed.Execution.Request.RelativePath,
                         ErrorMessage = failed.Execution.ErrorMessage ?? "Request execution failed",
                         ErrorType = "HttpRequestException",
                         PairOutcome = RequestPairOutcome.OneOrBothFailed,
@@ -376,12 +377,22 @@ public class RequestComparisonJobService
                     // This is a domain-model comparison result — find its execution result
                     var execResult = successPairs.FirstOrDefault(c =>
                         string.Equals(
-                            Path.GetFileName(c.Execution.Request.RelativePath),
-                            pairResult.File1Name,
+                            c.Execution.Request.RelativePath,
+                            pairResult.RequestRelativePath,
                             StringComparison.OrdinalIgnoreCase));
+
+                    if (execResult == null)
+                    {
+                        execResult = successPairs.FirstOrDefault(c =>
+                            string.Equals(
+                                Path.GetFileName(c.Execution.Request.RelativePath),
+                                pairResult.File1Name,
+                                StringComparison.OrdinalIgnoreCase));
+                    }
 
                     if (execResult != null)
                     {
+                        pairResult.RequestRelativePath = execResult.Execution.Request.RelativePath;
                         pairResult.PairOutcome = RequestPairOutcome.BothSuccess;
                         pairResult.HttpStatusCodeA = execResult.Execution.StatusCodeA;
                         pairResult.HttpStatusCodeB = execResult.Execution.StatusCodeB;

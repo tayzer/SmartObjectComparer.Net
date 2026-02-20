@@ -137,9 +137,11 @@
                              RowClassFunc="@GetRowClass"
                              SelectedItem="@SelectedItem"
                              SelectedItemChanged="@OnSelectedItemChanged"
+                             CurrentPage="@CurrentPage"
+                             CurrentPageChanged="@OnCurrentPageChanged"
                              Filterable="false"
                              SortMode="SortMode.Single"
-                             RowsPerPage="@(ShowAll ? 100 : PreviewCount)">
+                             RowsPerPage="@CurrentRowsPerPage">
                     <Columns>
                         <TemplateColumn Title="Status" Sortable="true">
                             <CellTemplate>
@@ -264,7 +266,9 @@
     private bool IsCollapsed = false;
     private bool ShowAll = false;
     private const int PreviewCount = 20;
-    private FileResultGridItem SelectedItem { get; set; }
+    private FileResultGridItem? SelectedItem { get; set; }
+    private int CurrentPage { get; set; }
+    private int? lastSynchronizedSelectedPairIndex;
 
     private string StatusFilter = "All";
     private string SelectedGroupFilter = "All";
@@ -340,6 +344,8 @@
                 PairOutcome = x.Result.PairOutcome,
             });
     }
+
+            private int CurrentRowsPerPage => ShowAll ? 100 : PreviewCount;
     
     private int GetEqualCount() => Result?.FilePairResults?.Count(r => !r.HasError && r.AreEqual) ?? 0;
     private int GetDifferentCount() => Result?.FilePairResults?.Count(r => !r.HasError && !r.AreEqual) ?? 0;
@@ -347,6 +353,12 @@
     private int GetStatusCodeMismatchCount() => Result?.FilePairResults?.Count(r => r.PairOutcome == RequestPairOutcome.StatusCodeMismatch) ?? 0;
     private int GetBothNonSuccessCount() => Result?.FilePairResults?.Count(r => r.PairOutcome == RequestPairOutcome.BothNonSuccess) ?? 0;
     private int GetTotalFilteredCount() => GetFilteredResultsWithOriginalIndex().Count();
+
+    protected override void OnParametersSet()
+    {
+        base.OnParametersSet();
+        SynchronizeGridSelection();
+    }
 
     /// <summary>
     /// Whether any file pair results contain HTTP status code data (request comparison mode).
@@ -381,6 +393,46 @@
     {
         if (item != null)
             SelectPair(item.OriginalIndex);
+    }
+
+    private Task OnCurrentPageChanged(int page)
+    {
+        CurrentPage = page;
+        return Task.CompletedTask;
+    }
+
+    private void SynchronizeGridSelection()
+    {
+        if (Result?.FilePairResults == null || SelectedPairIndex < 0)
+        {
+            SelectedItem = null;
+            return;
+        }
+
+        if (lastSynchronizedSelectedPairIndex == SelectedPairIndex)
+        {
+            return;
+        }
+
+        var visibleItems = GetFilteredGridItems().ToList();
+        var visibleIndex = visibleItems.FindIndex(x => x.OriginalIndex == SelectedPairIndex);
+
+        if (visibleIndex < 0 && !ShowAll && GetTotalFilteredCount() > PreviewCount)
+        {
+            ShowAll = true;
+            visibleItems = GetFilteredGridItems().ToList();
+            visibleIndex = visibleItems.FindIndex(x => x.OriginalIndex == SelectedPairIndex);
+        }
+
+        if (visibleIndex < 0)
+        {
+            SelectedItem = null;
+            return;
+        }
+
+        SelectedItem = visibleItems[visibleIndex];
+        CurrentPage = visibleIndex / Math.Max(1, CurrentRowsPerPage);
+        lastSynchronizedSelectedPairIndex = SelectedPairIndex;
     }
 
     private async Task SelectPair(int index)

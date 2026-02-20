@@ -263,6 +263,8 @@ else
     private readonly string panelAId = $"sbs-panel-a-{Guid.NewGuid():N}";
     private readonly string panelBId = $"sbs-panel-b-{Guid.NewGuid():N}";
     private bool syncScrollInitialized;
+    private bool syncScrollNeedsRefresh = true;
+    private string? lastSyncSignature;
     
     private SideBySideDiffModel? cachedDiffModel;
     private string? previousContentA;
@@ -332,18 +334,46 @@ else
         return new ChangeStats(insertions, deletions, modifications);
     }
 
+    protected override void OnParametersSet()
+    {
+        syncScrollNeedsRefresh = true;
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
+        if (!IsSideBySideVisible())
         {
-            await ConfigureSyncScrollAsync();
+            if (syncScrollInitialized)
+            {
+                await DisposeSyncScrollAsync();
+            }
+
+            lastSyncSignature = null;
+            return;
         }
+
+        var currentSignature = BuildSyncSignature();
+        if (!firstRender && !syncScrollNeedsRefresh && string.Equals(lastSyncSignature, currentSignature, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        await ConfigureSyncScrollAsync();
+        syncScrollNeedsRefresh = false;
+        lastSyncSignature = currentSignature;
     }
 
     private async Task OnSyncScrollToggled(bool enabled)
     {
         syncScroll = enabled;
-        await ConfigureSyncScrollAsync();
+        syncScrollNeedsRefresh = true;
+
+        if (IsSideBySideVisible())
+        {
+            await ConfigureSyncScrollAsync();
+            lastSyncSignature = BuildSyncSignature();
+            syncScrollNeedsRefresh = false;
+        }
     }
 
     private async Task ConfigureSyncScrollAsync()
@@ -359,13 +389,28 @@ else
         }
     }
 
-    public async ValueTask DisposeAsync()
+    private string BuildSyncSignature()
     {
-        if (!syncScrollInitialized)
-        {
-            return;
-        }
+        return string.Join('|',
+            panelAId,
+            panelBId,
+            syncScroll,
+            FileNameA,
+            FileNameB,
+            ContentA?.Length ?? 0,
+            ContentB?.Length ?? 0,
+            IsLoading,
+            ErrorMessage ?? string.Empty);
+    }
 
+    private bool IsSideBySideVisible()
+    {
+        return !IsLoading && string.IsNullOrEmpty(ErrorMessage) &&
+               (!string.IsNullOrEmpty(ContentA) || !string.IsNullOrEmpty(ContentB));
+    }
+
+    private async Task DisposeSyncScrollAsync()
+    {
         try
         {
             await JSRuntime.InvokeVoidAsync("disposeBidirectionalScrollSync", panelAId, panelBId);
@@ -374,5 +419,19 @@ else
         {
             // Ignore dispose JS interop errors during teardown/navigation
         }
+        finally
+        {
+            syncScrollInitialized = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (!syncScrollInitialized)
+        {
+            return;
+        }
+
+        await DisposeSyncScrollAsync();
     }
 }

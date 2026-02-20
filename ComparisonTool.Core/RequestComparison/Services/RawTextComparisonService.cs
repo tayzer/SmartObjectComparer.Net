@@ -45,6 +45,9 @@ public class RawTextComparisonService
         {
             File1Name = fileName,
             File2Name = fileName,
+            RequestRelativePath = exec.Request.RelativePath,
+            File1Path = exec.ResponsePathA,
+            File2Path = exec.ResponsePathB,
             HttpStatusCodeA = exec.StatusCodeA,
             HttpStatusCodeB = exec.StatusCodeB,
             PairOutcome = classified.Outcome,

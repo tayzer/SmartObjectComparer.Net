@@ -62,7 +62,9 @@ public class EnhancedStructuralDifferenceAnalyzer
                 continue;
             }
 
-            var pairIdentifier = $"{filePairResult.File1Name} vs {filePairResult.File2Name}";
+            var pairIdentifier = string.IsNullOrWhiteSpace(filePairResult.RequestRelativePath)
+                ? $"{filePairResult.File1Name} vs {filePairResult.File2Name}"
+                : filePairResult.RequestRelativePath;
 
             foreach (var difference in filePairResult.Result?.Differences ?? new System.Collections.Generic.List<KellermanSoftware.CompareNetObjects.Difference>())
             {
