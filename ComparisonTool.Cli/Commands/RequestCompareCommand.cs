@@ -118,10 +118,17 @@ public static class RequestCompareCommand
 
         var formatOption = new Option<OutputFormat[]>("--format", "-f")
         {
-            Description = "Output format(s): Console, Json, Markdown. Multiple allowed",
+            Description = "Output format(s): Console, Json, Markdown, Html. Multiple allowed",
             Arity = ArgumentArity.OneOrMore,
             AllowMultipleArgumentsPerToken = true,
             DefaultValueFactory = _ => new[] { OutputFormat.Console },
+        };
+
+        var htmlModeOption = new Option<HtmlReportMode>("--html-mode")
+        {
+            Description = "HTML output mode: SingleFile or StaticSite",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => HtmlReportMode.SingleFile,
         };
 
         var pageSizeOption = new Option<int>("--page-size")
@@ -156,6 +163,7 @@ public static class RequestCompareCommand
             contentTypeOption,
             outputOption,
             formatOption,
+            htmlModeOption,
             pageSizeOption,
         };
 
@@ -176,6 +184,7 @@ public static class RequestCompareCommand
             var contentTypeOverride = parseResult.GetValue(contentTypeOption);
             var outputDir = parseResult.GetValue(outputOption);
             var formats = parseResult.GetValue(formatOption) ?? new[] { OutputFormat.Console };
+            var htmlMode = parseResult.GetValue(htmlModeOption);
             var pageSize = parseResult.GetValue(pageSizeOption);
 
             return await ExecuteAsync(
@@ -195,6 +204,7 @@ public static class RequestCompareCommand
                 contentTypeOverride,
                 outputDir,
                 formats,
+                htmlMode,
                 pageSize,
                 cancellationToken);
         });
@@ -219,6 +229,7 @@ public static class RequestCompareCommand
         string? contentTypeOverride,
         DirectoryInfo? outputDir,
         OutputFormat[] formats,
+        HtmlReportMode htmlMode,
         int markdownPageSize,
         CancellationToken cancellationToken)
     {
@@ -319,6 +330,7 @@ public static class RequestCompareCommand
             JobId = job.JobId,
             MostAffectedFields = MostAffectedFieldsAggregator.Build(result),
             MarkdownPageSize = markdownPageSize,
+            HtmlMode = htmlMode,
         };
 
         var resolvedOutputDir = outputDir?.FullName ?? Directory.GetCurrentDirectory();
@@ -341,6 +353,17 @@ public static class RequestCompareCommand
                     var pageCount = await MarkdownReportWriter.WriteAsync(reportContext, mdPath);
                     var pageSuffix = pageCount > 0 ? $" (+{pageCount} detail pages)" : string.Empty;
                     Console.WriteLine($"  Markdown report: {mdPath}{pageSuffix}");
+                    break;
+                case OutputFormat.Html:
+                    var htmlTimestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+                    var htmlOutputPath = htmlMode == HtmlReportMode.StaticSite
+                        ? Path.Combine(resolvedOutputDir, $"request-comparison-{htmlTimestamp}")
+                        : Path.Combine(resolvedOutputDir, $"request-comparison-{htmlTimestamp}.html");
+                    var htmlResult = await HtmlReportWriter.WriteAsync(reportContext, htmlOutputPath);
+                    var detailSuffix = htmlResult.DetailPageCount > 0
+                        ? $" (+{htmlResult.DetailPageCount} pair pages)"
+                        : string.Empty;
+                    Console.WriteLine($"  HTML report: {htmlResult.PrimaryPath}{detailSuffix}");
                     break;
             }
         }

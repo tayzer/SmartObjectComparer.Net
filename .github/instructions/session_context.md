@@ -1,58 +1,53 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2026-02-20T13:00:00Z
+lastUpdated: 2026-02-20T17:30:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-Fix synchronized scrolling in side-by-side full file comparison view
+Extract shared request-comparison presentation logic for Web + CLI HTML export parity
 
 ## Todo List Status
 ```markdown
-- [x] 🔍 Identify sync scrolling root cause
-- [x] 🛠️ Move scroll sync to client-side listeners with teardown
-- [x] ✅ Build and test verification
+- [x] 🔍 Extract common projection/filter logic into Core
+- [x] 🛠️ Rewire Web FileComparisonResults to shared projection
+- [x] 🛠️ Rewire CLI HtmlReportWriter to shared projection
+- [x] ✅ Build verification (Core, CLI, Web)
 ```
 
 ## Recent File Changes
-- `ComparisonTool.Web/Components/Comparison/SideBySideFileView.razor`: Replaced server-side onscroll roundtrip with JS-configured bidirectional sync using unique per-instance panel IDs and disposal
-- `ComparisonTool.Web/wwwroot/js/app.js`: Added `configureBidirectionalScrollSync` and `disposeBidirectionalScrollSync` listener lifecycle helpers
-- `.github/instructions/session_context.md`: Updated context for synchronized scrolling fix
+- `ComparisonTool.Core/Comparison/Presentation/ComparisonResultStatusFilter.cs`: Added shared status-filter enum used by Web and CLI report rendering.
+- `ComparisonTool.Core/Comparison/Presentation/ComparisonResultGridItem.cs`: Added shared row DTO for comparison result views.
+- `ComparisonTool.Core/Comparison/Presentation/ComparisonResultProjection.cs`: Added aggregate projection DTO with counts/categories.
+- `ComparisonTool.Core/Comparison/Presentation/ComparisonResultProjectionBuilder.cs`: Added shared projection + filtering logic extracted from Web component behavior.
+- `ComparisonTool.Web/Components/Comparison/FileComparisonResults.razor`: Replaced component-local filtering/count logic with shared Core projection builder.
+- `ComparisonTool.Cli/Reporting/HtmlReportWriter.cs`: Switched to shared projection for summary counts, category grouping, and filter semantics.
 
 ## Key Technical Decisions
-- Decision: Use pure client-side scroll event synchronization instead of Blazor server event roundtrips for panel sync
-- Rationale: Prevent latency, eliminate duplicate ID targeting issues, and ensure smooth reliable syncing
+- Decision: Centralize comparison grid projection/filter semantics in Core instead of duplicating logic in Web and CLI writers.
+- Rationale: Keeps Request Comparison Results behavior aligned across Blazor UI and exported HTML artifacts.
 - Date: 2026-02-20
 
 ## External Resources Referenced
-- Internal code inspection only
+- https://learn.microsoft.com/en-us/aspnet/core/blazor/components/?view=aspnetcore-9.0: component architecture and state/rendering patterns.
+- https://learn.microsoft.com/en-us/dotnet/standard/linq/: projection/filter composition patterns.
 
 ## Blockers & Issues
-- [RESOLVED] Synchronized scrolling did not work reliably due to server-roundtrip scroll events and static panel IDs
+- None
 
 ## Failed Approaches
-- Approach: Sync via `@onscroll` in Blazor component and JS interop call per scroll event
-- Failure Reason: Blazor server event latency and non-unique IDs reduced reliability/usability
-- Lesson: Keep frequent UI events fully client-side and use unique IDs per component instance
+- None
 
 ## Environment Notes
 - .NET 10.0
 
 ## Next Session Priority
-No active tasks
+Optional: add focused unit tests around `ComparisonResultProjectionBuilder` and HTML filter rendering.
 
 ## Session Notes
-Implemented robust synchronized scrolling for side-by-side diff panels with client-side bidirectional listeners, component-scoped unique panel IDs, listener cleanup, and lifecycle-based rebind when pairs/content change. Added paged grid selection synchronization so inspector-selected pairs auto-navigate to the correct page and highlight in Expected vs Actual results. Build succeeded and tests passed (143/143).
-
-Hosting feasibility review (2026-02-20): Current `ComparisonTool.Web` is a server-rendered Blazor app using Interactive Server render mode, SignalR hub endpoints, server-side file upload APIs, temp filesystem persistence, and background job execution. It is not directly deployable as a pure static web app without refactoring to Blazor WebAssembly + externalized backend services.
-
-External docs reviewed:
-- https://learn.microsoft.com/en-us/aspnet/core/blazor/components/render-modes?view=aspnetcore-9.0
-- https://learn.microsoft.com/en-us/azure/static-web-apps/overview
-- https://learn.microsoft.com/en-us/azure/static-web-apps/deploy-blazor
-- https://learn.microsoft.com/en-us/azure/static-web-apps/functions-bring-your-own
+Phase 2 completed: shared projection/filter behavior now powers both Web `FileComparisonResults` and CLI HTML export rendering, improving feature parity for status/category filtering and summary counts. Core/CLI/Web builds succeeded.
 
 ---
 # Previous Session Archive

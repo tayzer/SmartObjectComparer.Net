@@ -120,7 +120,7 @@ dotnet build ComparisonTool.Cli/ComparisonTool.Cli.csproj -c Release
 ```bash
 comparisontool folder <expected-dir> <actual-dir> -m ComplexOrderResponse \
   --ignore-trailing-whitespace-end \
-  -f Console Json Markdown -o ./reports
+  -f Console Json Markdown Html --html-mode SingleFile -o ./reports
 ```
 
 **Request comparison** — fire requests at two endpoints and diff the responses (with ignore rules + content-type override):
@@ -132,8 +132,10 @@ comparisontool request <request-dir> \
   --ignore-rules ./ignore-rules.json \
   --content-type application/json \
   --ignore-collection-order --ignore-trailing-whitespace-end --ignore-namespaces \
-  -f Console Json -o ./reports
+  -f Console Json Html --html-mode StaticSite -o ./reports
 ```
+
+`--html-mode` supports `SingleFile` (one self-contained `.html`) and `StaticSite` (index + per-pair pages).
 
 **Ignore rules JSON** (array of `IgnoreRuleDto`):
 ```json

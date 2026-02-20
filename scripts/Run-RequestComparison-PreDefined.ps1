@@ -16,7 +16,8 @@ $DomainModel = "ComplexOrderResponse"
 $ContentType = "application/xml"
 $IgnoreRulesPath = ""
 $OutputDirectory = "C:\Dev\GitMain\ComparisonTool\reports"
-$OutputType = @("Console", "Markdown")
+$OutputType = @("Console", "Markdown", "Html")
+$HtmlMode = "StaticSite"
 # ------------------------------
 
 Write-Host "Building CLI project..."
@@ -56,6 +57,11 @@ if (-not [string]::IsNullOrWhiteSpace($ContentType))
 if (-not [string]::IsNullOrWhiteSpace($IgnoreRulesPath))
 {
     $arguments += @("--ignore-rules", $IgnoreRulesPath)
+}
+
+if ($OutputType -contains "Html" -and -not [string]::IsNullOrWhiteSpace($HtmlMode))
+{
+    $arguments += @("--html-mode", $HtmlMode)
 }
 
 Write-Host "Running request comparison..."

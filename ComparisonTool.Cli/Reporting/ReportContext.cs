@@ -50,4 +50,9 @@ public class ReportContext
     /// Defaults to <c>50</c>.
     /// </summary>
     public int MarkdownPageSize { get; set; } = 50;
+
+    /// <summary>
+    /// Gets or sets the HTML export mode used by <see cref="HtmlReportWriter"/>.
+    /// </summary>
+    public HtmlReportMode HtmlMode { get; set; } = HtmlReportMode.SingleFile;
 }
