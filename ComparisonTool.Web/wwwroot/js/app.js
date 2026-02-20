@@ -666,3 +666,86 @@ window.scrollToElement = function(elementId) {
         element.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 };
+
+/**
+ * Synchronizes the scroll position of one panel to match another.
+ * Used for side-by-side file comparison view.
+ */
+window.syncScrollPanels = function(sourceId, targetId) {
+    const source = document.getElementById(sourceId);
+    const target = document.getElementById(targetId);
+    if (source && target) {
+        target.scrollTop = source.scrollTop;
+        target.scrollLeft = source.scrollLeft;
+    }
+};
+
+window.__sideBySideScrollSync = window.__sideBySideScrollSync || {};
+
+window.configureBidirectionalScrollSync = function(panelAId, panelBId, enabled) {
+    window.disposeBidirectionalScrollSync(panelAId, panelBId);
+
+    if (!enabled) {
+        return;
+    }
+
+    const panelA = document.getElementById(panelAId);
+    const panelB = document.getElementById(panelBId);
+    if (!panelA || !panelB) {
+        return;
+    }
+
+    let syncingFromA = false;
+    let syncingFromB = false;
+
+    const onScrollA = function() {
+        if (syncingFromB) {
+            return;
+        }
+
+        syncingFromA = true;
+        panelB.scrollTop = panelA.scrollTop;
+        panelB.scrollLeft = panelA.scrollLeft;
+
+        requestAnimationFrame(() => {
+            syncingFromA = false;
+        });
+    };
+
+    const onScrollB = function() {
+        if (syncingFromA) {
+            return;
+        }
+
+        syncingFromB = true;
+        panelA.scrollTop = panelB.scrollTop;
+        panelA.scrollLeft = panelB.scrollLeft;
+
+        requestAnimationFrame(() => {
+            syncingFromB = false;
+        });
+    };
+
+    panelA.addEventListener('scroll', onScrollA, { passive: true });
+    panelB.addEventListener('scroll', onScrollB, { passive: true });
+
+    const key = `${panelAId}|${panelBId}`;
+    window.__sideBySideScrollSync[key] = {
+        panelA,
+        panelB,
+        onScrollA,
+        onScrollB
+    };
+};
+
+window.disposeBidirectionalScrollSync = function(panelAId, panelBId) {
+    const key = `${panelAId}|${panelBId}`;
+    const registration = window.__sideBySideScrollSync[key];
+    if (!registration) {
+        return;
+    }
+
+    registration.panelA.removeEventListener('scroll', registration.onScrollA);
+    registration.panelB.removeEventListener('scroll', registration.onScrollB);
+    delete window.__sideBySideScrollSync[key];
+};

@@ -234,6 +234,13 @@
     </MudExpansionPanels>
 }
 
+<!-- Top Affected Objects Panel -->
+@if (FolderComparisonResult != null && !FolderComparisonResult.AllEqual)
+{
+    <TopAffectedObjectsPanel FolderResult="@FolderComparisonResult"
+                             Analysis="@Analysis" />
+}
+
 <!-- Inspectors in MudTabs -->
 <MudPaper Elevation="2" Class="pa-0">
     <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-0" @bind-ActivePanelIndex="ActiveTabIndex">
@@ -332,7 +339,12 @@
                                         <MudStack Spacing="2">
                                             <MudStack Row="true" AlignItems="AlignItems.Center">
                                                 <MudIcon Icon="@Icons.Material.Filled.InsertDriveFile" Size="Size.Small" Color="Color.Secondary" />
-                                                <MudText Typo="Typo.body2"><strong>@file.FileName</strong></MudText>
+                                                <MudLink Typo="Typo.body2" Color="Color.Primary" Style="cursor: pointer; font-weight: 600;" OnClick="@(() => NavigateToFilePair(file.FileName))">
+                                                    @file.FileName
+                                                </MudLink>
+                                                <MudTooltip Text="View detailed comparison for this file pair">
+                                                    <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Color="Color.Primary" OnClick="@(() => NavigateToFilePair(file.FileName))" />
+                                                </MudTooltip>
                                             </MudStack>
                                             
                                             <MudGrid Spacing="2">
@@ -480,7 +492,12 @@
                                         <MudStack Spacing="2">
                                             <MudStack Row="true" AlignItems="AlignItems.Center">
                                                 <MudIcon Icon="@Icons.Material.Filled.InsertDriveFile" Size="Size.Small" Color="Color.Secondary" />
-                                                <MudText Typo="Typo.body2"><strong>@file.FileName</strong></MudText>
+                                                <MudLink Typo="Typo.body2" Color="Color.Primary" Style="cursor: pointer; font-weight: 600;" OnClick="@(() => NavigateToFilePair(file.FileName))">
+                                                    @file.FileName
+                                                </MudLink>
+                                                <MudTooltip Text="View detailed comparison for this file pair">
+                                                    <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Color="Color.Primary" OnClick="@(() => NavigateToFilePair(file.FileName))" />
+                                                </MudTooltip>
                                             </MudStack>
                                             
                                             <MudGrid Spacing="2">
@@ -595,7 +612,12 @@
                                         <MudStack Spacing="2">
                                             <MudStack Row="true" AlignItems="AlignItems.Center">
                                                 <MudIcon Icon="@Icons.Material.Filled.Error" Size="Size.Small" Color="Color.Error" />
-                                                <MudText Typo="Typo.body2"><strong>@file.FileName</strong></MudText>
+                                                <MudLink Typo="Typo.body2" Color="Color.Primary" Style="cursor: pointer; font-weight: 600;" OnClick="@(() => NavigateToFilePair(file.FileName))">
+                                                    @file.FileName
+                                                </MudLink>
+                                                <MudTooltip Text="View detailed comparison for this file pair">
+                                                    <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Color="Color.Primary" OnClick="@(() => NavigateToFilePair(file.FileName))" />
+                                                </MudTooltip>
                                             </MudStack>
                                             
                                             <MudGrid Spacing="2">
@@ -680,7 +702,13 @@
                                     <MudText Typo="Typo.body2"><code>@context.Item.PropertyPath</code></MudText>
                                 </CellTemplate>
                             </PropertyColumn>
-                            <PropertyColumn Property="x => x.FileName" Title="File" Sortable="true" Groupable="true" />
+                            <TemplateColumn Title="File" Sortable="true" Groupable="true">
+                                <CellTemplate>
+                                    <MudLink Color="Color.Primary" Style="cursor: pointer;" OnClick="@(() => NavigateToFilePair(context.Item.FileName))">
+                                        @context.Item.FileName
+                                    </MudLink>
+                                </CellTemplate>
+                            </TemplateColumn>
                             <TemplateColumn Title="Expected" Sortable="false">
                                 <CellTemplate>
                                     <div class="diff-expected">
@@ -719,6 +747,12 @@
     
     [Parameter]
     public MultiFolderComparisonResult FolderComparisonResult { get; set; }
+    
+    /// <summary>
+    /// Fires when a file name is clicked in any inspector tab, passing the file name to navigate to.
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> OnFileSelected { get; set; }
     
     private int ActiveTabIndex { get; set; } = 0;
     
@@ -1170,6 +1204,14 @@
     {
         BuildPropertyGroups();
         StateHasChanged();
+    }
+    
+    private async Task NavigateToFilePair(string fileName)
+    {
+        if (OnFileSelected.HasDelegate && !string.IsNullOrEmpty(fileName))
+        {
+            await OnFileSelected.InvokeAsync(fileName);
+        }
     }
     
     private void ExportResults() { }

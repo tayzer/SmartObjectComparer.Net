@@ -32,6 +32,15 @@
         <div class="pa-4">
             <!-- Filter Controls -->
             <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Class="mb-4 flex-wrap">
+                <MudTextField @bind-Value="FileNameSearchFilter" 
+                              Placeholder="Search by file name..." 
+                              Variant="Variant.Outlined" 
+                              Adornment="Adornment.Start" 
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              Immediate="true"
+                              DebounceInterval="300"
+                              Margin="Margin.Dense"
+                              Style="min-width: 220px;" />
                 <MudSelect T="string" @bind-Value="StatusFilter" Label="Status" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 140px;">
                     <MudSelectItem Value='"All"'>All</MudSelectItem>
                     <MudSelectItem Value='"Equal"'>
@@ -259,6 +268,7 @@
 
     private string StatusFilter = "All";
     private string SelectedGroupFilter = "All";
+    private string FileNameSearchFilter { get; set; } = "";
     
     // Grid item model
     public class FileResultGridItem
@@ -302,6 +312,11 @@
         
         if (SelectedGroupFilter != "All")
             results = results.Where(x => (x.Result.Summary?.CommonPatterns?.FirstOrDefault()?.Pattern ?? "Uncategorized") == SelectedGroupFilter);
+        
+        if (!string.IsNullOrWhiteSpace(FileNameSearchFilter))
+            results = results.Where(x => 
+                x.Result.File1Name.Contains(FileNameSearchFilter, StringComparison.OrdinalIgnoreCase) ||
+                x.Result.File2Name.Contains(FileNameSearchFilter, StringComparison.OrdinalIgnoreCase));
         
         return results;
     }

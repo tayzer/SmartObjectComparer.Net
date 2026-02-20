@@ -1,51 +1,50 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2026-02-12T00:20:00Z
+lastUpdated: 2026-02-20T12:00:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-Fix JSON report serialization crash caused by ref properties in analysis models
+Fix synchronized scrolling in side-by-side full file comparison view
 
 ## Todo List Status
 ```markdown
-- [x] 🛠️ Add JsonIgnore to ref properties
-- [x] 🔍 Confirm report serialization path
-- [x] ✅ Run targeted tests
-- [x] 📝 Update session context
+- [x] 🔍 Identify sync scrolling root cause
+- [x] 🛠️ Move scroll sync to client-side listeners with teardown
+- [x] ✅ Build and test verification
 ```
 
 ## Recent File Changes
-- `ComparisonTool.Core/Comparison/Analysis/GlobalPatternInfo.cs`: Added `JsonIgnore` to ref-returning counter properties
-- `ComparisonTool.Core/Comparison/Analysis/GlobalPropertyChangeInfo.cs`: Added `JsonIgnore` to ref-returning counter property
+- `ComparisonTool.Web/Components/Comparison/SideBySideFileView.razor`: Replaced server-side onscroll roundtrip with JS-configured bidirectional sync using unique per-instance panel IDs and disposal
+- `ComparisonTool.Web/wwwroot/js/app.js`: Added `configureBidirectionalScrollSync` and `disposeBidirectionalScrollSync` listener lifecycle helpers
+- `.github/instructions/session_context.md`: Updated context for synchronized scrolling fix
 
 ## Key Technical Decisions
-- Decision: Use `JsonIgnore` on ref-returning properties used only for Interlocked operations
-- Rationale: System.Text.Json cannot serialize ref/pointer-like properties; ignore them for reporting
-- Date: 2026-02-12
+- Decision: Use pure client-side scroll event synchronization instead of Blazor server event roundtrips for panel sync
+- Rationale: Prevent latency, eliminate duplicate ID targeting issues, and ensure smooth reliable syncing
+- Date: 2026-02-20
 
 ## External Resources Referenced
-- https://learn.microsoft.com/en-us/dotnet/standard/serialization/system-text-json/ignore-properties: JsonIgnore usage and ignore options
-- https://learn.microsoft.com/en-us/dotnet/api/system.text.json.serialization.jsonignoreattribute: JsonIgnoreAttribute reference
-- https://learn.microsoft.com/en-us/dotnet/api/system.text.json.serialization.jsonignorecondition: JsonIgnoreCondition enum
-- https://learn.microsoft.com/en-us/dotnet/standard/serialization/system-text-json/overview: System.Text.Json overview
+- Internal code inspection only
 
 ## Blockers & Issues
-- None
+- [RESOLVED] Synchronized scrolling did not work reliably due to server-roundtrip scroll events and static panel IDs
 
 ## Failed Approaches
-- Google search result page blocked (redirect to enablejs)
+- Approach: Sync via `@onscroll` in Blazor component and JS interop call per scroll event
+- Failure Reason: Blazor server event latency and non-unique IDs reduced reliability/usability
+- Lesson: Keep frequent UI events fully client-side and use unique IDs per component instance
 
 ## Environment Notes
-- .NET 8.0
+- .NET 10.0
 
 ## Next Session Priority
 No active tasks
 
 ## Session Notes
-Added `JsonIgnore` attributes to ref-returning properties used only for Interlocked operations to avoid System.Text.Json serialization failures. All tests passed (147).
+Implemented robust synchronized scrolling for side-by-side diff panels with client-side bidirectional listeners, component-scoped unique panel IDs, and listener cleanup on dispose. Build succeeded and tests passed (143/143).
 
 ---
 # Previous Session Archive

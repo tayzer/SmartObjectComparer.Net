@@ -248,7 +248,8 @@
                     @if (EnhancedStructuralAnalysis != null)
                     {
                         <ComparisonRunDetails Analysis="@EnhancedStructuralAnalysis"
-                                              FolderComparisonResult="@FolderComparisonResult" />
+                                              FolderComparisonResult="@FolderComparisonResult"
+                                              OnFileSelected="@HandleInspectorFileSelected" />
                     }
                     else if (!FolderComparisonResult.AllEqual)
                     {
@@ -428,7 +429,8 @@
                             @if (RequestComparisonEnhancedAnalysis != null)
                             {
                                 <ComparisonRunDetails Analysis="@RequestComparisonEnhancedAnalysis"
-                                                      FolderComparisonResult="@RequestComparisonResult" />
+                                                      FolderComparisonResult="@RequestComparisonResult"
+                                                      OnFileSelected="@HandleRequestInspectorFileSelected" />
                             }
                             else
                             {
@@ -1052,6 +1054,46 @@
         }
         
         StateHasChanged();
+    }
+    
+    /// <summary>
+    /// Handles file selection from the inspector tabs in the File/Folder comparison.
+    /// Resolves the file name to a pair index and scrolls to the detailed differences section.
+    /// </summary>
+    private async Task HandleInspectorFileSelected(string fileName)
+    {
+        if (FolderComparisonResult?.FilePairResults == null || string.IsNullOrEmpty(fileName))
+            return;
+            
+        var index = FolderComparisonResult.FilePairResults.FindIndex(p => 
+            string.Equals(p.File1Name, fileName, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(p.File2Name, fileName, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals($"{p.File1Name} vs {p.File2Name}", fileName, StringComparison.OrdinalIgnoreCase));
+            
+        if (index >= 0)
+        {
+            await SelectPairResult(index);
+        }
+    }
+    
+    /// <summary>
+    /// Handles file selection from the inspector tabs in the Request Comparison.
+    /// Resolves the file name to a pair index and scrolls to the detailed differences section.
+    /// </summary>
+    private async Task HandleRequestInspectorFileSelected(string fileName)
+    {
+        if (RequestComparisonResult?.FilePairResults == null || string.IsNullOrEmpty(fileName))
+            return;
+            
+        var index = RequestComparisonResult.FilePairResults.FindIndex(p => 
+            string.Equals(p.File1Name, fileName, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(p.File2Name, fileName, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals($"{p.File1Name} vs {p.File2Name}", fileName, StringComparison.OrdinalIgnoreCase));
+            
+        if (index >= 0)
+        {
+            await SelectRequestPairResult(index);
+        }
     }
     
     private async Task ExportRequestComparisonResults()

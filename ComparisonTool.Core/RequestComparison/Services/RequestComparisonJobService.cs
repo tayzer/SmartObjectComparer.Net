@@ -385,6 +385,15 @@ public class RequestComparisonJobService
                         pairResult.PairOutcome = RequestPairOutcome.BothSuccess;
                         pairResult.HttpStatusCodeA = execResult.Execution.StatusCodeA;
                         pairResult.HttpStatusCodeB = execResult.Execution.StatusCodeB;
+
+                        // Propagate original response file paths for side-by-side raw content viewing.
+                        // The temp directory paths set by DirectoryComparisonService are deleted after comparison,
+                        // so we remap to the original response files which persist for the job lifetime.
+                        if (execResult.Execution.ResponsePathA != null && execResult.Execution.ResponsePathB != null)
+                        {
+                            pairResult.File1Path = execResult.Execution.ResponsePathA;
+                            pairResult.File2Path = execResult.Execution.ResponsePathB;
+                        }
                     }
                 }
             }

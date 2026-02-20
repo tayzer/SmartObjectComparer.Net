@@ -4,8 +4,10 @@
 @using ComparisonTool.Core.Utilities
 @using ComparisonTool.Core.Comparison.Analysis
 @using ComparisonTool.Core.Comparison.Results
+@using ComparisonTool.Web.Services
 @using KellermanSoftware.CompareNetObjects
 @using Microsoft.AspNetCore.Components
+@inject RawContentService RawContentService
 
 <style>
     .diff-expected-cell {
@@ -50,18 +52,44 @@
                 @SelectedPair.File1Name vs @SelectedPair.File2Name
             </MudText>
         </MudStack>
-        <MudButton Variant="Variant.Outlined" 
-                   Color="Color.Primary"
-                   Size="Size.Small" 
-                   StartIcon="@Icons.Material.Filled.Download"
-                   OnClick="ExportResults">
-            Export This Result
-        </MudButton>
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+            <MudTooltip Text="Toggle between structured differences and full file side-by-side comparison">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@Icons.Material.Filled.ViewList" Size="Size.Small" Color="@(!showFullFileView ? Color.Primary : Color.Default)" />
+                    <MudSwitch T="bool" @bind-Value="showFullFileView" 
+                               Color="Color.Primary" 
+                               Label="" 
+                               Class="ma-0" />
+                    <MudIcon Icon="@Icons.Material.Filled.ViewColumn" Size="Size.Small" Color="@(showFullFileView ? Color.Primary : Color.Default)" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@(showFullFileView ? "Full File View" : "Structured View")</MudText>
+                </MudStack>
+            </MudTooltip>
+            <MudButton Variant="Variant.Outlined" 
+                       Color="Color.Primary"
+                       Size="Size.Small" 
+                       StartIcon="@Icons.Material.Filled.Download"
+                       OnClick="ExportResults">
+                Export This Result
+            </MudButton>
+        </MudStack>
     </MudStack>
     <MudDivider />
 </MudPaper>
 
-@if (!DifferenceSummary.AreEqual)
+@if (showFullFileView)
+{
+    <MudPaper Elevation="2" Class="mt-4 pa-4">
+        <SideBySideFileView ContentA="@rawContentA"
+                            ContentB="@rawContentB"
+                            FileNameA="@SelectedPair.File1Name"
+                            FileNameB="@SelectedPair.File2Name"
+                            IsTruncatedA="@rawContentTruncatedA"
+                            IsTruncatedB="@rawContentTruncatedB"
+                            IsLoading="@isLoadingRawContent"
+                            ErrorMessage="@rawContentErrorMessage" />
+    </MudPaper>
+}
+else if (!DifferenceSummary.AreEqual)
 {
     <MudPaper Elevation="2" Class="mt-4">
         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pa-3">
@@ -178,6 +206,16 @@
     private string SearchFilter { get; set; } = "";
     private Dictionary<string, bool> groupCollapsedStates = new Dictionary<string, bool>();
     
+    // Full file view state
+    private bool showFullFileView;
+    private string rawContentA = "";
+    private string rawContentB = "";
+    private bool rawContentTruncatedA;
+    private bool rawContentTruncatedB;
+    private bool isLoadingRawContent;
+    private string? rawContentErrorMessage;
+    private string? lastLoadedPairKey;
+    
     // Grid item for differences
     public class DifferenceItem
     {
@@ -210,7 +248,67 @@
             GroupedDifferences = Enumerable.Empty<IGrouping<string, Difference>>();
             groupCollapsedStates.Clear();
         }
+        
+        // Reset full file view when pair changes
+        var currentPairKey = $"{SelectedPair?.File1Path}|{SelectedPair?.File2Path}";
+        if (currentPairKey != lastLoadedPairKey)
+        {
+            rawContentA = "";
+            rawContentB = "";
+            rawContentErrorMessage = null;
+            lastLoadedPairKey = null;
+            // Keep showFullFileView toggle state across pair changes but content needs reload
+        }
+        
         base.OnParametersSet();
+    }
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (showFullFileView && lastLoadedPairKey != $"{SelectedPair?.File1Path}|{SelectedPair?.File2Path}")
+        {
+            await LoadRawContentAsync();
+        }
+    }
+    
+    private async Task LoadRawContentAsync()
+    {
+        if (SelectedPair == null || isLoadingRawContent) return;
+        
+        var pairKey = $"{SelectedPair.File1Path}|{SelectedPair.File2Path}";
+        if (pairKey == lastLoadedPairKey) return;
+        
+        isLoadingRawContent = true;
+        rawContentErrorMessage = null;
+        StateHasChanged();
+        
+        try
+        {
+            var result = await RawContentService.LoadRawContentAsync(SelectedPair);
+            
+            if (result.IsLoaded)
+            {
+                rawContentA = result.ContentA;
+                rawContentB = result.ContentB;
+                rawContentTruncatedA = result.IsTruncatedA;
+                rawContentTruncatedB = result.IsTruncatedB;
+            }
+            else
+            {
+                rawContentErrorMessage = result.ErrorMessage;
+            }
+            
+            lastLoadedPairKey = pairKey;
+        }
+        catch (Exception ex)
+        {
+            rawContentErrorMessage = $"Failed to load file content: {ex.Message}";
+        }
+        finally
+        {
+            isLoadingRawContent = false;
+            StateHasChanged();
+        }
     }
     
     private IEnumerable<IGrouping<string, Difference>> GetFilteredGroups()

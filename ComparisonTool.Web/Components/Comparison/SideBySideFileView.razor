@@ -1,0 +1,378 @@
+@namespace ComparisonTool.Web.Components.Comparison
+@using DiffPlex
+@using DiffPlex.DiffBuilder
+@using DiffPlex.DiffBuilder.Model
+@implements IAsyncDisposable
+@inject IJSRuntime JSRuntime
+
+<style>
+    .side-by-side-container {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0;
+        max-height: 700px;
+    }
+    
+    .file-panel {
+        overflow: auto;
+        max-height: 700px;
+        border: 1px solid var(--mud-palette-lines-default);
+    }
+    
+    .file-panel:first-child {
+        border-right: none;
+        border-radius: 4px 0 0 4px;
+    }
+    
+    .file-panel:last-child {
+        border-radius: 0 4px 4px 0;
+    }
+    
+    .file-panel-header {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: var(--mud-palette-surface);
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--mud-palette-lines-default);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .file-panel-header.expected {
+        border-left: 3px solid #2e7d32;
+    }
+    
+    .file-panel-header.actual {
+        border-left: 3px solid #d32f2f;
+    }
+    
+    .file-content {
+        padding: 0;
+        margin: 0;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-size: 0.8rem;
+        line-height: 1.5;
+    }
+    
+    .file-line {
+        display: flex;
+        min-height: 1.5em;
+    }
+    
+    .file-line:hover {
+        background-color: var(--mud-palette-action-default-hover);
+    }
+    
+    .line-number {
+        display: inline-block;
+        min-width: 48px;
+        padding: 0 8px;
+        text-align: right;
+        color: var(--mud-palette-text-secondary);
+        background: var(--mud-palette-background-grey);
+        border-right: 1px solid var(--mud-palette-lines-default);
+        user-select: none;
+        flex-shrink: 0;
+    }
+    
+    .line-content {
+        padding: 0 8px;
+        flex: 1;
+        white-space: pre-wrap;
+        word-break: break-all;
+    }
+    
+    .line-deleted {
+        background-color: rgba(211, 47, 47, 0.12);
+    }
+    
+    .line-inserted {
+        background-color: rgba(46, 125, 50, 0.12);
+    }
+    
+    .line-modified {
+        background-color: rgba(255, 152, 0, 0.10);
+    }
+    
+    .line-imaginary {
+        background-color: var(--mud-palette-background-grey);
+        opacity: 0.5;
+    }
+    
+    .char-deleted {
+        background-color: rgba(211, 47, 47, 0.30);
+        border-radius: 2px;
+    }
+    
+    .char-inserted {
+        background-color: rgba(46, 125, 50, 0.30);
+        border-radius: 2px;
+    }
+</style>
+
+@if (!string.IsNullOrEmpty(ErrorMessage))
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-3">
+        @ErrorMessage
+    </MudAlert>
+}
+else if (IsLoading)
+{
+    <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="pa-8">
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">Loading file content...</MudText>
+    </MudStack>
+}
+else if (!string.IsNullOrEmpty(ContentA) || !string.IsNullOrEmpty(ContentB))
+{
+    var diffModel = GetDiffModel();
+    
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.Code" Color="Color.Primary" />
+            <MudText Typo="Typo.subtitle1">
+                <strong>Full File Comparison</strong>
+            </MudText>
+            <MudChip T="string" Size="Size.Small" Color="Color.Info">
+                @diffModel.OldText.Lines.Count / @diffModel.NewText.Lines.Count lines
+            </MudChip>
+            @{
+                var changeStats = GetChangeStats(diffModel);
+            }
+            @if (changeStats.Insertions > 0)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Success">+@changeStats.Insertions</MudChip>
+            }
+            @if (changeStats.Deletions > 0)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Error">-@changeStats.Deletions</MudChip>
+            }
+            @if (changeStats.Modifications > 0)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Warning">~@changeStats.Modifications</MudChip>
+            }
+        </MudStack>
+        <MudStack Row="true" Spacing="1">
+            <MudTooltip Text="@(syncScroll ? "Synchronized scrolling enabled" : "Synchronized scrolling disabled")">
+                <MudToggleIconButton Toggled="@syncScroll"
+                                 ToggledChanged="@OnSyncScrollToggled"
+                                 Icon="@Icons.Material.Filled.SyncDisabled"
+                                 ToggledIcon="@Icons.Material.Filled.Sync"
+                                 Size="Size.Small"
+                                 ToggledColor="Color.Primary" />
+            </MudTooltip>
+            <MudTooltip Text="@(highlightDifferences ? "Difference highlighting enabled" : "Difference highlighting disabled")">
+                <MudToggleIconButton @bind-Toggled="highlightDifferences"
+                                 Icon="@Icons.Material.Filled.HighlightOff"
+                                 ToggledIcon="@Icons.Material.Filled.Highlight"
+                                 Size="Size.Small"
+                                 ToggledColor="Color.Warning" />
+            </MudTooltip>
+            <MudTooltip Text="@(wordWrap ? "Word wrap enabled" : "Word wrap disabled")">
+                <MudToggleIconButton @bind-Toggled="wordWrap"
+                                 Icon="@Icons.Material.Filled.WrapText"
+                                 ToggledIcon="@Icons.Material.Filled.WrapText"
+                                 Size="Size.Small"
+                                 ToggledColor="Color.Primary" />
+            </MudTooltip>
+        </MudStack>
+    </MudStack>
+    
+    @if (IsTruncatedA || IsTruncatedB)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true" Class="mb-2">
+            @if (IsTruncatedA && IsTruncatedB)
+            {
+                <span>Both files have been truncated to 512 KB for display purposes.</span>
+            }
+            else if (IsTruncatedA)
+            {
+                <span>The expected file has been truncated to 512 KB for display purposes.</span>
+            }
+            else
+            {
+                <span>The actual file has been truncated to 512 KB for display purposes.</span>
+            }
+        </MudAlert>
+    }
+    
+    <div class="side-by-side-container">
+        <!-- Expected (A/Old) Panel -->
+        <div class="file-panel" id="@panelAId">
+            <div class="file-panel-header expected">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" />
+                    <MudText Typo="Typo.body2"><strong>Expected (A)</strong> — @FileNameA</MudText>
+                </MudStack>
+            </div>
+            <div class="file-content" style="@(wordWrap ? "" : "white-space: pre; overflow-x: auto;")">
+                @foreach (var line in diffModel.OldText.Lines)
+                {
+                    var lineClass = highlightDifferences ? GetLineCssClass(line.Type) : "";
+                    <div class="file-line @lineClass">
+                        <span class="line-number">@(line.Position?.ToString() ?? "")</span>
+                        <span class="line-content">@RenderLineWithSubPieces(line, "char-deleted")</span>
+                    </div>
+                }
+            </div>
+        </div>
+        
+        <!-- Actual (B/New) Panel -->
+        <div class="file-panel" id="@panelBId">
+            <div class="file-panel-header actual">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error" />
+                    <MudText Typo="Typo.body2"><strong>Actual (B)</strong> — @FileNameB</MudText>
+                </MudStack>
+            </div>
+            <div class="file-content" style="@(wordWrap ? "" : "white-space: pre; overflow-x: auto;")">
+                @foreach (var line in diffModel.NewText.Lines)
+                {
+                    var lineClass = highlightDifferences ? GetLineCssClass(line.Type) : "";
+                    <div class="file-line @lineClass">
+                        <span class="line-number">@(line.Position?.ToString() ?? "")</span>
+                        <span class="line-content">@RenderLineWithSubPieces(line, "char-inserted")</span>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Text">
+        No file content available for side-by-side comparison.
+    </MudAlert>
+}
+
+@code {
+    [Parameter] public string ContentA { get; set; } = "";
+    [Parameter] public string ContentB { get; set; } = "";
+    [Parameter] public string FileNameA { get; set; } = "";
+    [Parameter] public string FileNameB { get; set; } = "";
+    [Parameter] public bool IsTruncatedA { get; set; }
+    [Parameter] public bool IsTruncatedB { get; set; }
+    [Parameter] public bool IsLoading { get; set; }
+    [Parameter] public string? ErrorMessage { get; set; }
+    
+    private bool syncScroll = true;
+    private bool highlightDifferences = true;
+    private bool wordWrap = false;
+    private readonly string panelAId = $"sbs-panel-a-{Guid.NewGuid():N}";
+    private readonly string panelBId = $"sbs-panel-b-{Guid.NewGuid():N}";
+    private bool syncScrollInitialized;
+    
+    private SideBySideDiffModel? cachedDiffModel;
+    private string? previousContentA;
+    private string? previousContentB;
+    
+    private SideBySideDiffModel GetDiffModel()
+    {
+        if (cachedDiffModel != null && previousContentA == ContentA && previousContentB == ContentB)
+        {
+            return cachedDiffModel;
+        }
+        
+        var diffBuilder = new SideBySideDiffBuilder(new Differ());
+        cachedDiffModel = diffBuilder.BuildDiffModel(ContentA ?? "", ContentB ?? "");
+        previousContentA = ContentA;
+        previousContentB = ContentB;
+        return cachedDiffModel;
+    }
+    
+    private static string GetLineCssClass(ChangeType changeType)
+    {
+        return changeType switch
+        {
+            ChangeType.Deleted => "line-deleted",
+            ChangeType.Inserted => "line-inserted",
+            ChangeType.Modified => "line-modified",
+            ChangeType.Imaginary => "line-imaginary",
+            _ => ""
+        };
+    }
+    
+    private static RenderFragment RenderLineWithSubPieces(DiffPiece line, string changeCssClass)
+    {
+        return builder =>
+        {
+            if (line.SubPieces == null || line.SubPieces.Count == 0 || line.Type == ChangeType.Imaginary)
+            {
+                builder.AddContent(0, line.Text ?? "");
+                return;
+            }
+            
+            var sequence = 0;
+            foreach (var piece in line.SubPieces)
+            {
+                if (piece.Type != ChangeType.Unchanged)
+                {
+                    builder.OpenElement(sequence++, "span");
+                    builder.AddAttribute(sequence++, "class", changeCssClass);
+                    builder.AddContent(sequence++, piece.Text ?? "");
+                    builder.CloseElement();
+                }
+                else
+                {
+                    builder.AddContent(sequence++, piece.Text ?? "");
+                }
+            }
+        };
+    }
+    
+    private record ChangeStats(int Insertions, int Deletions, int Modifications);
+    
+    private static ChangeStats GetChangeStats(SideBySideDiffModel diffModel)
+    {
+        var insertions = diffModel.NewText.Lines.Count(l => l.Type == ChangeType.Inserted);
+        var deletions = diffModel.OldText.Lines.Count(l => l.Type == ChangeType.Deleted);
+        var modifications = diffModel.OldText.Lines.Count(l => l.Type == ChangeType.Modified);
+        return new ChangeStats(insertions, deletions, modifications);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await ConfigureSyncScrollAsync();
+        }
+    }
+
+    private async Task OnSyncScrollToggled(bool enabled)
+    {
+        syncScroll = enabled;
+        await ConfigureSyncScrollAsync();
+    }
+
+    private async Task ConfigureSyncScrollAsync()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("configureBidirectionalScrollSync", panelAId, panelBId, syncScroll);
+            syncScrollInitialized = true;
+        }
+        catch
+        {
+            syncScrollInitialized = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (!syncScrollInitialized)
+        {
+            return;
+        }
+
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("disposeBidirectionalScrollSync", panelAId, panelBId);
+        }
+        catch
+        {
+            // Ignore dispose JS interop errors during teardown/navigation
+        }
+    }
+}
