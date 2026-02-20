@@ -49,6 +49,17 @@ public interface IComparisonConfigurationService
     bool GetIgnoreStringCase();
 
     /// <summary>
+    /// Configure whether to ignore trailing spaces and tabs at the end of strings.
+    /// </summary>
+    void SetIgnoreTrailingWhitespaceAtEnd(bool ignoreTrailingWhitespaceAtEnd);
+
+    /// <summary>
+    /// Get whether trailing spaces and tabs at the end of strings are being ignored.
+    /// </summary>
+    /// <returns></returns>
+    bool GetIgnoreTrailingWhitespaceAtEnd();
+
+    /// <summary>
     /// Configure the comparer to ignore specific properties.
     /// </summary>
     void IgnoreProperty(string propertyPath);

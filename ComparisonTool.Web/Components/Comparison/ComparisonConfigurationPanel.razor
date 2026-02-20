@@ -29,6 +29,12 @@
                        Label="Ignore String Case Globally"
                        aria-label="Ignore string case globally" />
             <MudSwitch T="bool"
+                       Value="IgnoreTrailingWhitespaceAtEnd"
+                       ValueChanged="@((bool val) => { IgnoreTrailingWhitespaceAtEnd = val; OnIgnoreTrailingWhitespaceAtEndChanged.InvokeAsync(val); })"
+                       Color="Color.Primary"
+                       Label="Ignore Trailing Spaces/Tabs at End of Strings"
+                       aria-label="Ignore trailing spaces/tabs at end of strings" />
+            <MudSwitch T="bool"
                        Value="IgnoreXmlNamespaces"
                        ValueChanged="@((bool val) => { IgnoreXmlNamespaces = val; OnIgnoreXmlNamespacesChanged.InvokeAsync(val); })"
                        Color="Color.Primary"
@@ -245,6 +251,8 @@
     [Parameter] public EventCallback<bool> OnIgnoreCollectionOrderChanged { get; set; }
     [Parameter] public bool IgnoreStringCase { get; set; } 
     [Parameter] public EventCallback<bool> OnIgnoreStringCaseChanged { get; set; }
+    [Parameter] public bool IgnoreTrailingWhitespaceAtEnd { get; set; }
+    [Parameter] public EventCallback<bool> OnIgnoreTrailingWhitespaceAtEndChanged { get; set; }
     [Parameter] public bool IgnoreXmlNamespaces { get; set; }
     [Parameter] public EventCallback<bool> OnIgnoreXmlNamespacesChanged { get; set; }
     [Parameter] public bool EnableSemanticAnalysis { get; set; }

@@ -26,6 +26,7 @@ public class ComparisonConfigurationServiceTests
             MaxDifferences = 1000,
             DefaultIgnoreCollectionOrder = true,
             DefaultIgnoreStringCase = false,
+            DefaultIgnoreTrailingWhitespaceAtEnd = false,
         };
 
         this.service = new ComparisonConfigurationService(this.mockLogger.Object, Options.Create(this.options));
@@ -93,6 +94,43 @@ public class ComparisonConfigurationServiceTests
         // Assert
         this.service.GetIgnoreStringCase().Should().Be(!originalValue);
         this.service.GetCurrentConfig().CaseSensitive.Should().Be(originalValue); // CaseSensitive is inverse of IgnoreStringCase
+    }
+
+    [TestMethod]
+    public void SetIgnoreTrailingWhitespaceAtEnd_ShouldUpdateConfiguration()
+    {
+        // Arrange
+        var originalValue = this.service.GetIgnoreTrailingWhitespaceAtEnd();
+
+        // Act
+        this.service.SetIgnoreTrailingWhitespaceAtEnd(!originalValue);
+
+        // Assert
+        this.service.GetIgnoreTrailingWhitespaceAtEnd().Should().Be(!originalValue);
+    }
+
+    [TestMethod]
+    public void FilterIgnoredDifferences_WithTrailingWhitespaceIgnored_ShouldFilterOutTrailingWhitespaceOnlyStringDifferences()
+    {
+        // Arrange
+        var config = this.service.GetCurrentConfig();
+        var result = new ComparisonResult(config)
+        {
+            Differences = new List<Difference>
+            {
+                new () { PropertyName = "StringProperty", Object1Value = "Value", Object2Value = "Value \t" },
+                new () { PropertyName = "OtherProperty", Object1Value = "A", Object2Value = "B" },
+            },
+        };
+
+        this.service.SetIgnoreTrailingWhitespaceAtEnd(true);
+
+        // Act
+        var filteredResult = this.service.FilterIgnoredDifferences(result);
+
+        // Assert
+        filteredResult.Differences.Should().HaveCount(1);
+        filteredResult.Differences.Should().ContainSingle(d => d.PropertyName == "OtherProperty");
     }
 
     [TestMethod]

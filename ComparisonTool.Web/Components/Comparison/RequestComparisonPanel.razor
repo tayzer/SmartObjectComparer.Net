@@ -92,6 +92,9 @@
                             <MudSwitch @bind-Value="ignoreStringCase" 
                                        Label="Ignore String Case" 
                                        Color="Color.Primary" />
+                            <MudSwitch @bind-Value="ignoreTrailingWhitespaceAtEnd" 
+                                       Label="Ignore Trailing Spaces/Tabs at End of Strings" 
+                                       Color="Color.Primary" />
                             <MudSwitch @bind-Value="ignoreXmlNamespaces" 
                                        Label="Ignore XML Namespaces" 
                                        Color="Color.Primary" />
@@ -372,6 +375,7 @@
     private string selectedModelName = "";
     private bool ignoreCollectionOrder = false;
     private bool ignoreStringCase = false;
+    private bool ignoreTrailingWhitespaceAtEnd = false;
     private bool ignoreXmlNamespaces = true;
     private bool enableSemanticAnalysis = true;
     private bool enableEnhancedStructuralAnalysis = true;
@@ -541,6 +545,7 @@
                 ModelName = selectedModelName,
                 IgnoreCollectionOrder = ignoreCollectionOrder,
                 IgnoreStringCase = ignoreStringCase,
+                IgnoreTrailingWhitespaceAtEnd = ignoreTrailingWhitespaceAtEnd,
                 IgnoreXmlNamespaces = ignoreXmlNamespaces,
                 EnableSemanticAnalysis = enableSemanticAnalysis,
                 EnableEnhancedStructuralAnalysis = enableEnhancedStructuralAnalysis,

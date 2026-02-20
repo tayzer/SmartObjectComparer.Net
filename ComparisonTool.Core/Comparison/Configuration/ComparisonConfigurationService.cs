@@ -23,6 +23,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     private readonly SmartIgnoreProcessor smartIgnoreProcessor;
     private readonly List<IgnoreRule> xmlIgnoreRules = new List<IgnoreRule>();
     private readonly object configurationLock = new object();
+    private bool ignoreTrailingWhitespaceAtEnd;
 
     private ComparisonResultCacheService? cacheService;
 
@@ -39,6 +40,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         smartIgnoreProcessor = new SmartIgnoreProcessor(logger);
 
         var configOptions = options?.Value ?? new ComparisonConfigurationOptions();
+        ignoreTrailingWhitespaceAtEnd = configOptions.DefaultIgnoreTrailingWhitespaceAtEnd;
 
         compareLogic = new CompareLogic
         {
@@ -87,10 +89,11 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         // This avoids the recursion issue that occurs with custom comparers
         this.logger.LogInformation(
             "Initialized ComparisonConfigurationService with MaxDifferences={MaxDiffs}, " +
-                                   "IgnoreCollectionOrder={IgnoreOrder}, IgnoreCase={IgnoreCase}",
+                                   "IgnoreCollectionOrder={IgnoreOrder}, IgnoreCase={IgnoreCase}, IgnoreTrailingWhitespaceAtEnd={IgnoreTrailingWhitespaceAtEnd}",
             configOptions.MaxDifferences,
             configOptions.DefaultIgnoreCollectionOrder,
-            configOptions.DefaultIgnoreStringCase);
+            configOptions.DefaultIgnoreStringCase,
+            configOptions.DefaultIgnoreTrailingWhitespaceAtEnd);
     }
 
     private IEnumerable<IgnoreRule> AllIgnoreRules => ignoreRules.Concat(xmlIgnoreRules);
@@ -245,6 +248,29 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// </summary>
     /// <returns></returns>
     public bool GetIgnoreStringCase() => !compareLogic.Config.CaseSensitive;
+
+    /// <summary>
+    /// Configure whether to ignore trailing spaces and tabs at the end of strings.
+    /// </summary>
+    public void SetIgnoreTrailingWhitespaceAtEnd(bool ignoreTrailingWhitespaceAtEnd)
+    {
+        this.ignoreTrailingWhitespaceAtEnd = ignoreTrailingWhitespaceAtEnd;
+        MarkConfigurationDirty();
+        logger.LogDebug("Set IgnoreTrailingWhitespaceAtEnd to {Value}", ignoreTrailingWhitespaceAtEnd);
+
+        // Invalidate cache when configuration changes
+        if (cacheService != null)
+        {
+            var newFingerprint = cacheService.GenerateConfigurationFingerprint(this);
+            cacheService.InvalidateConfigurationChanges(newFingerprint);
+        }
+    }
+
+    /// <summary>
+    /// Get whether trailing spaces and tabs at the end of strings are being ignored.
+    /// </summary>
+    /// <returns></returns>
+    public bool GetIgnoreTrailingWhitespaceAtEnd() => ignoreTrailingWhitespaceAtEnd;
 
     /// <summary>
     /// Configure the comparer to ignore specific properties.
@@ -463,6 +489,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             return result;
         }
 
+        var shouldFilterTrailingWhitespace = ignoreTrailingWhitespaceAtEnd;
+
         // CRITICAL FIX: Use the generated patterns from MembersToIgnore, not just the original rule paths
         // The patterns we generated (including System.Collections variations) are in compareLogic.Config.MembersToIgnore
         // THREAD SAFETY FIX: Create thread-safe copy to avoid concurrent modification exceptions
@@ -479,7 +507,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             propertiesToIgnoreCompletely.Add(rule.PropertyPath);
         }
 
-        if (!propertiesToIgnoreCompletely.Any())
+        if (!propertiesToIgnoreCompletely.Any() && !shouldFilterTrailingWhitespace)
         {
             return result;
         }
@@ -489,11 +517,11 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
 
         if (useFastFiltering)
         {
-            return FilterDifferencesDirectly(result, propertiesToIgnoreCompletely);
+            return FilterDifferencesDirectly(result, propertiesToIgnoreCompletely, shouldFilterTrailingWhitespace);
         }
         else
         {
-            return FilterDifferencesWithPatternMatching(result, propertiesToIgnoreCompletely);
+            return FilterDifferencesWithPatternMatching(result, propertiesToIgnoreCompletely, shouldFilterTrailingWhitespace);
         }
     }
 
@@ -657,6 +685,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         {
             GlobalIgnoreCollectionOrder = compareLogic.Config.IgnoreCollectionOrder,
             GlobalIgnoreStringCase = !compareLogic.Config.CaseSensitive,
+            GlobalIgnoreTrailingWhitespaceAtEnd = ignoreTrailingWhitespaceAtEnd,
             IgnoreRules = AllIgnoreRules
                 .OrderBy(r => r.PropertyPath, System.StringComparer.Ordinal)
                 .Select(r => new { r.PropertyPath, r.IgnoreCompletely, r.IgnoreCollectionOrder })
@@ -682,6 +711,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         // Copy cached settings to current config
         compareLogic.Config.IgnoreCollectionOrder = cachedConfig.IgnoreCollectionOrder;
         compareLogic.Config.CaseSensitive = !cachedConfig.CaseSensitive;
+        ignoreTrailingWhitespaceAtEnd = cachedConfig.IgnoreTrailingWhitespaceAtEnd;
 
         // Clear and rebuild MembersToIgnore
         compareLogic.Config.MembersToIgnore.Clear();
@@ -782,6 +812,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
                 {
                     IgnoreCollectionOrder = compareLogic.Config.IgnoreCollectionOrder,
                     CaseSensitive = compareLogic.Config.CaseSensitive,
+                    IgnoreTrailingWhitespaceAtEnd = ignoreTrailingWhitespaceAtEnd,
                     MembersToIgnore = new List<string>(compareLogic.Config.MembersToIgnore),
                     CustomComparers = new List<BaseTypeComparer>(compareLogic.Config.CustomComparers),
                 };
@@ -965,6 +996,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         {
             IgnoreCollectionOrder = compareLogic.Config.IgnoreCollectionOrder,
             CaseSensitive = compareLogic.Config.CaseSensitive,
+            IgnoreTrailingWhitespaceAtEnd = ignoreTrailingWhitespaceAtEnd,
             MembersToIgnore = new List<string>(compareLogic.Config.MembersToIgnore),
             CustomComparers = new List<BaseTypeComparer>(compareLogic.Config.CustomComparers),
         };
@@ -995,7 +1027,10 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// <summary>
     /// Fast direct filtering for large rule sets - avoids expensive pattern matching.
     /// </summary>
-    private ComparisonResult FilterDifferencesDirectly(ComparisonResult result, HashSet<string> propertiesToIgnore)
+    private ComparisonResult FilterDifferencesDirectly(
+        ComparisonResult result,
+        HashSet<string> propertiesToIgnore,
+        bool filterTrailingWhitespaceAtEnd)
     {
         var originalCount = result.Differences.Count;
         var filteredDifferences = new List<Difference>();
@@ -1027,15 +1062,15 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
 
         foreach (var difference in result.Differences)
         {
-            var shouldIgnore = false;
+            var shouldIgnore = filterTrailingWhitespaceAtEnd && IsTrailingWhitespaceEquivalentStringDifference(difference);
             var propertyPath = difference.PropertyName;
 
             // Fast exact match check
-            if (normalizedPatterns.Contains(propertyPath))
+            if (!shouldIgnore && normalizedPatterns.Contains(propertyPath))
             {
                 shouldIgnore = true;
             }
-            else
+            else if (!shouldIgnore)
             {
                 // Fast wildcard pattern check (only for patterns containing [*])
                 foreach (var pattern in wildcardPatterns)
@@ -1080,7 +1115,10 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// <summary>
     /// Original pattern matching approach for smaller rule sets.
     /// </summary>
-    private ComparisonResult FilterDifferencesWithPatternMatching(ComparisonResult result, HashSet<string> propertiesToIgnore)
+    private ComparisonResult FilterDifferencesWithPatternMatching(
+        ComparisonResult result,
+        HashSet<string> propertiesToIgnore,
+        bool filterTrailingWhitespaceAtEnd)
     {
         if (logger.IsEnabled(LogLevel.Debug))
         {
@@ -1164,7 +1202,12 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
 
         foreach (var difference in differencesToProcess)
         {
-            var shouldIgnore = PropertyIgnoreHelper.ShouldIgnoreProperty(difference.PropertyName, propertiesToIgnore, logger);
+            var shouldIgnore = filterTrailingWhitespaceAtEnd && IsTrailingWhitespaceEquivalentStringDifference(difference);
+
+            if (!shouldIgnore)
+            {
+                shouldIgnore = PropertyIgnoreHelper.ShouldIgnoreProperty(difference.PropertyName, propertiesToIgnore, logger);
+            }
 
             // Also check the static MembersToIgnore list (for System.Collections variations)
             if (!shouldIgnore)
@@ -1477,6 +1520,22 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         return ignoredProperties;
     }
 
+    private bool IsTrailingWhitespaceEquivalentStringDifference(Difference difference)
+    {
+        if (difference?.Object1Value is not string value1 || difference.Object2Value is not string value2)
+        {
+            return false;
+        }
+
+        var normalized1 = value1.TrimEnd(' ', '\t');
+        var normalized2 = value2.TrimEnd(' ', '\t');
+        var comparison = compareLogic.Config.CaseSensitive
+            ? StringComparison.Ordinal
+            : StringComparison.OrdinalIgnoreCase;
+
+        return string.Equals(normalized1, normalized2, comparison);
+    }
+
     /// <summary>
     /// Custom class to hold comparison configuration for caching.
     /// </summary>
@@ -1488,6 +1547,11 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         }
 
         public bool CaseSensitive
+        {
+            get; set;
+        }
+
+        public bool IgnoreTrailingWhitespaceAtEnd
         {
             get; set;
         }

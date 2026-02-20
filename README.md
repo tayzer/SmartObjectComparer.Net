@@ -119,6 +119,7 @@ dotnet build ComparisonTool.Cli/ComparisonTool.Cli.csproj -c Release
 **Folder comparison** — compare two directories of XML/JSON files:
 ```bash
 comparisontool folder <expected-dir> <actual-dir> -m ComplexOrderResponse \
+  --ignore-trailing-whitespace-end \
   -f Console Json Markdown -o ./reports
 ```
 
@@ -130,7 +131,7 @@ comparisontool request <request-dir> \
   -m ComplexOrderResponse -c 32 --timeout 60000 \
   --ignore-rules ./ignore-rules.json \
   --content-type application/json \
-  --ignore-collection-order --ignore-namespaces \
+  --ignore-collection-order --ignore-trailing-whitespace-end --ignore-namespaces \
   -f Console Json -o ./reports
 ```
 
