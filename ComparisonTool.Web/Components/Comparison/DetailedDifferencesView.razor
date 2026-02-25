@@ -340,14 +340,25 @@ else if (!DifferenceSummary.AreEqual)
         if (string.IsNullOrEmpty(fullPath)) return "";
 
         var normalizedFull = PropertyPathNormalizer.NormalizePropertyPath(fullPath);
-        if (groupKey == "(Root Properties)") return normalizedFull;
+        if (groupKey == "(Root Properties)") return fullPath;
+        
         if (normalizedFull.StartsWith(groupKey))
         {
             var relative = normalizedFull.Substring(groupKey.Length);
-            return relative.TrimStart('.', '[').TrimEnd(']');
+            var trimmed = relative.TrimStart('.', '[').TrimEnd(']');
+            
+            // If the relative path is empty, it means the full path matches the group key exactly.
+            // In this case, we want to show the full path with the actual index (e.g., [5]) 
+            // instead of the normalized path (which has [*]).
+            if (string.IsNullOrEmpty(trimmed))
+            {
+                return fullPath;
+            }
+            
+            return trimmed;
         }
 
-        return normalizedFull;
+        return fullPath;
     }
 
     private bool IsGroupCollapsed(string groupKey)
