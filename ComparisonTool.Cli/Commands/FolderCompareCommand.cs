@@ -92,6 +92,13 @@ public static class FolderCompareCommand
             }
         });
 
+        var disableTruncationOption = new Option<bool>("--disable-truncation")
+        {
+            Description = "Disable truncation of long strings in reports",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => false,
+        };
+
         var command = new Command("folder", "Compare two directories of XML/JSON files")
         {
             dir1Arg,
@@ -105,6 +112,7 @@ public static class FolderCompareCommand
             formatOption,
             htmlModeOption,
             pageSizeOption,
+            disableTruncationOption,
         };
 
         command.SetAction(async (parseResult, cancellationToken) =>
@@ -120,6 +128,7 @@ public static class FolderCompareCommand
             var formats = parseResult.GetValue(formatOption) ?? new[] { OutputFormat.Console };
             var htmlMode = parseResult.GetValue(htmlModeOption);
             var pageSize = parseResult.GetValue(pageSizeOption);
+            var disableTruncation = parseResult.GetValue(disableTruncationOption);
 
             return await ExecuteAsync(
                 configuration,
@@ -134,6 +143,7 @@ public static class FolderCompareCommand
                 formats,
                 htmlMode,
                 pageSize,
+                disableTruncation,
                 cancellationToken);
         });
 
@@ -153,6 +163,7 @@ public static class FolderCompareCommand
         OutputFormat[] formats,
         HtmlReportMode htmlMode,
         int markdownPageSize,
+        bool disableTruncation,
         CancellationToken cancellationToken)
     {
         if (!dir1.Exists)
@@ -214,6 +225,7 @@ public static class FolderCompareCommand
             MostAffectedFields = MostAffectedFieldsAggregator.Build(result),
             MarkdownPageSize = markdownPageSize,
             HtmlMode = htmlMode,
+            DisableTruncation = disableTruncation,
         };
 
         var resolvedOutputDir = outputDir?.FullName ?? Directory.GetCurrentDirectory();

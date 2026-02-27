@@ -131,13 +131,12 @@ comparisontool request <request-dir> \
   -m ComplexOrderResponse -c 32 --timeout 60000 \
   --ignore-rules ./ignore-rules.json \
   --content-type application/json \
-  --debug-non-success-bodies \
-  --debug-artifacts-dir ./reports/debug-responses \
+  --disable-truncation \
   --ignore-collection-order --ignore-trailing-whitespace-end --ignore-namespaces \
   -f Console Json Html --html-mode StaticSite -o ./reports
 ```
 
-For CI troubleshooting (for example Jenkins), `--debug-non-success-bodies` writes full raw bodies for non-success outcomes and failed request diagnostics to artifact files. If `--debug-artifacts-dir` is omitted, files are written under the report output folder in a timestamped `debug-responses-*` directory.
+For CI troubleshooting (for example Jenkins), use `--disable-truncation` to show full value bodies directly in generated reports and console output.
 
 `--html-mode` supports `SingleFile` (one self-contained `.html`) and `StaticSite` (index + per-pair pages).
 

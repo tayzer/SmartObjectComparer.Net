@@ -25,9 +25,6 @@ public static class JsonReportWriter
         var result = context.Result;
         var pairs = result.FilePairResults;
         var mostAffected = context.MostAffectedFields;
-        var debugDirectory = GetStringMetadata(result.Metadata, "DebugArtifactsDirectory");
-        var debugIndexPath = GetStringMetadata(result.Metadata, "DebugArtifactsIndexPath");
-        var debugArtifactCount = GetIntMetadata(result.Metadata, "DebugArtifactsCount");
 
         var report = new
         {
@@ -63,13 +60,6 @@ public static class JsonReportWriter
                     })
                     .ToList(),
             },
-            debugArtifacts = new
-            {
-                enabled = !string.IsNullOrWhiteSpace(debugDirectory),
-                directory = debugDirectory,
-                indexPath = debugIndexPath,
-                count = debugArtifactCount,
-            },
             filePairs = pairs.Select(p => new
             {
                 file1 = p.File1Name,
@@ -102,31 +92,5 @@ public static class JsonReportWriter
 
         var json = JsonSerializer.Serialize(report, SerializerOptions);
         await File.WriteAllTextAsync(outputPath, json);
-    }
-
-    private static string? GetStringMetadata(IReadOnlyDictionary<string, object> metadata, string key)
-    {
-        if (!metadata.TryGetValue(key, out var value))
-        {
-            return null;
-        }
-
-        return value as string;
-    }
-
-    private static int? GetIntMetadata(IReadOnlyDictionary<string, object> metadata, string key)
-    {
-        if (!metadata.TryGetValue(key, out var value))
-        {
-            return null;
-        }
-
-        return value switch
-        {
-            int intValue => intValue,
-            long longValue when longValue <= int.MaxValue => (int)longValue,
-            JsonElement { ValueKind: JsonValueKind.Number } element when element.TryGetInt32(out var parsed) => parsed,
-            _ => null,
-        };
     }
 }

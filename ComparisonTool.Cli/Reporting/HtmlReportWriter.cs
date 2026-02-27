@@ -80,7 +80,7 @@ public static class HtmlReportWriter
         sb.AppendLine("<section id=\"details\">\n<h2>Detailed Differences</h2>");
         for (var pairIndex = 0; pairIndex < result.FilePairResults.Count; pairIndex++)
         {
-            AppendPairDetailsSection(sb, result.FilePairResults[pairIndex], pairIndex, staticSite: false);
+            AppendPairDetailsSection(sb, context, result.FilePairResults[pairIndex], pairIndex, staticSite: false);
         }
 
         sb.AppendLine("</section>");
@@ -111,7 +111,7 @@ public static class HtmlReportWriter
         var sb = new StringBuilder();
         AppendDocumentHeader(sb, title, includeScrollScript: false);
         sb.AppendLine("<p><a href=\"../index.html\">&larr; Back to report index</a></p>");
-        AppendPairDetailsSection(sb, pair, pairIndex, staticSite: true);
+        AppendPairDetailsSection(sb, context, pair, pairIndex, staticSite: true);
         AppendDocumentFooter(sb);
         return sb.ToString();
     }
@@ -282,7 +282,7 @@ public static class HtmlReportWriter
         sb.AppendLine("</section>");
     }
 
-    private static void AppendPairDetailsSection(StringBuilder sb, FilePairComparisonResult pair, int pairIndex, bool staticSite)
+    private static void AppendPairDetailsSection(StringBuilder sb, ReportContext context, FilePairComparisonResult pair, int pairIndex, bool staticSite)
     {
         var title = EscapeHtml(GetPairTitle(pair));
         var status = EscapeHtml(GetStatus(pair));
@@ -316,7 +316,7 @@ public static class HtmlReportWriter
             sb.AppendLine("<thead><tr><th>Property</th><th>Expected</th><th>Actual</th></tr></thead><tbody>");
             foreach (var diff in structuredDifferences.Take(StructuredDifferencesLimit))
             {
-                sb.AppendLine($"<tr><td><code>{EscapeHtml(diff.PropertyName)}</code></td><td>{EscapeHtml(Truncate(diff.Object1Value, 240))}</td><td>{EscapeHtml(Truncate(diff.Object2Value, 240))}</td></tr>");
+                sb.AppendLine($"<tr><td><code>{EscapeHtml(diff.PropertyName)}</code></td><td>{EscapeHtml(Truncate(diff.Object1Value, 240, context.DisableTruncation))}</td><td>{EscapeHtml(Truncate(diff.Object2Value, 240, context.DisableTruncation))}</td></tr>");
             }
 
             if (structuredDifferences.Count > StructuredDifferencesLimit)
@@ -337,7 +337,7 @@ public static class HtmlReportWriter
             sb.AppendLine("<thead><tr><th>Type</th><th>Line A</th><th>Line B</th><th>Description</th><th>Text A</th><th>Text B</th></tr></thead><tbody>");
             foreach (var diff in rawTextDifferences.Take(RawTextDifferencesLimit))
             {
-                sb.AppendLine($"<tr><td>{EscapeHtml(diff.Type.ToString())}</td><td>{diff.LineNumberA?.ToString() ?? "-"}</td><td>{diff.LineNumberB?.ToString() ?? "-"}</td><td>{EscapeHtml(diff.Description)}</td><td>{EscapeHtml(Truncate(diff.TextA, 240))}</td><td>{EscapeHtml(Truncate(diff.TextB, 240))}</td></tr>");
+                sb.AppendLine($"<tr><td>{EscapeHtml(diff.Type.ToString())}</td><td>{diff.LineNumberA?.ToString() ?? "-"}</td><td>{diff.LineNumberB?.ToString() ?? "-"}</td><td>{EscapeHtml(diff.Description)}</td><td>{EscapeHtml(Truncate(diff.TextA, 240, context.DisableTruncation))}</td><td>{EscapeHtml(Truncate(diff.TextB, 240, context.DisableTruncation))}</td></tr>");
             }
 
             if (rawTextDifferences.Count > RawTextDifferencesLimit)
@@ -472,11 +472,16 @@ public static class HtmlReportWriter
             : outputPath + ".html";
     }
 
-    private static string Truncate(string? value, int maxLength)
+    private static string Truncate(string? value, int maxLength, bool disableTruncation)
     {
         if (string.IsNullOrEmpty(value))
         {
             return "(null)";
+        }
+
+        if (disableTruncation)
+        {
+            return value;
         }
 
         return value.Length <= maxLength ? value : value[..maxLength] + "...";
