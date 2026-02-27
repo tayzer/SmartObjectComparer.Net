@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using ComparisonTool.Cli.Infrastructure;
 using ComparisonTool.Cli.Reporting;
+using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.RequestComparison.Models;
 using ComparisonTool.Core.RequestComparison.Services;
 using Microsoft.Extensions.Configuration;
@@ -111,6 +112,18 @@ public static class RequestCompareCommand
             Description = "Override Content-Type header for all request bodies",
         };
 
+        var debugNonSuccessBodiesOption = new Option<bool>("--debug-non-success-bodies")
+        {
+            Description = "Export full raw response bodies for non-success outcomes to durable artifact files",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => false,
+        };
+
+        var debugArtifactsDirOption = new Option<DirectoryInfo?>("--debug-artifacts-dir")
+        {
+            Description = "Directory for non-success debug artifacts (implies --debug-non-success-bodies)",
+        };
+
         var outputOption = new Option<DirectoryInfo?>("--output", "-o")
         {
             Description = "Directory for report output files. Defaults to current directory",
@@ -161,6 +174,8 @@ public static class RequestCompareCommand
             semanticAnalysisOption,
             ignoreRulesFileOption,
             contentTypeOption,
+            debugNonSuccessBodiesOption,
+            debugArtifactsDirOption,
             outputOption,
             formatOption,
             htmlModeOption,
@@ -182,6 +197,8 @@ public static class RequestCompareCommand
             var semanticAnalysis = parseResult.GetValue(semanticAnalysisOption);
             var ignoreRulesFile = parseResult.GetValue(ignoreRulesFileOption);
             var contentTypeOverride = parseResult.GetValue(contentTypeOption);
+            var debugNonSuccessBodies = parseResult.GetValue(debugNonSuccessBodiesOption);
+            var debugArtifactsDir = parseResult.GetValue(debugArtifactsDirOption);
             var outputDir = parseResult.GetValue(outputOption);
             var formats = parseResult.GetValue(formatOption) ?? new[] { OutputFormat.Console };
             var htmlMode = parseResult.GetValue(htmlModeOption);
@@ -202,6 +219,8 @@ public static class RequestCompareCommand
                 semanticAnalysis,
                 ignoreRulesFile,
                 contentTypeOverride,
+                debugNonSuccessBodies,
+                debugArtifactsDir,
                 outputDir,
                 formats,
                 htmlMode,
@@ -227,6 +246,8 @@ public static class RequestCompareCommand
         bool semanticAnalysis,
         FileInfo? ignoreRulesFile,
         string? contentTypeOverride,
+        bool debugNonSuccessBodies,
+        DirectoryInfo? debugArtifactsDir,
         DirectoryInfo? outputDir,
         OutputFormat[] formats,
         HtmlReportMode htmlMode,
@@ -319,6 +340,33 @@ public static class RequestCompareCommand
             return 1;
         }
 
+        var resolvedOutputDir = outputDir?.FullName ?? Directory.GetCurrentDirectory();
+        Directory.CreateDirectory(resolvedOutputDir);
+
+        var debugArtifactsEnabled = debugNonSuccessBodies || debugArtifactsDir != null;
+        if (debugArtifactsEnabled)
+        {
+            var resolvedDebugArtifactsDir = debugArtifactsDir?.FullName
+                ?? Path.Combine(resolvedOutputDir, $"debug-responses-{DateTime.Now:yyyyMMdd-HHmmss}");
+
+            var summary = await ExportNonSuccessDebugArtifactsAsync(
+                result,
+                resolvedDebugArtifactsDir,
+                cancellationToken);
+
+            if (summary.ArtifactCount > 0)
+            {
+                result.Metadata["DebugArtifactsDirectory"] = resolvedDebugArtifactsDir;
+                result.Metadata["DebugArtifactsIndexPath"] = summary.IndexPath;
+                result.Metadata["DebugArtifactsCount"] = summary.ArtifactCount;
+                Console.WriteLine($"  Debug artifacts: {resolvedDebugArtifactsDir}");
+            }
+            else
+            {
+                Console.WriteLine("  Debug artifacts: none generated (no non-success responses/errors found)");
+            }
+        }
+
         var reportContext = new ReportContext
         {
             Result = result,
@@ -332,9 +380,6 @@ public static class RequestCompareCommand
             MarkdownPageSize = markdownPageSize,
             HtmlMode = htmlMode,
         };
-
-        var resolvedOutputDir = outputDir?.FullName ?? Directory.GetCurrentDirectory();
-        Directory.CreateDirectory(resolvedOutputDir);
 
         foreach (var format in formats.Distinct())
         {
@@ -369,6 +414,163 @@ public static class RequestCompareCommand
         }
 
         return result.AllEqual ? 0 : 2;
+    }
+
+    private static async Task<DebugArtifactExportResult> ExportNonSuccessDebugArtifactsAsync(
+        MultiFolderComparisonResult result,
+        string debugArtifactsDir,
+        CancellationToken cancellationToken)
+    {
+        Directory.CreateDirectory(debugArtifactsDir);
+
+        var entries = new List<DebugArtifactEntry>();
+
+        foreach (var pair in result.FilePairResults)
+        {
+            if (pair.PairOutcome is not RequestPairOutcome.StatusCodeMismatch
+                and not RequestPairOutcome.BothNonSuccess
+                and not RequestPairOutcome.OneOrBothFailed)
+            {
+                continue;
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var requestIdentity = pair.RequestRelativePath ?? pair.File1Name;
+            var normalizedRelativePath = NormalizeRelativePath(requestIdentity);
+
+            var entry = new DebugArtifactEntry
+            {
+                RequestPath = requestIdentity,
+                PairOutcome = pair.PairOutcome?.ToString(),
+                StatusCodeA = pair.HttpStatusCodeA,
+                StatusCodeB = pair.HttpStatusCodeB,
+                ErrorMessage = pair.ErrorMessage,
+            };
+
+            var aBodyPath = await TryCopyBodyArtifactAsync(
+                pair.File1Path,
+                debugArtifactsDir,
+                "endpointA",
+                normalizedRelativePath,
+                pair.HttpStatusCodeA,
+                cancellationToken);
+            if (aBodyPath != null)
+            {
+                entry.EndpointABodyPath = aBodyPath;
+            }
+
+            var bBodyPath = await TryCopyBodyArtifactAsync(
+                pair.File2Path,
+                debugArtifactsDir,
+                "endpointB",
+                normalizedRelativePath,
+                pair.HttpStatusCodeB,
+                cancellationToken);
+            if (bBodyPath != null)
+            {
+                entry.EndpointBBodyPath = bBodyPath;
+            }
+
+            if (!string.IsNullOrWhiteSpace(pair.ErrorMessage))
+            {
+                var errorFilePath = BuildArtifactPath(
+                    debugArtifactsDir,
+                    "errors",
+                    normalizedRelativePath,
+                    ".error.txt");
+
+                Directory.CreateDirectory(Path.GetDirectoryName(errorFilePath)!);
+                await File.WriteAllTextAsync(errorFilePath, pair.ErrorMessage, cancellationToken);
+                entry.ErrorDetailsPath = errorFilePath;
+            }
+
+            entries.Add(entry);
+        }
+
+        if (entries.Count == 0)
+        {
+            return DebugArtifactExportResult.Empty;
+        }
+
+        var indexPath = Path.Combine(debugArtifactsDir, "index.json");
+        var indexModel = new
+        {
+            GeneratedAtUtc = DateTime.UtcNow,
+            TotalEntries = entries.Count,
+            Entries = entries,
+        };
+
+        var options = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+        };
+
+        await File.WriteAllTextAsync(indexPath, JsonSerializer.Serialize(indexModel, options), cancellationToken);
+
+        return new DebugArtifactExportResult
+        {
+            ArtifactCount = entries.Count,
+            IndexPath = indexPath,
+        };
+    }
+
+    private static async Task<string?> TryCopyBodyArtifactAsync(
+        string? sourcePath,
+        string debugArtifactsDir,
+        string endpointName,
+        string normalizedRelativePath,
+        int? statusCode,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
+        {
+            return null;
+        }
+
+        var suffix = statusCode.HasValue
+            ? $".status-{statusCode.Value}.body"
+            : ".body";
+
+        var destinationPath = BuildArtifactPath(
+            debugArtifactsDir,
+            endpointName,
+            normalizedRelativePath,
+            suffix);
+
+        Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+
+        await using var sourceStream = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+        await using var destinationStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
+        await sourceStream.CopyToAsync(destinationStream, 81920, cancellationToken);
+
+        return destinationPath;
+    }
+
+    private static string BuildArtifactPath(
+        string debugArtifactsDir,
+        string category,
+        string normalizedRelativePath,
+        string suffix)
+    {
+        var extension = Path.GetExtension(normalizedRelativePath);
+        var basePath = normalizedRelativePath;
+        if (!string.IsNullOrEmpty(extension))
+        {
+            basePath = normalizedRelativePath[..^extension.Length];
+        }
+
+        return Path.Combine(debugArtifactsDir, category, basePath + suffix);
+    }
+
+    private static string NormalizeRelativePath(string path)
+    {
+        var normalized = path
+            .Replace('/', Path.DirectorySeparatorChar)
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .TrimStart(Path.DirectorySeparatorChar);
+
+        return normalized.Replace("..", "_");
     }
 
     /// <summary>
@@ -496,5 +698,37 @@ public static class RequestCompareCommand
                 IsSuccess = false,
                 ErrorMessage = message,
             };
+    }
+
+    private sealed record DebugArtifactExportResult
+    {
+        public static readonly DebugArtifactExportResult Empty = new ()
+        {
+            ArtifactCount = 0,
+            IndexPath = string.Empty,
+        };
+
+        public int ArtifactCount { get; init; }
+
+        public string IndexPath { get; init; } = string.Empty;
+    }
+
+    private sealed class DebugArtifactEntry
+    {
+        required public string RequestPath { get; init; }
+
+        public string? PairOutcome { get; init; }
+
+        public int? StatusCodeA { get; init; }
+
+        public int? StatusCodeB { get; init; }
+
+        public string? EndpointABodyPath { get; set; }
+
+        public string? EndpointBBodyPath { get; set; }
+
+        public string? ErrorMessage { get; init; }
+
+        public string? ErrorDetailsPath { get; set; }
     }
 }
