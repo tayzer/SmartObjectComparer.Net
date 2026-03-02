@@ -1,10 +1,12 @@
 using System.CommandLine;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using ComparisonTool.Cli.Infrastructure;
 using ComparisonTool.Cli.Reporting;
 using ComparisonTool.Core.RequestComparison.Models;
 using ComparisonTool.Core.RequestComparison.Services;
+using ComparisonTool.Core.Serialization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -13,7 +15,7 @@ namespace ComparisonTool.Cli.Commands;
 /// <summary>
 /// CLI command for executing requests against two endpoints and comparing the responses.
 /// </summary>
-public static class RequestCompareCommand
+public static partial class RequestCompareCommand
 {
     /// <summary>
     /// Creates the "request" sub-command.
@@ -39,7 +41,7 @@ public static class RequestCompareCommand
 
         var modelOption = new Option<string>("--model", "-m")
         {
-            Description = "Domain model name for response comparison (default: Auto)",
+            Description = "Domain model name for response comparison. Must match a registered model (e.g. ComplexOrderResponse, SoapEnvelope)",
             Arity = ArgumentArity.ZeroOrOne,
             DefaultValueFactory = _ => "Auto",
         };
@@ -269,6 +271,29 @@ public static class RequestCompareCommand
 
         var jobService = serviceProvider.GetRequiredService<RequestComparisonJobService>();
 
+        // Validate model name before starting the job — provide a clear error rather than
+        // per-file deserialization failures buried in the report.
+        var xmlDeserializationService = serviceProvider.GetRequiredService<IXmlDeserializationService>();
+        var availableModels = xmlDeserializationService.GetRegisteredModelNames()
+            .OrderBy(m => m, StringComparer.Ordinal)
+            .ToList();
+
+        if (string.Equals(modelName, "Auto", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.Error.WriteLine("Error: A domain model name must be specified with -m. 'Auto' is not a valid model name.");
+            Console.Error.WriteLine($"Available models: {string.Join(", ", availableModels)}");
+            Console.Error.WriteLine("Example: -m ComplexOrderResponse");
+            return 1;
+        }
+
+        if (!availableModels.Contains(modelName, StringComparer.Ordinal))
+        {
+            Console.Error.WriteLine($"Error: Unknown model name '{modelName}'.");
+            Console.Error.WriteLine($"Available models: {string.Join(", ", availableModels)}");
+            Console.Error.WriteLine($"Use -m with one of the listed names. If '{modelName}' is a new model, it must be registered in ServiceProviderFactory.");
+            return 1;
+        }
+
         var ignoreRulesResult = await LoadIgnoreRulesAsync(ignoreRulesFile, cancellationToken);
         if (!ignoreRulesResult.IsSuccess)
         {
@@ -445,10 +470,6 @@ public static class RequestCompareCommand
         try
         {
             var json = await File.ReadAllTextAsync(fileInfo.FullName, cancellationToken);
-            var options = new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true,
-            };
 
             if (string.IsNullOrWhiteSpace(json))
             {
@@ -457,11 +478,11 @@ public static class RequestCompareCommand
 
             if (json.TrimStart().StartsWith("[", StringComparison.Ordinal))
             {
-                var rules = JsonSerializer.Deserialize<List<IgnoreRuleDto>>(json, options) ?? new List<IgnoreRuleDto>();
+                var rules = JsonSerializer.Deserialize(json, IgnoreRulesJsonContext.Default.ListIgnoreRuleDto) ?? new List<IgnoreRuleDto>();
                 return IgnoreRulesLoadResult.Success(rules, new List<SmartIgnoreRuleDto>());
             }
 
-            var container = JsonSerializer.Deserialize<IgnoreRulesContainer>(json, options) ?? new IgnoreRulesContainer();
+            var container = JsonSerializer.Deserialize(json, IgnoreRulesJsonContext.Default.IgnoreRulesContainer) ?? new IgnoreRulesContainer();
             return IgnoreRulesLoadResult.Success(
                 container.IgnoreRules ?? new List<IgnoreRuleDto>(),
                 container.SmartIgnoreRules ?? new List<SmartIgnoreRuleDto>());
@@ -481,6 +502,14 @@ public static class RequestCompareCommand
         public List<IgnoreRuleDto>? IgnoreRules { get; init; }
 
         public List<SmartIgnoreRuleDto>? SmartIgnoreRules { get; init; }
+    }
+
+    [JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
+    [JsonSerializable(typeof(List<IgnoreRuleDto>))]
+    [JsonSerializable(typeof(List<SmartIgnoreRuleDto>))]
+    [JsonSerializable(typeof(IgnoreRulesContainer))]
+    private sealed partial class IgnoreRulesJsonContext : JsonSerializerContext
+    {
     }
 
     private sealed record IgnoreRulesLoadResult

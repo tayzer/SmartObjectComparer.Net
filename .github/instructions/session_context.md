@@ -1,38 +1,39 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2026-02-20T17:30:00Z
+lastUpdated: 2026-03-02T00:00:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-Extract shared request-comparison presentation logic for Web + CLI HTML export parity
+Fix CLI request comparison giving "ComplexOrderResponse cannot be serialized" when an unregistered model is passed via -m
 
 ## Todo List Status
 ```markdown
-- [x] 🔍 Extract common projection/filter logic into Core
-- [x] 🛠️ Rewire Web FileComparisonResults to shared projection
-- [x] 🛠️ Rewire CLI HtmlReportWriter to shared projection
-- [x] ✅ Build verification (Core, CLI, Web)
+- [x] Add early model name validation in RequestCompareCommand before job creation
+- [x] Update -m option description to explain what values are accepted
+- [x] Add same validation to FolderCompareCommand for consistency
+- [x] Build and verify the fix
 ```
 
 ## Recent File Changes
-- `ComparisonTool.Core/Comparison/Presentation/ComparisonResultStatusFilter.cs`: Added shared status-filter enum used by Web and CLI report rendering.
-- `ComparisonTool.Core/Comparison/Presentation/ComparisonResultGridItem.cs`: Added shared row DTO for comparison result views.
-- `ComparisonTool.Core/Comparison/Presentation/ComparisonResultProjection.cs`: Added aggregate projection DTO with counts/categories.
-- `ComparisonTool.Core/Comparison/Presentation/ComparisonResultProjectionBuilder.cs`: Added shared projection + filtering logic extracted from Web component behavior.
-- `ComparisonTool.Web/Components/Comparison/FileComparisonResults.razor`: Replaced component-local filtering/count logic with shared Core projection builder.
-- `ComparisonTool.Cli/Reporting/HtmlReportWriter.cs`: Switched to shared projection for summary counts, category grouping, and filter semantics.
+- `ComparisonTool.Cli/Commands/RequestCompareCommand.cs`: Added `using ComparisonTool.Core.Serialization;`, updated `-m` option description, added early model-name validation after service provider creation — gives clear "Unknown model / Available models" error before any comparison starts.
+- `ComparisonTool.Cli/Commands/FolderCompareCommand.cs`: Added early model-name validation (identical pattern) after service provider creation.
 
 ## Key Technical Decisions
-- Decision: Centralize comparison grid projection/filter semantics in Core instead of duplicating logic in Web and CLI writers.
-- Rationale: Keeps Request Comparison Results behavior aligned across Blazor UI and exported HTML artifacts.
-- Date: 2026-02-20
+- Decision: Validate model names BEFORE creating the comparison job, using `IXmlDeserializationService.GetRegisteredModelNames()`.
+- Rationale: Previously unregistered names propagated deep into the pipeline producing per-file `ArgumentException` failures that were difficult to diagnose. The error the user saw ("ComplexOrderResponse cannot be serialized...") was a secondary/misleading error.
+- Date: 2026-03-02
+
+## Root Cause Analysis
+1. `CreditReportDomain` is not defined or registered anywhere in the codebase.
+2. `GetModelType("CreditReportDomain")` throws `ArgumentException` inside each file-pair comparison loop.
+3. Per-pair errors were stored in `FilePairComparisonResult.ErrorMessage` — the user saw a confusing error mentioning `ComplexOrderResponse` (unrelated secondary failure path).
+4. The `"Auto"` default was also broken — `"Auto"` is never registered, so it always failed at the same model-lookup stage.
 
 ## External Resources Referenced
-- https://learn.microsoft.com/en-us/aspnet/core/blazor/components/?view=aspnetcore-9.0: component architecture and state/rendering patterns.
-- https://learn.microsoft.com/en-us/dotnet/standard/linq/: projection/filter composition patterns.
+- None (workspace-only investigation and fix).
 
 ## Blockers & Issues
 - None
@@ -44,10 +45,52 @@ Extract shared request-comparison presentation logic for Web + CLI HTML export p
 - .NET 10.0
 
 ## Next Session Priority
-Optional: add focused unit tests around `ComparisonResultProjectionBuilder` and HTML filter rendering.
+No active tasks.
 
 ## Session Notes
-Phase 2 completed: shared projection/filter behavior now powers both Web `FileComparisonResults` and CLI HTML export rendering, improving feature parity for status/category filtering and summary counts. Core/CLI/Web builds succeeded.
+- Added upfront validation in both `RequestCompareCommand` and `FolderCompareCommand`.
+- `dotnet build` passes (0 errors).
+- Verified: `-m CreditReportDomain` → "Error: Unknown model name 'CreditReportDomain'. Available models: ComplexOrderResponse, SoapEnvelope."
+- Verified: no `-m` (Auto) → "Error: A domain model name must be specified with -m. 'Auto' is not a valid model name. Available models: ComplexOrderResponse, SoapEnvelope."
+- Verified: `-m ComplexOrderResponse` → passes validation, proceeds to comparison.
+
+## Todo List Status
+```markdown
+- [x] Remove `--debug-non-success-bodies` and `--debug-artifacts-dir` from request CLI options
+- [x] Remove debug artifact export pipeline/helpers from request command
+- [x] Remove debug artifact metadata output from console/json reports
+- [x] Update README request example to use `--disable-truncation`
+- [x] Build `ComparisonTool.Cli` to verify compilation
+```
+
+## Recent File Changes
+- `ComparisonTool.Cli/Commands/RequestCompareCommand.cs`: Removed legacy debug artifact options, execution branch, and helper types/methods.
+- `ComparisonTool.Cli/Reporting/ConsoleReportWriter.cs`: Removed debug artifact directory/index lines from summary output.
+- `ComparisonTool.Cli/Reporting/JsonReportWriter.cs`: Removed `debugArtifacts` JSON section and associated metadata helper methods.
+- `README.md`: Replaced debug artifact flags in request example with `--disable-truncation` and updated troubleshooting note.
+
+## Key Technical Decisions
+- Decision: Fully retire debug-artifact export flags/logic now that inline report truncation can be disabled.
+- Rationale: Avoid duplicate troubleshooting paths and keep CLI/report behavior simpler and consistent.
+- Date: 2026-02-27
+
+## External Resources Referenced
+- None (workspace-only implementation).
+
+## Blockers & Issues
+- None
+
+## Failed Approaches
+- None
+
+## Environment Notes
+- .NET 10.0
+
+## Next Session Priority
+No active tasks.
+
+## Session Notes
+Removed artifact export pathway and references; troubleshooting now relies on `--disable-truncation` inline report output. `dotnet build ComparisonTool.Cli/ComparisonTool.Cli.csproj` succeeds (warnings only).
 
 ---
 # Previous Session Archive

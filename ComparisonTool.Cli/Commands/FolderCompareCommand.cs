@@ -185,6 +185,21 @@ public static class FolderCompareCommand
         Console.WriteLine();
 
         await using var serviceProvider = ServiceProviderFactory.CreateServiceProvider(configuration);
+
+        // Validate the model name against the registered model registry before running.
+        var xmlDeserializationService = serviceProvider.GetRequiredService<IXmlDeserializationService>();
+        var availableModels = xmlDeserializationService.GetRegisteredModelNames()
+            .OrderBy(m => m, StringComparer.Ordinal)
+            .ToList();
+
+        if (!availableModels.Contains(modelName, StringComparer.Ordinal))
+        {
+            Console.Error.WriteLine($"Error: Unknown model name '{modelName}'.");
+            Console.Error.WriteLine($"Available models: {string.Join(", ", availableModels)}");
+            Console.Error.WriteLine($"Use -m with one of the listed names. If '{modelName}' is a new model, it must be registered in ServiceProviderFactory.");
+            return 1;
+        }
+
         using var scope = serviceProvider.CreateScope();
 
         var configService = scope.ServiceProvider.GetRequiredService<IComparisonConfigurationService>();
