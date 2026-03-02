@@ -1,27 +1,32 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2026-03-02T00:00:00Z
+lastUpdated: 2026-03-02T11:05:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-Fix CLI request comparison giving "ComplexOrderResponse cannot be serialized" when an unregistered model is passed via -m
+Fix CLI request comparison regression where eager `SoapEnvelope` serializer initialization could fail unrelated `-m` runs
 
 ## Todo List Status
 ```markdown
-- [x] Add early model name validation in RequestCompareCommand before job creation
-- [x] Update -m option description to explain what values are accepted
-- [x] Add same validation to FolderCompareCommand for consistency
-- [x] Build and verify the fix
+- [x] Locate where `SoapEnvelope` serialization exception is thrown
+- [x] Trace model selection and deserialization path for request CLI
+- [x] Implement targeted fix for incorrect model usage
+- [x] Build and validate CLI request flow
+- [x] Finalize and mark session complete
 ```
 
 ## Recent File Changes
+- `ComparisonTool.Core/Serialization/XmlDeserializationService.cs`: Made model serializer pre-caching non-fatal during registration (`RegisterDomainModel<T>` now catches and logs pre-cache exceptions, then falls back to lazy creation when model is actually used).
 - `ComparisonTool.Cli/Commands/RequestCompareCommand.cs`: Added `using ComparisonTool.Core.Serialization;`, updated `-m` option description, added early model-name validation after service provider creation — gives clear "Unknown model / Available models" error before any comparison starts.
 - `ComparisonTool.Cli/Commands/FolderCompareCommand.cs`: Added early model-name validation (identical pattern) after service provider creation.
 
 ## Key Technical Decisions
+- Decision: Keep eager serializer pre-cache as a best-effort optimization only; never fail registration if one model serializer cannot pre-initialize.
+- Rationale: Request/folder runs should only fail for the selected `-m` model; unrelated registered models (for example `SoapEnvelope`) must not break startup/execution.
+- Date: 2026-03-02
 - Decision: Validate model names BEFORE creating the comparison job, using `IXmlDeserializationService.GetRegisteredModelNames()`.
 - Rationale: Previously unregistered names propagated deep into the pipeline producing per-file `ArgumentException` failures that were difficult to diagnose. The error the user saw ("ComplexOrderResponse cannot be serialized...") was a secondary/misleading error.
 - Date: 2026-03-02
@@ -48,6 +53,8 @@ Fix CLI request comparison giving "ComplexOrderResponse cannot be serialized" wh
 No active tasks.
 
 ## Session Notes
+- Verified build: `dotnet build ComparisonTool.Cli/ComparisonTool.Cli.csproj` (0 errors).
+- Verified request flow with local mock endpoints and `-m ComplexOrderResponse` runs successfully (differences reported, no `SoapEnvelope` constructor failure).
 - Added upfront validation in both `RequestCompareCommand` and `FolderCompareCommand`.
 - `dotnet build` passes (0 errors).
 - Verified: `-m CreditReportDomain` → "Error: Unknown model name 'CreditReportDomain'. Available models: ComplexOrderResponse, SoapEnvelope."
