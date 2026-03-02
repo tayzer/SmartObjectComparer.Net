@@ -113,6 +113,11 @@ public static partial class RequestCompareCommand
             Description = "Override Content-Type header for all request bodies",
         };
 
+        var soapActionOption = new Option<string?>("--soap-action")
+        {
+            Description = "Optional SOAPAction header value to send with every request",
+        };
+
         var outputOption = new Option<DirectoryInfo?>("--output", "-o")
         {
             Description = "Directory for report output files. Defaults to current directory",
@@ -170,6 +175,7 @@ public static partial class RequestCompareCommand
             semanticAnalysisOption,
             ignoreRulesFileOption,
             contentTypeOption,
+            soapActionOption,
             outputOption,
             formatOption,
             htmlModeOption,
@@ -192,6 +198,7 @@ public static partial class RequestCompareCommand
             var semanticAnalysis = parseResult.GetValue(semanticAnalysisOption);
             var ignoreRulesFile = parseResult.GetValue(ignoreRulesFileOption);
             var contentTypeOverride = parseResult.GetValue(contentTypeOption);
+            var soapAction = parseResult.GetValue(soapActionOption);
             var outputDir = parseResult.GetValue(outputOption);
             var formats = parseResult.GetValue(formatOption) ?? new[] { OutputFormat.Console };
             var htmlMode = parseResult.GetValue(htmlModeOption);
@@ -213,6 +220,7 @@ public static partial class RequestCompareCommand
                 semanticAnalysis,
                 ignoreRulesFile,
                 contentTypeOverride,
+                soapAction,
                 outputDir,
                 formats,
                 htmlMode,
@@ -239,6 +247,7 @@ public static partial class RequestCompareCommand
         bool semanticAnalysis,
         FileInfo? ignoreRulesFile,
         string? contentTypeOverride,
+        string? soapAction,
         DirectoryInfo? outputDir,
         OutputFormat[] formats,
         HtmlReportMode htmlMode,
@@ -261,6 +270,10 @@ public static partial class RequestCompareCommand
         if (!string.IsNullOrWhiteSpace(contentTypeOverride))
         {
             Console.WriteLine($"  Content-Type: {contentTypeOverride}");
+        }
+        if (!string.IsNullOrWhiteSpace(soapAction))
+        {
+            Console.WriteLine($"  SOAPAction: {soapAction}");
         }
         Console.WriteLine();
 
@@ -317,6 +330,18 @@ public static partial class RequestCompareCommand
             IgnoreRules = ignoreRulesResult.IgnoreRules,
             SmartIgnoreRules = ignoreRulesResult.SmartIgnoreRules,
             ContentTypeOverride = contentTypeOverride,
+            HeadersA = string.IsNullOrWhiteSpace(soapAction)
+                ? null
+                : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["SOAPAction"] = soapAction,
+                },
+            HeadersB = string.IsNullOrWhiteSpace(soapAction)
+                ? null
+                : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["SOAPAction"] = soapAction,
+                },
         };
 
         var job = jobService.CreateJob(createRequest);
