@@ -1,6 +1,7 @@
 ﻿@namespace ComparisonTool.Web.Components.Comparison
 @using ComparisonTool.Core.Comparison.Analysis
 @using ComparisonTool.Core.Comparison.Results
+@using ComparisonTool.Core.Utilities
 @using KellermanSoftware.CompareNetObjects
 
 <style>
@@ -342,6 +343,9 @@
                                                 <MudLink Typo="Typo.body2" Color="Color.Primary" Style="cursor: pointer; font-weight: 600;" OnClick="@(() => NavigateToFilePair(file.FileName))">
                                                     @file.FileName
                                                 </MudLink>
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined" Class="ml-2">
+                                                    @file.OccurrenceCount diffs
+                                                </MudChip>
                                                 <MudTooltip Text="View detailed comparison for this file pair">
                                                     <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Color="Color.Primary" OnClick="@(() => NavigateToFilePair(file.FileName))" />
                                                 </MudTooltip>
@@ -495,6 +499,9 @@
                                                 <MudLink Typo="Typo.body2" Color="Color.Primary" Style="cursor: pointer; font-weight: 600;" OnClick="@(() => NavigateToFilePair(file.FileName))">
                                                     @file.FileName
                                                 </MudLink>
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined" Class="ml-2">
+                                                    @file.OccurrenceCount diffs
+                                                </MudChip>
                                                 <MudTooltip Text="View detailed comparison for this file pair">
                                                     <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Color="Color.Primary" OnClick="@(() => NavigateToFilePair(file.FileName))" />
                                                 </MudTooltip>
@@ -723,6 +730,7 @@
                                     </div>
                                 </CellTemplate>
                             </TemplateColumn>
+                            <PropertyColumn Property="x => x.OccurrenceCount" Title="Count" Sortable="true" Groupable="false" />
                             <PropertyColumn Property="x => x.Category" Title="Category" Sortable="true" Groupable="true" />
                         </Columns>
                         <PagerContent>
@@ -802,6 +810,7 @@
         public string ExpectedValue { get; set; } = "";
         public string ActualValue { get; set; } = "";
         public string Category { get; set; } = "";
+        public int OccurrenceCount { get; set; } = 1;
     }
     
     public class DifferenceGridItem
@@ -811,6 +820,7 @@
         public string ExpectedValue { get; set; } = "";
         public string ActualValue { get; set; } = "";
         public string Category { get; set; } = "";
+        public int OccurrenceCount { get; set; } = 1;
         public bool IsCritical { get; set; }
         public bool IsOrdering { get; set; }
     }
@@ -838,13 +848,16 @@
             
             foreach (var file in pattern.AffectedFiles.Distinct())
             {
-                var example = pattern.Examples.FirstOrDefault();
+                var fileDifferences = GetMatchingDifferencesForFile(pattern, file);
+                var example = fileDifferences.FirstOrDefault() ?? pattern.Examples.FirstOrDefault();
+                var occurrenceCount = fileDifferences.Count > 0 ? fileDifferences.Count : 1;
                 var fileDiff = new FileDifference
                 {
                     FileName = file,
-                    ExpectedValue = FormatValue(example?.Object1Value),
-                    ActualValue = FormatValue(example?.Object2Value),
-                    Category = pattern.Category.ToString()
+                    ExpectedValue = FormatValueWithCount(example?.Object1Value, occurrenceCount),
+                    ActualValue = FormatValueWithCount(example?.Object2Value, occurrenceCount),
+                    Category = pattern.Category.ToString(),
+                    OccurrenceCount = occurrenceCount,
                 };
                 
                 var gridItem = new DifferenceGridItem
@@ -854,6 +867,7 @@
                     ExpectedValue = fileDiff.ExpectedValue,
                     ActualValue = fileDiff.ActualValue,
                     Category = pattern.Category.ToString(),
+                    OccurrenceCount = occurrenceCount,
                     IsCritical = isCritical,
                     IsOrdering = isOrder
                 };
@@ -1198,6 +1212,85 @@
         if (value is DateTime dt) return dt.ToString("yyyy-MM-dd HH:mm:ss");
         var str = value.ToString() ?? "null";
         return str.Length > 100 ? str.Substring(0, 97) + "..." : str;
+    }
+
+    private string FormatValueWithCount(object value, int occurrenceCount)
+    {
+        var formatted = FormatValue(value);
+        return occurrenceCount > 1 ? $"{formatted} (+{occurrenceCount - 1} more)" : formatted;
+    }
+
+    private List<Difference> GetMatchingDifferencesForFile(EnhancedStructuralDifferenceAnalyzer.StructuralPattern pattern, string fileIdentifier)
+    {
+        if (FolderComparisonResult?.FilePairResults == null)
+            return new List<Difference>();
+
+        var patternPath = ExtractPatternPath(pattern.FullPattern, pattern.Category);
+        var matches = new List<Difference>();
+
+        foreach (var result in FolderComparisonResult.FilePairResults)
+        {
+            if (result.HasError || !string.Equals(GetPairIdentifier(result), fileIdentifier, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            foreach (var difference in result.Result?.Differences ?? new List<Difference>())
+            {
+                if (DifferenceMatchesPattern(difference, patternPath, pattern.Category))
+                {
+                    matches.Add(difference);
+                }
+            }
+        }
+
+        return matches;
+    }
+
+    private string GetPairIdentifier(FilePairComparisonResult filePairResult)
+    {
+        return string.IsNullOrWhiteSpace(filePairResult.RequestRelativePath)
+            ? $"{filePairResult.File1Name} vs {filePairResult.File2Name}"
+            : filePairResult.RequestRelativePath;
+    }
+
+    private string ExtractPatternPath(string fullPattern, DifferenceCategory category)
+    {
+        if (string.IsNullOrWhiteSpace(fullPattern))
+            return string.Empty;
+
+        if (category == DifferenceCategory.CollectionItemChanged && fullPattern.EndsWith("[Order]", StringComparison.Ordinal))
+        {
+            return fullPattern.Substring(0, fullPattern.Length - "[Order]".Length);
+        }
+
+        if (fullPattern.EndsWith("_GENERAL_CHANGE", StringComparison.Ordinal))
+        {
+            return fullPattern.Substring(0, fullPattern.Length - "_GENERAL_CHANGE".Length);
+        }
+
+        if (fullPattern.EndsWith("_critical", StringComparison.Ordinal))
+        {
+            return fullPattern.Substring(0, fullPattern.Length - "_critical".Length);
+        }
+
+        var split = fullPattern.Split('_');
+        return split.Length > 1 && !string.IsNullOrWhiteSpace(split[0]) ? split[0] : fullPattern;
+    }
+
+    private bool DifferenceMatchesPattern(Difference difference, string patternPath, DifferenceCategory category)
+    {
+        if (difference == null || string.IsNullOrWhiteSpace(difference.PropertyName))
+            return false;
+
+        if (category == DifferenceCategory.CollectionItemChanged)
+        {
+            return difference.PropertyName.StartsWith(patternPath + "[", StringComparison.Ordinal)
+                || difference.PropertyName.StartsWith(patternPath + ".", StringComparison.Ordinal);
+        }
+
+        var normalizedDifferencePath = PropertyPathNormalizer.NormalizePropertyPath(difference.PropertyName);
+        return string.Equals(normalizedDifferencePath, patternPath, StringComparison.Ordinal);
     }
     
     private void RefreshAnalysis()
