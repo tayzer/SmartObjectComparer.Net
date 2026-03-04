@@ -106,16 +106,21 @@ else if (!DifferenceSummary.AreEqual)
         <MudDivider />
         
         <div class="pa-4">
-            <MudTextField @bind-Value="SearchFilter" 
+            <MudTextField Value="SearchFilter" 
                           Placeholder="Search differences..." 
                           Variant="Variant.Outlined" 
                           Adornment="Adornment.Start" 
                           AdornmentIcon="@Icons.Material.Filled.Search"
                           Immediate="true"
+                          ValueChanged="OnSearchFilterChanged"
                           Margin="Margin.Dense"
                           Class="mb-4" />
+
+            @{
+                var groupRenderContext = GetGroupRenderContext();
+            }
             
-            @foreach (var group in GetFilteredGroups())
+            @foreach (var group in groupRenderContext.Groups)
             {
                 string groupKey = group.Key;
                 bool isCollapsed = IsGroupCollapsed(groupKey);
@@ -177,6 +182,21 @@ else if (!DifferenceSummary.AreEqual)
                     }
                 </MudPaper>
             }
+
+            @if (groupRenderContext.HasMore)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2">
+                    Rendering @groupRenderContext.RenderedCount of @groupRenderContext.TotalCount groups to keep the UI responsive.
+                    <MudStack Row="true" Spacing="1" Class="mt-2">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" OnClick="LoadMoreGroups">
+                            Load @GroupRenderIncrement More
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" OnClick="LoadAllGroups">
+                            Load All Groups
+                        </MudButton>
+                    </MudStack>
+                </MudAlert>
+            }
         </div>
     </MudPaper>
 }
@@ -205,6 +225,11 @@ else if (!DifferenceSummary.AreEqual)
 
     private string SearchFilter { get; set; } = "";
     private Dictionary<string, bool> groupCollapsedStates = new Dictionary<string, bool>();
+    private int renderedGroupLimit = InitialGroupRenderLimit;
+    private string? lastRenderedPairKey;
+    
+    private const int InitialGroupRenderLimit = 150;
+    private const int GroupRenderIncrement = 150;
     
     // Full file view state
     private bool showFullFileView;
@@ -224,16 +249,32 @@ else if (!DifferenceSummary.AreEqual)
         public string ActualValue { get; set; } = "";
     }
 
+    private sealed class GroupRenderContext
+    {
+        public List<IGrouping<string, Difference>> Groups { get; set; } = new();
+        public int TotalCount { get; set; }
+        public int RenderedCount => Groups.Count;
+        public bool HasMore => TotalCount > RenderedCount;
+    }
+
     private IEnumerable<IGrouping<string, Difference>> GroupedDifferences { get; set; } = Enumerable.Empty<IGrouping<string, Difference>>();
 
     protected override void OnParametersSet()
     {
+        var currentPairKey = $"{SelectedPair?.File1Path}|{SelectedPair?.File2Path}|{SelectedPair?.RequestRelativePath}";
+        if (!string.Equals(currentPairKey, lastRenderedPairKey, StringComparison.Ordinal))
+        {
+            renderedGroupLimit = InitialGroupRenderLimit;
+            lastRenderedPairKey = currentPairKey;
+        }
+
         if (ComparisonResult != null)
         {
             GroupedDifferences = (ComparisonResult.Differences ?? Enumerable.Empty<Difference>())
                 .Select(d => new { Normalized = PropertyPathNormalizer.NormalizePropertyPath(d.PropertyName), Diff = d })
                 .GroupBy(x => x.Normalized, x => x.Diff)
-                .OrderBy(g => g.Key);
+                .OrderBy(g => g.Key)
+                .ToList();
 
             foreach (var group in GroupedDifferences)
             {
@@ -250,8 +291,8 @@ else if (!DifferenceSummary.AreEqual)
         }
         
         // Reset full file view when pair changes
-        var currentPairKey = $"{SelectedPair?.File1Path}|{SelectedPair?.File2Path}";
-        if (currentPairKey != lastLoadedPairKey)
+        var currentRawPairKey = $"{SelectedPair?.File1Path}|{SelectedPair?.File2Path}";
+        if (currentRawPairKey != lastLoadedPairKey)
         {
             rawContentA = "";
             rawContentB = "";
@@ -315,13 +356,43 @@ else if (!DifferenceSummary.AreEqual)
     {
         if (string.IsNullOrWhiteSpace(SearchFilter))
             return GroupedDifferences;
+
+        var filter = SearchFilter.Trim();
+        var includeValueSearch = filter.Length >= 3;
             
         return GroupedDifferences.Where(g => 
-            g.Key.Contains(SearchFilter, StringComparison.OrdinalIgnoreCase) ||
+            (g.Key?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false) ||
             g.Any(d => 
-                d.PropertyName.Contains(SearchFilter, StringComparison.OrdinalIgnoreCase) ||
-                FormatValue(d.Object1Value).Contains(SearchFilter, StringComparison.OrdinalIgnoreCase) ||
-                FormatValue(d.Object2Value).Contains(SearchFilter, StringComparison.OrdinalIgnoreCase)));
+                (d.PropertyName?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (includeValueSearch && FormatValue(d.Object1Value).Contains(filter, StringComparison.OrdinalIgnoreCase)) ||
+                (includeValueSearch && FormatValue(d.Object2Value).Contains(filter, StringComparison.OrdinalIgnoreCase))));
+    }
+
+    private void OnSearchFilterChanged(string value)
+    {
+        SearchFilter = value ?? string.Empty;
+        renderedGroupLimit = InitialGroupRenderLimit;
+    }
+
+    private GroupRenderContext GetGroupRenderContext()
+    {
+        var filtered = GetFilteredGroups().ToList();
+
+        return new GroupRenderContext
+        {
+            TotalCount = filtered.Count,
+            Groups = filtered.Take(renderedGroupLimit).ToList(),
+        };
+    }
+
+    private void LoadMoreGroups()
+    {
+        renderedGroupLimit += GroupRenderIncrement;
+    }
+
+    private void LoadAllGroups()
+    {
+        renderedGroupLimit = int.MaxValue;
     }
     
     private IEnumerable<DifferenceItem> GetGroupItems(IGrouping<string, Difference> group)

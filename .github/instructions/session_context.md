@@ -1,21 +1,21 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2026-03-02T11:05:00Z
+lastUpdated: 2026-03-04T00:30:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-Fix CLI request comparison regression where eager `SoapEnvelope` serializer initialization could fail unrelated `-m` runs
+Prevent Detailed Comparison UI crashes when selecting very large file pairs from Value Differences
 
 ## Todo List Status
 ```markdown
-- [x] Locate where `SoapEnvelope` serialization exception is thrown
-- [x] Trace model selection and deserialization path for request CLI
-- [x] Implement targeted fix for incorrect model usage
-- [x] Build and validate CLI request flow
-- [x] Finalize and mark session complete
+- [x] Confirm navigation now resolves correct pair identifiers
+- [x] Add progressive group rendering in Detailed Comparison
+- [x] Add large-pair safety for Show All toggle carry-over
+- [x] Harden selected-pair rendering and async selection flow
+- [x] Validate diagnostics and finalize session context
 ```
 
 ## Recent File Changes
