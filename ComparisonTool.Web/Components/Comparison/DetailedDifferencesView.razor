@@ -106,13 +106,12 @@ else if (!DifferenceSummary.AreEqual)
         <MudDivider />
         
         <div class="pa-4">
-            <MudTextField Value="SearchFilter" 
+            <MudTextField @bind-Value="SearchFilter" 
                           Placeholder="Search differences..." 
                           Variant="Variant.Outlined" 
                           Adornment="Adornment.Start" 
                           AdornmentIcon="@Icons.Material.Filled.Search"
                           Immediate="true"
-                          ValueChanged="OnSearchFilterChanged"
                           Margin="Margin.Dense"
                           Class="mb-4" />
 
@@ -223,7 +222,22 @@ else if (!DifferenceSummary.AreEqual)
     [Parameter]
     public MultiFolderComparisonResult FolderResult { get; set; }
 
-    private string SearchFilter { get; set; } = "";
+    private string _searchFilter = string.Empty;
+    private string SearchFilter
+    {
+        get => _searchFilter;
+        set
+        {
+            var normalized = value ?? string.Empty;
+            if (string.Equals(_searchFilter, normalized, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _searchFilter = normalized;
+            renderedGroupLimit = InitialGroupRenderLimit;
+        }
+    }
     private Dictionary<string, bool> groupCollapsedStates = new Dictionary<string, bool>();
     private int renderedGroupLimit = InitialGroupRenderLimit;
     private string? lastRenderedPairKey;
@@ -366,12 +380,6 @@ else if (!DifferenceSummary.AreEqual)
                 (d.PropertyName?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false) ||
                 (includeValueSearch && FormatValue(d.Object1Value).Contains(filter, StringComparison.OrdinalIgnoreCase)) ||
                 (includeValueSearch && FormatValue(d.Object2Value).Contains(filter, StringComparison.OrdinalIgnoreCase))));
-    }
-
-    private void OnSearchFilterChanged(string value)
-    {
-        SearchFilter = value ?? string.Empty;
-        renderedGroupLimit = InitialGroupRenderLimit;
     }
 
     private GroupRenderContext GetGroupRenderContext()
