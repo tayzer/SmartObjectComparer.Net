@@ -262,13 +262,19 @@
                                           Size="Size.Small" />
                             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                    @_valueTreeNodes.Sum(n => CountLeafNodes(n)) properties
+                                    @_valueLeafCount properties
                                 </MudText>
                                 <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
                                     <MudIconButton Icon="@Icons.Material.Filled.UnfoldMore" Size="Size.Small" OnClick="ExpandAllValueNodes" Title="Expand All" />
                                     <MudIconButton Icon="@Icons.Material.Filled.UnfoldLess" Size="Size.Small" OnClick="CollapseAllValueNodes" Title="Collapse All" />
                                 </MudButtonGroup>
                             </MudStack>
+                            @if (!string.IsNullOrEmpty(_valueExpandInfoMessage))
+                            {
+                                <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true">
+                                    @_valueExpandInfoMessage
+                                </MudAlert>
+                            }
                         </MudStack>
                         
                         @if (_valueTreeNodes.Any())
@@ -419,13 +425,19 @@
                                           Size="Size.Small" />
                             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                    @_orderTreeNodes.Sum(n => CountLeafNodes(n)) collections
+                                    @_orderLeafCount collections
                                 </MudText>
                                 <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
                                     <MudIconButton Icon="@Icons.Material.Filled.UnfoldMore" Size="Size.Small" OnClick="ExpandAllOrderNodes" Title="Expand All" />
                                     <MudIconButton Icon="@Icons.Material.Filled.UnfoldLess" Size="Size.Small" OnClick="CollapseAllOrderNodes" Title="Collapse All" />
                                 </MudButtonGroup>
                             </MudStack>
+                            @if (!string.IsNullOrEmpty(_orderExpandInfoMessage))
+                            {
+                                <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true">
+                                    @_orderExpandInfoMessage
+                                </MudAlert>
+                            }
                         </MudStack>
                         
                         @if (_orderTreeNodes.Any())
@@ -781,6 +793,13 @@
     // Tree view data structures
     private List<TreeItemData<string>> _valueTreeNodes = new();
     private List<TreeItemData<string>> _orderTreeNodes = new();
+    private int _valueLeafCount;
+    private int _orderLeafCount;
+    private string _valueExpandInfoMessage = string.Empty;
+    private string _orderExpandInfoMessage = string.Empty;
+
+    private const int ExpandAllMaxNodes = 2500;
+    private const int ExpandAllSafeDepth = 3;
     
     public class PropertyTreeNode : TreeItemData<string>
     {
@@ -836,6 +855,8 @@
         _orderPropertyGroups.Clear();
         _criticalPropertyGroups.Clear();
         _allDifferences.Clear();
+        _valueExpandInfoMessage = string.Empty;
+        _orderExpandInfoMessage = string.Empty;
         
         if (Analysis?.AllPatterns == null) return;
         
@@ -904,6 +925,8 @@
         // Build hierarchical tree views
         _valueTreeNodes = BuildPropertyTree(_valuePropertyGroups);
         _orderTreeNodes = BuildPropertyTree(_orderPropertyGroups);
+        _valueLeafCount = _valuePropertyGroups.Count;
+        _orderLeafCount = _orderPropertyGroups.Count;
     }
     
     private List<TreeItemData<string>> BuildPropertyTree(Dictionary<string, List<FileDifference>> propertyGroups)
@@ -1027,29 +1050,69 @@
     
     private void ExpandAllValueNodes()
     {
-        foreach (var node in _valueTreeNodes)
-            SetExpandedRecursive(node, true);
+        var totalNodes = CountTreeNodes(_valueTreeNodes);
+
+        if (totalNodes > ExpandAllMaxNodes)
+        {
+            SetExpandedToDepth(_valueTreeNodes, ExpandAllSafeDepth);
+            _valueExpandInfoMessage =
+                $"Large tree detected ({totalNodes:N0} nodes). Expanded first {ExpandAllSafeDepth} levels to keep UI responsive. Use filter/search or expand specific branches for deeper navigation.";
+        }
+        else
+        {
+            foreach (var node in _valueTreeNodes)
+            {
+                SetExpandedRecursive(node, true);
+            }
+
+            _valueExpandInfoMessage = string.Empty;
+        }
+
         StateHasChanged();
     }
     
     private void CollapseAllValueNodes()
     {
         foreach (var node in _valueTreeNodes)
+        {
             SetExpandedRecursive(node, false);
+        }
+
+        _valueExpandInfoMessage = string.Empty;
         StateHasChanged();
     }
     
     private void ExpandAllOrderNodes()
     {
-        foreach (var node in _orderTreeNodes)
-            SetExpandedRecursive(node, true);
+        var totalNodes = CountTreeNodes(_orderTreeNodes);
+
+        if (totalNodes > ExpandAllMaxNodes)
+        {
+            SetExpandedToDepth(_orderTreeNodes, ExpandAllSafeDepth);
+            _orderExpandInfoMessage =
+                $"Large tree detected ({totalNodes:N0} nodes). Expanded first {ExpandAllSafeDepth} levels to keep UI responsive.";
+        }
+        else
+        {
+            foreach (var node in _orderTreeNodes)
+            {
+                SetExpandedRecursive(node, true);
+            }
+
+            _orderExpandInfoMessage = string.Empty;
+        }
+
         StateHasChanged();
     }
     
     private void CollapseAllOrderNodes()
     {
         foreach (var node in _orderTreeNodes)
+        {
             SetExpandedRecursive(node, false);
+        }
+
+        _orderExpandInfoMessage = string.Empty;
         StateHasChanged();
     }
     
@@ -1077,6 +1140,53 @@
             foreach (var child in treeItem.Children)
                 SetExpandedRecursive(child, expanded);
         }
+    }
+
+    private void SetExpandedToDepth(IEnumerable<TreeItemData<string>> nodes, int maxDepth)
+    {
+        foreach (var node in nodes)
+        {
+            SetExpandedToDepth(node, 0, maxDepth);
+        }
+    }
+
+    private void SetExpandedToDepth(TreeItemData<string> treeItem, int depth, int maxDepth)
+    {
+        treeItem.Expanded = depth < maxDepth;
+
+        if (treeItem.Children == null)
+        {
+            return;
+        }
+
+        foreach (var child in treeItem.Children)
+        {
+            SetExpandedToDepth(child, depth + 1, maxDepth);
+        }
+    }
+
+    private int CountTreeNodes(IEnumerable<TreeItemData<string>> roots)
+    {
+        var count = 0;
+        var stack = new Stack<TreeItemData<string>>(roots);
+
+        while (stack.Count > 0)
+        {
+            var node = stack.Pop();
+            count++;
+
+            if (node.Children == null)
+            {
+                continue;
+            }
+
+            foreach (var child in node.Children)
+            {
+                stack.Push(child);
+            }
+        }
+
+        return count;
     }
     
     private void SelectValueProperty(string prop) { SelectedValueProperty = prop; }
