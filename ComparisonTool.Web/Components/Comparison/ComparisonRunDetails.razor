@@ -909,85 +909,60 @@
     private List<TreeItemData<string>> BuildPropertyTree(Dictionary<string, List<FileDifference>> propertyGroups)
     {
         var rootNodes = new List<PropertyTreeNode>();
-        var nodeMap = new Dictionary<string, PropertyTreeNode>(); // Track all nodes by full path
+        var nodeMap = new Dictionary<string, PropertyTreeNode>();
         
         foreach (var kvp in propertyGroups)
         {
             var path = kvp.Key;
             var differences = kvp.Value;
             
-            // Normalize path - remove array indices like [0], [1], [*]
-            var normalizedPath = System.Text.RegularExpressions.Regex.Replace(path, @"\[\d*\*?\]", "");
+            // Normalize path for hierarchy grouping while preserving object/property segments
+            var normalizedPath = System.Text.RegularExpressions.Regex.Replace(path, @"\[\d+\]", "[*]");
             var segments = normalizedPath.Split('.', StringSplitOptions.RemoveEmptyEntries);
             
             if (segments.Length == 0) continue;
             
-            // Build the tree structure
-            List<PropertyTreeNode> currentLevel = rootNodes;
-            PropertyTreeNode parentNode = null;
-            string currentPath = "";
-            
-            for (int i = 0; i < segments.Length; i++)
+            PropertyTreeNode? parentNode = null;
+            var currentPath = string.Empty;
+
+            for (var i = 0; i < segments.Length; i++)
             {
                 var segment = segments[i];
                 currentPath = string.IsNullOrEmpty(currentPath) ? segment : $"{currentPath}.{segment}";
                 var isLeaf = (i == segments.Length - 1);
-                
-                PropertyTreeNode existingNode = null;
-                if (nodeMap.TryGetValue(currentPath, out var mapped))
+
+                if (!nodeMap.TryGetValue(currentPath, out var node))
                 {
-                    existingNode = mapped;
-                }
-                
-                if (existingNode == null)
-                {
-                    var newNode = new PropertyTreeNode(segment, isLeaf ? path : currentPath)
+                    node = new PropertyTreeNode(segment, isLeaf ? path : currentPath)
                     {
                         IsLeaf = isLeaf,
                         DifferenceCount = isLeaf ? differences.Count : 0,
                         Differences = isLeaf ? differences : new List<FileDifference>()
                     };
-                    newNode.Expanded = i < 2; // Expand first 2 levels by default
-                    
-                    currentLevel.Add(newNode);
-                    nodeMap[currentPath] = newNode;
-                    parentNode = newNode;
-                    currentLevel = newNode.Children?.OfType<PropertyTreeNode>().ToList() ?? new List<PropertyTreeNode>();
-                    
-                    // Ensure children list is initialized
-                    if (newNode.Children == null)
-                        newNode.Children = new List<TreeItemData<string>>();
-                    currentLevel = newNode.Children.OfType<PropertyTreeNode>().ToList();
-                }
-                else
-                {
-                    if (isLeaf)
+                    node.Expanded = i < 2;
+
+                    nodeMap[currentPath] = node;
+
+                    if (parentNode == null)
                     {
-                        // This path leads to a leaf - update the node to be a leaf
-                        existingNode.IsLeaf = true;
-                        existingNode.FullPath = path;
-                        existingNode.DifferenceCount += differences.Count;
-                        existingNode.Differences.AddRange(differences);
+                        rootNodes.Add(node);
                     }
-                    parentNode = existingNode;
-                    currentLevel = existingNode.Children?.OfType<PropertyTreeNode>().ToList() ?? new List<PropertyTreeNode>();
-                }
-                
-                // Add to parent's children if this is a new node
-                if (parentNode != null && i > 0)
-                {
-                    var parentPath = string.Join(".", segments.Take(i));
-                    if (nodeMap.TryGetValue(parentPath, out var parent))
+                    else
                     {
-                        if (parent.Children == null)
-                            parent.Children = new List<TreeItemData<string>>();
-                        
-                        if (!parent.Children.OfType<PropertyTreeNode>().Any(c => c.FullPath == currentPath))
-                        {
-                            parent.Children.Add(nodeMap[currentPath]);
-                        }
+                        parentNode.Children ??= new List<TreeItemData<string>>();
+                        parentNode.Children.Add(node);
                     }
                 }
+
+                if (isLeaf)
+                {
+                    node.IsLeaf = true;
+                    node.FullPath = path;
+                    node.DifferenceCount += differences.Count;
+                    node.Differences.AddRange(differences);
+                }
+
+                parentNode = node;
             }
         }
         
@@ -1192,10 +1167,22 @@
     
     private string ExtractBasePropertyPath(string fullPattern)
     {
-        var cleaned = System.Text.RegularExpressions.Regex.Replace(fullPattern, @"\[\d*\*?\]", "");
-        var parts = cleaned.Split('_');
-        if (parts.Length > 1 && !string.IsNullOrEmpty(parts[0]))
-            cleaned = parts[0];
+        if (string.IsNullOrWhiteSpace(fullPattern))
+            return string.Empty;
+
+        var cleaned = fullPattern;
+
+        if (cleaned.EndsWith("_GENERAL_CHANGE", StringComparison.Ordinal))
+            cleaned = cleaned.Substring(0, cleaned.Length - "_GENERAL_CHANGE".Length);
+
+        if (cleaned.EndsWith("_critical", StringComparison.Ordinal))
+            cleaned = cleaned.Substring(0, cleaned.Length - "_critical".Length);
+
+        if (cleaned.EndsWith("[Order]", StringComparison.Ordinal))
+            cleaned = cleaned.Substring(0, cleaned.Length - "[Order]".Length);
+
+        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"\[\d+\]", "[*]");
+
         return cleaned;
     }
     
