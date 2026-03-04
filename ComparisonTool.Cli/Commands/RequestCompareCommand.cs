@@ -118,10 +118,17 @@ public static class RequestCompareCommand
 
         var formatOption = new Option<OutputFormat[]>("--format", "-f")
         {
-            Description = "Output format(s): Console, Json, Markdown. Multiple allowed",
+            Description = "Output format(s): Console, Json, Markdown, Html. Multiple allowed",
             Arity = ArgumentArity.OneOrMore,
             AllowMultipleArgumentsPerToken = true,
             DefaultValueFactory = _ => new[] { OutputFormat.Console },
+        };
+
+        var htmlModeOption = new Option<HtmlReportMode>("--html-mode")
+        {
+            Description = "HTML output mode: SingleFile or StaticSite",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => HtmlReportMode.SingleFile,
         };
 
         var pageSizeOption = new Option<int>("--page-size")
@@ -138,6 +145,13 @@ public static class RequestCompareCommand
                 result.AddError("Page size must be 0 (no pagination) or a positive number");
             }
         });
+
+        var disableTruncationOption = new Option<bool>("--disable-truncation")
+        {
+            Description = "Disable truncation of long strings in reports",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => false,
+        };
 
         var command = new Command("request", "Execute requests against two endpoints and compare responses")
         {
@@ -156,7 +170,9 @@ public static class RequestCompareCommand
             contentTypeOption,
             outputOption,
             formatOption,
+            htmlModeOption,
             pageSizeOption,
+            disableTruncationOption,
         };
 
         command.SetAction(async (parseResult, cancellationToken) =>
@@ -176,7 +192,9 @@ public static class RequestCompareCommand
             var contentTypeOverride = parseResult.GetValue(contentTypeOption);
             var outputDir = parseResult.GetValue(outputOption);
             var formats = parseResult.GetValue(formatOption) ?? new[] { OutputFormat.Console };
+            var htmlMode = parseResult.GetValue(htmlModeOption);
             var pageSize = parseResult.GetValue(pageSizeOption);
+            var disableTruncation = parseResult.GetValue(disableTruncationOption);
 
             return await ExecuteAsync(
                 configuration,
@@ -195,7 +213,9 @@ public static class RequestCompareCommand
                 contentTypeOverride,
                 outputDir,
                 formats,
+                htmlMode,
                 pageSize,
+                disableTruncation,
                 cancellationToken);
         });
 
@@ -219,7 +239,9 @@ public static class RequestCompareCommand
         string? contentTypeOverride,
         DirectoryInfo? outputDir,
         OutputFormat[] formats,
+        HtmlReportMode htmlMode,
         int markdownPageSize,
+        bool disableTruncation,
         CancellationToken cancellationToken)
     {
         if (!requestDir.Exists)
@@ -308,6 +330,9 @@ public static class RequestCompareCommand
             return 1;
         }
 
+        var resolvedOutputDir = outputDir?.FullName ?? Directory.GetCurrentDirectory();
+        Directory.CreateDirectory(resolvedOutputDir);
+
         var reportContext = new ReportContext
         {
             Result = result,
@@ -319,10 +344,9 @@ public static class RequestCompareCommand
             JobId = job.JobId,
             MostAffectedFields = MostAffectedFieldsAggregator.Build(result),
             MarkdownPageSize = markdownPageSize,
+            HtmlMode = htmlMode,
+            DisableTruncation = disableTruncation,
         };
-
-        var resolvedOutputDir = outputDir?.FullName ?? Directory.GetCurrentDirectory();
-        Directory.CreateDirectory(resolvedOutputDir);
 
         foreach (var format in formats.Distinct())
         {
@@ -342,11 +366,23 @@ public static class RequestCompareCommand
                     var pageSuffix = pageCount > 0 ? $" (+{pageCount} detail pages)" : string.Empty;
                     Console.WriteLine($"  Markdown report: {mdPath}{pageSuffix}");
                     break;
+                case OutputFormat.Html:
+                    var htmlTimestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+                    var htmlOutputPath = htmlMode == HtmlReportMode.StaticSite
+                        ? Path.Combine(resolvedOutputDir, $"request-comparison-{htmlTimestamp}")
+                        : Path.Combine(resolvedOutputDir, $"request-comparison-{htmlTimestamp}.html");
+                    var htmlResult = await HtmlReportWriter.WriteAsync(reportContext, htmlOutputPath);
+                    var detailSuffix = htmlResult.DetailPageCount > 0
+                        ? $" (+{htmlResult.DetailPageCount} pair pages)"
+                        : string.Empty;
+                    Console.WriteLine($"  HTML report: {htmlResult.PrimaryPath}{detailSuffix}");
+                    break;
             }
         }
 
         return result.AllEqual ? 0 : 2;
     }
+
 
     /// <summary>
     /// Copies request files from the user's directory into the temp batch path
@@ -474,4 +510,5 @@ public static class RequestCompareCommand
                 ErrorMessage = message,
             };
     }
+
 }

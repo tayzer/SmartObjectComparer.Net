@@ -59,15 +59,22 @@ public static class FolderCompareCommand
 
         var outputOption = new Option<DirectoryInfo?>("--output", "-o")
         {
-            Description = "Directory for report output files (JSON/Markdown). Defaults to current directory",
+            Description = "Directory for report output files (JSON/Markdown/Html). Defaults to current directory",
         };
 
         var formatOption = new Option<OutputFormat[]>("--format", "-f")
         {
-            Description = "Output format(s): Console, Json, Markdown. Multiple allowed",
+            Description = "Output format(s): Console, Json, Markdown, Html. Multiple allowed",
             Arity = ArgumentArity.OneOrMore,
             AllowMultipleArgumentsPerToken = true,
             DefaultValueFactory = _ => new[] { OutputFormat.Console },
+        };
+
+        var htmlModeOption = new Option<HtmlReportMode>("--html-mode")
+        {
+            Description = "HTML output mode: SingleFile or StaticSite",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => HtmlReportMode.SingleFile,
         };
 
         var pageSizeOption = new Option<int>("--page-size")
@@ -85,6 +92,13 @@ public static class FolderCompareCommand
             }
         });
 
+        var disableTruncationOption = new Option<bool>("--disable-truncation")
+        {
+            Description = "Disable truncation of long strings in reports",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => false,
+        };
+
         var command = new Command("folder", "Compare two directories of XML/JSON files")
         {
             dir1Arg,
@@ -96,7 +110,9 @@ public static class FolderCompareCommand
             ignoreTrailingWhitespaceOption,
             outputOption,
             formatOption,
+            htmlModeOption,
             pageSizeOption,
+            disableTruncationOption,
         };
 
         command.SetAction(async (parseResult, cancellationToken) =>
@@ -110,7 +126,9 @@ public static class FolderCompareCommand
             var ignoreTrailingWhitespaceAtEnd = parseResult.GetValue(ignoreTrailingWhitespaceOption);
             var outputDir = parseResult.GetValue(outputOption);
             var formats = parseResult.GetValue(formatOption) ?? new[] { OutputFormat.Console };
+            var htmlMode = parseResult.GetValue(htmlModeOption);
             var pageSize = parseResult.GetValue(pageSizeOption);
+            var disableTruncation = parseResult.GetValue(disableTruncationOption);
 
             return await ExecuteAsync(
                 configuration,
@@ -123,7 +141,9 @@ public static class FolderCompareCommand
                 ignoreTrailingWhitespaceAtEnd,
                 outputDir,
                 formats,
+                htmlMode,
                 pageSize,
+                disableTruncation,
                 cancellationToken);
         });
 
@@ -141,7 +161,9 @@ public static class FolderCompareCommand
         bool ignoreTrailingWhitespaceAtEnd,
         DirectoryInfo? outputDir,
         OutputFormat[] formats,
+        HtmlReportMode htmlMode,
         int markdownPageSize,
+        bool disableTruncation,
         CancellationToken cancellationToken)
     {
         if (!dir1.Exists)
@@ -202,6 +224,8 @@ public static class FolderCompareCommand
             ModelName = modelName,
             MostAffectedFields = MostAffectedFieldsAggregator.Build(result),
             MarkdownPageSize = markdownPageSize,
+            HtmlMode = htmlMode,
+            DisableTruncation = disableTruncation,
         };
 
         var resolvedOutputDir = outputDir?.FullName ?? Directory.GetCurrentDirectory();
@@ -224,6 +248,17 @@ public static class FolderCompareCommand
                     var pageCount = await MarkdownReportWriter.WriteAsync(reportContext, mdPath);
                     var pageSuffix = pageCount > 0 ? $" (+{pageCount} detail pages)" : string.Empty;
                     Console.WriteLine($"  Markdown report: {mdPath}{pageSuffix}");
+                    break;
+                case OutputFormat.Html:
+                    var htmlTimestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+                    var htmlOutputPath = htmlMode == HtmlReportMode.StaticSite
+                        ? Path.Combine(resolvedOutputDir, $"comparison-result-{htmlTimestamp}")
+                        : Path.Combine(resolvedOutputDir, $"comparison-result-{htmlTimestamp}.html");
+                    var htmlResult = await HtmlReportWriter.WriteAsync(reportContext, htmlOutputPath);
+                    var detailSuffix = htmlResult.DetailPageCount > 0
+                        ? $" (+{htmlResult.DetailPageCount} pair pages)"
+                        : string.Empty;
+                    Console.WriteLine($"  HTML report: {htmlResult.PrimaryPath}{detailSuffix}");
                     break;
             }
         }

@@ -1,5 +1,6 @@
 ﻿@namespace ComparisonTool.Web.Components.Comparison
 @using ComparisonTool.Core
+@using ComparisonTool.Core.Comparison.Presentation
 @using ComparisonTool.Core.Comparison.Results
 @using ComparisonTool.Core.RequestComparison.Models
 
@@ -128,7 +129,7 @@
                     <MudText Typo="Typo.body2">Found differences in compared file pairs. Select a row to view detailed comparison.</MudText>
                 </MudAlert>
                 
-                <MudDataGrid T="FileResultGridItem" 
+                <MudDataGrid T="ComparisonResultGridItem" 
                              Items="@GetFilteredGridItems()" 
                              Dense="true" 
                              Hover="true"
@@ -233,7 +234,7 @@
                         </TemplateColumn>
                     </Columns>
                     <PagerContent>
-                        <MudDataGridPager T="FileResultGridItem" />
+                        <MudDataGridPager T="ComparisonResultGridItem" />
                     </PagerContent>
                 </MudDataGrid>
                 
@@ -266,93 +267,40 @@
     private bool IsCollapsed = false;
     private bool ShowAll = false;
     private const int PreviewCount = 20;
-    private FileResultGridItem? SelectedItem { get; set; }
+    private ComparisonResultGridItem? SelectedItem { get; set; }
     private int CurrentPage { get; set; }
     private int? lastSynchronizedSelectedPairIndex;
 
     private string StatusFilter = "All";
     private string SelectedGroupFilter = "All";
     private string FileNameSearchFilter { get; set; } = "";
-    
-    // Grid item model
-    public class FileResultGridItem
-    {
-        public int OriginalIndex { get; set; }
-        public string File1Name { get; set; } = "";
-        public string File2Name { get; set; } = "";
-        public bool AreEqual { get; set; }
-        public bool HasError { get; set; }
-        public string ErrorMessage { get; set; } = "";
-        public int DifferenceCount { get; set; }
-        public string Category { get; set; } = "";
-        public int? HttpStatusCodeA { get; set; }
-        public int? HttpStatusCodeB { get; set; }
-        public RequestPairOutcome? PairOutcome { get; set; }
-    }
-    
-    private List<string> AvailableGroups => Result?.FilePairResults?
-        .Select(r => r.Summary?.CommonPatterns?.FirstOrDefault()?.Pattern ?? "Uncategorized")
-        .Distinct()
-        .OrderBy(g => g).ToList() ?? new List<string>();
 
-    private IEnumerable<(FilePairComparisonResult Result, int OriginalIndex)> GetFilteredResultsWithOriginalIndex()
-    {
-        if (Result?.FilePairResults == null)
-            return Enumerable.Empty<(FilePairComparisonResult, int)>();
+    private ComparisonResultProjection Projection => ComparisonResultProjectionBuilder.Build(Result);
 
-        var results = Result.FilePairResults
-            .Select((r, i) => (Result: r, OriginalIndex: i));
-        
-        if (StatusFilter == "Equal")
-            results = results.Where(x => !x.Result.HasError && x.Result.AreEqual);
-        else if (StatusFilter == "Different")
-            results = results.Where(x => !x.Result.HasError && !x.Result.AreEqual);
-        else if (StatusFilter == "Error")
-            results = results.Where(x => x.Result.HasError);
-        else if (StatusFilter == "StatusMismatch")
-            results = results.Where(x => x.Result.PairOutcome == RequestPairOutcome.StatusCodeMismatch);
-        else if (StatusFilter == "NonSuccess")
-            results = results.Where(x => x.Result.PairOutcome == RequestPairOutcome.BothNonSuccess || x.Result.PairOutcome == RequestPairOutcome.OneOrBothFailed);
-        
-        if (SelectedGroupFilter != "All")
-            results = results.Where(x => (x.Result.Summary?.CommonPatterns?.FirstOrDefault()?.Pattern ?? "Uncategorized") == SelectedGroupFilter);
-        
-        if (!string.IsNullOrWhiteSpace(FileNameSearchFilter))
-            results = results.Where(x => 
-                x.Result.File1Name.Contains(FileNameSearchFilter, StringComparison.OrdinalIgnoreCase) ||
-                x.Result.File2Name.Contains(FileNameSearchFilter, StringComparison.OrdinalIgnoreCase));
-        
-        return results;
-    }
-    
-    private IEnumerable<FileResultGridItem> GetFilteredGridItems()
+    private IReadOnlyList<string> AvailableGroups => Projection.AvailableGroups;
+
+    private IEnumerable<ComparisonResultGridItem> GetFilteredResults()
     {
-        return GetFilteredResultsWithOriginalIndex()
-            .Take(ShowAll ? int.MaxValue : PreviewCount)
-            .Select(x => new FileResultGridItem
-            {
-                OriginalIndex = x.OriginalIndex,
-                File1Name = x.Result.File1Name,
-                File2Name = x.Result.File2Name,
-                AreEqual = x.Result.AreEqual,
-                HasError = x.Result.HasError,
-                ErrorMessage = x.Result.ErrorMessage ?? "",
-                DifferenceCount = x.Result.RawTextDifferences?.Count ?? x.Result.Summary?.TotalDifferenceCount ?? 0,
-                Category = x.Result.Summary?.CommonPatterns?.FirstOrDefault()?.Pattern ?? "Uncategorized",
-                HttpStatusCodeA = x.Result.HttpStatusCodeA,
-                HttpStatusCodeB = x.Result.HttpStatusCodeB,
-                PairOutcome = x.Result.PairOutcome,
-            });
+        return ComparisonResultProjectionBuilder.Filter(
+            Projection.Items,
+            ParseStatusFilter(StatusFilter),
+            SelectedGroupFilter,
+            FileNameSearchFilter);
+    }
+
+    private IEnumerable<ComparisonResultGridItem> GetFilteredGridItems()
+    {
+        return GetFilteredResults().Take(ShowAll ? int.MaxValue : PreviewCount);
     }
 
             private int CurrentRowsPerPage => ShowAll ? 100 : PreviewCount;
     
-    private int GetEqualCount() => Result?.FilePairResults?.Count(r => !r.HasError && r.AreEqual) ?? 0;
-    private int GetDifferentCount() => Result?.FilePairResults?.Count(r => !r.HasError && !r.AreEqual) ?? 0;
-    private int GetErrorCount() => Result?.FilePairResults?.Count(r => r.HasError) ?? 0;
-    private int GetStatusCodeMismatchCount() => Result?.FilePairResults?.Count(r => r.PairOutcome == RequestPairOutcome.StatusCodeMismatch) ?? 0;
-    private int GetBothNonSuccessCount() => Result?.FilePairResults?.Count(r => r.PairOutcome == RequestPairOutcome.BothNonSuccess) ?? 0;
-    private int GetTotalFilteredCount() => GetFilteredResultsWithOriginalIndex().Count();
+            private int GetEqualCount() => Projection.EqualCount;
+            private int GetDifferentCount() => Projection.DifferentCount;
+            private int GetErrorCount() => Projection.ErrorCount;
+            private int GetStatusCodeMismatchCount() => Projection.StatusCodeMismatchCount;
+            private int GetBothNonSuccessCount() => Projection.BothNonSuccessCount;
+            private int GetTotalFilteredCount() => GetFilteredResults().Count();
 
     protected override void OnParametersSet()
     {
@@ -363,7 +311,7 @@
     /// <summary>
     /// Whether any file pair results contain HTTP status code data (request comparison mode).
     /// </summary>
-    private bool HasHttpStatusData => Result?.FilePairResults?.Any(r => r.PairOutcome != null) ?? false;
+    private bool HasHttpStatusData => Projection.HasHttpStatusData;
 
     /// <summary>
     /// Returns a MudBlazor color for an HTTP status code.
@@ -377,19 +325,19 @@
         _ => Color.Default,
     };
     
-    private string GetRowClass(FileResultGridItem item, int index)
+    private string GetRowClass(ComparisonResultGridItem item, int index)
     {
         if (item.OriginalIndex == SelectedPairIndex)
             return "mud-theme-primary";
         return "";
     }
     
-    private void OnRowClick(DataGridRowClickEventArgs<FileResultGridItem> args)
+    private void OnRowClick(DataGridRowClickEventArgs<ComparisonResultGridItem> args)
     {
         SelectPair(args.Item.OriginalIndex);
     }
     
-    private void OnSelectedItemChanged(FileResultGridItem item)
+    private void OnSelectedItemChanged(ComparisonResultGridItem item)
     {
         if (item != null)
             SelectPair(item.OriginalIndex);
@@ -443,5 +391,18 @@
     private async Task ExportAll()
     {
         await OnExportAll.InvokeAsync();
+    }
+
+    private static ComparisonResultStatusFilter ParseStatusFilter(string statusFilter)
+    {
+        return statusFilter switch
+        {
+            "Equal" => ComparisonResultStatusFilter.Equal,
+            "Different" => ComparisonResultStatusFilter.Different,
+            "Error" => ComparisonResultStatusFilter.Error,
+            "StatusMismatch" => ComparisonResultStatusFilter.StatusMismatch,
+            "NonSuccess" => ComparisonResultStatusFilter.NonSuccess,
+            _ => ComparisonResultStatusFilter.All,
+        };
     }
 }

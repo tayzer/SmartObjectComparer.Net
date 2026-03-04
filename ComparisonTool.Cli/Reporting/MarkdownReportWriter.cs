@@ -135,7 +135,7 @@ public static class MarkdownReportWriter
 
             foreach (var pair in differencePairs.Take(firstPageCount))
             {
-                AppendPairDetails(sb, pair);
+                AppendPairDetails(sb, pair, context);
             }
         }
 
@@ -195,7 +195,7 @@ public static class MarkdownReportWriter
 
                 foreach (var pair in pagePairs)
                 {
-                    AppendPairDetails(pageSb, pair);
+                    AppendPairDetails(pageSb, pair, context);
                 }
 
                 // Footer navigation
@@ -252,7 +252,7 @@ public static class MarkdownReportWriter
     /// <summary>
     /// Appends the detailed difference section for a single file pair to the string builder.
     /// </summary>
-    private static void AppendPairDetails(StringBuilder sb, FilePairComparisonResult pair)
+    private static void AppendPairDetails(StringBuilder sb, FilePairComparisonResult pair, ReportContext context)
     {
         var outcomeTag = pair.PairOutcome != null ? $" ({pair.PairOutcome})" : string.Empty;
         sb.AppendLine($"### {pair.File1Name}{outcomeTag}");
@@ -265,8 +265,8 @@ public static class MarkdownReportWriter
 
             foreach (var diff in pair.Result.Differences.Take(DifferencesPerPairLimit))
             {
-                var expected = EscapeMarkdown(Truncate(diff.Object1Value, ValueTruncateLength));
-                var actual = EscapeMarkdown(Truncate(diff.Object2Value, ValueTruncateLength));
+                var expected = EscapeMarkdown(Truncate(diff.Object1Value, ValueTruncateLength, context.DisableTruncation));
+                var actual = EscapeMarkdown(Truncate(diff.Object2Value, ValueTruncateLength, context.DisableTruncation));
                 sb.AppendLine($"| `{diff.PropertyName}` | {expected} | {actual} |");
             }
 
@@ -295,11 +295,16 @@ public static class MarkdownReportWriter
         sb.AppendLine();
     }
 
-    private static string Truncate(string? value, int maxLength)
+    private static string Truncate(string? value, int maxLength, bool disableTruncation)
     {
         if (string.IsNullOrEmpty(value))
         {
             return "(null)";
+        }
+
+        if (disableTruncation)
+        {
+            return value;
         }
 
         return value.Length <= maxLength ? value : value[..maxLength] + "...";
