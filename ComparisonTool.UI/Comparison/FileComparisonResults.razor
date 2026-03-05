@@ -1,0 +1,408 @@
+@namespace ComparisonTool.UI.Comparison
+@using ComparisonTool.Core
+@using ComparisonTool.Core.Comparison.Presentation
+@using ComparisonTool.Core.Comparison.Results
+@using ComparisonTool.Core.RequestComparison.Models
+
+<MudPaper Elevation="2" Class="mt-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pa-3" Style="background: var(--mud-palette-surface);">
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.CompareArrows" Class="mr-2" />
+            Expected vs Actual Comparison Results
+        </MudText>
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Outlined" 
+                       Size="Size.Small" 
+                       StartIcon="@(IsCollapsed ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ExpandLess)"
+                       OnClick="() => IsCollapsed = !IsCollapsed">
+                @(IsCollapsed ? "Expand" : "Collapse")
+            </MudButton>
+            <MudButton Variant="Variant.Filled" 
+                       Color="Color.Primary"
+                       Size="Size.Small" 
+                       StartIcon="@Icons.Material.Filled.Download"
+                       OnClick="ExportAll">
+                Export All
+            </MudButton>
+        </MudStack>
+    </MudStack>
+    
+    @if (!IsCollapsed)
+    {
+        <MudDivider />
+        <div class="pa-4">
+            <!-- Filter Controls -->
+            <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Class="mb-4 flex-wrap">
+                <MudTextField @bind-Value="FileNameSearchFilter" 
+                              Placeholder="Search by file name..." 
+                              Variant="Variant.Outlined" 
+                              Adornment="Adornment.Start" 
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              Immediate="true"
+                              DebounceInterval="300"
+                              Margin="Margin.Dense"
+                              Style="min-width: 220px;" />
+                <MudSelect T="string" @bind-Value="StatusFilter" Label="Status" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 140px;">
+                    <MudSelectItem Value='"All"'>All</MudSelectItem>
+                    <MudSelectItem Value='"Equal"'>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
+                            <span>Equal</span>
+                        </MudStack>
+                    </MudSelectItem>
+                    <MudSelectItem Value='"Different"'>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" Size="Size.Small" />
+                            <span>Different</span>
+                        </MudStack>
+                    </MudSelectItem>
+                    <MudSelectItem Value='"Error"'>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Size="Size.Small" />
+                            <span>Error</span>
+                        </MudStack>
+                    </MudSelectItem>
+                    @if (HasHttpStatusData)
+                    {
+                        <MudSelectItem Value="@("StatusMismatch")">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.SyncProblem" Color="Color.Warning" Size="Size.Small" />
+                                <span>Status Mismatch</span>
+                            </MudStack>
+                        </MudSelectItem>
+                        <MudSelectItem Value="@("NonSuccess")">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Color="Color.Error" Size="Size.Small" />
+                                <span>Non-Success</span>
+                            </MudStack>
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+                
+                <MudSelect T="string" @bind-Value="SelectedGroupFilter" Label="Category/Pattern" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 200px;">
+                    <MudSelectItem Value='"All"'>All Categories</MudSelectItem>
+                    @foreach (var group in AvailableGroups)
+                    {
+                        <MudSelectItem Value="@group">@group</MudSelectItem>
+                    }
+                </MudSelect>
+                
+                <!-- Quick Stats -->
+                <MudStack Row="true" Spacing="2" Class="ml-auto">
+                    <MudChip T="string" Color="Color.Success" Size="Size.Small" Icon="@Icons.Material.Filled.CheckCircle">
+                        @GetEqualCount() Equal
+                    </MudChip>
+                    <MudChip T="string" Color="Color.Error" Size="Size.Small" Icon="@Icons.Material.Filled.Cancel">
+                        @GetDifferentCount() Different
+                    </MudChip>
+                    @if (GetErrorCount() > 0)
+                    {
+                        <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.Warning">
+                            @GetErrorCount() Errors
+                        </MudChip>
+                    }
+                    @if (GetStatusCodeMismatchCount() > 0)
+                    {
+                        <MudChip T="string" Color="Color.Warning" Size="Size.Small" Icon="@Icons.Material.Filled.SyncProblem">
+                            @GetStatusCodeMismatchCount() Status Mismatches
+                        </MudChip>
+                    }
+                    @if (GetBothNonSuccessCount() > 0)
+                    {
+                        <MudChip T="string" Color="Color.Error" Size="Size.Small" Icon="@Icons.Material.Filled.ErrorOutline">
+                            @GetBothNonSuccessCount() Both Non-Success
+                        </MudChip>
+                    }
+                </MudStack>
+            </MudStack>
+            
+            @if (Result.AllEqual)
+            {
+                <MudAlert Severity="Severity.Success" Variant="Variant.Filled" Icon="@Icons.Material.Filled.CheckCircle" Class="mb-4">
+                    <MudText Typo="Typo.body1"><strong>All file pairs are identical</strong></MudText>
+                    <MudText Typo="Typo.body2">All compared files match according to the current comparison rules.</MudText>
+                </MudAlert>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Info" Class="mb-4">
+                    <MudText Typo="Typo.body2">Found differences in compared file pairs. Select a row to view detailed comparison.</MudText>
+                </MudAlert>
+                
+                <MudDataGrid T="ComparisonResultGridItem" 
+                             Items="@GetFilteredGridItems()" 
+                             Dense="true" 
+                             Hover="true"
+                             Striped="true"
+                             RowClick="@OnRowClick"
+                             RowClassFunc="@GetRowClass"
+                             SelectedItem="@SelectedItem"
+                             SelectedItemChanged="@OnSelectedItemChanged"
+                             CurrentPage="@CurrentPage"
+                             CurrentPageChanged="@OnCurrentPageChanged"
+                             Filterable="false"
+                             SortMode="SortMode.Single"
+                             RowsPerPage="@CurrentRowsPerPage">
+                    <Columns>
+                        <TemplateColumn Title="Status" Sortable="true">
+                            <CellTemplate>
+                                @if (context.Item.PairOutcome == RequestPairOutcome.StatusCodeMismatch)
+                                {
+                                    <MudTooltip Text="@($"Status code mismatch: A={context.Item.HttpStatusCodeA}, B={context.Item.HttpStatusCodeB}")">
+                                        <MudIcon Icon="@Icons.Material.Filled.SyncProblem" Color="Color.Warning" />
+                                    </MudTooltip>
+                                }
+                                else if (context.Item.PairOutcome == RequestPairOutcome.BothNonSuccess)
+                                {
+                                    <MudTooltip Text="@($"Both returned non-success: A={context.Item.HttpStatusCodeA}, B={context.Item.HttpStatusCodeB}")">
+                                        <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Color="Color.Error" />
+                                    </MudTooltip>
+                                }
+                                else if (context.Item.PairOutcome == RequestPairOutcome.OneOrBothFailed)
+                                {
+                                    <MudTooltip Text="@context.Item.ErrorMessage">
+                                        <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" />
+                                    </MudTooltip>
+                                }
+                                else if (context.Item.HasError)
+                                {
+                                    <MudTooltip Text="@context.Item.ErrorMessage">
+                                        <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" />
+                                    </MudTooltip>
+                                }
+                                else if (context.Item.AreEqual)
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" />
+                                }
+                                else
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" />
+                                }
+                            </CellTemplate>
+                        </TemplateColumn>
+                        <PropertyColumn Property="x => x.File1Name" Title="Expected File" Sortable="true" />
+                        <PropertyColumn Property="x => x.File2Name" Title="Actual File" Sortable="true" />
+                        @if (HasHttpStatusData)
+                        {
+                            <TemplateColumn Title="HTTP Status" Sortable="true">
+                                <CellTemplate>
+                                    @if (context.Item.HttpStatusCodeA.HasValue && context.Item.HttpStatusCodeB.HasValue)
+                                    {
+                                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                            <MudChip T="string" Size="Size.Small" Color="@GetStatusCodeColor(context.Item.HttpStatusCodeA.Value)" Variant="Variant.Outlined">
+                                                A: @context.Item.HttpStatusCodeA
+                                            </MudChip>
+                                            <MudChip T="string" Size="Size.Small" Color="@GetStatusCodeColor(context.Item.HttpStatusCodeB.Value)" Variant="Variant.Outlined">
+                                                B: @context.Item.HttpStatusCodeB
+                                            </MudChip>
+                                        </MudStack>
+                                    }
+                                </CellTemplate>
+                            </TemplateColumn>
+                        }
+                        <PropertyColumn Property="x => x.DifferenceCount" Title="Differences" Sortable="true">
+                            <CellTemplate>
+                                @if (context.Item.HasError)
+                                {
+                                    <MudText Color="Color.Warning">-</MudText>
+                                }
+                                else if (context.Item.AreEqual)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success">0</MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Error">@context.Item.DifferenceCount</MudChip>
+                                }
+                            </CellTemplate>
+                        </PropertyColumn>
+                        <PropertyColumn Property="x => x.Category" Title="Category" Sortable="true">
+                            <CellTemplate>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default">@context.Item.Category</MudChip>
+                            </CellTemplate>
+                        </PropertyColumn>
+                        <TemplateColumn Title="Action">
+                            <CellTemplate>
+                                <MudButton Variant="Variant.Text" 
+                                           Color="Color.Primary" 
+                                           Size="Size.Small" 
+                                           StartIcon="@Icons.Material.Filled.Visibility"
+                                           OnClick="@(() => SelectPair(context.Item.OriginalIndex))">
+                                    View
+                                </MudButton>
+                            </CellTemplate>
+                        </TemplateColumn>
+                    </Columns>
+                    <PagerContent>
+                        <MudDataGridPager T="ComparisonResultGridItem" />
+                    </PagerContent>
+                </MudDataGrid>
+                
+                @if (GetTotalFilteredCount() > PreviewCount)
+                {
+                    <MudStack Row="true" Justify="Justify.Center" Class="mt-3">
+                        <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => ShowAll = !ShowAll)">
+                            @(ShowAll ? $"Show Top {PreviewCount}" : $"Show All ({GetTotalFilteredCount()})")
+                        </MudButton>
+                    </MudStack>
+                }
+            }
+        </div>
+    }
+</MudPaper>
+
+@code {
+    [Parameter]
+    public MultiFolderComparisonResult Result { get; set; }
+
+    [Parameter]
+    public int SelectedPairIndex { get; set; } = -1;
+
+    [Parameter]
+    public EventCallback<int> OnPairSelected { get; set; }
+
+    [Parameter]
+    public EventCallback OnExportAll { get; set; }
+
+    private bool IsCollapsed = false;
+    private bool ShowAll = false;
+    private const int PreviewCount = 20;
+    private ComparisonResultGridItem? SelectedItem { get; set; }
+    private int CurrentPage { get; set; }
+    private int? lastSynchronizedSelectedPairIndex;
+
+    private string StatusFilter = "All";
+    private string SelectedGroupFilter = "All";
+    private string FileNameSearchFilter { get; set; } = "";
+
+    private ComparisonResultProjection Projection => ComparisonResultProjectionBuilder.Build(Result);
+
+    private IReadOnlyList<string> AvailableGroups => Projection.AvailableGroups;
+
+    private IEnumerable<ComparisonResultGridItem> GetFilteredResults()
+    {
+        return ComparisonResultProjectionBuilder.Filter(
+            Projection.Items,
+            ParseStatusFilter(StatusFilter),
+            SelectedGroupFilter,
+            FileNameSearchFilter);
+    }
+
+    private IEnumerable<ComparisonResultGridItem> GetFilteredGridItems()
+    {
+        return GetFilteredResults().Take(ShowAll ? int.MaxValue : PreviewCount);
+    }
+
+            private int CurrentRowsPerPage => ShowAll ? 100 : PreviewCount;
+    
+            private int GetEqualCount() => Projection.EqualCount;
+            private int GetDifferentCount() => Projection.DifferentCount;
+            private int GetErrorCount() => Projection.ErrorCount;
+            private int GetStatusCodeMismatchCount() => Projection.StatusCodeMismatchCount;
+            private int GetBothNonSuccessCount() => Projection.BothNonSuccessCount;
+            private int GetTotalFilteredCount() => GetFilteredResults().Count();
+
+    protected override void OnParametersSet()
+    {
+        base.OnParametersSet();
+        SynchronizeGridSelection();
+    }
+
+    /// <summary>
+    /// Whether any file pair results contain HTTP status code data (request comparison mode).
+    /// </summary>
+    private bool HasHttpStatusData => Projection.HasHttpStatusData;
+
+    /// <summary>
+    /// Returns a MudBlazor color for an HTTP status code.
+    /// </summary>
+    private static Color GetStatusCodeColor(int statusCode) => statusCode switch
+    {
+        >= 200 and < 300 => Color.Success,
+        >= 300 and < 400 => Color.Info,
+        >= 400 and < 500 => Color.Warning,
+        >= 500 => Color.Error,
+        _ => Color.Default,
+    };
+    
+    private string GetRowClass(ComparisonResultGridItem item, int index)
+    {
+        if (item.OriginalIndex == SelectedPairIndex)
+            return "mud-theme-primary";
+        return "";
+    }
+    
+    private void OnRowClick(DataGridRowClickEventArgs<ComparisonResultGridItem> args)
+    {
+        SelectPair(args.Item.OriginalIndex);
+    }
+    
+    private void OnSelectedItemChanged(ComparisonResultGridItem item)
+    {
+        if (item != null)
+            SelectPair(item.OriginalIndex);
+    }
+
+    private Task OnCurrentPageChanged(int page)
+    {
+        CurrentPage = page;
+        return Task.CompletedTask;
+    }
+
+    private void SynchronizeGridSelection()
+    {
+        if (Result?.FilePairResults == null || SelectedPairIndex < 0)
+        {
+            SelectedItem = null;
+            return;
+        }
+
+        if (lastSynchronizedSelectedPairIndex == SelectedPairIndex)
+        {
+            return;
+        }
+
+        var visibleItems = GetFilteredGridItems().ToList();
+        var visibleIndex = visibleItems.FindIndex(x => x.OriginalIndex == SelectedPairIndex);
+
+        if (visibleIndex < 0 && !ShowAll && GetTotalFilteredCount() > PreviewCount)
+        {
+            ShowAll = true;
+            visibleItems = GetFilteredGridItems().ToList();
+            visibleIndex = visibleItems.FindIndex(x => x.OriginalIndex == SelectedPairIndex);
+        }
+
+        if (visibleIndex < 0)
+        {
+            SelectedItem = null;
+            return;
+        }
+
+        SelectedItem = visibleItems[visibleIndex];
+        CurrentPage = visibleIndex / Math.Max(1, CurrentRowsPerPage);
+        lastSynchronizedSelectedPairIndex = SelectedPairIndex;
+    }
+
+    private async Task SelectPair(int index)
+    {
+        await OnPairSelected.InvokeAsync(index);
+    }
+
+    private async Task ExportAll()
+    {
+        await OnExportAll.InvokeAsync();
+    }
+
+    private static ComparisonResultStatusFilter ParseStatusFilter(string statusFilter)
+    {
+        return statusFilter switch
+        {
+            "Equal" => ComparisonResultStatusFilter.Equal,
+            "Different" => ComparisonResultStatusFilter.Different,
+            "Error" => ComparisonResultStatusFilter.Error,
+            "StatusMismatch" => ComparisonResultStatusFilter.StatusMismatch,
+            "NonSuccess" => ComparisonResultStatusFilter.NonSuccess,
+            _ => ComparisonResultStatusFilter.All,
+        };
+    }
+}

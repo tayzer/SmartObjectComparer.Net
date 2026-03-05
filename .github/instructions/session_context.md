@@ -1,21 +1,125 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2026-03-04T00:30:00Z
-sessionStatus: complete
+lastUpdated: 2026-03-04T10:00:00Z
+sessionStatus: active
 ---
 
 # Current Session Context
 
 ## Active Task
-Prevent Detailed Comparison UI crashes when selecting very large file pairs from Value Differences
+Migrate from Blazor Server web UI to Blazor Hybrid (WPF + BlazorWebView) desktop app
 
 ## Todo List Status
 ```markdown
-- [x] Confirm navigation now resolves correct pair identifiers
-- [x] Add progressive group rendering in Detailed Comparison
-- [x] Add large-pair safety for Show All toggle carry-over
-- [x] Harden selected-pair rendering and async selection flow
-- [x] Validate diagnostics and finalize session context
+### Phase 1: Foundation
+- [x] Create platform service abstractions in ComparisonTool.Core/Abstractions
+- [x] Create ComparisonTool.UI Razor Class Library (shared components target)
+- [x] Create ComparisonTool.Desktop WPF project with BlazorWebView shell
+- [x] Implement desktop services (file export, folder picker, notifications, scroll)
+- [x] Implement in-process progress publisher/subscriber (replaces SignalR)
+- [x] Implement in-process request comparison gateway (replaces HTTP APIs)
+- [x] Update Directory.Packages.props with WebView.Wpf package
+- [x] Add both new projects to solution file
+- [ ] Move shared Razor components from Web to UI library
+- [ ] Update Web project to reference UI library (keep Web working)
+- [ ] Create web-side platform service implementations (IJSRuntime wrappers)
+- [ ] Verify Desktop shell compiles and renders Home page
+- [ ] Verify Web project still functions unchanged
+
+### Phase 2: Component Migration (Complete)
+- [x] Create Web Implementation Services
+- [x] Move Home.razor, RequestComparisonPanel.razor, and Shared components to ComparisonTool.UI
+- [x] Move Pages from Web/Components/Pages to UI
+- [x] Move Comparison components from Web/Components/Comparison to UI
+- [x] Move Shared components from Web/Components/Shared to UI
+- [x] Move Layout from Web/Components/Layout to UI
+- [x] Refactor IJSRuntime.InvokeVoidAsync("alert",...) calls to use INotificationService
+- [x] Refactor IJSRuntime.InvokeVoidAsync("downloadFile"/"saveAsFile",...) to use IFileExportService
+- [x] Refactor IJSRuntime.InvokeAsync<string>("browseFolder",...) to use IFolderPickerService
+- [x] Refactor IJSRuntime.InvokeVoidAsync("scrollToElement",...) to use IScrollService
+- [x] Refactor RequestComparisonPanel HTTP calls to use IRequestComparisonGateway
+- [x] Refactor ComparisonProgressService usage to use IProgressSubscriber
+
+*Note: The entire solution currently builds with 0 errors.*
+
+### Phase 3: Request Comparison Desktop Path
+- [x] Wire up request comparison flow end-to-end in Desktop
+- [x] Test full request comparison lifecycle in Desktop
+
+### Phase 4: Polish & Hardening
+- [ ] Native file save dialogs for all exports
+- [ ] Window state persistence
+- [ ] Error handling and crash recovery
+- [ ] Temp file lifecycle management
+- [ ] Performance testing with large datasets
+```
+
+## Recent File Changes
+- `ComparisonTool.Core/Abstractions/IFileExportService.cs`: New - platform-agnostic file export interface
+- `ComparisonTool.Core/Abstractions/IFolderPickerService.cs`: New - platform-agnostic folder picker interface
+- `ComparisonTool.Core/Abstractions/INotificationService.cs`: New - platform-agnostic alert/notification interface
+- `ComparisonTool.Core/Abstractions/IScrollService.cs`: New - platform-agnostic scroll service interface
+- `ComparisonTool.Core/Abstractions/IRequestComparisonGateway.cs`: New - replaces HTTP API for request comparison
+- `ComparisonTool.Core/Abstractions/IProgressSubscriber.cs`: New - replaces SignalR for progress updates
+- `ComparisonTool.UI/ComparisonTool.UI.csproj`: New - Razor Class Library for shared UI components
+- `ComparisonTool.UI/_Imports.razor`: New - shared Razor imports
+- `ComparisonTool.UI/wwwroot/js/app.js`: New - shared JS interop functions
+- `ComparisonTool.Desktop/ComparisonTool.Desktop.csproj`: New - WPF host project
+- `ComparisonTool.Desktop/App.xaml[.cs]`: New - WPF app with full DI setup
+- `ComparisonTool.Desktop/MainWindow.xaml[.cs]`: New - BlazorWebView host window
+- `ComparisonTool.Desktop/Main.razor`: New - root Blazor component for desktop
+- `ComparisonTool.Desktop/wwwroot/index.html`: New - BlazorWebView host page
+- `ComparisonTool.Desktop/Services/*.cs`: New - 7 desktop service implementations
+- `Directory.Packages.props`: Added Microsoft.AspNetCore.Components.WebView.Wpf
+- `ComparisonTool.sln`: Added ComparisonTool.UI and ComparisonTool.Desktop projects
+
+## Key Technical Decisions
+- Decision: WPF + BlazorWebView over MAUI for desktop host
+- Rationale: Windows-only target, simpler setup, no MAUI overhead, direct WPF interop
+- Date: 2026-03-04
+
+- Decision: Shared UI library (ComparisonTool.UI) for component reuse
+- Rationale: Both Web and Desktop hosts reference same components; avoids duplication
+- Date: 2026-03-04
+
+- Decision: Platform abstractions in Core, implementations in host projects
+- Rationale: Clean dependency direction, testable, follows existing CLI pattern
+- Date: 2026-03-04
+
+- Decision: In-process services replace HTTP APIs and SignalR in Desktop
+- Rationale: No network overhead; direct service calls; follows ConsoleProgressPublisher pattern from CLI
+- Date: 2026-03-04
+
+## Architecture
+```
+ComparisonTool.Desktop (WPF+BlazorWebView) ─┐
+                                              ├─► ComparisonTool.UI (Razor Class Library)
+ComparisonTool.Web (Blazor Server) ──────────┘         │
+                                                       ▼
+                                              ComparisonTool.Core (Business Logic + Abstractions)
+```
+
+## External Resources Referenced
+- https://learn.microsoft.com/en-us/aspnet/core/blazor/hybrid/
+
+## Blockers & Issues
+- None
+
+## Environment Notes
+- .NET 10.0 (SDK 10.0.103)
+- MudBlazor 8.15.0
+- Microsoft.AspNetCore.Components.WebView.Wpf 10.0.3
+
+## Next Steps
+Move Razor components from ComparisonTool.Web to ComparisonTool.UI, then wire up
+Web platform service implementations so both hosts render the same UI.
+
+## Todo List Status
+```markdown
+- [x] Verify reported CS1503 location and reproduce context
+- [x] Patch search field callback wiring in DetailedDifferencesView
+- [x] Re-run diagnostics to confirm error cleared
+- [x] Finalize session context
 ```
 
 ## Recent File Changes

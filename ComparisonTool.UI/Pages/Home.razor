@@ -1,0 +1,1557 @@
+@page "/"
+@using System.IO
+@using ComparisonTool.Core.Comparison
+@using ComparisonTool.Core.Comparison.Analysis
+@using ComparisonTool.Core.Comparison.Configuration
+@using ComparisonTool.Core.Comparison.Results
+@using ComparisonTool.Core.RequestComparison.Models
+@using ComparisonTool.Core.RequestComparison.Services
+@using ComparisonTool.Core.Serialization
+@using ComparisonTool.Core.Utilities
+@using ComparisonTool.UI.Comparison
+@using ComparisonTool.Core.Abstractions
+@using KellermanSoftware.CompareNetObjects
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
+@using MudBlazor
+@implements IDisposable
+@inject IDeserializationService DeserializationService
+@inject IXmlDeserializationService XmlDeserializationService
+@inject IComparisonConfigurationService ConfigService
+@inject IComparisonService ComparisonService
+@inject IFileSystemService FileSystemService
+@inject DirectoryComparisonService DirectoryComparisonService
+@inject IFileUtilities FileUtilities
+@inject IFileExportService FileExportService
+@inject IJSRuntime JS
+@inject ILogger<Home> Logger
+@inject PerformanceTracker PerformanceTracker
+@inject SystemResourceMonitor ResourceMonitor
+@inject ComparisonResultCacheService CacheService
+@inject RawTextComparisonService RawTextComparisonService
+@inject IConfiguration Configuration
+
+<MudStack Spacing="4">
+    <!-- Header Section -->
+    <MudPaper Elevation="2" Class="pa-4">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.h4">File Comparison Tool (XML &amp; JSON)</MudText>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudText Typo="Typo.caption" Color="Color.Default">Cache: @GetCacheStatsDisplay()</MudText>
+                <MudButton Variant="Variant.Outlined" 
+                           Size="Size.Small" 
+                           StartIcon="@Icons.Material.Filled.DeleteOutline" 
+                           OnClick="ClearCache"
+                           aria-label="Clear all caches">
+                    Clear Cache
+                </MudButton>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+
+    <MudTabs Rounded="true" Border="true" @bind-ActivePanelIndex="activeTabIndex">
+        <MudTabPanel Text="File/Folder Comparison">
+            <!-- Mode Switch Section -->
+            <MudPaper Elevation="2" Class="pa-4">
+                <MudSwitch T="bool"
+                           Value="UseDirectoryMode"
+                           ValueChanged="@((bool val) => UseDirectoryMode = val)"
+                           Color="Color.Primary"
+                           Label="@(UseDirectoryMode ? "Directory Mode: Compare folders on server" : "Upload Mode: Compare uploaded files")"
+                           aria-label="Toggle between directory mode and upload mode" />
+            </MudPaper>
+
+            <!-- Main Content Grid -->
+            @if (UseDirectoryMode)
+            {
+                <MudGrid Spacing="4">
+                    <MudItem xs="12" md="6">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <MudStack Spacing="3">
+                                <MudText Typo="Typo.h6">Step 1: Select Folders to Compare</MudText>
+                                
+                                <MudSelect T="string" 
+                                           Label="Select Domain Model" 
+                                           Value="SelectedModelName"
+                                           ValueChanged="@((string val) => SelectedModelName = val)"
+                                           Variant="Variant.Outlined"
+                                           AnchorOrigin="Origin.BottomCenter"
+                                           aria-label="Select domain model for comparison">
+                                    @foreach (var modelName in DeserializationService.GetRegisteredModelNames())
+                                    {
+                                        <MudSelectItem Value="@modelName">@modelName</MudSelectItem>
+                                    }
+                                </MudSelect>
+
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body2" Color="Color.Default">Expected Directory:</MudText>
+                                    <MudStack Row="true" Spacing="2">
+                                        <MudTextField T="string"
+                                                      Value="Directory1Path"
+                                                      ValueChanged="@((string val) => Directory1Path = val)"
+                                                      Label="Expected Directory Path"
+                                                      Placeholder="Enter path to first directory"
+                                                      Variant="Variant.Outlined"
+                                                      FullWidth="true"
+                                                      aria-label="Expected directory path" />
+                                        <MudButton Variant="Variant.Outlined" 
+                                                   StartIcon="@Icons.Material.Filled.Folder"
+                                                   OnClick="BrowseDirectory1"
+                                                   aria-label="Browse for expected directory">
+                                            Browse
+                                        </MudButton>
+                                    </MudStack>
+                                    @if (!string.IsNullOrEmpty(Directory1Path) && Directory.Exists(Directory1Path))
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Success">
+                                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Class="mr-1" />
+                                            Directory exists with @GetXmlFileCount(Directory1Path) XML files
+                                        </MudText>
+                                    }
+                                    else if (!string.IsNullOrEmpty(Directory1Path))
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Error">
+                                            <MudIcon Icon="@Icons.Material.Filled.Error" Size="Size.Small" Class="mr-1" />
+                                            Directory does not exist
+                                        </MudText>
+                                    }
+                                </MudStack>
+
+                                <MudStack Spacing="1">
+                                    <MudText Typo="Typo.body2" Color="Color.Default">Actual Directory:</MudText>
+                                    <MudStack Row="true" Spacing="2">
+                                        <MudTextField T="string"
+                                                      Value="Directory2Path"
+                                                      ValueChanged="@((string val) => Directory2Path = val)"
+                                                      Label="Actual Directory Path"
+                                                      Placeholder="Enter path to second directory"
+                                                      Variant="Variant.Outlined"
+                                                      FullWidth="true"
+                                                      aria-label="Actual directory path" />
+                                        <MudButton Variant="Variant.Outlined" 
+                                                   StartIcon="@Icons.Material.Filled.Folder"
+                                                   OnClick="BrowseDirectory2"
+                                                   aria-label="Browse for actual directory">
+                                            Browse
+                                        </MudButton>
+                                    </MudStack>
+                                    @if (!string.IsNullOrEmpty(Directory2Path) && Directory.Exists(Directory2Path))
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Success">
+                                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Class="mr-1" />
+                                            Directory exists with @GetXmlFileCount(Directory2Path) XML files
+                                        </MudText>
+                                    }
+                                    else if (!string.IsNullOrEmpty(Directory2Path))
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Error">
+                                            <MudIcon Icon="@Icons.Material.Filled.Error" Size="Size.Small" Class="mr-1" />
+                                            Directory does not exist
+                                        </MudText>
+                                    }
+                                </MudStack>
+                            </MudStack>
+                        </MudPaper>
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <ComparisonConfigurationPanel IgnoreCollectionOrder="@IgnoreCollectionOrder"
+                                                      OnIgnoreCollectionOrderChanged="@(value => IgnoreCollectionOrder = value)"
+                                                      IgnoreStringCase="@IgnoreStringCase"
+                                                      OnIgnoreStringCaseChanged="@(value => IgnoreStringCase = value)"
+                                                      IgnoreTrailingWhitespaceAtEnd="@IgnoreTrailingWhitespaceAtEnd"
+                                                      OnIgnoreTrailingWhitespaceAtEndChanged="@(value => IgnoreTrailingWhitespaceAtEnd = value)"
+                                                      IgnoreXmlNamespaces="@IgnoreXmlNamespaces"
+                                                      OnIgnoreXmlNamespacesChanged="@(value => { IgnoreXmlNamespaces = value; XmlDeserializationService.IgnoreXmlNamespaces = value; })"
+                                                      EnableSemanticAnalysis="@EnableSemanticAnalysis"
+                                                      OnEnableSemanticAnalysisChanged="@(value => EnableSemanticAnalysis = value)"
+                                                      EnableEnhancedStructuralAnalysis="@EnableEnhancedStructuralAnalysis"
+                                                      OnEnableEnhancedStructuralAnalysisChanged="@(value => EnableEnhancedStructuralAnalysis = value)"
+                                                      IgnoreRules="@IgnoreRules"
+                                                      OnIgnoreRuleAdded="@AddIgnoreRule"
+                                                      OnIgnoreRuleRemoved="@RemoveIgnoreRule"
+                                                      OnIgnoreRulesCleared="@ClearAllIgnoreRules"
+                                                      ModelType="@GetSelectedModelType()"
+                                                      OnPropertySelectorOpened="@OpenPropertySelector"
+                                                      OnTreePropertySelectorOpened="@OpenTreePropertySelector"
+                                                      OnRunComparison="@RunDirectoryComparison"
+                                                      CanRunComparison="@CanRunDirectoryComparison" />
+                    </MudItem>
+                </MudGrid>
+            }
+            else
+            {
+                <MudGrid Spacing="4">
+                    <MudItem xs="12" md="6">
+                        <FileSelector ModelNames="@DeserializationService.GetRegisteredModelNames()"
+                                      SelectedModelName="@SelectedModelName"
+                                      OnModelNameChanged="@(name => SelectedModelName = name)"
+                                      Folder1Files="@Folder1Files"
+                                      OnFolder1FilesChanged="@HandleFolder1FilesChanged"
+                                      Folder2Files="@Folder2Files"
+                                      OnFolder2FilesChanged="@HandleFolder2FilesChanged" />
+                    </MudItem>
+
+                    <MudItem xs="12" md="6">
+                        <ComparisonConfigurationPanel IgnoreCollectionOrder="@IgnoreCollectionOrder"
+                                                      OnIgnoreCollectionOrderChanged="@(value => IgnoreCollectionOrder = value)"
+                                                      IgnoreStringCase="@IgnoreStringCase"
+                                                      OnIgnoreStringCaseChanged="@(value => IgnoreStringCase = value)"
+                                                      IgnoreTrailingWhitespaceAtEnd="@IgnoreTrailingWhitespaceAtEnd"
+                                                      OnIgnoreTrailingWhitespaceAtEndChanged="@(value => IgnoreTrailingWhitespaceAtEnd = value)"
+                                                      IgnoreXmlNamespaces="@IgnoreXmlNamespaces"
+                                                      OnIgnoreXmlNamespacesChanged="@(value => { IgnoreXmlNamespaces = value; XmlDeserializationService.IgnoreXmlNamespaces = value; })"
+                                                      EnableSemanticAnalysis="@EnableSemanticAnalysis"
+                                                      OnEnableSemanticAnalysisChanged="@(value => EnableSemanticAnalysis = value)"
+                                                      EnableEnhancedStructuralAnalysis="@EnableEnhancedStructuralAnalysis"
+                                                      OnEnableEnhancedStructuralAnalysisChanged="@(value => EnableEnhancedStructuralAnalysis = value)"
+                                                      IgnoreRules="@IgnoreRules"
+                                                      OnIgnoreRuleAdded="@AddIgnoreRule"
+                                                      OnIgnoreRuleRemoved="@RemoveIgnoreRule"
+                                                      OnIgnoreRulesCleared="@ClearAllIgnoreRules"
+                                                      ModelType="@GetSelectedModelType()"
+                                                      OnPropertySelectorOpened="@OpenPropertySelector"
+                                                      OnTreePropertySelectorOpened="@OpenTreePropertySelector"
+                                                      OnRunComparison="@RunFolderComparison"
+                                                      CanRunComparison="@CanRunFolderComparison" />
+                    </MudItem>
+                </MudGrid>
+            }
+
+            <!-- Progress Section -->
+            @if (IsComparing)
+            {
+                <MudPaper Elevation="2" Class="pa-4">
+                    <MudStack Spacing="3" AlignItems="AlignItems.Center">
+                        <MudProgressLinear Color="Color.Primary" 
+                                           Value="@Progress.PercentComplete" 
+                                           Striped="true"
+                                           Size="Size.Large"
+                                           Class="my-2"
+                                           aria-label="Comparison progress" />
+                        <MudText Typo="Typo.body1">@Progress.Status (@Progress.Completed of @Progress.Total completed)</MudText>
+                        @if (IsCancellable)
+                        {
+                            <MudButton Variant="Variant.Filled" 
+                                       Color="Color.Warning" 
+                                       StartIcon="@Icons.Material.Filled.Cancel" 
+                                       OnClick="CancelComparison"
+                                       Size="Size.Small"
+                                       aria-label="Cancel comparison">
+                                Cancel
+                            </MudButton>
+                        }
+                    </MudStack>
+                </MudPaper>
+            }
+
+            <!-- Results Section -->
+            @if (FolderComparisonResult != null)
+            {
+                @if (EnableEnhancedStructuralAnalysis)
+                {
+                    @if (EnhancedStructuralAnalysis != null)
+                    {
+                        <ComparisonRunDetails Analysis="@EnhancedStructuralAnalysis"
+                                              FolderComparisonResult="@FolderComparisonResult"
+                                              OnFileSelected="@HandleInspectorFileSelected" />
+                    }
+                    else if (!FolderComparisonResult.AllEqual)
+                    {
+                        <!-- Loading state for Enhanced Structural Analysis -->
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <MudStack Spacing="3">
+                                <MudText Typo="Typo.h5">Comparison Overview</MudText>
+                                <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="py-6">
+                                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+                                    <MudText Typo="Typo.h6" Class="mt-3">Generating Enhanced Analysis...</MudText>
+                                    <MudText Typo="Typo.body2" Color="Color.Default">
+                                        Please wait while we analyze structural patterns and categorize differences.
+                                    </MudText>
+                                </MudStack>
+                            </MudStack>
+                        </MudPaper>
+                    }
+                    else
+                    {
+                        <!-- All files are equal - show simple success message -->
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <MudStack Spacing="3">
+                                <MudText Typo="Typo.h5">Comparison Overview</MudText>
+                                <MudAlert Severity="Severity.Success" Variant="Variant.Filled" Icon="@Icons.Material.Filled.CheckCircle">
+                                    <MudText Typo="Typo.body1"><strong>All files are identical</strong></MudText>
+                                    <MudText Typo="Typo.body2">
+                                        No differences found in any of the @FolderComparisonResult.FilePairResults.Count compared files.
+                                    </MudText>
+                                </MudAlert>
+                            </MudStack>
+                        </MudPaper>
+                    }
+                }
+                else
+                {
+                    <!-- Enhanced Structural Analysis is disabled - show traditional summary -->
+                    <EnhancedDifferenceSummary Summary="@DifferenceSummary" FolderResult="@FolderComparisonResult" />
+                }
+                
+                <FileComparisonResults Result="@FolderComparisonResult"
+                                       SelectedPairIndex="@SelectedPairIndex"
+                                       OnPairSelected="@SelectPairResult"
+                                       OnExportAll="@ExportAllFolderResults" />
+            }
+
+            @if (FolderComparisonResult != null && SelectedPairIndex >= 0 && SelectedPairIndex < FolderComparisonResult.FilePairResults.Count)
+            {
+                var selectedFolderPair = FolderComparisonResult.FilePairResults[SelectedPairIndex];
+
+                @if (selectedFolderPair.HasError)
+                {
+                    <ErrorDetailView SelectedPair="@selectedFolderPair"
+                                     RawFileDifferences="@FolderRawFileDifferences" />
+                }
+                else if (DifferenceSummary != null)
+                {
+                    <DetailedDifferencesView SelectedPair="@selectedFolderPair"
+                                             DifferenceSummary="@DifferenceSummary"
+                                             ComparisonResult="@ComparisonResult"
+                                             ShowAllDifferences="@ShowAllDifferences"
+                                             OnToggleShowAll="@ToggleShowAllDifferences"
+                                             OnExportResults="@ExportFolderResults"
+                                             FolderResult="@FolderComparisonResult" />
+                }
+            }
+
+            @if (EnableEnhancedStructuralAnalysis && FolderComparisonResult != null && !FolderComparisonResult.AllEqual && EnhancedStructuralAnalysis == null)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">
+                    <MudStack Spacing="2">
+                        <MudText Typo="Typo.h6">Enhanced Structural Analysis</MudText>
+                        <MudText Typo="Typo.body2">
+                            Enhanced structural analysis is enabled but no patterns were found or the analysis didn't run.
+                        </MudText>
+                        <MudButton Variant="Variant.Filled" 
+                                   Color="Color.Success" 
+                                   Size="Size.Small" 
+                                   OnClick="GenerateEnhancedStructuralAnalysis"
+                                   aria-label="Run enhanced structural analysis">
+                            Run Enhanced Structural Analysis
+                        </MudButton>
+                    </MudStack>
+                </MudAlert>
+            }
+
+            @if (SemanticAnalysis != null && EnableSemanticAnalysis)
+            {
+                <SemanticGroupsPanel Analysis="@SemanticAnalysis"
+                                     OnExportAnalysis="@ExportSemanticAnalysisReport" />
+            }
+
+            <HierarchicalPropertySelector @ref="propertySelector"
+                                          ModelType="@GetSelectedModelType()"
+                                          IgnoredProperties="IgnoreRules"
+                                          OnPropertyAdded="AddIgnoreRule"
+                                          OnPropertiesBatchAdded="AddIgnoreRulesBatch"
+                                          OnPropertyRemoved="propertyPath => RemoveIgnoreRule(IgnoreRules.FirstOrDefault(r => r.PropertyPath == propertyPath))" />
+
+            <ObjectTreePropertySelector @ref="treePropertySelector"
+                                       ModelType="@GetSelectedModelType()"
+                                       IgnoredProperties="IgnoreRules"
+                                       OnPropertyAdded="AddIgnoreRule"
+                                       OnPropertiesBatchAdded="AddIgnoreRulesBatch"
+                                       OnPropertyRemoved="propertyPath => RemoveIgnoreRule(IgnoreRules.FirstOrDefault(r => r.PropertyPath == propertyPath))" />
+        </MudTabPanel>
+        <MudTabPanel Text="Request Comparison (A/B)">
+            @if (!RequestComparisonEnabled)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                    Request comparison is disabled. Enable FeatureFlags:RequestComparisonEnabled in appsettings.json.
+                </MudAlert>
+            }
+            else
+            {
+                <RequestComparisonPanel @ref="requestComparisonPanel" 
+                                        OnComparisonComplete="HandleRequestComparisonComplete"
+                                        OnPropertySelectorOpened="OpenRequestPropertySelector"
+                                        OnTreePropertySelectorOpened="OpenRequestTreePropertySelector" />
+                
+                @* Property Selectors for Request Comparison - placed outside the panel for modal behavior *@
+                <HierarchicalPropertySelector @ref="requestPropertySelector"
+                                              ModelType="@(requestComparisonPanel?.GetSelectedModelType())"
+                                              IgnoredProperties="@(requestComparisonPanel?.IgnoreRules ?? new List<IgnoreRule>())"
+                                              OnPropertyAdded="AddRequestIgnoreRule"
+                                              OnPropertiesBatchAdded="AddRequestIgnoreRulesBatch"
+                                              OnPropertyRemoved="propertyPath => RemoveRequestIgnoreRule(propertyPath)" />
+
+                <ObjectTreePropertySelector @ref="requestTreePropertySelector"
+                                           ModelType="@(requestComparisonPanel?.GetSelectedModelType())"
+                                           IgnoredProperties="@(requestComparisonPanel?.IgnoreRules ?? new List<IgnoreRule>())"
+                                           OnPropertyAdded="AddRequestIgnoreRule"
+                                           OnPropertiesBatchAdded="AddRequestIgnoreRulesBatch"
+                                           OnPropertyRemoved="propertyPath => RemoveRequestIgnoreRule(propertyPath)" />
+                
+                @* Display Request Comparison Results *@
+                @if (RequestComparisonResult != null)
+                {
+                    <MudPaper Elevation="2" Class="pa-4 mt-4">
+                        <MudStack Spacing="3">
+                            <MudText Typo="Typo.h6">Request Comparison Results</MudText>
+
+                            @* Execution Outcome Summary (non-200 awareness) *@
+                            @{
+                                var hasOutcomeSummary = RequestComparisonResult.Metadata.TryGetValue("ExecutionOutcomeSummary", out var outcomeSummaryObj);
+                                var outcomeSummary = outcomeSummaryObj as ComparisonTool.Core.RequestComparison.Models.ExecutionOutcomeSummary;
+                            }
+                            @if (hasOutcomeSummary && outcomeSummary != null && (outcomeSummary.StatusCodeMismatch > 0 || outcomeSummary.BothNonSuccess > 0 || outcomeSummary.OneOrBothFailed > 0))
+                            {
+                                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                                    <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center" Class="flex-wrap">
+                                        <MudText Typo="Typo.body2"><strong>Execution Summary:</strong></MudText>
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.CheckCircle">
+                                            @outcomeSummary.BothSuccess Both OK
+                                        </MudChip>
+                                        @if (outcomeSummary.StatusCodeMismatch > 0)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.SyncProblem">
+                                                @outcomeSummary.StatusCodeMismatch Status Mismatch
+                                            </MudChip>
+                                        }
+                                        @if (outcomeSummary.BothNonSuccess > 0)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.ErrorOutline">
+                                                @outcomeSummary.BothNonSuccess Both Non-Success
+                                            </MudChip>
+                                        }
+                                        @if (outcomeSummary.OneOrBothFailed > 0)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Warning">
+                                                @outcomeSummary.OneOrBothFailed Failed
+                                            </MudChip>
+                                        }
+                                    </MudStack>
+                                </MudAlert>
+                            }
+
+                            @if (RequestComparisonEnhancedAnalysis != null)
+                            {
+                                <ComparisonRunDetails Analysis="@RequestComparisonEnhancedAnalysis"
+                                                      FolderComparisonResult="@RequestComparisonResult"
+                                                      OnFileSelected="@HandleRequestInspectorFileSelected" />
+                            }
+                            else if (EnableEnhancedStructuralAnalysis && !RequestComparisonResult.AllEqual)
+                            {
+                                <MudPaper Elevation="2" Class="pa-4">
+                                    <MudStack Spacing="3">
+                                        <MudText Typo="Typo.h5">Comparison Overview</MudText>
+                                        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="py-6">
+                                            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+                                            <MudText Typo="Typo.h6" Class="mt-3">Generating Enhanced Analysis...</MudText>
+                                            <MudText Typo="Typo.body2" Color="Color.Default">
+                                                Please wait while we analyze structural patterns and categorize differences.
+                                            </MudText>
+                                        </MudStack>
+                                    </MudStack>
+                                </MudPaper>
+                            }
+                            else
+                            {
+                                <EnhancedDifferenceSummary Summary="@DifferenceSummary" FolderResult="@RequestComparisonResult" />
+                            }
+
+                            <FileComparisonResults Result="@RequestComparisonResult"
+                                                   SelectedPairIndex="@SelectedRequestPairIndex"
+                                                   OnPairSelected="@SelectRequestPairResult"
+                                                   OnExportAll="@ExportRequestComparisonResults" />
+                        </MudStack>
+                    </MudPaper>
+
+                    @if (RequestComparisonResult != null && SelectedRequestPairIndex >= 0 && SelectedRequestPairIndex < RequestComparisonResult.FilePairResults.Count)
+                    {
+                        var selectedRequestPair = RequestComparisonResult.FilePairResults[SelectedRequestPairIndex];
+
+                        @if (selectedRequestPair.HasError)
+                        {
+                            <ErrorDetailView SelectedPair="@selectedRequestPair"
+                                             RawFileDifferences="@RequestRawFileDifferences" />
+                        }
+                        else if (ShouldRenderRawRequestDetail(selectedRequestPair))
+                        {
+                            <RawTextDifferencesView SelectedPair="@selectedRequestPair"
+                                                    OnExportResults="@ExportRequestSelectedPairResults" />
+                        }
+                        else if (DifferenceSummary != null)
+                        {
+                            <DetailedDifferencesView SelectedPair="@selectedRequestPair"
+                                                     DifferenceSummary="@DifferenceSummary"
+                                                     ComparisonResult="@ComparisonResult"
+                                                     ShowAllDifferences="@ShowAllDifferences"
+                                                     OnToggleShowAll="@ToggleShowAllDifferences"
+                                                     OnExportResults="@ExportRequestSelectedPairResults"
+                                                     FolderResult="@RequestComparisonResult" />
+                        }
+                    }
+
+                    @if (EnableEnhancedStructuralAnalysis && RequestComparisonResult != null && !RequestComparisonResult.AllEqual && RequestComparisonEnhancedAnalysis == null)
+                    {
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">
+                            <MudStack Spacing="2">
+                                <MudText Typo="Typo.h6">Enhanced Structural Analysis</MudText>
+                                <MudText Typo="Typo.body2">
+                                    Enhanced structural analysis is enabled but no patterns were found or the analysis didn't run.
+                                </MudText>
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Success"
+                                           Size="Size.Small"
+                                           OnClick="GenerateRequestEnhancedStructuralAnalysis"
+                                           aria-label="Run request enhanced structural analysis">
+                                    Run Enhanced Structural Analysis
+                                </MudButton>
+                            </MudStack>
+                        </MudAlert>
+                    }
+
+                    @if (RequestComparisonSemanticAnalysis != null)
+                    {
+                        <SemanticGroupsPanel Analysis="@RequestComparisonSemanticAnalysis"
+                                             OnExportAnalysis="@ExportRequestSemanticAnalysisReport" />
+                    }
+                }
+            }
+        </MudTabPanel>
+    </MudTabs>
+</MudStack>
+
+@code {
+    // Configuration properties
+    private string SelectedModelName { get; set; }
+    private bool IgnoreCollectionOrder { get; set; } = false;
+    private bool IgnoreStringCase { get; set; } = false;
+    private bool IgnoreTrailingWhitespaceAtEnd { get; set; } = false;
+    private bool IgnoreXmlNamespaces { get; set; } = true;
+    private List<IgnoreRule> IgnoreRules { get; set; } = new List<IgnoreRule>();
+    private bool EnableSemanticAnalysis { get; set; } = true;
+    private bool EnableEnhancedStructuralAnalysis { get; set; } = true;
+    private bool UseDirectoryMode { get; set; } = false;
+    private bool RequestComparisonEnabled => Configuration.GetValue("FeatureFlags:RequestComparisonEnabled", false);
+    private int activeTabIndex { get; set; } = 0;
+    
+    // Directory mode properties
+    private string Directory1Path { get; set; }
+    private string Directory2Path { get; set; }
+    
+    // File upload mode properties
+    private List<string> Folder1Files { get; set; } = new();
+    private List<string> Folder2Files { get; set; } = new();
+    
+    // Comparison state
+    private bool IsComparing { get; set; } = false;
+    private ComparisonProgress Progress { get; set; } = new ComparisonProgress(0, 0, "Ready");
+    private bool IsCancellable { get; set; } = true;
+    private ComparisonResult ComparisonResult { get; set; }
+    private DifferenceSummary DifferenceSummary { get; set; }
+    private bool ShowAllDifferences { get; set; } = false;
+    private const int LargePairShowAllResetThreshold = 5000;
+    private MultiFolderComparisonResult FolderComparisonResult { get; set; }
+    private int SelectedPairIndex { get; set; } = -1;
+    private List<RawTextDifference>? FolderRawFileDifferences { get; set; }
+    private SemanticDifferenceAnalysis SemanticAnalysis { get; set; }
+    private EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult EnhancedStructuralAnalysis { get; set; }
+    private CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
+    private HierarchicalPropertySelector propertySelector;
+    
+    // Request Comparison state
+    private MultiFolderComparisonResult RequestComparisonResult { get; set; }
+    private int SelectedRequestPairIndex { get; set; } = -1;
+    private SemanticDifferenceAnalysis RequestComparisonSemanticAnalysis { get; set; }
+    private EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult RequestComparisonEnhancedAnalysis { get; set; }
+    private List<RawTextDifference>? RequestRawFileDifferences { get; set; }
+    private ObjectTreePropertySelector treePropertySelector;
+    
+    // Request Comparison selectors
+    private RequestComparisonPanel requestComparisonPanel;
+    private HierarchicalPropertySelector requestPropertySelector;
+    private ObjectTreePropertySelector requestTreePropertySelector;
+
+    private bool CanRunFolderComparison =>
+        !string.IsNullOrEmpty(SelectedModelName) &&
+        Folder1Files.Count > 0 &&
+        Folder2Files.Count > 0;
+        
+    private bool CanRunDirectoryComparison =>
+        !string.IsNullOrEmpty(SelectedModelName) &&
+        !string.IsNullOrEmpty(Directory1Path) &&
+        !string.IsNullOrEmpty(Directory2Path) &&
+        Directory.Exists(Directory1Path) &&
+        Directory.Exists(Directory2Path);
+
+    protected override void OnInitialized()
+    {
+        try
+        {
+            SelectedModelName = DeserializationService.GetRegisteredModelNames().FirstOrDefault();
+
+            IgnoreCollectionOrder = ConfigService.GetIgnoreCollectionOrder();
+            IgnoreStringCase = ConfigService.GetIgnoreStringCase();
+            IgnoreTrailingWhitespaceAtEnd = ConfigService.GetIgnoreTrailingWhitespaceAtEnd();
+            IgnoreXmlNamespaces = XmlDeserializationService.IgnoreXmlNamespaces;
+
+            IgnoreRules = ConfigService.GetUserIgnoreRules()
+                .Select(rule => new IgnoreRule
+                {
+                    PropertyPath = rule.PropertyPath,
+                    IgnoreCompletely = rule.IgnoreCompletely,
+                    IgnoreCollectionOrder = rule.IgnoreCollectionOrder,
+                })
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error initializing component");
+        }
+    }
+
+    public void Dispose()
+    {
+        _cancellationTokenSource?.Cancel();
+        _cancellationTokenSource?.Dispose();
+    }
+
+    private Type GetSelectedModelType()
+    {
+        if (string.IsNullOrEmpty(SelectedModelName))
+            return null;
+
+        try
+        {
+            return DeserializationService.GetModelType(SelectedModelName);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+    
+    private int GetXmlFileCount(string directoryPath)
+    {
+        if (string.IsNullOrEmpty(directoryPath) || !Directory.Exists(directoryPath))
+            return 0;
+            
+        try
+        {
+            return Directory.GetFiles(directoryPath, "*.xml", SearchOption.AllDirectories).Length;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private void HandleFolder1FilesChanged(List<string> files)
+    {
+        Folder1Files = files;
+    }
+
+    private void HandleFolder2FilesChanged(List<string> files)
+    {
+        Folder2Files = files;
+    }
+
+    private async Task OpenPropertySelector()
+    {
+        await propertySelector.ShowAsync();
+    }
+
+    private async Task OpenTreePropertySelector()
+    {
+        await treePropertySelector.ShowAsync();
+    }
+
+    private void AddIgnoreRule(IgnoreRule rule)
+    {
+        var existingRule = IgnoreRules.FirstOrDefault(r => r.PropertyPath == rule.PropertyPath);
+        if (existingRule != null)
+        {
+            IgnoreRules.Remove(existingRule);
+        }
+
+        IgnoreRules.Add(rule);
+
+        if (rule.IgnoreCompletely)
+        {
+            ConfigService.IgnoreProperty(rule.PropertyPath);
+        }
+        else
+        {
+            ConfigService.AddIgnoreRule(rule);
+        }
+    }
+
+    private void AddIgnoreRulesBatch(IEnumerable<IgnoreRule> rules)
+    {
+        if (rules == null || !rules.Any()) return;
+
+        var rulesList = rules.ToList();
+
+        // Remove existing rules and add new ones to local collection
+        foreach (var rule in rulesList)
+        {
+            var existingRule = IgnoreRules.FirstOrDefault(r => r.PropertyPath == rule.PropertyPath);
+            if (existingRule != null)
+            {
+                IgnoreRules.Remove(existingRule);
+            }
+            IgnoreRules.Add(rule);
+        }
+
+        // Use batch method for better performance
+        ConfigService.AddIgnoreRulesBatch(rulesList);
+    }
+
+    private void RemoveIgnoreRule(IgnoreRule rule)
+    {
+        if (rule == null) return;
+
+        IgnoreRules.Remove(rule);
+
+        // Also remove from the service
+        if (rule.IgnoreCompletely)
+        {
+            ConfigService.RemoveIgnoredProperty(rule.PropertyPath);
+        }
+    }
+
+    private void ClearAllIgnoreRules()
+    {
+        IgnoreRules.Clear();
+        ConfigService.ClearIgnoreRules();
+    }
+
+    // Request Comparison selector handlers
+    private async Task OpenRequestPropertySelector()
+    {
+        if (requestPropertySelector != null)
+        {
+            await requestPropertySelector.ShowAsync();
+        }
+    }
+
+    private async Task OpenRequestTreePropertySelector()
+    {
+        if (requestTreePropertySelector != null)
+        {
+            await requestTreePropertySelector.ShowAsync();
+        }
+    }
+
+    private void AddRequestIgnoreRule(IgnoreRule rule)
+    {
+        requestComparisonPanel?.AddIgnoreRule(rule);
+    }
+
+    private void AddRequestIgnoreRulesBatch(IEnumerable<IgnoreRule> rules)
+    {
+        requestComparisonPanel?.AddIgnoreRulesBatch(rules);
+    }
+
+    private void RemoveRequestIgnoreRule(string propertyPath)
+    {
+        if (requestComparisonPanel != null && requestComparisonPanel.IgnoreRules != null)
+        {
+            var rule = requestComparisonPanel.IgnoreRules.FirstOrDefault(r => r.PropertyPath == propertyPath);
+            if (rule != null)
+            {
+                requestComparisonPanel.IgnoreRules.Remove(rule);
+            }
+        }
+    }
+    
+    private async Task BrowseDirectory1()
+    {
+                    var result = await JS.InvokeAsync<string>("browseFolder", "Select Expected Directory");
+        if (!string.IsNullOrEmpty(result))
+        {
+            Directory1Path = result;
+            StateHasChanged();
+        }
+    }
+    
+    private async Task BrowseDirectory2()
+    {
+                    var result = await JS.InvokeAsync<string>("browseFolder", "Select Actual Directory");
+        if (!string.IsNullOrEmpty(result))
+        {
+            Directory2Path = result;
+            StateHasChanged();
+        }
+    }
+    
+    private async Task RunDirectoryComparison()
+    {
+        if (!CanRunDirectoryComparison)
+            return;
+            
+        try
+        {
+            await ClearAndReset();
+            
+            IsComparing = true;
+            IsCancellable = true;
+            Progress = new ComparisonProgress(0, 0, "Preparing comparison...");
+
+            await ResetCancellationToken();
+            var cancellationToken = _cancellationTokenSource.Token;
+
+            ConfigService.SetIgnoreCollectionOrder(IgnoreCollectionOrder);
+            ConfigService.SetIgnoreStringCase(IgnoreStringCase);
+            ConfigService.SetIgnoreTrailingWhitespaceAtEnd(IgnoreTrailingWhitespaceAtEnd);
+            XmlDeserializationService.IgnoreXmlNamespaces = IgnoreXmlNamespaces;
+
+            foreach (var rule in IgnoreRules)
+            {
+                ConfigService.AddIgnoreRule(rule);
+            }
+
+            ConfigService.ApplyConfiguredSettings();
+            
+            // Create progress reporter
+            var progressReporter = new Progress<ComparisonProgress>(progress =>
+            {
+                Progress = progress;
+                StateHasChanged();
+            });
+            
+            // Run the comparison
+            FolderComparisonResult = await DirectoryComparisonService.CompareDirectoriesAsync(
+                Directory1Path,
+                Directory2Path,
+                SelectedModelName,
+                includeAllFiles: false,
+                enablePatternAnalysis: false, // Pattern analysis removed
+                enableSemanticAnalysis: EnableSemanticAnalysis,
+                progress: progressReporter,
+                cancellationToken: cancellationToken);
+                
+            // Select the first result if there are differences
+            if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 0)
+            {
+                await SelectPairResult(0);
+            }
+            
+            // Get semantic analysis from metadata if available
+            if (FolderComparisonResult.Metadata.TryGetValue("SemanticAnalysis", out var semanticAnalysisObj))
+            {
+                SemanticAnalysis = semanticAnalysisObj as SemanticDifferenceAnalysis;
+            }
+            
+            // Generate enhanced structural analysis if enabled and there are differences
+            if (EnableEnhancedStructuralAnalysis && !FolderComparisonResult.AllEqual)
+            {
+                Progress = new ComparisonProgress(0, 0, "Starting enhanced structural analysis...");
+                StateHasChanged();
+                await Task.Delay(100); // Ensure UI updates
+                await GenerateEnhancedStructuralAnalysis();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            Logger.LogInformation("Comparison operation was canceled");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error comparing directories: {Message}", ex.Message);
+            await JS.InvokeVoidAsync("alert", $"Error comparing directories: {ex.Message}");
+        }
+        finally
+        {
+            IsComparing = false;
+            IsCancellable = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RunFolderComparison()
+    {
+        if (!CanRunFolderComparison)
+            return;
+
+        try
+        {
+            await ClearAndReset();
+            
+            IsComparing = true;
+            IsCancellable = true;
+            Progress = new ComparisonProgress(0, 0, "Preparing comparison...");
+
+            await ResetCancellationToken();
+            var cancellationToken = _cancellationTokenSource.Token;
+
+            ConfigService.SetIgnoreCollectionOrder(IgnoreCollectionOrder);
+            ConfigService.SetIgnoreStringCase(IgnoreStringCase);
+            ConfigService.SetIgnoreTrailingWhitespaceAtEnd(IgnoreTrailingWhitespaceAtEnd);
+            XmlDeserializationService.IgnoreXmlNamespaces = IgnoreXmlNamespaces;
+
+            foreach (var rule in IgnoreRules)
+            {
+                ConfigService.AddIgnoreRule(rule);
+            }
+
+            ConfigService.ApplyConfiguredSettings();
+
+            // Create progress reporter
+            var progressReporter = new Progress<ComparisonProgress>(progress =>
+            {
+                Progress = progress;
+                StateHasChanged();
+            });
+
+            // Use folder uploads method
+            if (Folder1Files.Count > 500 || Folder2Files.Count > 500)
+            {
+                FolderComparisonResult = await DirectoryComparisonService.CompareFolderUploadsAsync(
+                    Folder1Files,
+                    Folder2Files,
+                    SelectedModelName,
+                    false, // Pattern analysis removed
+                    EnableSemanticAnalysis,
+                    progressReporter,
+                    cancellationToken);
+                    
+                // Get semantic analysis from metadata if available
+                if (FolderComparisonResult.Metadata.TryGetValue("SemanticAnalysis", out var semanticAnalysisObj))
+                {
+                    SemanticAnalysis = semanticAnalysisObj as SemanticDifferenceAnalysis;
+                }
+                
+                // Select the first result if there are differences
+                if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 0)
+                {
+                    await SelectPairResult(0);
+                }
+                
+                // Generate enhanced structural analysis if enabled
+                if (EnableEnhancedStructuralAnalysis && !FolderComparisonResult.AllEqual)
+                {
+                    Progress = new ComparisonProgress(0, 0, "Starting enhanced structural analysis...");
+                    StateHasChanged();
+                    await Task.Delay(100); // Ensure UI updates
+                    await GenerateEnhancedStructuralAnalysis();
+                }
+            }
+            else
+            {
+                // Create a simple progress reporter for the batch method
+                var batchProgressReporter = new Progress<(int Completed, int Total)>(progress =>
+                {
+                    Progress = new ComparisonProgress(progress.Completed, progress.Total, $"Compared {progress.Completed} of {progress.Total} files");
+                    StateHasChanged();
+                });
+
+                // Use batch comparison service with caching for smaller sets
+                FolderComparisonResult = await ComparisonService.CompareFoldersInBatchesAsync(
+                    Folder1Files,
+                    Folder2Files,
+                    SelectedModelName,
+                    batchSize: 25,
+                    batchProgressReporter,
+                    cancellationToken);
+
+                // Select the first result if there are differences
+                if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 0)
+                {
+                    await SelectPairResult(0);
+                }
+
+                // Generate semantic analysis if needed
+                if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 1 && EnableSemanticAnalysis)
+                {
+                    await GenerateSemanticAnalysis();
+                }
+                
+                // Generate enhanced structural analysis if enabled
+                if (EnableEnhancedStructuralAnalysis && !FolderComparisonResult.AllEqual)
+                {
+                    Progress = new ComparisonProgress(0, 0, "Starting enhanced structural analysis...");
+                    StateHasChanged();
+                    await Task.Delay(100); // Ensure UI updates
+                    await GenerateEnhancedStructuralAnalysis();
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            Logger.LogInformation("Comparison operation was canceled");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error comparing files: {Message}", ex.Message);
+            await JS.InvokeVoidAsync("alert", $"Error comparing files: {ex.Message}");
+        }
+        finally
+        {
+            IsComparing = false;
+            IsCancellable = false;
+            StateHasChanged();
+        }
+    }
+    
+    private async Task ResetCancellationToken()
+    {
+        await _cancellationTokenSource.CancelAsync();
+        _cancellationTokenSource.Dispose();
+        _cancellationTokenSource = new CancellationTokenSource();
+    }
+    
+    private async Task CancelComparison()
+    {
+        if (IsCancellable)
+        {
+            await _cancellationTokenSource.CancelAsync();
+            IsCancellable = false;
+        }
+    }
+
+    private async Task SelectPairResult(int index)
+    {
+        if (FolderComparisonResult == null || index < 0 || index >= FolderComparisonResult.FilePairResults.Count)
+            return;
+            
+        SelectedPairIndex = index;
+
+        var selectedPair = FolderComparisonResult.FilePairResults[index];
+        ComparisonResult = selectedPair.Result;
+        DifferenceSummary = selectedPair.Summary;
+
+        var selectedDiffCount = selectedPair.Result?.Differences?.Count ?? 0;
+        if (selectedDiffCount > LargePairShowAllResetThreshold && ShowAllDifferences)
+        {
+            ShowAllDifferences = false;
+        }
+
+        // Compute raw file diff for error detail view when the pair has an error
+        if (selectedPair.HasError && !string.IsNullOrEmpty(selectedPair.File1Path))
+        {
+            try
+            {
+                FolderRawFileDifferences = await RawTextComparisonService.CompareFilesRawAsync(
+                    selectedPair.File1Path, selectedPair.File2Path);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Failed to compute raw file differences for error detail view.");
+                FolderRawFileDifferences = null;
+            }
+        }
+        else
+        {
+            FolderRawFileDifferences = null;
+        }
+
+        // Scroll to the detailed differences section after selection
+        try
+        {
+            await JS.InvokeVoidAsync("scrollToElement", "detailed-differences-section");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to scroll to detailed differences section.");
+        }
+        
+        StateHasChanged(); // Ensure UI updates with selection
+    }
+
+    private void ToggleShowAllDifferences()
+    {
+        ShowAllDifferences = !ShowAllDifferences;
+    }
+    
+    // Request Comparison handlers
+    private async Task HandleRequestComparisonComplete(MultiFolderComparisonResult result)
+    {
+        RequestComparisonResult = result;
+        RequestComparisonSemanticAnalysis = null;
+        RequestComparisonEnhancedAnalysis = null;
+        RequestRawFileDifferences = null;
+        SelectedRequestPairIndex = -1;
+        
+        // Extract semantic analysis from metadata if available
+        if (result.Metadata.TryGetValue("SemanticAnalysis", out var semanticAnalysisObj))
+        {
+            RequestComparisonSemanticAnalysis = semanticAnalysisObj as SemanticDifferenceAnalysis;
+        }
+        
+        // Extract enhanced structural analysis from metadata if available
+        if (result.Metadata.TryGetValue("EnhancedStructuralAnalysis", out var enhancedAnalysisObj))
+        {
+            RequestComparisonEnhancedAnalysis = enhancedAnalysisObj as EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult;
+        }
+
+        if (EnableEnhancedStructuralAnalysis && !result.AllEqual && RequestComparisonEnhancedAnalysis == null)
+        {
+            await GenerateRequestEnhancedStructuralAnalysis();
+        }
+        
+        // Select first result if there are differences
+        if (!result.AllEqual && result.FilePairResults.Count > 0)
+        {
+            await SelectRequestPairResult(0);
+        }
+        
+        StateHasChanged();
+    }
+    
+    private async Task SelectRequestPairResult(int index)
+    {
+        if (RequestComparisonResult == null || index < 0 || index >= RequestComparisonResult.FilePairResults.Count)
+            return;
+            
+        SelectedRequestPairIndex = index;
+        
+        // Update ComparisonResult and DifferenceSummary for display
+        var selectedPair = RequestComparisonResult.FilePairResults[index];
+        ComparisonResult = selectedPair.Result;
+        DifferenceSummary = selectedPair.Summary;
+
+        var selectedDiffCount = selectedPair.Result?.Differences?.Count ?? 0;
+        if (selectedDiffCount > LargePairShowAllResetThreshold && ShowAllDifferences)
+        {
+            ShowAllDifferences = false;
+        }
+
+        if (selectedPair.HasError && !string.IsNullOrEmpty(selectedPair.File1Path))
+        {
+            try
+            {
+                RequestRawFileDifferences = await RawTextComparisonService.CompareFilesRawAsync(
+                    selectedPair.File1Path,
+                    selectedPair.File2Path);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Failed to compute raw file differences for request error detail view.");
+                RequestRawFileDifferences = null;
+            }
+        }
+        else
+        {
+            RequestRawFileDifferences = null;
+        }
+
+        var detailSectionId = GetRequestDetailSectionId(selectedPair);
+        
+        try
+        {
+            await JS.InvokeVoidAsync("scrollToElement", detailSectionId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to scroll to request detailed differences section {SectionId}.", detailSectionId);
+        }
+        
+        StateHasChanged();
+    }
+    
+    /// <summary>
+    /// Handles file selection from the inspector tabs in the File/Folder comparison.
+    /// Resolves the file name to a pair index and scrolls to the detailed differences section.
+    /// </summary>
+    private async Task HandleInspectorFileSelected(string fileName)
+    {
+        if (FolderComparisonResult?.FilePairResults == null || string.IsNullOrEmpty(fileName))
+            return;
+
+        var index = ResolvePairIndex(FolderComparisonResult.FilePairResults, fileName);
+            
+        if (index >= 0)
+        {
+            await SelectPairResult(index);
+        }
+    }
+    
+    /// <summary>
+    /// Handles file selection from the inspector tabs in the Request Comparison.
+    /// Resolves the file name to a pair index and scrolls to the detailed differences section.
+    /// </summary>
+    private async Task HandleRequestInspectorFileSelected(string fileName)
+    {
+        if (RequestComparisonResult?.FilePairResults == null || string.IsNullOrEmpty(fileName))
+            return;
+
+        var index = ResolvePairIndex(RequestComparisonResult.FilePairResults, fileName);
+            
+        if (index >= 0)
+        {
+            await SelectRequestPairResult(index);
+        }
+    }
+    
+    private async Task ExportRequestComparisonResults()
+    {
+        if (RequestComparisonResult == null)
+            return;
+            
+        try
+        {
+            var filename = $"request_comparison_{DateTime.Now:yyyyMMdd_HHmmss}.json";
+            var json = System.Text.Json.JsonSerializer.Serialize(RequestComparisonResult, 
+                new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            
+            await JS.InvokeVoidAsync("downloadFile", filename, json, "application/json");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error exporting request comparison results");
+            await JS.InvokeVoidAsync("alert", $"Error exporting results: {ex.Message}");
+        }
+    }
+
+    private async Task ExportRequestSelectedPairResults()
+    {
+        if (RequestComparisonResult == null || SelectedRequestPairIndex < 0 || SelectedRequestPairIndex >= RequestComparisonResult.FilePairResults.Count)
+            return;
+
+        try
+        {
+            var selectedPair = RequestComparisonResult.FilePairResults[SelectedRequestPairIndex];
+            var filenameBase = !string.IsNullOrWhiteSpace(selectedPair.RequestRelativePath)
+                ? SanitizeExportFileName(selectedPair.RequestRelativePath)
+                : $"{Path.GetFileNameWithoutExtension(selectedPair.File1Name)}-vs-{Path.GetFileNameWithoutExtension(selectedPair.File2Name)}";
+
+            var filename = $"request_comparison_pair_{filenameBase}_{DateTime.Now:yyyyMMdd_HHmmss}.json";
+            var json = System.Text.Json.JsonSerializer.Serialize(selectedPair,
+                new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+
+            await JS.InvokeVoidAsync("downloadFile", filename, json, "application/json");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error exporting selected request comparison result");
+            await JS.InvokeVoidAsync("alert", $"Error exporting selected result: {ex.Message}");
+        }
+    }
+
+    private static string SanitizeExportFileName(string value)
+    {
+        var invalidChars = Path.GetInvalidFileNameChars();
+        var sanitized = new string(value.Select(c => invalidChars.Contains(c) ? '_' : c).ToArray());
+        return sanitized.Replace('/', '_').Replace('\\', '_');
+    }
+
+    private static int ResolvePairIndex(IReadOnlyList<FilePairComparisonResult> pairs, string selectedIdentifier)
+    {
+        if (pairs == null || string.IsNullOrWhiteSpace(selectedIdentifier))
+            return -1;
+
+        var normalizedSelected = NormalizeIdentifier(selectedIdentifier);
+        var selectedFileName = Path.GetFileName(normalizedSelected);
+
+        for (var i = 0; i < pairs.Count; i++)
+        {
+            var pair = pairs[i];
+            var pairDisplay = $"{pair.File1Name} vs {pair.File2Name}";
+
+            if (IdentifierEquals(pair.RequestRelativePath, normalizedSelected) ||
+                IdentifierEquals(pair.File1Name, normalizedSelected) ||
+                IdentifierEquals(pair.File2Name, normalizedSelected) ||
+                IdentifierEquals(pairDisplay, normalizedSelected))
+            {
+                return i;
+            }
+
+            if (!string.IsNullOrWhiteSpace(selectedFileName) &&
+                (IdentifierEquals(Path.GetFileName(pair.File1Name), selectedFileName) ||
+                 IdentifierEquals(Path.GetFileName(pair.File2Name), selectedFileName)))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static string NormalizeIdentifier(string value)
+    {
+        return (value ?? string.Empty).Trim().Replace('\\', '/');
+    }
+
+    private static bool IdentifierEquals(string left, string right)
+    {
+        if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
+            return false;
+
+        return string.Equals(NormalizeIdentifier(left), NormalizeIdentifier(right), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ShouldRenderRawRequestDetail(FilePairComparisonResult selectedPair)
+    {
+        return selectedPair.PairOutcome == RequestPairOutcome.StatusCodeMismatch ||
+               selectedPair.PairOutcome == RequestPairOutcome.BothNonSuccess ||
+               (selectedPair.RawTextDifferences != null && selectedPair.RawTextDifferences.Count > 0);
+    }
+
+    private static string GetRequestDetailSectionId(FilePairComparisonResult selectedPair)
+    {
+        return ShouldRenderRawRequestDetail(selectedPair)
+            ? "request-detailed-differences-section"
+            : "detailed-differences-section";
+    }
+
+    private async Task GenerateRequestEnhancedStructuralAnalysis()
+    {
+        if (RequestComparisonResult == null)
+            return;
+
+        try
+        {
+            Logger.LogInformation("Starting request enhanced structural pattern analysis...");
+            var enhancedStructuralAnalyzer = new EnhancedStructuralDifferenceAnalyzer(RequestComparisonResult, Logger);
+            RequestComparisonEnhancedAnalysis = enhancedStructuralAnalyzer.AnalyzeStructuralPatterns();
+
+            if (RequestComparisonResult.Metadata.ContainsKey("EnhancedStructuralAnalysis"))
+                RequestComparisonResult.Metadata["EnhancedStructuralAnalysis"] = RequestComparisonEnhancedAnalysis;
+            else
+                RequestComparisonResult.Metadata.Add("EnhancedStructuralAnalysis", RequestComparisonEnhancedAnalysis);
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error generating request enhanced structural pattern analysis");
+        }
+    }
+    
+    private async Task ExportRequestSemanticAnalysisReport()
+    {
+        if (RequestComparisonSemanticAnalysis == null)
+            return;
+            
+        try
+        {
+            var filename = $"request_semantic_analysis_{DateTime.Now:yyyyMMdd_HHmmss}.json";
+            var json = System.Text.Json.JsonSerializer.Serialize(RequestComparisonSemanticAnalysis, 
+                new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            
+            await JS.InvokeVoidAsync("downloadFile", filename, json, "application/json");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error exporting request semantic analysis report");
+            await JS.InvokeVoidAsync("alert", $"Error exporting report: {ex.Message}");
+        }
+    }
+
+
+
+    private async Task GenerateSemanticAnalysis()
+    {
+        if (FolderComparisonResult == null)
+            return;
+
+        try
+        {
+            var cancellationToken = _cancellationTokenSource.Token;
+
+            // Generate semantic analysis directly without pattern analysis dependency
+            SemanticAnalysis = await ComparisonService.AnalyzeSemanticDifferencesAsync(
+                FolderComparisonResult,
+                null, // No pattern analysis needed
+                cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            Logger.LogInformation("Semantic analysis operation was canceled");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error generating semantic analysis: {Message}", ex.Message);
+            await JS.InvokeVoidAsync("alert", $"Error generating semantic analysis: {ex.Message}");
+        }
+    }
+
+
+
+    private async Task GenerateEnhancedStructuralAnalysis()
+    {
+        if (FolderComparisonResult == null)
+            return;
+        
+        try
+        {
+            Logger.LogInformation("Starting enhanced structural pattern analysis...");
+            Progress = new ComparisonProgress(0, 0, "Generating enhanced structural pattern analysis...");
+            StateHasChanged();
+            
+            await Task.Delay(100); // Allow UI to update
+
+            var enhancedStructuralAnalyzer = new EnhancedStructuralDifferenceAnalyzer(FolderComparisonResult, Logger);
+            EnhancedStructuralAnalysis = await Task.Run(() => enhancedStructuralAnalyzer.AnalyzeStructuralPatterns());
+
+            Logger.LogInformation("Enhanced structural analysis completed. Found patterns: {Critical}, {MissingElements}, {MissingProps}, {ValueDiffs}, {GeneralDiffs}, {OrderDiffs}",
+                EnhancedStructuralAnalysis?.CriticalMissingElements?.Count ?? 0,
+                EnhancedStructuralAnalysis?.MissingCollectionElements?.Count ?? 0,
+                EnhancedStructuralAnalysis?.ConsistentlyMissingProperties?.Count ?? 0,
+                EnhancedStructuralAnalysis?.ConsistentValueDifferences?.Count ?? 0,
+                EnhancedStructuralAnalysis?.GeneralValueDifferences?.Count ?? 0,
+                EnhancedStructuralAnalysis?.ElementOrderDifferences?.Count ?? 0);
+            
+            // Add to metadata to save with results
+            if (FolderComparisonResult.Metadata.ContainsKey("EnhancedStructuralAnalysis"))
+                FolderComparisonResult.Metadata["EnhancedStructuralAnalysis"] = EnhancedStructuralAnalysis;
+            else
+                FolderComparisonResult.Metadata.Add("EnhancedStructuralAnalysis", EnhancedStructuralAnalysis);
+            
+            Progress = new ComparisonProgress(0, 0, "Enhanced structural analysis complete");
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error generating enhanced structural pattern analysis");
+            Progress = new ComparisonProgress(0, 0, "Error generating enhanced structural analysis");
+            StateHasChanged();
+        }
+    }
+
+    private async Task ExportFolderResults()
+    {
+        if (FolderComparisonResult == null || SelectedPairIndex < 0)
+            return;
+
+        try
+        {
+            var selectedPair = FolderComparisonResult.FilePairResults[SelectedPairIndex];
+            var file1Name = Path.GetFileNameWithoutExtension(selectedPair.File1Name);
+            var file2Name = Path.GetFileNameWithoutExtension(selectedPair.File2Name);
+
+            var headerInfo = $"# Comparison Report\n\n" +
+                                                                  $"Expected file: **{selectedPair.File1Name}**\n\n" +
+                        $"Actual file: **{selectedPair.File2Name}**\n\n" +
+                          $"---\n\n";
+
+            var report = FileUtilities.GenerateReportMarkdown(selectedPair.Summary, headerInfo);
+
+            await JS.InvokeVoidAsync(
+                "saveAsFile",
+                $"comparison-{file1Name}-vs-{file2Name}.md",
+                "text/markdown",
+                report);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error exporting folder results: {Message}", ex.Message);
+            await JS.InvokeVoidAsync("alert", $"Error exporting results: {ex.Message}");
+        }
+    }
+
+    private async Task ExportAllFolderResults()
+    {
+        if (FolderComparisonResult == null || FolderComparisonResult.FilePairResults.Count == 0)
+            return;
+
+        try
+        {
+            string report = FileUtilities.GenerateFolderComparisonReport(FolderComparisonResult);
+
+            await JS.InvokeVoidAsync(
+                "saveAsFile",
+                "folder-comparison-report.md",
+                "text/markdown",
+                report);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error exporting all folder results: {Message}", ex.Message);
+            await JS.InvokeVoidAsync("alert", $"Error exporting results: {ex.Message}");
+        }
+    }
+
+
+
+    private async Task ExportSemanticAnalysisReport(string filename)
+    {
+        if (SemanticAnalysis == null)
+            return;
+
+        try
+        {
+            var report = FileUtilities.GenerateSemanticAnalysisReport(SemanticAnalysis);
+
+            await JS.InvokeVoidAsync(
+                "saveAsFile",
+                filename,
+                "text/markdown",
+                report);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error exporting semantic analysis: {Message}", ex.Message);
+            await JS.InvokeVoidAsync("alert", $"Error exporting semantic analysis: {ex.Message}");
+        }
+    }
+
+    private async Task ClearAndReset()
+    {
+        try
+        {
+            // Reset all comparison results
+            ComparisonResult = null;
+            DifferenceSummary = null;
+            FolderComparisonResult = null;
+            SelectedPairIndex = -1;
+            SemanticAnalysis = null;
+            EnhancedStructuralAnalysis = null;
+            ShowAllDifferences = false;
+            
+            // Force garbage collection to clean up memory
+            GC.Collect();
+            
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error clearing comparison results");
+        }
+    }
+
+    private string GetCacheStatsDisplay()
+    {
+        try
+        {
+            var stats = CacheService.GetCacheStatistics();
+            if (stats.Hits + stats.Misses == 0)
+                return "No activity";
+            
+            var hitRatio = stats.HitRatio * 100;
+            var memoryMB = stats.EstimatedMemory / (1024 * 1024);
+            
+            return $"{hitRatio:F0}% hit ratio, {stats.ComparisonEntries + stats.ObjectEntries} entries, {memoryMB}MB";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Error getting cache statistics");
+            return "Cache error";
+        }
+    }
+
+    private async Task ClearCache()
+    {
+        try
+        {
+            // Clear all caches
+            CacheService.ClearAllCaches();
+            
+            // Also clear the internal XML deserialization cache
+            if (DeserializationService is XmlDeserializationService xmlService)
+            {
+                xmlService.ClearDeserializationCache();
+            }
+            
+            Logger.LogInformation("All caches cleared by user - both object cache and XML deserialization cache");
+            await JS.InvokeVoidAsync("alert", "All caches cleared successfully! Both object cache and XML deserialization cache have been reset.");
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error clearing cache");
+            await JS.InvokeVoidAsync("alert", $"Error clearing cache: {ex.Message}");
+        }
+    }
+}

@@ -28,6 +28,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ComparisonTool.Core\ComparisonTool.Core.csproj" />
+    <ProjectReference Include="..\ComparisonTool.UI\ComparisonTool.UI.csproj" />
   </ItemGroup>
 
   <ItemGroup>

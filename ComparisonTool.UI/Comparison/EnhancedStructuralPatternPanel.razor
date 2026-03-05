@@ -1,0 +1,673 @@
+@namespace ComparisonTool.UI.Comparison
+@using ComparisonTool.Core.Comparison.Analysis
+@using ComparisonTool.Core.Comparison.Results
+@using KellermanSoftware.CompareNetObjects
+
+<style>
+    .file-coverage-card {
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        padding: 1rem;
+        text-align: center;
+        background: white;
+        transition: all 0.2s ease;
+        cursor: pointer;
+    }
+    
+    .file-coverage-card:hover {
+        border-color: #6c757d;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .file-count {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+    }
+    
+    .file-list {
+        max-height: 250px;
+        overflow-y: auto;
+        border: 1px solid #e9ecef;
+        border-radius: 0.25rem;
+        padding: 0.75rem;
+        background: #f8f9fa;
+        margin-top: 1rem;
+    }
+    
+    .file-item {
+        padding: 0.5rem;
+        margin: 0.25rem 0;
+        background: white;
+        border-radius: 0.25rem;
+        border-left: 3px solid #0d6efd;
+        font-size: 0.9rem;
+    }
+    
+    .validation-alert {
+        border: 2px solid;
+        font-weight: 600;
+    }
+    
+    .validation-success {
+        border-color: #198754;
+        background-color: #d1e7dd;
+        color: #0f5132;
+    }
+    
+    .validation-error {
+        border-color: #dc3545;
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+</style>
+
+<div class="card mb-4">
+    <div class="card-header bg-success text-white">
+        <h5 class="mb-0">
+            <i class="bi bi-files"></i>
+            Complete File Coverage Analysis
+        </h5>
+        <small>Every file with differences is categorized exactly once</small>
+    </div>
+    
+    <div class="card-body">
+        @if (Analysis?.FileClassification == null)
+        {
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i>
+                No file classification data available.
+            </div>
+        }
+        else
+        {
+            <!-- Quick Summary -->
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <div class="card bg-light">
+                        <div class="card-body text-center py-2">
+                            <h6 class="text-muted mb-1">Total Files Analyzed</h6>
+                            <h3 class="text-primary mb-0">@Analysis.TotalFilesAnalyzed</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-light">
+                        <div class="card-body text-center py-2">
+                            <h6 class="text-muted mb-1">Files with Differences</h6>
+                            <h3 class="text-warning mb-0">@Analysis.FilesWithDifferences</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-light">
+                        <div class="card-body text-center py-2">
+                            <h6 class="text-muted mb-1">Coverage Validation</h6>
+                            <h3 class="@(Analysis.FileClassification.IsComplete ? "text-success" : "text-danger") mb-0">
+                                @(Analysis.FileClassification.IsComplete ? "✓ COMPLETE" : "✗ INCOMPLETE")
+                            </h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- File Classification Breakdown -->
+            <div class="row g-3 mb-4">
+                <div class="col-md-2">
+                    <div class="file-coverage-card" @onclick='() => ToggleCategory("Value")'>
+                        <div class="file-count text-primary">@GetCategoryCount("Value")</div>
+                        <div class="fw-bold">Value Changes</div>
+                        <div class="small text-muted">Property values differ</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="file-coverage-card" @onclick='() => ToggleCategory("Missing")'>
+                        <div class="file-count text-warning">@GetCategoryCount("Missing")</div>
+                        <div class="fw-bold">Missing Elements</div>
+                        <div class="small text-muted">Properties missing</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="file-coverage-card" @onclick='() => ToggleCategory("Order")'>
+                        <div class="file-count text-info">@GetCategoryCount("Order")</div>
+                        <div class="fw-bold">Order Issues</div>
+                        <div class="small text-muted">Collection ordering</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="file-coverage-card" @onclick='() => ToggleCategory("Mixed")'>
+                        <div class="file-count text-danger">@GetCategoryCount("Mixed")</div>
+                        <div class="fw-bold">Mixed Issues</div>
+                        <div class="small text-muted">Multiple types</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="file-coverage-card" @onclick='() => ToggleCategory("Uncategorized")'>
+                        <div class="file-count text-secondary">@GetCategoryCount("Uncategorized")</div>
+                        <div class="fw-bold">Other</div>
+                        <div class="small text-muted">Unique differences</div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="file-coverage-card bg-light">
+                        <div class="file-count text-success">@(GetCategoryCount("Value") + GetCategoryCount("Missing") + GetCategoryCount("Order") + GetCategoryCount("Mixed") + GetCategoryCount("Uncategorized"))</div>
+                        <div class="fw-bold">TOTAL</div>
+                        <div class="small text-muted">Sum of categories</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Validation Alert -->
+            <div class="validation-alert @(Analysis.FileClassification.IsComplete ? "validation-success" : "validation-error") p-3 rounded">
+                @if (Analysis.FileClassification.IsComplete)
+                {
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-check-circle-fill me-2"></i>
+                        <div>
+                            <strong>✅ Perfect Coverage Achieved</strong><br/>
+                            All @Analysis.FilesWithDifferences files with differences are categorized exactly once. 
+                            Total: @(GetCategoryCount("Value") + GetCategoryCount("Missing") + GetCategoryCount("Order") + GetCategoryCount("Mixed") + GetCategoryCount("Uncategorized")) = @Analysis.FilesWithDifferences ✓
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        <div>
+                            <strong>⚠️ Coverage Issue Detected</strong><br/>
+                            Categories total @(GetCategoryCount("Value") + GetCategoryCount("Missing") + GetCategoryCount("Order") + GetCategoryCount("Mixed") + GetCategoryCount("Uncategorized")) but @Analysis.FilesWithDifferences files have differences.
+                            @{int difference = Analysis.FilesWithDifferences - (GetCategoryCount("Value") + GetCategoryCount("Missing") + GetCategoryCount("Order") + GetCategoryCount("Mixed") + GetCategoryCount("Uncategorized"));}
+                            Missing: @difference files.
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- File Lists (when expanded) -->
+            @foreach (var category in new[] { "Value", "Missing", "Order", "Mixed", "Uncategorized" })
+            {
+                @if (ExpandedCategories.Contains(category) && GetCategoryFiles(category).Any())
+                {
+                    <div class="file-list">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0">
+                                <i class="bi bi-folder-open"></i>
+                                @category Files (@GetCategoryCount(category))
+                            </h6>
+                            <button class="btn btn-sm btn-outline-secondary" @onclick='() => ToggleCategory(category)'>
+                                <i class="bi bi-x"></i> Close
+                            </button>
+                        </div>
+                        @foreach (var file in GetCategoryFiles(category))
+                        {
+                            <div class="file-item">
+                                <i class="bi bi-file-earmark me-2"></i>@file
+                            </div>
+                        }
+                    </div>
+                }
+            }
+
+            <!-- Pattern Analysis Section -->
+            @if (HasPatterns())
+            {
+                <div class="mt-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="mb-0">
+                            <i class="bi bi-search"></i>
+                            Common Difference Patterns
+                        </h6>
+                        <small class="text-muted">Ordered by occurrence • Click to explore</small>
+                    </div>
+                    
+                    <ul class="nav nav-tabs nav-fill" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link @(ActivePatternTab == "value" ? "active" : "")" 
+                                    @onclick='() => ActivePatternTab = "value"'>
+                                <i class="bi bi-pencil-square text-primary"></i>
+                                Value Patterns (@GetPatternCount("Value"))
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link @(ActivePatternTab == "missing" ? "active" : "")" 
+                                    @onclick='() => ActivePatternTab = "missing"'>
+                                <i class="bi bi-exclamation-triangle text-warning"></i>
+                                Missing Patterns (@GetPatternCount("Missing"))
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link @(ActivePatternTab == "order" ? "active" : "")" 
+                                    @onclick='() => ActivePatternTab = "order"'>
+                                <i class="bi bi-arrows-move text-info"></i>
+                                Order Patterns (@GetPatternCount("Order"))
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link @(ActivePatternTab == "mixed" ? "active" : "")" 
+                                    @onclick='() => ActivePatternTab = "mixed"'>
+                                <i class="bi bi-layers text-danger"></i>
+                                Mixed Patterns (@GetPatternCount("Mixed"))
+                            </button>
+                        </li>
+                    </ul>
+                    
+                    <div class="tab-content border border-top-0 rounded-bottom p-3">
+                        @if (ActivePatternTab == "value")
+                        {
+                            <div class="alert alert-light">
+                                <h6 class="alert-heading">
+                                    <i class="bi bi-pencil-square text-primary"></i>
+                                    Value Difference Patterns
+                                </h6>
+                                <p class="mb-2">Common patterns where property values differ between expected and actual results.</p>
+                                
+                                <!-- FILE BREAKDOWN SUMMARY -->
+                                @if (GetValuePatterns().Any())
+                                {
+                                    <div class="alert alert-info mb-3">
+                                        <h6 class="mb-2">
+                                            <i class="bi bi-files"></i>
+                                            File Breakdown: @GetCategoryCount("Value") Value Difference Files
+                                        </h6>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <strong>Files in Patterns:</strong> @GetValuePatterns().SelectMany(p => p.AffectedFiles).Distinct().Count() files<br/>
+                                                <strong>Total Patterns:</strong> @GetValuePatterns().Count patterns<br/>
+                                                <strong>Total Occurrences:</strong> @GetValuePatterns().Sum(p => p.OccurenceCount) occurrences
+                                            </div>
+                                            <div class="col-md-6">
+                                                @{
+                                                    var totalFilesInPatterns = GetValuePatterns().SelectMany(p => p.AffectedFiles).Distinct().Count();
+                                                    var totalCategoryFiles = GetCategoryCount("Value");
+                                                    var missingFiles = totalCategoryFiles - totalFilesInPatterns;
+                                                }
+                                                @if (missingFiles > 0)
+                                                {
+                                                    <div class="text-danger">
+                                                        <strong>⚠️ Missing Coverage:</strong> @missingFiles files with value differences are not captured in patterns
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="text-success">
+                                                        <strong>✅ Complete Coverage:</strong> All value difference files are captured in patterns
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <EnhancedPatternListView Patterns="GetValuePatterns()" OnSelectPattern="SetSelectedPattern" />
+                                }
+                                else
+                                {
+                                    <div class="text-center py-3 text-muted">
+                                        <i class="bi bi-info-circle"></i>
+                                        No value difference patterns found.
+                                    </div>
+                                }
+                            </div>
+                        }
+                        
+                        @if (ActivePatternTab == "missing")
+                        {
+                            <div class="alert alert-light">
+                                <h6 class="alert-heading">
+                                    <i class="bi bi-exclamation-triangle text-warning"></i>
+                                    Missing Element Patterns
+                                </h6>
+                                <p class="mb-2">Common patterns where properties or objects are missing from the actual results.</p>
+                                
+                                <!-- FILE BREAKDOWN SUMMARY -->
+                                @if (GetMissingPatterns().Any())
+                                {
+                                    <div class="alert alert-warning mb-3">
+                                        <h6 class="mb-2">
+                                            <i class="bi bi-files"></i>
+                                            File Breakdown: @GetCategoryCount("Missing") Missing Element Files
+                                        </h6>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <strong>Files in Patterns:</strong> @GetMissingPatterns().SelectMany(p => p.AffectedFiles).Distinct().Count() files<br/>
+                                                <strong>Total Patterns:</strong> @GetMissingPatterns().Count patterns<br/>
+                                                <strong>Total Occurrences:</strong> @GetMissingPatterns().Sum(p => p.OccurenceCount) occurrences
+                                            </div>
+                                            <div class="col-md-6">
+                                                @{
+                                                    var totalFilesInPatterns = GetMissingPatterns().SelectMany(p => p.AffectedFiles).Distinct().Count();
+                                                    var totalCategoryFiles = GetCategoryCount("Missing");
+                                                    var missingFiles = totalCategoryFiles - totalFilesInPatterns;
+                                                }
+                                                @if (missingFiles > 0)
+                                                {
+                                                    <div class="text-danger">
+                                                        <strong>⚠️ Missing Coverage:</strong> @missingFiles files with missing elements are not captured in patterns
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="text-success">
+                                                        <strong>✅ Complete Coverage:</strong> All missing element files are captured in patterns
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <EnhancedPatternListView Patterns="GetMissingPatterns()" OnSelectPattern="SetSelectedPattern" ShowPriority="true" />
+                                }
+                                else
+                                {
+                                    <div class="text-center py-3 text-muted">
+                                        <i class="bi bi-info-circle"></i>
+                                        No missing element patterns found.
+                                    </div>
+                                }
+                            </div>
+                        }
+                        
+                        @if (ActivePatternTab == "order")
+                        {
+                            <div class="alert alert-light">
+                                <h6 class="alert-heading">
+                                    <i class="bi bi-arrows-move text-info"></i>
+                                    Collection Order Patterns
+                                </h6>
+                                <p class="mb-2">Patterns where collections have the same elements but in different order.</p>
+                                
+                                <!-- FILE BREAKDOWN SUMMARY -->
+                                @if (GetOrderPatterns().Any())
+                                {
+                                    <div class="alert alert-info mb-3">
+                                        <h6 class="mb-2">
+                                            <i class="bi bi-files"></i>
+                                            File Breakdown: @GetCategoryCount("Order") Order Difference Files
+                                        </h6>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <strong>Files in Patterns:</strong> @GetOrderPatterns().SelectMany(p => p.AffectedFiles).Distinct().Count() files<br/>
+                                                <strong>Total Patterns:</strong> @GetOrderPatterns().Count patterns<br/>
+                                                <strong>Total Occurrences:</strong> @GetOrderPatterns().Sum(p => p.OccurenceCount) occurrences
+                                            </div>
+                                            <div class="col-md-6">
+                                                @{
+                                                    var totalFilesInPatterns = GetOrderPatterns().SelectMany(p => p.AffectedFiles).Distinct().Count();
+                                                    var totalCategoryFiles = GetCategoryCount("Order");
+                                                    var missingFiles = totalCategoryFiles - totalFilesInPatterns;
+                                                }
+                                                @if (missingFiles > 0)
+                                                {
+                                                    <div class="text-danger">
+                                                        <strong>⚠️ Missing Coverage:</strong> @missingFiles files with order differences are not captured in patterns
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="text-success">
+                                                        <strong>✅ Complete Coverage:</strong> All order difference files are captured in patterns
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <EnhancedPatternListView Patterns="GetOrderPatterns()" OnSelectPattern="SetSelectedPattern" />
+                                }
+                                else
+                                {
+                                    <div class="text-center py-3 text-muted">
+                                        <i class="bi bi-info-circle"></i>
+                                        No order difference patterns found.
+                                    </div>
+                                }
+                            </div>
+                        }
+                        
+                        @if (ActivePatternTab == "mixed")
+                        {
+                            <div class="alert alert-light">
+                                <h6 class="alert-heading">
+                                    <i class="bi bi-layers text-danger"></i>
+                                    Mixed Issue Patterns
+                                </h6>
+                                <p class="mb-2">Files with multiple types of differences that don't fit into a single category.</p>
+                                
+                                <!-- FILE BREAKDOWN SUMMARY -->
+                                @if (GetMixedPatterns().Any())
+                                {
+                                    <div class="alert alert-danger mb-3">
+                                        <h6 class="mb-2">
+                                            <i class="bi bi-files"></i>
+                                            File Breakdown: @GetCategoryCount("Mixed") Mixed Issue Files
+                                        </h6>
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <strong>Files in Patterns:</strong> @GetMixedPatterns().SelectMany(p => p.AffectedFiles).Distinct().Count() files<br/>
+                                                <strong>Total Patterns:</strong> @GetMixedPatterns().Count patterns<br/>
+                                                <strong>Total Occurrences:</strong> @GetMixedPatterns().Sum(p => p.OccurenceCount) occurrences
+                                            </div>
+                                            <div class="col-md-6">
+                                                @{
+                                                    var totalFilesInPatterns = GetMixedPatterns().SelectMany(p => p.AffectedFiles).Distinct().Count();
+                                                    var totalCategoryFiles = GetCategoryCount("Mixed");
+                                                    var missingFiles = totalCategoryFiles - totalFilesInPatterns;
+                                                }
+                                                @if (missingFiles > 0)
+                                                {
+                                                    <div class="text-danger">
+                                                        <strong>⚠️ Missing Coverage:</strong> @missingFiles files with mixed issues are not captured in patterns
+                                                    </div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="text-success">
+                                                        <strong>✅ Complete Coverage:</strong> All mixed issue files are captured in patterns
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <EnhancedPatternListView Patterns="GetMixedPatterns()" OnSelectPattern="SetSelectedPattern" />
+                                }
+                                else
+                                {
+                                    <div class="text-center py-3 text-muted">
+                                        <i class="bi bi-info-circle"></i>
+                                        No mixed issue patterns found.
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            <!-- Selected Pattern Details -->
+            @if (SelectedPattern != null)
+            {
+                <div class="mt-4 border rounded p-3 bg-light">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <h6 class="mb-0">
+                            @if (SelectedPattern.IsCriticalProperty)
+                            {
+                                <i class="bi bi-exclamation-triangle text-danger"></i>
+                            }
+                            else
+                            {
+                                <i class="bi bi-info-circle text-info"></i>
+                            }
+                            Pattern Details
+                        </h6>
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => SelectedPattern = null">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    </div>
+                    
+                    @if (!string.IsNullOrEmpty(SelectedPattern.HumanReadableDescription))
+                    {
+                        <div class="alert @(SelectedPattern.IsCriticalProperty ? "alert-danger" : "alert-info") mb-3">
+                            <h6 class="alert-heading">Description</h6>
+                            <p class="mb-0">@SelectedPattern.HumanReadableDescription</p>
+                        </div>
+                    }
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong>Pattern:</strong> <code>@SelectedPattern.FullPattern</code><br/>
+                            <strong>Category:</strong> <span class="badge bg-primary">@SelectedPattern.Category</span><br/>
+                            <strong>Consistency:</strong> @SelectedPattern.Consistency.ToString("0.0")%<br/>
+                            <strong>Files Affected:</strong> @SelectedPattern.FileCount
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Total Occurrences:</strong> @SelectedPattern.OccurenceCount<br/>
+                            @if (SelectedPattern.IsCriticalProperty)
+                            {
+                                <span class="badge bg-danger">Critical Priority</span>
+                            }
+                            @if (!string.IsNullOrEmpty(SelectedPattern.RecommendAction))
+                            {
+                                <br/><br/>
+                                <strong>Recommended Action:</strong><br/>
+                                <small class="text-muted">@SelectedPattern.RecommendAction</small>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult Analysis { get; set; }
+    
+    [Parameter]
+    public MultiFolderComparisonResult FolderComparisonResult { get; set; }
+    
+    private HashSet<string> ExpandedCategories { get; set; } = new HashSet<string>();
+    private string ActivePatternTab { get; set; } = "value";
+    private EnhancedStructuralDifferenceAnalyzer.StructuralPattern? SelectedPattern { get; set; }
+    
+    private int GetCategoryCount(string category)
+    {
+        if (Analysis?.FileClassification?.FileCounts?.ContainsKey(category) == true)
+        {
+            return Analysis.FileClassification.FileCounts[category];
+        }
+        return 0;
+    }
+    
+    private List<string> GetCategoryFiles(string category)
+    {
+        if (Analysis?.FileClassification?.FilesByCategory?.ContainsKey(category) == true)
+        {
+            return Analysis.FileClassification.FilesByCategory[category];
+        }
+        return new List<string>();
+    }
+    
+    private void ToggleCategory(string category)
+    {
+        if (ExpandedCategories.Contains(category))
+        {
+            ExpandedCategories.Remove(category);
+        }
+        else
+        {
+            ExpandedCategories.Add(category);
+        }
+    }
+    
+    private bool HasPatterns()
+    {
+        return Analysis?.AllPatterns?.Any() == true;
+    }
+    
+    private int GetPatternCount(string category)
+    {
+        return category switch
+        {
+            "Value" => GetValuePatterns().Count,
+            "Missing" => GetMissingPatterns().Count,
+            "Order" => GetOrderPatterns().Count,
+            "Mixed" => GetMixedPatterns().Count,
+            _ => 0
+        };
+    }
+    
+    private List<EnhancedStructuralDifferenceAnalyzer.StructuralPattern> GetValuePatterns()
+    {
+        if (Analysis?.AllPatterns == null) return new List<EnhancedStructuralDifferenceAnalyzer.StructuralPattern>();
+        
+        return Analysis.AllPatterns
+            .Where(p => GetCategoryGroup(p.Category) == "Value")
+            .OrderByDescending(p => p.OccurenceCount)
+            .ThenByDescending(p => p.FileCount)
+            .ToList();
+    }
+    
+    private List<EnhancedStructuralDifferenceAnalyzer.StructuralPattern> GetMissingPatterns()
+    {
+        if (Analysis?.AllPatterns == null) return new List<EnhancedStructuralDifferenceAnalyzer.StructuralPattern>();
+        
+        return Analysis.AllPatterns
+            .Where(p => GetCategoryGroup(p.Category) == "Missing")
+            .OrderByDescending(p => p.IsCriticalProperty ? 1 : 0)
+            .ThenByDescending(p => p.OccurenceCount)
+            .ThenByDescending(p => p.FileCount)
+            .ToList();
+    }
+    
+    private List<EnhancedStructuralDifferenceAnalyzer.StructuralPattern> GetOrderPatterns()
+    {
+        if (Analysis?.AllPatterns == null) return new List<EnhancedStructuralDifferenceAnalyzer.StructuralPattern>();
+        
+        return Analysis.AllPatterns
+            .Where(p => GetCategoryGroup(p.Category) == "Order")
+            .OrderByDescending(p => p.OccurenceCount)
+            .ThenByDescending(p => p.FileCount)
+            .ToList();
+    }
+    
+    private List<EnhancedStructuralDifferenceAnalyzer.StructuralPattern> GetMixedPatterns()
+    {
+        if (Analysis?.AllPatterns == null) return new List<EnhancedStructuralDifferenceAnalyzer.StructuralPattern>();
+        
+        return Analysis.AllPatterns
+            .Where(p => GetCategoryGroup(p.Category) == "Mixed")
+            .OrderByDescending(p => p.OccurenceCount)
+            .ThenByDescending(p => p.FileCount)
+            .ToList();
+    }
+    
+    private string GetCategoryGroup(DifferenceCategory category)
+    {
+        return category switch
+        {
+            DifferenceCategory.NumericValueChanged => "Value",
+            DifferenceCategory.BooleanValueChanged => "Value",
+            DifferenceCategory.DateTimeChanged => "Value",
+            DifferenceCategory.TextContentChanged => "Value",
+            DifferenceCategory.ValueChanged => "Value",
+            DifferenceCategory.GeneralValueChanged => "Value",
+            
+            DifferenceCategory.ItemRemoved => "Missing",
+            DifferenceCategory.NullValueChange => "Missing",
+            
+            DifferenceCategory.CollectionItemChanged => "Order",
+            DifferenceCategory.ItemAdded => "Order",
+            
+            DifferenceCategory.UncategorizedDifference => "Uncategorized",
+            
+            _ => "Mixed"
+        };
+    }
+    
+    private void SetSelectedPattern(EnhancedStructuralDifferenceAnalyzer.StructuralPattern pattern)
+    {
+        SelectedPattern = pattern;
+    }
+} 

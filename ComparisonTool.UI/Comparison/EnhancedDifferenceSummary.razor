@@ -1,0 +1,253 @@
+@using ComparisonTool.Core.Comparison.Analysis
+@using ComparisonTool.Core.Comparison.Results
+@using KellermanSoftware.CompareNetObjects
+@using MudBlazor
+@inject IFileExportService FileExportService
+
+<MudPaper Elevation="2" Class="pa-4">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h5">Comparison Overview</MudText>
+        
+        @if (AreAllEqual)
+        {
+            <MudAlert Severity="Severity.Success" Variant="Variant.Filled" Icon="@Icons.Material.Filled.CheckCircle">
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.body1"><strong>@(FolderResult != null ? "All files are identical" : "Files are identical")</strong></MudText>
+                    <MudText Typo="Typo.body2">
+                        @if (FolderResult != null)
+                        {
+                            <text>No differences found in any of the @TotalFiles compared files.</text>
+                        }
+                        else
+                        {
+                            <text>No differences found according to current comparison rules.</text>
+                        }
+                    </MudText>
+                </MudStack>
+            </MudAlert>
+        }
+        else
+        {
+            @* Additional Context for Folder Comparisons *@
+            @if (FolderResult != null)
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@Icons.Material.Filled.FolderOpen" Size="Size.Small" />
+                        <MudText Typo="Typo.body2">
+                            Analyzing <strong>@TotalFiles</strong> files: 
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text">@(TotalFiles - FilesWithDifferences) identical</MudChip>
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Text">@FilesWithDifferences with differences</MudChip>
+                        </MudText>
+                    </MudStack>
+                </MudAlert>
+            }
+
+            @* Key Metrics Row *@
+            <MudGrid Spacing="3">
+                <MudItem xs="6" sm="3">
+                    <MudPaper Elevation="0" Outlined="true" Class="pa-3 text-center">
+                        <MudText Typo="Typo.h4" Color="Color.Warning">@TotalDifferences</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Default">Total Differences</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="6" sm="3">
+                    <MudPaper Elevation="0" Outlined="true" Class="pa-3 text-center">
+                        <MudText Typo="Typo.h4" Color="Color.Info">@AggregatedCategoryCount.Count</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Default">Change Types</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="6" sm="3">
+                    <MudPaper Elevation="0" Outlined="true" Class="pa-3 text-center">
+                        <MudText Typo="Typo.h4" Color="Color.Primary">@AggregatedObjectCount.Count</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Default">Affected Objects</MudText>
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="6" sm="3">
+                    <MudPaper Elevation="0" Outlined="true" Class="pa-3 text-center">
+                        <MudText Typo="Typo.h4" Color="Color.Secondary">@TotalPatterns</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Default">Patterns Found</MudText>
+                    </MudPaper>
+                </MudItem>
+            </MudGrid>
+
+            @* Top Categories Summary *@
+            <MudGrid Spacing="3">
+                <MudItem xs="12" md="6">
+                    <MudStack Spacing="2">
+                        <MudText Typo="Typo.subtitle2">Most Common Change Types</MudText>
+                        @foreach (var category in AggregatedCategoryCount
+                            .OrderByDescending(c => c.Value)
+                            .Take(3))
+                        {
+                            var percentage = TotalDifferences > 0 ? Math.Round((double)category.Value / TotalDifferences * 100, 1) : 0;
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.body2">@FormatCategoryName(category.Key)</MudText>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudProgressLinear Value="@percentage" Color="Color.Warning" Style="width: 80px;" Size="Size.Small" />
+                                    <MudText Typo="Typo.caption" Color="Color.Default">@category.Value (@percentage%)</MudText>
+                                </MudStack>
+                            </MudStack>
+                        }
+                    </MudStack>
+                </MudItem>
+                
+                <MudItem xs="12" md="6">
+                    <MudStack Spacing="2">
+                        <MudText Typo="Typo.subtitle2">Most Affected Objects</MudText>
+                        @foreach (var obj in AggregatedObjectCount
+                            .OrderByDescending(o => o.Value)
+                            .Take(3))
+                        {
+                            var percentage = TotalDifferences > 0 ? Math.Round((double)obj.Value / TotalDifferences * 100, 1) : 0;
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.body2" Style="max-width: 70%; word-break: break-all;">
+                                    <MudTooltip Text="@obj.Key">@TruncateText(obj.Key, 30)</MudTooltip>
+                                </MudText>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                    <MudProgressLinear Value="@percentage" Color="Color.Primary" Style="width: 60px;" Size="Size.Small" />
+                                    <MudText Typo="Typo.caption" Color="Color.Default">@obj.Value (@percentage%)</MudText>
+                                </MudStack>
+                            </MudStack>
+                        }
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+
+            @* Quick Insights *@
+            @if (TotalPatterns > 0 && AggregatedCategoryCount.Any())
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Icon="@Icons.Material.Filled.Lightbulb">
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.body2">
+                            <strong>Key Insight:</strong>
+                            @{
+                                var topCategory = AggregatedCategoryCount.OrderByDescending(c => c.Value).First();
+                            }
+                            @if (FolderResult != null)
+                            {
+                                <text>Across @TotalFiles files, @TotalDifferences differences were found. </text>
+                            }
+                            Most changes are <strong>@FormatCategoryName(topCategory.Key)</strong> affecting 
+                            @topCategory.Value properties@(TotalPatterns > 0 ? $" with {TotalPatterns} distinct patterns identified" : "").
+                        </MudText>
+                    </MudStack>
+                </MudAlert>
+            }
+
+            @* Testing Guidance *@
+            <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true" Icon="@Icons.Material.Filled.Info">
+                <MudText Typo="Typo.body2">
+                    <strong>Testing Focus:</strong>
+                    @if (AggregatedCategoryCount.Any())
+                    {
+                        var topCategory = AggregatedCategoryCount.OrderByDescending(c => c.Value).First();
+                        <text>Concentrate testing on <strong>@FormatCategoryName(topCategory.Key)</strong> changes</text>
+                        
+                        @if (AggregatedObjectCount.Any())
+                        {
+                            var topObject = AggregatedObjectCount.OrderByDescending(o => o.Value).First();
+                            <text>, particularly in <strong style="word-break: break-all;">@topObject.Key</strong> objects</text>
+                        }
+                        @if (FolderResult != null)
+                        {
+                            <text> across the @FilesWithDifferences files that have differences</text>
+                        }
+                        <text>.</text>
+                    }
+                </MudText>
+            </MudAlert>
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter]
+    public DifferenceSummary Summary { get; set; }
+
+    [Parameter]
+    public MultiFolderComparisonResult FolderResult { get; set; }
+
+    // Computed properties for aggregated folder statistics
+    private int TotalDifferences => FolderResult?.FilePairResults?.Sum(pair => pair.Summary?.TotalDifferenceCount ?? 0) ?? Summary.TotalDifferenceCount;
+
+    private int FilesWithDifferences => FolderResult?.FilePairResults?.Count(pair => !pair.AreEqual) ?? (Summary.AreEqual ? 0 : 1);
+
+    private int TotalFiles => FolderResult?.FilePairResults?.Count ?? 1;
+
+    private Dictionary<DifferenceCategory, int> AggregatedCategoryCount
+    {
+        get
+        {
+            if (FolderResult?.FilePairResults != null)
+            {
+                var aggregated = new Dictionary<DifferenceCategory, int>();
+                foreach (var pair in FolderResult.FilePairResults)
+                {
+                    if (pair.Summary?.DifferencesByChangeType != null)
+                    {
+                        foreach (var category in pair.Summary.DifferencesByChangeType)
+                        {
+                            aggregated[category.Key] = aggregated.GetValueOrDefault(category.Key, 0) + category.Value.Count;
+                        }
+                    }
+                }
+                return aggregated;
+            }
+            return Summary.DifferencesByChangeType.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Count);
+        }
+    }
+
+    private Dictionary<string, int> AggregatedObjectCount
+    {
+        get
+        {
+            if (FolderResult?.FilePairResults != null)
+            {
+                var aggregated = new Dictionary<string, int>();
+                foreach (var pair in FolderResult.FilePairResults)
+                {
+                    if (pair.Summary?.DifferencesByRootObject != null)
+                    {
+                        foreach (var obj in pair.Summary.DifferencesByRootObject)
+                        {
+                            aggregated[obj.Key] = aggregated.GetValueOrDefault(obj.Key, 0) + obj.Value.Count;
+                        }
+                    }
+                }
+                return aggregated;
+            }
+            return Summary.DifferencesByRootObject.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Count);
+        }
+    }
+
+    private int TotalPatterns => FolderResult?.FilePairResults?.Sum(pair => pair.Summary?.CommonPatterns?.Count ?? 0) ?? Summary.CommonPatterns.Count;
+
+    private bool AreAllEqual => FolderResult?.AllEqual ?? Summary.AreEqual;
+
+    private string FormatCategoryName(DifferenceCategory category)
+    {
+        return category switch
+        {
+            // DifferenceCategory.TextContentChanged => "Text Changes",
+            DifferenceCategory.NumericValueChanged => "Numeric Changes",
+            DifferenceCategory.DateTimeChanged => "Date/Time Changes",
+            DifferenceCategory.BooleanValueChanged => "Boolean Changes",
+            DifferenceCategory.CollectionItemChanged => "Collection Structure Changes",
+            DifferenceCategory.ItemAdded => "Added Items",
+            DifferenceCategory.ItemRemoved => "Removed Items",
+            DifferenceCategory.NullValueChange => "Null Value Changes",
+            DifferenceCategory.ValueChanged => "Property Value Changes",
+            DifferenceCategory.GeneralValueChanged => "General Changes",
+            _ => "Other Changes"
+        };
+    }
+
+    private string TruncateText(string text, int maxLength)
+    {
+        if (string.IsNullOrEmpty(text) || text.Length <= maxLength)
+            return text ?? "";
+
+        return text.Substring(0, maxLength - 3) + "...";
+    }
+}
