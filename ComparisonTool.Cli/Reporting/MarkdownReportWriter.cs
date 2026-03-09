@@ -32,7 +32,7 @@ public static class MarkdownReportWriter
 
         sb.AppendLine("# Comparison Report");
         sb.AppendLine();
-        sb.AppendLine($"**Generated:** {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC  ");
+        sb.AppendLine($"**Generated:** {context.GeneratedAtUtc:yyyy-MM-dd HH:mm:ss} UTC  ");
         sb.AppendLine($"**Command:** `{context.CommandName}`  ");
 
         if (!string.IsNullOrEmpty(context.ModelName))

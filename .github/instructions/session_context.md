@@ -1,58 +1,67 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2026-02-20T13:00:00Z
+lastUpdated: 2026-03-09T16:10:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-Fix synchronized scrolling in side-by-side full file comparison view
+Implement a static React-based HTML report for ComparisonTool.Cli
 
 ## Todo List Status
 ```markdown
-- [x] 🔍 Identify sync scrolling root cause
-- [x] 🛠️ Move scroll sync to client-side listeners with teardown
-- [x] ✅ Build and test verification
+- [x] 🔍 Inspect existing CLI reporting pipeline and UI scaffold
+- [x] 🛠️ Add shared HTML/JSON report contract and HTML writer
+- [x] 🎨 Replace placeholder report UI with interactive static React report
+- [x] 🧹 Remove accidental scaffold/temp npm files and create memory file
+- [x] ✅ Build UI, build CLI, and run HTML smoke test
 ```
 
 ## Recent File Changes
-- `ComparisonTool.Web/Components/Comparison/SideBySideFileView.razor`: Replaced server-side onscroll roundtrip with JS-configured bidirectional sync using unique per-instance panel IDs and disposal
-- `ComparisonTool.Web/wwwroot/js/app.js`: Added `configureBidirectionalScrollSync` and `disposeBidirectionalScrollSync` listener lifecycle helpers
-- `.github/instructions/session_context.md`: Updated context for synchronized scrolling fix
+- `ComparisonTool.Cli/Reporting/ComparisonReportData.cs`: Added shared DTOs, mapper, JSON options, and hashed report/pair identifiers
+- `ComparisonTool.Cli/Reporting/HtmlReportWriter.cs`: Added embedded-template HTML writer for self-contained static reports
+- `ComparisonTool.Cli/Commands/FolderCompareCommand.cs`: Added `Html` output support and updated output help text
+- `ComparisonTool.Cli/Commands/RequestCompareCommand.cs`: Added `Html` output support
+- `ComparisonTool.Cli/ComparisonTool.Cli.csproj`: Builds and embeds `ComparisonTool.ReportUI/dist/index.html`
+- `ComparisonTool.ReportUI/*`: Replaced placeholder app with typed React/Vite single-file report UI
+- `.github/instructions/memory.instruction.md`: Added required long-term memory file front matter
 
 ## Key Technical Decisions
-- Decision: Use pure client-side scroll event synchronization instead of Blazor server event roundtrips for panel sync
-- Rationale: Prevent latency, eliminate duplicate ID targeting issues, and ensure smooth reliable syncing
-- Date: 2026-02-20
+- Decision: Ship a single-file React/Vite report UI embedded into the CLI assembly and inject report JSON into a static HTML template
+- Rationale: Produces a Jenkins-friendly artifact with no runtime server dependency while preserving richer navigation/filtering UX
+- Date: 2026-03-09
+- Decision: Use one shared DTO/mapper for JSON and HTML outputs
+- Rationale: Keeps the static UI contract aligned with machine-readable JSON output and avoids duplicate projection logic
+- Date: 2026-03-09
 
 ## External Resources Referenced
 - Internal code inspection only
 
 ## Blockers & Issues
-- [RESOLVED] Synchronized scrolling did not work reliably due to server-roundtrip scroll events and static panel IDs
+- [RESOLVED] HTML output did not previously exist in the CLI despite earlier scaffold assumptions
+- [NOTE] Building the CLI from source now requires Node/npm at packaging time to rebuild the embedded report UI; viewing generated HTML artifacts does not require Node
 
 ## Failed Approaches
-- Approach: Sync via `@onscroll` in Blazor component and JS interop call per scroll event
-- Failure Reason: Blazor server event latency and non-unique IDs reduced reliability/usability
-- Lesson: Keep frequent UI events fully client-side and use unique IDs per component instance
+- Approach: Assume the existing scaffold already included a working HTML writer/output path
+- Failure Reason: Code inspection showed only `Console`, `Json`, and `Markdown` outputs were implemented
+- Lesson: Verify end-to-end output flow before building on top of a scaffold
 
 ## Environment Notes
 - .NET 10.0
+- Windows
 
 ## Next Session Priority
-No active tasks
+Stage/commit the new untracked report feature files, and optionally make the UI build step configurable if any pipeline still builds the CLI from source on Jenkins
 
 ## Session Notes
-Implemented robust synchronized scrolling for side-by-side diff panels with client-side bidirectional listeners, component-scoped unique panel IDs, listener cleanup, and lifecycle-based rebind when pairs/content change. Added paged grid selection synchronization so inspector-selected pairs auto-navigate to the correct page and highlight in Expected vs Actual results. Build succeeded and tests passed (143/143).
-
-Hosting feasibility review (2026-02-20): Current `ComparisonTool.Web` is a server-rendered Blazor app using Interactive Server render mode, SignalR hub endpoints, server-side file upload APIs, temp filesystem persistence, and background job execution. It is not directly deployable as a pure static web app without refactoring to Blazor WebAssembly + externalized backend services.
-
-External docs reviewed:
-- https://learn.microsoft.com/en-us/aspnet/core/blazor/components/render-modes?view=aspnetcore-9.0
-- https://learn.microsoft.com/en-us/azure/static-web-apps/overview
-- https://learn.microsoft.com/en-us/azure/static-web-apps/deploy-blazor
-- https://learn.microsoft.com/en-us/azure/static-web-apps/functions-bring-your-own
+- Implemented a new `Html` CLI output format backed by an embedded single-file React/Vite report app.
+- The generated report includes summary cards, pair navigation, search/filtering, affected-field drilldown, structured/raw diff views, local review categorization via `localStorage`, and export of review categories.
+- Validation completed:
+	- `npm run build` succeeded in `ComparisonTool.ReportUI`
+	- `dotnet build ComparisonTool.Cli/ComparisonTool.Cli.csproj` succeeded with warnings only
+	- Smoke test generated a standalone HTML artifact at `TestResults/CliOutput/HtmlSmoke/comparison-result-20260309-160741.html`
+	- Smoke test exit code was non-zero because differences were found, not because report generation failed
 
 ---
 # Previous Session Archive

@@ -11,6 +11,9 @@ public enum OutputFormat
     /// <summary>Machine-readable JSON file.</summary>
     Json,
 
+    /// <summary>Static HTML report.</summary>
+    Html,
+
     /// <summary>Markdown report file.</summary>
     Markdown,
 }

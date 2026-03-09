@@ -29,4 +29,18 @@
     </Content>
   </ItemGroup>
 
+  <Target Name="RestoreReportUIDependencies" BeforeTargets="BuildReportUI" Condition="!Exists('..\ComparisonTool.ReportUI\node_modules')">
+    <Exec Command="npm ci" WorkingDirectory="..\ComparisonTool.ReportUI" />
+  </Target>
+
+  <Target Name="BuildReportUI" BeforeTargets="BeforeBuild">
+    <Exec Command="npm run build" WorkingDirectory="..\ComparisonTool.ReportUI" />
+  </Target>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\ComparisonTool.ReportUI\dist\index.html">
+      <Link>Resources\ReportTemplate.html</Link>
+    </EmbeddedResource>
+  </ItemGroup>
+
 </Project>

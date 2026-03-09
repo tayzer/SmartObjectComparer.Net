@@ -59,12 +59,12 @@ public static class FolderCompareCommand
 
         var outputOption = new Option<DirectoryInfo?>("--output", "-o")
         {
-            Description = "Directory for report output files (JSON/Markdown). Defaults to current directory",
+            Description = "Directory for report output files (JSON/HTML/Markdown). Defaults to current directory",
         };
 
         var formatOption = new Option<OutputFormat[]>("--format", "-f")
         {
-            Description = "Output format(s): Console, Json, Markdown. Multiple allowed",
+            Description = "Output format(s): Console, Json, Html, Markdown. Multiple allowed",
             Arity = ArgumentArity.OneOrMore,
             AllowMultipleArgumentsPerToken = true,
             DefaultValueFactory = _ => new[] { OutputFormat.Console },
@@ -195,6 +195,7 @@ public static class FolderCompareCommand
         var reportContext = new ReportContext
         {
             Result = result,
+            GeneratedAtUtc = DateTime.UtcNow,
             Elapsed = stopwatch.Elapsed,
             CommandName = "folder",
             Directory1 = dir1.FullName,
@@ -205,6 +206,7 @@ public static class FolderCompareCommand
         };
 
         var resolvedOutputDir = outputDir?.FullName ?? Directory.GetCurrentDirectory();
+        var outputTimestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
         Directory.CreateDirectory(resolvedOutputDir);
 
         foreach (var format in formats.Distinct())
@@ -215,12 +217,17 @@ public static class FolderCompareCommand
                     ConsoleReportWriter.Write(reportContext);
                     break;
                 case OutputFormat.Json:
-                    var jsonPath = Path.Combine(resolvedOutputDir, $"comparison-result-{DateTime.Now:yyyyMMdd-HHmmss}.json");
+                    var jsonPath = Path.Combine(resolvedOutputDir, $"comparison-result-{outputTimestamp}.json");
                     await JsonReportWriter.WriteAsync(reportContext, jsonPath);
                     Console.WriteLine($"  JSON report: {jsonPath}");
                     break;
+                case OutputFormat.Html:
+                    var htmlPath = Path.Combine(resolvedOutputDir, $"comparison-result-{outputTimestamp}.html");
+                    await HtmlReportWriter.WriteAsync(reportContext, htmlPath);
+                    Console.WriteLine($"  HTML report: {htmlPath}");
+                    break;
                 case OutputFormat.Markdown:
-                    var mdPath = Path.Combine(resolvedOutputDir, $"comparison-result-{DateTime.Now:yyyyMMdd-HHmmss}.md");
+                    var mdPath = Path.Combine(resolvedOutputDir, $"comparison-result-{outputTimestamp}.md");
                     var pageCount = await MarkdownReportWriter.WriteAsync(reportContext, mdPath);
                     var pageSuffix = pageCount > 0 ? $" (+{pageCount} detail pages)" : string.Empty;
                     Console.WriteLine($"  Markdown report: {mdPath}{pageSuffix}");

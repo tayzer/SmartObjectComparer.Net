@@ -10,6 +10,9 @@ public class ReportContext
     /// <summary>Gets or sets the comparison result.</summary>
     required public MultiFolderComparisonResult Result { get; set; }
 
+    /// <summary>Gets or sets when the report payload was generated, in UTC.</summary>
+    public DateTime GeneratedAtUtc { get; set; } = DateTime.UtcNow;
+
     /// <summary>Gets or sets the elapsed wall-clock time.</summary>
     public TimeSpan Elapsed { get; set; }
 
