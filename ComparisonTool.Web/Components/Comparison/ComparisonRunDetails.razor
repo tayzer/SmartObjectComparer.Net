@@ -1,6 +1,7 @@
 ﻿@namespace ComparisonTool.Web.Components.Comparison
 @using ComparisonTool.Core.Comparison.Analysis
 @using ComparisonTool.Core.Comparison.Results
+@using ComparisonTool.Core.Utilities
 @using KellermanSoftware.CompareNetObjects
 
 <style>
@@ -261,13 +262,19 @@
                                           Size="Size.Small" />
                             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                    @_valueTreeNodes.Sum(n => CountLeafNodes(n)) properties
+                                    @_valueLeafCount properties
                                 </MudText>
                                 <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
                                     <MudIconButton Icon="@Icons.Material.Filled.UnfoldMore" Size="Size.Small" OnClick="ExpandAllValueNodes" Title="Expand All" />
                                     <MudIconButton Icon="@Icons.Material.Filled.UnfoldLess" Size="Size.Small" OnClick="CollapseAllValueNodes" Title="Collapse All" />
                                 </MudButtonGroup>
                             </MudStack>
+                            @if (!string.IsNullOrEmpty(_valueExpandInfoMessage))
+                            {
+                                <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true">
+                                    @_valueExpandInfoMessage
+                                </MudAlert>
+                            }
                         </MudStack>
                         
                         @if (_valueTreeNodes.Any())
@@ -342,6 +349,9 @@
                                                 <MudLink Typo="Typo.body2" Color="Color.Primary" Style="cursor: pointer; font-weight: 600;" OnClick="@(() => NavigateToFilePair(file.FileName))">
                                                     @file.FileName
                                                 </MudLink>
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined" Class="ml-2">
+                                                    @file.OccurrenceCount diffs
+                                                </MudChip>
                                                 <MudTooltip Text="View detailed comparison for this file pair">
                                                     <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Color="Color.Primary" OnClick="@(() => NavigateToFilePair(file.FileName))" />
                                                 </MudTooltip>
@@ -415,13 +425,19 @@
                                           Size="Size.Small" />
                             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                    @_orderTreeNodes.Sum(n => CountLeafNodes(n)) collections
+                                    @_orderLeafCount collections
                                 </MudText>
                                 <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
                                     <MudIconButton Icon="@Icons.Material.Filled.UnfoldMore" Size="Size.Small" OnClick="ExpandAllOrderNodes" Title="Expand All" />
                                     <MudIconButton Icon="@Icons.Material.Filled.UnfoldLess" Size="Size.Small" OnClick="CollapseAllOrderNodes" Title="Collapse All" />
                                 </MudButtonGroup>
                             </MudStack>
+                            @if (!string.IsNullOrEmpty(_orderExpandInfoMessage))
+                            {
+                                <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true">
+                                    @_orderExpandInfoMessage
+                                </MudAlert>
+                            }
                         </MudStack>
                         
                         @if (_orderTreeNodes.Any())
@@ -495,6 +511,9 @@
                                                 <MudLink Typo="Typo.body2" Color="Color.Primary" Style="cursor: pointer; font-weight: 600;" OnClick="@(() => NavigateToFilePair(file.FileName))">
                                                     @file.FileName
                                                 </MudLink>
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined" Class="ml-2">
+                                                    @file.OccurrenceCount diffs
+                                                </MudChip>
                                                 <MudTooltip Text="View detailed comparison for this file pair">
                                                     <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Color="Color.Primary" OnClick="@(() => NavigateToFilePair(file.FileName))" />
                                                 </MudTooltip>
@@ -723,6 +742,7 @@
                                     </div>
                                 </CellTemplate>
                             </TemplateColumn>
+                            <PropertyColumn Property="x => x.OccurrenceCount" Title="Count" Sortable="true" Groupable="false" />
                             <PropertyColumn Property="x => x.Category" Title="Category" Sortable="true" Groupable="true" />
                         </Columns>
                         <PagerContent>
@@ -773,6 +793,13 @@
     // Tree view data structures
     private List<TreeItemData<string>> _valueTreeNodes = new();
     private List<TreeItemData<string>> _orderTreeNodes = new();
+    private int _valueLeafCount;
+    private int _orderLeafCount;
+    private string _valueExpandInfoMessage = string.Empty;
+    private string _orderExpandInfoMessage = string.Empty;
+
+    private const int ExpandAllMaxNodes = 2500;
+    private const int ExpandAllSafeDepth = 3;
     
     public class PropertyTreeNode : TreeItemData<string>
     {
@@ -802,6 +829,7 @@
         public string ExpectedValue { get; set; } = "";
         public string ActualValue { get; set; } = "";
         public string Category { get; set; } = "";
+        public int OccurrenceCount { get; set; } = 1;
     }
     
     public class DifferenceGridItem
@@ -811,6 +839,7 @@
         public string ExpectedValue { get; set; } = "";
         public string ActualValue { get; set; } = "";
         public string Category { get; set; } = "";
+        public int OccurrenceCount { get; set; } = 1;
         public bool IsCritical { get; set; }
         public bool IsOrdering { get; set; }
     }
@@ -826,8 +855,14 @@
         _orderPropertyGroups.Clear();
         _criticalPropertyGroups.Clear();
         _allDifferences.Clear();
+        _valueExpandInfoMessage = string.Empty;
+        _orderExpandInfoMessage = string.Empty;
         
         if (Analysis?.AllPatterns == null) return;
+        
+        // Pre-build a file-identifier → differences index to avoid repeated full scans
+        // inside the pattern × file nested loops (O(1) lookup replaces O(pairs × diffs) scan)
+        var differencesByFile = BuildDifferencesIndex();
         
         foreach (var pattern in Analysis.AllPatterns)
         {
@@ -835,16 +870,25 @@
             var isOrder = IsOrderingDifference(pattern.Category);
             var isCritical = pattern.IsCriticalProperty;
             var propertyPath = ExtractBasePropertyPath(pattern.FullPattern);
+            var patternPath = ExtractPatternPath(pattern.FullPattern, pattern.Category);
             
             foreach (var file in pattern.AffectedFiles.Distinct())
             {
-                var example = pattern.Examples.FirstOrDefault();
+                var allFileDiffs = differencesByFile.TryGetValue(file, out var diffs)
+                    ? diffs
+                    : Enumerable.Empty<Difference>();
+                var fileDifferences = allFileDiffs
+                    .Where(d => DifferenceMatchesPattern(d, patternPath, pattern.Category))
+                    .ToList();
+                var example = fileDifferences.FirstOrDefault() ?? pattern.Examples.FirstOrDefault();
+                var occurrenceCount = fileDifferences.Count > 0 ? fileDifferences.Count : 1;
                 var fileDiff = new FileDifference
                 {
                     FileName = file,
-                    ExpectedValue = FormatValue(example?.Object1Value),
-                    ActualValue = FormatValue(example?.Object2Value),
-                    Category = pattern.Category.ToString()
+                    ExpectedValue = FormatValueWithCount(example?.Object1Value, occurrenceCount),
+                    ActualValue = FormatValueWithCount(example?.Object2Value, occurrenceCount),
+                    Category = pattern.Category.ToString(),
+                    OccurrenceCount = occurrenceCount,
                 };
                 
                 var gridItem = new DifferenceGridItem
@@ -854,6 +898,7 @@
                     ExpectedValue = fileDiff.ExpectedValue,
                     ActualValue = fileDiff.ActualValue,
                     Category = pattern.Category.ToString(),
+                    OccurrenceCount = occurrenceCount,
                     IsCritical = isCritical,
                     IsOrdering = isOrder
                 };
@@ -890,90 +935,67 @@
         // Build hierarchical tree views
         _valueTreeNodes = BuildPropertyTree(_valuePropertyGroups);
         _orderTreeNodes = BuildPropertyTree(_orderPropertyGroups);
+        _valueLeafCount = _valuePropertyGroups.Count;
+        _orderLeafCount = _orderPropertyGroups.Count;
     }
     
     private List<TreeItemData<string>> BuildPropertyTree(Dictionary<string, List<FileDifference>> propertyGroups)
     {
         var rootNodes = new List<PropertyTreeNode>();
-        var nodeMap = new Dictionary<string, PropertyTreeNode>(); // Track all nodes by full path
+        var nodeMap = new Dictionary<string, PropertyTreeNode>();
         
         foreach (var kvp in propertyGroups)
         {
             var path = kvp.Key;
             var differences = kvp.Value;
             
-            // Normalize path - remove array indices like [0], [1], [*]
-            var normalizedPath = System.Text.RegularExpressions.Regex.Replace(path, @"\[\d*\*?\]", "");
+            // Normalize path for hierarchy grouping while preserving object/property segments
+            var normalizedPath = System.Text.RegularExpressions.Regex.Replace(path, @"\[\d+\]", "[*]");
             var segments = normalizedPath.Split('.', StringSplitOptions.RemoveEmptyEntries);
             
             if (segments.Length == 0) continue;
             
-            // Build the tree structure
-            List<PropertyTreeNode> currentLevel = rootNodes;
-            PropertyTreeNode parentNode = null;
-            string currentPath = "";
-            
-            for (int i = 0; i < segments.Length; i++)
+            PropertyTreeNode? parentNode = null;
+            var currentPath = string.Empty;
+
+            for (var i = 0; i < segments.Length; i++)
             {
                 var segment = segments[i];
                 currentPath = string.IsNullOrEmpty(currentPath) ? segment : $"{currentPath}.{segment}";
                 var isLeaf = (i == segments.Length - 1);
-                
-                PropertyTreeNode existingNode = null;
-                if (nodeMap.TryGetValue(currentPath, out var mapped))
+
+                if (!nodeMap.TryGetValue(currentPath, out var node))
                 {
-                    existingNode = mapped;
-                }
-                
-                if (existingNode == null)
-                {
-                    var newNode = new PropertyTreeNode(segment, isLeaf ? path : currentPath)
+                    node = new PropertyTreeNode(segment, isLeaf ? path : currentPath)
                     {
                         IsLeaf = isLeaf,
                         DifferenceCount = isLeaf ? differences.Count : 0,
                         Differences = isLeaf ? differences : new List<FileDifference>()
                     };
-                    newNode.Expanded = i < 2; // Expand first 2 levels by default
-                    
-                    currentLevel.Add(newNode);
-                    nodeMap[currentPath] = newNode;
-                    parentNode = newNode;
-                    currentLevel = newNode.Children?.OfType<PropertyTreeNode>().ToList() ?? new List<PropertyTreeNode>();
-                    
-                    // Ensure children list is initialized
-                    if (newNode.Children == null)
-                        newNode.Children = new List<TreeItemData<string>>();
-                    currentLevel = newNode.Children.OfType<PropertyTreeNode>().ToList();
-                }
-                else
-                {
-                    if (isLeaf)
+                    node.Expanded = i < 2;
+
+                    nodeMap[currentPath] = node;
+
+                    if (parentNode == null)
                     {
-                        // This path leads to a leaf - update the node to be a leaf
-                        existingNode.IsLeaf = true;
-                        existingNode.FullPath = path;
-                        existingNode.DifferenceCount += differences.Count;
-                        existingNode.Differences.AddRange(differences);
+                        rootNodes.Add(node);
                     }
-                    parentNode = existingNode;
-                    currentLevel = existingNode.Children?.OfType<PropertyTreeNode>().ToList() ?? new List<PropertyTreeNode>();
-                }
-                
-                // Add to parent's children if this is a new node
-                if (parentNode != null && i > 0)
-                {
-                    var parentPath = string.Join(".", segments.Take(i));
-                    if (nodeMap.TryGetValue(parentPath, out var parent))
+                    else
                     {
-                        if (parent.Children == null)
-                            parent.Children = new List<TreeItemData<string>>();
-                        
-                        if (!parent.Children.OfType<PropertyTreeNode>().Any(c => c.FullPath == currentPath))
-                        {
-                            parent.Children.Add(nodeMap[currentPath]);
-                        }
+                        parentNode.Children ??= new List<TreeItemData<string>>();
+                        parentNode.Children.Add(node);
                     }
                 }
+
+                if (isLeaf)
+                {
+                    node.IsLeaf = true;
+                    node.FullPath = path;
+                    node.DifferenceCount += differences.Count;
+                    node.Differences.AddRange(differences);
+                }
+
+                parentNode = node;
             }
         }
         
@@ -1038,29 +1060,69 @@
     
     private void ExpandAllValueNodes()
     {
-        foreach (var node in _valueTreeNodes)
-            SetExpandedRecursive(node, true);
+        var totalNodes = CountTreeNodes(_valueTreeNodes);
+
+        if (totalNodes > ExpandAllMaxNodes)
+        {
+            SetExpandedToDepth(_valueTreeNodes, ExpandAllSafeDepth);
+            _valueExpandInfoMessage =
+                $"Large tree detected ({totalNodes:N0} nodes). Expanded first {ExpandAllSafeDepth} levels to keep UI responsive. Use filter/search or expand specific branches for deeper navigation.";
+        }
+        else
+        {
+            foreach (var node in _valueTreeNodes)
+            {
+                SetExpandedRecursive(node, true);
+            }
+
+            _valueExpandInfoMessage = string.Empty;
+        }
+
         StateHasChanged();
     }
     
     private void CollapseAllValueNodes()
     {
         foreach (var node in _valueTreeNodes)
+        {
             SetExpandedRecursive(node, false);
+        }
+
+        _valueExpandInfoMessage = string.Empty;
         StateHasChanged();
     }
     
     private void ExpandAllOrderNodes()
     {
-        foreach (var node in _orderTreeNodes)
-            SetExpandedRecursive(node, true);
+        var totalNodes = CountTreeNodes(_orderTreeNodes);
+
+        if (totalNodes > ExpandAllMaxNodes)
+        {
+            SetExpandedToDepth(_orderTreeNodes, ExpandAllSafeDepth);
+            _orderExpandInfoMessage =
+                $"Large tree detected ({totalNodes:N0} nodes). Expanded first {ExpandAllSafeDepth} levels to keep UI responsive.";
+        }
+        else
+        {
+            foreach (var node in _orderTreeNodes)
+            {
+                SetExpandedRecursive(node, true);
+            }
+
+            _orderExpandInfoMessage = string.Empty;
+        }
+
         StateHasChanged();
     }
     
     private void CollapseAllOrderNodes()
     {
         foreach (var node in _orderTreeNodes)
+        {
             SetExpandedRecursive(node, false);
+        }
+
+        _orderExpandInfoMessage = string.Empty;
         StateHasChanged();
     }
     
@@ -1088,6 +1150,53 @@
             foreach (var child in treeItem.Children)
                 SetExpandedRecursive(child, expanded);
         }
+    }
+
+    private void SetExpandedToDepth(IEnumerable<TreeItemData<string>> nodes, int maxDepth)
+    {
+        foreach (var node in nodes)
+        {
+            SetExpandedToDepth(node, 0, maxDepth);
+        }
+    }
+
+    private void SetExpandedToDepth(TreeItemData<string> treeItem, int depth, int maxDepth)
+    {
+        treeItem.Expanded = depth < maxDepth;
+
+        if (treeItem.Children == null)
+        {
+            return;
+        }
+
+        foreach (var child in treeItem.Children)
+        {
+            SetExpandedToDepth(child, depth + 1, maxDepth);
+        }
+    }
+
+    private int CountTreeNodes(IEnumerable<TreeItemData<string>> roots)
+    {
+        var count = 0;
+        var stack = new Stack<TreeItemData<string>>(roots);
+
+        while (stack.Count > 0)
+        {
+            var node = stack.Pop();
+            count++;
+
+            if (node.Children == null)
+            {
+                continue;
+            }
+
+            foreach (var child in node.Children)
+            {
+                stack.Push(child);
+            }
+        }
+
+        return count;
     }
     
     private void SelectValueProperty(string prop) { SelectedValueProperty = prop; }
@@ -1178,10 +1287,22 @@
     
     private string ExtractBasePropertyPath(string fullPattern)
     {
-        var cleaned = System.Text.RegularExpressions.Regex.Replace(fullPattern, @"\[\d*\*?\]", "");
-        var parts = cleaned.Split('_');
-        if (parts.Length > 1 && !string.IsNullOrEmpty(parts[0]))
-            cleaned = parts[0];
+        if (string.IsNullOrWhiteSpace(fullPattern))
+            return string.Empty;
+
+        var cleaned = fullPattern;
+
+        if (cleaned.EndsWith("_GENERAL_CHANGE", StringComparison.Ordinal))
+            cleaned = cleaned.Substring(0, cleaned.Length - "_GENERAL_CHANGE".Length);
+
+        if (cleaned.EndsWith("_critical", StringComparison.Ordinal))
+            cleaned = cleaned.Substring(0, cleaned.Length - "_critical".Length);
+
+        if (cleaned.EndsWith("[Order]", StringComparison.Ordinal))
+            cleaned = cleaned.Substring(0, cleaned.Length - "[Order]".Length);
+
+        cleaned = System.Text.RegularExpressions.Regex.Replace(cleaned, @"\[\d+\]", "[*]");
+
         return cleaned;
     }
     
@@ -1198,6 +1319,85 @@
         if (value is DateTime dt) return dt.ToString("yyyy-MM-dd HH:mm:ss");
         var str = value.ToString() ?? "null";
         return str.Length > 100 ? str.Substring(0, 97) + "..." : str;
+    }
+
+    private string FormatValueWithCount(object value, int occurrenceCount)
+    {
+        var formatted = FormatValue(value);
+        return occurrenceCount > 1 ? $"{formatted} (+{occurrenceCount - 1} more)" : formatted;
+    }
+
+    private Dictionary<string, List<Difference>> BuildDifferencesIndex()
+    {
+        var filePairResults = FolderComparisonResult?.FilePairResults;
+        if (filePairResults == null)
+            return new Dictionary<string, List<Difference>>(StringComparer.Ordinal);
+
+        var index = new Dictionary<string, List<Difference>>(filePairResults.Count, StringComparer.Ordinal);
+
+        foreach (var result in filePairResults)
+        {
+            if (result.HasError || result.Result?.Differences == null)
+                continue;
+
+            var identifier = GetPairIdentifier(result);
+            if (!index.TryGetValue(identifier, out var list))
+            {
+                list = new List<Difference>();
+                index[identifier] = list;
+            }
+
+            list.AddRange(result.Result.Differences);
+        }
+
+        return index;
+    }
+
+
+    private string GetPairIdentifier(FilePairComparisonResult filePairResult)
+    {
+        return string.IsNullOrWhiteSpace(filePairResult.RequestRelativePath)
+            ? $"{filePairResult.File1Name} vs {filePairResult.File2Name}"
+            : filePairResult.RequestRelativePath;
+    }
+
+    private string ExtractPatternPath(string fullPattern, DifferenceCategory category)
+    {
+        if (string.IsNullOrWhiteSpace(fullPattern))
+            return string.Empty;
+
+        if (category == DifferenceCategory.CollectionItemChanged && fullPattern.EndsWith("[Order]", StringComparison.Ordinal))
+        {
+            return fullPattern.Substring(0, fullPattern.Length - "[Order]".Length);
+        }
+
+        if (fullPattern.EndsWith("_GENERAL_CHANGE", StringComparison.Ordinal))
+        {
+            return fullPattern.Substring(0, fullPattern.Length - "_GENERAL_CHANGE".Length);
+        }
+
+        if (fullPattern.EndsWith("_critical", StringComparison.Ordinal))
+        {
+            return fullPattern.Substring(0, fullPattern.Length - "_critical".Length);
+        }
+
+        var split = fullPattern.Split('_');
+        return split.Length > 1 && !string.IsNullOrWhiteSpace(split[0]) ? split[0] : fullPattern;
+    }
+
+    private bool DifferenceMatchesPattern(Difference difference, string patternPath, DifferenceCategory category)
+    {
+        if (difference == null || string.IsNullOrWhiteSpace(difference.PropertyName))
+            return false;
+
+        if (category == DifferenceCategory.CollectionItemChanged)
+        {
+            return difference.PropertyName.StartsWith(patternPath + "[", StringComparison.Ordinal)
+                || difference.PropertyName.StartsWith(patternPath + ".", StringComparison.Ordinal);
+        }
+
+        var normalizedDifferencePath = PropertyPathNormalizer.NormalizePropertyPath(difference.PropertyName);
+        return string.Equals(normalizedDifferencePath, patternPath, StringComparison.Ordinal);
     }
     
     private void RefreshAnalysis()

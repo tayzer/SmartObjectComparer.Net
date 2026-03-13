@@ -129,12 +129,15 @@ comparisontool request <request-dir> \
   -a https://host-a/api/endpoint \
   -b https://host-b/api/endpoint \
   -m ComplexOrderResponse -c 32 --timeout 60000 \
+  --soap-action "urn:YourSoapAction" \
   --ignore-rules ./ignore-rules.json \
   --content-type application/json \
   --disable-truncation \
   --ignore-collection-order --ignore-trailing-whitespace-end --ignore-namespaces \
   -f Console Json Html --html-mode StaticSite -o ./reports
 ```
+
+`--soap-action` is optional. When provided, it sets the `SOAPAction` header for requests sent to both endpoints.
 
 For CI troubleshooting (for example Jenkins), use `--disable-truncation` to show full value bodies directly in generated reports and console output.
 

@@ -300,7 +300,7 @@
                                        OnExportAll="@ExportAllFolderResults" />
             }
 
-            @if (FolderComparisonResult != null && SelectedPairIndex >= 0)
+            @if (FolderComparisonResult != null && SelectedPairIndex >= 0 && SelectedPairIndex < FolderComparisonResult.FilePairResults.Count)
             {
                 var selectedFolderPair = FolderComparisonResult.FilePairResults[SelectedPairIndex];
 
@@ -464,7 +464,7 @@
                         </MudStack>
                     </MudPaper>
 
-                    @if (RequestComparisonResult != null && SelectedRequestPairIndex >= 0)
+                    @if (RequestComparisonResult != null && SelectedRequestPairIndex >= 0 && SelectedRequestPairIndex < RequestComparisonResult.FilePairResults.Count)
                     {
                         var selectedRequestPair = RequestComparisonResult.FilePairResults[SelectedRequestPairIndex];
 
@@ -549,6 +549,7 @@
     private ComparisonResult ComparisonResult { get; set; }
     private DifferenceSummary DifferenceSummary { get; set; }
     private bool ShowAllDifferences { get; set; } = false;
+    private const int LargePairShowAllResetThreshold = 5000;
     private MultiFolderComparisonResult FolderComparisonResult { get; set; }
     private int SelectedPairIndex { get; set; } = -1;
     private List<RawTextDifference>? FolderRawFileDifferences { get; set; }
@@ -832,7 +833,7 @@
             // Select the first result if there are differences
             if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 0)
             {
-                SelectPairResult(0);
+                await SelectPairResult(0);
             }
             
             // Get semantic analysis from metadata if available
@@ -923,7 +924,7 @@
                 // Select the first result if there are differences
                 if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 0)
                 {
-                    SelectPairResult(0);
+                    await SelectPairResult(0);
                 }
                 
                 // Generate enhanced structural analysis if enabled
@@ -956,7 +957,7 @@
                 // Select the first result if there are differences
                 if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 0)
                 {
-                    SelectPairResult(0);
+                    await SelectPairResult(0);
                 }
 
                 // Generate semantic analysis if needed
@@ -1018,6 +1019,12 @@
         var selectedPair = FolderComparisonResult.FilePairResults[index];
         ComparisonResult = selectedPair.Result;
         DifferenceSummary = selectedPair.Summary;
+
+        var selectedDiffCount = selectedPair.Result?.Differences?.Count ?? 0;
+        if (selectedDiffCount > LargePairShowAllResetThreshold && ShowAllDifferences)
+        {
+            ShowAllDifferences = false;
+        }
 
         // Compute raw file diff for error detail view when the pair has an error
         if (selectedPair.HasError && !string.IsNullOrEmpty(selectedPair.File1Path))
@@ -1103,6 +1110,12 @@
         ComparisonResult = selectedPair.Result;
         DifferenceSummary = selectedPair.Summary;
 
+        var selectedDiffCount = selectedPair.Result?.Differences?.Count ?? 0;
+        if (selectedDiffCount > LargePairShowAllResetThreshold && ShowAllDifferences)
+        {
+            ShowAllDifferences = false;
+        }
+
         if (selectedPair.HasError && !string.IsNullOrEmpty(selectedPair.File1Path))
         {
             try
@@ -1144,11 +1157,8 @@
     {
         if (FolderComparisonResult?.FilePairResults == null || string.IsNullOrEmpty(fileName))
             return;
-            
-        var index = FolderComparisonResult.FilePairResults.FindIndex(p => 
-            string.Equals(p.File1Name, fileName, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(p.File2Name, fileName, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals($"{p.File1Name} vs {p.File2Name}", fileName, StringComparison.OrdinalIgnoreCase));
+
+        var index = ResolvePairIndex(FolderComparisonResult.FilePairResults, fileName);
             
         if (index >= 0)
         {
@@ -1164,12 +1174,8 @@
     {
         if (RequestComparisonResult?.FilePairResults == null || string.IsNullOrEmpty(fileName))
             return;
-            
-        var index = RequestComparisonResult.FilePairResults.FindIndex(p => 
-            string.Equals(p.RequestRelativePath, fileName, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(p.File1Name, fileName, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(p.File2Name, fileName, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals($"{p.File1Name} vs {p.File2Name}", fileName, StringComparison.OrdinalIgnoreCase));
+
+        var index = ResolvePairIndex(RequestComparisonResult.FilePairResults, fileName);
             
         if (index >= 0)
         {
@@ -1227,6 +1233,51 @@
         var invalidChars = Path.GetInvalidFileNameChars();
         var sanitized = new string(value.Select(c => invalidChars.Contains(c) ? '_' : c).ToArray());
         return sanitized.Replace('/', '_').Replace('\\', '_');
+    }
+
+    private static int ResolvePairIndex(IReadOnlyList<FilePairComparisonResult> pairs, string selectedIdentifier)
+    {
+        if (pairs == null || string.IsNullOrWhiteSpace(selectedIdentifier))
+            return -1;
+
+        var normalizedSelected = NormalizeIdentifier(selectedIdentifier);
+        var selectedFileName = Path.GetFileName(normalizedSelected);
+
+        for (var i = 0; i < pairs.Count; i++)
+        {
+            var pair = pairs[i];
+            var pairDisplay = $"{pair.File1Name} vs {pair.File2Name}";
+
+            if (IdentifierEquals(pair.RequestRelativePath, normalizedSelected) ||
+                IdentifierEquals(pair.File1Name, normalizedSelected) ||
+                IdentifierEquals(pair.File2Name, normalizedSelected) ||
+                IdentifierEquals(pairDisplay, normalizedSelected))
+            {
+                return i;
+            }
+
+            if (!string.IsNullOrWhiteSpace(selectedFileName) &&
+                (IdentifierEquals(Path.GetFileName(pair.File1Name), selectedFileName) ||
+                 IdentifierEquals(Path.GetFileName(pair.File2Name), selectedFileName)))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static string NormalizeIdentifier(string value)
+    {
+        return (value ?? string.Empty).Trim().Replace('\\', '/');
+    }
+
+    private static bool IdentifierEquals(string left, string right)
+    {
+        if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
+            return false;
+
+        return string.Equals(NormalizeIdentifier(left), NormalizeIdentifier(right), StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool ShouldRenderRawRequestDetail(FilePairComparisonResult selectedPair)

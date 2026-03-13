@@ -76,7 +76,19 @@ public class XmlDeserializationService : IXmlDeserializationService
         logger.LogInformation("Registered model {ModelName} as {ModelType}", modelName, typeof(T).Name);
 
         // Pre-cache the serializer for this type to avoid creation during comparison
-        GetCachedSerializer<T>();
+        try
+        {
+            GetCachedSerializer<T>();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Failed to pre-cache serializer for model {ModelName} ({ModelType}). " +
+                "The serializer will be created lazily when/if this model is used.",
+                modelName,
+                typeof(T).FullName);
+        }
 
         // Automatically add XmlIgnore properties to the ignore list if config service is available
         if (configService != null)
