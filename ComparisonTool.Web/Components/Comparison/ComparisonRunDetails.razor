@@ -860,16 +860,26 @@
         
         if (Analysis?.AllPatterns == null) return;
         
+        // Pre-build a file-identifier → differences index to avoid repeated full scans
+        // inside the pattern × file nested loops (O(1) lookup replaces O(pairs × diffs) scan)
+        var differencesByFile = BuildDifferencesIndex();
+        
         foreach (var pattern in Analysis.AllPatterns)
         {
             var isValue = IsValueDifference(pattern.Category);
             var isOrder = IsOrderingDifference(pattern.Category);
             var isCritical = pattern.IsCriticalProperty;
             var propertyPath = ExtractBasePropertyPath(pattern.FullPattern);
+            var patternPath = ExtractPatternPath(pattern.FullPattern, pattern.Category);
             
             foreach (var file in pattern.AffectedFiles.Distinct())
             {
-                var fileDifferences = GetMatchingDifferencesForFile(pattern, file);
+                var allFileDiffs = differencesByFile.TryGetValue(file, out var diffs)
+                    ? diffs
+                    : Enumerable.Empty<Difference>();
+                var fileDifferences = allFileDiffs
+                    .Where(d => DifferenceMatchesPattern(d, patternPath, pattern.Category))
+                    .ToList();
                 var example = fileDifferences.FirstOrDefault() ?? pattern.Examples.FirstOrDefault();
                 var occurrenceCount = fileDifferences.Count > 0 ? fileDifferences.Count : 1;
                 var fileDiff = new FileDifference
@@ -1317,32 +1327,32 @@
         return occurrenceCount > 1 ? $"{formatted} (+{occurrenceCount - 1} more)" : formatted;
     }
 
-    private List<Difference> GetMatchingDifferencesForFile(EnhancedStructuralDifferenceAnalyzer.StructuralPattern pattern, string fileIdentifier)
+    private Dictionary<string, List<Difference>> BuildDifferencesIndex()
     {
-        if (FolderComparisonResult?.FilePairResults == null)
-            return new List<Difference>();
+        var filePairResults = FolderComparisonResult?.FilePairResults;
+        if (filePairResults == null)
+            return new Dictionary<string, List<Difference>>(StringComparer.Ordinal);
 
-        var patternPath = ExtractPatternPath(pattern.FullPattern, pattern.Category);
-        var matches = new List<Difference>();
+        var index = new Dictionary<string, List<Difference>>(filePairResults.Count, StringComparer.Ordinal);
 
-        foreach (var result in FolderComparisonResult.FilePairResults)
+        foreach (var result in filePairResults)
         {
-            if (result.HasError || !string.Equals(GetPairIdentifier(result), fileIdentifier, StringComparison.Ordinal))
-            {
+            if (result.HasError || result.Result?.Differences == null)
                 continue;
+
+            var identifier = GetPairIdentifier(result);
+            if (!index.TryGetValue(identifier, out var list))
+            {
+                list = new List<Difference>();
+                index[identifier] = list;
             }
 
-            foreach (var difference in result.Result?.Differences ?? new List<Difference>())
-            {
-                if (DifferenceMatchesPattern(difference, patternPath, pattern.Category))
-                {
-                    matches.Add(difference);
-                }
-            }
+            list.AddRange(result.Result.Differences);
         }
 
-        return matches;
+        return index;
     }
+
 
     private string GetPairIdentifier(FilePairComparisonResult filePairResult)
     {
