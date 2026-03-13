@@ -1,10 +1,12 @@
 using System.CommandLine;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using ComparisonTool.Cli.Infrastructure;
 using ComparisonTool.Cli.Reporting;
 using ComparisonTool.Core.RequestComparison.Models;
 using ComparisonTool.Core.RequestComparison.Services;
+using ComparisonTool.Core.Serialization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -13,7 +15,7 @@ namespace ComparisonTool.Cli.Commands;
 /// <summary>
 /// CLI command for executing requests against two endpoints and comparing the responses.
 /// </summary>
-public static class RequestCompareCommand
+public static partial class RequestCompareCommand
 {
     /// <summary>
     /// Creates the "request" sub-command.
@@ -39,9 +41,8 @@ public static class RequestCompareCommand
 
         var modelOption = new Option<string>("--model", "-m")
         {
-            Description = "Domain model name for response comparison (default: Auto)",
-            Arity = ArgumentArity.ZeroOrOne,
-            DefaultValueFactory = _ => "Auto",
+            Description = "Domain model name for response comparison. Must match a registered model (e.g. ComplexOrderResponse, SoapEnvelope)",
+            Required = true,
         };
 
         var concurrencyOption = new Option<int>("--concurrency", "-c")
@@ -111,6 +112,11 @@ public static class RequestCompareCommand
             Description = "Override Content-Type header for all request bodies",
         };
 
+        var soapActionOption = new Option<string?>("--soap-action")
+        {
+            Description = "Optional SOAPAction header value to send with every request",
+        };
+
         var outputOption = new Option<DirectoryInfo?>("--output", "-o")
         {
             Description = "Directory for report output files. Defaults to current directory",
@@ -139,6 +145,13 @@ public static class RequestCompareCommand
             }
         });
 
+        var disableTruncationOption = new Option<bool>("--disable-truncation")
+        {
+            Description = "Disable truncation of long strings in reports",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => false,
+        };
+
         var command = new Command("request", "Execute requests against two endpoints and compare responses")
         {
             requestDirArg,
@@ -154,9 +167,11 @@ public static class RequestCompareCommand
             semanticAnalysisOption,
             ignoreRulesFileOption,
             contentTypeOption,
+            soapActionOption,
             outputOption,
             formatOption,
             pageSizeOption,
+            disableTruncationOption,
         };
 
         command.SetAction(async (parseResult, cancellationToken) =>
@@ -174,9 +189,11 @@ public static class RequestCompareCommand
             var semanticAnalysis = parseResult.GetValue(semanticAnalysisOption);
             var ignoreRulesFile = parseResult.GetValue(ignoreRulesFileOption);
             var contentTypeOverride = parseResult.GetValue(contentTypeOption);
+            var soapAction = parseResult.GetValue(soapActionOption);
             var outputDir = parseResult.GetValue(outputOption);
             var formats = parseResult.GetValue(formatOption) ?? new[] { OutputFormat.Console };
             var pageSize = parseResult.GetValue(pageSizeOption);
+            var disableTruncation = parseResult.GetValue(disableTruncationOption);
 
             return await ExecuteAsync(
                 configuration,
@@ -193,9 +210,11 @@ public static class RequestCompareCommand
                 semanticAnalysis,
                 ignoreRulesFile,
                 contentTypeOverride,
+                soapAction,
                 outputDir,
                 formats,
                 pageSize,
+                disableTruncation,
                 cancellationToken);
         });
 
@@ -217,9 +236,11 @@ public static class RequestCompareCommand
         bool semanticAnalysis,
         FileInfo? ignoreRulesFile,
         string? contentTypeOverride,
+        string? soapAction,
         DirectoryInfo? outputDir,
         OutputFormat[] formats,
         int markdownPageSize,
+        bool disableTruncation,
         CancellationToken cancellationToken)
     {
         if (!requestDir.Exists)
@@ -238,12 +259,30 @@ public static class RequestCompareCommand
         {
             Console.WriteLine($"  Content-Type: {contentTypeOverride}");
         }
+        if (!string.IsNullOrWhiteSpace(soapAction))
+        {
+            Console.WriteLine($"  SOAPAction: {soapAction}");
+        }
         Console.WriteLine();
+
+        // Validate model name up-front — fail fast before staging any temp files
+        await using var serviceProvider = ServiceProviderFactory.CreateServiceProvider(configuration);
+
+        var xmlDeserializationService = serviceProvider.GetRequiredService<IXmlDeserializationService>();
+        var availableModels = xmlDeserializationService.GetRegisteredModelNames()
+            .OrderBy(m => m, StringComparer.Ordinal)
+            .ToList();
+
+        if (!availableModels.Contains(modelName, StringComparer.Ordinal))
+        {
+            Console.Error.WriteLine($"Error: Unknown model name '{modelName}'.");
+            Console.Error.WriteLine($"Available models: {string.Join(", ", availableModels)}");
+            Console.Error.WriteLine($"Use -m with one of the listed names. If '{modelName}' is a new model, it must be registered in ServiceProviderFactory.");
+            return 1;
+        }
 
         // Stage the request files into the temp batch directory that RequestFileParserService expects
         var batchId = await StageRequestBatchAsync(requestDir, cancellationToken);
-
-        await using var serviceProvider = ServiceProviderFactory.CreateServiceProvider(configuration);
 
         var jobService = serviceProvider.GetRequiredService<RequestComparisonJobService>();
 
@@ -253,6 +292,13 @@ public static class RequestCompareCommand
             Console.Error.WriteLine(ignoreRulesResult.ErrorMessage);
             return 1;
         }
+
+        var soapHeaders = string.IsNullOrWhiteSpace(soapAction)
+            ? null
+            : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["SOAPAction"] = soapAction,
+            };
 
         var createRequest = new CreateRequestComparisonJobRequest
         {
@@ -270,6 +316,8 @@ public static class RequestCompareCommand
             IgnoreRules = ignoreRulesResult.IgnoreRules,
             SmartIgnoreRules = ignoreRulesResult.SmartIgnoreRules,
             ContentTypeOverride = contentTypeOverride,
+            HeadersA = soapHeaders,
+            HeadersB = soapHeaders,
         };
 
         var job = jobService.CreateJob(createRequest);
@@ -320,6 +368,8 @@ public static class RequestCompareCommand
             JobId = job.JobId,
             MostAffectedFields = MostAffectedFieldsAggregator.Build(result),
             MarkdownPageSize = markdownPageSize,
+            HtmlMode = htmlMode,
+            DisableTruncation = disableTruncation,
         };
 
         var resolvedOutputDir = outputDir?.FullName ?? Directory.GetCurrentDirectory();
@@ -354,6 +404,7 @@ public static class RequestCompareCommand
 
         return result.AllEqual ? 0 : 2;
     }
+
 
     /// <summary>
     /// Copies request files from the user's directory into the temp batch path
@@ -416,10 +467,6 @@ public static class RequestCompareCommand
         try
         {
             var json = await File.ReadAllTextAsync(fileInfo.FullName, cancellationToken);
-            var options = new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true,
-            };
 
             if (string.IsNullOrWhiteSpace(json))
             {
@@ -428,11 +475,11 @@ public static class RequestCompareCommand
 
             if (json.TrimStart().StartsWith("[", StringComparison.Ordinal))
             {
-                var rules = JsonSerializer.Deserialize<List<IgnoreRuleDto>>(json, options) ?? new List<IgnoreRuleDto>();
+                var rules = JsonSerializer.Deserialize(json, IgnoreRulesJsonContext.Default.ListIgnoreRuleDto) ?? new List<IgnoreRuleDto>();
                 return IgnoreRulesLoadResult.Success(rules, new List<SmartIgnoreRuleDto>());
             }
 
-            var container = JsonSerializer.Deserialize<IgnoreRulesContainer>(json, options) ?? new IgnoreRulesContainer();
+            var container = JsonSerializer.Deserialize(json, IgnoreRulesJsonContext.Default.IgnoreRulesContainer) ?? new IgnoreRulesContainer();
             return IgnoreRulesLoadResult.Success(
                 container.IgnoreRules ?? new List<IgnoreRuleDto>(),
                 container.SmartIgnoreRules ?? new List<SmartIgnoreRuleDto>());
@@ -452,6 +499,14 @@ public static class RequestCompareCommand
         public List<IgnoreRuleDto>? IgnoreRules { get; init; }
 
         public List<SmartIgnoreRuleDto>? SmartIgnoreRules { get; init; }
+    }
+
+    [JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
+    [JsonSerializable(typeof(List<IgnoreRuleDto>))]
+    [JsonSerializable(typeof(List<SmartIgnoreRuleDto>))]
+    [JsonSerializable(typeof(IgnoreRulesContainer))]
+    private sealed partial class IgnoreRulesJsonContext : JsonSerializerContext
+    {
     }
 
     private sealed record IgnoreRulesLoadResult
@@ -481,4 +536,5 @@ public static class RequestCompareCommand
                 ErrorMessage = message,
             };
     }
+
 }

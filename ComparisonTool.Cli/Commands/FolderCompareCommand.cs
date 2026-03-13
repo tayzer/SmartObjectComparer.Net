@@ -85,6 +85,13 @@ public static class FolderCompareCommand
             }
         });
 
+        var disableTruncationOption = new Option<bool>("--disable-truncation")
+        {
+            Description = "Disable truncation of long strings in reports",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => false,
+        };
+
         var command = new Command("folder", "Compare two directories of XML/JSON files")
         {
             dir1Arg,
@@ -97,6 +104,7 @@ public static class FolderCompareCommand
             outputOption,
             formatOption,
             pageSizeOption,
+            disableTruncationOption,
         };
 
         command.SetAction(async (parseResult, cancellationToken) =>
@@ -111,6 +119,7 @@ public static class FolderCompareCommand
             var outputDir = parseResult.GetValue(outputOption);
             var formats = parseResult.GetValue(formatOption) ?? new[] { OutputFormat.Console };
             var pageSize = parseResult.GetValue(pageSizeOption);
+            var disableTruncation = parseResult.GetValue(disableTruncationOption);
 
             return await ExecuteAsync(
                 configuration,
@@ -124,6 +133,7 @@ public static class FolderCompareCommand
                 outputDir,
                 formats,
                 pageSize,
+                disableTruncation,
                 cancellationToken);
         });
 
@@ -142,6 +152,7 @@ public static class FolderCompareCommand
         DirectoryInfo? outputDir,
         OutputFormat[] formats,
         int markdownPageSize,
+        bool disableTruncation,
         CancellationToken cancellationToken)
     {
         if (!dir1.Exists)
@@ -163,6 +174,21 @@ public static class FolderCompareCommand
         Console.WriteLine();
 
         await using var serviceProvider = ServiceProviderFactory.CreateServiceProvider(configuration);
+
+        // Validate the model name against the registered model registry before running.
+        var xmlDeserializationService = serviceProvider.GetRequiredService<IXmlDeserializationService>();
+        var availableModels = xmlDeserializationService.GetRegisteredModelNames()
+            .OrderBy(m => m, StringComparer.Ordinal)
+            .ToList();
+
+        if (!availableModels.Contains(modelName, StringComparer.Ordinal))
+        {
+            Console.Error.WriteLine($"Error: Unknown model name '{modelName}'.");
+            Console.Error.WriteLine($"Available models: {string.Join(", ", availableModels)}");
+            Console.Error.WriteLine($"Use -m with one of the listed names. If '{modelName}' is a new model, it must be registered in ServiceProviderFactory.");
+            return 1;
+        }
+
         using var scope = serviceProvider.CreateScope();
 
         var configService = scope.ServiceProvider.GetRequiredService<IComparisonConfigurationService>();
@@ -203,6 +229,7 @@ public static class FolderCompareCommand
             ModelName = modelName,
             MostAffectedFields = MostAffectedFieldsAggregator.Build(result),
             MarkdownPageSize = markdownPageSize,
+            DisableTruncation = disableTruncation,
         };
 
         var resolvedOutputDir = outputDir?.FullName ?? Directory.GetCurrentDirectory();

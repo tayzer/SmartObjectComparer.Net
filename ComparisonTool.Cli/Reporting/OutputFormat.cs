@@ -16,4 +16,7 @@ public enum OutputFormat
 
     /// <summary>Markdown report file.</summary>
     Markdown,
+
+    /// <summary>Interactive HTML report output.</summary>
+    Html,
 }

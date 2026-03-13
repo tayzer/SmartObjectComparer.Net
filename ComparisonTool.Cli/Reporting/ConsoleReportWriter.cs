@@ -48,6 +48,7 @@ public static class ConsoleReportWriter
         Console.WriteLine($"  Errors:          {errorCount}");
         Console.WriteLine($"  All equal:       {(result.AllEqual ? "YES" : "NO")}");
         Console.WriteLine($"  Elapsed:         {context.Elapsed.TotalSeconds:F2}s");
+
         WriteSeparator();
 
         // Show first N differences for quick triage
@@ -74,8 +75,8 @@ public static class ConsoleReportWriter
                     foreach (var diff in pair.Result.Differences.Take(3))
                     {
                         Console.WriteLine($"      • {diff.PropertyName}");
-                        Console.WriteLine($"        Expected: {Truncate(diff.Object1Value, 80)}");
-                        Console.WriteLine($"        Actual:   {Truncate(diff.Object2Value, 80)}");
+                        Console.WriteLine($"        Expected: {Truncate(diff.Object1Value, 80, context.DisableTruncation)}");
+                        Console.WriteLine($"        Actual:   {Truncate(diff.Object2Value, 80, context.DisableTruncation)}");
                     }
 
                     if (pair.Result.Differences.Count > 3)
@@ -108,11 +109,16 @@ public static class ConsoleReportWriter
         Console.WriteLine($"  {string.Empty.PadRight(60, '─')}");
     }
 
-    private static string Truncate(string? value, int maxLength)
+    private static string Truncate(string? value, int maxLength, bool disableTruncation)
     {
         if (string.IsNullOrEmpty(value))
         {
             return "(null)";
+        }
+
+        if (disableTruncation)
+        {
+            return value;
         }
 
         return value.Length <= maxLength ? value : value[..maxLength] + "...";
