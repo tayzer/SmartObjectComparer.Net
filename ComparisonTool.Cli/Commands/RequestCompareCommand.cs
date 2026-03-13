@@ -368,7 +368,6 @@ public static partial class RequestCompareCommand
             JobId = job.JobId,
             MostAffectedFields = MostAffectedFieldsAggregator.Build(result),
             MarkdownPageSize = markdownPageSize,
-            HtmlMode = htmlMode,
             DisableTruncation = disableTruncation,
         };
 
