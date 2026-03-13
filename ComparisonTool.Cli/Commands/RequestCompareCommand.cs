@@ -42,8 +42,7 @@ public static partial class RequestCompareCommand
         var modelOption = new Option<string>("--model", "-m")
         {
             Description = "Domain model name for response comparison. Must match a registered model (e.g. ComplexOrderResponse, SoapEnvelope)",
-            Arity = ArgumentArity.ZeroOrOne,
-            DefaultValueFactory = _ => "Auto",
+            Required = true,
         };
 
         var concurrencyOption = new Option<int>("--concurrency", "-c")
@@ -277,27 +276,13 @@ public static partial class RequestCompareCommand
         }
         Console.WriteLine();
 
-        // Stage the request files into the temp batch directory that RequestFileParserService expects
-        var batchId = await StageRequestBatchAsync(requestDir, cancellationToken);
-
+        // Validate model name up-front — fail fast before staging any temp files
         await using var serviceProvider = ServiceProviderFactory.CreateServiceProvider(configuration);
 
-        var jobService = serviceProvider.GetRequiredService<RequestComparisonJobService>();
-
-        // Validate model name before starting the job — provide a clear error rather than
-        // per-file deserialization failures buried in the report.
         var xmlDeserializationService = serviceProvider.GetRequiredService<IXmlDeserializationService>();
         var availableModels = xmlDeserializationService.GetRegisteredModelNames()
             .OrderBy(m => m, StringComparer.Ordinal)
             .ToList();
-
-        if (string.Equals(modelName, "Auto", StringComparison.OrdinalIgnoreCase))
-        {
-            Console.Error.WriteLine("Error: A domain model name must be specified with -m. 'Auto' is not a valid model name.");
-            Console.Error.WriteLine($"Available models: {string.Join(", ", availableModels)}");
-            Console.Error.WriteLine("Example: -m ComplexOrderResponse");
-            return 1;
-        }
 
         if (!availableModels.Contains(modelName, StringComparer.Ordinal))
         {
@@ -307,12 +292,24 @@ public static partial class RequestCompareCommand
             return 1;
         }
 
+        // Stage the request files into the temp batch directory that RequestFileParserService expects
+        var batchId = await StageRequestBatchAsync(requestDir, cancellationToken);
+
+        var jobService = serviceProvider.GetRequiredService<RequestComparisonJobService>();
+
         var ignoreRulesResult = await LoadIgnoreRulesAsync(ignoreRulesFile, cancellationToken);
         if (!ignoreRulesResult.IsSuccess)
         {
             Console.Error.WriteLine(ignoreRulesResult.ErrorMessage);
             return 1;
         }
+
+        var soapHeaders = string.IsNullOrWhiteSpace(soapAction)
+            ? null
+            : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["SOAPAction"] = soapAction,
+            };
 
         var createRequest = new CreateRequestComparisonJobRequest
         {
@@ -330,18 +327,8 @@ public static partial class RequestCompareCommand
             IgnoreRules = ignoreRulesResult.IgnoreRules,
             SmartIgnoreRules = ignoreRulesResult.SmartIgnoreRules,
             ContentTypeOverride = contentTypeOverride,
-            HeadersA = string.IsNullOrWhiteSpace(soapAction)
-                ? null
-                : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                {
-                    ["SOAPAction"] = soapAction,
-                },
-            HeadersB = string.IsNullOrWhiteSpace(soapAction)
-                ? null
-                : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                {
-                    ["SOAPAction"] = soapAction,
-                },
+            HeadersA = soapHeaders,
+            HeadersB = soapHeaders,
         };
 
         var job = jobService.CreateJob(createRequest);

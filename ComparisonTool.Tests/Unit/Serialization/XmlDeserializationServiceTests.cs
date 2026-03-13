@@ -423,6 +423,34 @@ public class XmlDeserializationServiceTests
     }
 
     [TestMethod]
+    public void RegisterDomainModel_WhenSerializerPreCachingFails_ShouldStillRegisterModelAndLogWarning()
+    {
+        // Arrange - register a factory that throws to simulate a pre-cache failure
+        var throwingFactory = new CoreXmlSerializerFactory();
+        throwingFactory.RegisterType<TestModel>(() => throw new InvalidOperationException("Simulated serializer factory error"));
+
+        var warnLogger = new Mock<ILogger<XmlDeserializationService>>();
+        var serviceUnderTest = new XmlDeserializationService(warnLogger.Object, throwingFactory);
+
+        // Act — must not throw
+        var act = () => serviceUnderTest.RegisterDomainModel<TestModel>("ThrowingModel");
+        act.Should().NotThrow();
+
+        // Assert — model is still present in the registry
+        serviceUnderTest.GetRegisteredModelNames().Should().Contain("ThrowingModel");
+
+        // Assert — a warning was logged mentioning the model name and failure
+        warnLogger.Verify(
+            x => x.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((o, t) => o.ToString()!.Contains("ThrowingModel")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.AtLeastOnce());
+    }
+
+    [TestMethod]
     public void IgnoreXmlNamespaces_ShouldBeTrueByDefault()
     {
         // Assert
