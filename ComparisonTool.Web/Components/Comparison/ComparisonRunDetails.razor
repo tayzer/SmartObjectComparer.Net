@@ -849,6 +849,27 @@
         BuildPropertyGroups();
     }
     
+    private Dictionary<string, List<Difference>> BuildFileDifferenceIndex()
+    {
+        var index = new Dictionary<string, List<Difference>>(StringComparer.Ordinal);
+        if (FolderComparisonResult?.FilePairResults == null) return index;
+
+        foreach (var result in FolderComparisonResult.FilePairResults)
+        {
+            if (result.HasError) continue;
+            var key = GetPairIdentifier(result);
+            if (!index.TryGetValue(key, out var list))
+            {
+                list = new List<Difference>();
+                index[key] = list;
+            }
+            if (result.Result?.Differences != null)
+                list.AddRange(result.Result.Differences);
+        }
+
+        return index;
+    }
+
     private void BuildPropertyGroups()
     {
         _valuePropertyGroups.Clear();
@@ -859,6 +880,9 @@
         _orderExpandInfoMessage = string.Empty;
         
         if (Analysis?.AllPatterns == null) return;
+
+        // Pre-index all file-pair differences once to avoid O(patterns × files × pairs × diffs) scans.
+        var fileDifferenceIndex = BuildFileDifferenceIndex();
         
         foreach (var pattern in Analysis.AllPatterns)
         {
@@ -866,10 +890,13 @@
             var isOrder = IsOrderingDifference(pattern.Category);
             var isCritical = pattern.IsCriticalProperty;
             var propertyPath = ExtractBasePropertyPath(pattern.FullPattern);
+            var patternPath = ExtractPatternPath(pattern.FullPattern, pattern.Category);
             
             foreach (var file in pattern.AffectedFiles.Distinct())
             {
-                var fileDifferences = GetMatchingDifferencesForFile(pattern, file);
+                var fileDifferences = fileDifferenceIndex.TryGetValue(file, out var diffs)
+                    ? diffs.Where(d => DifferenceMatchesPattern(d, patternPath, pattern.Category)).ToList()
+                    : new List<Difference>();
                 var example = fileDifferences.FirstOrDefault() ?? pattern.Examples.FirstOrDefault();
                 var occurrenceCount = fileDifferences.Count > 0 ? fileDifferences.Count : 1;
                 var fileDiff = new FileDifference
@@ -1315,33 +1342,6 @@
     {
         var formatted = FormatValue(value);
         return occurrenceCount > 1 ? $"{formatted} (+{occurrenceCount - 1} more)" : formatted;
-    }
-
-    private List<Difference> GetMatchingDifferencesForFile(EnhancedStructuralDifferenceAnalyzer.StructuralPattern pattern, string fileIdentifier)
-    {
-        if (FolderComparisonResult?.FilePairResults == null)
-            return new List<Difference>();
-
-        var patternPath = ExtractPatternPath(pattern.FullPattern, pattern.Category);
-        var matches = new List<Difference>();
-
-        foreach (var result in FolderComparisonResult.FilePairResults)
-        {
-            if (result.HasError || !string.Equals(GetPairIdentifier(result), fileIdentifier, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            foreach (var difference in result.Result?.Differences ?? new List<Difference>())
-            {
-                if (DifferenceMatchesPattern(difference, patternPath, pattern.Category))
-                {
-                    matches.Add(difference);
-                }
-            }
-        }
-
-        return matches;
     }
 
     private string GetPairIdentifier(FilePairComparisonResult filePairResult)
