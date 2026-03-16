@@ -70,6 +70,28 @@ public static class FolderCompareCommand
             DefaultValueFactory = _ => new[] { OutputFormat.Console },
         };
 
+        var htmlModeOption = new Option<HtmlReportMode>("--html-mode")
+        {
+            Description = "HTML export mode: StaticSite (lazy-loaded static site) or SingleFile (embedded payload)",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => HtmlReportMode.StaticSite,
+        };
+
+        var htmlChunkSizeOption = new Option<int>("--html-chunk-size")
+        {
+            Description = "Pairs per lazy-loaded HTML detail chunk",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => 250,
+        };
+        htmlChunkSizeOption.Validators.Add(result =>
+        {
+            var value = result.GetValue(htmlChunkSizeOption);
+            if (value < 25 || value > 1000)
+            {
+                result.AddError("HTML chunk size must be between 25 and 1000");
+            }
+        });
+
         var pageSizeOption = new Option<int>("--page-size")
         {
             Description = "Max file pairs per markdown page (0 = no pagination, all in one file)",
@@ -103,6 +125,8 @@ public static class FolderCompareCommand
             ignoreTrailingWhitespaceOption,
             outputOption,
             formatOption,
+            htmlModeOption,
+            htmlChunkSizeOption,
             pageSizeOption,
             disableTruncationOption,
         };
@@ -118,6 +142,8 @@ public static class FolderCompareCommand
             var ignoreTrailingWhitespaceAtEnd = parseResult.GetValue(ignoreTrailingWhitespaceOption);
             var outputDir = parseResult.GetValue(outputOption);
             var formats = parseResult.GetValue(formatOption) ?? new[] { OutputFormat.Console };
+            var htmlMode = parseResult.GetValue(htmlModeOption);
+            var htmlChunkSize = parseResult.GetValue(htmlChunkSizeOption);
             var pageSize = parseResult.GetValue(pageSizeOption);
             var disableTruncation = parseResult.GetValue(disableTruncationOption);
 
@@ -132,6 +158,8 @@ public static class FolderCompareCommand
                 ignoreTrailingWhitespaceAtEnd,
                 outputDir,
                 formats,
+                htmlMode,
+                htmlChunkSize,
                 pageSize,
                 disableTruncation,
                 cancellationToken);
@@ -151,6 +179,8 @@ public static class FolderCompareCommand
         bool ignoreTrailingWhitespaceAtEnd,
         DirectoryInfo? outputDir,
         OutputFormat[] formats,
+        HtmlReportMode htmlMode,
+        int htmlChunkSize,
         int markdownPageSize,
         bool disableTruncation,
         CancellationToken cancellationToken)
@@ -228,6 +258,8 @@ public static class FolderCompareCommand
             Directory2 = dir2.FullName,
             ModelName = modelName,
             MostAffectedFields = MostAffectedFieldsAggregator.Build(result),
+            HtmlMode = htmlMode,
+            HtmlDetailChunkSize = htmlChunkSize,
             MarkdownPageSize = markdownPageSize,
             DisableTruncation = disableTruncation,
         };

@@ -161,7 +161,7 @@ internal static class ComparisonReportMapper
 
         return new ComparisonReportDto
         {
-            ReportId = BuildReportId(context),
+            ReportId = ComparisonReportIdentity.BuildReportId(context),
             GeneratedAt = context.GeneratedAtUtc,
             Command = context.CommandName,
             Model = context.ModelName,
@@ -239,7 +239,7 @@ internal static class ComparisonReportMapper
 
         return new ComparisonFilePairDto
         {
-            PairId = BuildPairId(pair, index),
+            PairId = ComparisonReportIdentity.BuildPairId(pair, index),
             Index = index + 1,
             File1 = pair.File1Name,
             File2 = pair.File2Name,
@@ -282,36 +282,6 @@ internal static class ComparisonReportMapper
         };
     }
 
-    private static string BuildReportId(ReportContext context)
-    {
-        var identity = string.Join(
-            "|",
-            context.CommandName,
-            context.ModelName ?? string.Empty,
-            Path.GetFileName(context.Directory1 ?? string.Empty),
-            Path.GetFileName(context.Directory2 ?? string.Empty),
-            context.EndpointA ?? string.Empty,
-            context.EndpointB ?? string.Empty,
-            context.JobId ?? string.Empty,
-            context.GeneratedAtUtc.ToString("O"));
-
-        return $"{context.CommandName}-{CreateStableHash(identity)}";
-    }
-
-    private static string BuildPairId(FilePairComparisonResult pair, int index)
-    {
-        var stableSegment = string.Join(
-            "|",
-            index + 1,
-            pair.RequestRelativePath ?? string.Empty,
-            pair.File1Name ?? string.Empty,
-            Path.GetFileName(pair.File1Path ?? string.Empty),
-            pair.File2Name ?? string.Empty,
-            Path.GetFileName(pair.File2Path ?? string.Empty));
-
-        return $"pair-{index + 1}-{CreateStableHash(stableSegment)}";
-    }
-
     private static string GetComparisonKind(FilePairComparisonResult pair, int differenceCount, int rawDifferenceCount)
     {
         if (pair.HasError)
@@ -331,8 +301,41 @@ internal static class ComparisonReportMapper
 
         return "equal";
     }
+}
 
-    private static string CreateStableHash(string value)
+internal static class ComparisonReportIdentity
+{
+    public static string BuildReportId(ReportContext context)
+    {
+        var identity = string.Join(
+            "|",
+            context.CommandName,
+            context.ModelName ?? string.Empty,
+            Path.GetFileName(context.Directory1 ?? string.Empty),
+            Path.GetFileName(context.Directory2 ?? string.Empty),
+            context.EndpointA ?? string.Empty,
+            context.EndpointB ?? string.Empty,
+            context.JobId ?? string.Empty,
+            context.GeneratedAtUtc.ToString("O"));
+
+        return $"{context.CommandName}-{CreateStableHash(identity)}";
+    }
+
+    public static string BuildPairId(FilePairComparisonResult pair, int index)
+    {
+        var stableSegment = string.Join(
+            "|",
+            index + 1,
+            pair.RequestRelativePath ?? string.Empty,
+            pair.File1Name ?? string.Empty,
+            Path.GetFileName(pair.File1Path ?? string.Empty),
+            pair.File2Name ?? string.Empty,
+            Path.GetFileName(pair.File2Path ?? string.Empty));
+
+        return $"pair-{index + 1}-{CreateStableHash(stableSegment)}";
+    }
+
+    public static string CreateStableHash(string value)
     {
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(value));
         return Convert.ToHexString(hash.AsSpan(0, 8)).ToLowerInvariant();

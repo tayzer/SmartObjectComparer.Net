@@ -130,6 +130,28 @@ public static partial class RequestCompareCommand
             DefaultValueFactory = _ => new[] { OutputFormat.Console },
         };
 
+        var htmlModeOption = new Option<HtmlReportMode>("--html-mode")
+        {
+            Description = "HTML export mode: StaticSite (lazy-loaded static site) or SingleFile (embedded payload)",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => HtmlReportMode.StaticSite,
+        };
+
+        var htmlChunkSizeOption = new Option<int>("--html-chunk-size")
+        {
+            Description = "Pairs per lazy-loaded HTML detail chunk",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => 250,
+        };
+        htmlChunkSizeOption.Validators.Add(result =>
+        {
+            var value = result.GetValue(htmlChunkSizeOption);
+            if (value < 25 || value > 1000)
+            {
+                result.AddError("HTML chunk size must be between 25 and 1000");
+            }
+        });
+
         var pageSizeOption = new Option<int>("--page-size")
         {
             Description = "Max file pairs per markdown page (0 = no pagination, all in one file)",
@@ -170,6 +192,8 @@ public static partial class RequestCompareCommand
             soapActionOption,
             outputOption,
             formatOption,
+            htmlModeOption,
+            htmlChunkSizeOption,
             pageSizeOption,
             disableTruncationOption,
         };
@@ -192,6 +216,8 @@ public static partial class RequestCompareCommand
             var soapAction = parseResult.GetValue(soapActionOption);
             var outputDir = parseResult.GetValue(outputOption);
             var formats = parseResult.GetValue(formatOption) ?? new[] { OutputFormat.Console };
+            var htmlMode = parseResult.GetValue(htmlModeOption);
+            var htmlChunkSize = parseResult.GetValue(htmlChunkSizeOption);
             var pageSize = parseResult.GetValue(pageSizeOption);
             var disableTruncation = parseResult.GetValue(disableTruncationOption);
 
@@ -213,6 +239,8 @@ public static partial class RequestCompareCommand
                 soapAction,
                 outputDir,
                 formats,
+                htmlMode,
+                htmlChunkSize,
                 pageSize,
                 disableTruncation,
                 cancellationToken);
@@ -239,6 +267,8 @@ public static partial class RequestCompareCommand
         string? soapAction,
         DirectoryInfo? outputDir,
         OutputFormat[] formats,
+        HtmlReportMode htmlMode,
+        int htmlChunkSize,
         int markdownPageSize,
         bool disableTruncation,
         CancellationToken cancellationToken)
@@ -367,6 +397,8 @@ public static partial class RequestCompareCommand
             ModelName = modelName,
             JobId = job.JobId,
             MostAffectedFields = MostAffectedFieldsAggregator.Build(result),
+            HtmlMode = htmlMode,
+            HtmlDetailChunkSize = htmlChunkSize,
             MarkdownPageSize = markdownPageSize,
             DisableTruncation = disableTruncation,
         };

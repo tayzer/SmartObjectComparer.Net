@@ -1,5 +1,15 @@
-export interface ComparisonReport {
+export interface ReportBootstrap {
   schemaVersion: number;
+  mode: 'single-file' | 'static-site' | string;
+  report: ReportHeader;
+  defaultPageSize: number;
+  detailChunkSize: number;
+  indexPath?: string | null;
+  index?: ReportIndex | null;
+  detailChunks?: ReportDetailChunk[] | null;
+}
+
+export interface ReportHeader {
   reportId: string;
   generatedAt: string;
   command: string;
@@ -13,8 +23,7 @@ export interface ComparisonReport {
   summary: ComparisonSummary;
   mostAffectedFields: MostAffectedFields;
   pairOutcomeCounts: LabelCount[];
-  filePairs: ComparisonFilePair[];
-  metadata?: Record<string, unknown> | null;
+  metadataKeys: string[];
 }
 
 export interface ComparisonSummary {
@@ -43,7 +52,16 @@ export interface LabelCount {
   count: number;
 }
 
-export interface ComparisonFilePair {
+export interface ReportIndex {
+  totalPairs: number;
+  pairs: PairSummary[];
+  patterns: PatternCluster[];
+  statusCounts: LabelCount[];
+  comparisonKindCounts: LabelCount[];
+  topFields: LabelCount[];
+}
+
+export interface PairSummary {
   pairId: string;
   index: number;
   file1: string;
@@ -63,8 +81,37 @@ export interface ComparisonFilePair {
   affectedFields: string[];
   categoryCounts: LabelCount[];
   rootObjectCounts: LabelCount[];
+  patternKeys: string[];
+  searchText: string;
+  detailChunkId: string;
+  detailChunkPath?: string | null;
+}
+
+export interface PatternCluster {
+  key: string;
+  label: string;
+  kind: string;
+  count: number;
+  description?: string | null;
+  samplePairIds: string[];
+}
+
+export interface ReportDetailChunk {
+  chunkId: string;
+  pairIds: string[];
+  pairs: PairDetail[];
+}
+
+export interface PairDetail {
+  pairId: string;
+  index: number;
+  areEqual: boolean;
+  hasError: boolean;
+  errorMessage?: string | null;
+  errorType?: string | null;
   differences: StructuredDifference[];
   rawTextDifferences: RawTextDifference[];
+  diffDocument?: DiffDocument | null;
 }
 
 export interface StructuredDifference {
@@ -80,4 +127,22 @@ export interface RawTextDifference {
   textA?: string | null;
   textB?: string | null;
   description: string;
+}
+
+export interface DiffDocument {
+  format: 'xml' | 'json' | 'text' | string;
+  leftLabel: string;
+  rightLabel: string;
+  totalLines: number;
+  changedLineCount: number;
+  lines: DiffLine[];
+}
+
+export interface DiffLine {
+  rowNumber: number;
+  changeType: 'unchanged' | 'modified' | 'inserted' | 'deleted' | string;
+  leftLineNumber?: number | null;
+  rightLineNumber?: number | null;
+  leftText?: string | null;
+  rightText?: string | null;
 }

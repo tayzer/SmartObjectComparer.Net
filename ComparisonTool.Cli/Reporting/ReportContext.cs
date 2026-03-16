@@ -57,7 +57,17 @@ public class ReportContext
     /// <summary>
     /// Gets or sets the HTML export mode used by <see cref="HtmlReportWriter"/>.
     /// </summary>
-    public HtmlReportMode HtmlMode { get; set; } = HtmlReportMode.SingleFile;
+    public HtmlReportMode HtmlMode { get; set; } = HtmlReportMode.StaticSite;
+
+    /// <summary>
+    /// Gets or sets the default page size used by the static HTML report pair list.
+    /// </summary>
+    public int HtmlDefaultPageSize { get; set; } = 100;
+
+    /// <summary>
+    /// Gets or sets the number of pair-detail records stored per lazy-loaded HTML chunk.
+    /// </summary>
+    public int HtmlDetailChunkSize { get; set; } = 250;
 
     /// <summary>
     /// Gets or sets a value indicating whether to disable truncation of long strings in reports.

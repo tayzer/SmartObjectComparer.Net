@@ -20,11 +20,46 @@ public static class HtmlReportWriter
     public static async Task WriteAsync(ReportContext context, string outputPath)
     {
         var template = await ReadTemplateAsync();
-        var report = ComparisonReportMapper.Map(context);
-        var reportJson = JsonSerializer.Serialize(report, ComparisonReportJson.CompactOptions);
+
+        var outputDirectory = Path.GetDirectoryName(outputPath);
+        if (!string.IsNullOrWhiteSpace(outputDirectory))
+        {
+            Directory.CreateDirectory(outputDirectory);
+        }
+
+        HtmlReportBootstrapDto bootstrap;
+
+        if (context.HtmlMode == HtmlReportMode.StaticSite)
+        {
+            var baseDirectory = Path.GetDirectoryName(outputPath) ?? Directory.GetCurrentDirectory();
+            var dataRootPath = BuildDataRootPath(outputPath);
+            var dataDirectory = Path.Combine(
+                baseDirectory,
+                dataRootPath);
+
+            if (Directory.Exists(dataDirectory))
+            {
+                Directory.Delete(dataDirectory, recursive: true);
+            }
+
+            Directory.CreateDirectory(dataDirectory);
+
+            bootstrap = await HtmlReportBundleBuilder.WriteStaticSiteAsync(context, dataRootPath, baseDirectory);
+        }
+        else
+        {
+            bootstrap = HtmlReportBundleBuilder.BuildSingleFile(context).Bootstrap;
+        }
+
+        var reportJson = JsonSerializer.Serialize(bootstrap, ComparisonReportJson.CompactOptions);
         var html = template.Replace(ReportDataPlaceholder, reportJson, StringComparison.Ordinal);
 
         await File.WriteAllTextAsync(outputPath, html);
+    }
+
+    private static string BuildDataRootPath(string outputPath)
+    {
+        return $"{Path.GetFileNameWithoutExtension(outputPath)}.data";
     }
 
     private static async Task<string> ReadTemplateAsync()
