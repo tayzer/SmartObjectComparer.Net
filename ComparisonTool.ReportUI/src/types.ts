@@ -56,6 +56,7 @@ export interface ReportIndex {
   totalPairs: number;
   pairs: PairSummary[];
   patterns: PatternCluster[];
+  patternMetadata?: Record<string, PatternMetadata>;
   statusCounts: LabelCount[];
   comparisonKindCounts: LabelCount[];
   topFields: LabelCount[];
@@ -78,6 +79,8 @@ export interface PairSummary {
   httpStatusB?: number | null;
   differenceCount: number;
   comparisonKind: 'equal' | 'structured' | 'raw-text' | 'error' | string;
+  previewLabel?: string | null;
+  previewChange?: string | null;
   affectedFields: string[];
   categoryCounts: LabelCount[];
   rootObjectCounts: LabelCount[];
@@ -94,6 +97,12 @@ export interface PatternCluster {
   count: number;
   description?: string | null;
   samplePairIds: string[];
+}
+
+export interface PatternMetadata {
+  label: string;
+  kind: string;
+  description?: string | null;
 }
 
 export interface ReportDetailChunk {

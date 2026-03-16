@@ -17,7 +17,9 @@ $ContentType = "application/xml"
 $IgnoreRulesPath = ""
 $OutputDirectory = "C:\Dev\GitMain\ComparisonTool\reports"
 $OutputType = @("Console", "Markdown", "Html")
-$HtmlMode = "StaticSite"
+# Use SingleFile here because this script is intended for local runs where testers open the artifact directly from disk.
+# Switch to StaticSite when serving the report directory over HTTP and you want chunked lazy loading.
+$HtmlMode = "SingleFile"
 # ------------------------------
 
 Write-Host "Building CLI project..."

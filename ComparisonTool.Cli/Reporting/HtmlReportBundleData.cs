@@ -11,7 +11,7 @@ namespace ComparisonTool.Cli.Reporting;
 
 internal sealed class HtmlReportBootstrapDto
 {
-    public int SchemaVersion { get; init; } = 2;
+    public int SchemaVersion { get; init; } = 3;
 
     public string Mode { get; init; } = string.Empty;
 
@@ -67,6 +67,8 @@ internal sealed class HtmlReportIndexDto
 
     public List<HtmlReportPatternClusterDto> Patterns { get; init; } = new();
 
+    public Dictionary<string, HtmlReportPatternMetadataDto> PatternMetadata { get; init; } = new(StringComparer.Ordinal);
+
     public List<LabelCountDto> StatusCounts { get; init; } = new();
 
     public List<LabelCountDto> ComparisonKindCounts { get; init; } = new();
@@ -108,6 +110,10 @@ internal sealed class HtmlReportPairSummaryDto
 
     public string ComparisonKind { get; init; } = string.Empty;
 
+    public string PreviewLabel { get; init; } = string.Empty;
+
+    public string PreviewChange { get; init; } = string.Empty;
+
     public List<string> AffectedFields { get; init; } = new();
 
     public List<LabelCountDto> CategoryCounts { get; init; } = new();
@@ -136,6 +142,15 @@ internal sealed class HtmlReportPatternClusterDto
     public string? Description { get; init; }
 
     public List<string> SamplePairIds { get; init; } = new();
+}
+
+internal sealed class HtmlReportPatternMetadataDto
+{
+    public string Label { get; init; } = string.Empty;
+
+    public string Kind { get; init; } = string.Empty;
+
+    public string? Description { get; init; }
 }
 
 internal sealed class HtmlReportDetailChunkDto
@@ -215,7 +230,7 @@ internal sealed class HtmlReportBundleFileDto
 internal static class HtmlReportBundleBuilder
 {
     private const int MostAffectedFieldsLimit = 15;
-    private const int PatternLimit = 36;
+    private const int PatternLimit = 128;
     private const int TopFieldLimit = 24;
 
     public static HtmlReportBundle BuildSingleFile(ReportContext context)
@@ -239,6 +254,7 @@ internal static class HtmlReportBundleBuilder
         var summary = BuildSummary(context, pairs);
         var mostAffectedFields = BuildMostAffectedFields(context);
         var semanticAnalysis = TryGetMetadata<SemanticDifferenceAnalysis>(context.Result.Metadata, "SemanticAnalysis");
+        var tagLabels = new Dictionary<string, string>(StringComparer.Ordinal);
         var tagDescriptions = new Dictionary<string, string>(StringComparer.Ordinal);
         var workingPairs = new List<WorkingSummaryDto>(pairs.Count);
         var chunkSize = Math.Clamp(context.HtmlDetailChunkSize, 25, 1000);
@@ -259,7 +275,8 @@ internal static class HtmlReportBundleBuilder
                 .OrderBy(propertyName => propertyName, StringComparer.Ordinal)
                 .ToList();
             var comparisonKind = GetComparisonKind(pair, structuredDifferences.Count, rawTextDifferences.Count);
-            var patternKeys = BuildPatternKeys(pair, affectedFields, semanticAnalysis, tagDescriptions);
+            var patternKeys = BuildPatternKeys(pair, structuredDifferences, rawTextDifferences, affectedFields, semanticAnalysis, tagLabels, tagDescriptions);
+            var preview = BuildPairPreview(pair, structuredDifferences, rawTextDifferences);
             var chunkId = $"pairs-{chunkNumber:0000}";
             var chunkPath = BuildChunkPath(dataRootPath, chunkId);
 
@@ -281,6 +298,8 @@ internal static class HtmlReportBundleBuilder
                 HttpStatusB = pair.HttpStatusCodeB,
                 DifferenceCount = structuredDifferences.Count > 0 ? structuredDifferences.Count : rawTextDifferences.Count,
                 ComparisonKind = comparisonKind,
+                PreviewLabel = preview.Label,
+                PreviewChange = preview.Change,
                 AffectedFields = affectedFields,
                 CategoryCounts = pair.Summary?.DifferencesByChangeType
                     .OrderByDescending(category => category.Value.Count)
@@ -298,7 +317,7 @@ internal static class HtmlReportBundleBuilder
                         Count = rootObject.Value.Count,
                     })
                     .ToList() ?? new List<LabelCountDto>(),
-                SearchText = BuildSearchText(pair, affectedFields, comparisonKind),
+                SearchText = BuildSearchText(pair, affectedFields, comparisonKind, preview),
                 DetailChunkId = chunkId,
                 DetailChunkPath = chunkPath,
             };
@@ -355,6 +374,18 @@ internal static class HtmlReportBundleBuilder
                 .ToList();
         }
 
+        var patternMetadata = recurringTagCounts
+            .Where(entry => entry.Value > 1)
+            .ToDictionary(
+                entry => entry.Key,
+                entry => new HtmlReportPatternMetadataDto
+                {
+                    Label = tagLabels.GetValueOrDefault(entry.Key) ?? HumanizePatternKey(entry.Key),
+                    Kind = GetPatternKind(entry.Key),
+                    Description = tagDescriptions.GetValueOrDefault(entry.Key),
+                },
+                StringComparer.Ordinal);
+
         var patternClusters = recurringTagCounts
             .Where(entry => entry.Value > 1)
             .OrderByDescending(entry => entry.Value)
@@ -363,7 +394,7 @@ internal static class HtmlReportBundleBuilder
             .Select(entry => new HtmlReportPatternClusterDto
             {
                 Key = entry.Key,
-                Label = HumanizePatternKey(entry.Key),
+                Label = tagLabels.GetValueOrDefault(entry.Key) ?? HumanizePatternKey(entry.Key),
                 Kind = GetPatternKind(entry.Key),
                 Count = entry.Value,
                 Description = tagDescriptions.GetValueOrDefault(entry.Key),
@@ -380,6 +411,7 @@ internal static class HtmlReportBundleBuilder
             TotalPairs = context.Result.TotalPairsCompared,
             Pairs = workingPairs.Select(pair => pair.Summary).ToList(),
             Patterns = patternClusters,
+            PatternMetadata = patternMetadata,
             StatusCounts = BuildStatusCounts(workingPairs.Select(pair => pair.Summary)),
             ComparisonKindCounts = workingPairs
                 .Select(pair => pair.Summary)
@@ -442,6 +474,7 @@ internal static class HtmlReportBundleBuilder
         var summary = BuildSummary(context, pairs);
         var mostAffectedFields = BuildMostAffectedFields(context);
         var semanticAnalysis = TryGetMetadata<SemanticDifferenceAnalysis>(context.Result.Metadata, "SemanticAnalysis");
+        var tagLabels = new Dictionary<string, string>(StringComparer.Ordinal);
         var tagDescriptions = new Dictionary<string, string>(StringComparer.Ordinal);
         var workingPairs = new List<WorkingPairDto>(pairs.Count);
 
@@ -458,7 +491,8 @@ internal static class HtmlReportBundleBuilder
                 .OrderBy(propertyName => propertyName, StringComparer.Ordinal)
                 .ToList();
             var comparisonKind = GetComparisonKind(pair, structuredDifferences.Count, rawTextDifferences.Count);
-            var patternKeys = BuildPatternKeys(pair, affectedFields, semanticAnalysis, tagDescriptions);
+            var patternKeys = BuildPatternKeys(pair, structuredDifferences, rawTextDifferences, affectedFields, semanticAnalysis, tagLabels, tagDescriptions);
+            var preview = BuildPairPreview(pair, structuredDifferences, rawTextDifferences);
             var summaryDto = new HtmlReportPairSummaryDto
             {
                 PairId = pairId,
@@ -477,6 +511,8 @@ internal static class HtmlReportBundleBuilder
                 HttpStatusB = pair.HttpStatusCodeB,
                 DifferenceCount = structuredDifferences.Count > 0 ? structuredDifferences.Count : rawTextDifferences.Count,
                 ComparisonKind = comparisonKind,
+                PreviewLabel = preview.Label,
+                PreviewChange = preview.Change,
                 AffectedFields = affectedFields,
                 CategoryCounts = pair.Summary?.DifferencesByChangeType
                     .OrderByDescending(category => category.Value.Count)
@@ -494,7 +530,7 @@ internal static class HtmlReportBundleBuilder
                         Count = rootObject.Value.Count,
                     })
                     .ToList() ?? new List<LabelCountDto>(),
-                SearchText = BuildSearchText(pair, affectedFields, comparisonKind),
+                SearchText = BuildSearchText(pair, affectedFields, comparisonKind, preview),
             };
             var detailDto = new HtmlReportPairDetailDto
             {
@@ -531,6 +567,18 @@ internal static class HtmlReportBundleBuilder
                 .ToList();
         }
 
+        var patternMetadata = recurringTagCounts
+            .Where(entry => entry.Value > 1)
+            .ToDictionary(
+                entry => entry.Key,
+                entry => new HtmlReportPatternMetadataDto
+                {
+                    Label = tagLabels.GetValueOrDefault(entry.Key) ?? HumanizePatternKey(entry.Key),
+                    Kind = GetPatternKind(entry.Key),
+                    Description = tagDescriptions.GetValueOrDefault(entry.Key),
+                },
+                StringComparer.Ordinal);
+
         var patternClusters = recurringTagCounts
             .Where(entry => entry.Value > 1)
             .OrderByDescending(entry => entry.Value)
@@ -539,7 +587,7 @@ internal static class HtmlReportBundleBuilder
             .Select(entry => new HtmlReportPatternClusterDto
             {
                 Key = entry.Key,
-                Label = HumanizePatternKey(entry.Key),
+                Label = tagLabels.GetValueOrDefault(entry.Key) ?? HumanizePatternKey(entry.Key),
                 Kind = GetPatternKind(entry.Key),
                 Count = entry.Value,
                 Description = tagDescriptions.GetValueOrDefault(entry.Key),
@@ -591,6 +639,7 @@ internal static class HtmlReportBundleBuilder
             TotalPairs = context.Result.TotalPairsCompared,
             Pairs = workingPairs.Select(pair => pair.Summary).ToList(),
             Patterns = patternClusters,
+            PatternMetadata = patternMetadata,
             StatusCounts = BuildStatusCounts(workingPairs.Select(pair => pair.Summary)),
             ComparisonKindCounts = workingPairs
                 .Select(pair => pair.Summary)
@@ -963,7 +1012,8 @@ internal static class HtmlReportBundleBuilder
     private static string BuildSearchText(
         FilePairComparisonResult pair,
         IReadOnlyCollection<string> affectedFields,
-        string comparisonKind)
+        string comparisonKind,
+        PairPreviewDto? preview = null)
     {
         return string.Join(
                 ' ',
@@ -975,6 +1025,8 @@ internal static class HtmlReportBundleBuilder
                     pair.PairOutcome?.ToString(),
                     pair.ErrorMessage,
                     comparisonKind,
+                    preview?.Label,
+                    preview?.Change,
                 }
                 .Concat(affectedFields)
                 .Where(value => !string.IsNullOrWhiteSpace(value)))
@@ -983,8 +1035,11 @@ internal static class HtmlReportBundleBuilder
 
     private static List<string> BuildPatternKeys(
         FilePairComparisonResult pair,
+        IReadOnlyCollection<StructuredDifferenceDto> structuredDifferences,
+        IReadOnlyCollection<RawTextDifferenceDto> rawTextDifferences,
         IReadOnlyCollection<string> affectedFields,
         SemanticDifferenceAnalysis? semanticAnalysis,
+        IDictionary<string, string> tagLabels,
         IDictionary<string, string> tagDescriptions)
     {
         var tags = new HashSet<string>(StringComparer.Ordinal)
@@ -1005,6 +1060,44 @@ internal static class HtmlReportBundleBuilder
         foreach (var field in affectedFields.Take(4))
         {
             tags.Add($"field:{field}");
+        }
+
+        foreach (var difference in structuredDifferences)
+        {
+            var signature = JsonSerializer.Serialize(
+                new
+                {
+                    difference.PropertyName,
+                    difference.Expected,
+                    difference.Actual,
+                },
+                ComparisonReportJson.CompactOptions);
+            var key = $"change:{ComparisonReportIdentity.CreateStableHash(signature)}";
+            var label = !string.IsNullOrWhiteSpace(difference.PropertyName)
+                ? difference.PropertyName
+                : "Changed value";
+            tags.Add(key);
+            tagLabels[key] = label;
+            tagDescriptions[key] = $"{label}: {FormatPreviewValue(difference.Expected)} -> {FormatPreviewValue(difference.Actual)}";
+        }
+
+        foreach (var difference in rawTextDifferences)
+        {
+            var descriptor = JsonSerializer.Serialize(
+                new
+                {
+                    difference.Type,
+                    difference.Description,
+                    difference.TextA,
+                    difference.TextB,
+                    difference.LineNumberA,
+                    difference.LineNumberB,
+                },
+                ComparisonReportJson.CompactOptions);
+            var key = $"raw:{ComparisonReportIdentity.CreateStableHash(descriptor)}";
+            tags.Add(key);
+            tagLabels[key] = $"Raw {difference.Type}";
+            tagDescriptions[key] = BuildRawPreview(difference);
         }
 
         if (pair.HttpStatusCodeA != null || pair.HttpStatusCodeB != null)
@@ -1031,6 +1124,85 @@ internal static class HtmlReportBundleBuilder
         }
 
         return tags.OrderBy(tag => tag, StringComparer.Ordinal).ToList();
+    }
+
+    private static PairPreviewDto BuildPairPreview(
+        FilePairComparisonResult pair,
+        IReadOnlyCollection<StructuredDifferenceDto> structuredDifferences,
+        IReadOnlyCollection<RawTextDifferenceDto> rawTextDifferences)
+    {
+        if (pair.HasError)
+        {
+            return new PairPreviewDto
+            {
+                Label = pair.ErrorType ?? "Comparison error",
+                Change = TrimPreview(pair.ErrorMessage ?? "An error interrupted this comparison."),
+            };
+        }
+
+        var firstDifference = structuredDifferences.FirstOrDefault();
+        if (firstDifference != null)
+        {
+            var label = !string.IsNullOrWhiteSpace(firstDifference.PropertyName)
+                ? firstDifference.PropertyName
+                : "Changed value";
+
+            return new PairPreviewDto
+            {
+                Label = label,
+                Change = $"{FormatPreviewValue(firstDifference.Expected)} -> {FormatPreviewValue(firstDifference.Actual)}",
+            };
+        }
+
+        var firstRawDifference = rawTextDifferences.FirstOrDefault();
+        if (firstRawDifference != null)
+        {
+            return new PairPreviewDto
+            {
+                Label = HumanizeLabel(firstRawDifference.Type),
+                Change = BuildRawPreview(firstRawDifference),
+            };
+        }
+
+        return new PairPreviewDto
+        {
+            Label = "No differences",
+            Change = pair.AreEqual ? "Accepted by the active comparison rules." : "No preview available.",
+        };
+    }
+
+    private static string BuildRawPreview(RawTextDifferenceDto difference)
+    {
+        if (!string.IsNullOrWhiteSpace(difference.Description))
+        {
+            return TrimPreview(difference.Description);
+        }
+
+        var rawPreview = !string.IsNullOrWhiteSpace(difference.TextB)
+            ? difference.TextB
+            : difference.TextA;
+
+        return TrimPreview(rawPreview ?? HumanizeLabel(difference.Type));
+    }
+
+    private static string FormatPreviewValue(object? value)
+    {
+        return TrimPreview(FormatValue(value));
+    }
+
+    private static string TrimPreview(string value)
+    {
+        const int maxLength = 120;
+        var normalized = value.Replace("\r", " ", StringComparison.Ordinal).Replace("\n", " ", StringComparison.Ordinal).Trim();
+        return normalized.Length <= maxLength ? normalized : $"{normalized[..(maxLength - 1)]}...";
+    }
+
+    private static string HumanizeLabel(string value)
+    {
+        return value
+            .Replace('-', ' ')
+            .Replace('_', ' ')
+            .Trim();
     }
 
     private static bool IsSemanticGroupMatch(SemanticDifferenceGroup group, FilePairComparisonResult pair)
@@ -1161,11 +1333,13 @@ internal static class HtmlReportBundleBuilder
         return prefix switch
         {
             "field" => $"Field: {value}",
+            "change" => "Exact recurring change",
             "semantic" => value,
             "outcome" => $"Outcome: {value}",
             "error" => $"Error: {value}",
             "http" => $"HTTP: {value}",
             "kind" => $"Kind: {value}",
+            "raw" => "Recurring raw diff",
             _ => value,
         };
     }
@@ -1210,5 +1384,12 @@ internal static class HtmlReportBundleBuilder
         public string LeftText { get; init; } = string.Empty;
 
         public string RightText { get; init; } = string.Empty;
+    }
+
+    private sealed class PairPreviewDto
+    {
+        public string Label { get; init; } = string.Empty;
+
+        public string Change { get; init; } = string.Empty;
     }
 }
