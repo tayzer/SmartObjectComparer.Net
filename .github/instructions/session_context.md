@@ -1,103 +1,73 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2026-03-04T00:30:00Z
+lastUpdated: 2026-03-13T17:25:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-Prevent Detailed Comparison UI crashes when selecting very large file pairs from Value Differences
+Implement and validate a scalable React-based HTML report for ComparisonTool.Cli
 
 ## Todo List Status
 ```markdown
-- [x] Confirm navigation now resolves correct pair identifiers
-- [x] Add progressive group rendering in Detailed Comparison
-- [x] Add large-pair safety for Show All toggle carry-over
-- [x] Harden selected-pair rendering and async selection flow
-- [x] Validate diagnostics and finalize session context
+- [x] 🔍 Inspect existing CLI reporting pipeline and UI scaffold
+- [x] 🛠️ Add shared HTML/JSON report contract and HTML writer
+- [x] 🎨 Replace placeholder report UI with interactive static React report
+- [x] 🧩 Add index + chunk bundle architecture for large reports
+- [x] 🚰 Stream static-site chunk output to disk during generation
+- [x] ✅ Build CLI and validate StaticSite and SingleFile HTML smoke artifacts
 ```
 
 ## Recent File Changes
-- `ComparisonTool.Core/Serialization/XmlDeserializationService.cs`: Made model serializer pre-caching non-fatal during registration (`RegisterDomainModel<T>` now catches and logs pre-cache exceptions, then falls back to lazy creation when model is actually used).
-- `ComparisonTool.Cli/Commands/RequestCompareCommand.cs`: Added `using ComparisonTool.Core.Serialization;`, updated `-m` option description, added early model-name validation after service provider creation — gives clear "Unknown model / Available models" error before any comparison starts.
-- `ComparisonTool.Cli/Commands/FolderCompareCommand.cs`: Added early model-name validation (identical pattern) after service provider creation.
+- `ComparisonTool.Cli/Reporting/ComparisonReportData.cs`: Extracted reusable `ComparisonReportIdentity` helpers for stable report and pair IDs
+- `ComparisonTool.Cli/Reporting/HtmlReportBundleData.cs`: Added bootstrap/index/chunk/detail DTOs, diff generation, and streamed static-site chunk writing
+- `ComparisonTool.Cli/Reporting/HtmlReportWriter.cs`: Writes either embedded single-file reports or streamed static-site sibling data bundles
+- `ComparisonTool.Cli/Reporting/ReportContext.cs`: Added HTML default page size and detail chunk size configuration
+- `ComparisonTool.Cli/Commands/FolderCompareCommand.cs`: Added `--html-mode` and `--html-chunk-size`
+- `ComparisonTool.Cli/Commands/RequestCompareCommand.cs`: Added `--html-mode` and `--html-chunk-size`
+- `ComparisonTool.Cli/ComparisonTool.Cli.csproj`: Added `DiffPlex` for precomputed line diffs
+- `ComparisonTool.ReportUI/src/*`: Reworked the report UI around bootstrap/index/chunk loading, pagination, pattern triage, diff navigation, and review state
 
 ## Key Technical Decisions
-- Decision: Keep eager serializer pre-cache as a best-effort optimization only; never fail registration if one model serializer cannot pre-initialize.
-- Rationale: Request/folder runs should only fail for the selected `-m` model; unrelated registered models (for example `SoapEnvelope`) must not break startup/execution.
-- Date: 2026-03-02
-- Decision: Validate model names BEFORE creating the comparison job, using `IXmlDeserializationService.GetRegisteredModelNames()`.
-- Rationale: Previously unregistered names propagated deep into the pipeline producing per-file `ArgumentException` failures that were difficult to diagnose. The error the user saw ("ComplexOrderResponse cannot be serialized...") was a secondary/misleading error.
-- Date: 2026-03-02
-
-## Root Cause Analysis
-1. `CreditReportDomain` is not defined or registered anywhere in the codebase.
-2. `GetModelType("CreditReportDomain")` throws `ArgumentException` inside each file-pair comparison loop.
-3. Per-pair errors were stored in `FilePairComparisonResult.ErrorMessage` — the user saw a confusing error mentioning `ComplexOrderResponse` (unrelated secondary failure path).
-4. The `"Auto"` default was also broken — `"Auto"` is never registered, so it always failed at the same model-lookup stage.
+- Decision: Support two HTML modes, `StaticSite` and `SingleFile`, behind one embedded React/Vite shell
+- Rationale: `StaticSite` scales large reports via lazy-loaded chunk files, while `SingleFile` preserves a self-contained artifact option
+- Date: 2026-03-13
+- Decision: Precompute index metadata and pair diff payloads at CLI time
+- Rationale: Keeps filtering, sorting, and diff rendering client-side without pushing expensive computation into the browser
+- Date: 2026-03-13
+- Decision: Stream static-site detail chunks directly to disk during generation
+- Rationale: Avoids retaining the entire detail payload set in CLI memory when generating large reports
+- Date: 2026-03-13
 
 ## External Resources Referenced
-- None (workspace-only investigation and fix).
+- Internal code inspection only
 
 ## Blockers & Issues
-- None
+- [NOTE] `StaticSite` mode relies on runtime fetches for `index.json` and chunk files, so it is intended for served artifacts such as Jenkins artifact browsing rather than raw `file://` opening
+- [NOTE] The CLI returns exit code `2` when differences are found; non-zero exit during smoke tests was expected behavior, not report-generation failure
 
 ## Failed Approaches
-- None
+- Approach: Build static-site bundles entirely in memory before writing chunk files
+- Failure Reason: That left the CLI holding all pair detail payloads at once, which undermined the large-report scaling goal
+- Lesson: Browser lazy loading is not enough; the generator also has to stream chunk output incrementally
 
 ## Environment Notes
 - .NET 10.0
+- Windows
 
 ## Next Session Priority
-No active tasks.
+If needed, add browser-level validation or automated tests for static-site chunk loading and large-report cache behavior in the UI
 
 ## Session Notes
-- Verified build: `dotnet build ComparisonTool.Cli/ComparisonTool.Cli.csproj` (0 errors).
-- Verified request flow with local mock endpoints and `-m ComplexOrderResponse` runs successfully (differences reported, no `SoapEnvelope` constructor failure).
-- Added upfront validation in both `RequestCompareCommand` and `FolderCompareCommand`.
-- `dotnet build` passes (0 errors).
-- Verified: `-m CreditReportDomain` → "Error: Unknown model name 'CreditReportDomain'. Available models: ComplexOrderResponse, SoapEnvelope."
-- Verified: no `-m` (Auto) → "Error: A domain model name must be specified with -m. 'Auto' is not a valid model name. Available models: ComplexOrderResponse, SoapEnvelope."
-- Verified: `-m ComplexOrderResponse` → passes validation, proceeds to comparison.
-
-## Todo List Status
-```markdown
-- [x] Remove `--debug-non-success-bodies` and `--debug-artifacts-dir` from request CLI options
-- [x] Remove debug artifact export pipeline/helpers from request command
-- [x] Remove debug artifact metadata output from console/json reports
-- [x] Update README request example to use `--disable-truncation`
-- [x] Build `ComparisonTool.Cli` to verify compilation
-```
-
-## Recent File Changes
-- `ComparisonTool.Cli/Commands/RequestCompareCommand.cs`: Removed legacy debug artifact options, execution branch, and helper types/methods.
-- `ComparisonTool.Cli/Reporting/ConsoleReportWriter.cs`: Removed debug artifact directory/index lines from summary output.
-- `ComparisonTool.Cli/Reporting/JsonReportWriter.cs`: Removed `debugArtifacts` JSON section and associated metadata helper methods.
-- `README.md`: Replaced debug artifact flags in request example with `--disable-truncation` and updated troubleshooting note.
-
-## Key Technical Decisions
-- Decision: Fully retire debug-artifact export flags/logic now that inline report truncation can be disabled.
-- Rationale: Avoid duplicate troubleshooting paths and keep CLI/report behavior simpler and consistent.
-- Date: 2026-02-27
-
-## External Resources Referenced
-- None (workspace-only implementation).
-
-## Blockers & Issues
-- None
-
-## Failed Approaches
-- None
-
-## Environment Notes
-- .NET 10.0
-
-## Next Session Priority
-No active tasks.
-
-## Session Notes
-Removed artifact export pathway and references; troubleshooting now relies on `--disable-truncation` inline report output. `dotnet build ComparisonTool.Cli/ComparisonTool.Cli.csproj` succeeds (warnings only).
+- Implemented a scalable HTML report contract with embedded bootstrap data, a prebuilt pair index, and lazy-loaded detail chunks.
+- The report UI now supports pagination, client-side search/filter/sort, recurring-pattern triage, local review categories, progress tracking, split/unified diff viewing, collapsed unchanged regions, and keyboard navigation.
+- Validation completed:
+	- `dotnet build ComparisonTool.Cli/ComparisonTool.Cli.csproj -c Debug` succeeded with warnings only
+	- Static-site smoke artifact generated at `reports/html-smoke-minimal-stream/comparison-result-20260313-172346.html` with sibling `.data/index.json` and chunk files
+	- Single-file smoke artifact generated at `reports/html-smoke-singlefile-stream/comparison-result-20260313-172347.html`
+	- Verified static-site bootstrap, index payload, and chunk payload contents
+	- Verified CLI exit code `2` for difference-bearing comparisons in both modes
 
 ---
 # Previous Session Archive
