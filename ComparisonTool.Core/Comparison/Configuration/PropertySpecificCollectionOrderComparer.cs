@@ -22,9 +22,18 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
     {
         "Id",
         "ID",
+        "ItemId",
+        "OrderId",
+        "ProductId",
+        "LineId",
+        "ReferenceId",
+        "CustomerId",
+        "TransactionId",
         "Name",
         "Key",
         "Code",
+        "SKU",
+        "Sku",
         "Identifier",
         "ExternalId",
         "Guid",
@@ -286,7 +295,7 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
         out object?[] orderedItems1,
         out object?[] orderedItems2)
     {
-        foreach (var propertyName in PreferredIdentifierPropertyNames)
+        foreach (var propertyName in GetCandidateIdentifierPropertyNames(items1, items2))
         {
             if (!TryBuildIdentifierEntries(items1, propertyName, out var entries1) ||
                 !TryBuildIdentifierEntries(items2, propertyName, out var entries2) ||
@@ -304,6 +313,91 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
         orderedItems2 = Array.Empty<object?>();
         return false;
     }
+
+    private static IEnumerable<string> GetCandidateIdentifierPropertyNames(
+        IReadOnlyList<object?> items1,
+        IReadOnlyList<object?> items2)
+    {
+        var yieldedNames = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+
+        foreach (var propertyName in PreferredIdentifierPropertyNames)
+        {
+            if (yieldedNames.Add(propertyName))
+            {
+                yield return propertyName;
+            }
+        }
+
+        foreach (var propertyName in GetSharedHeuristicIdentifierPropertyNames(items1, items2))
+        {
+            if (yieldedNames.Add(propertyName))
+            {
+                yield return propertyName;
+            }
+        }
+    }
+
+    private static IEnumerable<string> GetSharedHeuristicIdentifierPropertyNames(
+        IReadOnlyList<object?> items1,
+        IReadOnlyList<object?> items2)
+    {
+        var leftNames = GetHeuristicIdentifierPropertyNames(items1);
+        if (leftNames.Count == 0)
+        {
+            yield break;
+        }
+
+        var rightNames = GetHeuristicIdentifierPropertyNames(items2);
+        if (rightNames.Count == 0)
+        {
+            yield break;
+        }
+
+        foreach (var propertyName in leftNames.Intersect(rightNames, System.StringComparer.OrdinalIgnoreCase))
+        {
+            yield return propertyName;
+        }
+    }
+
+    private static HashSet<string> GetHeuristicIdentifierPropertyNames(IReadOnlyList<object?> items)
+    {
+        var names = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+
+        foreach (var item in items)
+        {
+            if (item == null || IsSimpleScalarType(item.GetType()))
+            {
+                return new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+            }
+
+            foreach (var property in item.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public))
+            {
+                if (!property.CanRead || property.GetIndexParameters().Length != 0)
+                {
+                    continue;
+                }
+
+                if (!IsSimpleScalarType(property.PropertyType))
+                {
+                    continue;
+                }
+
+                if (LooksLikeIdentifierName(property.Name))
+                {
+                    names.Add(property.Name);
+                }
+            }
+        }
+
+        return names;
+    }
+
+    private static bool LooksLikeIdentifierName(string propertyName) =>
+        propertyName.EndsWith("Id", StringComparison.OrdinalIgnoreCase) ||
+        propertyName.EndsWith("Key", StringComparison.OrdinalIgnoreCase) ||
+        propertyName.EndsWith("Code", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(propertyName, "SKU", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(propertyName, "Identifier", StringComparison.OrdinalIgnoreCase);
 
     private bool TryBuildIdentifierEntries(
         IReadOnlyList<object?> items,

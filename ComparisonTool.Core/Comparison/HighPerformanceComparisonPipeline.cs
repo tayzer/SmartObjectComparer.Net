@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.IO.Hashing;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
@@ -239,8 +240,10 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
                     // OPTIMIZATION: Read and deserialize both files in parallel using TryDeserialize
                     // which pre-validates root elements and catches exceptions internally —
                     // no InvalidOperationException propagates to the debugger.
+                    var deserializationStart = Stopwatch.GetTimestamp();
                     var (result1, result2) = await DeserializeBothFilesAsync(
                         file1Path, file2Path, deserializer, ct).ConfigureAwait(false);
+                    ComparisonPhaseTimingScope.Current?.AddDeserialization(Stopwatch.GetElapsedTime(deserializationStart));
 
                     // Check for deserialization failures (returned as result, not as exception)
                     if (!result1.Success || !result2.Success)
@@ -377,11 +380,13 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
                 var compareLogic = threadLocalCompareLogic.Value!;
 
                 // Perform comparison
+                var comparisonStart = Stopwatch.GetTimestamp();
                 var result = compareLogic.Compare(pair.Object1!, pair.Object2!);
 
                 // Filter ignored differences
                 result = configService.FilterSmartIgnoredDifferences(result, modelType);
                 result = configService.FilterIgnoredDifferences(result);
+                ComparisonPhaseTimingScope.Current?.AddComparison(Stopwatch.GetElapsedTime(comparisonStart));
 
                 // OPTIMIZATION: Pool categorizer instances
                 var categorizer = categorizerPool.Get();

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.Utilities;
@@ -58,6 +59,7 @@ public class ComparisonEngine : IComparisonEngine, IDisposable
         CancellationToken cancellationToken = default)
     {
         // PERFORMANCE OPTIMIZATION: Use thread-local CompareLogic to avoid allocation per file
+        var comparisonStart = Stopwatch.GetTimestamp();
         var result = await performanceTracker.TrackOperationAsync(
             "Compare_Objects",
             async () => await Task.Run(
@@ -69,6 +71,7 @@ public class ComparisonEngine : IComparisonEngine, IDisposable
                     // Direct comparison without cloning - this eliminates serialization corruption
                     return compareLogic.Compare(oldResponse, newResponse);
                 }, cancellationToken));
+        ComparisonPhaseTimingScope.Current?.AddComparison(Stopwatch.GetElapsedTime(comparisonStart));
 
         logger.LogDebug(
             "Comparison completed. Found {DifferenceCount} differences",
@@ -77,6 +80,7 @@ public class ComparisonEngine : IComparisonEngine, IDisposable
         // Filter out ignored properties using smart rules and legacy pattern matching
         result = configService.FilterSmartIgnoredDifferences(result, modelType);
         result = configService.FilterIgnoredDifferences(result);
+        ComparisonPhaseTimingScope.Current?.AddComparison(Stopwatch.GetElapsedTime(comparisonStart));
 
         return result;
     }
@@ -95,11 +99,13 @@ public class ComparisonEngine : IComparisonEngine, IDisposable
         Type modelType)
     {
         var compareLogic = GetOrRefreshCompareLogic();
+        var comparisonStart = Stopwatch.GetTimestamp();
         var result = compareLogic.Compare(oldResponse, newResponse);
 
         // Filter out ignored properties
         result = configService.FilterSmartIgnoredDifferences(result, modelType);
         result = configService.FilterIgnoredDifferences(result);
+        ComparisonPhaseTimingScope.Current?.AddComparison(Stopwatch.GetElapsedTime(comparisonStart));
 
         return result;
     }

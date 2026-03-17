@@ -249,6 +249,34 @@
             <!-- Results Section -->
             @if (FolderComparisonResult != null)
             {
+                var phaseTimings = GetPhaseTimings(FolderComparisonResult);
+
+                @if (phaseTimings != null)
+                {
+                    <MudPaper Elevation="2" Class="pa-4 mb-3">
+                        <MudStack Spacing="2">
+                            <MudText Typo="Typo.h6">Comparison Timings</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Default">
+                                @phaseTimings.ComparisonMode across @phaseTimings.TotalPairsCompared file pairs.
+                            </MudText>
+                            <MudStack Row="true" Spacing="2" Class="flex-wrap">
+                                <MudChip T="string" Size="Size.Small" Color="Color.Primary">Total: @FormatElapsedTime(phaseTimings.TotalElapsedMs)</MudChip>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info">Discovery/Pairing: @FormatElapsedTime(phaseTimings.FileDiscoveryPairingMs)</MudChip>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info">Deserialization Work: @FormatElapsedTime(phaseTimings.DeserializationMs)</MudChip>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info">Comparison Work: @FormatElapsedTime(phaseTimings.ComparisonMs)</MudChip>
+                                @if (phaseTimings.CacheHits > 0 || phaseTimings.CacheMisses > 0)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Default">Cache Hits: @phaseTimings.CacheHits</MudChip>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Default">Fresh Comparisons: @phaseTimings.CacheMisses</MudChip>
+                                }
+                            </MudStack>
+                            <MudText Typo="Typo.caption" Color="Color.Default">
+                                Total and discovery/pairing are wall-clock elapsed time. Deserialization and comparison are cumulative work across file pairs, so on parallel runs they can exceed total elapsed time. Cache hits bypass most fresh-file work.
+                            </MudText>
+                        </MudStack>
+                    </MudPaper>
+                }
+
                 @if (EnableEnhancedStructuralAnalysis)
                 {
                     @if (EnhancedStructuralAnalysis != null)
@@ -614,6 +642,35 @@
     {
         _cancellationTokenSource?.Cancel();
         _cancellationTokenSource?.Dispose();
+    }
+
+    private static ComparisonPhaseTimings? GetPhaseTimings(MultiFolderComparisonResult? result)
+    {
+        if (result?.Metadata == null)
+        {
+            return null;
+        }
+
+        return result.Metadata.TryGetValue(ComparisonPhaseTimings.MetadataKey, out var timingsObj)
+            ? timingsObj as ComparisonPhaseTimings
+            : null;
+    }
+
+    private static string FormatElapsedTime(long milliseconds)
+    {
+        if (milliseconds >= 60000)
+        {
+            var minutes = milliseconds / 60000;
+            var seconds = (milliseconds % 60000) / 1000.0;
+            return $"{minutes}m {seconds:F1}s";
+        }
+
+        if (milliseconds >= 1000)
+        {
+            return $"{milliseconds / 1000.0:F2}s";
+        }
+
+        return $"{milliseconds} ms";
     }
 
     private Type GetSelectedModelType()

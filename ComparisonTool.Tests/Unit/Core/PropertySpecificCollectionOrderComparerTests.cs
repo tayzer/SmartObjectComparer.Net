@@ -40,6 +40,35 @@ public class PropertySpecificCollectionOrderComparerTests
     }
 
     [TestMethod]
+    public void Compare_WithGlobalIgnoreCollectionOrder_ShouldRecognizeCommonDomainIdentifierNames()
+    {
+        var compareLogic = CreateCompareLogic(ignoreCollectionOrder: true);
+
+        var left = new DomainIdentifierContainer
+        {
+            Items = new List<DomainIdentifierItem>
+            {
+                new() { ItemId = "ITEM-02", Value = "two" },
+                new() { ItemId = "ITEM-01", Value = "one" },
+            },
+        };
+
+        var right = new DomainIdentifierContainer
+        {
+            Items = new List<DomainIdentifierItem>
+            {
+                new() { ItemId = "ITEM-01", Value = "one" },
+                new() { ItemId = "ITEM-02", Value = "two" },
+            },
+        };
+
+        var result = compareLogic.Compare(left, right);
+
+        result.AreEqual.Should().BeTrue();
+        result.Differences.Should().BeEmpty();
+    }
+
+    [TestMethod]
     public void Compare_WithGlobalIgnoreCollectionOrder_ShouldHandlePrimitiveCollectionsSafely()
     {
         var compareLogic = CreateCompareLogic(ignoreCollectionOrder: true);
@@ -115,6 +144,11 @@ public class PropertySpecificCollectionOrderComparerTests
         public List<int> Values { get; set; } = new List<int>();
     }
 
+    private sealed class DomainIdentifierContainer
+    {
+        public List<DomainIdentifierItem> Items { get; set; } = new List<DomainIdentifierItem>();
+    }
+
     private sealed class NamedContainer
     {
         public List<NamedItem> Items { get; set; } = new List<NamedItem>();
@@ -139,6 +173,19 @@ public class PropertySpecificCollectionOrderComparerTests
         {
             get; set;
         }
+
+        public string? Value
+        {
+            get; set;
+        }
+    }
+
+    private sealed class DomainIdentifierItem
+    {
+        public string ItemId
+        {
+            get; set;
+        } = string.Empty;
 
         public string? Value
         {

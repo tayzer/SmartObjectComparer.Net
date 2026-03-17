@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using ComparisonTool.Core.Comparison;
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Configuration;
@@ -62,6 +63,9 @@ public class DirectoryComparisonService
             throw new ArgumentException("Model name must be specified", nameof(modelName));
         }
 
+        var phaseTimings = new ComparisonPhaseTimingContext("Directory path comparison");
+        using var timingScope = ComparisonPhaseTimingScope.Push(phaseTimings);
+
         string sessionId = null;
 
         try
@@ -72,11 +76,14 @@ public class DirectoryComparisonService
             // Find matching file pairs
             progress?.Report(new ComparisonProgress(0, 0, "Finding matching files..."));
 
+            var fileDiscoveryStart = Stopwatch.GetTimestamp();
             var filePairs = await fileSystemService.CreateFilePairsAsync(
                 directory1Path,
                 directory2Path,
                 includeAllFiles,
                 cancellationToken).ConfigureAwait(false);
+            phaseTimings.AddFileDiscoveryPairing(Stopwatch.GetElapsedTime(fileDiscoveryStart));
+            phaseTimings.SetTotalPairsCompared(filePairs.Count);
 
             if (filePairs.Count == 0)
             {
@@ -90,7 +97,10 @@ public class DirectoryComparisonService
                     AllEqual = true,
                     TotalPairsCompared = 0,
                     FilePairResults = new List<FilePairComparisonResult>(),
-                    Metadata = new Dictionary<string, object>(StringComparer.Ordinal),
+                    Metadata = new Dictionary<string, object>(StringComparer.Ordinal)
+                    {
+                        [ComparisonPhaseTimings.MetadataKey] = phaseTimings.CreateSnapshot(),
+                    },
                 };
             }
 
@@ -304,6 +314,8 @@ public class DirectoryComparisonService
                 comparisonLogService.EndSession(sessionId, result);
             }
 
+            result.Metadata[ComparisonPhaseTimings.MetadataKey] = phaseTimings.CreateSnapshot();
+
             return result;
         }
         catch (Exception ex)
@@ -338,6 +350,9 @@ public class DirectoryComparisonService
         CancellationToken cancellationToken = default) =>
         await performanceTracker.TrackOperationAsync("CompareFolderUploadsAsync", async () =>
         {
+            var phaseTimings = new ComparisonPhaseTimingContext("Folder upload comparison");
+            using var timingScope = ComparisonPhaseTimingScope.Push(phaseTimings);
+
             // Record timing statistics about input
             performanceTracker.TrackOperation("Folder_Stats", () =>
             {
@@ -346,6 +361,8 @@ public class DirectoryComparisonService
                     folder1Files.Count,
                     folder2Files.Count);
             });
+
+                    var fileDiscoveryStart = Stopwatch.GetTimestamp();
 
             // Sort files by name for consistent ordering
             var sortedFiles = performanceTracker.TrackOperation("Sort_Files", () =>
@@ -387,6 +404,8 @@ public class DirectoryComparisonService
 
             // Determine how many pairs we can make (minimum of both lists)
             var pairCount = Math.Min(folder1Files.Count, folder2Files.Count);
+            phaseTimings.AddFileDiscoveryPairing(Stopwatch.GetElapsedTime(fileDiscoveryStart));
+            phaseTimings.SetTotalPairsCompared(pairCount);
 
             // Start comparison logging session
             var sessionId = comparisonLogService.StartSession(modelName, pairCount);
@@ -556,6 +575,8 @@ public class DirectoryComparisonService
 
             // End the logging session with final results
             comparisonLogService.EndSession(sessionId, result);
+
+            result.Metadata[ComparisonPhaseTimings.MetadataKey] = phaseTimings.CreateSnapshot();
 
             return result;
         }).ConfigureAwait(false);

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
@@ -264,12 +265,15 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                 // Try to get cached comparison result first
                 if (cacheService.TryGetCachedComparison(file1Hash, file2Hash, configFingerprint, out var cachedResult))
                 {
+                    ComparisonPhaseTimingScope.Current?.RecordCacheHit();
                     logger.LogDebug(
                         "Using cached comparison result for files with hashes {File1Hash}..{File2Hash}",
                         file1Hash[..8],
                         file2Hash[..8]);
                     return cachedResult;
                 }
+
+                ComparisonPhaseTimingScope.Current?.RecordCacheMiss();
 
                 logger.LogDebug(
                     "Cache miss - performing fresh comparison for {ModelName} in {Format} format",
@@ -282,6 +286,7 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                 // Use TryDeserialize to avoid exceptions from XmlSerializer.Deserialize
                 // for expected failures (SOAP faults, wrong root elements, malformed XML).
                 // This prevents the VS debugger from breaking on first-chance exceptions.
+                var oldDeserializationStart = Stopwatch.GetTimestamp();
                 var oldResult = await performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}_{oldFormat}", async () =>
                 {
                     return await Task.Run(
@@ -291,6 +296,7 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                             return deserializationService.TryDeserialize(oldFileStream, modelType, oldFormat);
                         }, cancellationToken).ConfigureAwait(false);
                 }).ConfigureAwait(false);
+                ComparisonPhaseTimingScope.Current?.AddDeserialization(Stopwatch.GetElapsedTime(oldDeserializationStart));
 
                 if (!oldResult.Success)
                 {
@@ -298,6 +304,7 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                         $"Failed to deserialize old file ({oldFilePath}): {oldResult.ErrorMessage}");
                 }
 
+                var newDeserializationStart = Stopwatch.GetTimestamp();
                 var newResult = await performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}_{newFormat}", async () =>
                 {
                     return await Task.Run(
@@ -307,6 +314,7 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                             return deserializationService.TryDeserialize(newFileStream, modelType, newFormat);
                         }, cancellationToken).ConfigureAwait(false);
                 }).ConfigureAwait(false);
+                ComparisonPhaseTimingScope.Current?.AddDeserialization(Stopwatch.GetElapsedTime(newDeserializationStart));
 
                 if (!newResult.Success)
                 {
@@ -493,14 +501,20 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
         CancellationToken cancellationToken = default) =>
         await performanceTracker.TrackOperationAsync("CompareFoldersInBatchesAsync", async () =>
         {
+            var phaseTimings = new ComparisonPhaseTimingContext("Folder batch comparison");
+            using var timingScope = ComparisonPhaseTimingScope.Push(phaseTimings);
+
             logger.LogInformation(
                 "Starting batch comparison of {Count1} files from folder 1 and {Count2} files from folder 2",
                 folder1Files.Count,
                 folder2Files.Count);
 
             // Create mappings between files in both folders (by name for now)
+            var fileDiscoveryStart = Stopwatch.GetTimestamp();
             var filePairMappings = FilePairMappingUtility.CreateFilePairMappings(folder1Files, folder2Files);
+            phaseTimings.AddFileDiscoveryPairing(Stopwatch.GetElapsedTime(fileDiscoveryStart));
             var totalPairs = filePairMappings.Count;
+            phaseTimings.SetTotalPairsCompared(totalPairs);
 
             // Use high-performance pipeline for large batch operations
             if (totalPairs >= HighPerformancePipelineThreshold)
@@ -517,11 +531,14 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                     pipelineProgress = new Progress<ComparisonProgress>(p => progress.Report((p.Completed, p.Total)));
                 }
 
-                return await highPerformancePipeline.Value.CompareFilesAsync(
+                var pipelineResult = await highPerformancePipeline.Value.CompareFilesAsync(
                     filePairMappings,
                     modelName,
                     pipelineProgress,
                     cancellationToken).ConfigureAwait(false);
+
+                pipelineResult.Metadata[ComparisonPhaseTimings.MetadataKey] = phaseTimings.CreateSnapshot();
+                return pipelineResult;
             }
 
             // For smaller batches, use the standard approach
@@ -724,6 +741,8 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                 result.AllEqual);
 
             progress?.Report((totalPairs, totalPairs));
+
+            result.Metadata[ComparisonPhaseTimings.MetadataKey] = phaseTimings.CreateSnapshot();
 
             return result;
         }).ConfigureAwait(false);
