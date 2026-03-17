@@ -38,12 +38,18 @@ public class EnhancedStructuralDifferenceAnalyzer
 
     public EnhancedStructuralAnalysisResult AnalyzeStructuralPatterns()
     {
-        logger?.LogInformation("Starting enhanced structural analysis for {FileCount} file pairs", folderResults.FilePairResults.Count);
+        var (filesWithDifferencesCount, totalDifferencesCount) = GetAnalysisScopeSummary();
+
+        logger?.LogInformation(
+            "Starting enhanced structural analysis for {FileCount} file pairs. Files with differences: {FilesWithDifferences}. Total differences to analyze: {TotalDifferences}",
+            folderResults.FilePairResults.Count,
+            filesWithDifferencesCount,
+            totalDifferencesCount);
 
         var result = new EnhancedStructuralAnalysisResult()
         {
             TotalFilesAnalyzed = folderResults.FilePairResults.Count,
-            FilesWithDifferences = folderResults.FilePairResults.Count(r => r.Summary != null && !r.Summary.AreEqual),
+            FilesWithDifferences = filesWithDifferencesCount,
         };
 
         var allDifferences = new List<(Difference difference, string FilePair, FilePairComparisonResult Result)>();
@@ -276,6 +282,25 @@ public class EnhancedStructuralDifferenceAnalyzer
         result.FileClassification = CreateFileClassificationBreakdown();
 
         return result;
+    }
+
+    private (int FilesWithDifferences, int TotalDifferences) GetAnalysisScopeSummary()
+    {
+        var filesWithDifferences = 0;
+        var totalDifferences = 0;
+
+        foreach (var filePairResult in folderResults.FilePairResults)
+        {
+            if (filePairResult.Summary == null || filePairResult.Summary.AreEqual)
+            {
+                continue;
+            }
+
+            filesWithDifferences++;
+            totalDifferences += filePairResult.Result?.Differences?.Count ?? 0;
+        }
+
+        return (filesWithDifferences, totalDifferences);
     }
 
     private void AnalyzeCriticalMissingProperties(

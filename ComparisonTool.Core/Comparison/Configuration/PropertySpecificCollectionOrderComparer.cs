@@ -121,6 +121,12 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
             logger.LogDebug("Collection comparison #{Count} at path: '{Path}'", currentCount, parms.BreadCrumb ?? "unknown");
         }
 
+        // Early termination if we've already hit MaxDifferences
+        if (parms.Result.Differences.Count >= parms.Config.MaxDifferences)
+        {
+            return;
+        }
+
         // Save original config state - we'll restore this at the end
         var originalIgnoreCollectionOrder = parms.Config.IgnoreCollectionOrder;
 
@@ -143,6 +149,9 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
                 return;
             }
 
+            logger.LogWarning(
+                "Deterministic ordering failed for collection at '{Path}' — falling back to O(n²) comparison. This may be slow for large collections.",
+                parms.BreadCrumb ?? "<root>");
             CompareWithCollectionComparer(parms, ignoreCollectionOrder: true);
         }
         finally
@@ -201,11 +210,6 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
         var items1 = MaterializeItems(enumerable1);
         var items2 = MaterializeItems(enumerable2);
 
-        if (items1.Count != items2.Count)
-        {
-            return false;
-        }
-
         if (!TryCreateOrderedCollections(items1, items2, out var orderedItems1, out var orderedItems2))
         {
             return false;
@@ -251,8 +255,7 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
         out object?[] orderedItems2)
     {
         if (!TryBuildScalarEntries(items1, out var entries1) ||
-            !TryBuildScalarEntries(items2, out var entries2) ||
-            !HaveMatchingKeySets(entries1, entries2))
+            !TryBuildScalarEntries(items2, out var entries2))
         {
             orderedItems1 = Array.Empty<object?>();
             orderedItems2 = Array.Empty<object?>();
@@ -267,7 +270,7 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
     private bool TryBuildScalarEntries(IReadOnlyList<object?> items, out List<OrderedCollectionEntry> entries)
     {
         entries = new List<OrderedCollectionEntry>(items.Count);
-        var keys = new HashSet<string>(System.StringComparer.Ordinal);
+        var keyCounts = new Dictionary<string, int>(System.StringComparer.Ordinal);
 
         foreach (var item in items)
         {
@@ -277,12 +280,24 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
                 return false;
             }
 
-            if (!TryCreateScalarKey(item, out var key) || !keys.Add(key))
+            if (!TryCreateScalarKey(item, out var baseKey))
             {
                 entries.Clear();
                 return false;
             }
 
+            // Handle duplicates by appending occurrence index
+            if (keyCounts.TryGetValue(baseKey, out var count))
+            {
+                keyCounts[baseKey] = count + 1;
+            }
+            else
+            {
+                keyCounts[baseKey] = 0;
+                count = 0;
+            }
+
+            var key = count == 0 ? baseKey : $"{baseKey}::{count}";
             entries.Add(new OrderedCollectionEntry(key, item));
         }
 
@@ -298,14 +313,22 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
         foreach (var propertyName in GetCandidateIdentifierPropertyNames(items1, items2))
         {
             if (!TryBuildIdentifierEntries(items1, propertyName, out var entries1) ||
-                !TryBuildIdentifierEntries(items2, propertyName, out var entries2) ||
-                !HaveMatchingKeySets(entries1, entries2))
+                !TryBuildIdentifierEntries(items2, propertyName, out var entries2))
             {
                 continue;
             }
 
             orderedItems1 = OrderEntries(entries1);
             orderedItems2 = OrderEntries(entries2);
+            return true;
+        }
+
+        // Composite key fallback: hash all scalar properties
+        if (TryBuildCompositeKeyEntries(items1, out var compositeEntries1) &&
+            TryBuildCompositeKeyEntries(items2, out var compositeEntries2))
+        {
+            orderedItems1 = OrderEntries(compositeEntries1);
+            orderedItems2 = OrderEntries(compositeEntries2);
             return true;
         }
 
@@ -425,6 +448,7 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
             var identifierValue = identifierProperty.GetValue(item);
             if (!TryCreateScalarKey(identifierValue, out var key) || !keys.Add(key))
             {
+                // Duplicate identifier — fail so composite key fallback handles this correctly
                 entries.Clear();
                 return false;
             }
@@ -452,17 +476,70 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
         return IsSimpleScalarType(property.PropertyType) ? property : null;
     }
 
-    private static bool HaveMatchingKeySets(
-        IReadOnlyCollection<OrderedCollectionEntry> entries1,
-        IReadOnlyCollection<OrderedCollectionEntry> entries2)
+    /// <summary>
+    /// Last-resort: build a sort key by hashing ALL public scalar properties of each item.
+    /// This avoids the O(n²) fallback in CompareNetObjects.
+    /// </summary>
+    private bool TryBuildCompositeKeyEntries(
+        IReadOnlyList<object?> items,
+        out List<OrderedCollectionEntry> entries)
     {
-        if (entries1.Count != entries2.Count)
+        entries = new List<OrderedCollectionEntry>(items.Count);
+        var keyCounts = new Dictionary<string, int>(System.StringComparer.Ordinal);
+
+        foreach (var item in items)
         {
-            return false;
+            if (item == null)
+            {
+                entries.Clear();
+                return false;
+            }
+
+            var type = item.GetType();
+            if (IsSimpleScalarType(type))
+            {
+                entries.Clear();
+                return false;
+            }
+
+            var keyParts = new List<string>();
+            foreach (var prop in type.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+            {
+                if (!prop.CanRead || prop.GetIndexParameters().Length != 0)
+                    continue;
+                if (!IsSimpleScalarType(prop.PropertyType))
+                    continue;
+
+                var val = prop.GetValue(item);
+                if (TryCreateScalarKey(val, out var partKey))
+                {
+                    keyParts.Add($"{prop.Name}={partKey}");
+                }
+            }
+
+            if (keyParts.Count == 0)
+            {
+                entries.Clear();
+                return false;
+            }
+
+            var baseKey = string.Join("|", keyParts);
+
+            if (keyCounts.TryGetValue(baseKey, out var count))
+            {
+                keyCounts[baseKey] = count + 1;
+            }
+            else
+            {
+                keyCounts[baseKey] = 0;
+                count = 0;
+            }
+
+            var key = count == 0 ? baseKey : $"{baseKey}::{count}";
+            entries.Add(new OrderedCollectionEntry(key, item));
         }
 
-        var keys1 = new HashSet<string>(entries1.Select(entry => entry.Key), System.StringComparer.Ordinal);
-        return keys1.SetEquals(entries2.Select(entry => entry.Key));
+        return entries.Count > 0;
     }
 
     private static object?[] OrderEntries(IEnumerable<OrderedCollectionEntry> entries) =>
