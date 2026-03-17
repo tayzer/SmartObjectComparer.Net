@@ -198,7 +198,7 @@ public class ComparisonEngine : IComparisonEngine, IDisposable
 
         // Apply collection order rules by creating new, independent custom comparers
         var collectionOrderRules = ignoreRules.Where(r => r.IgnoreCollectionOrder && !r.IgnoreCompletely).ToList();
-        if (collectionOrderRules.Any())
+        if (currentConfig.IgnoreCollectionOrder || collectionOrderRules.Any())
         {
             try
             {
@@ -211,7 +211,10 @@ public class ComparisonEngine : IComparisonEngine, IDisposable
 
                 // Use RootComparerFactory directly like other parts of the codebase
                 var collectionOrderComparer = new PropertySpecificCollectionOrderComparer(
-                    RootComparerFactory.GetRootComparer(), expandedProperties, logger);
+                    RootComparerFactory.GetRootComparer(),
+                    expandedProperties,
+                    logger,
+                    applyGlobally: currentConfig.IgnoreCollectionOrder);
 
                 isolatedCompareLogic.Config.CustomComparers.Add(collectionOrderComparer);
             }

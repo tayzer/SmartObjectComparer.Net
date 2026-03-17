@@ -1,0 +1,3 @@
+- ComparisonTool.Web serves routed pages from the shared ComparisonTool.UI assembly, not just the web assembly.
+- When adding or changing Blazor Web App hosting, keep shared route discovery registered in both ComparisonTool.Web/Program.cs via AddAdditionalAssemblies(...) and ComparisonTool.Web/Components/Routes.razor via AdditionalAssemblies.
+- Global IgnoreCollectionOrder on large batch comparisons is expensive unless collections can be matched deterministically; the core comparer now tries scalar/common-identifier ordering before falling back to CompareNETObjects unordered matching.

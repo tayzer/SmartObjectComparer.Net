@@ -2,8 +2,11 @@ namespace ComparisonTool.Core.Comparison.Configuration;
 
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Reflection;
 using KellermanSoftware.CompareNetObjects;
 using KellermanSoftware.CompareNetObjects.TypeComparers;
 using Microsoft.Extensions.Logging;
@@ -15,11 +18,26 @@ using Microsoft.Extensions.Logging.Abstractions;
 /// </summary>
 public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
 {
+    private static readonly string[] PreferredIdentifierPropertyNames =
+    {
+        "Id",
+        "ID",
+        "Name",
+        "Key",
+        "Code",
+        "Identifier",
+        "ExternalId",
+        "Guid",
+    };
+
+    private static readonly ConcurrentDictionary<(Type Type, string PropertyName), PropertyInfo?> IdentifierPropertyCache = new();
+
     // Use simple thread-safe tracking without expensive concurrent dictionaries
     private static int comparisonCount = 0;
 
     private readonly HashSet<string> propertiesToIgnoreOrder;
     private readonly ILogger logger;
+    private readonly bool applyGlobally;
 
     // Explicitly track if we have rules for Results or RelatedItems (for fast lookup)
     private readonly bool hasResultsRule;
@@ -35,11 +53,13 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
     public PropertySpecificCollectionOrderComparer(
         RootComparer rootComparer,
         IEnumerable<string> propertiesToIgnoreOrder,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        bool applyGlobally = false)
         : base(rootComparer)
     {
         this.propertiesToIgnoreOrder = new HashSet<string>(propertiesToIgnoreOrder ?? Enumerable.Empty<string>(), System.StringComparer.Ordinal);
         this.logger = logger ?? NullLogger.Instance;
+        this.applyGlobally = applyGlobally;
 
         // Check if we have rules for specific collections using simple IndexOf
         hasResultsRule = this.propertiesToIgnoreOrder.Any(p =>
@@ -50,8 +70,9 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
 
         // Simplified logging - only log the essential information
         this.logger.LogDebug(
-            "PropertySpecificCollectionOrderComparer initialized with {Count} properties, Results rule: {HasResults}, RelatedItems rule: {HasRelatedItems}",
+            "PropertySpecificCollectionOrderComparer initialized with {Count} properties, global mode: {ApplyGlobally}, Results rule: {HasResults}, RelatedItems rule: {HasRelatedItems}",
             this.propertiesToIgnoreOrder.Count,
+            this.applyGlobally,
             hasResultsRule,
             hasRelatedItemsRule);
     }
@@ -91,74 +112,356 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
             logger.LogDebug("Collection comparison #{Count} at path: '{Path}'", currentCount, parms.BreadCrumb ?? "unknown");
         }
 
-        // Don't bother with complex logic if the breadcrumb is empty
-        if (string.IsNullOrEmpty(parms.BreadCrumb))
-        {
-            var noPathCollectionComparer = new CollectionComparer(RootComparer);
-            noPathCollectionComparer.CompareType(parms);
-            return;
-        }
-
         // Save original config state - we'll restore this at the end
         var originalIgnoreCollectionOrder = parms.Config.IgnoreCollectionOrder;
 
         try
         {
-            // If global ignore order is set, use the default collection comparer
-            if (originalIgnoreCollectionOrder)
+            var shouldIgnoreOrder = applyGlobally || ShouldIgnoreOrderForPath(parms.BreadCrumb);
+
+            if (!shouldIgnoreOrder)
             {
-                var defaultCollectionComparer = new CollectionComparer(RootComparer);
-                defaultCollectionComparer.CompareType(parms);
+                CompareWithCollectionComparer(parms, ignoreCollectionOrder: false);
                 return;
             }
 
-            // Fast path: Direct path matching for Results/RelatedItems
-            var isResultsCollection = hasResultsRule &&
-                (parms.BreadCrumb.IndexOf("Results", StringComparison.OrdinalIgnoreCase) >= 0);
-            var isRelatedItemsCollection = hasRelatedItemsRule &&
-                (parms.BreadCrumb.IndexOf("RelatedItems", StringComparison.OrdinalIgnoreCase) >= 0);
-
-            var shouldIgnoreOrder = false;
-
-            if (isResultsCollection || isRelatedItemsCollection)
+            if (TryCompareUsingDeterministicOrdering(parms))
             {
-                shouldIgnoreOrder = true;
                 if (logger.IsEnabled(LogLevel.Debug))
                 {
-                    logger.LogDebug("Fast path match for '{Path}' - ignoring collection order", parms.BreadCrumb);
+                    logger.LogDebug("Applied deterministic ordering optimization for '{Path}'", parms.BreadCrumb ?? "<root>");
                 }
-            }
-            else
-            {
-                // Detailed pattern matching (more expensive, but only when needed)
-                shouldIgnoreOrder = propertiesToIgnoreOrder.Any(pattern =>
-                    DoesPathMatchPattern(parms.BreadCrumb, pattern));
-
-                if (shouldIgnoreOrder && logger.IsEnabled(LogLevel.Debug))
-                {
-                    logger.LogDebug("Pattern match for '{Path}' - ignoring collection order", parms.BreadCrumb);
-                }
+                return;
             }
 
-            if (shouldIgnoreOrder)
-            {
-                // Temporarily enable ignore collection order for this comparison
-                parms.Config.IgnoreCollectionOrder = true;
-                var ignoreOrderComparer = new CollectionComparer(RootComparer);
-                ignoreOrderComparer.CompareType(parms);
-            }
-            else
-            {
-                // Use normal collection comparison (preserve order)
-                var normalComparer = new CollectionComparer(RootComparer);
-                normalComparer.CompareType(parms);
-            }
+            CompareWithCollectionComparer(parms, ignoreCollectionOrder: true);
         }
         finally
         {
             // Always restore original setting
             parms.Config.IgnoreCollectionOrder = originalIgnoreCollectionOrder;
         }
+    }
+
+    private void CompareWithCollectionComparer(CompareParms parms, bool ignoreCollectionOrder)
+    {
+        parms.Config.IgnoreCollectionOrder = ignoreCollectionOrder;
+        var collectionComparer = new CollectionComparer(RootComparer);
+        collectionComparer.CompareType(parms);
+    }
+
+    private bool ShouldIgnoreOrderForPath(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return false;
+        }
+
+        var isResultsCollection = hasResultsRule &&
+            (path.IndexOf("Results", StringComparison.OrdinalIgnoreCase) >= 0);
+        var isRelatedItemsCollection = hasRelatedItemsRule &&
+            (path.IndexOf("RelatedItems", StringComparison.OrdinalIgnoreCase) >= 0);
+
+        if (isResultsCollection || isRelatedItemsCollection)
+        {
+            if (logger.IsEnabled(LogLevel.Debug))
+            {
+                logger.LogDebug("Fast path match for '{Path}' - ignoring collection order", path);
+            }
+
+            return true;
+        }
+
+        var shouldIgnoreOrder = propertiesToIgnoreOrder.Any(pattern => DoesPathMatchPattern(path, pattern));
+
+        if (shouldIgnoreOrder && logger.IsEnabled(LogLevel.Debug))
+        {
+            logger.LogDebug("Pattern match for '{Path}' - ignoring collection order", path);
+        }
+
+        return shouldIgnoreOrder;
+    }
+
+    private bool TryCompareUsingDeterministicOrdering(CompareParms parms)
+    {
+        if (parms.Object1 is not IEnumerable enumerable1 || parms.Object2 is not IEnumerable enumerable2)
+        {
+            return false;
+        }
+
+        var items1 = MaterializeItems(enumerable1);
+        var items2 = MaterializeItems(enumerable2);
+
+        if (items1.Count != items2.Count)
+        {
+            return false;
+        }
+
+        if (!TryCreateOrderedCollections(items1, items2, out var orderedItems1, out var orderedItems2))
+        {
+            return false;
+        }
+
+        parms.Config.IgnoreCollectionOrder = false;
+        var orderedParms = CreateOrderedCompareParms(parms, orderedItems1, orderedItems2);
+        var collectionComparer = new CollectionComparer(RootComparer);
+        collectionComparer.CompareType(orderedParms);
+
+        return true;
+    }
+
+    private static List<object?> MaterializeItems(IEnumerable enumerable)
+    {
+        var items = new List<object?>();
+        foreach (var item in enumerable)
+        {
+            items.Add(item);
+        }
+
+        return items;
+    }
+
+    private bool TryCreateOrderedCollections(
+        IReadOnlyList<object?> items1,
+        IReadOnlyList<object?> items2,
+        out object?[] orderedItems1,
+        out object?[] orderedItems2)
+    {
+        if (TryCreateOrderedScalarCollections(items1, items2, out orderedItems1, out orderedItems2))
+        {
+            return true;
+        }
+
+        return TryCreateOrderedObjectCollections(items1, items2, out orderedItems1, out orderedItems2);
+    }
+
+    private bool TryCreateOrderedScalarCollections(
+        IReadOnlyList<object?> items1,
+        IReadOnlyList<object?> items2,
+        out object?[] orderedItems1,
+        out object?[] orderedItems2)
+    {
+        if (!TryBuildScalarEntries(items1, out var entries1) ||
+            !TryBuildScalarEntries(items2, out var entries2) ||
+            !HaveMatchingKeySets(entries1, entries2))
+        {
+            orderedItems1 = Array.Empty<object?>();
+            orderedItems2 = Array.Empty<object?>();
+            return false;
+        }
+
+        orderedItems1 = OrderEntries(entries1);
+        orderedItems2 = OrderEntries(entries2);
+        return true;
+    }
+
+    private bool TryBuildScalarEntries(IReadOnlyList<object?> items, out List<OrderedCollectionEntry> entries)
+    {
+        entries = new List<OrderedCollectionEntry>(items.Count);
+        var keys = new HashSet<string>(System.StringComparer.Ordinal);
+
+        foreach (var item in items)
+        {
+            if (item != null && !IsSimpleScalarType(item.GetType()))
+            {
+                entries.Clear();
+                return false;
+            }
+
+            if (!TryCreateScalarKey(item, out var key) || !keys.Add(key))
+            {
+                entries.Clear();
+                return false;
+            }
+
+            entries.Add(new OrderedCollectionEntry(key, item));
+        }
+
+        return true;
+    }
+
+    private bool TryCreateOrderedObjectCollections(
+        IReadOnlyList<object?> items1,
+        IReadOnlyList<object?> items2,
+        out object?[] orderedItems1,
+        out object?[] orderedItems2)
+    {
+        foreach (var propertyName in PreferredIdentifierPropertyNames)
+        {
+            if (!TryBuildIdentifierEntries(items1, propertyName, out var entries1) ||
+                !TryBuildIdentifierEntries(items2, propertyName, out var entries2) ||
+                !HaveMatchingKeySets(entries1, entries2))
+            {
+                continue;
+            }
+
+            orderedItems1 = OrderEntries(entries1);
+            orderedItems2 = OrderEntries(entries2);
+            return true;
+        }
+
+        orderedItems1 = Array.Empty<object?>();
+        orderedItems2 = Array.Empty<object?>();
+        return false;
+    }
+
+    private bool TryBuildIdentifierEntries(
+        IReadOnlyList<object?> items,
+        string propertyName,
+        out List<OrderedCollectionEntry> entries)
+    {
+        entries = new List<OrderedCollectionEntry>(items.Count);
+        var keys = new HashSet<string>(System.StringComparer.Ordinal);
+
+        foreach (var item in items)
+        {
+            if (item == null || IsSimpleScalarType(item.GetType()))
+            {
+                entries.Clear();
+                return false;
+            }
+
+            var identifierProperty = GetIdentifierProperty(item.GetType(), propertyName);
+            if (identifierProperty == null)
+            {
+                entries.Clear();
+                return false;
+            }
+
+            var identifierValue = identifierProperty.GetValue(item);
+            if (!TryCreateScalarKey(identifierValue, out var key) || !keys.Add(key))
+            {
+                entries.Clear();
+                return false;
+            }
+
+            entries.Add(new OrderedCollectionEntry(key, item));
+        }
+
+        return true;
+    }
+
+    private static PropertyInfo? GetIdentifierProperty(Type type, string propertyName) =>
+        IdentifierPropertyCache.GetOrAdd((type, propertyName), key => ResolveIdentifierProperty(key.Type, key.PropertyName));
+
+    private static PropertyInfo? ResolveIdentifierProperty(Type type, string propertyName)
+    {
+        var property = type.GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public) ??
+            type.GetProperties(BindingFlags.Instance | BindingFlags.Public)
+                .FirstOrDefault(p => string.Equals(p.Name, propertyName, StringComparison.OrdinalIgnoreCase));
+
+        if (property == null || !property.CanRead || property.GetIndexParameters().Length != 0)
+        {
+            return null;
+        }
+
+        return IsSimpleScalarType(property.PropertyType) ? property : null;
+    }
+
+    private static bool HaveMatchingKeySets(
+        IReadOnlyCollection<OrderedCollectionEntry> entries1,
+        IReadOnlyCollection<OrderedCollectionEntry> entries2)
+    {
+        if (entries1.Count != entries2.Count)
+        {
+            return false;
+        }
+
+        var keys1 = new HashSet<string>(entries1.Select(entry => entry.Key), System.StringComparer.Ordinal);
+        return keys1.SetEquals(entries2.Select(entry => entry.Key));
+    }
+
+    private static object?[] OrderEntries(IEnumerable<OrderedCollectionEntry> entries) =>
+        entries
+            .OrderBy(entry => entry.Key, System.StringComparer.Ordinal)
+            .Select(entry => entry.Item)
+            .ToArray();
+
+    private static CompareParms CreateOrderedCompareParms(
+        CompareParms originalParms,
+        object?[] orderedItems1,
+        object?[] orderedItems2) => new CompareParms
+        {
+            BreadCrumb = originalParms.BreadCrumb,
+            Config = originalParms.Config,
+            CustomPropertyComparer = originalParms.CustomPropertyComparer,
+            Object1 = orderedItems1,
+            Object2 = orderedItems2,
+            Object1DeclaredType = orderedItems1.GetType(),
+            Object2DeclaredType = orderedItems2.GetType(),
+            Object1Type = orderedItems1.GetType(),
+            Object2Type = orderedItems2.GetType(),
+            ParentObject1 = originalParms.ParentObject1,
+            ParentObject2 = originalParms.ParentObject2,
+            Result = originalParms.Result,
+        };
+
+    private static bool TryCreateScalarKey(object? value, out string key)
+    {
+        if (value == null)
+        {
+            key = "<null>";
+            return true;
+        }
+
+        var type = Nullable.GetUnderlyingType(value.GetType()) ?? value.GetType();
+        if (!IsSimpleScalarType(type))
+        {
+            key = string.Empty;
+            return false;
+        }
+
+        key = type.FullName + ":" + ConvertScalarToInvariantString(value, type);
+        return true;
+    }
+
+    private static string ConvertScalarToInvariantString(object value, Type type)
+    {
+        if (type == typeof(string))
+        {
+            return (string)value;
+        }
+
+        if (type == typeof(DateTime))
+        {
+            return ((DateTime)value).ToString("O", CultureInfo.InvariantCulture);
+        }
+
+        if (type == typeof(DateTimeOffset))
+        {
+            return ((DateTimeOffset)value).ToString("O", CultureInfo.InvariantCulture);
+        }
+
+        if (type == typeof(TimeSpan))
+        {
+            return ((TimeSpan)value).ToString("c", CultureInfo.InvariantCulture);
+        }
+
+        if (type == typeof(Guid))
+        {
+            return ((Guid)value).ToString("D");
+        }
+
+        if (value is IFormattable formattable)
+        {
+            return formattable.ToString(null, CultureInfo.InvariantCulture);
+        }
+
+        return value.ToString() ?? string.Empty;
+    }
+
+    private static bool IsSimpleScalarType(Type type)
+    {
+        var actualType = Nullable.GetUnderlyingType(type) ?? type;
+
+        return actualType.IsPrimitive ||
+            actualType.IsEnum ||
+            actualType == typeof(string) ||
+            actualType == typeof(decimal) ||
+            actualType == typeof(Guid) ||
+            actualType == typeof(DateTime) ||
+            actualType == typeof(DateTimeOffset) ||
+            actualType == typeof(TimeSpan);
     }
 
     /// <summary>
@@ -199,5 +502,24 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
         }
 
         return false;
+    }
+
+    private readonly struct OrderedCollectionEntry
+    {
+        public OrderedCollectionEntry(string key, object? item)
+        {
+            Key = key;
+            Item = item;
+        }
+
+        public string Key
+        {
+            get;
+        }
+
+        public object? Item
+        {
+            get;
+        }
     }
 }

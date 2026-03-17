@@ -463,6 +463,25 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
         optimizedLogic.Config.MembersToInclude = new List<string>();
         optimizedLogic.Config.CustomComparers = new List<KellermanSoftware.CompareNetObjects.TypeComparers.BaseTypeComparer>();
 
+        var ignoreRules = configService.GetIgnoreRules();
+        var collectionOrderRules = ignoreRules.Where(r => r.IgnoreCollectionOrder && !r.IgnoreCompletely).ToList();
+        if (currentConfig.IgnoreCollectionOrder || collectionOrderRules.Any())
+        {
+            var propertiesWithIgnoreOrder = collectionOrderRules.Select(r => r.PropertyPath).ToList();
+            var expandedProperties = propertiesWithIgnoreOrder
+                .SelectMany(p => new[] { p, p.Replace("[*]", "[0]"), p.Replace("[*]", "[1]") })
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            var collectionOrderComparer = new PropertySpecificCollectionOrderComparer(
+                RootComparerFactory.GetRootComparer(),
+                expandedProperties,
+                logger,
+                applyGlobally: currentConfig.IgnoreCollectionOrder);
+
+            optimizedLogic.Config.CustomComparers.Add(collectionOrderComparer);
+        }
+
         // Always ignore array length properties
         if (!optimizedLogic.Config.MembersToIgnore.Contains("Length", StringComparer.Ordinal))
         {

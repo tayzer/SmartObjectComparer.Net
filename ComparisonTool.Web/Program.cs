@@ -101,6 +101,7 @@ app.UseStaticFiles();
 app.UseAntiforgery();
 
 app.MapRazorComponents<App>()
+    .AddAdditionalAssemblies(typeof(ComparisonTool.UI.Pages.Home).Assembly)
     .AddInteractiveServerRenderMode();
 
 // Map SignalR hub for comparison progress
