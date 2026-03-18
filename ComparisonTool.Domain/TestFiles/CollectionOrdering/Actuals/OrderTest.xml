@@ -2,13 +2,26 @@
 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
   <soap:Body>
     <SearchResponse xmlns="urn:soap.co.uk/soap:search1">
-      <ReportId>order-test-123</ReportId>
+        <ReportId>order-test-123</ReportId>
       <GeneratedOn>2025-05-01T10:00:00</GeneratedOn>
       <Summary>
         <TotalResults>3</TotalResults>
         <SuccessCount>3</SuccessCount>
         <FailureCount>0</FailureCount>
       </Summary>
+      <!-- AddressLinks collections in different order: addresses 103, 101, 102 and links 103, 101, 102 -->
+      <AddressLinks>
+        <Addresses>
+          <Address Id="103">303 Pine Rd, Springfield</Address>
+          <Address Id="101">101 Main St, Springfield</Address>
+          <Address Id="102">202 Oak Ave, Springfield</Address>
+        </Addresses>
+        <Links>
+          <Link SourceId="103" TargetId="203">Mailing</Link>
+          <Link SourceId="101" TargetId="201">Current</Link>
+          <Link SourceId="102" TargetId="202">Previous</Link>
+        </Links>
+      </AddressLinks>
       <!-- Results collection in different order: C, A, B (compared to expected A, B, C) -->
       <Results>
         <Result>

@@ -21,8 +21,51 @@ public class SoapBody
     }
 }
 
+public class AddressLinks
+{
+    [XmlArray(ElementName = "Addresses")]
+    [XmlArrayItem(ElementName = "Address")]
+    public AddressLinkAddress[]? Addresses { get; set; }
+
+    [XmlArray(ElementName = "Links")]
+    [XmlArrayItem(ElementName = "Link")]
+    public Link[]? Links { get; set; }
+
+    public bool ShouldSerializeAddresses() => Addresses != null && Addresses.Length > 0;
+
+    public bool ShouldSerializeLinks() => Links != null && Links.Length > 0;
+}
+
+public class AddressLinkAddress
+{
+    [XmlAttribute(AttributeName = "Id")]
+    public int Id { get; set; }
+
+    [XmlText]
+    public string? AddressLines { get; set; }
+}
+
+public class Link
+{
+    [XmlAttribute(AttributeName = "SourceId")]
+    public int SourceId { get; set; }
+
+    [XmlAttribute(AttributeName = "TargetId")]
+    public int TargetId { get; set; }
+
+    [XmlText]
+    public string? LinkType
+    {
+        get;
+        set;
+    }
+}
+
 public class SearchResponse
 {
+    [XmlElement(ElementName = "AddressLinks")]
+    public AddressLinks? AddressLinks { get; set; }
+
     [XmlElement(ElementName = "ReportId")]
     public string ReportId { get; set; } = Guid.NewGuid().ToString();
 

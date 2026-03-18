@@ -3,6 +3,9 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO.Hashing;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using System.Threading.Channels;
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Configuration;
@@ -30,7 +33,9 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
     private readonly PerformanceTracker performanceTracker;
 
     // OPTIMIZATION 1: Reuse CompareLogic instances per thread to avoid allocation
-    private readonly ThreadLocal<CompareLogic> threadLocalCompareLogic;
+    private ThreadLocal<CompareLogic> threadLocalCompareLogic;
+    private readonly object compareLogicRefreshLock = new object();
+    private volatile string cachedConfigFingerprint = string.Empty;
 
     // OPTIMIZATION 2: Pool DifferenceCategorizer instances
     private readonly ObjectPool<DifferenceCategorizer> categorizerPool;
@@ -63,9 +68,8 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
         channelCapacity = cpuCores * 4; // Buffer to decouple stages
 
         // OPTIMIZATION 1: Thread-local CompareLogic to avoid allocation per file
-        threadLocalCompareLogic = new ThreadLocal<CompareLogic>(
-            () => CreateOptimizedCompareLogic(),
-            trackAllValues: false);
+        threadLocalCompareLogic = CreateThreadLocalCompareLogic();
+        cachedConfigFingerprint = GenerateConfigurationFingerprint();
 
         // OPTIMIZATION 2: Object pool for categorizers
         categorizerPool = new ObjectPool<DifferenceCategorizer>(
@@ -117,6 +121,7 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
         IProgress<ComparisonProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        RefreshCompareLogicIfNeeded();
         var totalFiles = filePairs.Count;
         logger.LogInformation(
             "Starting high-performance comparison of {Count} file pairs with I/O parallelism {IoParallel} and CPU parallelism {CpuParallel}",
@@ -499,6 +504,57 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
         }
 
         return optimizedLogic;
+    }
+
+    private ThreadLocal<CompareLogic> CreateThreadLocalCompareLogic() => new ThreadLocal<CompareLogic>(
+        () => CreateOptimizedCompareLogic(),
+        trackAllValues: false);
+
+    private void RefreshCompareLogicIfNeeded()
+    {
+        var currentFingerprint = GenerateConfigurationFingerprint();
+        if (string.Equals(cachedConfigFingerprint, currentFingerprint, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        lock (compareLogicRefreshLock)
+        {
+            currentFingerprint = GenerateConfigurationFingerprint();
+            if (string.Equals(cachedConfigFingerprint, currentFingerprint, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            var previousThreadLocal = threadLocalCompareLogic;
+            threadLocalCompareLogic = CreateThreadLocalCompareLogic();
+            cachedConfigFingerprint = currentFingerprint;
+            previousThreadLocal.Dispose();
+        }
+    }
+
+    private string GenerateConfigurationFingerprint()
+    {
+        var config = new
+        {
+            GlobalIgnoreCollectionOrder = configService.GetIgnoreCollectionOrder(),
+            GlobalIgnoreStringCase = configService.GetIgnoreStringCase(),
+            GlobalIgnoreTrailingWhitespaceAtEnd = configService.GetIgnoreTrailingWhitespaceAtEnd(),
+            IgnoreRules = configService.GetIgnoreRules()
+                .OrderBy(rule => rule.PropertyPath, StringComparer.Ordinal)
+                .Select(rule => new { rule.PropertyPath, rule.IgnoreCompletely, rule.IgnoreCollectionOrder })
+                .ToList(),
+            SmartIgnoreRules = configService.GetSmartIgnoreRules()
+                .Where(rule => rule.IsEnabled)
+                .OrderBy(rule => rule.Type)
+                .ThenBy(rule => rule.Value, StringComparer.Ordinal)
+                .Select(rule => new { rule.Type, rule.Value, rule.IsEnabled })
+                .ToList(),
+        };
+
+        var json = JsonSerializer.Serialize(config);
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(json));
+        return Convert.ToBase64String(hash);
     }
 
     /// <summary>

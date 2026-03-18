@@ -1,4 +1,7 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.Utilities;
@@ -18,7 +21,8 @@ public class ComparisonEngine : IComparisonEngine, IDisposable
     private readonly PerformanceTracker performanceTracker;
 
     // PERFORMANCE OPTIMIZATION: Thread-local CompareLogic to avoid allocation per comparison
-    private readonly ThreadLocal<CompareLogic> threadLocalCompareLogic;
+    private ThreadLocal<CompareLogic> threadLocalCompareLogic;
+    private readonly object compareLogicRefreshLock = new object();
 
     // PERFORMANCE OPTIMIZATION: Cache configuration fingerprint to detect changes
     private volatile string cachedConfigFingerprint = string.Empty;
@@ -34,9 +38,9 @@ public class ComparisonEngine : IComparisonEngine, IDisposable
         this.performanceTracker = performanceTracker;
 
         // Initialize thread-local CompareLogic with lazy creation
-        threadLocalCompareLogic = new ThreadLocal<CompareLogic>(
-            valueFactory: () => CreateIsolatedCompareLogic(),
-            trackAllValues: false);
+        threadLocalCompareLogic = CreateThreadLocalCompareLogic();
+        cachedConfigFingerprint = GenerateConfigurationFingerprint();
+        configurationChanged = false;
     }
 
     /// <summary>
@@ -124,18 +128,61 @@ public class ComparisonEngine : IComparisonEngine, IDisposable
     /// </summary>
     private CompareLogic GetOrRefreshCompareLogic()
     {
-        // Check if configuration changed (volatile read)
-        if (configurationChanged)
-        {
-            // Reset thread-local value to force recreation
-            if (threadLocalCompareLogic.IsValueCreated)
-            {
-                // Can't reset ThreadLocal, but we can invalidate by recreating
-                configurationChanged = false;
-            }
-        }
+        RefreshCompareLogicIfNeeded();
 
         return threadLocalCompareLogic.Value!;
+    }
+
+    private ThreadLocal<CompareLogic> CreateThreadLocalCompareLogic() => new ThreadLocal<CompareLogic>(
+        valueFactory: () => CreateIsolatedCompareLogic(),
+        trackAllValues: false);
+
+    private void RefreshCompareLogicIfNeeded()
+    {
+        var currentFingerprint = GenerateConfigurationFingerprint();
+        if (!configurationChanged && string.Equals(cachedConfigFingerprint, currentFingerprint, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        lock (compareLogicRefreshLock)
+        {
+            currentFingerprint = GenerateConfigurationFingerprint();
+            if (!configurationChanged && string.Equals(cachedConfigFingerprint, currentFingerprint, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            var previousThreadLocal = threadLocalCompareLogic;
+            threadLocalCompareLogic = CreateThreadLocalCompareLogic();
+            cachedConfigFingerprint = currentFingerprint;
+            configurationChanged = false;
+            previousThreadLocal.Dispose();
+        }
+    }
+
+    private string GenerateConfigurationFingerprint()
+    {
+        var config = new
+        {
+            GlobalIgnoreCollectionOrder = configService.GetIgnoreCollectionOrder(),
+            GlobalIgnoreStringCase = configService.GetIgnoreStringCase(),
+            GlobalIgnoreTrailingWhitespaceAtEnd = configService.GetIgnoreTrailingWhitespaceAtEnd(),
+            IgnoreRules = configService.GetIgnoreRules()
+                .OrderBy(rule => rule.PropertyPath, System.StringComparer.Ordinal)
+                .Select(rule => new { rule.PropertyPath, rule.IgnoreCompletely, rule.IgnoreCollectionOrder })
+                .ToList(),
+            SmartIgnoreRules = configService.GetSmartIgnoreRules()
+                .Where(rule => rule.IsEnabled)
+                .OrderBy(rule => rule.Type)
+                .ThenBy(rule => rule.Value, System.StringComparer.Ordinal)
+                .Select(rule => new { rule.Type, rule.Value, rule.IsEnabled })
+                .ToList(),
+        };
+
+        var json = JsonSerializer.Serialize(config);
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(json));
+        return Convert.ToBase64String(hash);
     }
 
     /// <summary>
