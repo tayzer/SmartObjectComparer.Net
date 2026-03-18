@@ -24,6 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\ComparisonTool.Cli\ComparisonTool.Cli.csproj" />
     <ProjectReference Include="..\ComparisonTool.Core\ComparisonTool.Core.csproj" />
     <ProjectReference Include="..\ComparisonTool.Domain\ComparisonTool.Domain.csproj" />
   </ItemGroup>

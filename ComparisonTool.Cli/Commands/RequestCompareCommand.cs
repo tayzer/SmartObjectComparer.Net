@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using ComparisonTool.Cli.Infrastructure;
 using ComparisonTool.Cli.Reporting;
 using ComparisonTool.Core.RequestComparison.Models;
@@ -17,6 +18,10 @@ namespace ComparisonTool.Cli.Commands;
 /// </summary>
 public static partial class RequestCompareCommand
 {
+    private static readonly Regex RequestRangePattern = new Regex(
+        @"^\s*(?<start>-?\d+)\s*-\s*(?<end>-?\d+)\s*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     /// <summary>
     /// Creates the "request" sub-command.
     /// </summary>
@@ -24,7 +29,7 @@ public static partial class RequestCompareCommand
     {
         var requestDirArg = new Argument<DirectoryInfo>("request-directory")
         {
-            Description = "Path to a directory containing request body files (XML/JSON)",
+            Description = "Path to a directory containing request body files (XML/JSON/TXT)",
         };
 
         var endpointAOption = new Option<string>("--endpoint-a", "-a")
@@ -117,6 +122,11 @@ public static partial class RequestCompareCommand
             Description = "Optional SOAPAction header value to send with every request",
         };
 
+        var rangeOption = new Option<string?>("--range")
+        {
+            Description = "1-based inclusive ordinal range of request files after ordinal sorting, for example 1-500",
+        };
+
         var outputOption = new Option<DirectoryInfo?>("--output", "-o")
         {
             Description = "Directory for report output files. Defaults to current directory",
@@ -190,6 +200,7 @@ public static partial class RequestCompareCommand
             ignoreRulesFileOption,
             contentTypeOption,
             soapActionOption,
+            rangeOption,
             outputOption,
             formatOption,
             htmlModeOption,
@@ -201,9 +212,12 @@ public static partial class RequestCompareCommand
         command.SetAction(async (parseResult, cancellationToken) =>
         {
             var requestDir = parseResult.GetValue(requestDirArg);
-            var endpointA = parseResult.GetValue(endpointAOption)!;
-            var endpointB = parseResult.GetValue(endpointBOption)!;
-            var model = parseResult.GetValue(modelOption)!;
+            var endpointA = parseResult.GetValue(endpointAOption)
+                ?? throw new InvalidOperationException("Missing required option --endpoint-a.");
+            var endpointB = parseResult.GetValue(endpointBOption)
+                ?? throw new InvalidOperationException("Missing required option --endpoint-b.");
+            var model = parseResult.GetValue(modelOption)
+                ?? throw new InvalidOperationException("Missing required option --model.");
             var concurrency = parseResult.GetValue(concurrencyOption);
             var timeout = parseResult.GetValue(timeoutOption);
             var ignoreCollectionOrder = parseResult.GetValue(ignoreCollectionOrderOption);
@@ -214,6 +228,7 @@ public static partial class RequestCompareCommand
             var ignoreRulesFile = parseResult.GetValue(ignoreRulesFileOption);
             var contentTypeOverride = parseResult.GetValue(contentTypeOption);
             var soapAction = parseResult.GetValue(soapActionOption);
+            var requestRange = parseResult.GetValue(rangeOption);
             var outputDir = parseResult.GetValue(outputOption);
             var formats = parseResult.GetValue(formatOption) ?? new[] { OutputFormat.Console };
             var htmlMode = parseResult.GetValue(htmlModeOption);
@@ -237,6 +252,7 @@ public static partial class RequestCompareCommand
                 ignoreRulesFile,
                 contentTypeOverride,
                 soapAction,
+                requestRange,
                 outputDir,
                 formats,
                 htmlMode,
@@ -247,6 +263,85 @@ public static partial class RequestCompareCommand
         });
 
         return command;
+    }
+
+    internal static RequestBatchSelection CreateRequestBatchSelection(
+        DirectoryInfo requestDir,
+        string? rangeText)
+    {
+        var eligibleFiles = GetEligibleRequestFiles(requestDir);
+
+        if (eligibleFiles.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"No request files (xml/json/txt) found in {requestDir.FullName}");
+        }
+
+        var requestedRange = ParseRequestRange(rangeText);
+        var appliedRange = ApplyRequestRange(requestedRange, eligibleFiles.Count);
+
+        var selectedFiles = eligibleFiles
+            .Skip(appliedRange.StartOrdinal - 1)
+            .Take(appliedRange.EndOrdinal - appliedRange.StartOrdinal + 1)
+            .ToList();
+
+        return new RequestBatchSelection(
+            eligibleFiles.Count,
+            selectedFiles,
+            requestedRange,
+            appliedRange);
+    }
+
+    internal static RequestOrdinalRange? ParseRequestRange(string? rangeText)
+    {
+        if (string.IsNullOrWhiteSpace(rangeText))
+        {
+            return null;
+        }
+
+        var match = RequestRangePattern.Match(rangeText);
+        if (!match.Success
+            || !int.TryParse(match.Groups["start"].Value, out var startOrdinal)
+            || !int.TryParse(match.Groups["end"].Value, out var endOrdinal))
+        {
+            throw new ArgumentException(
+                $"Invalid --range value '{rangeText}'. Expected format 'start-end' using 1-based inclusive ordinals, for example '1-500'.",
+                nameof(rangeText));
+        }
+
+        if (startOrdinal <= 0 || endOrdinal <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(rangeText),
+                $"Invalid --range value '{rangeText}'. Range values must be positive 1-based ordinals.");
+        }
+
+        if (startOrdinal > endOrdinal)
+        {
+            throw new ArgumentException(
+                $"Invalid --range value '{rangeText}'. Range start must be less than or equal to range end.",
+                nameof(rangeText));
+        }
+
+        return new RequestOrdinalRange(startOrdinal, endOrdinal);
+    }
+
+    internal static IReadOnlyList<FileInfo> GetFilesToStage(RequestBatchSelection selection)
+    {
+        var filesToStage = new List<FileInfo>();
+
+        foreach (var selectedFile in selection.SelectedFiles)
+        {
+            filesToStage.Add(selectedFile);
+
+            var sidecarPath = selectedFile.FullName + ".headers.json";
+            if (File.Exists(sidecarPath))
+            {
+                filesToStage.Add(new FileInfo(sidecarPath));
+            }
+        }
+
+        return filesToStage;
     }
 
     private static async Task<int> ExecuteAsync(
@@ -265,6 +360,7 @@ public static partial class RequestCompareCommand
         FileInfo? ignoreRulesFile,
         string? contentTypeOverride,
         string? soapAction,
+        string? requestRange,
         DirectoryInfo? outputDir,
         OutputFormat[] formats,
         HtmlReportMode htmlMode,
@@ -279,20 +375,35 @@ public static partial class RequestCompareCommand
             return 1;
         }
 
+        RequestBatchSelection stagingSelection;
+        try
+        {
+            stagingSelection = CreateRequestBatchSelection(requestDir, requestRange);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            Console.Error.WriteLine($"Error: {ex.Message}");
+            return 1;
+        }
+
         Console.WriteLine("Request comparison:");
         Console.WriteLine($"  Requests:    {requestDir.FullName}");
         Console.WriteLine($"  Endpoint A:  {endpointA}");
         Console.WriteLine($"  Endpoint B:  {endpointB}");
         Console.WriteLine($"  Model:       {modelName}");
         Console.WriteLine($"  Concurrency: {maxConcurrency}");
+        Console.WriteLine($"  Range:       {stagingSelection.AppliedRangeDisplay}");
+        Console.WriteLine($"  Selected:    {stagingSelection.SelectedFileCount}/{stagingSelection.TotalEligibleFileCount} file(s)");
         if (!string.IsNullOrWhiteSpace(contentTypeOverride))
         {
             Console.WriteLine($"  Content-Type: {contentTypeOverride}");
         }
+
         if (!string.IsNullOrWhiteSpace(soapAction))
         {
             Console.WriteLine($"  SOAPAction: {soapAction}");
         }
+
         Console.WriteLine();
 
         // Validate model name up-front — fail fast before staging any temp files
@@ -312,7 +423,7 @@ public static partial class RequestCompareCommand
         }
 
         // Stage the request files into the temp batch directory that RequestFileParserService expects
-        var batchId = await StageRequestBatchAsync(requestDir, cancellationToken);
+        var batchId = await StageRequestBatchAsync(stagingSelection, cancellationToken);
 
         var jobService = serviceProvider.GetRequiredService<RequestComparisonJobService>();
 
@@ -436,34 +547,21 @@ public static partial class RequestCompareCommand
         return result.AllEqual ? 0 : 2;
     }
 
-
     /// <summary>
     /// Copies request files from the user's directory into the temp batch path
     /// that <see cref="RequestFileParserService"/> expects.
     /// </summary>
     private static async Task<string> StageRequestBatchAsync(
-        DirectoryInfo requestDir,
+        RequestBatchSelection selection,
         CancellationToken cancellationToken)
     {
         var batchId = Guid.NewGuid().ToString("N")[..12];
         var batchPath = Path.Combine(Path.GetTempPath(), "ComparisonToolRequests", batchId);
         Directory.CreateDirectory(batchPath);
 
-        var files = requestDir.GetFiles("*.*", SearchOption.TopDirectoryOnly)
-            .Where(f => f.Extension.Equals(".xml", StringComparison.OrdinalIgnoreCase)
-                     || f.Extension.Equals(".json", StringComparison.OrdinalIgnoreCase)
-                     || f.Extension.Equals(".txt", StringComparison.OrdinalIgnoreCase))
-            .ToList();
+        Console.WriteLine($"  Staging {selection.SelectedFileCount} request file(s)...");
 
-        if (files.Count == 0)
-        {
-            throw new InvalidOperationException(
-                $"No request files (xml/json/txt) found in {requestDir.FullName}");
-        }
-
-        Console.WriteLine($"  Staging {files.Count} request file(s)...");
-
-        foreach (var file in files)
+        foreach (var file in GetFilesToStage(selection))
         {
             cancellationToken.ThrowIfCancellationRequested();
             var destPath = Path.Combine(batchPath, file.Name);
@@ -471,6 +569,47 @@ public static partial class RequestCompareCommand
         }
 
         return batchId;
+    }
+
+    private static RequestOrdinalRange ApplyRequestRange(
+        RequestOrdinalRange? requestedRange,
+        int totalEligibleFileCount)
+    {
+        if (requestedRange is null)
+        {
+            return new RequestOrdinalRange(1, totalEligibleFileCount);
+        }
+
+        if (requestedRange.Value.StartOrdinal > totalEligibleFileCount)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(requestedRange),
+                $"Invalid --range value '{requestedRange.Value}'. Range start {requestedRange.Value.StartOrdinal} exceeds the available eligible request file count {totalEligibleFileCount}.");
+        }
+
+        return new RequestOrdinalRange(
+            requestedRange.Value.StartOrdinal,
+            Math.Min(requestedRange.Value.EndOrdinal, totalEligibleFileCount));
+    }
+
+    private static List<FileInfo> GetEligibleRequestFiles(DirectoryInfo requestDir)
+    {
+        return requestDir.GetFiles("*.*", SearchOption.TopDirectoryOnly)
+            .Where(IsEligibleRequestFile)
+            .OrderBy(file => file.Name, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static bool IsEligibleRequestFile(FileInfo file)
+    {
+        if (file.Name.EndsWith(".headers.json", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return file.Extension.Equals(".xml", StringComparison.OrdinalIgnoreCase)
+            || file.Extension.Equals(".json", StringComparison.OrdinalIgnoreCase)
+            || file.Extension.Equals(".txt", StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task CopyFileAsync(string source, string destination, CancellationToken cancellationToken)
@@ -568,4 +707,55 @@ public static partial class RequestCompareCommand
             };
     }
 
+    internal readonly struct RequestOrdinalRange : IEquatable<RequestOrdinalRange>
+    {
+        public RequestOrdinalRange(int startOrdinal, int endOrdinal)
+        {
+            StartOrdinal = startOrdinal;
+            EndOrdinal = endOrdinal;
+        }
+
+        public int StartOrdinal { get; }
+
+        public int EndOrdinal { get; }
+
+        public bool Equals(RequestOrdinalRange other) => StartOrdinal == other.StartOrdinal && EndOrdinal == other.EndOrdinal;
+
+        public override bool Equals(object? obj) => obj is RequestOrdinalRange other && Equals(other);
+
+        public override int GetHashCode() => HashCode.Combine(StartOrdinal, EndOrdinal);
+
+        public override string ToString() => $"{StartOrdinal}-{EndOrdinal}";
+    }
+
+    internal sealed class RequestBatchSelection
+    {
+        public RequestBatchSelection(
+            int totalEligibleFileCount,
+            IReadOnlyList<FileInfo> selectedFiles,
+            RequestOrdinalRange? requestedRange,
+            RequestOrdinalRange appliedRange)
+        {
+            TotalEligibleFileCount = totalEligibleFileCount;
+            SelectedFiles = selectedFiles;
+            RequestedRange = requestedRange;
+            AppliedRange = appliedRange;
+        }
+
+        public int TotalEligibleFileCount { get; }
+
+        public IReadOnlyList<FileInfo> SelectedFiles { get; }
+
+        public RequestOrdinalRange? RequestedRange { get; }
+
+        public RequestOrdinalRange AppliedRange { get; }
+
+        public int SelectedFileCount => SelectedFiles.Count;
+
+        public string AppliedRangeDisplay => RequestedRange is null
+            ? $"all ({AppliedRange})"
+            : RequestedRange.Value.Equals(AppliedRange)
+                ? AppliedRange.ToString()
+                : $"{AppliedRange} (requested {RequestedRange.Value})";
+    }
 }
