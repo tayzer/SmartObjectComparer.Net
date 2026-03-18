@@ -475,6 +475,12 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
 
         var ignoreRules = configService.GetIgnoreRules();
         var collectionOrderRules = ignoreRules.Where(r => r.IgnoreCollectionOrder && !r.IgnoreCompletely).ToList();
+        var ignoredPropertyPaths = ignoreRules
+            .Where(r => r.IgnoreCompletely)
+            .Select(r => r.PropertyPath)
+            .Distinct(System.StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
         if (currentConfig.IgnoreCollectionOrder || collectionOrderRules.Any())
         {
             var propertiesWithIgnoreOrder = collectionOrderRules.Select(r => r.PropertyPath).ToList();
@@ -487,7 +493,8 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
                 RootComparerFactory.GetRootComparer(),
                 expandedProperties,
                 logger,
-                applyGlobally: currentConfig.IgnoreCollectionOrder);
+                applyGlobally: currentConfig.IgnoreCollectionOrder,
+                ignoredPropertyPatterns: ignoredPropertyPaths);
 
             optimizedLogic.Config.CustomComparers.Add(collectionOrderComparer);
         }

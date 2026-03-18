@@ -859,6 +859,11 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             .Where(r => r.IgnoreCollectionOrder && !r.IgnoreCompletely)
             .Select(r => r.PropertyPath)
             .ToList();
+        var ignoredPropertyPaths = AllIgnoreRules
+            .Where(r => r.IgnoreCompletely)
+            .Select(r => r.PropertyPath)
+            .Distinct(System.StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
         logger.LogDebug("Found {Count} properties with ignore collection order setting", propertiesWithIgnoreOrder.Count);
 
@@ -874,7 +879,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
                     .ToList();
 
                 var rootComparer = RootComparerFactory.GetRootComparer();
-                var collectionOrderComparer = new PropertySpecificCollectionOrderComparer(rootComparer, expandedProperties, logger);
+                var collectionOrderComparer = new PropertySpecificCollectionOrderComparer(rootComparer, expandedProperties, logger, ignoredPropertyPatterns: ignoredPropertyPaths);
 
                 var newComparerList = new List<BaseTypeComparer>(compareLogic.Config.CustomComparers)
                 {
@@ -921,6 +926,11 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             .Where(r => r.IgnoreCollectionOrder && !r.IgnoreCompletely)
             .Select(r => r.PropertyPath)
             .ToList();
+        var ignoredPropertyPaths = AllIgnoreRules
+            .Where(r => r.IgnoreCompletely)
+            .Select(r => r.PropertyPath)
+            .Distinct(System.StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
         logger.LogDebug("Found {Count} properties with ignore collection order setting", propertiesWithIgnoreOrder.Count);
 
@@ -936,7 +946,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
                     .ToList();
 
                 var rootComparer = RootComparerFactory.GetRootComparer();
-                var collectionOrderComparer = new PropertySpecificCollectionOrderComparer(rootComparer, expandedProperties, logger);
+                var collectionOrderComparer = new PropertySpecificCollectionOrderComparer(rootComparer, expandedProperties, logger, ignoredPropertyPatterns: ignoredPropertyPaths);
 
                 var newComparerList = new List<BaseTypeComparer>(compareLogic.Config.CustomComparers)
                 {

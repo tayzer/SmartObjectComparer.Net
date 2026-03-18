@@ -118,7 +118,45 @@ public class PropertySpecificCollectionOrderComparerTests
         result.Differences.Should().BeEmpty();
     }
 
-    private static CompareLogic CreateCompareLogic(bool ignoreCollectionOrder, params string[] propertiesToIgnoreOrder)
+    [TestMethod]
+    public void Compare_WithIgnoredIdentifierProperty_ShouldUseNonIgnoredPropertiesForAlignment()
+    {
+        var compareLogic = CreateCompareLogic(
+            ignoreCollectionOrder: true,
+            ignoredPropertyPaths: new[] { "Items[*].Id" });
+
+        var left = new IdentifiedContainer
+        {
+            Items = new List<IdentifiedItem>
+            {
+                new() { Id = 101, Value = "303 Pine Rd, Springfield" },
+                new() { Id = 102, Value = "101 Main St, Springfield" },
+                new() { Id = 103, Value = "202 Oak Ave, Springfield" },
+            },
+        };
+
+        var right = new IdentifiedContainer
+        {
+            Items = new List<IdentifiedItem>
+            {
+                new() { Id = 101, Value = "101 Main St, Springfield" },
+                new() { Id = 102, Value = "202 Oak Ave, Springfield" },
+                new() { Id = 103, Value = "303 Pine Rd, Springfield" },
+            },
+        };
+
+        var result = compareLogic.Compare(left, right);
+
+        result.AreEqual.Should().BeFalse();
+        result.Differences.Should().NotBeEmpty();
+        result.Differences.Should().NotContain(d => d.PropertyName.Contains("Value"));
+        result.Differences.Should().OnlyContain(d => d.PropertyName.Contains(".Id", StringComparison.Ordinal));
+    }
+
+    private static CompareLogic CreateCompareLogic(
+        bool ignoreCollectionOrder,
+        string[]? ignoredPropertyPaths = null,
+        params string[] propertiesToIgnoreOrder)
     {
         var compareLogic = new CompareLogic();
         compareLogic.Config.IgnoreCollectionOrder = ignoreCollectionOrder;
@@ -128,7 +166,8 @@ public class PropertySpecificCollectionOrderComparerTests
                 RootComparerFactory.GetRootComparer(),
                 propertiesToIgnoreOrder,
                 NullLogger.Instance,
-                applyGlobally: ignoreCollectionOrder),
+                applyGlobally: ignoreCollectionOrder,
+                ignoredPropertyPatterns: ignoredPropertyPaths),
         };
 
         return compareLogic;

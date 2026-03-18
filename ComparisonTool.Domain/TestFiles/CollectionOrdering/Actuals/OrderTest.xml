@@ -12,9 +12,9 @@
       <!-- AddressLinks collections in different order: addresses 103, 101, 102 and links 103, 101, 102 -->
       <AddressLinks>
         <Addresses>
-          <Address Id="103">303 Pine Rd, Springfield</Address>
-          <Address Id="101">101 Main St, Springfield</Address>
-          <Address Id="102">202 Oak Ave, Springfield</Address>
+          <Address Id="101">303 Pine Rd, Springfield</Address>
+          <Address Id="102">101 Main St, Springfield</Address>
+          <Address Id="103">202 Oak Ave, Springfield</Address>
         </Addresses>
         <Links>
           <Link SourceId="103" TargetId="203">Mailing</Link>

@@ -45,6 +45,7 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
     private static int comparisonCount = 0;
 
     private readonly HashSet<string> propertiesToIgnoreOrder;
+    private readonly HashSet<string> ignoredPropertyPatterns;
     private readonly ILogger logger;
     private readonly bool applyGlobally;
 
@@ -63,10 +64,12 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
         RootComparer rootComparer,
         IEnumerable<string> propertiesToIgnoreOrder,
         ILogger? logger = null,
-        bool applyGlobally = false)
+        bool applyGlobally = false,
+        IEnumerable<string>? ignoredPropertyPatterns = null)
         : base(rootComparer)
     {
         this.propertiesToIgnoreOrder = new HashSet<string>(propertiesToIgnoreOrder ?? Enumerable.Empty<string>(), System.StringComparer.Ordinal);
+        this.ignoredPropertyPatterns = new HashSet<string>(ignoredPropertyPatterns ?? Enumerable.Empty<string>(), System.StringComparer.OrdinalIgnoreCase);
         this.logger = logger ?? NullLogger.Instance;
         this.applyGlobally = applyGlobally;
 
@@ -210,7 +213,7 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
         var items1 = MaterializeItems(enumerable1);
         var items2 = MaterializeItems(enumerable2);
 
-        if (!TryCreateOrderedCollections(items1, items2, out var orderedItems1, out var orderedItems2))
+        if (!TryCreateOrderedCollections(parms.BreadCrumb, items1, items2, out var orderedItems1, out var orderedItems2))
         {
             return false;
         }
@@ -235,6 +238,7 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
     }
 
     private bool TryCreateOrderedCollections(
+        string? collectionPath,
         IReadOnlyList<object?> items1,
         IReadOnlyList<object?> items2,
         out object?[] orderedItems1,
@@ -245,7 +249,7 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
             return true;
         }
 
-        return TryCreateOrderedObjectCollections(items1, items2, out orderedItems1, out orderedItems2);
+        return TryCreateOrderedObjectCollections(collectionPath, items1, items2, out orderedItems1, out orderedItems2);
     }
 
     private bool TryCreateOrderedScalarCollections(
@@ -305,12 +309,13 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
     }
 
     private bool TryCreateOrderedObjectCollections(
+        string? collectionPath,
         IReadOnlyList<object?> items1,
         IReadOnlyList<object?> items2,
         out object?[] orderedItems1,
         out object?[] orderedItems2)
     {
-        foreach (var propertyName in GetCandidateIdentifierPropertyNames(items1, items2))
+        foreach (var propertyName in GetCandidateIdentifierPropertyNames(collectionPath, items1, items2))
         {
             if (!TryBuildIdentifierEntries(items1, propertyName, out var entries1) ||
                 !TryBuildIdentifierEntries(items2, propertyName, out var entries2))
@@ -324,8 +329,8 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
         }
 
         // Composite key fallback: hash all scalar properties
-        if (TryBuildCompositeKeyEntries(items1, out var compositeEntries1) &&
-            TryBuildCompositeKeyEntries(items2, out var compositeEntries2))
+        if (TryBuildCompositeKeyEntries(collectionPath, items1, out var compositeEntries1) &&
+            TryBuildCompositeKeyEntries(collectionPath, items2, out var compositeEntries2))
         {
             orderedItems1 = OrderEntries(compositeEntries1);
             orderedItems2 = OrderEntries(compositeEntries2);
@@ -337,7 +342,8 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
         return false;
     }
 
-    private static IEnumerable<string> GetCandidateIdentifierPropertyNames(
+    private IEnumerable<string> GetCandidateIdentifierPropertyNames(
+        string? collectionPath,
         IReadOnlyList<object?> items1,
         IReadOnlyList<object?> items2)
     {
@@ -345,7 +351,7 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
 
         foreach (var propertyName in PreferredIdentifierPropertyNames)
         {
-            if (yieldedNames.Add(propertyName))
+            if (yieldedNames.Add(propertyName) && !IsIgnoredPropertyForCollection(collectionPath, propertyName))
             {
                 yield return propertyName;
             }
@@ -353,7 +359,7 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
 
         foreach (var propertyName in GetSharedHeuristicIdentifierPropertyNames(items1, items2))
         {
-            if (yieldedNames.Add(propertyName))
+            if (yieldedNames.Add(propertyName) && !IsIgnoredPropertyForCollection(collectionPath, propertyName))
             {
                 yield return propertyName;
             }
@@ -481,6 +487,7 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
     /// This avoids the O(n²) fallback in CompareNetObjects.
     /// </summary>
     private bool TryBuildCompositeKeyEntries(
+        string? collectionPath,
         IReadOnlyList<object?> items,
         out List<OrderedCollectionEntry> entries)
     {
@@ -508,6 +515,8 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
                 if (!prop.CanRead || prop.GetIndexParameters().Length != 0)
                     continue;
                 if (!IsSimpleScalarType(prop.PropertyType))
+                    continue;
+                if (IsIgnoredPropertyForCollection(collectionPath, prop.Name))
                     continue;
 
                 var val = prop.GetValue(item);
@@ -540,6 +549,48 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
         }
 
         return entries.Count > 0;
+    }
+
+    private bool IsIgnoredPropertyForCollection(string? collectionPath, string propertyName)
+    {
+        if (ignoredPropertyPatterns.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var pattern in ignoredPropertyPatterns)
+        {
+            if (string.Equals(pattern, propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            foreach (var candidatePath in GetCandidatePropertyPaths(collectionPath, propertyName))
+            {
+                if (string.Equals(candidatePath, pattern, StringComparison.OrdinalIgnoreCase) || DoesPathMatchPattern(candidatePath, pattern))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static IEnumerable<string> GetCandidatePropertyPaths(string? collectionPath, string propertyName)
+    {
+        yield return propertyName;
+
+        if (string.IsNullOrWhiteSpace(collectionPath))
+        {
+            yield break;
+        }
+
+        var normalizedPath = collectionPath.TrimEnd('.');
+        yield return $"{normalizedPath}.{propertyName}";
+        yield return $"{normalizedPath}[*].{propertyName}";
+        yield return $"{normalizedPath}[0].{propertyName}";
+        yield return $"{normalizedPath}[1].{propertyName}";
     }
 
     private static object?[] OrderEntries(IEnumerable<OrderedCollectionEntry> entries) =>

@@ -307,6 +307,7 @@ public class ComparisonServiceIntegrationTests
         var testRoot = GetCollectionOrderingTestRoot();
         var actualPath = Path.Combine(testRoot, "Actuals", "OrderTest.xml");
         var expectedPath = Path.Combine(testRoot, "Expecteds", "OrderTest.xml");
+        configService.IgnoreProperty("Body.Response.AddressLinks.Addresses[*].Id");
 
         configService.SetIgnoreCollectionOrder(false);
         configService.SetIgnoreTrailingWhitespaceAtEnd(false);
@@ -365,6 +366,7 @@ public class ComparisonServiceIntegrationTests
 
         scopedConfigService.GetIgnoreCollectionOrder().Should().BeTrue();
         scopedConfigService.GetIgnoreTrailingWhitespaceAtEnd().Should().BeTrue();
+        scopedConfigService.IgnoreProperty("Body.Response.AddressLinks.Addresses[*].Id");
 
         var testRoot = GetCollectionOrderingTestRoot();
         var actualPath = Path.Combine(testRoot, "Actuals", "OrderTest.xml");
@@ -384,9 +386,34 @@ public class ComparisonServiceIntegrationTests
     }
 
     [TestMethod]
+    public async Task CompareXmlFilesAsync_WithIgnoredAddressIdentifiers_ShouldTreatReorderedAddressesAsEqual()
+    {
+        var testRoot = GetCollectionOrderingTestRoot();
+        var actualPath = Path.Combine(testRoot, "Actuals", "OrderTest.xml");
+        var expectedPath = Path.Combine(testRoot, "Expecteds", "OrderTest.xml");
+
+        configService.IgnoreProperty("Body.Response.AddressLinks.Addresses[*].Id");
+        configService.SetIgnoreCollectionOrder(true);
+        configService.SetIgnoreTrailingWhitespaceAtEnd(true);
+
+        using var actualStream = File.OpenRead(actualPath);
+        using var expectedStream = File.OpenRead(expectedPath);
+
+        var result = await comparisonService.CompareXmlFilesAsync(
+            actualStream,
+            expectedStream,
+            "SoapEnvelope");
+
+        result.Should().NotBeNull();
+        result.AreEqual.Should().BeTrue();
+        result.Differences.Should().BeEmpty();
+    }
+
+    [TestMethod]
     public async Task CompareFoldersInBatchesAsync_WhenConfigurationChanges_ShouldRefreshHighPerformancePipeline()
     {
         const int pairCount = 100;
+        configService.IgnoreProperty("Body.Response.AddressLinks.Addresses[*].Id");
 
         configService.SetIgnoreCollectionOrder(false);
         configService.SetIgnoreTrailingWhitespaceAtEnd(false);

@@ -251,6 +251,12 @@ public class ComparisonEngine : IComparisonEngine, IDisposable
 
         // Apply collection order rules by creating new, independent custom comparers
         var collectionOrderRules = ignoreRules.Where(r => r.IgnoreCollectionOrder && !r.IgnoreCompletely).ToList();
+        var ignoredPropertyPaths = ignoreRules
+            .Where(r => r.IgnoreCompletely)
+            .Select(r => r.PropertyPath)
+            .Distinct(System.StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
         if (currentConfig.IgnoreCollectionOrder || collectionOrderRules.Any())
         {
             try
@@ -267,7 +273,8 @@ public class ComparisonEngine : IComparisonEngine, IDisposable
                     RootComparerFactory.GetRootComparer(),
                     expandedProperties,
                     logger,
-                    applyGlobally: currentConfig.IgnoreCollectionOrder);
+                    applyGlobally: currentConfig.IgnoreCollectionOrder,
+                    ignoredPropertyPatterns: ignoredPropertyPaths);
 
                 isolatedCompareLogic.Config.CustomComparers.Add(collectionOrderComparer);
             }
