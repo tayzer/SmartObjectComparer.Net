@@ -50,6 +50,20 @@ public static class FolderCompareCommand
             DefaultValueFactory = _ => true,
         };
 
+        var ignoreCollectionOrderOption = new Option<bool>("--ignore-collection-order")
+        {
+            Description = "Ignore collection ordering during comparison",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => false,
+        };
+
+        var ignoreCaseOption = new Option<bool>("--ignore-case")
+        {
+            Description = "Ignore string case during comparison",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => false,
+        };
+
         var ignoreTrailingWhitespaceOption = new Option<bool>("--ignore-trailing-whitespace-end")
         {
             Description = "Ignore trailing spaces and tabs at the end of strings during comparison",
@@ -107,6 +121,8 @@ public static class FolderCompareCommand
             includeAllOption,
             patternAnalysisOption,
             semanticAnalysisOption,
+            ignoreCollectionOrderOption,
+            ignoreCaseOption,
             ignoreTrailingWhitespaceOption,
             outputOption,
             formatOption,
@@ -123,6 +139,8 @@ public static class FolderCompareCommand
             var includeAll = parseResult.GetValue(includeAllOption);
             var patternAnalysis = parseResult.GetValue(patternAnalysisOption);
             var semanticAnalysis = parseResult.GetValue(semanticAnalysisOption);
+            var ignoreCollectionOrder = parseResult.GetValue(ignoreCollectionOrderOption);
+            var ignoreCase = parseResult.GetValue(ignoreCaseOption);
             var ignoreTrailingWhitespaceAtEnd = parseResult.GetValue(ignoreTrailingWhitespaceOption);
             var outputDir = parseResult.GetValue(outputOption);
             var formats = parseResult.GetValue(formatOption) ?? new[] { OutputFormat.Console };
@@ -138,6 +156,8 @@ public static class FolderCompareCommand
                 includeAll,
                 patternAnalysis,
                 semanticAnalysis,
+                ignoreCollectionOrder,
+                ignoreCase,
                 ignoreTrailingWhitespaceAtEnd,
                 outputDir,
                 formats,
@@ -158,6 +178,8 @@ public static class FolderCompareCommand
         bool includeAll,
         bool patternAnalysis,
         bool semanticAnalysis,
+        bool ignoreCollectionOrder,
+        bool ignoreCase,
         bool ignoreTrailingWhitespaceAtEnd,
         DirectoryInfo? outputDir,
         OutputFormat[] formats,
@@ -205,6 +227,8 @@ public static class FolderCompareCommand
         var configService = scope.ServiceProvider.GetRequiredService<IComparisonConfigurationService>();
         var comparisonService = scope.ServiceProvider.GetRequiredService<DirectoryComparisonService>();
 
+        configService.SetIgnoreCollectionOrder(ignoreCollectionOrder);
+        configService.SetIgnoreStringCase(ignoreCase);
         configService.SetIgnoreTrailingWhitespaceAtEnd(ignoreTrailingWhitespaceAtEnd);
 
         var progress = new Progress<ComparisonProgress>(p =>
