@@ -1,4 +1,6 @@
 using System.Xml.Serialization;
+using ComparisonTool.Core.AcceptedDifferences;
+using ComparisonTool.Core.Abstractions;
 using ComparisonTool.Core.Comparison;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Models;
@@ -228,6 +230,7 @@ public static class ServiceCollectionExtensions
         if (configuration != null)
         {
             services.Configure<ComparisonConfigurationOptions>(configuration.GetSection("ComparisonSettings"));
+            services.Configure<AcceptedDifferencesOptions>(configuration.GetSection("AcceptedDifferences"));
         }
     }
 
@@ -244,6 +247,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<PerformanceTracker>();
         services.AddSingleton<SystemResourceMonitor>();
         services.AddSingleton<ComparisonResultCacheService>();
+        services.AddSingleton<AcceptedDifferenceFingerprintBuilder>();
+        services.AddSingleton<IAcceptedDifferenceService, AcceptedDifferenceService>();
 
         services.AddSingleton<IComparisonConfigurationService>(provider =>
         {

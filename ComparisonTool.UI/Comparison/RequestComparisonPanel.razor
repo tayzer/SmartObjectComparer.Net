@@ -191,6 +191,12 @@
                             }
                         </MudStack>
                     </MudExpansionPanel>
+
+                    <MudExpansionPanel Text="Accepted Difference Profiles">
+                        <AcceptedDifferenceProfilesPanel ShowHeader="false"
+                                                         StartCollapsed="false"
+                                                         OnProfilesChanged="OnAcceptedDifferenceProfilesChanged" />
+                    </MudExpansionPanel>
                 </MudExpansionPanels>
             </MudStack>
         </MudPaper>
@@ -363,6 +369,7 @@
 
 @code {
     [Parameter] public EventCallback<MultiFolderComparisonResult> OnComparisonComplete { get; set; }
+    [Parameter] public EventCallback OnAcceptedDifferenceProfilesChanged { get; set; }
     private const string CustomEndpointValue = "__custom__";
 
     private List<IBrowserFile>? selectedFiles;

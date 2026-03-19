@@ -175,6 +175,7 @@
                                                       ModelType="@GetSelectedModelType()"
                                                       OnPropertySelectorOpened="@OpenPropertySelector"
                                                       OnTreePropertySelectorOpened="@OpenTreePropertySelector"
+                                                      OnAcceptedDifferenceProfilesChanged="@RefreshSelectedFolderPairProfiles"
                                                       OnRunComparison="@RunDirectoryComparison"
                                                       CanRunComparison="@CanRunDirectoryComparison" />
                     </MudItem>
@@ -213,6 +214,7 @@
                                                       ModelType="@GetSelectedModelType()"
                                                       OnPropertySelectorOpened="@OpenPropertySelector"
                                                       OnTreePropertySelectorOpened="@OpenTreePropertySelector"
+                                                      OnAcceptedDifferenceProfilesChanged="@RefreshSelectedFolderPairProfiles"
                                                       OnRunComparison="@RunFolderComparison"
                                                       CanRunComparison="@CanRunFolderComparison" />
                     </MudItem>
@@ -425,6 +427,7 @@
             {
                 <RequestComparisonPanel @ref="requestComparisonPanel" 
                                         OnComparisonComplete="HandleRequestComparisonComplete"
+                                        OnAcceptedDifferenceProfilesChanged="@RefreshSelectedRequestPairProfiles"
                                         OnPropertySelectorOpened="OpenRequestPropertySelector"
                                         OnTreePropertySelectorOpened="OpenRequestTreePropertySelector" />
                 
@@ -1090,6 +1093,11 @@
 
     private async Task SelectPairResult(int index)
     {
+        await SelectPairResultCore(index, scrollToDetails: true);
+    }
+
+    private async Task SelectPairResultCore(int index, bool scrollToDetails)
+    {
         if (FolderComparisonResult == null || index < 0 || index >= FolderComparisonResult.FilePairResults.Count)
             return;
             
@@ -1125,16 +1133,30 @@
         }
 
         // Scroll to the detailed differences section after selection
-        try
+        if (scrollToDetails)
         {
-            await JS.InvokeVoidAsync("scrollToElement", "detailed-differences-section");
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(ex, "Failed to scroll to detailed differences section.");
+            try
+            {
+                await JS.InvokeVoidAsync("scrollToElement", "detailed-differences-section");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Failed to scroll to detailed differences section.");
+            }
         }
         
         StateHasChanged(); // Ensure UI updates with selection
+    }
+
+    private async Task RefreshSelectedFolderPairProfiles()
+    {
+        if (FolderComparisonResult != null && SelectedPairIndex >= 0 && SelectedPairIndex < FolderComparisonResult.FilePairResults.Count)
+        {
+            await SelectPairResultCore(SelectedPairIndex, scrollToDetails: false);
+            return;
+        }
+
+        StateHasChanged();
     }
 
     private void ToggleShowAllDifferences()
@@ -1179,6 +1201,11 @@
     
     private async Task SelectRequestPairResult(int index)
     {
+        await SelectRequestPairResultCore(index, scrollToDetails: true);
+    }
+
+    private async Task SelectRequestPairResultCore(int index, bool scrollToDetails)
+    {
         if (RequestComparisonResult == null || index < 0 || index >= RequestComparisonResult.FilePairResults.Count)
             return;
             
@@ -1216,15 +1243,29 @@
 
         var detailSectionId = GetRequestDetailSectionId(selectedPair);
         
-        try
+        if (scrollToDetails)
         {
-            await JS.InvokeVoidAsync("scrollToElement", detailSectionId);
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(ex, "Failed to scroll to request detailed differences section {SectionId}.", detailSectionId);
+            try
+            {
+                await JS.InvokeVoidAsync("scrollToElement", detailSectionId);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Failed to scroll to request detailed differences section {SectionId}.", detailSectionId);
+            }
         }
         
+        StateHasChanged();
+    }
+
+    private async Task RefreshSelectedRequestPairProfiles()
+    {
+        if (RequestComparisonResult != null && SelectedRequestPairIndex >= 0 && SelectedRequestPairIndex < RequestComparisonResult.FilePairResults.Count)
+        {
+            await SelectRequestPairResultCore(SelectedRequestPairIndex, scrollToDetails: false);
+            return;
+        }
+
         StateHasChanged();
     }
     

@@ -1,6 +1,7 @@
 @namespace ComparisonTool.UI.Comparison
 @using System.Text.RegularExpressions
 @using ComparisonTool.Core
+@using ComparisonTool.Core.AcceptedDifferences
 @using ComparisonTool.Core.Utilities
 @using ComparisonTool.Core.Comparison.Analysis
 @using ComparisonTool.Core.Comparison.Results
@@ -8,6 +9,7 @@
 @using KellermanSoftware.CompareNetObjects
 @using Microsoft.AspNetCore.Components
 @inject RawContentService RawContentService
+@inject IAcceptedDifferenceService AcceptedDifferenceService
 
 <style>
     .diff-expected-cell {
@@ -106,14 +108,45 @@ else if (!DifferenceSummary.AreEqual)
         <MudDivider />
         
         <div class="pa-4">
-            <MudTextField @bind-Value="SearchFilter" 
-                          Placeholder="Search differences..." 
-                          Variant="Variant.Outlined" 
-                          Adornment="Adornment.Start" 
-                          AdornmentIcon="@Icons.Material.Filled.Search"
-                          Immediate="true"
-                          Margin="Margin.Dense"
-                          Class="mb-4" />
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-4 flex-wrap">
+                <MudTextField @bind-Value="SearchFilter" 
+                              Placeholder="Search differences..." 
+                              Variant="Variant.Outlined" 
+                              Adornment="Adornment.Start" 
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              Immediate="true"
+                              Margin="Margin.Dense"
+                              Style="min-width: 260px;" />
+                @if (AcceptedDifferenceService.IsEnabled)
+                {
+                    <MudSwitch T="bool"
+                               @bind-Value="HideTrackedDifferences"
+                               Color="Color.Primary"
+                               Label="Hide accepted / known bugs"
+                               Class="ma-0" />
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default">
+                        @GetUntrackedDifferenceCount() New
+                    </MudChip>
+                    @if (GetAcceptedDifferenceCount() > 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success">
+                            @GetAcceptedDifferenceCount() Accepted
+                        </MudChip>
+                    }
+                    @if (GetKnownBugCount() > 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning">
+                            @GetKnownBugCount() Known Bugs
+                        </MudChip>
+                    }
+                    @if (GetFixedVerifiedCount() > 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info">
+                            @GetFixedVerifiedCount() Fixed / Verified
+                        </MudChip>
+                    }
+                }
+            </MudStack>
 
             @{
                 var groupRenderContext = GetGroupRenderContext();
@@ -151,9 +184,25 @@ else if (!DifferenceSummary.AreEqual)
                                      SortMode="SortMode.Single"
                                      RowsPerPage="25">
                             <Columns>
-                                <PropertyColumn Property="x => x.PropertyName" Title="Property" Sortable="true">
+                                <TemplateColumn Title="Tracking" Sortable="true">
                                     <CellTemplate>
-                                        <code style="font-size: 0.85rem;">@context.Item.PropertyName</code>
+                                        @if (context.Item.MatchedProfile != null)
+                                        {
+                                            <MudChip T="string"
+                                                     Size="Size.Small"
+                                                     Color="@GetProfileChipColor(context.Item.MatchedProfile.Status)">
+                                                @GetProfileLabel(context.Item.MatchedProfile)
+                                            </MudChip>
+                                        }
+                                        else
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Default">New</MudChip>
+                                        }
+                                    </CellTemplate>
+                                </TemplateColumn>
+                                <PropertyColumn Property="x => x.DisplayPropertyName" Title="Property" Sortable="true">
+                                    <CellTemplate>
+                                        <code style="font-size: 0.85rem;">@context.Item.DisplayPropertyName</code>
                                     </CellTemplate>
                                 </PropertyColumn>
                                 <TemplateColumn Title="Expected (A)" CellClass="diff-expected-cell">
@@ -166,6 +215,20 @@ else if (!DifferenceSummary.AreEqual)
                                         <span class="diff-value-actual">@context.Item.ActualValue</span>
                                     </CellTemplate>
                                 </TemplateColumn>
+                                @if (AcceptedDifferenceService.IsEnabled)
+                                {
+                                    <TemplateColumn Title="Action">
+                                        <CellTemplate>
+                                            <MudButton Variant="Variant.Text"
+                                                       Color="Color.Primary"
+                                                       Size="Size.Small"
+                                                       StartIcon="@Icons.Material.Filled.BookmarkAdd"
+                                                       OnClick="@(() => OpenProfileDialog(context.Item))">
+                                                @(context.Item.MatchedProfile == null ? "Track" : "Edit")
+                                            </MudButton>
+                                        </CellTemplate>
+                                    </TemplateColumn>
+                                }
                             </Columns>
                             <PagerContent>
                                 <MudDataGridPager T="DifferenceItem" />
@@ -200,6 +263,74 @@ else if (!DifferenceSummary.AreEqual)
     </MudPaper>
 }
 
+<MudDialog @bind-Visible="showProfileDialog" Options="profileDialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Track Difference Profile</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (editingDifferenceItem != null)
+        {
+            <MudStack Spacing="2">
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                    Profiles are stored in a shared JSON file. Point Web and Desktop to the same absolute or network store path when you need cross-machine sharing.
+                </MudAlert>
+                <MudText Typo="Typo.body2"><strong>Property:</strong> @editingDifferenceItem.SourceDifference.PropertyName</MudText>
+                <MudText Typo="Typo.body2"><strong>Fingerprint Path:</strong> @editingDifferenceItem.GroupKey</MudText>
+                <MudText Typo="Typo.body2"><strong>Expected:</strong> @editingDifferenceItem.ExpectedValue</MudText>
+                <MudText Typo="Typo.body2"><strong>Actual:</strong> @editingDifferenceItem.ActualValue</MudText>
+
+                <MudSelect T="AcceptedDifferenceStatus"
+                           @bind-Value="editorStatus"
+                           Label="Classification"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense">
+                    <MudSelectItem Value="@AcceptedDifferenceStatus.AcceptedDifference">Accepted Difference</MudSelectItem>
+                    <MudSelectItem Value="@AcceptedDifferenceStatus.KnownBug">Known Bug</MudSelectItem>
+                    <MudSelectItem Value="@AcceptedDifferenceStatus.FixedVerified">Fixed / Verified</MudSelectItem>
+                </MudSelect>
+
+                @if (editorStatus == AcceptedDifferenceStatus.KnownBug)
+                {
+                    <MudTextField @bind-Value="editorTicketId"
+                                  Label="Ticket ID"
+                                  Placeholder="BUG-1234"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  Required="true" />
+                }
+
+                <MudTextField @bind-Value="editorNotes"
+                              Label="Notes"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              Lines="3" />
+
+                @if (!string.IsNullOrWhiteSpace(profileDialogErrorMessage))
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true">
+                        @profileDialogErrorMessage
+                    </MudAlert>
+                }
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="CloseProfileDialog">Cancel</MudButton>
+        <MudButton Variant="Variant.Text"
+                   Color="Color.Error"
+                   Disabled="@(editingDifferenceItem?.MatchedProfile == null)"
+                   OnClick="ClearProfileAsync">
+            Clear Profile
+        </MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Disabled="@(!CanSaveProfile)"
+                   OnClick="SaveProfileAsync">
+            Save
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
 @code {
     [Parameter]
     public FilePairComparisonResult SelectedPair { get; set; }
@@ -222,6 +353,13 @@ else if (!DifferenceSummary.AreEqual)
     [Parameter]
     public MultiFolderComparisonResult FolderResult { get; set; }
 
+    private static readonly DialogOptions profileDialogOptions = new()
+    {
+        MaxWidth = MaxWidth.Medium,
+        FullWidth = true,
+        CloseButton = true,
+    };
+
     private string _searchFilter = string.Empty;
     private string SearchFilter
     {
@@ -238,12 +376,20 @@ else if (!DifferenceSummary.AreEqual)
             renderedGroupLimit = InitialGroupRenderLimit;
         }
     }
+
     private Dictionary<string, bool> groupCollapsedStates = new Dictionary<string, bool>();
     private int renderedGroupLimit = InitialGroupRenderLimit;
     private string? lastRenderedPairKey;
+    private bool showProfileDialog;
+    private DifferenceItem? editingDifferenceItem;
+    private AcceptedDifferenceStatus editorStatus = AcceptedDifferenceStatus.AcceptedDifference;
+    private string editorTicketId = string.Empty;
+    private string editorNotes = string.Empty;
+    private string? profileDialogErrorMessage;
     
     private const int InitialGroupRenderLimit = 150;
     private const int GroupRenderIncrement = 150;
+    private const int GroupPreviewDifferenceLimit = 100;
     
     // Full file view state
     private bool showFullFileView;
@@ -258,49 +404,44 @@ else if (!DifferenceSummary.AreEqual)
     // Grid item for differences
     public class DifferenceItem
     {
+        public Difference SourceDifference { get; set; } = null!;
+        public string GroupKey { get; set; } = string.Empty;
+        public string Fingerprint { get; set; } = string.Empty;
         public string PropertyName { get; set; } = "";
+        public string DisplayPropertyName { get; set; } = "";
         public string ExpectedValue { get; set; } = "";
         public string ActualValue { get; set; } = "";
+        public AcceptedDifferenceProfile? MatchedProfile { get; set; }
     }
 
     private sealed class GroupRenderContext
     {
-        public List<IGrouping<string, Difference>> Groups { get; set; } = new();
+        public List<IGrouping<string, DifferenceItem>> Groups { get; set; } = new();
         public int TotalCount { get; set; }
         public int RenderedCount => Groups.Count;
         public bool HasMore => TotalCount > RenderedCount;
     }
 
-    private IEnumerable<IGrouping<string, Difference>> GroupedDifferences { get; set; } = Enumerable.Empty<IGrouping<string, Difference>>();
+    private List<DifferenceItem> DifferenceItems { get; set; } = new();
+    private bool HideTrackedDifferences { get; set; } = true;
 
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
         var currentPairKey = $"{SelectedPair?.File1Path}|{SelectedPair?.File2Path}|{SelectedPair?.RequestRelativePath}";
         if (!string.Equals(currentPairKey, lastRenderedPairKey, StringComparison.Ordinal))
         {
             renderedGroupLimit = InitialGroupRenderLimit;
             lastRenderedPairKey = currentPairKey;
+            groupCollapsedStates.Clear();
         }
 
         if (ComparisonResult != null)
         {
-            GroupedDifferences = (ComparisonResult.Differences ?? Enumerable.Empty<Difference>())
-                .Select(d => new { Normalized = PropertyPathNormalizer.NormalizePropertyPath(d.PropertyName), Diff = d })
-                .GroupBy(x => x.Normalized, x => x.Diff)
-                .OrderBy(g => g.Key)
-                .ToList();
-
-            foreach (var group in GroupedDifferences)
-            {
-                if (!groupCollapsedStates.ContainsKey(group.Key))
-                {
-                    groupCollapsedStates[group.Key] = true;
-                }
-            }
+            await BuildDifferenceItemsAsync();
         }
         else
         {
-            GroupedDifferences = Enumerable.Empty<IGrouping<string, Difference>>();
+            DifferenceItems = new List<DifferenceItem>();
             groupCollapsedStates.Clear();
         }
         
@@ -315,7 +456,7 @@ else if (!DifferenceSummary.AreEqual)
             // Keep showFullFileView toggle state across pair changes but content needs reload
         }
         
-        base.OnParametersSet();
+        await base.OnParametersSetAsync();
     }
     
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -366,20 +507,66 @@ else if (!DifferenceSummary.AreEqual)
         }
     }
     
-    private IEnumerable<IGrouping<string, Difference>> GetFilteredGroups()
+    private async Task BuildDifferenceItemsAsync()
     {
-        if (string.IsNullOrWhiteSpace(SearchFilter))
-            return GroupedDifferences;
+        var differences = (ComparisonResult?.Differences ?? Enumerable.Empty<Difference>()).ToList();
+        var matches = AcceptedDifferenceService.IsEnabled
+            ? await AcceptedDifferenceService.GetMatchesAsync(differences)
+            : new Dictionary<string, AcceptedDifferenceProfile>(StringComparer.Ordinal);
 
-        var filter = SearchFilter.Trim();
-        var includeValueSearch = filter.Length >= 3;
-            
-        return GroupedDifferences.Where(g => 
-            (g.Key?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false) ||
-            g.Any(d => 
-                (d.PropertyName?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false) ||
-                (includeValueSearch && FormatValue(d.Object1Value).Contains(filter, StringComparison.OrdinalIgnoreCase)) ||
-                (includeValueSearch && FormatValue(d.Object2Value).Contains(filter, StringComparison.OrdinalIgnoreCase))));
+        DifferenceItems = differences
+            .Select(difference =>
+            {
+                var fingerprint = AcceptedDifferenceService.CreateFingerprint(difference);
+                matches.TryGetValue(fingerprint.Fingerprint, out var matchedProfile);
+
+                return new DifferenceItem
+                {
+                    SourceDifference = difference,
+                    GroupKey = fingerprint.NormalizedPropertyPath,
+                    Fingerprint = fingerprint.Fingerprint,
+                    PropertyName = difference.PropertyName ?? string.Empty,
+                    DisplayPropertyName = difference.PropertyName ?? string.Empty,
+                    ExpectedValue = FormatValue(difference.Object1Value),
+                    ActualValue = FormatValue(difference.Object2Value),
+                    MatchedProfile = matchedProfile,
+                };
+            })
+            .ToList();
+
+        foreach (var group in DifferenceItems.GroupBy(item => item.GroupKey).OrderBy(group => group.Key))
+        {
+            if (!groupCollapsedStates.ContainsKey(group.Key))
+            {
+                groupCollapsedStates[group.Key] = true;
+            }
+        }
+    }
+
+    private IEnumerable<IGrouping<string, DifferenceItem>> GetFilteredGroups()
+    {
+        var filteredItems = DifferenceItems.AsEnumerable();
+        if (HideTrackedDifferences)
+        {
+            filteredItems = filteredItems.Where(item => !IsSuppressibleTrackedDifference(item.MatchedProfile));
+        }
+
+        if (!string.IsNullOrWhiteSpace(SearchFilter))
+        {
+            var filter = SearchFilter.Trim();
+            var includeValueSearch = filter.Length >= 3;
+
+            filteredItems = filteredItems.Where(item =>
+                item.GroupKey.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                item.PropertyName.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                (includeValueSearch && item.ExpectedValue.Contains(filter, StringComparison.OrdinalIgnoreCase)) ||
+                (includeValueSearch && item.ActualValue.Contains(filter, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        return filteredItems
+            .GroupBy(item => item.GroupKey)
+            .OrderBy(group => group.Key)
+            .ToList();
     }
 
     private GroupRenderContext GetGroupRenderContext()
@@ -403,15 +590,15 @@ else if (!DifferenceSummary.AreEqual)
         renderedGroupLimit = int.MaxValue;
     }
     
-    private IEnumerable<DifferenceItem> GetGroupItems(IGrouping<string, Difference> group)
+    private IEnumerable<DifferenceItem> GetGroupItems(IGrouping<string, DifferenceItem> group)
     {
-        var items = ShowAllDifferences ? group : group.Take(100);
-        return items.Select(d => new DifferenceItem
+        var items = ShowAllDifferences ? group : group.Take(GroupPreviewDifferenceLimit);
+        foreach (var item in items)
         {
-            PropertyName = GetRelativePropertyName(d.PropertyName, group.Key),
-            ExpectedValue = FormatValue(d.Object1Value),
-            ActualValue = FormatValue(d.Object2Value)
-        });
+            item.DisplayPropertyName = GetRelativePropertyName(item.SourceDifference.PropertyName ?? string.Empty, group.Key);
+        }
+
+        return items;
     }
 
     private string GetRelativePropertyName(string fullPath, string groupKey)
@@ -462,7 +649,111 @@ else if (!DifferenceSummary.AreEqual)
         await OnExportResults.InvokeAsync();
     }
 
-    private string FormatValue(object value)
+    private async Task OpenProfileDialog(DifferenceItem item)
+    {
+        editingDifferenceItem = item;
+        editorStatus = item.MatchedProfile?.Status ?? AcceptedDifferenceStatus.AcceptedDifference;
+        editorTicketId = item.MatchedProfile?.TicketId ?? string.Empty;
+        editorNotes = item.MatchedProfile?.Notes ?? string.Empty;
+        profileDialogErrorMessage = null;
+        showProfileDialog = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void CloseProfileDialog()
+    {
+        showProfileDialog = false;
+        editingDifferenceItem = null;
+        profileDialogErrorMessage = null;
+    }
+
+    private bool CanSaveProfile =>
+        editingDifferenceItem != null &&
+        (editorStatus != AcceptedDifferenceStatus.KnownBug || !string.IsNullOrWhiteSpace(editorTicketId));
+
+    private async Task SaveProfileAsync()
+    {
+        if (editingDifferenceItem == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var savedProfile = await AcceptedDifferenceService.SaveAsync(
+                editingDifferenceItem.SourceDifference,
+                editorStatus,
+                editorNotes,
+                editorTicketId);
+
+            foreach (var item in DifferenceItems.Where(item => string.Equals(item.Fingerprint, savedProfile.Fingerprint, StringComparison.Ordinal)))
+            {
+                item.MatchedProfile = savedProfile;
+            }
+
+            CloseProfileDialog();
+        }
+        catch (Exception ex)
+        {
+            profileDialogErrorMessage = ex.Message;
+        }
+    }
+
+    private async Task ClearProfileAsync()
+    {
+        if (editingDifferenceItem == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var removed = await AcceptedDifferenceService.RemoveAsync(editingDifferenceItem.SourceDifference);
+            if (removed)
+            {
+                foreach (var item in DifferenceItems.Where(item => string.Equals(item.Fingerprint, editingDifferenceItem.Fingerprint, StringComparison.Ordinal)))
+                {
+                    item.MatchedProfile = null;
+                }
+            }
+
+            CloseProfileDialog();
+        }
+        catch (Exception ex)
+        {
+            profileDialogErrorMessage = ex.Message;
+        }
+    }
+
+    private static bool IsSuppressibleTrackedDifference(AcceptedDifferenceProfile? profile) =>
+        profile?.Status is AcceptedDifferenceStatus.AcceptedDifference or AcceptedDifferenceStatus.KnownBug;
+
+    private int GetUntrackedDifferenceCount() => DifferenceItems.Count(item => item.MatchedProfile == null);
+
+    private int GetAcceptedDifferenceCount() => DifferenceItems.Count(item => item.MatchedProfile?.Status == AcceptedDifferenceStatus.AcceptedDifference);
+
+    private int GetKnownBugCount() => DifferenceItems.Count(item => item.MatchedProfile?.Status == AcceptedDifferenceStatus.KnownBug);
+
+    private int GetFixedVerifiedCount() => DifferenceItems.Count(item => item.MatchedProfile?.Status == AcceptedDifferenceStatus.FixedVerified);
+
+    private static string GetProfileLabel(AcceptedDifferenceProfile profile) => profile.Status switch
+    {
+        AcceptedDifferenceStatus.AcceptedDifference => "Accepted",
+        AcceptedDifferenceStatus.KnownBug when !string.IsNullOrWhiteSpace(profile.TicketId) => $"Bug: {profile.TicketId}",
+        AcceptedDifferenceStatus.KnownBug => "Known Bug",
+        AcceptedDifferenceStatus.FixedVerified => "Fixed / Verified",
+        _ => "Tracked",
+    };
+
+    private static Color GetProfileChipColor(AcceptedDifferenceStatus status) => status switch
+    {
+        AcceptedDifferenceStatus.AcceptedDifference => Color.Success,
+        AcceptedDifferenceStatus.KnownBug => Color.Warning,
+        AcceptedDifferenceStatus.FixedVerified => Color.Info,
+        _ => Color.Default,
+    };
+
+    private string FormatValue(object? value)
     {
         if (value == null) return "null";
 

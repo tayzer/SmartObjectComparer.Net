@@ -1,10 +1,36 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2026-03-04T10:00:00Z
+lastUpdated: 2026-03-18T00:00:00Z
 sessionStatus: active
 ---
 
 # Current Session Context
+
+## Latest Task
+Implement accepted-difference persistence and bug tracking for structured comparison differences across Web and Desktop.
+
+## Latest Task Status
+```markdown
+- [x] Add shared accepted-difference fingerprinting and JSON-backed persistence in Core
+- [x] Register the persistence service in shared DI and host configuration
+- [x] Extend DetailedDifferencesView with persisted classifications and noise filtering
+- [x] Harden store access for cross-process reads/writes and malformed JSON
+- [x] Add accepted-difference profile management and import/export panels in configuration UI
+- [x] Refresh open detailed-difference views after profile imports/removals/clear-all
+- [x] Preserve immutable detail-view search paths while rendering relative property labels
+- [x] Enforce Known Bug ticket-ID invariant on profile imports
+- [x] Add unit tests for fingerprinting, persistence reload, malformed payloads, and concurrent saves
+- [x] Verify with `dotnet build ComparisonTool.sln`
+- [x] Verify with `dotnet test ComparisonTool.Tests/ComparisonTool.Tests.csproj --filter AcceptedDifferenceServiceTests`
+```
+
+## Latest Session Notes
+- Added a shared accepted-difference store under `ComparisonTool.Core/AcceptedDifferences` with stable fingerprints based on normalized property paths plus scrubbed value patterns.
+- Relative accepted-difference store paths now resolve under the machine-level application data root, so Web and Desktop default to the same physical JSON store on the same machine.
+- Detailed structured-difference UI now supports `Accepted Difference`, `Known Bug`, and `Fixed / Verified` classifications and can hide accepted or known-bug noise while keeping fixed regressions visible.
+- Added reusable profile management/import-export UI in both file/folder and request comparison configuration panels.
+- Configuration-side profile changes now refresh the currently selected detailed comparison without forcing a rerun.
+- Store access now uses a sidecar lock file plus reload-before-write semantics to avoid lost updates across multiple service instances.
 
 ## Active Task
 Migrate from Blazor Server web UI to Blazor Hybrid (WPF + BlazorWebView) desktop app
