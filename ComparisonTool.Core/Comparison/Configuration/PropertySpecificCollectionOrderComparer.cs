@@ -37,6 +37,7 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
         "Identifier",
         "ExternalId",
         "Guid",
+        "CertificationNumber",
     };
 
     private static readonly ConcurrentDictionary<(Type Type, string PropertyName), PropertyInfo?> IdentifierPropertyCache = new();
@@ -213,6 +214,12 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
         var items1 = MaterializeItems(enumerable1);
         var items2 = MaterializeItems(enumerable2);
 
+        // If ignore rules eliminate every comparable scalar on each item, count parity is all that remains.
+        if (CanShortCircuitFullyIgnoredCollection(parms.BreadCrumb, items1, items2))
+        {
+            return true;
+        }
+
         if (!TryCreateOrderedCollections(parms.BreadCrumb, items1, items2, out var orderedItems1, out var orderedItems2))
         {
             return false;
@@ -224,6 +231,51 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
         collectionComparer.CompareType(orderedParms);
 
         return true;
+    }
+
+    private bool CanShortCircuitFullyIgnoredCollection(
+        string? collectionPath,
+        IReadOnlyList<object?> items1,
+        IReadOnlyList<object?> items2)
+    {
+        if (items1.Count != items2.Count || items1.Count == 0)
+        {
+            return false;
+        }
+
+        return AreCollectionItemsFullyIgnored(collectionPath, items1) &&
+            AreCollectionItemsFullyIgnored(collectionPath, items2);
+    }
+
+    private bool AreCollectionItemsFullyIgnored(string? collectionPath, IReadOnlyList<object?> items)
+    {
+        foreach (var item in items)
+        {
+            if (item == null)
+            {
+                return false;
+            }
+
+            var type = item.GetType();
+            if (IsSimpleScalarType(type))
+            {
+                return false;
+            }
+
+            var hasComparableProperty = type
+                .GetProperties(BindingFlags.Instance | BindingFlags.Public)
+                .Any(prop =>
+                    prop.CanRead &&
+                    prop.GetIndexParameters().Length == 0 &&
+                    !IsIgnoredPropertyForCollection(collectionPath, prop.Name));
+
+            if (hasComparableProperty)
+            {
+                return false;
+            }
+        }
+
+        return items.Count > 0;
     }
 
     private static List<object?> MaterializeItems(IEnumerable enumerable)

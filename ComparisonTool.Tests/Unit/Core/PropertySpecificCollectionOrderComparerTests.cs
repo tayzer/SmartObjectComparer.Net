@@ -2,6 +2,7 @@ using ComparisonTool.Core.Comparison.Configuration;
 using FluentAssertions;
 using KellermanSoftware.CompareNetObjects;
 using KellermanSoftware.CompareNetObjects.TypeComparers;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -153,19 +154,100 @@ public class PropertySpecificCollectionOrderComparerTests
         result.Differences.Should().OnlyContain(d => d.PropertyName.Contains(".Id", StringComparison.Ordinal));
     }
 
+    [TestMethod]
+    public void Compare_WithCertificationNumberIdentifiers_ShouldAvoidFallbackAndTreatReorderedItemsAsEqual()
+    {
+        var logger = new TestLogger();
+        var compareLogic = CreateCompareLogic(
+            ignoreCollectionOrder: true,
+            ignoredPropertyPaths: new[] { "Items[*].Name", "Items[*].IssuingAuthority", "Items[*].ValidUntil" },
+            applyIgnoredPropertiesToComparison: true,
+            logger: logger);
+
+        var left = new CertificationContainer
+        {
+            Items = new List<CertificationItem>
+            {
+                new() { CertificationNumber = "CERT-002", Name = "B", IssuingAuthority = "AUTH-B" },
+                new() { CertificationNumber = "CERT-001", Name = "A", IssuingAuthority = "AUTH-A" },
+            },
+        };
+
+        var right = new CertificationContainer
+        {
+            Items = new List<CertificationItem>
+            {
+                new() { CertificationNumber = "CERT-001", Name = "A", IssuingAuthority = "AUTH-A" },
+                new() { CertificationNumber = "CERT-002", Name = "B", IssuingAuthority = "AUTH-B" },
+            },
+        };
+
+        var result = compareLogic.Compare(left, right);
+
+        result.AreEqual.Should().BeTrue();
+        result.Differences.Should().BeEmpty();
+        logger.WarningMessages.Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public void Compare_WithFullyIgnoredCollectionItems_ShouldShortCircuitWithoutFallbackWarning()
+    {
+        var logger = new TestLogger();
+        var compareLogic = CreateCompareLogic(
+            ignoreCollectionOrder: true,
+            ignoredPropertyPaths: new[] { "Items[*]" },
+            applyIgnoredPropertiesToComparison: true,
+            logger: logger);
+
+        var left = new NamedContainer
+        {
+            Items = new List<NamedItem>
+            {
+                new() { Name = "first", Value = "A" },
+                new() { Name = "second", Value = "B" },
+            },
+        };
+
+        var right = new NamedContainer
+        {
+            Items = new List<NamedItem>
+            {
+                new() { Name = "different-second", Value = "different-B" },
+                new() { Name = "different-first", Value = "different-A" },
+            },
+        };
+
+        var result = compareLogic.Compare(left, right);
+
+        result.AreEqual.Should().BeTrue();
+        result.Differences.Should().BeEmpty();
+        logger.WarningMessages.Should().BeEmpty();
+    }
+
     private static CompareLogic CreateCompareLogic(
         bool ignoreCollectionOrder,
         string[]? ignoredPropertyPaths = null,
+        bool applyIgnoredPropertiesToComparison = false,
+        ILogger? logger = null,
         params string[] propertiesToIgnoreOrder)
     {
         var compareLogic = new CompareLogic();
         compareLogic.Config.IgnoreCollectionOrder = ignoreCollectionOrder;
+
+        if (applyIgnoredPropertiesToComparison && ignoredPropertyPaths != null)
+        {
+            foreach (var ignoredPropertyPath in ignoredPropertyPaths)
+            {
+                compareLogic.Config.MembersToIgnore.Add(ignoredPropertyPath);
+            }
+        }
+
         compareLogic.Config.CustomComparers = new List<BaseTypeComparer>
         {
             new PropertySpecificCollectionOrderComparer(
                 RootComparerFactory.GetRootComparer(),
                 propertiesToIgnoreOrder,
-                NullLogger.Instance,
+                logger ?? NullLogger.Instance,
                 applyGlobally: ignoreCollectionOrder,
                 ignoredPropertyPatterns: ignoredPropertyPaths),
         };
@@ -186,6 +268,11 @@ public class PropertySpecificCollectionOrderComparerTests
     private sealed class DomainIdentifierContainer
     {
         public List<DomainIdentifierItem> Items { get; set; } = new List<DomainIdentifierItem>();
+    }
+
+    private sealed class CertificationContainer
+    {
+        public List<CertificationItem> Items { get; set; } = new List<CertificationItem>();
     }
 
     private sealed class NamedContainer
@@ -229,6 +316,61 @@ public class PropertySpecificCollectionOrderComparerTests
         public string? Value
         {
             get; set;
+        }
+    }
+
+    private sealed class CertificationItem
+    {
+        public string CertificationNumber
+        {
+            get; set;
+        } = string.Empty;
+
+        public string? Name
+        {
+            get; set;
+        }
+
+        public string? IssuingAuthority
+        {
+            get; set;
+        }
+
+        public DateTime? ValidUntil
+        {
+            get; set;
+        }
+    }
+
+    private sealed class TestLogger : ILogger
+    {
+        public List<string> WarningMessages { get; } = new List<string>();
+
+        public IDisposable BeginScope<TState>(TState state)
+            where TState : notnull => NullScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel == LogLevel.Warning)
+            {
+                WarningMessages.Add(formatter(state, exception));
+            }
+        }
+    }
+
+    private sealed class NullScope : IDisposable
+    {
+        public static readonly NullScope Instance = new NullScope();
+
+        public void Dispose()
+        {
         }
     }
 }

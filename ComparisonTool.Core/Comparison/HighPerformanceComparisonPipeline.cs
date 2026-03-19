@@ -23,6 +23,12 @@ namespace ComparisonTool.Core.Comparison;
 /// </summary>
 public sealed class HighPerformanceComparisonPipeline : IDisposable
 {
+    private const string PipelineRunOperationName = "HighPerfPipeline_Run";
+    private const string DeserializePairOperationName = "HighPerfPipeline_DeserializePair";
+    private const string ComparePairOperationName = "HighPerfPipeline_CompareFilterPair";
+    private const string SummarizePairOperationName = "HighPerfPipeline_SummarizePair";
+    private const string FinalizeResultsOperationName = "HighPerfPipeline_FinalizeResults";
+
     // OPTIMIZATION 4: Use XxHash64 instead of MD5 for faster hashing (non-cryptographic)
     private static readonly XxHash64 HashAlgorithm = new XxHash64();
 
@@ -120,101 +126,106 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
         string modelName,
         IProgress<ComparisonProgress>? progress = null,
         CancellationToken cancellationToken = default)
-    {
-        RefreshCompareLogicIfNeeded();
-        var totalFiles = filePairs.Count;
-        logger.LogInformation(
-            "Starting high-performance comparison of {Count} file pairs with I/O parallelism {IoParallel} and CPU parallelism {CpuParallel}",
-            totalFiles,
-            ioParallelism,
-            cpuParallelism);
-
-        // Create bounded channels for back-pressure
-        var deserializationChannel = Channel.CreateBounded<DeserializedFilePair>(
-            new BoundedChannelOptions(channelCapacity)
-            {
-                FullMode = BoundedChannelFullMode.Wait,
-                SingleWriter = false,
-                SingleReader = false,
-            });
-
-        var comparisonChannel = Channel.CreateBounded<FilePairComparisonResult>(
-            new BoundedChannelOptions(channelCapacity)
-            {
-                FullMode = BoundedChannelFullMode.Wait,
-                SingleWriter = false,
-                SingleReader = true,
-            });
-
-        // Get model type once
-        var modelType = deserializationService.GetModelType(modelName);
-
-        // Results collection
-        var results = new ConcurrentBag<FilePairComparisonResult>();
-        var completedCount = 0;
-        var allEqual = true;
-
-        // Stage 1: I/O + Deserialization (I/O-bound producer)
-        var deserializationTask = RunDeserializationStageAsync(
-            filePairs,
-            modelType,
-            deserializationChannel.Writer,
-            cancellationToken);
-
-        // Stage 2: Comparison (CPU-bound consumers)
-        var comparisonTasks = Enumerable.Range(0, cpuParallelism)
-            .Select(_ => RunComparisonStageAsync(
-                deserializationChannel.Reader,
-                comparisonChannel.Writer,
-                modelType,
-                cancellationToken))
-            .ToArray();
-
-        // Stage 3: Result aggregation (single consumer)
-        var aggregationTask = Task.Run(
+        => await performanceTracker.TrackOperationAsync(
+            PipelineRunOperationName,
             async () =>
-        {
-            await foreach (var result in comparisonChannel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             {
-                results.Add(result);
+                RefreshCompareLogicIfNeeded();
+                var totalFiles = filePairs.Count;
+                logger.LogInformation(
+                    "Starting high-performance comparison of {Count} file pairs with I/O parallelism {IoParallel} and CPU parallelism {CpuParallel}",
+                    totalFiles,
+                    ioParallelism,
+                    cpuParallelism);
 
-                if (!result.AreEqual)
-                {
-                    allEqual = false;
-                }
+                // Create bounded channels for back-pressure
+                var deserializationChannel = Channel.CreateBounded<DeserializedFilePair>(
+                    new BoundedChannelOptions(channelCapacity)
+                    {
+                        FullMode = BoundedChannelFullMode.Wait,
+                        SingleWriter = false,
+                        SingleReader = false,
+                    });
 
-                var current = Interlocked.Increment(ref completedCount);
+                var comparisonChannel = Channel.CreateBounded<FilePairComparisonResult>(
+                    new BoundedChannelOptions(channelCapacity)
+                    {
+                        FullMode = BoundedChannelFullMode.Wait,
+                        SingleWriter = false,
+                        SingleReader = true,
+                    });
 
-                // Throttle progress updates to reduce UI thread contention
-                if (current % Math.Max(1, totalFiles / 100) == 0 || current == totalFiles)
-                {
-                    progress?.Report(new ComparisonProgress(
-                        current,
-                        totalFiles,
-                        $"Compared {current} of {totalFiles} files"));
-                }
-            }
-        }, cancellationToken);
+                // Get model type once
+                var modelType = deserializationService.GetModelType(modelName);
 
-        // Wait for deserialization to complete and close its channel
-        await deserializationTask.ConfigureAwait(false);
-        deserializationChannel.Writer.Complete();
+                // Results collection
+                var results = new ConcurrentBag<FilePairComparisonResult>();
+                var completedCount = 0;
+                var allEqual = true;
 
-        // Wait for all comparison tasks
-        await Task.WhenAll(comparisonTasks).ConfigureAwait(false);
-        comparisonChannel.Writer.Complete();
+                // Stage 1: I/O + Deserialization (I/O-bound producer)
+                var deserializationTask = RunDeserializationStageAsync(
+                    filePairs,
+                    modelType,
+                    deserializationChannel.Writer,
+                    cancellationToken);
 
-        // Wait for aggregation
-        await aggregationTask.ConfigureAwait(false);
+                // Stage 2: Comparison (CPU-bound consumers)
+                var comparisonTasks = Enumerable.Range(0, cpuParallelism)
+                    .Select(_ => RunComparisonStageAsync(
+                        deserializationChannel.Reader,
+                        comparisonChannel.Writer,
+                        modelType,
+                        cancellationToken))
+                    .ToArray();
 
-        return new MultiFolderComparisonResult
-        {
-            TotalPairsCompared = totalFiles,
-            AllEqual = allEqual,
-            FilePairResults = results.OrderBy(r => r.File1Name, StringComparer.Ordinal).ToList(),
-            Metadata = new Dictionary<string, object>(StringComparer.Ordinal),
-        };
-    }
+                // Stage 3: Result aggregation (single consumer)
+                var aggregationTask = Task.Run(
+                    async () =>
+                    {
+                        await foreach (var result in comparisonChannel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+                        {
+                            results.Add(result);
+
+                            if (!result.AreEqual)
+                            {
+                                allEqual = false;
+                            }
+
+                            var current = Interlocked.Increment(ref completedCount);
+
+                            // Throttle progress updates to reduce UI thread contention
+                            if (current % Math.Max(1, totalFiles / 100) == 0 || current == totalFiles)
+                            {
+                                progress?.Report(new ComparisonProgress(
+                                    current,
+                                    totalFiles,
+                                    $"Compared {current} of {totalFiles} files"));
+                            }
+                        }
+                    }, cancellationToken);
+
+                // Wait for deserialization to complete and close its channel
+                await deserializationTask.ConfigureAwait(false);
+                deserializationChannel.Writer.Complete();
+
+                // Wait for all comparison tasks
+                await Task.WhenAll(comparisonTasks).ConfigureAwait(false);
+                comparisonChannel.Writer.Complete();
+
+                // Wait for aggregation
+                await aggregationTask.ConfigureAwait(false);
+
+                return performanceTracker.TrackOperation(
+                    FinalizeResultsOperationName,
+                    () => new MultiFolderComparisonResult
+                    {
+                        TotalPairsCompared = totalFiles,
+                        AllEqual = allEqual,
+                        FilePairResults = results.OrderBy(r => r.File1Name, StringComparer.Ordinal).ToList(),
+                        Metadata = new Dictionary<string, object>(StringComparer.Ordinal),
+                    });
+            }).ConfigureAwait(false);
 
     public void Dispose() => threadLocalCompareLogic?.Dispose();
 
@@ -237,97 +248,102 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
             {
                 var (file1Path, file2Path, relativePath) = filePair;
 
-                try
-                {
-                    var file1Format = FileTypeDetector.DetectFormat(file1Path);
-                    var file2Format = FileTypeDetector.DetectFormat(file2Path);
-                    if (file1Format != file2Format)
+                await performanceTracker.TrackOperationAsync(
+                    DeserializePairOperationName,
+                    async () =>
                     {
-                        await writer.WriteAsync(
-                            new DeserializedFilePair
+                        try
+                        {
+                            var file1Format = FileTypeDetector.DetectFormat(file1Path);
+                            var file2Format = FileTypeDetector.DetectFormat(file2Path);
+                            if (file1Format != file2Format)
+                            {
+                                await writer.WriteAsync(
+                                    new DeserializedFilePair
+                                    {
+                                        File1Path = file1Path,
+                                        File2Path = file2Path,
+                                        RelativePath = relativePath,
+                                        ErrorMessage = $"Cannot compare files of different formats: {file1Format} vs {file2Format}",
+                                        ErrorType = nameof(InvalidOperationException),
+                                    },
+                                    ct).ConfigureAwait(false);
+                                return;
+                            }
+
+                            var deserializer = GetOrCreateDeserializer(modelType, file1Format);
+
+                            // OPTIMIZATION: Read and deserialize both files in parallel using TryDeserialize
+                            // which pre-validates root elements and catches exceptions internally —
+                            // no InvalidOperationException propagates to the debugger.
+                            var deserializationStart = Stopwatch.GetTimestamp();
+                            var (result1, result2) = await DeserializeBothFilesAsync(
+                                file1Path, file2Path, deserializer, ct).ConfigureAwait(false);
+                            ComparisonPhaseTimingScope.Current?.AddDeserialization(Stopwatch.GetElapsedTime(deserializationStart));
+
+                            // Check for deserialization failures (returned as result, not as exception)
+                            if (!result1.Success || !result2.Success)
+                            {
+                                var errorMessages = new List<string>();
+                                if (!result1.Success)
+                                {
+                                    errorMessages.Add($"File 1: {result1.ErrorMessage}");
+                                }
+
+                                if (!result2.Success)
+                                {
+                                    errorMessages.Add($"File 2: {result2.ErrorMessage}");
+                                }
+
+                                var combinedError = string.Join(" | ", errorMessages);
+                                logger.LogWarning("Deserialization failed for file pair {Path}: {Error}", relativePath, combinedError);
+
+                                var errorPair = new DeserializedFilePair
+                                {
+                                    File1Path = file1Path,
+                                    File2Path = file2Path,
+                                    RelativePath = relativePath,
+                                    Object1 = null,
+                                    Object2 = null,
+                                    ErrorMessage = combinedError,
+                                    ErrorType = "DeserializationError",
+                                };
+
+                                await writer.WriteAsync(errorPair, ct).ConfigureAwait(false);
+                                return;
+                            }
+
+                            var deserializedPair = new DeserializedFilePair
                             {
                                 File1Path = file1Path,
                                 File2Path = file2Path,
                                 RelativePath = relativePath,
-                                ErrorMessage = $"Cannot compare files of different formats: {file1Format} vs {file2Format}",
-                                ErrorType = nameof(InvalidOperationException),
-                            },
-                            ct).ConfigureAwait(false);
-                        return;
-                    }
+                                Object1 = result1.Value,
+                                Object2 = result2.Value,
+                            };
 
-                    var deserializer = GetOrCreateDeserializer(modelType, file1Format);
-
-                    // OPTIMIZATION: Read and deserialize both files in parallel using TryDeserialize
-                    // which pre-validates root elements and catches exceptions internally —
-                    // no InvalidOperationException propagates to the debugger.
-                    var deserializationStart = Stopwatch.GetTimestamp();
-                    var (result1, result2) = await DeserializeBothFilesAsync(
-                        file1Path, file2Path, deserializer, ct).ConfigureAwait(false);
-                    ComparisonPhaseTimingScope.Current?.AddDeserialization(Stopwatch.GetElapsedTime(deserializationStart));
-
-                    // Check for deserialization failures (returned as result, not as exception)
-                    if (!result1.Success || !result2.Success)
-                    {
-                        var errorMessages = new List<string>();
-                        if (!result1.Success)
-                        {
-                            errorMessages.Add($"File 1: {result1.ErrorMessage}");
+                            await writer.WriteAsync(deserializedPair, ct).ConfigureAwait(false);
                         }
-
-                        if (!result2.Success)
+                        catch (Exception ex)
                         {
-                            errorMessages.Add($"File 2: {result2.ErrorMessage}");
+                            // This catch is now only for truly unexpected errors (I/O failures, etc.)
+                            // Deserialization errors are handled above via DeserializationResult.
+                            logger.LogError(ex, "Unexpected error processing file pair: {Path}: {Message}", relativePath, ex.Message);
+
+                            var errorPair = new DeserializedFilePair
+                            {
+                                File1Path = file1Path,
+                                File2Path = file2Path,
+                                RelativePath = relativePath,
+                                Object1 = null,
+                                Object2 = null,
+                                ErrorMessage = ex.Message,
+                                ErrorType = ex.GetType().Name,
+                            };
+
+                            await writer.WriteAsync(errorPair, ct).ConfigureAwait(false);
                         }
-
-                        var combinedError = string.Join(" | ", errorMessages);
-                        logger.LogWarning("Deserialization failed for file pair {Path}: {Error}", relativePath, combinedError);
-
-                        var errorPair = new DeserializedFilePair
-                        {
-                            File1Path = file1Path,
-                            File2Path = file2Path,
-                            RelativePath = relativePath,
-                            Object1 = null,
-                            Object2 = null,
-                            ErrorMessage = combinedError,
-                            ErrorType = "DeserializationError",
-                        };
-
-                        await writer.WriteAsync(errorPair, ct).ConfigureAwait(false);
-                        return;
-                    }
-
-                    var deserializedPair = new DeserializedFilePair
-                    {
-                        File1Path = file1Path,
-                        File2Path = file2Path,
-                        RelativePath = relativePath,
-                        Object1 = result1.Value,
-                        Object2 = result2.Value,
-                    };
-
-                    await writer.WriteAsync(deserializedPair, ct).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    // This catch is now only for truly unexpected errors (I/O failures, etc.)
-                    // Deserialization errors are handled above via DeserializationResult.
-                    logger.LogError(ex, "Unexpected error processing file pair: {Path}: {Message}", relativePath, ex.Message);
-
-                    var errorPair = new DeserializedFilePair
-                    {
-                        File1Path = file1Path,
-                        File2Path = file2Path,
-                        RelativePath = relativePath,
-                        Object1 = null,
-                        Object2 = null,
-                        ErrorMessage = ex.Message,
-                        ErrorType = ex.GetType().Name,
-                    };
-
-                    await writer.WriteAsync(errorPair, ct).ConfigureAwait(false);
-                }
+                    }).ConfigureAwait(false);
             }).ConfigureAwait(false);
 
     /// <summary>
@@ -400,30 +416,41 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
                 // OPTIMIZATION: Reuse thread-local CompareLogic
                 var compareLogic = threadLocalCompareLogic.Value!;
 
-                // Perform comparison
-                var comparisonStart = Stopwatch.GetTimestamp();
-                var result = compareLogic.Compare(pair.Object1!, pair.Object2!);
+                var result = await performanceTracker.TrackOperationAsync(
+                    ComparePairOperationName,
+                    () =>
+                    {
+                        // Perform comparison
+                        var comparisonStart = Stopwatch.GetTimestamp();
+                        var comparisonResult = compareLogic.Compare(pair.Object1!, pair.Object2!);
 
-                // Filter ignored differences
-                result = configService.FilterSmartIgnoredDifferences(result, modelType);
-                result = configService.FilterIgnoredDifferences(result);
-                ComparisonPhaseTimingScope.Current?.AddComparison(Stopwatch.GetElapsedTime(comparisonStart));
+                        // Filter ignored differences
+                        comparisonResult = configService.FilterSmartIgnoredDifferences(comparisonResult, modelType);
+                        comparisonResult = configService.FilterIgnoredDifferences(comparisonResult);
+                        ComparisonPhaseTimingScope.Current?.AddComparison(Stopwatch.GetElapsedTime(comparisonStart));
+                        return Task.FromResult(comparisonResult);
+                    }).ConfigureAwait(false);
 
                 // OPTIMIZATION: Pool categorizer instances
                 var categorizer = categorizerPool.Get();
                 try
                 {
-                    var summary = categorizer.CategorizeAndSummarize(result);
+                    var pairResult = performanceTracker.TrackOperation(
+                        SummarizePairOperationName,
+                        () =>
+                        {
+                            var summary = categorizer.CategorizeAndSummarize(result);
 
-                    var pairResult = new FilePairComparisonResult
-                    {
-                        File1Name = Path.GetFileName(pair.File1Path),
-                        File2Name = Path.GetFileName(pair.File2Path),
-                        File1Path = pair.File1Path,
-                        File2Path = pair.File2Path,
-                        Result = result,
-                        Summary = summary,
-                    };
+                            return new FilePairComparisonResult
+                            {
+                                File1Name = Path.GetFileName(pair.File1Path),
+                                File2Name = Path.GetFileName(pair.File2Path),
+                                File1Path = pair.File1Path,
+                                File2Path = pair.File2Path,
+                                Result = result,
+                                Summary = summary,
+                            };
+                        });
 
                     await writer.WriteAsync(pairResult, cancellationToken).ConfigureAwait(false);
                 }
