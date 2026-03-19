@@ -289,15 +289,9 @@ public static class FolderCompareCommand
                     Console.WriteLine($"  Markdown report: {mdPath}{pageSuffix}");
                     break;
                 case OutputFormat.Html:
-                    var htmlTimestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-                    var htmlOutputPath = htmlMode == HtmlReportMode.StaticSite
-                        ? Path.Combine(resolvedOutputDir, $"comparison-result-{htmlTimestamp}")
-                        : Path.Combine(resolvedOutputDir, $"comparison-result-{htmlTimestamp}.html");
-                    var htmlResult = await HtmlReportWriter.WriteAsync(reportContext, htmlOutputPath);
-                    var detailSuffix = htmlResult.DetailPageCount > 0
-                        ? $" (+{htmlResult.DetailPageCount} pair pages)"
-                        : string.Empty;
-                    Console.WriteLine($"  HTML report: {htmlResult.PrimaryPath}{detailSuffix}");
+                    var htmlPath = Path.Combine(resolvedOutputDir, $"comparison-result-{DateTime.Now:yyyyMMdd-HHmmss}.html");
+                    await HtmlReportWriter.WriteAsync(reportContext, htmlPath);
+                    Console.WriteLine($"  HTML report: {htmlPath}");
                     break;
             }
         }
