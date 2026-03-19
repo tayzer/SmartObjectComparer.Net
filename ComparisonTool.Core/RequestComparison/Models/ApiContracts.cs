@@ -61,6 +61,9 @@ public record CreateRequestComparisonJobRequest
     /// <summary>Gets the smart ignore rules to apply during comparison.</summary>
     public List<SmartIgnoreRuleDto>? SmartIgnoreRules { get; init; }
 
+    /// <summary>Gets the response masking rules to apply before comparison and reporting.</summary>
+    public List<MaskRuleDto>? MaskRules { get; init; }
+
     /// <summary>Gets a value indicating whether to enable semantic analysis.</summary>
     public bool EnableSemanticAnalysis { get; init; } = true;
 
@@ -96,6 +99,21 @@ public record SmartIgnoreRuleDto
 
     /// <summary>Gets the description for the rule.</summary>
     public string? Description { get; init; }
+}
+
+/// <summary>
+/// DTO for response masking rules in API requests.
+/// </summary>
+public record MaskRuleDto
+{
+    /// <summary>Gets the property path to mask.</summary>
+    public string PropertyPath { get; init; } = string.Empty;
+
+    /// <summary>Gets how many trailing characters should remain visible.</summary>
+    public int PreserveLastCharacters { get; init; } = 0;
+
+    /// <summary>Gets the single character used for masking.</summary>
+    public string MaskCharacter { get; init; } = "*";
 }
 
 /// <summary>

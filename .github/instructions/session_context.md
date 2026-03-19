@@ -1,40 +1,49 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2026-03-18T00:00:00Z
+lastUpdated: 2026-03-19T00:00:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-Add ordinal request-range support to the ComparisonTool CLI request command
+Add CLI request-response masking rules for sensitive fields
 
 ## Todo List Status
 ```markdown
-- [x] 🔍 Inspect request CLI command flow and request-file staging behavior
-- [x] 🛠️ Add validated range option and deterministic ordinal file slicing
-- [x] 🧪 Add focused CLI tests for selection, clamping, invalid input, and sidecar staging
-- [x] 📝 Update README request command usage
-- [x] ✅ Run targeted validation and review for regressions
+- [x] 🔍 Trace the CLI request-comparison flow and existing ignore-rules loading
+- [x] 🛠️ Add `--mask-rules` loading and shared mask-rule propagation
+- [x] 🛡️ Mask persisted response bodies before first write for JSON/XML request comparisons
+- [x] 🧪 Add focused CLI and masking-service tests, including UTF-16 XML coverage
+- [x] ✅ Run targeted validation and final review for leakage/regression risks
 ```
 
 ## Recent File Changes
-- `ComparisonTool.Cli/Commands/RequestCompareCommand.cs`: Added `--range`, range parsing/validation, deterministic ordinal selection, selected/total console output, and sidecar-aware staging for selected requests
-- `ComparisonTool.Cli/Properties/AssemblyInfo.cs`: Added `InternalsVisibleTo("ComparisonTool.Tests")` for focused CLI helper tests
-- `ComparisonTool.Tests/ComparisonTool.Tests.csproj`: Added a project reference to `ComparisonTool.Cli`
-- `ComparisonTool.Tests/Unit/Cli/RequestCompareCommandTests.cs`: Added tests for ordinal range behavior, invalid input handling, clamping, and staged sidecar inclusion
-- `README.md`: Documented `--range` semantics and usage example for request comparisons
+- `ComparisonTool.Cli/Commands/RequestCompareCommand.cs`: Added `--mask-rules`, mask-rule JSON loading/validation, and request-job propagation
+- `ComparisonTool.Core/RequestComparison/Models/ApiContracts.cs`: Added `MaskRuleDto` and optional `MaskRules` on the shared request contract
+- `ComparisonTool.Core/RequestComparison/Models/RequestComparisonJob.cs`: Added persisted per-job mask rules
+- `ComparisonTool.Core/RequestComparison/Services/ResponseMaskingService.cs`: Added JSON/XML string-field masking with property-path matching, charset handling, and pre-write masking support
+- `ComparisonTool.Core/RequestComparison/Services/RequestExecutionService.cs`: Masks endpoint responses before the first persisted write
+- `ComparisonTool.Core/RequestComparison/Services/RequestComparisonJobService.cs`: Validates mask rules at job creation
+- `ComparisonTool.Web/RequestComparisonApi.cs`: Returns `400` for invalid shared mask-rule input instead of surfacing a server error
+- `ComparisonTool.Cli/Infrastructure/ServiceProviderFactory.cs` and `ComparisonTool.Web/Program.cs`: Registered the masking service
+- `ComparisonTool.Tests/Unit/Cli/RequestCompareCommandTests.cs`: Added mask-rule loader tests
+- `ComparisonTool.Tests/Unit/RequestComparison/ResponseMaskingServiceTests.cs`: Added JSON, namespace-aware XML, and UTF-16 XML masking tests
+- `README.md`: Documented `--mask-rules` usage and JSON examples
 
 ## Key Technical Decisions
-- Decision: Keep the feature CLI-local by filtering files before temp-batch staging instead of changing core request-comparison contracts
-- Rationale: The request range is an operator convenience for the CLI and does not need to expand the shared API surface
-- Date: 2026-03-18
-- Decision: Apply the range after `StringComparer.Ordinal` sorting of eligible top-level request files
-- Rationale: Preserves deterministic behavior that matches the existing parser/execution ordering expectations
-- Date: 2026-03-18
-- Decision: Stage selected request files together with their matching `.headers.json` sidecars
-- Rationale: Preserves existing per-request header behavior while limiting the run to the chosen ordinal slice
-- Date: 2026-03-18
+- Decision: Use a dedicated `--mask-rules` JSON file parallel to `--ignore-rules`
+- Rationale: Keeps sensitive-value handling explicit and operator-controlled without overloading ignore semantics
+- Date: 2026-03-19
+- Decision: Mask response bodies before the first persisted write, not later in reporting
+- Rationale: Prevents masked fields from leaking into saved response files, raw-text comparisons, report payloads, and raw-content viewers
+- Date: 2026-03-19
+- Decision: Limit v1 masking to matched JSON/XML string values using the same normalized property-path style already used by comparison rules
+- Rationale: Covers payment-card and similar secrets with low deserialization risk while keeping rule syntax consistent across features
+- Date: 2026-03-19
+- Decision: Preserve charset information when masking, including UTF-16 XML payloads
+- Rationale: Avoids corrupting non-UTF8 response artifacts during masking and comparison
+- Date: 2026-03-19
 
 ## External Resources Referenced
 - Internal code inspection only
@@ -43,24 +52,25 @@ Add ordinal request-range support to the ComparisonTool CLI request command
 - [NOTE] Focused validation passed, but the repository still has many pre-existing StyleCop and analyzer warnings unrelated to this feature
 
 ## Failed Approaches
-- Approach: Initial range implementation staged only the selected primary request files
-- Failure Reason: That dropped matching `.headers.json` sidecars and would have silently removed per-request headers
-- Lesson: Range selection must keep sidecar staging aligned with the selected primary requests
+- Approach: Initial masking hook rewrote response files only after request execution completed
+- Failure Reason: That still allowed unmasked response bodies to hit disk before the masking pass
+- Lesson: Sensitive-value masking must happen before the first persisted write, not merely before comparison/reporting
 
 ## Environment Notes
 - .NET 10.0
 - Windows
 
 ## Next Session Priority
-If needed, add a command-level integration test that invokes the request command end-to-end with `--range` and verifies staged sidecars are consumed by the parser
+If needed, add a request-comparison integration test that exercises `--mask-rules` end to end against a mock endpoint and verifies masked values never reach persisted job artifacts
 
 ## Session Notes
-- Added a `--range` option that accepts 1-based inclusive values like `1-500` for the request CLI command.
-- Range selection now sorts eligible top-level `xml`/`json`/`txt` request files ordinally, clamps oversized end values, and rejects malformed or out-of-bounds starts.
-- The request comparison summary now shows the applied range and selected-versus-total request count before execution.
+- Added `--mask-rules` to the CLI request command with JSON loading that accepts both top-level arrays and `{ "maskRules": [...] }` container objects.
+- Added `MaskRuleDto` with `propertyPath`, `preserveLastCharacters`, and `maskCharacter` semantics for string-field masking.
+- Request comparison now masks matched JSON/XML response fields before the first persisted write, so downstream comparisons and reports consume masked artifacts.
+- Shared validation now rejects invalid mask rules during job creation, and the web request-comparison API maps that failure to a `400` response.
 - Validation completed:
-	- `dotnet test .\ComparisonTool.Tests\ComparisonTool.Tests.csproj --filter RequestCompareCommandTests` passed with 8/8 tests
-	- Final review found no remaining feature-level bugs after restoring sidecar-header staging for selected requests
+	- `dotnet test .\ComparisonTool.Tests\ComparisonTool.Tests.csproj --filter "RequestCompareCommandTests|ResponseMaskingServiceTests"` passed with 16/16 tests
+	- Final review confirmed the original unmasked-on-disk leak path is closed after moving masking into `RequestExecutionService`
 
 ---
 # Previous Session Archive

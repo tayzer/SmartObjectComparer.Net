@@ -19,6 +19,7 @@ public class RequestComparisonJobService
     private readonly RequestExecutionService _executionService;
     private readonly RequestFileParserService _parserService;
     private readonly RawTextComparisonService _rawTextComparisonService;
+    private readonly ResponseMaskingService _responseMaskingService;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IComparisonProgressPublisher? _progressPublisher;
     private readonly ConcurrentDictionary<string, RequestComparisonJob> _jobs = new();
@@ -31,6 +32,7 @@ public class RequestComparisonJobService
         RequestExecutionService executionService,
         RequestFileParserService parserService,
         RawTextComparisonService rawTextComparisonService,
+        ResponseMaskingService responseMaskingService,
         IServiceScopeFactory scopeFactory,
         IComparisonProgressPublisher? progressPublisher = null)
     {
@@ -38,6 +40,7 @@ public class RequestComparisonJobService
         _executionService = executionService;
         _parserService = parserService;
         _rawTextComparisonService = rawTextComparisonService;
+        _responseMaskingService = responseMaskingService;
         _scopeFactory = scopeFactory;
         _progressPublisher = progressPublisher;
     }
@@ -115,9 +118,15 @@ public class RequestComparisonJobService
             IgnoreXmlNamespaces = request.IgnoreXmlNamespaces,
             IgnoreRules = request.IgnoreRules?.ToList() ?? new List<IgnoreRuleDto>(),
             SmartIgnoreRules = request.SmartIgnoreRules?.ToList() ?? new List<SmartIgnoreRuleDto>(),
+            MaskRules = request.MaskRules?.ToList() ?? new List<MaskRuleDto>(),
             EnableSemanticAnalysis = request.EnableSemanticAnalysis,
             EnableEnhancedStructuralAnalysis = request.EnableEnhancedStructuralAnalysis
         };
+
+        if (job.MaskRules.Count > 0)
+        {
+            _responseMaskingService.ValidateRules(job.MaskRules);
+        }
 
         _jobs[job.JobId] = job;
         _logger.LogInformation("Created request comparison job {JobId} with model {ModelName}", job.JobId, job.ModelName);

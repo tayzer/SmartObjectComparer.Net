@@ -99,6 +99,90 @@ public sealed class RequestCompareCommandTests : IDisposable
             .WithMessage("*exceeds the available eligible request file count 3*");
     }
 
+        [TestMethod]
+        public async Task LoadMaskRulesAsync_LoadsRulesFromArrayJson()
+        {
+                var file = this.CreateTempFile(
+                        "mask-rules.json",
+                        """
+                        [
+                            {
+                                "propertyPath": "Order.Payments[*].CardNumber",
+                                "preserveLastCharacters": 4
+                            }
+                        ]
+                        """);
+
+                var result = await RequestCompareCommand.LoadMaskRulesAsync(file, CancellationToken.None);
+
+                result.IsSuccess.Should().BeTrue();
+                result.MaskRules.Should().ContainSingle();
+                result.MaskRules![0].PropertyPath.Should().Be("Order.Payments[*].CardNumber");
+                result.MaskRules[0].PreserveLastCharacters.Should().Be(4);
+                result.MaskRules[0].MaskCharacter.Should().Be("*");
+        }
+
+        [TestMethod]
+        public async Task LoadMaskRulesAsync_LoadsRulesFromContainerJson()
+        {
+                var file = this.CreateTempFile(
+                        "mask-rules-container.json",
+                        """
+                        {
+                            "maskRules": [
+                                {
+                                    "propertyPath": "Order.Customer.Email",
+                                    "maskCharacter": "#"
+                                }
+                            ]
+                        }
+                        """);
+
+                var result = await RequestCompareCommand.LoadMaskRulesAsync(file, CancellationToken.None);
+
+                result.IsSuccess.Should().BeTrue();
+                result.MaskRules.Should().ContainSingle();
+                result.MaskRules![0].MaskCharacter.Should().Be("#");
+                result.MaskRules[0].PreserveLastCharacters.Should().Be(0);
+        }
+
+        [TestMethod]
+        public async Task LoadMaskRulesAsync_RejectsInvalidMaskCharacter()
+        {
+                var file = this.CreateTempFile(
+                        "mask-rules-invalid.json",
+                        """
+                        [
+                            {
+                                "propertyPath": "Order.Payments[*].CardNumber",
+                                "maskCharacter": "XX"
+                            }
+                        ]
+                        """);
+
+                var result = await RequestCompareCommand.LoadMaskRulesAsync(file, CancellationToken.None);
+
+                result.IsSuccess.Should().BeFalse();
+                result.ErrorMessage.Should().Contain("exactly one character");
+        }
+
+            [TestMethod]
+            public async Task LoadMaskRulesAsync_RejectsNullEntries()
+            {
+                var file = this.CreateTempFile(
+                    "mask-rules-null.json",
+                    """
+                    [
+                      null
+                    ]
+                    """);
+
+                var result = await RequestCompareCommand.LoadMaskRulesAsync(file, CancellationToken.None);
+
+                result.IsSuccess.Should().BeFalse();
+                result.ErrorMessage.Should().Contain("cannot contain null entries");
+            }
+
     private DirectoryInfo CreateRequestDirectory(params string[] fileNames)
     {
         var path = Path.Combine(Path.GetTempPath(), "ComparisonToolCliTests", Guid.NewGuid().ToString("N"));
@@ -111,5 +195,13 @@ public sealed class RequestCompareCommandTests : IDisposable
         }
 
         return new DirectoryInfo(path);
+    }
+
+    private FileInfo CreateTempFile(string fileName, string contents)
+    {
+        var directory = this.CreateRequestDirectory();
+        var path = Path.Combine(directory.FullName, fileName);
+        File.WriteAllText(path, contents);
+        return new FileInfo(path);
     }
 }
