@@ -270,19 +270,19 @@
     private ComparisonResultGridItem? SelectedItem { get; set; }
     private int CurrentPage { get; set; }
     private int? lastSynchronizedSelectedPairIndex;
+    private MultiFolderComparisonResult? projectedResult;
+    private ComparisonResultProjection projection = new();
 
     private string StatusFilter = "All";
     private string SelectedGroupFilter = "All";
     private string FileNameSearchFilter { get; set; } = "";
 
-    private ComparisonResultProjection Projection => ComparisonResultProjectionBuilder.Build(Result);
-
-    private IReadOnlyList<string> AvailableGroups => Projection.AvailableGroups;
+    private IReadOnlyList<string> AvailableGroups => projection.AvailableGroups;
 
     private IEnumerable<ComparisonResultGridItem> GetFilteredResults()
     {
         return ComparisonResultProjectionBuilder.Filter(
-            Projection.Items,
+            projection.Items,
             ParseStatusFilter(StatusFilter),
             SelectedGroupFilter,
             FileNameSearchFilter);
@@ -295,23 +295,31 @@
 
             private int CurrentRowsPerPage => ShowAll ? 100 : PreviewCount;
     
-            private int GetEqualCount() => Projection.EqualCount;
-            private int GetDifferentCount() => Projection.DifferentCount;
-            private int GetErrorCount() => Projection.ErrorCount;
-            private int GetStatusCodeMismatchCount() => Projection.StatusCodeMismatchCount;
-            private int GetBothNonSuccessCount() => Projection.BothNonSuccessCount;
+            private int GetEqualCount() => projection.EqualCount;
+            private int GetDifferentCount() => projection.DifferentCount;
+            private int GetErrorCount() => projection.ErrorCount;
+            private int GetStatusCodeMismatchCount() => projection.StatusCodeMismatchCount;
+            private int GetBothNonSuccessCount() => projection.BothNonSuccessCount;
             private int GetTotalFilteredCount() => GetFilteredResults().Count();
 
     protected override void OnParametersSet()
     {
         base.OnParametersSet();
+
+        if (!ReferenceEquals(projectedResult, Result))
+        {
+            projectedResult = Result;
+            projection = ComparisonResultProjectionBuilder.Build(Result);
+            lastSynchronizedSelectedPairIndex = null;
+        }
+
         SynchronizeGridSelection();
     }
 
     /// <summary>
     /// Whether any file pair results contain HTTP status code data (request comparison mode).
     /// </summary>
-    private bool HasHttpStatusData => Projection.HasHttpStatusData;
+    private bool HasHttpStatusData => projection.HasHttpStatusData;
 
     /// <summary>
     /// Returns a MudBlazor color for an HTTP status code.

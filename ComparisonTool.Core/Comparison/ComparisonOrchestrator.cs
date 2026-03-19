@@ -18,7 +18,7 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
     /// <summary>
     /// Threshold for switching to high-performance pipeline (number of file pairs).
     /// </summary>
-    private const int HighPerformancePipelineThreshold = 100;
+    internal const int HighPerformancePipelineThreshold = 100;
 
     private readonly ILogger<ComparisonOrchestrator> logger;
     private readonly IXmlDeserializationService deserializationService;

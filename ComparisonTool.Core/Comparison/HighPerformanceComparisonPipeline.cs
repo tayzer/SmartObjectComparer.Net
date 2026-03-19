@@ -40,8 +40,8 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
     // OPTIMIZATION 2: Pool DifferenceCategorizer instances
     private readonly ObjectPool<DifferenceCategorizer> categorizerPool;
 
-    // OPTIMIZATION 3: Cache deserialization delegate per type
-    private readonly ConcurrentDictionary<Type, Func<Stream, DeserializationResult>> cachedDeserializers = new ConcurrentDictionary<Type, Func<Stream, DeserializationResult>>();
+    // OPTIMIZATION 3: Cache deserialization delegates per type and format
+    private readonly ConcurrentDictionary<DeserializerCacheKey, Func<Stream, DeserializationResult>> cachedDeserializers = new ConcurrentDictionary<DeserializerCacheKey, Func<Stream, DeserializationResult>>();
 
     // Pipeline configuration
     private readonly int ioParallelism;
@@ -149,9 +149,6 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
         // Get model type once
         var modelType = deserializationService.GetModelType(modelName);
 
-        // Cache the deserializer for this model type
-        var deserializer = GetOrCreateDeserializer(modelType);
-
         // Results collection
         var results = new ConcurrentBag<FilePairComparisonResult>();
         var completedCount = 0;
@@ -160,7 +157,7 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
         // Stage 1: I/O + Deserialization (I/O-bound producer)
         var deserializationTask = RunDeserializationStageAsync(
             filePairs,
-            deserializer,
+            modelType,
             deserializationChannel.Writer,
             cancellationToken);
 
@@ -181,7 +178,7 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
             {
                 results.Add(result);
 
-                if (!result.Summary?.AreEqual ?? false)
+                if (!result.AreEqual)
                 {
                     allEqual = false;
                 }
@@ -226,7 +223,7 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
     /// </summary>
     private async Task RunDeserializationStageAsync(
         IReadOnlyList<(string File1Path, string File2Path, string RelativePath)> filePairs,
-        Func<Stream, DeserializationResult> deserializer,
+        Type modelType,
         ChannelWriter<DeserializedFilePair> writer,
         CancellationToken cancellationToken)
         => await Parallel.ForEachAsync(
@@ -242,6 +239,25 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
 
                 try
                 {
+                    var file1Format = FileTypeDetector.DetectFormat(file1Path);
+                    var file2Format = FileTypeDetector.DetectFormat(file2Path);
+                    if (file1Format != file2Format)
+                    {
+                        await writer.WriteAsync(
+                            new DeserializedFilePair
+                            {
+                                File1Path = file1Path,
+                                File2Path = file2Path,
+                                RelativePath = relativePath,
+                                ErrorMessage = $"Cannot compare files of different formats: {file1Format} vs {file2Format}",
+                                ErrorType = nameof(InvalidOperationException),
+                            },
+                            ct).ConfigureAwait(false);
+                        return;
+                    }
+
+                    var deserializer = GetOrCreateDeserializer(modelType, file1Format);
+
                     // OPTIMIZATION: Read and deserialize both files in parallel using TryDeserialize
                     // which pre-validates root elements and catches exceptions internally —
                     // no InvalidOperationException propagates to the debugger.
@@ -565,15 +581,29 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
     }
 
     /// <summary>
-    /// Get or create a cached deserializer delegate for the model type.
-    /// Uses <see cref="IXmlDeserializationService.TryDeserializeXml"/> directly instead of
-    /// reflection-based <see cref="IXmlDeserializationService.DeserializeXml{T}"/>,
-    /// eliminating both the reflection overhead and the exception throwing for expected
-    /// failures like SOAP faults or wrong root elements.
+    /// Get or create a cached deserializer delegate for the model type and format.
     /// </summary>
-    private Func<Stream, DeserializationResult> GetOrCreateDeserializer(Type modelType) =>
-        cachedDeserializers.GetOrAdd(modelType, type =>
-            stream => deserializationService.TryDeserializeXml(stream, type));
+    private Func<Stream, DeserializationResult> GetOrCreateDeserializer(Type modelType, SerializationFormat format) =>
+        cachedDeserializers.GetOrAdd(new DeserializerCacheKey(modelType, format), static (key, state) =>
+        {
+            var (pipeline, serviceFactory) = state;
+
+            if (key.Format == SerializationFormat.Xml)
+            {
+                return stream => pipeline.deserializationService.TryDeserializeXml(stream, key.ModelType);
+            }
+
+            if (serviceFactory == null)
+            {
+                return _ => DeserializationResult.Failure(
+                    $"No deserialization factory is available for {key.Format} format.");
+            }
+
+            var service = serviceFactory.GetService(key.Format);
+            return stream => service.TryDeserialize(stream, key.ModelType, key.Format);
+        }, (this, deserializationFactory));
+
+    private readonly record struct DeserializerCacheKey(Type ModelType, SerializationFormat Format);
 
     /// <summary>
     /// Internal class for passing deserialized objects between pipeline stages.

@@ -896,10 +896,7 @@
             ConfigService.SetIgnoreTrailingWhitespaceAtEnd(IgnoreTrailingWhitespaceAtEnd);
             XmlDeserializationService.IgnoreXmlNamespaces = IgnoreXmlNamespaces;
 
-            foreach (var rule in IgnoreRules)
-            {
-                ConfigService.AddIgnoreRule(rule);
-            }
+            ConfigService.AddIgnoreRulesBatch(IgnoreRules);
 
             ConfigService.ApplyConfiguredSettings();
             
@@ -977,10 +974,7 @@
             ConfigService.SetIgnoreTrailingWhitespaceAtEnd(IgnoreTrailingWhitespaceAtEnd);
             XmlDeserializationService.IgnoreXmlNamespaces = IgnoreXmlNamespaces;
 
-            foreach (var rule in IgnoreRules)
-            {
-                ConfigService.AddIgnoreRule(rule);
-            }
+            ConfigService.AddIgnoreRulesBatch(IgnoreRules);
 
             ConfigService.ApplyConfiguredSettings();
 
