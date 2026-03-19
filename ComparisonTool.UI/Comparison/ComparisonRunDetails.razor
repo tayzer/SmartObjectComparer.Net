@@ -879,16 +879,24 @@
             }
         }
 
+        var differencesByFile = BuildDifferencesIndex();
+
         foreach (var pattern in Analysis.AllPatterns)
         {
             var isValue = IsValueDifference(pattern.Category);
             var isOrder = IsOrderingDifference(pattern.Category);
             var isCritical = pattern.IsCriticalProperty;
             var propertyPath = ExtractBasePropertyPath(pattern.FullPattern);
+            var patternPath = ExtractPatternPath(pattern.FullPattern, pattern.Category);
             
             foreach (var file in pattern.AffectedFiles.Distinct())
             {
-                var fileDifferences = GetMatchingDifferencesForFile(pattern, file);
+                var allFileDiffs = differencesByFile.TryGetValue(file, out var diffs)
+                    ? diffs
+                    : Enumerable.Empty<Difference>();
+                var fileDifferences = allFileDiffs
+                    .Where(d => DifferenceMatchesPattern(d, patternPath, pattern.Category))
+                    .ToList();
                 var example = fileDifferences.FirstOrDefault() ?? pattern.Examples.FirstOrDefault();
                 var occurrenceCount = fileDifferences.Count > 0 ? fileDifferences.Count : 1;
                 var fileDiff = new FileDifference
@@ -1336,27 +1344,23 @@
         return occurrenceCount > 1 ? $"{formatted} (+{occurrenceCount - 1} more)" : formatted;
     }
 
-    private List<Difference> GetMatchingDifferencesForFile(EnhancedStructuralDifferenceAnalyzer.StructuralPattern pattern, string fileIdentifier)
+    private Dictionary<string, List<Difference>> BuildDifferencesIndex()
     {
         if (_filePairLookup == null)
-            return new List<Difference>();
-
-        var patternPath = ExtractPatternPath(pattern.FullPattern, pattern.Category);
-        var matches = new List<Difference>();
-
-        if (_filePairLookup.TryGetValue(fileIdentifier, out var result))
         {
-            foreach (var difference in result.Result?.Differences ?? new List<Difference>())
-            {
-                if (DifferenceMatchesPattern(difference, patternPath, pattern.Category))
-                {
-                    matches.Add(difference);
-                }
-            }
+            return new Dictionary<string, List<Difference>>(StringComparer.Ordinal);
         }
 
-        return matches;
+        var index = new Dictionary<string, List<Difference>>(_filePairLookup.Count, StringComparer.Ordinal);
+
+        foreach (var entry in _filePairLookup)
+        {
+            index[entry.Key] = entry.Value.Result?.Differences?.ToList() ?? new List<Difference>();
+        }
+
+        return index;
     }
+
 
     private string GetPairIdentifier(FilePairComparisonResult filePairResult)
     {

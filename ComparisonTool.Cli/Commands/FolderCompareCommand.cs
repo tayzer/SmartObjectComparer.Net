@@ -18,6 +18,8 @@ public static class FolderCompareCommand
     /// <summary>
     /// Creates the "folder" sub-command.
     /// </summary>
+    /// <param name="configuration">Application configuration used to build required services.</param>
+    /// <returns>The configured folder comparison command.</returns>
     public static Command Create(IConfiguration configuration)
     {
         var dir1Arg = new Argument<DirectoryInfo>("directory1") { Description = "Path to the first (expected) directory" };
@@ -48,6 +50,20 @@ public static class FolderCompareCommand
             Description = "Enable semantic difference analysis",
             Arity = ArgumentArity.ZeroOrOne,
             DefaultValueFactory = _ => true,
+        };
+
+        var ignoreCollectionOrderOption = new Option<bool>("--ignore-collection-order")
+        {
+            Description = "Ignore collection ordering during comparison",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => false,
+        };
+
+        var ignoreCaseOption = new Option<bool>("--ignore-case")
+        {
+            Description = "Ignore string case during comparison",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => false,
         };
 
         var ignoreTrailingWhitespaceOption = new Option<bool>("--ignore-trailing-whitespace-end")
@@ -107,6 +123,8 @@ public static class FolderCompareCommand
             includeAllOption,
             patternAnalysisOption,
             semanticAnalysisOption,
+            ignoreCollectionOrderOption,
+            ignoreCaseOption,
             ignoreTrailingWhitespaceOption,
             outputOption,
             formatOption,
@@ -119,10 +137,13 @@ public static class FolderCompareCommand
         {
             var dir1 = parseResult.GetValue(dir1Arg);
             var dir2 = parseResult.GetValue(dir2Arg);
-            var model = parseResult.GetValue(modelOption)!;
+            var model = parseResult.GetValue(modelOption)
+                ?? throw new InvalidOperationException("Missing required option --model.");
             var includeAll = parseResult.GetValue(includeAllOption);
             var patternAnalysis = parseResult.GetValue(patternAnalysisOption);
             var semanticAnalysis = parseResult.GetValue(semanticAnalysisOption);
+            var ignoreCollectionOrder = parseResult.GetValue(ignoreCollectionOrderOption);
+            var ignoreCase = parseResult.GetValue(ignoreCaseOption);
             var ignoreTrailingWhitespaceAtEnd = parseResult.GetValue(ignoreTrailingWhitespaceOption);
             var outputDir = parseResult.GetValue(outputOption);
             var formats = parseResult.GetValue(formatOption) ?? new[] { OutputFormat.Console };
@@ -138,6 +159,8 @@ public static class FolderCompareCommand
                 includeAll,
                 patternAnalysis,
                 semanticAnalysis,
+                ignoreCollectionOrder,
+                ignoreCase,
                 ignoreTrailingWhitespaceAtEnd,
                 outputDir,
                 formats,
@@ -158,6 +181,8 @@ public static class FolderCompareCommand
         bool includeAll,
         bool patternAnalysis,
         bool semanticAnalysis,
+        bool ignoreCollectionOrder,
+        bool ignoreCase,
         bool ignoreTrailingWhitespaceAtEnd,
         DirectoryInfo? outputDir,
         OutputFormat[] formats,
@@ -205,6 +230,8 @@ public static class FolderCompareCommand
         var configService = scope.ServiceProvider.GetRequiredService<IComparisonConfigurationService>();
         var comparisonService = scope.ServiceProvider.GetRequiredService<DirectoryComparisonService>();
 
+        configService.SetIgnoreCollectionOrder(ignoreCollectionOrder);
+        configService.SetIgnoreStringCase(ignoreCase);
         configService.SetIgnoreTrailingWhitespaceAtEnd(ignoreTrailingWhitespaceAtEnd);
 
         var progress = new Progress<ComparisonProgress>(p =>
@@ -265,15 +292,9 @@ public static class FolderCompareCommand
                     Console.WriteLine($"  Markdown report: {mdPath}{pageSuffix}");
                     break;
                 case OutputFormat.Html:
-                    var htmlTimestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-                    var htmlOutputPath = htmlMode == HtmlReportMode.StaticSite
-                        ? Path.Combine(resolvedOutputDir, $"comparison-result-{htmlTimestamp}")
-                        : Path.Combine(resolvedOutputDir, $"comparison-result-{htmlTimestamp}.html");
-                    var htmlResult = await HtmlReportWriter.WriteAsync(reportContext, htmlOutputPath);
-                    var detailSuffix = htmlResult.DetailPageCount > 0
-                        ? $" (+{htmlResult.DetailPageCount} pair pages)"
-                        : string.Empty;
-                    Console.WriteLine($"  HTML report: {htmlResult.PrimaryPath}{detailSuffix}");
+                    var htmlPath = Path.Combine(resolvedOutputDir, $"comparison-result-{DateTime.Now:yyyyMMdd-HHmmss}.html");
+                    await HtmlReportWriter.WriteAsync(reportContext, htmlPath);
+                    Console.WriteLine($"  HTML report: {htmlPath}");
                     break;
             }
         }

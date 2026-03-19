@@ -25,11 +25,11 @@ public class AddressLinks
 {
     [XmlArray(ElementName = "Addresses")]
     [XmlArrayItem(ElementName = "Address")]
-    public AddressLinkAddress[]? Addresses { get; set; }
+    public AddressLinkAddress[] Addresses { get; set; } = Array.Empty<AddressLinkAddress>();
 
     [XmlArray(ElementName = "Links")]
     [XmlArrayItem(ElementName = "Link")]
-    public Link[]? Links { get; set; }
+    public Link[] Links { get; set; } = Array.Empty<Link>();
 
     public bool ShouldSerializeAddresses() => Addresses != null && Addresses.Length > 0;
 
