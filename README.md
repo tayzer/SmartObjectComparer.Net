@@ -129,6 +129,7 @@ comparisontool request <request-dir> \
   -a https://host-a/api/endpoint \
   -b https://host-b/api/endpoint \
   -m ComplexOrderResponse -c 32 --timeout 60000 \
+  --range 1-500 \
   --soap-action "urn:YourSoapAction" \
   --ignore-rules ./ignore-rules.json \
   --content-type application/json \
@@ -138,6 +139,8 @@ comparisontool request <request-dir> \
 ```
 
 `--soap-action` is optional. When provided, it sets the `SOAPAction` header for requests sent to both endpoints.
+
+`--range` is optional. It applies a 1-based inclusive ordinal slice after top-level eligible request files are sorted with ordinal filename ordering. For example, `--range 1-500` stages the first 500 eligible `xml`/`json`/`txt` request files, clamping the end when fewer files are available.
 
 For CI troubleshooting (for example Jenkins), use `--disable-truncation` to show full value bodies directly in generated reports and console output.
 

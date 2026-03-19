@@ -1,73 +1,66 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2026-03-13T17:25:00Z
+lastUpdated: 2026-03-18T00:00:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-Implement and validate a scalable React-based HTML report for ComparisonTool.Cli
+Add ordinal request-range support to the ComparisonTool CLI request command
 
 ## Todo List Status
 ```markdown
-- [x] 🔍 Inspect existing CLI reporting pipeline and UI scaffold
-- [x] 🛠️ Add shared HTML/JSON report contract and HTML writer
-- [x] 🎨 Replace placeholder report UI with interactive static React report
-- [x] 🧩 Add index + chunk bundle architecture for large reports
-- [x] 🚰 Stream static-site chunk output to disk during generation
-- [x] ✅ Build CLI and validate StaticSite and SingleFile HTML smoke artifacts
+- [x] 🔍 Inspect request CLI command flow and request-file staging behavior
+- [x] 🛠️ Add validated range option and deterministic ordinal file slicing
+- [x] 🧪 Add focused CLI tests for selection, clamping, invalid input, and sidecar staging
+- [x] 📝 Update README request command usage
+- [x] ✅ Run targeted validation and review for regressions
 ```
 
 ## Recent File Changes
-- `ComparisonTool.Cli/Reporting/ComparisonReportData.cs`: Extracted reusable `ComparisonReportIdentity` helpers for stable report and pair IDs
-- `ComparisonTool.Cli/Reporting/HtmlReportBundleData.cs`: Added bootstrap/index/chunk/detail DTOs, diff generation, and streamed static-site chunk writing
-- `ComparisonTool.Cli/Reporting/HtmlReportWriter.cs`: Writes either embedded single-file reports or streamed static-site sibling data bundles
-- `ComparisonTool.Cli/Reporting/ReportContext.cs`: Added HTML default page size and detail chunk size configuration
-- `ComparisonTool.Cli/Commands/FolderCompareCommand.cs`: Added `--html-mode` and `--html-chunk-size`
-- `ComparisonTool.Cli/Commands/RequestCompareCommand.cs`: Added `--html-mode` and `--html-chunk-size`
-- `ComparisonTool.Cli/ComparisonTool.Cli.csproj`: Added `DiffPlex` for precomputed line diffs
-- `ComparisonTool.ReportUI/src/*`: Reworked the report UI around bootstrap/index/chunk loading, pagination, pattern triage, diff navigation, and review state
+- `ComparisonTool.Cli/Commands/RequestCompareCommand.cs`: Added `--range`, range parsing/validation, deterministic ordinal selection, selected/total console output, and sidecar-aware staging for selected requests
+- `ComparisonTool.Cli/Properties/AssemblyInfo.cs`: Added `InternalsVisibleTo("ComparisonTool.Tests")` for focused CLI helper tests
+- `ComparisonTool.Tests/ComparisonTool.Tests.csproj`: Added a project reference to `ComparisonTool.Cli`
+- `ComparisonTool.Tests/Unit/Cli/RequestCompareCommandTests.cs`: Added tests for ordinal range behavior, invalid input handling, clamping, and staged sidecar inclusion
+- `README.md`: Documented `--range` semantics and usage example for request comparisons
 
 ## Key Technical Decisions
-- Decision: Support two HTML modes, `StaticSite` and `SingleFile`, behind one embedded React/Vite shell
-- Rationale: `StaticSite` scales large reports via lazy-loaded chunk files, while `SingleFile` preserves a self-contained artifact option
-- Date: 2026-03-13
-- Decision: Precompute index metadata and pair diff payloads at CLI time
-- Rationale: Keeps filtering, sorting, and diff rendering client-side without pushing expensive computation into the browser
-- Date: 2026-03-13
-- Decision: Stream static-site detail chunks directly to disk during generation
-- Rationale: Avoids retaining the entire detail payload set in CLI memory when generating large reports
-- Date: 2026-03-13
+- Decision: Keep the feature CLI-local by filtering files before temp-batch staging instead of changing core request-comparison contracts
+- Rationale: The request range is an operator convenience for the CLI and does not need to expand the shared API surface
+- Date: 2026-03-18
+- Decision: Apply the range after `StringComparer.Ordinal` sorting of eligible top-level request files
+- Rationale: Preserves deterministic behavior that matches the existing parser/execution ordering expectations
+- Date: 2026-03-18
+- Decision: Stage selected request files together with their matching `.headers.json` sidecars
+- Rationale: Preserves existing per-request header behavior while limiting the run to the chosen ordinal slice
+- Date: 2026-03-18
 
 ## External Resources Referenced
 - Internal code inspection only
 
 ## Blockers & Issues
-- [NOTE] `StaticSite` mode relies on runtime fetches for `index.json` and chunk files, so it is intended for served artifacts such as Jenkins artifact browsing rather than raw `file://` opening
-- [NOTE] The CLI returns exit code `2` when differences are found; non-zero exit during smoke tests was expected behavior, not report-generation failure
+- [NOTE] Focused validation passed, but the repository still has many pre-existing StyleCop and analyzer warnings unrelated to this feature
 
 ## Failed Approaches
-- Approach: Build static-site bundles entirely in memory before writing chunk files
-- Failure Reason: That left the CLI holding all pair detail payloads at once, which undermined the large-report scaling goal
-- Lesson: Browser lazy loading is not enough; the generator also has to stream chunk output incrementally
+- Approach: Initial range implementation staged only the selected primary request files
+- Failure Reason: That dropped matching `.headers.json` sidecars and would have silently removed per-request headers
+- Lesson: Range selection must keep sidecar staging aligned with the selected primary requests
 
 ## Environment Notes
 - .NET 10.0
 - Windows
 
 ## Next Session Priority
-If needed, add browser-level validation or automated tests for static-site chunk loading and large-report cache behavior in the UI
+If needed, add a command-level integration test that invokes the request command end-to-end with `--range` and verifies staged sidecars are consumed by the parser
 
 ## Session Notes
-- Implemented a scalable HTML report contract with embedded bootstrap data, a prebuilt pair index, and lazy-loaded detail chunks.
-- The report UI now supports pagination, client-side search/filter/sort, recurring-pattern triage, local review categories, progress tracking, split/unified diff viewing, collapsed unchanged regions, and keyboard navigation.
+- Added a `--range` option that accepts 1-based inclusive values like `1-500` for the request CLI command.
+- Range selection now sorts eligible top-level `xml`/`json`/`txt` request files ordinally, clamps oversized end values, and rejects malformed or out-of-bounds starts.
+- The request comparison summary now shows the applied range and selected-versus-total request count before execution.
 - Validation completed:
-	- `dotnet build ComparisonTool.Cli/ComparisonTool.Cli.csproj -c Debug` succeeded with warnings only
-	- Static-site smoke artifact generated at `reports/html-smoke-minimal-stream/comparison-result-20260313-172346.html` with sibling `.data/index.json` and chunk files
-	- Single-file smoke artifact generated at `reports/html-smoke-singlefile-stream/comparison-result-20260313-172347.html`
-	- Verified static-site bootstrap, index payload, and chunk payload contents
-	- Verified CLI exit code `2` for difference-bearing comparisons in both modes
+	- `dotnet test .\ComparisonTool.Tests\ComparisonTool.Tests.csproj --filter RequestCompareCommandTests` passed with 8/8 tests
+	- Final review found no remaining feature-level bugs after restoring sidecar-header staging for selected requests
 
 ---
 # Previous Session Archive
