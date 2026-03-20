@@ -12,6 +12,8 @@ namespace ComparisonTool.Core.Utilities;
 /// </summary>
 public class PerformanceTracker : IDisposable
 {
+    private const long InformationLogThresholdMs = 10000;
+
     private readonly ILogger<PerformanceTracker> logger;
     private readonly ConcurrentDictionary<OperationKey, ConcurrentBag<long>> timings = new();
     private readonly ConcurrentDictionary<OperationKey, int> counts = new();
@@ -279,7 +281,7 @@ public class PerformanceTracker : IDisposable
         counts.AddOrUpdate(operationKey, 1, (_, count) => count + 1);
         totalTimes.AddOrUpdate(operationKey, elapsedMs, (_, total) => total + elapsedMs);
 
-        if (elapsedMs > 1000)
+        if (elapsedMs >= InformationLogThresholdMs)
         {
             logger.LogInformation("{Operation} completed in {ElapsedMs}ms", operationKey.OperationName, elapsedMs);
         }

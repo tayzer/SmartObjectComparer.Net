@@ -512,10 +512,11 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             return result;
         }
 
-        // Performance optimization: Use different strategies based on rule count
-        var useFastFiltering = ShouldUseFastFiltering();
+        // Use the direct matcher for large ignore sets, but keep the recursive compare-time
+        // fast comparer disabled until it can be fixed safely.
+        var useDirectFiltering = ShouldUseDirectFiltering(propertiesToIgnoreCompletely.Count);
 
-        if (useFastFiltering)
+        if (useDirectFiltering)
         {
             return FilterDifferencesDirectly(result, propertiesToIgnoreCompletely, shouldFilterTrailingWhitespace);
         }
@@ -732,18 +733,22 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// Performance check: if we have a lot of ignore rules for a large domain model,
     /// use fast property filtering instead of expensive pattern generation.
     /// </summary>
-    private bool ShouldUseFastFiltering()
+    private bool ShouldUseDirectFiltering(int ignorePatternCount)
+    {
+        // Large generated ignore sets are expensive to run through PropertyIgnoreHelper for every
+        // difference because that path rebuilds cache keys and walks patterns repeatedly.
+        return ignorePatternCount > 10;
+    }
+
+    /// <summary>
+    /// Fast compare-time filtering remains disabled because the current custom comparer re-enters
+    /// the root comparer and can recurse indefinitely.
+    /// </summary>
+    private bool ShouldUseFastComparerConfiguration()
     {
         // TEMPORARILY DISABLED: Fast filtering caused infinite recursion
         // TODO: Implement proper fast filtering without recursion issues
         return false;
-
-        // If we have many ignore rules, use fast filtering to avoid MembersToIgnore pattern explosion
-        var ignoreCompletelyCount = AllIgnoreRules.Count(r => r.IgnoreCompletely);
-
-        // Threshold: if more than 10 properties are being ignored completely, use fast filtering
-        // For smaller numbers, the standard pattern matching is fine and more reliable
-        return ignoreCompletelyCount > 10;
     }
 
     /// <summary>
@@ -792,7 +797,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             }
 
             // Performance optimization: Check if we should use fast filtering
-            var useFastFiltering = ShouldUseFastFiltering();
+            var useFastFiltering = ShouldUseFastComparerConfiguration();
             if (useFastFiltering)
             {
                 logger.LogInformation(
@@ -1045,52 +1050,20 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         var originalCount = result.Differences.Count;
         var filteredDifferences = new List<Difference>();
         var ignoredCount = 0;
+        var matcher = new DirectIgnorePathMatcher(propertiesToIgnore);
 
-        // Performance optimization: Pre-build normalized patterns for fast lookup
-        var normalizedPatterns = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
-        var wildcardPatterns = new List<string>();
-
-        foreach (var property in propertiesToIgnore)
+        if (logger.IsEnabled(LogLevel.Debug))
         {
-            normalizedPatterns.Add(property);
-
-            // Handle collection patterns
-            if (property.Contains("[*]"))
-            {
-                wildcardPatterns.Add(property);
-            }
-            else
-            {
-                // Add common collection variations for simple properties
-                normalizedPatterns.Add($"Results[*].{property}");
-                normalizedPatterns.Add($"Items[*].{property}");
-                normalizedPatterns.Add($"Data[*].{property}");
-            }
+            logger.LogDebug("Using direct filtering for {IgnoreCount} ignore patterns", propertiesToIgnore.Count);
         }
-
-        logger.LogInformation("Using direct filtering for {IgnoreCount} ignore patterns (performance optimized)", propertiesToIgnore.Count);
 
         foreach (var difference in result.Differences)
         {
             var shouldIgnore = filterTrailingWhitespaceAtEnd && IsTrailingWhitespaceEquivalentStringDifference(difference);
-            var propertyPath = difference.PropertyName;
 
-            // Fast exact match check
-            if (!shouldIgnore && normalizedPatterns.Contains(propertyPath))
+            if (!shouldIgnore)
             {
-                shouldIgnore = true;
-            }
-            else if (!shouldIgnore)
-            {
-                // Fast wildcard pattern check (only for patterns containing [*])
-                foreach (var pattern in wildcardPatterns)
-                {
-                    if (DoesPropertyMatchWildcardPattern(propertyPath, pattern))
-                    {
-                        shouldIgnore = true;
-                        break;
-                    }
-                }
+                shouldIgnore = matcher.IsMatch(difference.PropertyName);
             }
 
             if (!shouldIgnore)
@@ -1110,9 +1083,9 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             result.Differences.AddRange(filteredDifferences);
         }
 
-        if (ignoredCount > 0)
+        if (ignoredCount > 0 && logger.IsEnabled(LogLevel.Debug))
         {
-            logger.LogInformation(
+            logger.LogDebug(
                 "Direct filtering removed {IgnoredCount} differences from {OriginalCount} total (kept {FilteredCount})",
                 ignoredCount,
                 originalCount,
@@ -1283,9 +1256,9 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         }
 
         // Only log filtering summary if significant differences were filtered and Information level is enabled
-        if (ignoredCount > 0 && logger.IsEnabled(LogLevel.Information))
+        if (ignoredCount > 0 && logger.IsEnabled(LogLevel.Debug))
         {
-            logger.LogInformation(
+            logger.LogDebug(
                 "Pattern matching filtering removed {IgnoredCount} differences from {OriginalCount} total (kept {FilteredCount})",
                 ignoredCount,
                 originalCount,
@@ -1339,6 +1312,114 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         // Check that there's a collection index between prefix and suffix
         var middle = propertyPath.Substring(prefix.Length, propertyPath.Length - prefix.Length - suffix.Length);
         return middle.StartsWith("[", StringComparison.Ordinal) && middle.Contains("]");
+    }
+
+    private sealed class DirectIgnorePathMatcher
+    {
+        private readonly HashSet<string> exactPaths;
+        private readonly List<string> descendantPrefixes;
+        private readonly List<string> collectionPrefixes;
+        private readonly List<Regex> collectionPatternRegexes;
+        private readonly List<Regex> wildcardPatternRegexes;
+
+        public DirectIgnorePathMatcher(IEnumerable<string> ignorePatterns)
+        {
+            exactPaths = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+            descendantPrefixes = new List<string>();
+            collectionPrefixes = new List<string>();
+            collectionPatternRegexes = new List<Regex>();
+            wildcardPatternRegexes = new List<Regex>();
+
+            foreach (var pattern in ignorePatterns
+                .Where(static pattern => !string.IsNullOrWhiteSpace(pattern))
+                .Distinct(System.StringComparer.OrdinalIgnoreCase))
+            {
+                exactPaths.Add(pattern);
+
+                if (pattern.Contains("[*]", StringComparison.Ordinal))
+                {
+                    collectionPatternRegexes.Add(BuildCollectionPatternRegex(pattern));
+                    continue;
+                }
+
+                if (pattern.Contains('*'))
+                {
+                    wildcardPatternRegexes.Add(BuildWildcardPatternRegex(pattern));
+                    continue;
+                }
+
+                descendantPrefixes.Add(pattern + ".");
+                collectionPrefixes.Add(pattern + "[");
+            }
+        }
+
+        public bool IsMatch(string? propertyPath)
+        {
+            if (string.IsNullOrWhiteSpace(propertyPath))
+            {
+                return false;
+            }
+
+            if (exactPaths.Contains(propertyPath))
+            {
+                return true;
+            }
+
+            foreach (var prefix in descendantPrefixes)
+            {
+                if (propertyPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            foreach (var prefix in collectionPrefixes)
+            {
+                if (propertyPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            foreach (var regex in collectionPatternRegexes)
+            {
+                if (regex.IsMatch(propertyPath))
+                {
+                    return true;
+                }
+            }
+
+            foreach (var regex in wildcardPatternRegexes)
+            {
+                if (regex.IsMatch(propertyPath))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static Regex BuildCollectionPatternRegex(string pattern)
+        {
+            var tempPattern = pattern.Replace("[*]", "COLLECTION_INDEX_PLACEHOLDER", StringComparison.Ordinal);
+            var regexPattern = Regex.Escape(tempPattern)
+                .Replace("COLLECTION_INDEX_PLACEHOLDER", @"\[\d+\]", StringComparison.Ordinal);
+
+            return new Regex(
+                $"^{regexPattern}$",
+                RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.ExplicitCapture,
+                RegexTimeout);
+        }
+
+        private static Regex BuildWildcardPatternRegex(string pattern)
+        {
+            var regexPattern = "^" + Regex.Escape(pattern).Replace("\\*", ".*", StringComparison.Ordinal) + "($|\\.)";
+            return new Regex(
+                regexPattern,
+                RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.ExplicitCapture,
+                RegexTimeout);
+        }
     }
 
     /// <summary>

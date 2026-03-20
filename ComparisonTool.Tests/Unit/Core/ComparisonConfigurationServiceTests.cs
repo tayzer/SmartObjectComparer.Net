@@ -262,6 +262,82 @@ public class ComparisonConfigurationServiceTests
     }
 
     [TestMethod]
+    public void FilterIgnoredDifferences_WithLargeIgnoreSetAndIgnoredParentProperty_ShouldFilterNestedDifference()
+    {
+        // Arrange
+        var config = this.service.GetCurrentConfig();
+        var result = new ComparisonResult(config)
+        {
+            Differences = new List<Difference>
+            {
+                new () { PropertyName = "OrderData.Customer.Name", Object1Value = "Old", Object2Value = "New" },
+                new () { PropertyName = "OrderData.Supplier.Name", Object1Value = "Old", Object2Value = "New" },
+            },
+        };
+
+        this.AddPaddingIgnoreRules();
+        this.service.IgnoreProperty("OrderData.Customer");
+
+        // Act
+        var filteredResult = this.service.FilterIgnoredDifferences(result);
+
+        // Assert
+        filteredResult.Differences.Should().ContainSingle(d => d.PropertyName == "OrderData.Supplier.Name");
+    }
+
+    [TestMethod]
+    public void FilterIgnoredDifferences_WithLargeIgnoreSetAndIgnoredCollectionRoot_ShouldFilterCollectionItemDifference()
+    {
+        // Arrange
+        var config = this.service.GetCurrentConfig();
+        var result = new ComparisonResult(config)
+        {
+            Differences = new List<Difference>
+            {
+                new () { PropertyName = "Metadata.Performance.ComponentTimings[3].CallCount", Object1Value = "1", Object2Value = "2" },
+                new () { PropertyName = "Metadata.Version", Object1Value = "1", Object2Value = "2" },
+            },
+        };
+
+        this.AddPaddingIgnoreRules();
+        this.service.IgnoreProperty("Metadata.Performance.ComponentTimings");
+
+        // Act
+        var filteredResult = this.service.FilterIgnoredDifferences(result);
+
+        // Assert
+        filteredResult.Differences.Should().ContainSingle(d => d.PropertyName == "Metadata.Version");
+    }
+
+    [TestMethod]
+    public void FilterIgnoredDifferences_WithLargeIgnoreSetAndWildcardCollectionPattern_ShouldFilterMatchingDifference()
+    {
+        // Arrange
+        var config = this.service.GetCurrentConfig();
+        var result = new ComparisonResult(config)
+        {
+            Differences = new List<Difference>
+            {
+                new () { PropertyName = "OrderData.Items[7].Product.Category.Attributes[2].Name", Object1Value = "Old", Object2Value = "New" },
+                new () { PropertyName = "OrderData.Items[7].Product.Category.Attributes[2].Value", Object1Value = "Old", Object2Value = "New" },
+            },
+        };
+
+        this.AddPaddingIgnoreRules();
+        this.service.AddIgnoreRule(new IgnoreRule
+        {
+            PropertyPath = "OrderData.Items[*].Product.Category.Attributes[*].Name",
+            IgnoreCompletely = true,
+        });
+
+        // Act
+        var filteredResult = this.service.FilterIgnoredDifferences(result);
+
+        // Assert
+        filteredResult.Differences.Should().ContainSingle(d => d.PropertyName == "OrderData.Items[7].Product.Category.Attributes[2].Value");
+    }
+
+    [TestMethod]
     public void AddSmartIgnoreRule_WithValidRule_ShouldAddToSmartRules()
     {
         // Arrange
@@ -413,6 +489,14 @@ public class ComparisonConfigurationServiceTests
         public string? IgnoredProperty
         {
             get; set;
+        }
+    }
+
+    private void AddPaddingIgnoreRules(int count = 10)
+    {
+        for (var index = 0; index < count; index++)
+        {
+            this.service.IgnoreProperty($"Padding.Ignore.{index}");
         }
     }
 }
