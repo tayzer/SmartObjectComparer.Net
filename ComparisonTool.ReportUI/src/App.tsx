@@ -74,6 +74,31 @@ interface PatternCardItem {
 	tone: 'change' | 'raw';
 }
 
+type OutcomeFocusKind = 'all' | 'non-success' | 'comparison-error' | 'http-non-success' | 'status-mismatch' | 'equal-non-success' | 'pair-outcome';
+type ContextTone = 'neutral' | 'warn' | 'danger' | 'ok';
+
+interface OutcomeFocusOption {
+	key: string;
+	label: string;
+	description: string;
+	count: number;
+	kind: OutcomeFocusKind;
+	pairOutcome?: string;
+	tone: ContextTone;
+}
+
+interface ContextChipItem {
+	key: string;
+	label: string;
+	tone: ContextTone;
+	title?: string;
+}
+
+interface PropertyPathDisplay {
+	shortLabel: string;
+	fullPath?: string;
+}
+
 export default function App({ bootstrap, loadError }: AppProps) {
 	if (bootstrap == null) {
 		return (
@@ -98,6 +123,7 @@ function ReportWorkspace({ bootstrap }: { bootstrap: ReportBootstrap }) {
 	const deferredPairSearch = useDeferredValue(pairSearch);
 	const [selectedNodeKey, setSelectedNodeKey] = useState<string | null>(null);
 	const [selectedPatternKey, setSelectedPatternKey] = useState<string | null>(null);
+	const [selectedOutcomeKey, setSelectedOutcomeKey] = useState<string>('outcome/all');
 	const [selectedPairId, setSelectedPairId] = useState<string | null>(null);
 	const [expandedTreeKeys, setExpandedTreeKeys] = useState<Record<string, boolean>>({});
 	const [showFullDiff, setShowFullDiff] = useState(false);
@@ -176,6 +202,8 @@ function ReportWorkspace({ bootstrap }: { bootstrap: ReportBootstrap }) {
 	const allPairs = index?.pairs ?? [];
 	const patternInfoLookup = useMemo(() => buildPatternInfoLookup(index), [index]);
 	const navigatorRoots = useMemo(() => buildNavigatorRoots(allPairs, patternInfoLookup), [allPairs, patternInfoLookup]);
+	const outcomeFocusOptions = useMemo(() => buildOutcomeFocusOptions(allPairs), [allPairs]);
+	const outcomeFocusLookup = useMemo(() => new Map(outcomeFocusOptions.map((option) => [option.key, option] as const)), [outcomeFocusOptions]);
 	const structuredRoot = useMemo(() => navigatorRoots.find((node) => node.key === 'root/structured') ?? null, [navigatorRoots]);
 	const fieldNavigatorRoots = structuredRoot?.children ?? [];
 	const filteredFieldNavigatorRoots = useMemo(
@@ -184,17 +212,43 @@ function ReportWorkspace({ bootstrap }: { bootstrap: ReportBootstrap }) {
 	);
 	const visibleFieldNavigatorRoots = deferredTreeSearch.trim().length > 0 ? filteredFieldNavigatorRoots : fieldNavigatorRoots;
 	const patternCards = useMemo(() => buildPatternCards(navigatorRoots), [navigatorRoots]);
+	const primaryOutcomeOptions = useMemo(
+		() => outcomeFocusOptions.filter((option) => option.kind !== 'pair-outcome'),
+		[outcomeFocusOptions],
+	);
+	const pairOutcomeOptions = useMemo(
+		() => outcomeFocusOptions.filter((option) => option.kind === 'pair-outcome'),
+		[outcomeFocusOptions],
+	);
 	const patternCardLookup = useMemo(() => new Map(patternCards.map((card) => [card.key, card] as const)), [patternCards]);
 	const selectedFieldNode = useMemo(() => findSelectedNode(fieldNavigatorRoots, selectedNodeKey), [fieldNavigatorRoots, selectedNodeKey]);
 	const visibleSelectedFieldNode = useMemo(
 		() => findSelectedNode(visibleFieldNavigatorRoots, selectedNodeKey),
 		[visibleFieldNavigatorRoots, selectedNodeKey],
 	);
+	const selectedOutcomeFocus = useMemo(
+		() => outcomeFocusLookup.get(selectedOutcomeKey) ?? outcomeFocusLookup.get('outcome/all') ?? null,
+		[outcomeFocusLookup, selectedOutcomeKey],
+	);
+	const outcomeFocusActive = selectedOutcomeFocus != null && selectedOutcomeFocus.kind !== 'all';
 	const selectedPatternNode = useMemo(
 		() => (selectedPatternKey == null ? null : patternCardLookup.get(selectedPatternKey) ?? null),
 		[patternCardLookup, selectedPatternKey],
 	);
-	const activeSelectionNode = selectedPatternNode ?? selectedFieldNode;
+	const activeSelectionNode = outcomeFocusActive ? null : selectedPatternNode ?? selectedFieldNode;
+	const activeFieldSelection = activeSelectionNode?.selection.kind === 'field' ? activeSelectionNode.selection : null;
+	const activeFieldDisplay = useMemo(
+		() => (activeFieldSelection?.path != null ? getPropertyPathDisplay(activeFieldSelection.path, 'Structured validation') : null),
+		[activeFieldSelection],
+	);
+
+	useEffect(() => {
+		if (outcomeFocusLookup.has(selectedOutcomeKey)) {
+			return;
+		}
+
+		setSelectedOutcomeKey('outcome/all');
+	}, [outcomeFocusLookup, selectedOutcomeKey]);
 
 	useEffect(() => {
 		if (selectedPatternNode != null || visibleSelectedFieldNode != null) {
@@ -213,21 +267,31 @@ function ReportWorkspace({ bootstrap }: { bootstrap: ReportBootstrap }) {
 
 	const filteredPairs = useMemo(() => {
 		const search = deferredPairSearch.trim().toLowerCase();
-		if (search.length === 0 && selectedPatternNode == null && deferredTreeSearch.trim().length > 0 && visibleFieldNavigatorRoots.length === 0) {
+		if (search.length === 0 && selectedPatternNode == null && !outcomeFocusActive && deferredTreeSearch.trim().length > 0 && visibleFieldNavigatorRoots.length === 0) {
 			return [];
 		}
 
-		let base = search.length > 0 ? [...allPairs] : allPairs.filter((pair) => getPairStatus(pair) !== 'equal');
+		let base = allPairs;
 
 		if (search.length > 0) {
 			base = base.filter((pair) => pairMatchesGlobalPairSearch(pair, search));
+		} else if (outcomeFocusActive) {
+			base = allPairs;
 		} else {
-			base = base.filter((pair) => pairMatchesSelection(pair, activeSelectionNode?.selection ?? null, patternInfoLookup));
+			if (activeSelectionNode != null) {
+				base = base.filter((pair) => pairMatchesSelection(pair, activeSelectionNode.selection, patternInfoLookup));
+			} else if (!outcomeFocusActive) {
+				base = base.filter((pair) => getPairStatus(pair) !== 'equal');
+			}
+		}
+
+		if (selectedOutcomeFocus != null && selectedOutcomeFocus.kind !== 'all') {
+			base = base.filter((pair) => matchesOutcomeFocus(pair, selectedOutcomeFocus));
 		}
 
 		return base
 			.sort((left, right) => comparePairs(left, right));
-	}, [activeSelectionNode, allPairs, deferredPairSearch, deferredTreeSearch, patternInfoLookup, selectedPatternNode, visibleFieldNavigatorRoots.length]);
+	}, [activeSelectionNode, allPairs, deferredPairSearch, deferredTreeSearch, outcomeFocusActive, patternInfoLookup, selectedOutcomeFocus, selectedPatternNode, visibleFieldNavigatorRoots.length]);
 
 	useEffect(() => {
 		if (filteredPairs.length === 0) {
@@ -302,7 +366,7 @@ function ReportWorkspace({ bootstrap }: { bootstrap: ReportBootstrap }) {
 
 	useEffect(() => {
 		setShowFullDiff(false);
-	}, [selectedPairId, selectedNodeKey, selectedPatternKey]);
+	}, [selectedOutcomeKey, selectedPairId, selectedNodeKey, selectedPatternKey]);
 
 	const selectedDetail = useMemo(() => {
 		if (selectedPair == null) {
@@ -338,24 +402,11 @@ function ReportWorkspace({ bootstrap }: { bootstrap: ReportBootstrap }) {
 
 	const hasFieldFilterNoResults = deferredTreeSearch.trim().length > 0 && visibleFieldNavigatorRoots.length === 0;
 	const hasGlobalPairSearch = deferredPairSearch.trim().length > 0;
-	const selectionTitle = hasGlobalPairSearch
-		? `File-pair name search: ${deferredPairSearch.trim()}`
-		: selectedPatternNode != null
-		? selectedPatternNode.label
-		: hasFieldFilterNoResults
-			? 'No matching field/property nodes'
-			: activeSelectionNode?.selection.label ?? 'Structured validation';
-	const selectionDescription = hasGlobalPairSearch
-		? 'Showing every file pair whose file name or request path matches the current search.'
-		: selectedPatternNode != null
-		? selectedPatternNode.description ?? 'File pairs matching the selected common difference.'
-		: hasFieldFilterNoResults
-			? 'The current field/property filter returned no matching nodes.'
-			: activeSelectionNode?.selection.description ?? 'Select a field/property or common difference to focus the file pairs.';
 	const selectedChunkLoading = selectedPair == null ? false : loadingChunks[selectedPair.detailChunkId] === true;
 	const reviewSummary = buildReviewSummary(allPairs, reviewStates);
 	const selectedReviewStatus = selectedPair == null ? 'unreviewed' : getReviewStatus(reviewStates, selectedPair.pairId);
 	const displayMatchedEvidence = matchedEvidence.length > 0;
+	const selectedPairContextItems = selectedPair == null ? [] : getPairResponseContextItems(selectedPair);
 
 	function updatePairReviewStatus(pairId: string, status: Exclude<ReviewStatus, 'unreviewed'>) {
 		setReviewStates((current) => {
@@ -380,10 +431,10 @@ function ReportWorkspace({ bootstrap }: { bootstrap: ReportBootstrap }) {
 		<div className="parity-shell">
 			<header className="panel panel-hero parity-header">
 				<div>
-					<p className="eyebrow">React parity workspace</p>
-					<h1 className="title">Structured validation first</h1>
+					<p className="eyebrow">Comparison report</p>
+					<h1 className="title">Review structured differences first</h1>
 					<p className="subtitle">
-						{formatCommandLabel(report.command)} • {index.totalPairs} pairs • Generated {formatDateTime(report.generatedAt)}
+						{formatCommandLabel(report.command)} report • {index.totalPairs} pairs • Generated {formatDateTime(report.generatedAt)}
 					</p>
 				</div>
 				<div className="parity-header-metrics">
@@ -395,124 +446,210 @@ function ReportWorkspace({ bootstrap }: { bootstrap: ReportBootstrap }) {
 			</header>
 
 			<section className="panel parity-row-panel">
-				<div className="panel-header compact-header">
-					<div>
-						<h2 className="section-title">Difference navigator</h2>
-						<p className="muted">Choose a field or property first. The file-pair list below will switch to only the affected files.</p>
-					</div>
-				</div>
 				<div className="panel-body parity-row-body">
-					<div className="navigator-summary-row">
-						<input
-							className="search-input parity-row-search"
-							placeholder="Filter fields and properties"
-							value={treeSearch}
-							onChange={(event) => setTreeSearch(event.target.value)}
-						/>
-						<span className="state-pill">{countLeafNodes(fieldNavigatorRoots)} field/property leaves</span>
-						<div className="toolbar-cluster">
-							<button className="toolbar-button" onClick={() => setExpandedTreeKeys(expandAllNodes(visibleFieldNavigatorRoots))} type="button">
-								Expand all
-							</button>
-							<button className="toolbar-button" onClick={() => setExpandedTreeKeys(collapseAllNodes(visibleFieldNavigatorRoots))} type="button">
-								Collapse all
-							</button>
-						</div>
-					</div>
-					<div className="navigator-tree parity-row-scroll">
-						{visibleFieldNavigatorRoots.length === 0 ? (
-							<div className="empty-state compact-empty-state">
-								<strong>No field or property nodes match the current filter</strong>
-								<p className="muted">Clear the field filter to restore the full navigator.</p>
+					<div className="focus-control-grid">
+						<section className="focus-section focus-section-primary">
+							<div className="focus-section-header">
+								<h3 className="section-title">Field path navigator</h3>
 							</div>
-						) : (
-							visibleFieldNavigatorRoots.map((node) => (
-								<NavigatorTreeNode
-									key={node.key}
-									node={node}
-									expandedKeys={expandedTreeKeys}
-									onToggle={(key) => setExpandedTreeKeys((current) => ({ ...current, [key]: !current[key] }))}
-									onSelect={(key) => {
-										setSelectedPatternKey(null);
-										setSelectedNodeKey(key);
-										setExpandedTreeKeys((current) => ({ ...current, ...expandPathKeys(key) }));
-									}}
-									selectedKey={selectedPatternKey == null ? selectedNodeKey : null}
-								/>
-							))
-						)}
+							<div className="focus-section-content focus-section-content-navigator">
+								<div className="navigator-summary-row">
+									<input
+										className="search-input parity-row-search"
+										placeholder="Filter fields and properties"
+										value={treeSearch}
+										onChange={(event) => setTreeSearch(event.target.value)}
+									/>
+									<span className="state-pill">{countLeafNodes(fieldNavigatorRoots)} field/property leaves</span>
+									<div className="toolbar-cluster">
+										<button className="toolbar-button" onClick={() => setExpandedTreeKeys(expandAllNodes(visibleFieldNavigatorRoots))} type="button">
+											Expand all
+										</button>
+										<button className="toolbar-button" onClick={() => setExpandedTreeKeys(collapseAllNodes(visibleFieldNavigatorRoots))} type="button">
+											Collapse all
+										</button>
+									</div>
+								</div>
+								<div className="navigator-tree parity-row-scroll navigator-tree-fill">
+									{visibleFieldNavigatorRoots.length === 0 ? (
+										<div className="empty-state compact-empty-state">
+											<strong>No field or property nodes match the current filter</strong>
+											<p className="muted">Clear the field filter to restore the full navigator.</p>
+										</div>
+									) : (
+										visibleFieldNavigatorRoots.map((node) => (
+											<NavigatorTreeNode
+												key={node.key}
+												node={node}
+												expandedKeys={expandedTreeKeys}
+												onToggle={(key) => setExpandedTreeKeys((current) => ({ ...current, [key]: !current[key] }))}
+												onSelect={(key) => {
+													setSelectedOutcomeKey('outcome/all');
+													setSelectedPatternKey(null);
+													setSelectedNodeKey(key);
+													setExpandedTreeKeys((current) => ({ ...current, ...expandPathKeys(key) }));
+												}}
+												selectedKey={selectedPatternKey == null && !outcomeFocusActive ? selectedNodeKey : null}
+											/>
+										))
+									)}
+								</div>
+							</div>
+						</section>
+
+						<div className="focus-section-stack">
+							<section className="focus-section focus-section-outcomes">
+								<div className="focus-section-header">
+									<h3 className="section-title">Response outcomes</h3>
+									{selectedOutcomeFocus != null && selectedOutcomeFocus.kind !== 'all' ? (
+										<button className="toolbar-button" onClick={() => setSelectedOutcomeKey('outcome/all')} type="button">
+											Clear outcome focus
+										</button>
+									) : null}
+								</div>
+								<div className="focus-section-content focus-section-content-outcomes">
+									<div className="outcome-focus-grid outcome-focus-grid-fill">
+										{primaryOutcomeOptions.map((option) => {
+											const active = selectedOutcomeKey === option.key;
+											const disabled = option.kind !== 'all' && option.count === 0;
+											return (
+												<button
+													className={`outcome-focus-card ${active ? 'active' : ''}`}
+													disabled={disabled}
+													key={option.key}
+													onClick={() => {
+														setSelectedPatternKey(null);
+														setSelectedOutcomeKey(option.key);
+													}}
+													type="button"
+												>
+													<div className="outcome-focus-card-header">
+														<span className={`badge context-chip tone-${option.tone}`}>{option.label}</span>
+														<strong>{option.count}</strong>
+													</div>
+													<p className="muted">{option.description}</p>
+												</button>
+											);
+										})}
+									</div>
+									{pairOutcomeOptions.length > 0 ? (
+										<div className="outcome-chip-block">
+											<div className="focus-section-subheader">
+												<strong>Pair outcome labels</strong>
+												<p className="muted">Exact labels already emitted into the report data.</p>
+											</div>
+											<div className="chip-row outcome-chip-row">
+												{pairOutcomeOptions.map((option) => (
+													<button
+														className={`chip-button outcome-chip-button ${selectedOutcomeKey === option.key ? 'active' : ''}`}
+														key={option.key}
+														onClick={() => {
+															setSelectedPatternKey(null);
+															setSelectedOutcomeKey(option.key);
+														}}
+														title={option.description}
+														type="button"
+													>
+														<span>{option.label}</span>
+														<span className="badge">{option.count}</span>
+													</button>
+												))}
+											</div>
+										</div>
+									) : null}
+								</div>
+							</section>
+
+							{patternCards.length > 0 ? (
+								<section className="focus-section focus-section-patterns">
+									<div className="focus-section-header">
+										<h3 className="section-title">Recurring difference patterns</h3>
+										{selectedPatternNode != null ? (
+											<button className="toolbar-button" onClick={() => setSelectedPatternKey(null)} type="button">
+												Clear pattern focus
+											</button>
+										) : null}
+									</div>
+									<div className="focus-section-content focus-section-content-patterns">
+										<div className="branch-list common-pattern-list pattern-branch-list fill-scroll-region">
+											{patternCards.map((card) => (
+												<button
+													className={`branch-row ${selectedPatternKey === card.key ? 'active' : ''}`}
+													key={card.key}
+													onClick={() => {
+														setSelectedOutcomeKey('outcome/all');
+														setSelectedPatternKey(card.key);
+													}}
+													type="button"
+												>
+													<div className="branch-row-header">
+														<div>
+															<div className="branch-row-title">{card.label}</div>
+															<div className="branch-row-path">{card.groupLabel}</div>
+														</div>
+														<div className="branch-row-statuses">
+															<span className="badge">{card.count} pairs</span>
+															<span className="state-pill">Focus results</span>
+														</div>
+													</div>
+													<div className="branch-row-preview">
+														<div className="branch-row-preview-change">{card.description ?? 'Jump directly to the matching file pairs.'}</div>
+													</div>
+												</button>
+											))}
+										</div>
+									</div>
+								</section>
+							) : null}
+						</div>
 					</div>
 				</div>
 			</section>
-
-			{patternCards.length > 0 ? (
-				<section className="panel parity-row-panel">
-					<div className="panel-header compact-header">
-						<div>
-							<h2 className="section-title">Common differences</h2>
-							<p className="muted">Recurring exact changes and raw diff clusters are broken out separately for fast jump-to-files workflow.</p>
-						</div>
-						{selectedPatternNode != null ? (
-							<button className="toolbar-button" onClick={() => setSelectedPatternKey(null)} type="button">
-								Return to field navigator
-							</button>
-						) : null}
-					</div>
-					<div className="panel-body parity-row-body">
-						<div className="branch-list common-pattern-list">
-							{patternCards.map((card) => (
-								<button
-									className={`branch-row ${selectedPatternKey === card.key ? 'active' : ''}`}
-									key={card.key}
-									onClick={() => setSelectedPatternKey(card.key)}
-									type="button"
-								>
-									<div className="branch-row-header">
-										<div>
-											<div className="branch-row-title">{card.label}</div>
-											<div className="branch-row-path">{card.groupLabel}</div>
-										</div>
-										<div className="branch-row-statuses">
-											<span className="badge">{card.count} pairs</span>
-											<span className="state-pill">Focus files</span>
-										</div>
-									</div>
-									<div className="branch-row-preview">
-										<div className="branch-row-preview-change">{card.description ?? 'Jump directly to the matching file pairs.'}</div>
-									</div>
-								</button>
-							))}
-						</div>
-					</div>
-				</section>
-			) : null}
 
 			<div className="parity-main-grid">
 				<section className="panel parity-branch-panel">
 						<div className="panel-header compact-header">
 							<div>
-								<p className="eyebrow">Level 2: File pairs</p>
-								<h2 className="section-title">{selectionTitle}</h2>
-								<p className="muted">{selectionDescription}</p>
+								<p className="eyebrow">Matching pairs</p>
+								<h2 className="section-title">Results</h2>
+								<p className="muted">Use the focus controls above to narrow the list, then select a pair to inspect its detail on the right.</p>
 							</div>
 							<div className="toolbar-cluster">
 								<span className="state-pill">{filteredPairs.length} matching pairs</span>
 								{selectedPatternNode != null ? (
 									<button className="toolbar-button" onClick={() => setSelectedPatternKey(null)} type="button">
-										Back to fields
+										Clear pattern focus
 									</button>
 								) : null}
 							</div>
 						</div>
 						<div className="panel-body parity-branch-body">
+							<div className="badge-row focus-summary-row">
+								{hasGlobalPairSearch ? <span className="state-pill">Search: {deferredPairSearch.trim()}</span> : null}
+								{!hasGlobalPairSearch && activeFieldDisplay != null ? (
+									<span className="chip" title={activeFieldDisplay.fullPath ?? undefined}>Field: {activeFieldDisplay.shortLabel}</span>
+								) : null}
+								{!hasGlobalPairSearch && selectedPatternNode != null ? (
+									<span className="chip" title={selectedPatternNode.description ?? undefined}>Pattern: {selectedPatternNode.label}</span>
+								) : null}
+								{selectedOutcomeFocus != null && selectedOutcomeFocus.kind !== 'all' ? (
+									<span className={`chip context-chip tone-${selectedOutcomeFocus.tone}`} title={selectedOutcomeFocus.description}>Outcome: {selectedOutcomeFocus.label}</span>
+								) : null}
+								{!hasGlobalPairSearch && activeFieldDisplay == null && selectedPatternNode == null && (selectedOutcomeFocus == null || selectedOutcomeFocus.kind === 'all') ? (
+									<span className="muted">Showing pairs that currently need attention.</span>
+								) : null}
+								{hasFieldFilterNoResults && !hasGlobalPairSearch && selectedPatternNode == null ? (
+									<span className="chip">Field filter returned no matches</span>
+								) : null}
+							</div>
 							<div className="parity-branch-toolbar">
 								<input
 									className="search-input"
-									placeholder="Search all file pairs by file name or request path"
+									placeholder="Search matching pairs by file, request path, or preview text"
 									value={pairSearch}
 									onChange={(event) => setPairSearch(event.target.value)}
 								/>
-								<p className="muted pair-search-note">Name search spans the entire report and temporarily overrides field/common-difference focus so you can jump straight to a known pair.</p>
+								<p className="muted pair-search-note">Name search spans the entire report and overrides field/pattern focus so you can jump straight to a known pair. Response outcome focus still applies.</p>
 							</div>
 							<div className="review-summary-row">
 								<ReviewBadge status="unreviewed" count={reviewSummary.unreviewed} />
@@ -520,16 +657,17 @@ function ReportWorkspace({ bootstrap }: { bootstrap: ReportBootstrap }) {
 								<ReviewBadge status="accepted-difference" count={reviewSummary['accepted-difference']} />
 								<ReviewBadge status="bug-identified" count={reviewSummary['bug-identified']} />
 							</div>
-							<div className="branch-list">
+							<div className="branch-list results-branch-list">
 								{filteredPairs.length === 0 ? (
 									<div className="empty-state compact-empty-state">
-										<strong>No file pairs match this tree node</strong>
-										<p className="muted">Pick another field/common difference or broaden the global file-pair name search.</p>
+										<strong>No file pairs match the current focus</strong>
+										<p className="muted">Adjust the field path, recurring pattern, response outcome, or file-pair search to broaden the result set.</p>
 									</div>
 								) : (
 									filteredPairs.map((pair) => {
 										const active = pair.pairId === selectedPairId;
 										const reviewStatus = getReviewStatus(reviewStates, pair.pairId);
+										const responseContextItems = getPairResponseContextItems(pair);
 										return (
 											<button
 												className={`branch-row ${active ? 'active' : ''}`}
@@ -551,10 +689,15 @@ function ReportWorkspace({ bootstrap }: { bootstrap: ReportBootstrap }) {
 													<div className="branch-row-preview-label">{getPairPreviewLabel(pair)}</div>
 													<div className="branch-row-preview-change">{getPairPreviewChange(pair)}</div>
 												</div>
-												<div className="badge-row top-gap-tight">
+												<div className="badge-row top-gap-tight branch-row-context">
 													<span className="badge">{pair.differenceCount} issues</span>
+													{responseContextItems.map((item) => (
+														<span className={`chip compact-chip context-chip tone-${item.tone}`} key={item.key} title={item.title}>
+															{item.label}
+														</span>
+													))}
 													{pair.affectedFields.slice(0, 2).map((field) => (
-														<span className="chip compact-chip" key={field}>{field}</span>
+														<PathChip key={field} path={field} />
 													))}
 												</div>
 											</button>
@@ -568,9 +711,18 @@ function ReportWorkspace({ bootstrap }: { bootstrap: ReportBootstrap }) {
 					<section className="panel parity-leaf-panel">
 						<div className="panel-header compact-header">
 							<div>
-								<p className="eyebrow">Level 3: Deep dive</p>
-								<h2 className="section-title">{selectedPair?.file1 ?? 'Select a file pair'}</h2>
-								<p className="muted">The default view stays analytical. Full XML remains collapsed until you ask for it.</p>
+								<p className="eyebrow">Selected pair detail</p>
+								<h2 className="section-title">{selectedPair != null ? `#${selectedPair.index} ${selectedPair.file1}` : 'Select a pair'}</h2>
+								<p className="muted">{selectedPair != null ? selectedPair.requestRelativePath ?? selectedPair.file2 : 'Select a pair from the results list to inspect its detail.'}</p>
+								{selectedPair != null && selectedPairContextItems.length > 0 ? (
+									<div className="badge-row top-gap-tight">
+										{selectedPairContextItems.map((item) => (
+											<span className={`chip compact-chip context-chip tone-${item.tone}`} key={item.key} title={item.title}>
+												{item.label}
+											</span>
+										))}
+									</div>
+								) : null}
 							</div>
 							{selectedPair != null ? (
 								<div className="toolbar-cluster">
@@ -595,9 +747,14 @@ function ReportWorkspace({ bootstrap }: { bootstrap: ReportBootstrap }) {
 							) : (
 								<>
 									<div className="detail-topline">
-										<span className="badge">{formatPairStatus(getPairStatus(selectedPair))}</span>
+										<PairStatusBadge pair={selectedPair} />
 										<ReviewBadge status={selectedReviewStatus} />
 										<span className="badge">{selectedPair.differenceCount} detected differences</span>
+										{selectedPairContextItems.map((item) => (
+											<span className={`chip context-chip tone-${item.tone}`} key={item.key} title={item.title}>
+												{item.label}
+											</span>
+										))}
 										{selectedPair.requestRelativePath ? <span className="chip">{selectedPair.requestRelativePath}</span> : null}
 									</div>
 
@@ -633,7 +790,7 @@ function ReportWorkspace({ bootstrap }: { bootstrap: ReportBootstrap }) {
 															return (
 																<div className="structured-item active" key={match.key}>
 																	<div className="structured-item-header">
-																		<strong>{difference.propertyName || 'Changed value'}</strong>
+																		<PropertyPathHeading path={difference.propertyName} />
 																		<span className="state-pill active">Focused from tree</span>
 																	</div>
 																	<div className="structured-diff-grid">
@@ -691,7 +848,7 @@ function ReportWorkspace({ bootstrap }: { bootstrap: ReportBootstrap }) {
 																key={key}
 															>
 																<div className="structured-item-header">
-																	<strong>{difference.propertyName || 'Changed value'}</strong>
+																	<PropertyPathHeading path={difference.propertyName} />
 																</div>
 																<div className="structured-diff-grid">
 																	<div className="structured-value expected">
@@ -796,6 +953,27 @@ function ReviewBadge({ status, count }: { status: ReviewStatus; count?: number }
 	return <span className={className}>{count == null ? label : `${label} ${count}`}</span>;
 }
 
+function PathChip({ path }: { path: string }) {
+	const display = getPropertyPathDisplay(path, path);
+	return (
+		<span className="chip compact-chip property-chip" title={display.fullPath ?? undefined}>
+			{display.shortLabel}
+		</span>
+	);
+}
+
+function PropertyPathHeading({ path }: { path?: string | null }) {
+	const display = getPropertyPathDisplay(path, 'Changed value');
+	return (
+		<span className="property-path-heading" title={display.fullPath ?? undefined}>
+			<strong>{display.shortLabel}</strong>
+			{display.fullPath != null && display.fullPath !== display.shortLabel ? (
+				<span className="muted property-path-secondary">{display.fullPath}</span>
+			) : null}
+		</span>
+	);
+}
+
 function NavigatorTreeNode({
 	node,
 	expandedKeys,
@@ -816,19 +994,26 @@ function NavigatorTreeNode({
 	return (
 		<div className="navigator-node-wrap">
 			<div className={`navigator-node ${isSelected ? 'selected' : ''}`} style={{ paddingLeft: `${12 + node.depth * 18}px` }}>
+				{hasChildren ? (
+					<button
+						aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${node.label}`}
+						className="navigator-expander"
+						onClick={() => onToggle(node.key)}
+						type="button"
+					>
+						<span className="navigator-expander-icon">{isExpanded ? '▾' : '▸'}</span>
+					</button>
+				) : (
+					<span aria-hidden="true" className="navigator-expander-spacer" />
+				)}
 				<button className="navigator-node-main" onClick={() => onSelect(node.key)} type="button">
-					<span className={`navigator-icon ${node.icon}`}>{renderNodeIcon(node.icon, hasChildren, isExpanded)}</span>
+					<span className={`navigator-icon ${node.icon}`}>{renderNodeIcon(node.icon, hasChildren)}</span>
 					<span className="navigator-node-copy">
 						<strong>{node.label}</strong>
 						{node.description ? <span className="muted navigator-node-description">{node.description}</span> : null}
 					</span>
 				</button>
 				<span className="badge navigator-count">{node.count}</span>
-				{hasChildren ? (
-					<button className="navigator-toggle" onClick={() => onToggle(node.key)} type="button">
-						{isExpanded ? '−' : '+'}
-					</button>
-				) : null}
 			</div>
 			{hasChildren && isExpanded ? node.children.map((child) => (
 				<NavigatorTreeNode
@@ -868,8 +1053,8 @@ function FullXmlDiffViewer({ document }: { document: DiffDocument }) {
 function MetricCard({ label, value, tone }: { label: string; value: number | string; tone: 'ok' | 'warn' | 'danger' | 'neutral' }) {
 	return (
 		<div className={`metric-card ${tone}`}>
+			<span className="metric-card-label">{label}</span>
 			<strong>{value}</strong>
-			<span className="muted">{label}</span>
 		</div>
 	);
 }
@@ -1374,7 +1559,7 @@ function expandPathKeys(key: string): Record<string, boolean> {
 	return expanded;
 }
 
-function renderNodeIcon(icon: NavigatorNode['icon'], hasChildren: boolean, expanded: boolean): string {
+function renderNodeIcon(icon: NavigatorNode['icon'], hasChildren: boolean): string {
 	if (icon === 'pattern') {
 		return '#';
 	}
@@ -1383,11 +1568,221 @@ function renderNodeIcon(icon: NavigatorNode['icon'], hasChildren: boolean, expan
 		return '~';
 	}
 
+	if (icon === 'group') {
+		return '≡';
+	}
+
 	if (hasChildren) {
-		return expanded ? '▾' : '▸';
+		return '◦';
 	}
 
 	return '•';
+}
+
+function buildOutcomeFocusOptions(pairs: PairSummary[]): OutcomeFocusOption[] {
+	const pairOutcomeCounts = new Map<string, number>();
+	for (const pair of pairs) {
+		const pairOutcome = pair.pairOutcome?.trim();
+		if (pairOutcome != null && pairOutcome !== '') {
+			pairOutcomeCounts.set(pairOutcome, (pairOutcomeCounts.get(pairOutcome) ?? 0) + 1);
+		}
+	}
+
+	const primaryOptions = [
+		{
+			key: 'outcome/all',
+			label: 'All pairs',
+			description: 'Reset response outcome focus and keep the standard results behavior.',
+			count: pairs.length,
+			kind: 'all',
+			tone: 'neutral',
+		},
+		{
+			key: 'outcome/non-success',
+			label: 'Non-success / failed',
+			description: 'Comparison errors, non-2xx statuses, or explicit failed outcome labels.',
+			count: pairs.filter((pair) => isPairNonSuccess(pair)).length,
+			kind: 'non-success',
+			tone: 'warn',
+		},
+		{
+			key: 'outcome/comparison-error',
+			label: 'Comparison errors',
+			description: 'Pairs where the comparison itself failed before review could start.',
+			count: pairs.filter((pair) => pair.hasError).length,
+			kind: 'comparison-error',
+			tone: 'danger',
+		},
+		{
+			key: 'outcome/http-non-success',
+			label: 'HTTP non-success',
+			description: 'Any response pair with a non-2xx status in A or B.',
+			count: pairs.filter((pair) => hasHttpNonSuccess(pair)).length,
+			kind: 'http-non-success',
+			tone: 'warn',
+		},
+		{
+			key: 'outcome/status-mismatch',
+			label: 'Status mismatch',
+			description: 'A and B returned different HTTP status codes.',
+			count: pairs.filter((pair) => hasStatusMismatch(pair)).length,
+			kind: 'status-mismatch',
+			tone: 'warn',
+		},
+		{
+			key: 'outcome/equal-non-success',
+			label: 'Equal but non-success',
+			description: 'Pairs marked equal by comparison rules but still carrying non-success outcome context.',
+			count: pairs.filter((pair) => pair.areEqual && isPairNonSuccess(pair)).length,
+			kind: 'equal-non-success',
+			tone: 'ok',
+		},
+	] satisfies OutcomeFocusOption[];
+
+	const pairOutcomeOptions = [...pairOutcomeCounts.entries()]
+		.sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+		.map<OutcomeFocusOption>(([pairOutcome, count]) => ({
+			key: `outcome/pair/${pairOutcome}`,
+			label: pairOutcome,
+			description: `Focus file pairs whose pairOutcome is exactly "${pairOutcome}".`,
+			count,
+			kind: 'pair-outcome' as const,
+			pairOutcome,
+			tone: isNonSuccessOutcomeLabel(pairOutcome) ? 'warn' : 'neutral',
+		}));
+
+	return [...primaryOptions.filter((option) => option.kind === 'all' || option.count > 0), ...pairOutcomeOptions];
+}
+
+function matchesOutcomeFocus(pair: PairSummary, option: OutcomeFocusOption): boolean {
+	switch (option.kind) {
+		case 'all':
+			return true;
+		case 'non-success':
+			return isPairNonSuccess(pair);
+		case 'comparison-error':
+			return pair.hasError;
+		case 'http-non-success':
+			return hasHttpNonSuccess(pair);
+		case 'status-mismatch':
+			return hasStatusMismatch(pair);
+		case 'equal-non-success':
+			return pair.areEqual && isPairNonSuccess(pair);
+		case 'pair-outcome':
+			return (pair.pairOutcome?.trim() ?? '') === (option.pairOutcome ?? '');
+		default:
+			return true;
+	}
+}
+
+function getPairResponseContextItems(pair: PairSummary): ContextChipItem[] {
+	const items: ContextChipItem[] = [];
+	const pairOutcome = pair.pairOutcome?.trim();
+	if (pairOutcome != null && pairOutcome !== '') {
+		items.push({
+			key: `outcome:${pairOutcome}`,
+			label: `Outcome: ${pairOutcome}`,
+			tone: isNonSuccessOutcomeLabel(pairOutcome) ? 'warn' : 'neutral',
+			title: `pairOutcome: ${pairOutcome}`,
+		});
+	}
+
+	if (pair.httpStatusA != null) {
+		items.push({
+			key: `http-status-a:${pair.httpStatusA}`,
+			label: `A ${pair.httpStatusA}`,
+			tone: isHttpSuccessStatus(pair.httpStatusA) ? 'ok' : 'warn',
+			title: `Response A HTTP status ${pair.httpStatusA}`,
+		});
+	}
+
+	if (pair.httpStatusB != null) {
+		items.push({
+			key: `http-status-b:${pair.httpStatusB}`,
+			label: `B ${pair.httpStatusB}`,
+			tone: isHttpSuccessStatus(pair.httpStatusB) ? 'ok' : 'warn',
+			title: `Response B HTTP status ${pair.httpStatusB}`,
+		});
+	}
+
+	if (hasStatusMismatch(pair)) {
+		items.push({
+			key: 'status-mismatch',
+			label: 'Status mismatch',
+			tone: 'warn',
+			title: `A returned ${pair.httpStatusA}, B returned ${pair.httpStatusB}`,
+		});
+	}
+
+	if (pair.hasError) {
+		items.push({
+			key: 'comparison-error',
+			label: 'Comparison error',
+			tone: 'danger',
+			title: pair.errorMessage ?? 'The comparison engine reported an error.',
+		});
+	}
+
+	return items;
+}
+
+function getPropertyPathDisplay(path: string | null | undefined, fallback: string): PropertyPathDisplay {
+	const fullPath = path?.trim();
+	if (fullPath == null || fullPath === '') {
+		return { shortLabel: fallback };
+	}
+
+	const segments = splitPropertyPath(fullPath);
+	if (segments.length <= 2) {
+		return { shortLabel: fullPath, fullPath };
+	}
+
+	return {
+		shortLabel: segments.slice(-2).join('.'),
+		fullPath,
+	};
+}
+
+function hasHttpNonSuccess(pair: PairSummary): boolean {
+	return isNonSuccessHttpStatus(pair.httpStatusA) || isNonSuccessHttpStatus(pair.httpStatusB);
+}
+
+function hasStatusMismatch(pair: PairSummary): boolean {
+	return pair.httpStatusA != null && pair.httpStatusB != null && pair.httpStatusA !== pair.httpStatusB;
+}
+
+function isPairNonSuccess(pair: PairSummary): boolean {
+	return pair.hasError || hasHttpNonSuccess(pair) || isNonSuccessOutcomeLabel(pair.pairOutcome);
+}
+
+function isHttpSuccessStatus(status: number | null | undefined): boolean {
+	return status != null && status >= 200 && status < 300;
+}
+
+function isNonSuccessHttpStatus(status: number | null | undefined): boolean {
+	return status != null && !isHttpSuccessStatus(status);
+}
+
+function isNonSuccessOutcomeLabel(value: string | null | undefined): boolean {
+	const normalized = value?.trim().toLowerCase();
+	if (normalized == null || normalized === '') {
+		return false;
+	}
+
+	if (/(error|fail|failed|timeout|timed out|abort|aborted|cancel|cancelled|exception|invalid|mismatch|non-?success|unsuccess|not found|unauthorized|forbidden)/.test(normalized)) {
+		return true;
+	}
+
+	const statusCodes = normalized.match(/\b\d{3}\b/g);
+	if (statusCodes?.some((valueMatch) => !isHttpSuccessStatus(Number(valueMatch)))) {
+		return true;
+	}
+
+	if (/(^|\b)(success|successful|ok|passed|pass|equal|matched|same)(\b|$)/.test(normalized)) {
+		return false;
+	}
+
+	return false;
 }
 
 function getPatternKindFromKey(key: string): string {
