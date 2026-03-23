@@ -1,4 +1,5 @@
 using ComparisonTool.Core.Comparison.Configuration;
+using ComparisonTool.Core.Comparison.Results;
 using FluentAssertions;
 using KellermanSoftware.CompareNetObjects;
 using KellermanSoftware.CompareNetObjects.TypeComparers;
@@ -117,6 +118,46 @@ public class PropertySpecificCollectionOrderComparerTests
 
         result.AreEqual.Should().BeTrue();
         result.Differences.Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public void Compare_WithDuplicateCandidateKeys_ShouldRecordCollectionOrderFallbackTiming()
+    {
+        var logger = new TestLogger();
+        var compareLogic = CreateCompareLogic(
+            ignoreCollectionOrder: false,
+            logger: logger,
+            propertiesToIgnoreOrder: "Items");
+        var phaseTimings = new ComparisonPhaseTimingContext("unit-test");
+
+        var left = new ComplexOnlyContainer
+        {
+            Items = new List<ComplexOnlyItem>
+            {
+                new() { Child = new ComplexChild { Value = "A" } },
+                new() { Child = new ComplexChild { Value = "B" } },
+            },
+        };
+
+        var right = new ComplexOnlyContainer
+        {
+            Items = new List<ComplexOnlyItem>
+            {
+                new() { Child = new ComplexChild { Value = "B" } },
+                new() { Child = new ComplexChild { Value = "A" } },
+            },
+        };
+
+        using var scope = ComparisonPhaseTimingScope.Push(phaseTimings);
+
+        var result = compareLogic.Compare(left, right);
+        var snapshot = phaseTimings.CreateSnapshot();
+
+        result.Should().NotBeNull();
+        logger.WarningMessages.Should().ContainSingle(message => message.Contains("falling back to O(n²) comparison", StringComparison.Ordinal));
+        snapshot.CollectionOrderFallbackCount.Should().Be(1);
+        snapshot.CollectionOrderDeterministicOrderingMs.Should().BeGreaterThanOrEqualTo(0);
+        snapshot.CollectionOrderFallbackMs.Should().BeGreaterThanOrEqualTo(0);
     }
 
     [TestMethod]
@@ -280,6 +321,11 @@ public class PropertySpecificCollectionOrderComparerTests
         public List<NamedItem> Items { get; set; } = new List<NamedItem>();
     }
 
+    private sealed class ComplexOnlyContainer
+    {
+        public List<ComplexOnlyItem> Items { get; set; } = new List<ComplexOnlyItem>();
+    }
+
     private sealed class IdentifiedItem
     {
         public int Id
@@ -300,6 +346,22 @@ public class PropertySpecificCollectionOrderComparerTests
             get; set;
         }
 
+        public string? Value
+        {
+            get; set;
+        }
+    }
+
+    private sealed class ComplexOnlyItem
+    {
+        public ComplexChild? Child
+        {
+            get; set;
+        }
+    }
+
+    private sealed class ComplexChild
+    {
         public string? Value
         {
             get; set;

@@ -4,11 +4,14 @@ using System;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using KellermanSoftware.CompareNetObjects;
 using KellermanSoftware.CompareNetObjects.TypeComparers;
+using ComparisonTool.Core.Comparison.Results;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -41,6 +44,10 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
     };
 
     private static readonly ConcurrentDictionary<(Type Type, string PropertyName), PropertyInfo?> IdentifierPropertyCache = new();
+    private static readonly ConcurrentDictionary<Type, PropertyInfo[]> ReadablePropertyCache = new();
+    private static readonly ConcurrentDictionary<Type, PropertyInfo[]> ScalarReadablePropertyCache = new();
+    private static readonly ConcurrentDictionary<Type, string[]> HeuristicIdentifierPropertyCache = new();
+    private static readonly ConcurrentDictionary<string, PathPatternMatcher> PathPatternCache = new(System.StringComparer.OrdinalIgnoreCase);
 
     // Use simple thread-safe tracking without expensive concurrent dictionaries
     private static int comparisonCount = 0;
@@ -53,6 +60,9 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
     // Explicitly track if we have rules for Results or RelatedItems (for fast lookup)
     private readonly bool hasResultsRule;
     private readonly bool hasRelatedItemsRule;
+    private readonly PathPatternMatcher[] ignoreOrderPathMatchers;
+    private readonly ConcurrentDictionary<string, bool> ignoreOrderPathDecisionCache = new(System.StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, bool> ignoredPropertyDecisionCache = new(System.StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PropertySpecificCollectionOrderComparer"/> class.
@@ -80,6 +90,10 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
 
         hasRelatedItemsRule = this.propertiesToIgnoreOrder.Any(p =>
             p.IndexOf("RelatedItems", StringComparison.OrdinalIgnoreCase) >= 0);
+
+        ignoreOrderPathMatchers = this.propertiesToIgnoreOrder
+            .Select(GetOrCreatePathPatternMatcher)
+            .ToArray();
 
         // Simplified logging - only log the essential information
         this.logger.LogDebug(
@@ -144,8 +158,12 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
                 return;
             }
 
+            var deterministicOrderingStart = Stopwatch.GetTimestamp();
             if (TryCompareUsingDeterministicOrdering(parms))
             {
+                ComparisonPhaseTimingScope.Current?.AddCollectionOrderDeterministicOrdering(
+                    Stopwatch.GetElapsedTime(deterministicOrderingStart));
+
                 if (logger.IsEnabled(LogLevel.Debug))
                 {
                     logger.LogDebug("Applied deterministic ordering optimization for '{Path}'", parms.BreadCrumb ?? "<root>");
@@ -153,10 +171,17 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
                 return;
             }
 
+            ComparisonPhaseTimingScope.Current?.AddCollectionOrderDeterministicOrdering(
+                Stopwatch.GetElapsedTime(deterministicOrderingStart));
+
             logger.LogWarning(
                 "Deterministic ordering failed for collection at '{Path}' — falling back to O(n²) comparison. This may be slow for large collections.",
                 parms.BreadCrumb ?? "<root>");
+
+            var fallbackStart = Stopwatch.GetTimestamp();
             CompareWithCollectionComparer(parms, ignoreCollectionOrder: true);
+            ComparisonPhaseTimingScope.Current?.AddCollectionOrderFallback(
+                Stopwatch.GetElapsedTime(fallbackStart));
         }
         finally
         {
@@ -179,6 +204,11 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
             return false;
         }
 
+        if (ignoreOrderPathDecisionCache.TryGetValue(path, out var cachedDecision))
+        {
+            return cachedDecision;
+        }
+
         var isResultsCollection = hasResultsRule &&
             (path.IndexOf("Results", StringComparison.OrdinalIgnoreCase) >= 0);
         var isRelatedItemsCollection = hasRelatedItemsRule &&
@@ -191,16 +221,18 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
                 logger.LogDebug("Fast path match for '{Path}' - ignoring collection order", path);
             }
 
+            ignoreOrderPathDecisionCache[path] = true;
             return true;
         }
 
-        var shouldIgnoreOrder = propertiesToIgnoreOrder.Any(pattern => DoesPathMatchPattern(path, pattern));
+        var shouldIgnoreOrder = ignoreOrderPathMatchers.Any(matcher => matcher.IsMatch(path));
 
         if (shouldIgnoreOrder && logger.IsEnabled(LogLevel.Debug))
         {
             logger.LogDebug("Pattern match for '{Path}' - ignoring collection order", path);
         }
 
+        ignoreOrderPathDecisionCache[path] = shouldIgnoreOrder;
         return shouldIgnoreOrder;
     }
 
@@ -249,6 +281,8 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
 
     private bool AreCollectionItemsFullyIgnored(string? collectionPath, IReadOnlyList<object?> items)
     {
+        var comparablePropertyByType = new Dictionary<Type, bool>();
+
         foreach (var item in items)
         {
             if (item == null)
@@ -262,12 +296,12 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
                 return false;
             }
 
-            var hasComparableProperty = type
-                .GetProperties(BindingFlags.Instance | BindingFlags.Public)
-                .Any(prop =>
-                    prop.CanRead &&
-                    prop.GetIndexParameters().Length == 0 &&
-                    !IsIgnoredPropertyForCollection(collectionPath, prop.Name));
+            if (!comparablePropertyByType.TryGetValue(type, out var hasComparableProperty))
+            {
+                hasComparableProperty = GetReadableProperties(type)
+                    .Any(prop => !IsIgnoredPropertyForCollection(collectionPath, prop.Name));
+                comparablePropertyByType[type] = hasComparableProperty;
+            }
 
             if (hasComparableProperty)
             {
@@ -442,7 +476,7 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
 
     private static HashSet<string> GetHeuristicIdentifierPropertyNames(IReadOnlyList<object?> items)
     {
-        var names = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+        var itemTypes = new HashSet<Type>();
 
         foreach (var item in items)
         {
@@ -451,27 +485,25 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
                 return new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
             }
 
-            foreach (var property in item.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public))
-            {
-                if (!property.CanRead || property.GetIndexParameters().Length != 0)
-                {
-                    continue;
-                }
+            itemTypes.Add(item.GetType());
+        }
 
-                if (!IsSimpleScalarType(property.PropertyType))
-                {
-                    continue;
-                }
-
-                if (LooksLikeIdentifierName(property.Name))
-                {
-                    names.Add(property.Name);
-                }
-            }
+        var names = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+        foreach (var itemType in itemTypes)
+        {
+            names.UnionWith(GetHeuristicIdentifierPropertyNamesForType(itemType));
         }
 
         return names;
     }
+
+    private static IEnumerable<string> GetHeuristicIdentifierPropertyNamesForType(Type type) =>
+        HeuristicIdentifierPropertyCache.GetOrAdd(
+            type,
+            static currentType => GetScalarReadableProperties(currentType)
+                .Where(property => LooksLikeIdentifierName(property.Name))
+                .Select(property => property.Name)
+                .ToArray());
 
     private static bool LooksLikeIdentifierName(string propertyName) =>
         propertyName.EndsWith("Id", StringComparison.OrdinalIgnoreCase) ||
@@ -562,12 +594,8 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
             }
 
             var keyParts = new List<string>();
-            foreach (var prop in type.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+            foreach (var prop in GetScalarReadableProperties(type))
             {
-                if (!prop.CanRead || prop.GetIndexParameters().Length != 0)
-                    continue;
-                if (!IsSimpleScalarType(prop.PropertyType))
-                    continue;
                 if (IsIgnoredPropertyForCollection(collectionPath, prop.Name))
                     continue;
 
@@ -610,23 +638,39 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
             return false;
         }
 
+        var cacheKey = string.Concat(collectionPath ?? string.Empty, "|", propertyName);
+        if (ignoredPropertyDecisionCache.TryGetValue(cacheKey, out var cachedDecision))
+        {
+            return cachedDecision;
+        }
+
+        var isIgnored = false;
+
         foreach (var pattern in ignoredPropertyPatterns)
         {
             if (string.Equals(pattern, propertyName, StringComparison.OrdinalIgnoreCase))
             {
-                return true;
+                isIgnored = true;
+                break;
             }
 
             foreach (var candidatePath in GetCandidatePropertyPaths(collectionPath, propertyName))
             {
                 if (string.Equals(candidatePath, pattern, StringComparison.OrdinalIgnoreCase) || DoesPathMatchPattern(candidatePath, pattern))
                 {
-                    return true;
+                    isIgnored = true;
+                    break;
                 }
+            }
+
+            if (isIgnored)
+            {
+                break;
             }
         }
 
-        return false;
+        ignoredPropertyDecisionCache[cacheKey] = isIgnored;
+        return isIgnored;
     }
 
     private static IEnumerable<string> GetCandidatePropertyPaths(string? collectionPath, string propertyName)
@@ -743,39 +787,87 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
     /// </summary>
     private bool DoesPathMatchPattern(string path, string pattern)
     {
-        // Fast exact match check
-        if (string.Equals(path, pattern, StringComparison.OrdinalIgnoreCase))
+        return GetOrCreatePathPatternMatcher(pattern).IsMatch(path);
+    }
+
+    private static PropertyInfo[] GetReadableProperties(Type type) =>
+        ReadablePropertyCache.GetOrAdd(
+            type,
+            static currentType => currentType
+                .GetProperties(BindingFlags.Instance | BindingFlags.Public)
+                .Where(property => property.CanRead && property.GetIndexParameters().Length == 0)
+                .ToArray());
+
+    private static PropertyInfo[] GetScalarReadableProperties(Type type) =>
+        ScalarReadablePropertyCache.GetOrAdd(
+            type,
+            static currentType => GetReadableProperties(currentType)
+                .Where(property => IsSimpleScalarType(property.PropertyType))
+                .ToArray());
+
+    private static PathPatternMatcher GetOrCreatePathPatternMatcher(string pattern) =>
+        PathPatternCache.GetOrAdd(pattern, static currentPattern => PathPatternMatcher.Create(currentPattern));
+
+    private readonly struct PathPatternMatcher
+    {
+        private PathPatternMatcher(string pattern, Regex? wildcardRegex, string? fallbackContainsPattern)
         {
-            return true;
+            Pattern = pattern;
+            PrefixPattern = pattern + ".";
+            WildcardRegex = wildcardRegex;
+            FallbackContainsPattern = fallbackContainsPattern;
         }
 
-        // Fast prefix check for sub-properties
-        if (path.StartsWith(pattern + ".", StringComparison.OrdinalIgnoreCase))
+        public string Pattern { get; }
+
+        public string PrefixPattern { get; }
+
+        public Regex? WildcardRegex { get; }
+
+        public string? FallbackContainsPattern { get; }
+
+        public bool IsMatch(string path)
         {
-            return true;
+            if (string.Equals(path, Pattern, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (path.StartsWith(PrefixPattern, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (WildcardRegex != null)
+            {
+                return WildcardRegex.IsMatch(path);
+            }
+
+            return FallbackContainsPattern != null &&
+                path.Contains(FallbackContainsPattern, StringComparison.OrdinalIgnoreCase);
         }
 
-        // Handle wildcard patterns [*] - convert to simple pattern matching
-        if (pattern.Contains("[*]"))
+        public static PathPatternMatcher Create(string pattern)
         {
-            // Simple approach: replace [*] with a regex and check
+            if (!pattern.Contains("[*]", StringComparison.Ordinal))
+            {
+                return new PathPatternMatcher(pattern, null, null);
+            }
+
             try
             {
-                var regexPattern = pattern.Replace("[*]", @"\[\d+\]");
-                return System.Text.RegularExpressions.Regex.IsMatch(
-                    path,
-                    regexPattern,
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                return new PathPatternMatcher(
+                    pattern,
+                    new Regex(
+                        pattern.Replace("[*]", @"\[\d+\]"),
+                        RegexOptions.IgnoreCase | RegexOptions.Compiled),
+                    null);
             }
             catch
             {
-                // Fallback to simple contains check if regex fails
-                var basePattern = pattern.Replace("[*]", string.Empty);
-                return path.Contains(basePattern, StringComparison.OrdinalIgnoreCase);
+                return new PathPatternMatcher(pattern, null, pattern.Replace("[*]", string.Empty));
             }
         }
-
-        return false;
     }
 
     private readonly struct OrderedCollectionEntry

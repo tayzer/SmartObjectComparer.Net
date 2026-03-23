@@ -496,6 +496,19 @@ public class ComparisonServiceIntegrationTests
             initialResult.Metadata.Should().ContainKey("PerformanceReportTextPath");
             initialResult.Metadata.Should().ContainKey("PerformanceReportCsvPath");
 
+            var initialPhaseTimings = initialResult.Metadata[ComparisonPhaseTimings.MetadataKey]
+                .Should().BeOfType<ComparisonPhaseTimings>().Which;
+            initialPhaseTimings.XmlDeserializationPrecheckMs.Should().BePositive();
+            initialPhaseTimings.XmlDeserializationFullDeserializeMs.Should().BePositive();
+            initialPhaseTimings.CompareMs.Should().BePositive();
+            initialPhaseTimings.FilterMs.Should().BePositive();
+            initialPhaseTimings.ComparisonMs.Should().Be(initialPhaseTimings.CompareMs + initialPhaseTimings.FilterMs);
+
+            var initialReportPath = initialResult.Metadata["PerformanceReportTextPath"].Should().BeOfType<string>().Which;
+            var initialReportText = File.ReadAllText(initialReportPath);
+            initialReportText.Should().Contain("HighPerfPipeline_ComparePair");
+            initialReportText.Should().Contain("HighPerfPipeline_FilterPair");
+
             var initialSessionId = initialResult.Metadata["ComparisonSessionId"].Should().BeOfType<string>().Which;
             var initialSessionStats = comparisonLogService.GetSessionStats(initialSessionId);
             initialSessionStats.ProcessedFilePairs.Should().Be(pairCount);
@@ -517,12 +530,81 @@ public class ComparisonServiceIntegrationTests
             refreshedResult.Metadata.Should().ContainKey("ComparisonSessionId");
             refreshedResult.Metadata.Should().ContainKey(ComparisonPhaseTimings.MetadataKey);
 
+            var refreshedPhaseTimings = refreshedResult.Metadata[ComparisonPhaseTimings.MetadataKey]
+                .Should().BeOfType<ComparisonPhaseTimings>().Which;
+            refreshedPhaseTimings.XmlDeserializationPrecheckMs.Should().BeGreaterThanOrEqualTo(0);
+            refreshedPhaseTimings.XmlDeserializationFullDeserializeMs.Should().BeGreaterThanOrEqualTo(0);
+            (refreshedPhaseTimings.CollectionOrderDeterministicOrderingMs + refreshedPhaseTimings.CollectionOrderFallbackMs)
+                .Should().BePositive();
+            refreshedPhaseTimings.CollectionOrderFallbackCount.Should().BeGreaterThanOrEqualTo(0);
+            AssertSupplementalMetricsPersisted(refreshedResult, refreshedPhaseTimings);
+
             var refreshedSessionId = refreshedResult.Metadata["ComparisonSessionId"].Should().BeOfType<string>().Which;
             var refreshedSessionStats = comparisonLogService.GetSessionStats(refreshedSessionId);
             refreshedSessionStats.ProcessedFilePairs.Should().Be(pairCount);
             refreshedSessionStats.EqualFilePairs.Should().Be(pairCount);
             refreshedSessionStats.DifferentFilePairs.Should().Be(0);
             refreshedSessionStats.ErrorFilePairs.Should().Be(0);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
+    [TestMethod]
+    public async Task CompareDirectoriesAsync_WhenStandardRunUsesComparisonEngine_ShouldRecordSplitPhaseTimings()
+    {
+        const int pairCount = 25;
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddXmlComparisonServices(options =>
+            options.RegisterDomainModelWithRootElement<SoapEnvelope>("SoapEnvelope", "Envelope"));
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var directoryComparisonService = scope.ServiceProvider.GetRequiredService<DirectoryComparisonService>();
+        var scopedConfigService = scope.ServiceProvider.GetRequiredService<IComparisonConfigurationService>();
+
+        scopedConfigService.IgnoreProperty("Body.Response.AddressLinks.Addresses[*].Id");
+        scopedConfigService.SetIgnoreCollectionOrder(false);
+        scopedConfigService.SetIgnoreTrailingWhitespaceAtEnd(true);
+        scopedConfigService.AddIgnoreRule(new IgnoreRule
+        {
+            PropertyPath = "Body.Response.AddressLinks.Addresses",
+            IgnoreCollectionOrder = true,
+        });
+
+        var tempRoot = CreateCollectionOrderingCopySet(pairCount, out _, out _);
+        var actualDirectory = Path.Combine(tempRoot, "Actuals");
+        var expectedDirectory = Path.Combine(tempRoot, "Expecteds");
+
+        try
+        {
+            var result = await directoryComparisonService.CompareDirectoriesAsync(
+                actualDirectory,
+                expectedDirectory,
+                "SoapEnvelope");
+
+            result.TotalPairsCompared.Should().Be(pairCount);
+            result.Metadata.Should().ContainKey(ComparisonPhaseTimings.MetadataKey);
+
+            var phaseTimings = result.Metadata[ComparisonPhaseTimings.MetadataKey]
+                .Should().BeOfType<ComparisonPhaseTimings>().Which;
+
+            phaseTimings.XmlDeserializationPrecheckMs.Should().BeGreaterThanOrEqualTo(0);
+            phaseTimings.XmlDeserializationFullDeserializeMs.Should().BeGreaterThanOrEqualTo(0);
+            phaseTimings.CompareMs.Should().BePositive();
+            phaseTimings.FilterMs.Should().BeGreaterThanOrEqualTo(0);
+            phaseTimings.ComparisonMs.Should().Be(phaseTimings.CompareMs + phaseTimings.FilterMs);
+            phaseTimings.CollectionOrderDeterministicOrderingMs.Should().BeGreaterThanOrEqualTo(0);
+            phaseTimings.CollectionOrderFallbackMs.Should().BeGreaterThanOrEqualTo(0);
+            phaseTimings.CollectionOrderFallbackCount.Should().BeGreaterThanOrEqualTo(0);
+            AssertSupplementalMetricsPersisted(result, phaseTimings);
         }
         finally
         {
@@ -710,6 +792,36 @@ public class ComparisonServiceIntegrationTests
         }
 
         return tempRoot;
+    }
+
+    private static void AssertSupplementalMetricsPersisted(
+        MultiFolderComparisonResult result,
+        ComparisonPhaseTimings phaseTimings)
+    {
+        result.Metadata.Should().ContainKey("PerformanceReportTextPath");
+        result.Metadata.Should().ContainKey("PerformanceReportCsvPath");
+
+        var textReportPath = result.Metadata["PerformanceReportTextPath"].Should().BeOfType<string>().Which;
+        var textReport = File.ReadAllText(textReportPath);
+        textReport.Should().MatchRegex("(?s)Operation: .*SUPPLEMENTAL METRICS");
+        textReport.Should().Contain($"XmlDeserializationPrecheckMs: {phaseTimings.XmlDeserializationPrecheckMs}");
+        textReport.Should().Contain($"XmlDeserializationFullDeserializeMs: {phaseTimings.XmlDeserializationFullDeserializeMs}");
+        textReport.Should().Contain($"CollectionOrderDeterministicOrderingMs: {phaseTimings.CollectionOrderDeterministicOrderingMs}");
+        textReport.Should().Contain($"CollectionOrderFallbackMs: {phaseTimings.CollectionOrderFallbackMs}");
+        textReport.Should().Contain($"CollectionOrderFallbackCount: {phaseTimings.CollectionOrderFallbackCount}");
+
+        var csvReportPath = result.Metadata["PerformanceReportCsvPath"].Should().BeOfType<string>().Which;
+        var csvLines = File.ReadAllLines(csvReportPath);
+        var blankLineIndex = Array.IndexOf(csvLines, string.Empty);
+
+        csvLines[0].Should().Be("Operation,CallCount,TotalTimeMs,AverageTimeMs,MedianTimeMs,MinTimeMs,MaxTimeMs");
+        blankLineIndex.Should().BeGreaterThan(0);
+        csvLines[blankLineIndex + 1].Should().Be("Metric,Value");
+        csvLines.Should().Contain($"XmlDeserializationPrecheckMs,{phaseTimings.XmlDeserializationPrecheckMs}");
+        csvLines.Should().Contain($"XmlDeserializationFullDeserializeMs,{phaseTimings.XmlDeserializationFullDeserializeMs}");
+        csvLines.Should().Contain($"CollectionOrderDeterministicOrderingMs,{phaseTimings.CollectionOrderDeterministicOrderingMs}");
+        csvLines.Should().Contain($"CollectionOrderFallbackMs,{phaseTimings.CollectionOrderFallbackMs}");
+        csvLines.Should().Contain($"CollectionOrderFallbackCount,{phaseTimings.CollectionOrderFallbackCount}");
     }
 
     [DataTestMethod]

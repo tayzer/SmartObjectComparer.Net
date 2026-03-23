@@ -77,4 +77,88 @@ public class PerformanceTrackerTests
             }
         }
     }
+
+    [TestMethod]
+    public void SaveReportToFileForScope_WhenSupplementalMetricsProvided_ShouldAppendSupplementalMetricsSection()
+    {
+        var tracker = new PerformanceTracker(NullLogger<PerformanceTracker>.Instance);
+        var tempDirectory = Path.Combine(Path.GetTempPath(), "ComparisonToolTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDirectory);
+
+        try
+        {
+            using (tracker.BeginScope("run-a"))
+            {
+                tracker.TrackOperation("ScopedOperation", static () => { });
+            }
+
+            var reportPath = Path.Combine(tempDirectory, "scoped-report-with-metrics.txt");
+            tracker.SaveReportToFileForScope(
+                "run-a",
+                reportPath,
+                [
+                    new KeyValuePair<string, object?>("CollectionOrderDeterministicOrderingMs", 12L),
+                    new KeyValuePair<string, object?>("CollectionOrderFallbackMs", 3L),
+                    new KeyValuePair<string, object?>("CollectionOrderFallbackCount", 1),
+                ]);
+
+            var reportContents = File.ReadAllText(reportPath);
+
+            reportContents.Should().Contain("Operation: ScopedOperation");
+            reportContents.Should().MatchRegex("(?s)Operation: ScopedOperation.*SUPPLEMENTAL METRICS");
+            reportContents.Should().Contain("CollectionOrderDeterministicOrderingMs: 12");
+            reportContents.Should().Contain("CollectionOrderFallbackMs: 3");
+            reportContents.Should().Contain("CollectionOrderFallbackCount: 1");
+        }
+        finally
+        {
+            if (Directory.Exists(tempDirectory))
+            {
+                Directory.Delete(tempDirectory, true);
+            }
+        }
+    }
+
+    [TestMethod]
+    public void SaveReportToCsvForScope_WhenSupplementalMetricsProvided_ShouldAppendMetricValueSection()
+    {
+        var tracker = new PerformanceTracker(NullLogger<PerformanceTracker>.Instance);
+        var tempDirectory = Path.Combine(Path.GetTempPath(), "ComparisonToolTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDirectory);
+
+        try
+        {
+            using (tracker.BeginScope("run-a"))
+            {
+                tracker.TrackOperation("ScopedOperation", static () => { });
+            }
+
+            var reportPath = Path.Combine(tempDirectory, "scoped-report-with-metrics.csv");
+            tracker.SaveReportToCsvForScope(
+                "run-a",
+                reportPath,
+                [
+                    new KeyValuePair<string, object?>("CollectionOrderDeterministicOrderingMs", 12L),
+                    new KeyValuePair<string, object?>("CollectionOrderFallbackMs", 3L),
+                    new KeyValuePair<string, object?>("CollectionOrderFallbackCount", 1),
+                ]);
+
+            var reportLines = File.ReadAllLines(reportPath);
+            var blankLineIndex = Array.IndexOf(reportLines, string.Empty);
+
+            reportLines[0].Should().Be("Operation,CallCount,TotalTimeMs,AverageTimeMs,MedianTimeMs,MinTimeMs,MaxTimeMs");
+            blankLineIndex.Should().BeGreaterThan(0);
+            reportLines[blankLineIndex + 1].Should().Be("Metric,Value");
+            reportLines.Should().Contain("CollectionOrderDeterministicOrderingMs,12");
+            reportLines.Should().Contain("CollectionOrderFallbackMs,3");
+            reportLines.Should().Contain("CollectionOrderFallbackCount,1");
+        }
+        finally
+        {
+            if (Directory.Exists(tempDirectory))
+            {
+                Directory.Delete(tempDirectory, true);
+            }
+        }
+    }
 }

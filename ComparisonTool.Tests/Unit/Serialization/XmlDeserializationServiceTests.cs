@@ -1,6 +1,7 @@
 using System.Text;
 using System.Xml;
 using System.Xml.Serialization;
+using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.Models;
 using ComparisonTool.Core.Serialization;
 using ComparisonTool.Domain.Models;
@@ -317,6 +318,70 @@ public class XmlDeserializationServiceTests
         result.Id.Should().Be("TEST-003");
         result.Name.Should().Be("Matching Namespace Item");
         result.Value.Should().Be(123);
+    }
+
+    [TestMethod]
+    public void TryDeserializeXml_WithTimingScope_ShouldRecordXmlPrecheckAndFullDeserializeTimings()
+    {
+        // Arrange
+        service.RegisterDomainModel<TestModel>("TestModel");
+
+        var xml = Encoding.UTF8.GetBytes(@"<?xml version=""1.0"" encoding=""utf-8""?>
+<TestModel>
+    <StringProperty>Timed Value</StringProperty>
+    <IntProperty>42</IntProperty>
+</TestModel>");
+
+        var phaseTimings = new ComparisonPhaseTimingContext("unit-test");
+
+        // Act
+        using (ComparisonPhaseTimingScope.Push(phaseTimings))
+        {
+            for (var index = 0; index < 25; index++)
+            {
+                using var stream = new MemoryStream(xml, writable: false);
+                var result = service.TryDeserializeXml(stream, typeof(TestModel));
+                result.Success.Should().BeTrue();
+            }
+        }
+
+        var snapshot = phaseTimings.CreateSnapshot();
+
+        // Assert
+        snapshot.XmlDeserializationPrecheckMs.Should().BeGreaterThanOrEqualTo(0);
+        snapshot.XmlDeserializationFullDeserializeMs.Should().BeGreaterThanOrEqualTo(0);
+    }
+
+    [TestMethod]
+    public void TryDeserializeXml_WithWrongRoot_ShouldOnlyRecordXmlPrecheckTiming()
+    {
+        // Arrange
+        service.RegisterDomainModel<TestModel>("TestModel");
+
+        var xml = Encoding.UTF8.GetBytes(@"<?xml version=""1.0"" encoding=""utf-8""?>
+<WrongRoot>
+    <StringProperty>Timed Value</StringProperty>
+    <IntProperty>42</IntProperty>
+</WrongRoot>");
+
+        var phaseTimings = new ComparisonPhaseTimingContext("unit-test");
+
+        // Act
+        using (ComparisonPhaseTimingScope.Push(phaseTimings))
+        {
+            for (var index = 0; index < 25; index++)
+            {
+                using var stream = new MemoryStream(xml, writable: false);
+                var result = service.TryDeserializeXml(stream, typeof(TestModel));
+                result.Success.Should().BeFalse();
+            }
+        }
+
+        var snapshot = phaseTimings.CreateSnapshot();
+
+        // Assert
+        snapshot.XmlDeserializationPrecheckMs.Should().BeGreaterThanOrEqualTo(0);
+        snapshot.XmlDeserializationFullDeserializeMs.Should().Be(0);
     }
 
     [TestMethod]

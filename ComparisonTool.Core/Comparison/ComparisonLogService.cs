@@ -88,6 +88,21 @@ public class ComparisonSessionStats
     }
 
     public TimeSpan Duration => (EndTime ?? DateTime.UtcNow) - StartTime;
+
+    internal object SyncRoot { get; } = new object();
+
+    internal ComparisonSessionStats CreateSnapshot() => new ComparisonSessionStats
+    {
+        TotalFilePairs = TotalFilePairs,
+        ProcessedFilePairs = ProcessedFilePairs,
+        EqualFilePairs = EqualFilePairs,
+        DifferentFilePairs = DifferentFilePairs,
+        ErrorFilePairs = ErrorFilePairs,
+        ErrorsByType = new Dictionary<string, int>(ErrorsByType, StringComparer.Ordinal),
+        FilesWithErrors = new List<string>(FilesWithErrors),
+        StartTime = StartTime,
+        EndTime = EndTime,
+    };
 }
 
 /// <summary>
@@ -99,7 +114,6 @@ public class ComparisonLogService : IComparisonLogService, IDisposable
     private readonly string logDirectory;
     private readonly ConcurrentDictionary<string, ComparisonSessionStats> sessions = new ConcurrentDictionary<string, ComparisonSessionStats>(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, StreamWriter> sessionWriters = new ConcurrentDictionary<string, StreamWriter>(StringComparer.Ordinal);
-    private readonly object fileLock = new object();
     private bool disposed;
 
     public ComparisonLogService(ILogger<ComparisonLogService> logger)
@@ -153,45 +167,61 @@ public class ComparisonLogService : IComparisonLogService, IDisposable
             return;
         }
 
-        stats.ProcessedFilePairs++;
+        string? warningFile1 = null;
+        string? warningFile2 = null;
+        string? warningErrorType = null;
+        string? warningErrorMessage = null;
 
-        if (result.HasError)
+        lock (stats.SyncRoot)
         {
-            stats.ErrorFilePairs++;
-            stats.FilesWithErrors.Add($"{result.File1Name} vs {result.File2Name}");
-
-            // Track errors by type
-            var errorType = result.ErrorType ?? "Unknown";
-            if (!stats.ErrorsByType.ContainsKey(errorType))
+            if (stats.EndTime != null)
             {
-                stats.ErrorsByType[errorType] = 0;
+                return;
             }
 
-            stats.ErrorsByType[errorType]++;
+            stats.ProcessedFilePairs++;
 
-            WriteToSession(sessionId, $"[ERROR] {result.File1Name} vs {result.File2Name}");
-            WriteToSession(sessionId, $"  Error Type: {result.ErrorType}");
-            WriteToSession(sessionId, $"  Message: {result.ErrorMessage}");
-            WriteToSession(sessionId, string.Empty);
+            if (result.HasError)
+            {
+                stats.ErrorFilePairs++;
+                stats.FilesWithErrors.Add($"{result.File1Name} vs {result.File2Name}");
 
+                var errorType = result.ErrorType ?? "Unknown";
+                stats.ErrorsByType.TryGetValue(errorType, out var currentCount);
+                stats.ErrorsByType[errorType] = currentCount + 1;
+
+                WriteToSession(sessionId, $"[ERROR] {result.File1Name} vs {result.File2Name}");
+                WriteToSession(sessionId, $"  Error Type: {result.ErrorType}");
+                WriteToSession(sessionId, $"  Message: {result.ErrorMessage}");
+                WriteToSession(sessionId, string.Empty);
+
+                warningFile1 = result.File1Name;
+                warningFile2 = result.File2Name;
+                warningErrorType = result.ErrorType;
+                warningErrorMessage = result.ErrorMessage;
+            }
+            else if (result.AreEqual)
+            {
+                stats.EqualFilePairs++;
+            }
+            else
+            {
+                stats.DifferentFilePairs++;
+
+                var differenceCount = result.Summary?.TotalDifferenceCount ?? result.Result?.Differences?.Count ?? 0;
+                WriteToSession(sessionId, $"[DIFFERENT] {result.File1Name} vs {result.File2Name} - {differenceCount} differences");
+            }
+        }
+
+        if (warningFile1 != null)
+        {
             logger.LogWarning(
                 "Session {SessionId}: File comparison error - {File1} vs {File2}: [{ErrorType}] {ErrorMessage}",
                 sessionId,
-                result.File1Name,
-                result.File2Name,
-                result.ErrorType,
-                result.ErrorMessage);
-        }
-        else if (result.AreEqual)
-        {
-            stats.EqualFilePairs++;
-        }
-        else
-        {
-            stats.DifferentFilePairs++;
-
-            var differenceCount = result.Summary?.TotalDifferenceCount ?? result.Result?.Differences?.Count ?? 0;
-            WriteToSession(sessionId, $"[DIFFERENT] {result.File1Name} vs {result.File2Name} - {differenceCount} differences");
+                warningFile1,
+                warningFile2,
+                warningErrorType,
+                warningErrorMessage);
         }
     }
 
@@ -203,41 +233,57 @@ public class ComparisonLogService : IComparisonLogService, IDisposable
             return;
         }
 
-        stats.EndTime = DateTime.UtcNow;
+        ComparisonSessionStats snapshot;
+        lock (stats.SyncRoot)
+        {
+            stats.EndTime = DateTime.UtcNow;
+            snapshot = stats.CreateSnapshot();
 
-        WriteSessionSummary(sessionId, stats);
-        CloseSessionWriter(sessionId);
+            WriteSessionSummary(sessionId, snapshot);
+            CloseSessionWriter(sessionId);
+        }
 
         logger.LogInformation(
             "Comparison session {SessionId} completed: {Processed} processed, {Equal} equal, {Different} different, {Errors} errors (Duration: {Duration:F2}s)",
             sessionId,
-            stats.ProcessedFilePairs,
-            stats.EqualFilePairs,
-            stats.DifferentFilePairs,
-            stats.ErrorFilePairs,
-            stats.Duration.TotalSeconds);
+            snapshot.ProcessedFilePairs,
+            snapshot.EqualFilePairs,
+            snapshot.DifferentFilePairs,
+            snapshot.ErrorFilePairs,
+            snapshot.Duration.TotalSeconds);
 
-        if (stats.ErrorFilePairs > 0)
+        if (snapshot.ErrorFilePairs > 0)
         {
             logger.LogWarning(
                 "Session {SessionId} had {ErrorCount} file pairs with errors. Error types: {ErrorTypes}",
                 sessionId,
-                stats.ErrorFilePairs,
-                string.Join(", ", stats.ErrorsByType.Select(k => $"{k.Key}:{k.Value}")));
+                snapshot.ErrorFilePairs,
+                string.Join(", ", snapshot.ErrorsByType.Select(k => $"{k.Key}:{k.Value}")));
         }
     }
 
     /// <inheritdoc/>
     public void LogError(string sessionId, string message, Exception? exception = null)
     {
-        WriteToSession(sessionId, $"[ERROR] {message}");
-        if (exception != null)
+        if (sessions.TryGetValue(sessionId, out var stats))
         {
-            WriteToSession(sessionId, $"  Exception: {exception.GetType().Name}");
-            WriteToSession(sessionId, $"  Message: {exception.Message}");
-            if (exception.StackTrace != null)
+            lock (stats.SyncRoot)
             {
-                WriteToSession(sessionId, $"  Stack Trace: {exception.StackTrace}");
+                if (stats.EndTime != null)
+                {
+                    return;
+                }
+
+                WriteToSession(sessionId, $"[ERROR] {message}");
+                if (exception != null)
+                {
+                    WriteToSession(sessionId, $"  Exception: {exception.GetType().Name}");
+                    WriteToSession(sessionId, $"  Message: {exception.Message}");
+                    if (exception.StackTrace != null)
+                    {
+                        WriteToSession(sessionId, $"  Stack Trace: {exception.StackTrace}");
+                    }
+                }
             }
         }
 
@@ -245,7 +291,18 @@ public class ComparisonLogService : IComparisonLogService, IDisposable
     }
 
     /// <inheritdoc/>
-    public ComparisonSessionStats GetSessionStats(string sessionId) => sessions.TryGetValue(sessionId, out var stats) ? stats : new ComparisonSessionStats();
+    public ComparisonSessionStats GetSessionStats(string sessionId)
+    {
+        if (!sessions.TryGetValue(sessionId, out var stats))
+        {
+            return new ComparisonSessionStats();
+        }
+
+        lock (stats.SyncRoot)
+        {
+            return stats.CreateSnapshot();
+        }
+    }
 
     /// <inheritdoc/>
     public void Dispose()
@@ -257,13 +314,14 @@ public class ComparisonLogService : IComparisonLogService, IDisposable
 
         disposed = true;
 
-        foreach (var writer in sessionWriters.Values)
+        foreach (var session in sessions)
         {
             try
             {
-                writer.Flush();
-                writer.Close();
-                writer.Dispose();
+                lock (session.Value.SyncRoot)
+                {
+                    CloseSessionWriter(session.Key);
+                }
             }
             catch
             {
@@ -336,10 +394,7 @@ public class ComparisonLogService : IComparisonLogService, IDisposable
     {
         if (sessionWriters.TryGetValue(sessionId, out var writer))
         {
-            lock (fileLock)
-            {
-                writer.WriteLine($"{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff} {message}");
-            }
+            writer.WriteLine($"{DateTime.UtcNow:yyyy-MM-dd HH:mm:ss.fff} {message}");
         }
     }
 }

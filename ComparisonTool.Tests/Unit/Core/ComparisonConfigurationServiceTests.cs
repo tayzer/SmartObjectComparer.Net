@@ -238,6 +238,21 @@ public class ComparisonConfigurationServiceTests
     }
 
     [TestMethod]
+    public void ApplyConfiguredSettings_WhenCachedConfigurationIsReapplied_ShouldPreserveCaseSensitivity()
+    {
+        // Arrange
+        this.service.SetIgnoreStringCase(true);
+
+        // Act
+        this.service.ApplyConfiguredSettings();
+        this.service.ApplyConfiguredSettings();
+
+        // Assert
+        this.service.GetIgnoreStringCase().Should().BeTrue();
+        this.service.GetCurrentConfig().CaseSensitive.Should().BeFalse();
+    }
+
+    [TestMethod]
     public void FilterIgnoredDifferences_WithIgnoredProperty_ShouldFilterOutDifferences()
     {
         // Arrange
@@ -335,6 +350,46 @@ public class ComparisonConfigurationServiceTests
 
         // Assert
         filteredResult.Differences.Should().ContainSingle(d => d.PropertyName == "OrderData.Items[7].Product.Category.Attributes[2].Value");
+    }
+
+    [TestMethod]
+    public void FilterIgnoredDifferences_WhenIgnoreRulesChange_ShouldRebuildCachedDirectMatcher()
+    {
+        // Arrange
+        var config = this.service.GetCurrentConfig();
+        var initialResult = new ComparisonResult(config)
+        {
+            Differences = new List<Difference>
+            {
+                new () { PropertyName = "OrderData.Customer.Name", Object1Value = "Old", Object2Value = "New" },
+                new () { PropertyName = "OrderData.Supplier.Name", Object1Value = "Old", Object2Value = "New" },
+            },
+        };
+
+        this.AddPaddingIgnoreRules();
+        this.service.IgnoreProperty("OrderData.Customer");
+
+        // Act
+        var initiallyFiltered = this.service.FilterIgnoredDifferences(initialResult);
+
+        this.service.RemoveIgnoredProperty("OrderData.Customer");
+
+        var refreshedResult = new ComparisonResult(config)
+        {
+            Differences = new List<Difference>
+            {
+                new () { PropertyName = "OrderData.Customer.Name", Object1Value = "Old", Object2Value = "New" },
+                new () { PropertyName = "OrderData.Supplier.Name", Object1Value = "Old", Object2Value = "New" },
+            },
+        };
+
+        var refreshedFiltered = this.service.FilterIgnoredDifferences(refreshedResult);
+
+        // Assert
+        initiallyFiltered.Differences.Should().ContainSingle(d => d.PropertyName == "OrderData.Supplier.Name");
+        refreshedFiltered.Differences.Should().HaveCount(2);
+        refreshedFiltered.Differences.Should().Contain(d => d.PropertyName == "OrderData.Customer.Name");
+        refreshedFiltered.Differences.Should().Contain(d => d.PropertyName == "OrderData.Supplier.Name");
     }
 
     [TestMethod]

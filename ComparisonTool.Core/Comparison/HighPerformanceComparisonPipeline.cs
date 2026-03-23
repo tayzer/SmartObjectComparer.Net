@@ -25,7 +25,8 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
 {
     private const string PipelineRunOperationName = "HighPerfPipeline_Run";
     private const string DeserializePairOperationName = "HighPerfPipeline_DeserializePair";
-    private const string ComparePairOperationName = "HighPerfPipeline_CompareFilterPair";
+    private const string ComparePairOperationName = "HighPerfPipeline_ComparePair";
+    private const string FilterPairOperationName = "HighPerfPipeline_FilterPair";
     private const string SummarizePairOperationName = "HighPerfPipeline_SummarizePair";
     private const string FinalizeResultsOperationName = "HighPerfPipeline_FinalizeResults";
 
@@ -415,21 +416,21 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
             {
                 // OPTIMIZATION: Reuse thread-local CompareLogic
                 var compareLogic = threadLocalCompareLogic.Value!;
-
-                var result = await performanceTracker.TrackOperationAsync(
+                var compareStart = Stopwatch.GetTimestamp();
+                var comparisonResult = performanceTracker.TrackOperation(
                     ComparePairOperationName,
+                    () => compareLogic.Compare(pair.Object1!, pair.Object2!));
+                ComparisonPhaseTimingScope.Current?.AddCompare(Stopwatch.GetElapsedTime(compareStart));
+
+                var filterStart = Stopwatch.GetTimestamp();
+                var result = performanceTracker.TrackOperation(
+                    FilterPairOperationName,
                     () =>
                     {
-                        // Perform comparison
-                        var comparisonStart = Stopwatch.GetTimestamp();
-                        var comparisonResult = compareLogic.Compare(pair.Object1!, pair.Object2!);
-
-                        // Filter ignored differences
-                        comparisonResult = configService.FilterSmartIgnoredDifferences(comparisonResult, modelType);
-                        comparisonResult = configService.FilterIgnoredDifferences(comparisonResult);
-                        ComparisonPhaseTimingScope.Current?.AddComparison(Stopwatch.GetElapsedTime(comparisonStart));
-                        return Task.FromResult(comparisonResult);
-                    }).ConfigureAwait(false);
+                        var filteredResult = configService.FilterSmartIgnoredDifferences(comparisonResult, modelType);
+                        return configService.FilterIgnoredDifferences(filteredResult);
+                    });
+                ComparisonPhaseTimingScope.Current?.AddFilter(Stopwatch.GetElapsedTime(filterStart));
 
                 // OPTIMIZATION: Pool categorizer instances
                 var categorizer = categorizerPool.Get();

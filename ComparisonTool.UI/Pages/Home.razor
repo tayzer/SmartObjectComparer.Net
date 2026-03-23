@@ -266,6 +266,16 @@
                                 <MudChip T="string" Size="Size.Small" Color="Color.Info">Discovery/Pairing: @FormatElapsedTime(phaseTimings.FileDiscoveryPairingMs)</MudChip>
                                 <MudChip T="string" Size="Size.Small" Color="Color.Info">Deserialization Work: @FormatElapsedTime(phaseTimings.DeserializationMs)</MudChip>
                                 <MudChip T="string" Size="Size.Small" Color="Color.Info">Comparison Work: @FormatElapsedTime(phaseTimings.ComparisonMs)</MudChip>
+                                @if (phaseTimings.FilterMs > 0)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info">Compare Work: @FormatElapsedTime(phaseTimings.CompareMs)</MudChip>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info">Filter Work: @FormatElapsedTime(phaseTimings.FilterMs)</MudChip>
+                                }
+                                @if (phaseTimings.CollectionOrderDeterministicOrderingMs > 0 || phaseTimings.CollectionOrderFallbackMs > 0 || phaseTimings.CollectionOrderFallbackCount > 0)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Default">Collection Order Deterministic: @FormatElapsedTime(phaseTimings.CollectionOrderDeterministicOrderingMs)</MudChip>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">Collection Order Fallback: @FormatElapsedTime(phaseTimings.CollectionOrderFallbackMs) (@phaseTimings.CollectionOrderFallbackCount)</MudChip>
+                                }
                                 @if (phaseTimings.CacheHits > 0 || phaseTimings.CacheMisses > 0)
                                 {
                                     <MudChip T="string" Size="Size.Small" Color="Color.Default">Cache Hits: @phaseTimings.CacheHits</MudChip>
@@ -275,6 +285,12 @@
                             <MudText Typo="Typo.caption" Color="Color.Default">
                                 Total and discovery/pairing are wall-clock elapsed time. Deserialization and comparison are cumulative work across file pairs, so on parallel runs they can exceed total elapsed time. Cache hits bypass most fresh-file work.
                             </MudText>
+                            @if (phaseTimings.CollectionOrderDeterministicOrderingMs > 0 || phaseTimings.CollectionOrderFallbackMs > 0 || phaseTimings.CollectionOrderFallbackCount > 0)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Default">
+                                    Collection-order timings are subcomponents of comparison work. Fallback count is the number of collection comparisons that fell back to the slower O(n^2) unordered path.
+                                </MudText>
+                            }
                         </MudStack>
                     </MudPaper>
                 }

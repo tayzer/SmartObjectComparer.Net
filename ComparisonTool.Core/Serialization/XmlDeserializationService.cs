@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Xml;
 using System.Xml.Serialization;
+using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.Comparison.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -207,6 +209,7 @@ public class XmlDeserializationService : IXmlDeserializationService
 
             // Step 1: Pre-validate by reading the root element and checking CanDeserialize.
             // This catches root element mismatches (SOAP faults, wrong schemas) WITHOUT throwing.
+            var precheckStart = Stopwatch.GetTimestamp();
             using (var preCheckReader = XmlReader.Create(xmlStream, GetOptimizedReaderSettings()))
             {
                 XmlReader effectiveReader = preCheckReader;
@@ -221,11 +224,13 @@ public class XmlDeserializationService : IXmlDeserializationService
                 }
                 catch (XmlException ex)
                 {
+                    ComparisonPhaseTimingScope.Current?.AddXmlDeserializationPrecheck(Stopwatch.GetElapsedTime(precheckStart));
                     return DeserializationResult.Failure($"Malformed XML: {ex.Message}");
                 }
 
                 if (!serializer.CanDeserialize(effectiveReader))
                 {
+                    ComparisonPhaseTimingScope.Current?.AddXmlDeserializationPrecheck(Stopwatch.GetElapsedTime(precheckStart));
                     var actualRoot = effectiveReader.LocalName;
                     var actualNs = effectiveReader.NamespaceURI;
                     var expectedRoot = GetExpectedRootElementName(modelType);
@@ -240,6 +245,8 @@ public class XmlDeserializationService : IXmlDeserializationService
                 }
             }
 
+            ComparisonPhaseTimingScope.Current?.AddXmlDeserializationPrecheck(Stopwatch.GetElapsedTime(precheckStart));
+
             // Step 2: Root element matches — perform full deserialization.
             // Reset the stream and create a fresh reader.
             xmlStream.Position = 0;
@@ -251,7 +258,18 @@ public class XmlDeserializationService : IXmlDeserializationService
                 logger.LogDebug("Using namespace-agnostic reader for type {Type} (xsi:nil preserved)", modelType.Name);
             }
 
-            var result = serializer.Deserialize(deserializeReader);
+            var fullDeserializeStart = Stopwatch.GetTimestamp();
+            object? result;
+            try
+            {
+                result = serializer.Deserialize(deserializeReader);
+            }
+            finally
+            {
+                ComparisonPhaseTimingScope.Current?.AddXmlDeserializationFullDeserialize(
+                    Stopwatch.GetElapsedTime(fullDeserializeStart));
+            }
+
             if (result == null)
             {
                 return DeserializationResult.Failure(

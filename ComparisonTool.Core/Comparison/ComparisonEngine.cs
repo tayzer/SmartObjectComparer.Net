@@ -63,7 +63,7 @@ public class ComparisonEngine : IComparisonEngine, IDisposable
         CancellationToken cancellationToken = default)
     {
         // PERFORMANCE OPTIMIZATION: Use thread-local CompareLogic to avoid allocation per file
-        var comparisonStart = Stopwatch.GetTimestamp();
+        var compareStart = Stopwatch.GetTimestamp();
         var result = await performanceTracker.TrackOperationAsync(
             "Compare_Objects",
             async () => await Task.Run(
@@ -75,16 +75,17 @@ public class ComparisonEngine : IComparisonEngine, IDisposable
                     // Direct comparison without cloning - this eliminates serialization corruption
                     return compareLogic.Compare(oldResponse, newResponse);
                 }, cancellationToken));
-        ComparisonPhaseTimingScope.Current?.AddComparison(Stopwatch.GetElapsedTime(comparisonStart));
+        ComparisonPhaseTimingScope.Current?.AddCompare(Stopwatch.GetElapsedTime(compareStart));
 
         logger.LogDebug(
             "Comparison completed. Found {DifferenceCount} differences",
             result.Differences.Count);
 
         // Filter out ignored properties using smart rules and legacy pattern matching
+        var filterStart = Stopwatch.GetTimestamp();
         result = configService.FilterSmartIgnoredDifferences(result, modelType);
         result = configService.FilterIgnoredDifferences(result);
-        ComparisonPhaseTimingScope.Current?.AddComparison(Stopwatch.GetElapsedTime(comparisonStart));
+        ComparisonPhaseTimingScope.Current?.AddFilter(Stopwatch.GetElapsedTime(filterStart));
 
         return result;
     }
@@ -103,13 +104,15 @@ public class ComparisonEngine : IComparisonEngine, IDisposable
         Type modelType)
     {
         var compareLogic = GetOrRefreshCompareLogic();
-        var comparisonStart = Stopwatch.GetTimestamp();
+        var compareStart = Stopwatch.GetTimestamp();
         var result = compareLogic.Compare(oldResponse, newResponse);
+        ComparisonPhaseTimingScope.Current?.AddCompare(Stopwatch.GetElapsedTime(compareStart));
 
         // Filter out ignored properties
+        var filterStart = Stopwatch.GetTimestamp();
         result = configService.FilterSmartIgnoredDifferences(result, modelType);
         result = configService.FilterIgnoredDifferences(result);
-        ComparisonPhaseTimingScope.Current?.AddComparison(Stopwatch.GetElapsedTime(comparisonStart));
+        ComparisonPhaseTimingScope.Current?.AddFilter(Stopwatch.GetElapsedTime(filterStart));
 
         return result;
     }

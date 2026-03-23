@@ -16,7 +16,21 @@ public sealed class ComparisonPhaseTimings
 
     public long DeserializationMs { get; init; }
 
-    public long ComparisonMs { get; init; }
+    public long XmlDeserializationPrecheckMs { get; init; }
+
+    public long XmlDeserializationFullDeserializeMs { get; init; }
+
+    public long CompareMs { get; init; }
+
+    public long FilterMs { get; init; }
+
+    public long CollectionOrderDeterministicOrderingMs { get; init; }
+
+    public long CollectionOrderFallbackMs { get; init; }
+
+    public int CollectionOrderFallbackCount { get; init; }
+
+    public long ComparisonMs => CompareMs + FilterMs;
 
     public long TotalElapsedMs { get; init; }
 
@@ -30,7 +44,13 @@ internal sealed class ComparisonPhaseTimingContext
     private readonly Stopwatch stopwatch = Stopwatch.StartNew();
     private long fileDiscoveryPairingMs;
     private long deserializationMs;
-    private long comparisonMs;
+    private long xmlDeserializationPrecheckMs;
+    private long xmlDeserializationFullDeserializeMs;
+    private long compareMs;
+    private long filterMs;
+    private long collectionOrderDeterministicOrderingMs;
+    private long collectionOrderFallbackMs;
+    private int collectionOrderFallbackCount;
     private int totalPairsCompared;
     private int cacheHits;
     private int cacheMisses;
@@ -57,9 +77,40 @@ internal sealed class ComparisonPhaseTimingContext
         Interlocked.Add(ref deserializationMs, ToMilliseconds(elapsed));
     }
 
+    public void AddXmlDeserializationPrecheck(TimeSpan elapsed)
+    {
+        Interlocked.Add(ref xmlDeserializationPrecheckMs, ToMilliseconds(elapsed));
+    }
+
+    public void AddXmlDeserializationFullDeserialize(TimeSpan elapsed)
+    {
+        Interlocked.Add(ref xmlDeserializationFullDeserializeMs, ToMilliseconds(elapsed));
+    }
+
     public void AddComparison(TimeSpan elapsed)
     {
-        Interlocked.Add(ref comparisonMs, ToMilliseconds(elapsed));
+        AddCompare(elapsed);
+    }
+
+    public void AddCompare(TimeSpan elapsed)
+    {
+        Interlocked.Add(ref compareMs, ToMilliseconds(elapsed));
+    }
+
+    public void AddFilter(TimeSpan elapsed)
+    {
+        Interlocked.Add(ref filterMs, ToMilliseconds(elapsed));
+    }
+
+    public void AddCollectionOrderDeterministicOrdering(TimeSpan elapsed)
+    {
+        Interlocked.Add(ref collectionOrderDeterministicOrderingMs, ToMilliseconds(elapsed));
+    }
+
+    public void AddCollectionOrderFallback(TimeSpan elapsed)
+    {
+        Interlocked.Add(ref collectionOrderFallbackMs, ToMilliseconds(elapsed));
+        Interlocked.Increment(ref collectionOrderFallbackCount);
     }
 
     public void RecordCacheHit()
@@ -78,7 +129,13 @@ internal sealed class ComparisonPhaseTimingContext
         TotalPairsCompared = Volatile.Read(ref totalPairsCompared),
         FileDiscoveryPairingMs = Volatile.Read(ref fileDiscoveryPairingMs),
         DeserializationMs = Volatile.Read(ref deserializationMs),
-        ComparisonMs = Volatile.Read(ref comparisonMs),
+        XmlDeserializationPrecheckMs = Volatile.Read(ref xmlDeserializationPrecheckMs),
+        XmlDeserializationFullDeserializeMs = Volatile.Read(ref xmlDeserializationFullDeserializeMs),
+        CompareMs = Volatile.Read(ref compareMs),
+        FilterMs = Volatile.Read(ref filterMs),
+        CollectionOrderDeterministicOrderingMs = Volatile.Read(ref collectionOrderDeterministicOrderingMs),
+        CollectionOrderFallbackMs = Volatile.Read(ref collectionOrderFallbackMs),
+        CollectionOrderFallbackCount = Volatile.Read(ref collectionOrderFallbackCount),
         TotalElapsedMs = stopwatch.ElapsedMilliseconds,
         CacheHits = Volatile.Read(ref cacheHits),
         CacheMisses = Volatile.Read(ref cacheMisses),

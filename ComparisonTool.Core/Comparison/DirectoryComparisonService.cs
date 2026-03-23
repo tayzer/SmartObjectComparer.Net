@@ -614,8 +614,9 @@ public class DirectoryComparisonService
         result.Metadata ??= new Dictionary<string, object>(StringComparer.Ordinal);
 
         AddPropertyIgnoreCacheMetadata(result.Metadata, propertyIgnoreCacheBaseline);
-        AddPerformanceReportMetadata(result.Metadata, reportPrefix, performanceScopeId);
-        result.Metadata[ComparisonPhaseTimings.MetadataKey] = phaseTimings.CreateSnapshot();
+        var phaseTimingSnapshot = phaseTimings.CreateSnapshot();
+        result.Metadata[ComparisonPhaseTimings.MetadataKey] = phaseTimingSnapshot;
+        AddPerformanceReportMetadata(result.Metadata, reportPrefix, performanceScopeId, phaseTimingSnapshot);
     }
 
     private async Task<MultiFolderComparisonResult> CompareWithHighPerformancePipelineAsync(
@@ -734,7 +735,11 @@ public class DirectoryComparisonService
         metadata["PropertyIgnoreCacheHitRatio"] = hitRatio;
     }
 
-    private void AddPerformanceReportMetadata(IDictionary<string, object> metadata, string reportPrefix, string performanceScopeId)
+    private void AddPerformanceReportMetadata(
+        IDictionary<string, object> metadata,
+        string reportPrefix,
+        string performanceScopeId,
+        ComparisonPhaseTimings phaseTimings)
     {
         try
         {
@@ -747,12 +752,14 @@ public class DirectoryComparisonService
 
         var reportsDirectory = Path.Combine(Directory.GetCurrentDirectory(), "PerformanceReports");
         var baseFileName = performanceScopeId;
+        var supplementalMetrics = CreateSupplementalPerformanceReportMetrics(phaseTimings);
 
         try
         {
             var textReportPath = performanceTracker.SaveReportToFileForScope(
                 performanceScopeId,
-                Path.Combine(reportsDirectory, $"{baseFileName}.txt"));
+                Path.Combine(reportsDirectory, $"{baseFileName}.txt"),
+                supplementalMetrics);
             metadata["PerformanceReportTextPath"] = textReportPath;
         }
         catch (Exception ex)
@@ -764,7 +771,8 @@ public class DirectoryComparisonService
         {
             var csvReportPath = performanceTracker.SaveReportToCsvForScope(
                 performanceScopeId,
-                Path.Combine(reportsDirectory, $"{baseFileName}.csv"));
+                Path.Combine(reportsDirectory, $"{baseFileName}.csv"),
+                supplementalMetrics);
             metadata["PerformanceReportCsvPath"] = csvReportPath;
         }
         catch (Exception ex)
@@ -772,6 +780,16 @@ public class DirectoryComparisonService
             logger.LogWarning(ex, "Failed to save performance CSV report for scope {PerformanceScopeId}", performanceScopeId);
         }
     }
+
+    private static KeyValuePair<string, object?>[] CreateSupplementalPerformanceReportMetrics(ComparisonPhaseTimings phaseTimings)
+        =>
+        [
+            new("XmlDeserializationPrecheckMs", phaseTimings.XmlDeserializationPrecheckMs),
+            new("XmlDeserializationFullDeserializeMs", phaseTimings.XmlDeserializationFullDeserializeMs),
+            new("CollectionOrderDeterministicOrderingMs", phaseTimings.CollectionOrderDeterministicOrderingMs),
+            new("CollectionOrderFallbackMs", phaseTimings.CollectionOrderFallbackMs),
+            new("CollectionOrderFallbackCount", phaseTimings.CollectionOrderFallbackCount),
+        ];
 
     private string CreatePerformanceScopeId(string prefix)
         => $"{prefix}_{DateTime.UtcNow:yyyyMMddHHmmssfff}_{Guid.NewGuid():N}";

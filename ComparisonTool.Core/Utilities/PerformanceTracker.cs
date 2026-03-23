@@ -216,8 +216,17 @@ public class PerformanceTracker : IDisposable
     /// </summary>
     /// <param name="filePath">Path where the report should be saved. If null, will use a default timestamped path in the current directory.</param>
     /// <returns>The path to the saved file.</returns>
-    public string SaveReportToFile(string? filePath = null)
-        => SaveReportToFileInternal(GetReport(), filePath, "Performance report saved to: {FilePath}");
+    public string SaveReportToFile(
+        string? filePath = null,
+        IEnumerable<KeyValuePair<string, object?>>? supplementalMetrics = null)
+        => SaveReportToFileInternal(
+            BuildReport(
+                GetMetrics(),
+                "SYSTEM PERFORMANCE REPORT",
+                "No performance data collected.",
+                supplementalMetrics),
+            filePath,
+            "Performance report saved to: {FilePath}");
 
     /// <summary>
     /// Saves the performance report for a specific scope to a file.
@@ -225,10 +234,20 @@ public class PerformanceTracker : IDisposable
     /// <param name="scopeId">The scope identifier.</param>
     /// <param name="filePath">Path where the report should be saved. If null, will use a default timestamped path in the current directory.</param>
     /// <returns>The path to the saved file.</returns>
-    public string SaveReportToFileForScope(string scopeId, string? filePath = null)
+    public string SaveReportToFileForScope(
+        string scopeId,
+        string? filePath = null,
+        IEnumerable<KeyValuePair<string, object?>>? supplementalMetrics = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(scopeId);
-        return SaveReportToFileInternal(GetReportForScope(scopeId), filePath, "Performance report for scope saved to: {FilePath}");
+        return SaveReportToFileInternal(
+            BuildReport(
+                GetMetricsForScope(scopeId),
+                $"SYSTEM PERFORMANCE REPORT ({scopeId})",
+                $"No performance data collected for scope '{scopeId}'.",
+                supplementalMetrics),
+            filePath,
+            "Performance report for scope saved to: {FilePath}");
     }
 
     /// <summary>
@@ -236,8 +255,14 @@ public class PerformanceTracker : IDisposable
     /// </summary>
     /// <param name="filePath">Path where the CSV should be saved. If null, will use a default timestamped path.</param>
     /// <returns>The path to the saved CSV file.</returns>
-    public string SaveReportToCsv(string? filePath = null)
-        => SaveReportToCsvInternal(GetMetrics(), filePath, "Performance report CSV saved to: {FilePath}");
+    public string SaveReportToCsv(
+        string? filePath = null,
+        IEnumerable<KeyValuePair<string, object?>>? supplementalMetrics = null)
+        => SaveReportToCsvInternal(
+            GetMetrics(),
+            filePath,
+            "Performance report CSV saved to: {FilePath}",
+            supplementalMetrics);
 
     /// <summary>
     /// Saves the scoped performance report as CSV for further analysis.
@@ -245,10 +270,17 @@ public class PerformanceTracker : IDisposable
     /// <param name="scopeId">The scope identifier.</param>
     /// <param name="filePath">Path where the CSV should be saved. If null, will use a default timestamped path.</param>
     /// <returns>The path to the saved CSV file.</returns>
-    public string SaveReportToCsvForScope(string scopeId, string? filePath = null)
+    public string SaveReportToCsvForScope(
+        string scopeId,
+        string? filePath = null,
+        IEnumerable<KeyValuePair<string, object?>>? supplementalMetrics = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(scopeId);
-        return SaveReportToCsvInternal(GetMetricsForScope(scopeId), filePath, "Performance report CSV for scope saved to: {FilePath}");
+        return SaveReportToCsvInternal(
+            GetMetricsForScope(scopeId),
+            filePath,
+            "Performance report CSV for scope saved to: {FilePath}",
+            supplementalMetrics);
     }
 
     /// <summary>
@@ -347,28 +379,36 @@ public class PerformanceTracker : IDisposable
         return result;
     }
 
-    private string BuildReport(Dictionary<string, OperationMetrics> metrics, string header, string emptyMessage)
+    private string BuildReport(
+        Dictionary<string, OperationMetrics> metrics,
+        string header,
+        string emptyMessage,
+        IEnumerable<KeyValuePair<string, object?>>? supplementalMetrics = null)
     {
+        var report = new System.Text.StringBuilder();
         if (!metrics.Any())
         {
-            return emptyMessage;
+            report.AppendLine(emptyMessage);
         }
-
-        var report = new System.Text.StringBuilder();
-        report.AppendLine(header);
-        report.AppendLine(new string('=', header.Length));
-        report.AppendLine();
-
-        foreach (var metric in metrics.Values.OrderByDescending(m => m.TotalTimeMs))
+        else
         {
-            report.AppendLine($"Operation: {metric.OperationName}");
-            report.AppendLine($"  Calls:       {metric.CallCount}");
-            report.AppendLine(string.Format(CultureInfo.InvariantCulture, "  Total Time:  {0}ms", metric.TotalTimeMs));
-            report.AppendLine(string.Format(CultureInfo.InvariantCulture, "  Average:     {0:F2}ms", metric.AverageTimeMs));
-            report.AppendLine(string.Format(CultureInfo.InvariantCulture, "  Median:      {0:F2}ms", metric.MedianTimeMs));
-            report.AppendLine(string.Format(CultureInfo.InvariantCulture, "  Min/Max:     {0}ms / {1}ms", metric.MinTimeMs, metric.MaxTimeMs));
+            report.AppendLine(header);
+            report.AppendLine(new string('=', header.Length));
             report.AppendLine();
+
+            foreach (var metric in metrics.Values.OrderByDescending(m => m.TotalTimeMs))
+            {
+                report.AppendLine($"Operation: {metric.OperationName}");
+                report.AppendLine($"  Calls:       {metric.CallCount}");
+                report.AppendLine(string.Format(CultureInfo.InvariantCulture, "  Total Time:  {0}ms", metric.TotalTimeMs));
+                report.AppendLine(string.Format(CultureInfo.InvariantCulture, "  Average:     {0:F2}ms", metric.AverageTimeMs));
+                report.AppendLine(string.Format(CultureInfo.InvariantCulture, "  Median:      {0:F2}ms", metric.MedianTimeMs));
+                report.AppendLine(string.Format(CultureInfo.InvariantCulture, "  Min/Max:     {0}ms / {1}ms", metric.MinTimeMs, metric.MaxTimeMs));
+                report.AppendLine();
+            }
         }
+
+        AppendSupplementalMetricsSection(report, BuildSupplementalMetricsSnapshot(supplementalMetrics));
 
         return report.ToString();
     }
@@ -411,7 +451,11 @@ public class PerformanceTracker : IDisposable
         return filePath;
     }
 
-    private string SaveReportToCsvInternal(Dictionary<string, OperationMetrics> metrics, string? filePath, string logMessage)
+    private string SaveReportToCsvInternal(
+        Dictionary<string, OperationMetrics> metrics,
+        string? filePath,
+        string logMessage,
+        IEnumerable<KeyValuePair<string, object?>>? supplementalMetrics = null)
     {
         if (string.IsNullOrEmpty(filePath))
         {
@@ -439,8 +483,96 @@ public class PerformanceTracker : IDisposable
                     metric.MaxTimeMs));
         }
 
+        var supplementalMetricRows = BuildSupplementalMetricsSnapshot(supplementalMetrics);
+        if (supplementalMetricRows.Count > 0)
+        {
+            writer.WriteLine();
+            writer.WriteLine("Metric,Value");
+
+            foreach (var supplementalMetric in supplementalMetricRows)
+            {
+                writer.WriteLine(
+                    string.Format(
+                        CultureInfo.InvariantCulture,
+                        "{0},{1}",
+                        EscapeCsv(supplementalMetric.Name),
+                        EscapeCsv(supplementalMetric.Value)));
+            }
+        }
+
         logger.LogInformation(logMessage, filePath);
         return filePath;
+    }
+
+    private static void AppendSupplementalMetricsSection(
+        System.Text.StringBuilder report,
+        IReadOnlyList<SupplementalMetricRow> supplementalMetricRows)
+    {
+        if (supplementalMetricRows.Count == 0)
+        {
+            return;
+        }
+
+        if (report.Length > 0)
+        {
+            report.AppendLine();
+        }
+
+        report.AppendLine("SUPPLEMENTAL METRICS");
+        report.AppendLine("====================");
+        report.AppendLine();
+
+        foreach (var supplementalMetric in supplementalMetricRows)
+        {
+            report.AppendLine($"{supplementalMetric.Name}: {supplementalMetric.Value}");
+        }
+    }
+
+    private static List<SupplementalMetricRow> BuildSupplementalMetricsSnapshot(
+        IEnumerable<KeyValuePair<string, object?>>? supplementalMetrics)
+    {
+        var supplementalMetricRows = new List<SupplementalMetricRow>();
+        if (supplementalMetrics == null)
+        {
+            return supplementalMetricRows;
+        }
+
+        foreach (var supplementalMetric in supplementalMetrics)
+        {
+            if (string.IsNullOrWhiteSpace(supplementalMetric.Key))
+            {
+                continue;
+            }
+
+            supplementalMetricRows.Add(
+                new SupplementalMetricRow(
+                    supplementalMetric.Key,
+                    FormatSupplementalMetricValue(supplementalMetric.Value)));
+        }
+
+        return supplementalMetricRows;
+    }
+
+    private static string FormatSupplementalMetricValue(object? value)
+        => value switch
+        {
+            null => string.Empty,
+            string text => text,
+            IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
+            _ => value.ToString() ?? string.Empty,
+        };
+
+    private static string EscapeCsv(string value)
+    {
+        if (!value.Contains(',', StringComparison.Ordinal)
+            && !value.Contains('"')
+            && !value.Contains('\r')
+            && !value.Contains('\n'))
+        {
+            return value;
+        }
+
+        return $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
     }
 
     private static void EnsureDirectoryExists(string filePath)
@@ -496,6 +628,7 @@ public sealed class PerformanceTrackingScope : IDisposable
 internal sealed record ActiveOperation(OperationKey Key, Stopwatch Stopwatch);
 internal sealed record ScopeFrame(string ScopeId);
 internal readonly record struct OperationKey(string? ScopeId, string OperationName);
+internal readonly record struct SupplementalMetricRow(string Name, string Value);
 
 /// <summary>
 /// Performance metrics for an operation.
