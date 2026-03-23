@@ -2,6 +2,8 @@ using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.RequestComparison.Models;
 using Microsoft.Extensions.Logging;
+using System.Net.Http.Headers;
+using System.Text;
 
 namespace ComparisonTool.Core.RequestComparison.Services;
 
@@ -75,8 +77,8 @@ public class RawTextComparisonService
         }
 
         // Read response bodies and perform line-by-line comparison
-        var bodyA = await ReadResponseBodyAsync(exec.ResponsePathA, cancellationToken).ConfigureAwait(false);
-        var bodyB = await ReadResponseBodyAsync(exec.ResponsePathB, cancellationToken).ConfigureAwait(false);
+        var bodyA = await ReadResponseBodyAsync(exec.ResponsePathA, exec.ContentTypeA, cancellationToken).ConfigureAwait(false);
+        var bodyB = await ReadResponseBodyAsync(exec.ResponsePathB, exec.ContentTypeB, cancellationToken).ConfigureAwait(false);
 
         var textDiffs = ComputeLineDifferences(bodyA.lines, bodyB.lines);
         pairResult.RawTextDifferences.AddRange(textDiffs);
@@ -159,8 +161,8 @@ public class RawTextComparisonService
     {
         var diffs = new List<RawTextDifference>();
 
-        var bodyA = await ReadResponseBodyAsync(file1Path, cancellationToken).ConfigureAwait(false);
-        var bodyB = await ReadResponseBodyAsync(file2Path, cancellationToken).ConfigureAwait(false);
+        var bodyA = await ReadResponseBodyAsync(file1Path, null, cancellationToken).ConfigureAwait(false);
+        var bodyB = await ReadResponseBodyAsync(file2Path, null, cancellationToken).ConfigureAwait(false);
 
         // If both files are missing/empty, nothing to diff
         if (bodyA.lines.Length == 0 && bodyB.lines.Length == 0)
@@ -194,6 +196,7 @@ public class RawTextComparisonService
     /// </summary>
     private static async Task<(string[] lines, bool wasTruncated)> ReadResponseBodyAsync(
         string? filePath,
+        string? contentType,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
@@ -215,10 +218,52 @@ public class RawTextComparisonService
             FileOptions.Asynchronous | FileOptions.SequentialScan);
 
         var bytesRead = await stream.ReadAsync(buffer.AsMemory(0, bytesToRead), cancellationToken).ConfigureAwait(false);
-        var text = System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead);
+        var text = DecodeText(buffer, bytesRead, contentType);
         var lines = text.Split('\n');
 
         return (lines, wasTruncated);
+    }
+
+    private static string DecodeText(byte[] buffer, int bytesRead, string? contentType)
+    {
+        var encoding = ResolveEncoding(buffer, bytesRead, contentType);
+        var text = encoding.GetString(buffer, 0, bytesRead);
+        return text.Length > 0 && text[0] == '\uFEFF'
+            ? text[1..]
+            : text;
+    }
+
+    private static Encoding ResolveEncoding(byte[] buffer, int bytesRead, string? contentType)
+    {
+        if (!string.IsNullOrWhiteSpace(contentType)
+            && MediaTypeHeaderValue.TryParse(contentType, out var header)
+            && !string.IsNullOrWhiteSpace(header.CharSet))
+        {
+            try
+            {
+                return Encoding.GetEncoding(header.CharSet.Trim('"'));
+            }
+            catch (ArgumentException)
+            {
+            }
+        }
+
+        if (bytesRead >= 3 && buffer[0] == 0xEF && buffer[1] == 0xBB && buffer[2] == 0xBF)
+        {
+            return Encoding.UTF8;
+        }
+
+        if (bytesRead >= 2 && buffer[0] == 0xFF && buffer[1] == 0xFE)
+        {
+            return Encoding.Unicode;
+        }
+
+        if (bytesRead >= 2 && buffer[0] == 0xFE && buffer[1] == 0xFF)
+        {
+            return Encoding.BigEndianUnicode;
+        }
+
+        return Encoding.UTF8;
     }
 
     /// <summary>

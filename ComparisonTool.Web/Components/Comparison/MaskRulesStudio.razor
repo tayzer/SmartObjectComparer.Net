@@ -1,0 +1,961 @@
+@using System.Text.Json
+@using ComparisonTool.Core.RequestComparison.Models
+@using ComparisonTool.Core.Serialization
+@using ComparisonTool.Core.Utilities
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
+@using MudBlazor
+
+@inject IDeserializationService DeserializationService
+@inject IJSRuntime JSRuntime
+
+<MudPaper Elevation="2" Class="pa-4">
+    <MudStack Spacing="3">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.h6">Mask Rules Studio</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Default">
+                    Build masking rules for request comparison and export them in the same JSON format supported by the CLI.
+                </MudText>
+            </MudStack>
+            <MudChip T="string" Color="Color.Info" Variant="Variant.Filled">@MaskRules.Count rule(s)</MudChip>
+        </MudStack>
+
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+            Select a domain model, browse properties using the simple selector or tree navigator, then configure how many trailing characters remain visible. Prefer leaf fields that serialize to text, such as emails, card numbers, tokens, or identifiers.
+        </MudAlert>
+
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="7">
+                <MudStack Spacing="3">
+                    <MudPaper Elevation="0" Outlined="true" Class="pa-3">
+                        <MudStack Spacing="2">
+                            <MudText Typo="Typo.subtitle1">Model &amp; File Actions</MudText>
+
+                            <MudSelect T="string"
+                                       Label="Select Domain Model"
+                                       Value="SelectedModelName"
+                                       ValueChanged="HandleSelectedModelChanged"
+                                       Variant="Variant.Outlined"
+                                       AnchorOrigin="Origin.BottomCenter">
+                                @foreach (var modelName in AvailableModelNames)
+                                {
+                                    <MudSelectItem Value="@modelName">@modelName</MudSelectItem>
+                                }
+                            </MudSelect>
+
+                            <MudStack Row="true" Spacing="2" Class="flex-wrap">
+                                <InputFile OnChange="HandleImportFileSelected" accept=".json" id="mask-rules-import-input" style="display: none;" />
+                                <MudButton Variant="Variant.Outlined"
+                                           StartIcon="@Icons.Material.Filled.Upload"
+                                           HtmlTag="label"
+                                           for="mask-rules-import-input">
+                                    Import Mask Rules
+                                </MudButton>
+                                <MudButton Variant="Variant.Outlined"
+                                           StartIcon="@Icons.Material.Filled.Download"
+                                           OnClick="ExportMaskRules"
+                                           Disabled="@(!MaskRules.Any())">
+                                    Export Mask Rules
+                                </MudButton>
+                                <MudButton Variant="Variant.Outlined"
+                                           Color="Color.Error"
+                                           StartIcon="@Icons.Material.Filled.DeleteSweep"
+                                           OnClick="ClearAllRules"
+                                           Disabled="@(!MaskRules.Any())">
+                                    Clear All
+                                </MudButton>
+                            </MudStack>
+
+                            @if (!string.IsNullOrEmpty(statusMessage))
+                            {
+                                <MudAlert Severity="@(statusIsError ? Severity.Error : Severity.Success)" Variant="Variant.Outlined">
+                                    @statusMessage
+                                </MudAlert>
+                            }
+                        </MudStack>
+                    </MudPaper>
+
+                    <MudTabs Rounded="true" Border="true">
+                        <MudTabPanel Text="Simple Property Selector">
+                            <MudPaper Elevation="0" Outlined="true" Class="pa-3">
+                                <MudStack Spacing="2">
+                                    <MudTextField T="string"
+                                                  @bind-Value="simpleSearchTerm"
+                                                  Label="Search Properties"
+                                                  Placeholder="customer.payment, card, token"
+                                                  Variant="Variant.Outlined"
+                                                  Immediate="true"
+                                                  Clearable="true"
+                                                  Adornment="Adornment.Start"
+                                                  AdornmentIcon="@Icons.Material.Filled.Search" />
+
+                                    <MudText Typo="Typo.caption" Color="Color.Default">
+                                        @FilteredSimpleProperties.Count property path(s) available for @SelectedModelName.
+                                    </MudText>
+
+                                    <MudPaper Elevation="0" Outlined="true" Style="max-height: 520px; overflow-y: auto;">
+                                        @if (FilteredSimpleProperties.Any())
+                                        {
+                                            @foreach (var property in FilteredSimpleProperties)
+                                            {
+                                                var isSelected = string.Equals(selectedPropertyPath, property.Path, StringComparison.Ordinal);
+                                                var existingRule = GetRule(property.Path);
+
+                                                <MudStack Row="true"
+                                                          Class="pa-2"
+                                                          Justify="Justify.SpaceBetween"
+                                                          AlignItems="AlignItems.Center"
+                                                          Style="@GetSimpleSelectionStyle(isSelected)"
+                                                          @onclick="() => SelectProperty(property.Path)">
+                                                    <MudStack Spacing="0">
+                                                        <MudText Typo="Typo.body2" Style="font-family: 'Consolas', 'Monaco', monospace; word-break: break-all;">
+                                                            @property.Path
+                                                        </MudText>
+                                                        <MudText Typo="Typo.caption" Color="Color.Default">@property.TypeName</MudText>
+                                                    </MudStack>
+                                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                        @if (existingRule != null)
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
+                                                                @GetRuleSummary(existingRule)
+                                                            </MudChip>
+                                                        }
+                                                        <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" />
+                                                    </MudStack>
+                                                </MudStack>
+                                                <MudDivider />
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="pa-6">
+                                                <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Color="Color.Default" />
+                                                <MudText Typo="Typo.body2" Color="Color.Default">No properties match the current search.</MudText>
+                                            </MudStack>
+                                        }
+                                    </MudPaper>
+                                </MudStack>
+                            </MudPaper>
+                        </MudTabPanel>
+
+                        <MudTabPanel Text="Tree Navigator">
+                            <MudPaper Elevation="0" Outlined="true" Class="pa-3">
+                                <MudStack Spacing="2">
+                                    <MudTextField T="string"
+                                                  @bind-Value="treeSearchTerm"
+                                                  Label="Search Tree"
+                                                  Placeholder="order.payment, profile.email"
+                                                  Variant="Variant.Outlined"
+                                                  Immediate="true"
+                                                  Clearable="true"
+                                                  Adornment="Adornment.Start"
+                                                  AdornmentIcon="@Icons.Material.Filled.AccountTree" />
+
+                                    <MudStack Row="true" Spacing="1">
+                                        <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="ExpandAllTreeNodes">Expand All</MudButton>
+                                        <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="CollapseAllTreeNodes">Collapse All</MudButton>
+                                    </MudStack>
+
+                                    <MudPaper Elevation="0" Outlined="true" Style="max-height: 520px; overflow-y: auto;" Class="pa-2">
+                                        @if (treeNodes.Any())
+                                        {
+                                            @foreach (var node in treeNodes)
+                                            {
+                                                @RenderTreeNode(node, 0)
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="pa-6">
+                                                <MudIcon Icon="@Icons.Material.Filled.AccountTree" Size="Size.Large" Color="Color.Default" />
+                                                <MudText Typo="Typo.body2" Color="Color.Default">Select a model to browse its object graph.</MudText>
+                                            </MudStack>
+                                        }
+                                    </MudPaper>
+                                </MudStack>
+                            </MudPaper>
+                        </MudTabPanel>
+                    </MudTabs>
+                </MudStack>
+            </MudItem>
+
+            <MudItem xs="12" md="5">
+                <MudStack Spacing="3">
+                    <MudPaper Elevation="0" Outlined="true" Class="pa-3">
+                        <MudStack Spacing="2">
+                            <MudText Typo="Typo.subtitle1">Rule Editor</MudText>
+
+                            <MudTextField T="string"
+                                          Value="selectedPropertyPath"
+                                                        ValueChanged="HandleEditorPropertyPathChanged"
+                                          Label="Property Path"
+                                          Placeholder="OrderManagementResponse.OrderData.Payment.TransactionId"
+                                          Variant="Variant.Outlined" />
+
+                            <MudNumericField T="int"
+                                             Value="preserveLastCharacters"
+                                                            ValueChanged="HandlePreserveLastCharactersChanged"
+                                             Label="Preserve Last Characters"
+                                             Min="0"
+                                             Max="128"
+                                             Variant="Variant.Outlined" />
+
+                            <MudTextField T="string"
+                                          Value="maskCharacter"
+                                          ValueChanged="HandleMaskCharacterChanged"
+                                          Label="Mask Character"
+                                          Placeholder="*"
+                                          Variant="Variant.Outlined"
+                                          MaxLength="1"
+                                          Counter="1" />
+
+                            <MudText Typo="Typo.caption" Color="Color.Default">
+                                Preview: @GetPreviewMask()
+                            </MudText>
+
+                            <MudStack Row="true" Spacing="2">
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Success"
+                                           StartIcon="@Icons.Material.Filled.Add"
+                                           OnClick="SaveCurrentRule"
+                                           Disabled="@(string.IsNullOrWhiteSpace(selectedPropertyPath))">
+                                    Add Or Update Rule
+                                </MudButton>
+                                <MudButton Variant="Variant.Text"
+                                           Color="Color.Default"
+                                           OnClick="ResetEditor">
+                                    Reset
+                                </MudButton>
+                            </MudStack>
+                        </MudStack>
+                    </MudPaper>
+
+                    <MudPaper Elevation="0" Outlined="true" Class="pa-3">
+                        <MudStack Spacing="2">
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.subtitle1">Current Mask Rules</MudText>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@MaskRules.Count</MudChip>
+                            </MudStack>
+
+                            @if (MaskRules.Any())
+                            {
+                                <MudPaper Elevation="0" Outlined="true" Style="max-height: 520px; overflow-y: auto;">
+                                    @foreach (var rule in OrderedRules)
+                                    {
+                                        <MudStack Spacing="2" Class="pa-3">
+                                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+                                                <MudText Typo="Typo.body2" Style="font-family: 'Consolas', 'Monaco', monospace; word-break: break-all;">
+                                                    @rule.PropertyPath
+                                                </MudText>
+                                                <MudStack Row="true" Spacing="0">
+                                                    <MudTooltip Text="Edit rule">
+                                                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                                                       Size="Size.Small"
+                                                                       Color="Color.Primary"
+                                                                       OnClick="() => EditRule(rule)" />
+                                                    </MudTooltip>
+                                                    <MudTooltip Text="Remove rule">
+                                                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                                       Size="Size.Small"
+                                                                       Color="Color.Error"
+                                                                       OnClick="() => RemoveRule(rule.PropertyPath)" />
+                                                    </MudTooltip>
+                                                </MudStack>
+                                            </MudStack>
+
+                                            <MudGrid Spacing="2">
+                                                <MudItem xs="6">
+                                                    <MudNumericField T="int"
+                                                                     Value="rule.PreserveLastCharacters"
+                                                                     ValueChanged="value => UpdateRule(rule with { PreserveLastCharacters = value })"
+                                                                     Label="Preserve"
+                                                                     Min="0"
+                                                                     Max="128"
+                                                                     Variant="Variant.Outlined" />
+                                                </MudItem>
+                                                <MudItem xs="6">
+                                                    <MudTextField T="string"
+                                                                  Value="rule.MaskCharacter"
+                                                                  ValueChanged="value => UpdateRule(rule with { MaskCharacter = NormalizeMaskCharacter(value) })"
+                                                                  Label="Mask"
+                                                                      Variant="Variant.Outlined"
+                                                                  MaxLength="1"
+                                                                  Counter="1" />
+                                                </MudItem>
+                                            </MudGrid>
+
+                                            <MudText Typo="Typo.caption" Color="Color.Default">
+                                                Sample: @GetPreviewMask(rule)
+                                            </MudText>
+                                        </MudStack>
+                                        <MudDivider />
+                                    }
+                                </MudPaper>
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Normal" Variant="Variant.Outlined">
+                                    No mask rules configured yet.
+                                </MudAlert>
+                            }
+                        </MudStack>
+                    </MudPaper>
+                </MudStack>
+            </MudItem>
+        </MudGrid>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter] public IEnumerable<string> AvailableModelNames { get; set; } = Array.Empty<string>();
+    [Parameter] public string? SelectedModelName { get; set; }
+    [Parameter] public EventCallback<string> SelectedModelNameChanged { get; set; }
+    [Parameter] public List<MaskRuleDto> MaskRules { get; set; } = new();
+    [Parameter] public EventCallback<List<MaskRuleDto>> MaskRulesChanged { get; set; }
+
+    private const string SampleValue = "4111111111111111";
+
+    private readonly JsonSerializerOptions serializerOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        WriteIndented = true
+    };
+
+    private readonly List<TreeNode> treeNodes = new();
+    private readonly HashSet<string> expandedNodes = new(StringComparer.Ordinal);
+    private Dictionary<string, Type> allPropertyPaths = new(StringComparer.Ordinal);
+
+    private string simpleSearchTerm = string.Empty;
+    private string treeSearchTerm = string.Empty;
+    private string? selectedPropertyPath;
+    private int preserveLastCharacters = 4;
+    private string maskCharacter = "*";
+    private string statusMessage = string.Empty;
+    private bool statusIsError;
+
+    private List<PropertyEntry> FilteredSimpleProperties => allPropertyPaths
+        .OrderBy(path => path.Key, StringComparer.Ordinal)
+        .Where(path => IsMaskCandidatePath(path.Key, path.Value))
+        .Where(path => string.IsNullOrWhiteSpace(simpleSearchTerm)
+            || path.Key.Contains(simpleSearchTerm, StringComparison.OrdinalIgnoreCase))
+        .Select(path => new PropertyEntry(path.Key, PropertyPathExplorer.GetFriendlyTypeName(path.Value)))
+        .ToList();
+
+    private List<MaskRuleDto> OrderedRules => MaskRules
+        .OrderBy(rule => rule.PropertyPath, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    protected override void OnParametersSet()
+    {
+        if (string.IsNullOrWhiteSpace(SelectedModelName))
+        {
+            var fallbackModel = AvailableModelNames.FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(fallbackModel))
+            {
+                SelectedModelName = fallbackModel;
+            }
+        }
+
+        LoadPropertyMetadata();
+    }
+
+    private async Task HandleSelectedModelChanged(string modelName)
+    {
+        SelectedModelName = modelName;
+        ResetEditor();
+        LoadPropertyMetadata();
+        await SelectedModelNameChanged.InvokeAsync(modelName);
+    }
+
+    private void LoadPropertyMetadata()
+    {
+        allPropertyPaths = new Dictionary<string, Type>(StringComparer.Ordinal);
+        treeNodes.Clear();
+        expandedNodes.Clear();
+
+        if (string.IsNullOrWhiteSpace(SelectedModelName))
+        {
+            return;
+        }
+
+        Type? modelType;
+        try
+        {
+            modelType = DeserializationService.GetModelType(SelectedModelName);
+        }
+        catch
+        {
+            modelType = null;
+        }
+
+        allPropertyPaths = PropertyPathExplorer.GetAllPropertyPaths(modelType);
+        BuildTree();
+    }
+
+    private void BuildTree()
+    {
+        foreach (var property in allPropertyPaths)
+        {
+            AddTreePath(property.Key, property.Value);
+        }
+
+        foreach (var node in treeNodes)
+        {
+            if (node.Children.Count > 0)
+            {
+                expandedNodes.Add(node.FullPath);
+            }
+        }
+    }
+
+    private void AddTreePath(string propertyPath, Type propertyType)
+    {
+        var segments = SplitPropertyPath(propertyPath);
+        var currentLevel = treeNodes;
+        var currentPath = string.Empty;
+
+        for (var index = 0; index < segments.Count; index++)
+        {
+            var segment = segments[index];
+            currentPath = string.IsNullOrEmpty(currentPath)
+                ? segment
+                : segment == "[*]"
+                    ? $"{currentPath}[*]"
+                    : $"{currentPath}.{segment}";
+
+            var node = currentLevel.FirstOrDefault(existing => string.Equals(existing.Name, segment, StringComparison.Ordinal));
+            if (node == null)
+            {
+                var isLeaf = index == segments.Count - 1;
+                node = new TreeNode
+                {
+                    Name = segment,
+                    FullPath = currentPath,
+                    PropertyType = isLeaf ? propertyType : null,
+                    IsCollection = isLeaf && PropertyPathExplorer.IsCollectionType(propertyType),
+                    IsLeaf = isLeaf
+                };
+
+                currentLevel.Add(node);
+            }
+
+            currentLevel = node.Children;
+        }
+    }
+
+    private static List<string> SplitPropertyPath(string propertyPath)
+    {
+        var segments = new List<string>();
+        var parts = propertyPath.Split('.', StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var part in parts)
+        {
+            if (!part.Contains("[*]", StringComparison.Ordinal))
+            {
+                segments.Add(part);
+                continue;
+            }
+
+            var itemStart = part.IndexOf("[*]", StringComparison.Ordinal);
+            var before = part[..itemStart];
+            if (!string.IsNullOrEmpty(before))
+            {
+                segments.Add(before);
+            }
+
+            segments.Add("[*]");
+
+            var after = part[(itemStart + 3)..];
+            if (!string.IsNullOrEmpty(after))
+            {
+                segments.Add(after);
+            }
+        }
+
+        return segments;
+    }
+
+    private void SelectProperty(string propertyPath)
+    {
+        selectedPropertyPath = propertyPath;
+
+        var existingRule = GetRule(propertyPath);
+        if (existingRule != null)
+        {
+            preserveLastCharacters = existingRule.PreserveLastCharacters;
+            maskCharacter = existingRule.MaskCharacter;
+        }
+    }
+
+    private void HandleTreeNodeClick(TreeNode node)
+    {
+        if (node.PropertyType != null && IsMaskCandidatePath(node.FullPath, node.PropertyType))
+        {
+            SelectProperty(node.FullPath);
+            return;
+        }
+
+        if (node.Children.Count > 0)
+        {
+            ToggleExpanded(node);
+        }
+    }
+
+    private void HandleEditorPropertyPathChanged(string? value)
+    {
+        selectedPropertyPath = value;
+    }
+
+    private void HandlePreserveLastCharactersChanged(int value)
+    {
+        preserveLastCharacters = value;
+    }
+
+    private async Task SaveCurrentRule()
+    {
+        statusMessage = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(selectedPropertyPath))
+        {
+            SetStatus("Select or enter a property path first.", true);
+            return;
+        }
+
+        if (preserveLastCharacters < 0)
+        {
+            SetStatus("Preserve last characters must be zero or greater.", true);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(maskCharacter) || maskCharacter.Length != 1)
+        {
+            SetStatus("Mask character must be exactly one character.", true);
+            return;
+        }
+
+        var normalizedPath = PropertyPathNormalizer.NormalizePropertyPath(selectedPropertyPath.Trim());
+        if (allPropertyPaths.TryGetValue(normalizedPath, out var propertyType)
+            && !IsMaskCandidatePath(normalizedPath, propertyType))
+        {
+            SetStatus("Select a terminal value field. Container and collection paths cannot be masked directly.", true);
+            return;
+        }
+
+        var updatedRule = new MaskRuleDto
+        {
+            PropertyPath = normalizedPath,
+            PreserveLastCharacters = preserveLastCharacters,
+            MaskCharacter = maskCharacter
+        };
+
+        var updatedRules = MaskRules
+            .Where(rule => !string.Equals(rule.PropertyPath, normalizedPath, StringComparison.OrdinalIgnoreCase))
+            .Append(updatedRule)
+            .OrderBy(rule => rule.PropertyPath, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        MaskRules = updatedRules;
+        selectedPropertyPath = normalizedPath;
+        await MaskRulesChanged.InvokeAsync(updatedRules);
+
+        SetStatus($"Saved mask rule for '{normalizedPath}'.", false);
+    }
+
+    private async Task UpdateRule(MaskRuleDto updatedRule)
+    {
+        if (updatedRule.PreserveLastCharacters < 0)
+        {
+            SetStatus("Preserve last characters must be zero or greater.", true);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(updatedRule.MaskCharacter) || updatedRule.MaskCharacter.Length != 1)
+        {
+            SetStatus("Mask character must be exactly one character.", true);
+            return;
+        }
+
+        var normalizedRule = updatedRule with
+        {
+            PropertyPath = PropertyPathNormalizer.NormalizePropertyPath(updatedRule.PropertyPath),
+            MaskCharacter = NormalizeMaskCharacter(updatedRule.MaskCharacter)
+        };
+
+        var updatedRules = MaskRules
+            .Select(rule => string.Equals(rule.PropertyPath, normalizedRule.PropertyPath, StringComparison.OrdinalIgnoreCase) ? normalizedRule : rule)
+            .OrderBy(rule => rule.PropertyPath, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        MaskRules = updatedRules;
+        await MaskRulesChanged.InvokeAsync(updatedRules);
+        SetStatus($"Updated '{normalizedRule.PropertyPath}'.", false);
+    }
+
+    private async Task RemoveRule(string propertyPath)
+    {
+        var updatedRules = MaskRules
+            .Where(rule => !string.Equals(rule.PropertyPath, propertyPath, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(rule => rule.PropertyPath, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        MaskRules = updatedRules;
+        if (string.Equals(selectedPropertyPath, propertyPath, StringComparison.Ordinal))
+        {
+            ResetEditor();
+        }
+
+        await MaskRulesChanged.InvokeAsync(updatedRules);
+        SetStatus($"Removed '{propertyPath}'.", false);
+    }
+
+    private async Task ClearAllRules()
+    {
+        MaskRules = new List<MaskRuleDto>();
+        ResetEditor();
+        await MaskRulesChanged.InvokeAsync(MaskRules);
+        SetStatus("Cleared all mask rules.", false);
+    }
+
+    private void EditRule(MaskRuleDto rule)
+    {
+        selectedPropertyPath = rule.PropertyPath;
+        preserveLastCharacters = rule.PreserveLastCharacters;
+        maskCharacter = rule.MaskCharacter;
+    }
+
+    private void ResetEditor()
+    {
+        selectedPropertyPath = string.Empty;
+        preserveLastCharacters = 4;
+        maskCharacter = "*";
+    }
+
+    private string GetPreviewMask()
+    {
+        return GetPreviewMask(new MaskRuleDto
+        {
+            PropertyPath = selectedPropertyPath ?? string.Empty,
+            PreserveLastCharacters = preserveLastCharacters,
+            MaskCharacter = NormalizeMaskCharacter(maskCharacter)
+        });
+    }
+
+    private static string GetPreviewMask(MaskRuleDto rule)
+    {
+        if (rule.PreserveLastCharacters >= SampleValue.Length)
+        {
+            return SampleValue;
+        }
+
+        var mask = string.IsNullOrWhiteSpace(rule.MaskCharacter) ? "*" : rule.MaskCharacter;
+        var visibleCharacters = Math.Clamp(rule.PreserveLastCharacters, 0, SampleValue.Length);
+        var maskedLength = SampleValue.Length - visibleCharacters;
+
+        return visibleCharacters == 0
+            ? new string(mask[0], maskedLength)
+            : new string(mask[0], maskedLength) + SampleValue[^visibleCharacters..];
+    }
+
+    private async Task ExportMaskRules()
+    {
+        try
+        {
+            var payload = new MaskRuleFileContainer
+            {
+                MaskRules = OrderedRules
+            };
+
+            var json = JsonSerializer.Serialize(payload, serializerOptions);
+            var fileName = $"mask-rules_{DateTime.Now:yyyyMMdd_HHmmss}.json";
+            await JSRuntime.InvokeVoidAsync("saveAsFile", fileName, "application/json", json);
+
+            SetStatus($"Exported {MaskRules.Count} mask rule(s).", false);
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Export failed: {ex.Message}", true);
+        }
+    }
+
+    private async Task HandleImportFileSelected(InputFileChangeEventArgs args)
+    {
+        statusMessage = string.Empty;
+
+        var file = args.File;
+        if (file == null)
+        {
+            SetStatus("No file selected.", true);
+            return;
+        }
+
+        if (!file.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        {
+            SetStatus("Select a .json file.", true);
+            return;
+        }
+
+        const long maxFileSize = 1024 * 1024;
+        if (file.Size > maxFileSize)
+        {
+            SetStatus("Mask-rule files must be 1 MB or smaller.", true);
+            return;
+        }
+
+        try
+        {
+            await using var stream = file.OpenReadStream(maxFileSize);
+            using var reader = new StreamReader(stream);
+            var json = await reader.ReadToEndAsync();
+
+            var importedRules = TryDeserializeMaskRules(json);
+            if (importedRules.Count == 0)
+            {
+                SetStatus("The selected file does not contain any valid mask rules.", true);
+                return;
+            }
+
+            var normalizedRules = importedRules
+                .Where(rule => rule != null)
+                .Select(rule => rule!)
+                .Where(rule => !string.IsNullOrWhiteSpace(rule.PropertyPath))
+                .Select(rule => new MaskRuleDto
+                {
+                    PropertyPath = PropertyPathNormalizer.NormalizePropertyPath(rule.PropertyPath.Trim()),
+                    PreserveLastCharacters = Math.Max(0, rule.PreserveLastCharacters),
+                    MaskCharacter = NormalizeMaskCharacter(rule.MaskCharacter)
+                })
+                .GroupBy(rule => rule.PropertyPath, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.Last())
+                .OrderBy(rule => rule.PropertyPath, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (normalizedRules.Any(rule => string.IsNullOrWhiteSpace(rule.MaskCharacter) || rule.MaskCharacter.Length != 1))
+            {
+                SetStatus("Every imported mask rule must specify exactly one mask character.", true);
+                return;
+            }
+
+            MaskRules = normalizedRules;
+            await MaskRulesChanged.InvokeAsync(normalizedRules);
+            SetStatus($"Imported {normalizedRules.Count} mask rule(s).", false);
+        }
+        catch (JsonException ex)
+        {
+            SetStatus($"Import failed: invalid JSON. {ex.Message}", true);
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Import failed: {ex.Message}", true);
+        }
+    }
+
+    private List<MaskRuleDto> TryDeserializeMaskRules(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+
+        if (document.RootElement.ValueKind == JsonValueKind.Array)
+        {
+            var directList = JsonSerializer.Deserialize<List<MaskRuleDto?>>(json, serializerOptions);
+            if (directList == null)
+            {
+                return new List<MaskRuleDto>();
+            }
+
+            return directList.Where(rule => rule != null).Select(rule => rule!).ToList();
+        }
+
+        var container = JsonSerializer.Deserialize<MaskRuleFileContainer>(json, serializerOptions);
+        return container?.MaskRules?.Where(rule => rule != null).Select(rule => rule!).ToList() ?? new List<MaskRuleDto>();
+    }
+
+    private string NormalizeMaskCharacter(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "*" : value[..1];
+    }
+
+    private static string GetSimpleSelectionStyle(bool isSelected)
+    {
+        return isSelected
+            ? "cursor: pointer; background-color: var(--mud-palette-primary-lighten);"
+            : "cursor: pointer; background-color: transparent;";
+    }
+
+    private static string GetTreeNodeStyle(int depth, bool isSelected)
+    {
+        var background = isSelected ? "var(--mud-palette-primary-lighten)" : "transparent";
+        return $"padding-left: {depth * 18}px; cursor: pointer; background-color: {background};";
+    }
+
+    private void HandleMaskCharacterChanged(string value)
+    {
+        maskCharacter = NormalizeMaskCharacter(value);
+    }
+
+    private void SetStatus(string message, bool isError)
+    {
+        statusMessage = message;
+        statusIsError = isError;
+    }
+
+    private MaskRuleDto? GetRule(string propertyPath)
+    {
+        var normalizedPath = PropertyPathNormalizer.NormalizePropertyPath(propertyPath);
+        return MaskRules.FirstOrDefault(rule => string.Equals(rule.PropertyPath, normalizedPath, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private string GetRuleSummary(MaskRuleDto rule)
+    {
+        return $"keep {rule.PreserveLastCharacters}, mask '{rule.MaskCharacter}'";
+    }
+
+    private void ExpandAllTreeNodes()
+    {
+        foreach (var node in FlattenTree(treeNodes))
+        {
+            if (node.Children.Count > 0)
+            {
+                expandedNodes.Add(node.FullPath);
+            }
+        }
+    }
+
+    private void CollapseAllTreeNodes()
+    {
+        expandedNodes.Clear();
+    }
+
+    private IEnumerable<TreeNode> FlattenTree(IEnumerable<TreeNode> nodes)
+    {
+        foreach (var node in nodes)
+        {
+            yield return node;
+
+            foreach (var child in FlattenTree(node.Children))
+            {
+                yield return child;
+            }
+        }
+    }
+
+    private bool IsExpanded(TreeNode node)
+    {
+        return expandedNodes.Contains(node.FullPath);
+    }
+
+    private void ToggleExpanded(TreeNode node)
+    {
+        if (!expandedNodes.Add(node.FullPath))
+        {
+            expandedNodes.Remove(node.FullPath);
+        }
+    }
+
+    private bool NodeMatchesFilter(TreeNode node)
+    {
+        if (string.IsNullOrWhiteSpace(treeSearchTerm))
+        {
+            return true;
+        }
+
+        if (node.FullPath.Contains(treeSearchTerm, StringComparison.OrdinalIgnoreCase)
+            || node.Name.Contains(treeSearchTerm, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return node.Children.Any(NodeMatchesFilter);
+    }
+
+    private bool IsMaskCandidatePath(string path, Type propertyType)
+    {
+        return !PropertyPathExplorer.IsCollectionType(propertyType)
+            && !HasDescendantPath(path);
+    }
+
+    private bool HasDescendantPath(string path)
+    {
+        var prefixWithDot = $"{path}.";
+        var prefixWithIndex = $"{path}[";
+
+        return allPropertyPaths.Keys.Any(existingPath =>
+            existingPath.Length > path.Length
+            && (existingPath.StartsWith(prefixWithDot, StringComparison.Ordinal)
+                || existingPath.StartsWith(prefixWithIndex, StringComparison.Ordinal)));
+    }
+
+    private RenderFragment RenderTreeNode(TreeNode node, int depth) => @<div>
+        @if (NodeMatchesFilter(node))
+        {
+            var isSelected = string.Equals(selectedPropertyPath, node.FullPath, StringComparison.Ordinal);
+            var existingRule = GetRule(node.FullPath);
+            var isSelectable = node.PropertyType != null && IsMaskCandidatePath(node.FullPath, node.PropertyType);
+
+            <MudStack Row="true"
+                      AlignItems="AlignItems.Center"
+                      Justify="Justify.SpaceBetween"
+                      Class="pa-1"
+                      Style="@GetTreeNodeStyle(depth, isSelected)"
+                      @onclick="() => HandleTreeNodeClick(node)">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    @if (node.Children.Count > 0)
+                    {
+                        <div @onclick:stopPropagation="true">
+                            <MudIconButton Icon="@(IsExpanded(node) ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ChevronRight)"
+                                           Size="Size.Small"
+                                           OnClick="() => ToggleExpanded(node)" />
+                        </div>
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@(node.IsCollection ? Icons.Material.Filled.List : Icons.Material.Filled.DragIndicator)" Size="Size.Small" />
+                    }
+
+                    <MudText Typo="Typo.body2" Style="font-family: 'Consolas', 'Monaco', monospace;">
+                        @node.Name
+                    </MudText>
+                    @if (node.PropertyType != null)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@PropertyPathExplorer.GetFriendlyTypeName(node.PropertyType)</MudChip>
+                    }
+                    @if (!isSelectable && node.Children.Count > 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">Container</MudChip>
+                    }
+                </MudStack>
+
+                @if (existingRule != null)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
+                        @GetRuleSummary(existingRule)
+                    </MudChip>
+                }
+            </MudStack>
+
+            @if (node.Children.Count > 0 && (IsExpanded(node) || !string.IsNullOrWhiteSpace(treeSearchTerm)))
+            {
+                @foreach (var child in node.Children.OrderBy(child => child.Name, StringComparer.Ordinal))
+                {
+                    @RenderTreeNode(child, depth + 1)
+                }
+            }
+        }
+    </div>;
+
+    private sealed record PropertyEntry(string Path, string TypeName);
+
+    private sealed class TreeNode
+    {
+        public string Name { get; set; } = string.Empty;
+        public string FullPath { get; set; } = string.Empty;
+        public Type? PropertyType { get; set; }
+        public bool IsCollection { get; set; }
+        public bool IsLeaf { get; set; }
+        public List<TreeNode> Children { get; } = new();
+    }
+
+    private sealed class MaskRuleFileContainer
+    {
+        public List<MaskRuleDto?> MaskRules { get; set; } = new();
+    }
+}

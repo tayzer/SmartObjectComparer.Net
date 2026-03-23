@@ -5,6 +5,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+using System.Text;
 
 namespace ComparisonTool.Tests.Unit.RequestComparison;
 
@@ -47,6 +48,8 @@ public class RawTextComparisonServiceTests
         int statusB,
         string? responsePathA = null,
         string? responsePathB = null,
+        string? contentTypeA = null,
+        string? contentTypeB = null,
         bool success = true,
         string? error = null)
     {
@@ -65,6 +68,8 @@ public class RawTextComparisonServiceTests
                 StatusCodeB = statusB,
                 ResponsePathA = responsePathA,
                 ResponsePathB = responsePathB,
+                ContentTypeA = contentTypeA,
+                ContentTypeB = contentTypeB,
                 ErrorMessage = error,
             },
             Outcome = outcome,
@@ -272,6 +277,30 @@ public class RawTextComparisonServiceTests
             d.Type == RawTextDifferenceType.Modified &&
             d.TextA == "original" &&
             d.TextB == "changed");
+    }
+
+    [TestMethod]
+    public async Task CompareRawAsync_UsesDeclaredCharsetsForResponseBodies()
+    {
+        var pathA = Path.Combine(tempDir, "responseA-utf16.xml");
+        var pathB = Path.Combine(tempDir, "responseB-utf8.xml");
+        const string body = "<error>same body</error>";
+
+        await File.WriteAllTextAsync(pathA, body, Encoding.Unicode);
+        await File.WriteAllTextAsync(pathB, body, Encoding.UTF8);
+
+        var classified = CreateClassified(
+            RequestPairOutcome.StatusCodeMismatch,
+            500,
+            502,
+            responsePathA: pathA,
+            responsePathB: pathB,
+            contentTypeA: "application/xml; charset=utf-16",
+            contentTypeB: "application/xml; charset=utf-8");
+
+        var result = await service.CompareRawAsync(classified);
+
+        result.RawTextDifferences.Should().ContainSingle(diff => diff.Type == RawTextDifferenceType.StatusCodeDifference);
     }
 
     // --- CompareAllRawAsync batch tests ---

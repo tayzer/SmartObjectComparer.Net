@@ -15,13 +15,18 @@ public class RequestExecutionService : IDisposable
 {
     private readonly ILogger<RequestExecutionService> _logger;
     private readonly HttpClient _httpClient;
+    private readonly ResponseMaskingService _responseMaskingService;
     private readonly ArrayPool<byte> _bufferPool = ArrayPool<byte>.Shared;
     private const int BufferSize = 81920; // 80KB buffer
 
-    public RequestExecutionService(ILogger<RequestExecutionService> logger, IHttpClientFactory httpClientFactory)
+    public RequestExecutionService(
+        ILogger<RequestExecutionService> logger,
+        IHttpClientFactory httpClientFactory,
+        ResponseMaskingService responseMaskingService)
     {
         _logger = logger;
         _httpClient = httpClientFactory.CreateClient("RequestComparison");
+        _responseMaskingService = responseMaskingService;
     }
 
     /// <summary>
@@ -115,9 +120,16 @@ public class RequestExecutionService : IDisposable
             Directory.CreateDirectory(Path.GetDirectoryName(responsePathA)!);
             Directory.CreateDirectory(Path.GetDirectoryName(responsePathB)!);
 
+            var contentA = job.MaskRules.Count > 0
+                ? _responseMaskingService.MaskContent(responseA.content, responseA.contentType, responsePathA, job.MaskRules)
+                : responseA.content;
+            var contentB = job.MaskRules.Count > 0
+                ? _responseMaskingService.MaskContent(responseB.content, responseB.contentType, responsePathB, job.MaskRules)
+                : responseB.content;
+
             // Stream responses to disk
-            await SaveResponseAsync(responseA.content, responsePathA, cancellationToken).ConfigureAwait(false);
-            await SaveResponseAsync(responseB.content, responsePathB, cancellationToken).ConfigureAwait(false);
+            await SaveResponseAsync(contentA, responsePathA, cancellationToken).ConfigureAwait(false);
+            await SaveResponseAsync(contentB, responsePathB, cancellationToken).ConfigureAwait(false);
 
             stopwatch.Stop();
 
@@ -192,7 +204,7 @@ public class RequestExecutionService : IDisposable
 
         using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken).ConfigureAwait(false);
         var content = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
-        var responseContentType = response.Content.Headers.ContentType?.MediaType;
+        var responseContentType = response.Content.Headers.ContentType?.ToString();
 
         return (response.StatusCode, content, responseContentType);
     }

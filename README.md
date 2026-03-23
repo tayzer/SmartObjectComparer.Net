@@ -123,7 +123,7 @@ comparisontool folder <expected-dir> <actual-dir> -m ComplexOrderResponse \
   -f Console Json Markdown Html --html-mode SingleFile -o ./reports
 ```
 
-**Request comparison** — fire requests at two endpoints and diff the responses (with ignore rules + content-type override):
+**Request comparison** — fire requests at two endpoints and diff the responses (with ignore rules, response masking, and content-type override):
 ```bash
 comparisontool request <request-dir> \
   -a https://host-a/api/endpoint \
@@ -132,6 +132,7 @@ comparisontool request <request-dir> \
   --range 1-500 \
   --soap-action "urn:YourSoapAction" \
   --ignore-rules ./ignore-rules.json \
+  --mask-rules ./mask-rules.json \
   --content-type application/json \
   --disable-truncation \
   --ignore-collection-order --ignore-trailing-whitespace-end --ignore-namespaces \
@@ -141,6 +142,8 @@ comparisontool request <request-dir> \
 `--soap-action` is optional. When provided, it sets the `SOAPAction` header for requests sent to both endpoints.
 
 `--range` is optional. It applies a 1-based inclusive ordinal slice after top-level eligible request files are sorted with ordinal filename ordering. For example, `--range 1-500` stages the first 500 eligible `xml`/`json`/`txt` request files, clamping the end when fewer files are available.
+
+`--mask-rules` is optional. It masks matched JSON/XML string properties in saved response files before comparison and report generation. This is intended for sensitive values such as payment-card fields. v1 masking is string-only and preserves the final `preserveLastCharacters` characters.
 
 For CI troubleshooting (for example Jenkins), use `--disable-truncation` to show full value bodies directly in generated reports and console output.
 
@@ -158,6 +161,22 @@ For CI troubleshooting (for example Jenkins), use `--disable-truncation` to show
     "propertyPath": "Order.Items",
     "ignoreCompletely": false,
     "ignoreCollectionOrder": true
+  }
+]
+```
+
+**Mask rules JSON** (array of `MaskRuleDto`):
+```json
+[
+  {
+    "propertyPath": "Order.Payments[*].CardNumber",
+    "preserveLastCharacters": 4,
+    "maskCharacter": "*"
+  },
+  {
+    "propertyPath": "Order.Customer.Email",
+    "preserveLastCharacters": 0,
+    "maskCharacter": "#"
   }
 ]
 ```
