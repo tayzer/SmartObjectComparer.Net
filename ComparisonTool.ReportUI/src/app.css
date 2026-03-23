@@ -922,7 +922,8 @@ pre {
   align-items: stretch;
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: minmax(320px, 1.2fr) minmax(280px, 1fr);
+  grid-template-columns: minmax(320px, 1fr) minmax(280px, 1.2fr) minmax(280px, 1.2fr);
+  height: clamp(380px, calc(100vh - 360px), 640px);
 }
 
 .focus-section,
@@ -950,12 +951,12 @@ pre {
 
 .focus-section-content {
   display: flex;
-  flex: 1 1 auto;
+  flex: 1;
   flex-direction: column;
   gap: 0.75rem;
   min-height: 0;
   padding: 0.8rem;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .focus-section-primary .navigator-tree-fill {
@@ -965,19 +966,8 @@ pre {
   overflow-y: auto;
 }
 
-.focus-section-stack {
-  display: grid;
-  gap: 0.75rem;
-  grid-template-rows: auto minmax(0, 1fr);
-  min-height: 0;
-}
-
-.focus-section-stack > .focus-section {
-  min-height: 0;
-}
-
 .focus-section-outcomes {
-  height: auto;
+  min-height: 0;
 }
 
 .focus-section-patterns {
@@ -1577,6 +1567,7 @@ pre {
   .parity-main-grid,
   .focus-control-grid {
     grid-template-columns: 1fr;
+    height: auto;
   }
 
   .sticky-toolbar {
@@ -1585,11 +1576,6 @@ pre {
 
   .parity-main {
     grid-template-rows: auto auto;
-  }
-
-  .focus-section-stack {
-    display: flex;
-    flex-direction: column;
   }
 
   .focus-section-primary .navigator-tree-fill {

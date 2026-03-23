@@ -497,11 +497,10 @@ function ReportWorkspace({ bootstrap }: { bootstrap: ReportBootstrap }) {
 							</div>
 						</section>
 
-						<div className="focus-section-stack">
-							<section className="focus-section focus-section-outcomes">
-								<div className="focus-section-header">
-									<h3 className="section-title">Response outcomes</h3>
-									{selectedOutcomeFocus != null && selectedOutcomeFocus.kind !== 'all' ? (
+						<section className="focus-section focus-section-outcomes">
+							<div className="focus-section-header">
+								<h3 className="section-title">Response outcomes</h3>
+								{selectedOutcomeFocus != null && selectedOutcomeFocus.kind !== 'all' ? (
 										<button className="toolbar-button" onClick={() => setSelectedOutcomeKey('outcome/all')} type="button">
 											Clear outcome focus
 										</button>
@@ -601,7 +600,6 @@ function ReportWorkspace({ bootstrap }: { bootstrap: ReportBootstrap }) {
 									</div>
 								</section>
 							) : null}
-						</div>
 					</div>
 				</div>
 			</section>
