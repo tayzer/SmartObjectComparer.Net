@@ -922,8 +922,10 @@ pre {
   align-items: stretch;
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: minmax(320px, 1fr) minmax(280px, 1.2fr) minmax(280px, 1.2fr);
-  height: clamp(380px, calc(100vh - 360px), 640px);
+  grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);
+  grid-template-areas:
+    "outcomes outcomes"
+    "navigator patterns";
 }
 
 .focus-section,
@@ -959,6 +961,12 @@ pre {
   overflow-y: auto;
 }
 
+.focus-section-primary {
+  grid-area: navigator;
+  min-height: 500px;
+  max-height: 75vh;
+}
+
 .focus-section-primary .navigator-tree-fill {
   flex: 1 1 auto;
   max-height: none;
@@ -967,11 +975,14 @@ pre {
 }
 
 .focus-section-outcomes {
-  min-height: 0;
+  grid-area: outcomes;
+  height: auto;
 }
 
 .focus-section-patterns {
-  min-height: 0;
+  grid-area: patterns;
+  min-height: 500px;
+  max-height: 75vh;
   display: flex;
   flex-direction: column;
 }
@@ -1564,10 +1575,24 @@ pre {
   .audit-header,
   .parity-body,
   .parity-header,
-  .parity-main-grid,
-  .focus-control-grid {
+  .parity-main-grid {
     grid-template-columns: 1fr;
     height: auto;
+  }
+
+  .focus-control-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "outcomes"
+      "navigator"
+      "patterns";
+    height: auto;
+  }
+
+  .focus-section-primary,
+  .focus-section-patterns {
+    min-height: auto;
+    max-height: none;
   }
 
   .sticky-toolbar {
