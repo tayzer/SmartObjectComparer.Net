@@ -441,12 +441,19 @@ public class XmlSerializerFactory
         }
     }
 
-    private void OnUnknownElement(object? sender, XmlElementEventArgs e) =>
+    private void OnUnknownElement(object? sender, XmlElementEventArgs e)
+    {
+        if (e.Element.LocalName == "Fault" || e.Element.Name.Contains("Fault"))
+        {
+            throw new InvalidOperationException($"SOAP Fault detected in response: {e.Element.OuterXml}");
+        }
+
         logger?.LogDebug(
             "Unknown XML element encountered: {ElementName} at line {LineNumber}, column {LinePosition}. Ignoring element.",
             e.Element.Name,
             e.LineNumber,
             e.LinePosition);
+    }
 
     private void OnUnknownAttribute(object? sender, XmlAttributeEventArgs e) =>
         logger?.LogDebug(
