@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MudBlazor.Services;
 using Serilog;
+using Blazored.LocalStorage;
 
 namespace ComparisonTool.Desktop;
 
@@ -59,6 +60,9 @@ public partial class App : System.Windows.Application
 
         // MudBlazor
         services.AddMudServices();
+
+        // Local Storage
+        services.AddBlazoredLocalStorage();
 
         // WPF + Blazor
         services.AddWpfBlazorWebView();

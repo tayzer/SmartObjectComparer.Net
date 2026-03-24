@@ -9,6 +9,7 @@
 @inject IComparisonConfigurationService ConfigService
 @inject IFileExportService FileExportService
 @inject IJSRuntime JS
+@inject Blazored.LocalStorage.ILocalStorageService LocalStorage
 
 <MudPaper Elevation="2" Class="pa-4">
     <MudStack Spacing="3">
@@ -241,11 +242,11 @@
         }
 
         <!-- Run Comparison Button -->
-        <MudButton Variant="Variant.Filled" 
-                   Color="Color.Success" 
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Success"
                    FullWidth="true"
                    StartIcon="@Icons.Material.Filled.PlayArrow"
-                   OnClick="OnRunComparison" 
+                   OnClick="HandleRunComparison"
                    Disabled="@(!CanRunComparison)"
                    aria-label="Run comparison">
             Run Comparison
@@ -531,5 +532,44 @@
         
         // Trigger UI update
         StateHasChanged();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                var cachedRules = await LocalStorage.GetItemAsync<List<IgnoreRule>>("CachedIgnoreRules");
+                if (cachedRules != null && cachedRules.Any() && !IgnoreRules.Any())
+                {
+                    foreach (var rule in cachedRules)
+                    {
+                        // Call the added callback for each rule to populate the parent's list
+                        await OnIgnoreRuleAdded.InvokeAsync(rule);
+                    }
+                    StateHasChanged();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to load cached rules: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task HandleRunComparison()
+    {
+        try
+        {
+            // Cache the rules before running
+            await LocalStorage.SetItemAsync("CachedIgnoreRules", IgnoreRules);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to cache rules: {ex.Message}");
+        }
+
+        await OnRunComparison.InvokeAsync();
     }
 }

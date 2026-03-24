@@ -447,7 +447,7 @@ public class XmlSerializerFactory
         {
             throw new InvalidOperationException($"SOAP Fault detected in response: {e.Element.OuterXml}");
         }
-
+        
         logger?.LogDebug(
             "Unknown XML element encountered: {ElementName} at line {LineNumber}, column {LinePosition}. Ignoring element.",
             e.Element.Name,

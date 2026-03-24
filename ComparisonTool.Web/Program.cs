@@ -11,6 +11,7 @@ using ComparisonTool.Web.Components;
 using ComparisonTool.Web.Services;
 using MudBlazor.Services;
 using Serilog;
+using Blazored.LocalStorage;
 
 try
 {
@@ -41,6 +42,9 @@ builder.Services
 
 // Add MudBlazor services
 builder.Services.AddMudServices();
+
+// Add Blazored Local Storage
+builder.Services.AddBlazoredLocalStorage();
 
 // Add HttpClient for request comparison
 builder.Services.AddHttpClient("RequestComparison")
