@@ -1,5 +1,73 @@
 ﻿---
 applyTo: '**'
+lastUpdated: 2026-03-23T01:05:00Z
+sessionStatus: complete
+---
+
+# Current Session Context
+
+## Active Task
+Improve the CLI HTML report UX for request-comparison runs
+
+## Todo List Status
+```markdown
+- [x] 🔍 Inspect the React report UI structure and validate available request-outcome data
+- [x] 🛠️ Rework the report flow to read as focus controls -> matching pairs -> selected pair detail
+- [x] 🧭 Shorten noisy property-path display while preserving full-path matching and context
+- [x] 🚦 Add dedicated response-outcome focus controls for non-success, mismatch, and failed pairs
+- [x] 🎨 Polish the navigator layout and overall report styling after tester feedback
+- [x] 🧱 Rework the focus-column layout so response outcomes and recurring patterns use space correctly
+- [x] ✅ Rebuild the ReportUI bundle and complete final review
+```
+
+## Recent File Changes
+- `ComparisonTool.ReportUI/src/App.tsx`: Added response-outcome focus controls, shortened property-path rendering, clearer results/detail headings, response context chips, left-axis navigator expand/collapse behavior, and follow-up polish classes/copy for the primary navigator and result lists
+- `ComparisonTool.ReportUI/src/app.css`: Added focus-control layout/styles, response-context chip styling, property-path presentation helpers, updated navigator layout styling, stronger redesign styling, and follow-up fill behavior for the outcomes/pattern sections
+
+## Key Technical Decisions
+- Decision: Keep the payload/API unchanged and implement the tester feedback in the React report UI only
+- Rationale: `PairSummary` already exposes `pairOutcome`, HTTP statuses, error state, and full property paths, so the UX gaps could be addressed without expanding the CLI DTOs
+- Date: 2026-03-23
+- Decision: Treat response-outcome focus as the active result-set driver instead of stacking it with field/pattern focus
+- Rationale: Prevents hidden non-success pairs and keeps the focus summary and deep-dive behavior aligned with the user’s selected workflow
+- Date: 2026-03-23
+
+## External Resources Referenced
+- Internal code inspection only
+
+## Blockers & Issues
+- None
+
+## Failed Approaches
+- Approach: Initial outcome-focus implementation left the field-selection state effectively active in the summary/detail workflow
+- Failure Reason: Results filtering and deep-dive focus could disagree when outcome focus was selected
+- Lesson: In this report UI, only one primary focus mode should drive the active result set at a time
+
+## Environment Notes
+- Windows
+- React 18 + Vite single-file report bundle
+
+## Next Session Priority
+If testers still struggle with the report, consider adding automated UI coverage for combined focus/search/review-state interactions before doing larger presentation changes
+
+## Session Notes
+- Added a dedicated `Response outcomes` focus area for non-success, status mismatch, comparison-error, and exact `pairOutcome` grouping
+- Equal-but-non-success pairs now remain reachable through outcome focus instead of being hidden by the default non-equal filter
+- Long field/property paths are shortened for display in pair chips and structured-difference headings while keeping the full path in tooltips/secondary text
+- The navigator’s expand/collapse affordance now sits on the left hierarchy axis with a larger hit target
+- Results and detail panels were relabeled and reframed to read as a clearer master-detail workflow
+- The field path navigator now fills the height of its section on desktop instead of being constrained to a small fixed-height scroll area
+- The right-hand focus column now uses space intentionally: the response-outcomes section sizes to its content and the recurring-patterns section takes the remaining height with a full-height scroll region
+- The report received a stronger visual redesign pass: darker hero header, cleaner white/slate surface system, more distinct metric cards, clearer section framing, and more obvious interaction styling for cards, lists, and controls
+- Validation completed:
+	- `npm run build` in `ComparisonTool.ReportUI` passed
+	- Final review found no remaining correctness or requirement-coverage issues
+	- Residual risk is limited to browser-level responsive verification because there is no automated UI coverage for these layouts
+
+---
+
+---
+applyTo: '**'
 lastUpdated: 2026-03-19T00:00:00Z
 sessionStatus: complete
 ---
