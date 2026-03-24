@@ -416,7 +416,15 @@ public class XmlSerializerFactory
     private void ProcessPropertyTypeRecursively(Type propertyType, XmlAttributeOverrides overrides, HashSet<Type> processedTypes, bool removeNamespaces)
     {
         // Recursively process property types
-        if (propertyType.IsClass && propertyType != typeof(string))
+        if (propertyType.IsArray)
+        {
+            var elementType = propertyType.GetElementType();
+            if (elementType != null && elementType.IsClass && elementType != typeof(string))
+            {
+                ProcessTypeForAttributeNormalization(elementType, overrides, processedTypes, removeNamespaces);
+            }
+        }
+        else if (propertyType.IsClass && propertyType != typeof(string))
         {
             ProcessTypeForAttributeNormalization(propertyType, overrides, processedTypes, removeNamespaces);
         }
