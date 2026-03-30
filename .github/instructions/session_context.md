@@ -1,5 +1,66 @@
 ﻿---
 applyTo: '**'
+lastUpdated: 2026-03-30T00:00:00Z
+sessionStatus: complete
+---
+
+# Current Session Context
+
+## Active Task
+Fix CLI request-comparison HTML report OutOfMemoryException during large runs
+
+## Todo List Status
+```markdown
+- [x] 🔍 Trace the request CLI HTML report generation path and identify the memory-heavy steps
+- [x] 🛠️ Stop optional full diff generation from rereading oversized request response files
+- [x] 💾 Stream static-site JSON payloads and final HTML output instead of building giant intermediate strings
+- [x] 🧪 Add focused regression coverage for single-file and default static-site report generation
+- [x] ✅ Run targeted validation and final review
+```
+
+## Recent File Changes
+- `ComparisonTool.Cli/Reporting/HtmlReportBundleData.cs`: Added a request-report diff size guard, passed request context into diff-document generation, and streamed static-site JSON payload writes
+- `ComparisonTool.Cli/Reporting/HtmlReportWriter.cs`: Replaced full-string HTML/bootstrap assembly with streamed template + JSON output writing
+- `ComparisonTool.Tests/Unit/Cli/HtmlReportBundleBuilderTests.cs`: Added coverage for oversized request responses, structured fallback preservation, and streamed static-site artifact generation
+
+## Key Technical Decisions
+- Decision: Omit the optional HTML `diffDocument` for oversized request response files instead of rereading the full saved responses
+- Rationale: Request raw-text comparison already truncates bodies to 5 KB, and the full side-by-side diff pane is secondary to the structured/raw difference summaries; skipping oversized diff payloads prevents report-generation memory spikes on large batches
+- Date: 2026-03-30
+- Decision: Stream JSON payloads and HTML bootstrap injection directly to disk
+- Rationale: Removes duplicate giant JSON/HTML string allocations from the report-writing path without changing report structure or UI contracts
+- Date: 2026-03-30
+
+## External Resources Referenced
+- Internal code inspection only
+
+## Blockers & Issues
+- None
+
+## Failed Approaches
+- Approach: Treat the HTML writer as the only problem area
+- Failure Reason: The main memory spike also came from rebuilding full diff documents from persisted response files during bundle generation
+- Lesson: The write path and the upstream optional diff payload construction both needed to be addressed to materially reduce peak memory usage
+
+## Environment Notes
+- Windows
+- .NET 10.0
+
+## Next Session Priority
+If large request reports still show high memory use, inspect the remaining per-chunk detail DTO footprint and consider an explicit guardrail for very large `SingleFile` HTML exports
+
+## Session Notes
+- Request comparisons now skip optional full diff payload generation when saved response files exceed the existing 5 KB raw-text comparison threshold
+- Missing/unreadable small request files still preserve the structured fallback diff behavior instead of silently losing detail
+- Static-site JSON chunk/index writes now use `JsonSerializer.SerializeAsync` directly to file streams
+- HTML report output now streams template prefix, bootstrap JSON, and suffix instead of allocating full `reportJson` and final HTML strings in memory
+- Validation completed:
+	- `dotnet test .\ComparisonTool.Tests\ComparisonTool.Tests.csproj --filter "FullyQualifiedName~HtmlReportBundleBuilderTests" --verbosity minimal` passed with 4/4 tests
+	- `dotnet build .\ComparisonTool.Cli\ComparisonTool.Cli.csproj --no-restore --verbosity minimal` passed
+	- Final review found one missing static-site regression test; it was added and revalidated
+
+---
+applyTo: '**'
 lastUpdated: 2026-03-23T01:05:00Z
 sessionStatus: complete
 ---

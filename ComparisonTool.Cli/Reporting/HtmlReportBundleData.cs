@@ -231,6 +231,7 @@ internal static class HtmlReportBundleBuilder
 {
     private const int MostAffectedFieldsLimit = 15;
     private const int PatternLimit = 128;
+    private const int RequestDiffDocumentMaxBytes = 5 * 1024;
     private const int TopFieldLimit = 24;
 
     public static HtmlReportBundle BuildSingleFile(ReportContext context)
@@ -257,6 +258,7 @@ internal static class HtmlReportBundleBuilder
         var tagLabels = new Dictionary<string, string>(StringComparer.Ordinal);
         var tagDescriptions = new Dictionary<string, string>(StringComparer.Ordinal);
         var workingPairs = new List<WorkingSummaryDto>(pairs.Count);
+        var applyRequestDiffLimit = IsRequestComparison(context);
         var chunkSize = Math.Clamp(context.HtmlDetailChunkSize, 25, 1000);
         var chunkPairs = new List<HtmlReportPairDetailDto>(chunkSize);
         var chunkPairIds = new List<string>(chunkSize);
@@ -339,7 +341,7 @@ internal static class HtmlReportBundleBuilder
                 ErrorType = pair.ErrorType,
                 Differences = structuredDifferences,
                 RawTextDifferences = rawTextDifferences,
-                DiffDocument = BuildDiffDocument(pair, structuredDifferences),
+                DiffDocument = BuildDiffDocument(pair, structuredDifferences, applyRequestDiffLimit),
             });
 
             if (chunkPairs.Count == chunkSize || index == pairs.Count - 1)
@@ -477,6 +479,7 @@ internal static class HtmlReportBundleBuilder
         var tagLabels = new Dictionary<string, string>(StringComparer.Ordinal);
         var tagDescriptions = new Dictionary<string, string>(StringComparer.Ordinal);
         var workingPairs = new List<WorkingPairDto>(pairs.Count);
+        var applyRequestDiffLimit = IsRequestComparison(context);
 
         for (var index = 0; index < pairs.Count; index++)
         {
@@ -542,7 +545,7 @@ internal static class HtmlReportBundleBuilder
                 ErrorType = pair.ErrorType,
                 Differences = structuredDifferences,
                 RawTextDifferences = rawTextDifferences,
-                DiffDocument = BuildDiffDocument(pair, structuredDifferences),
+                DiffDocument = BuildDiffDocument(pair, structuredDifferences, applyRequestDiffLimit),
             };
 
             workingPairs.Add(new WorkingPairDto
@@ -782,9 +785,15 @@ internal static class HtmlReportBundleBuilder
 
     private static HtmlDiffDocumentDto? BuildDiffDocument(
         FilePairComparisonResult pair,
-        IReadOnlyCollection<StructuredDifferenceDto> structuredDifferences)
+        IReadOnlyCollection<StructuredDifferenceDto> structuredDifferences,
+        bool applyRequestDiffLimit)
     {
         if (pair.AreEqual && !pair.HasError)
+        {
+            return null;
+        }
+
+        if (applyRequestDiffLimit && HasOversizedRequestDiffFile(pair.File1Path, pair.File2Path))
         {
             return null;
         }
@@ -840,6 +849,33 @@ internal static class HtmlReportBundleBuilder
             ChangedLineCount = changedLineCount,
             Lines = lines,
         };
+    }
+
+    private static bool IsRequestComparison(ReportContext context)
+    {
+        return string.Equals(context.CommandName, "request", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool HasOversizedRequestDiffFile(string? leftPath, string? rightPath)
+    {
+        return IsOversizedRequestDiffFile(leftPath) || IsOversizedRequestDiffFile(rightPath);
+    }
+
+    private static bool IsOversizedRequestDiffFile(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            return false;
+        }
+
+        try
+        {
+            return new FileInfo(path).Length > RequestDiffDocumentMaxBytes;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static string? TryReadText(string? path)
@@ -1300,8 +1336,8 @@ internal static class HtmlReportBundleBuilder
             Directory.CreateDirectory(targetDirectory);
         }
 
-        var payloadJson = JsonSerializer.Serialize(payload, ComparisonReportJson.CompactOptions);
-        await File.WriteAllTextAsync(targetPath, payloadJson);
+        await using var stream = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
+        await JsonSerializer.SerializeAsync(stream, payload, payload.GetType(), ComparisonReportJson.CompactOptions);
     }
 
     private static List<LabelCountDto> BuildStatusCounts(IEnumerable<HtmlReportPairSummaryDto> pairs)
