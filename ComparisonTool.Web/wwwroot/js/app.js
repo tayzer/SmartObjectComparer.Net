@@ -667,6 +667,14 @@ window.scrollToElement = function(elementId) {
     }
 };
 
+window.scrollElementToTop = function(elementId) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.scrollTop = 0;
+        element.scrollLeft = 0;
+    }
+};
+
 /**
  * Synchronizes the scroll position of one panel to match another.
  * Used for side-by-side file comparison view.

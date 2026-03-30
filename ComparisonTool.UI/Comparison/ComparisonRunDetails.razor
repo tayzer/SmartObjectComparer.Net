@@ -3,6 +3,7 @@
 @using ComparisonTool.Core.Comparison.Results
 @using ComparisonTool.Core.Utilities
 @using KellermanSoftware.CompareNetObjects
+@inject Microsoft.JSInterop.IJSRuntime JS
 
 <style>
     /* Visual Diff Styles */
@@ -325,7 +326,7 @@
                 
                 <!-- Right Panel: File Differences -->
                 <MudItem xs="12" md="8">
-                    <div class="details-panel">
+                    <div class="details-panel" id="@ValueDetailsPanelId">
                         @if (!string.IsNullOrEmpty(SelectedValueProperty) && _valuePropertyGroups.ContainsKey(SelectedValueProperty))
                         {
                             var files = _valuePropertyGroups[SelectedValueProperty];
@@ -341,17 +342,9 @@
                                 
                                 <MudDivider />
 
-                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pb-2">
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                        @GetInspectorPagingStatusText(pager, files.Count)
-                                    </MudText>
-                                    <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
-                                        <MudIconButton Icon="@Icons.Material.Filled.FirstPage" Size="Size.Small" Disabled="@(!pager.CanGoPrevious)" OnClick="@(() => GoToFirstInspectorPage(ValueInspectorPagerKey))" />
-                                        <MudIconButton Icon="@Icons.Material.Filled.NavigateBefore" Size="Size.Small" Disabled="@(!pager.CanGoPrevious)" OnClick="@(() => GoToPreviousInspectorPage(ValueInspectorPagerKey, files.Count))" />
-                                        <MudIconButton Icon="@Icons.Material.Filled.NavigateNext" Size="Size.Small" Disabled="@(!pager.CanGoNext)" OnClick="@(() => GoToNextInspectorPage(ValueInspectorPagerKey, files.Count))" />
-                                        <MudIconButton Icon="@Icons.Material.Filled.LastPage" Size="Size.Small" Disabled="@(!pager.CanGoNext)" OnClick="@(() => GoToLastInspectorPage(ValueInspectorPagerKey, files.Count))" />
-                                    </MudButtonGroup>
-                                </MudStack>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="pb-2">
+                                    @GetInspectorPagingStatusText(pager, files.Count)
+                                </MudText>
                                 
                                 @foreach (var file in pager.PageItems)
                                 {
@@ -397,6 +390,15 @@
                                         </MudStack>
                                     </MudPaper>
                                 }
+
+                                <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Class="pt-2">
+                                    <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
+                                        <MudIconButton Icon="@Icons.Material.Filled.FirstPage" Size="Size.Small" Disabled="@(!pager.CanGoPrevious)" OnClick="@(() => GoToFirstInspectorPageAsync(ValueInspectorPagerKey, ValueDetailsPanelId))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.NavigateBefore" Size="Size.Small" Disabled="@(!pager.CanGoPrevious)" OnClick="@(() => GoToPreviousInspectorPageAsync(ValueInspectorPagerKey, files.Count, ValueDetailsPanelId))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.NavigateNext" Size="Size.Small" Disabled="@(!pager.CanGoNext)" OnClick="@(() => GoToNextInspectorPageAsync(ValueInspectorPagerKey, files.Count, ValueDetailsPanelId))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.LastPage" Size="Size.Small" Disabled="@(!pager.CanGoNext)" OnClick="@(() => GoToLastInspectorPageAsync(ValueInspectorPagerKey, files.Count, ValueDetailsPanelId))" />
+                                    </MudButtonGroup>
+                                </MudStack>
                             </MudStack>
                         }
                         else
@@ -493,7 +495,7 @@
                 </MudItem>
                 
                 <MudItem xs="12" md="8">
-                    <div class="details-panel">
+                    <div class="details-panel" id="@OrderDetailsPanelId">
                         @if (!string.IsNullOrEmpty(SelectedOrderProperty) && _orderPropertyGroups.ContainsKey(SelectedOrderProperty))
                         {
                             var files = _orderPropertyGroups[SelectedOrderProperty];
@@ -509,17 +511,9 @@
                                 
                                 <MudDivider />
 
-                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pb-2">
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                        @GetInspectorPagingStatusText(pager, files.Count)
-                                    </MudText>
-                                    <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
-                                        <MudIconButton Icon="@Icons.Material.Filled.FirstPage" Size="Size.Small" Disabled="@(!pager.CanGoPrevious)" OnClick="@(() => GoToFirstInspectorPage(OrderInspectorPagerKey))" />
-                                        <MudIconButton Icon="@Icons.Material.Filled.NavigateBefore" Size="Size.Small" Disabled="@(!pager.CanGoPrevious)" OnClick="@(() => GoToPreviousInspectorPage(OrderInspectorPagerKey, files.Count))" />
-                                        <MudIconButton Icon="@Icons.Material.Filled.NavigateNext" Size="Size.Small" Disabled="@(!pager.CanGoNext)" OnClick="@(() => GoToNextInspectorPage(OrderInspectorPagerKey, files.Count))" />
-                                        <MudIconButton Icon="@Icons.Material.Filled.LastPage" Size="Size.Small" Disabled="@(!pager.CanGoNext)" OnClick="@(() => GoToLastInspectorPage(OrderInspectorPagerKey, files.Count))" />
-                                    </MudButtonGroup>
-                                </MudStack>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="pb-2">
+                                    @GetInspectorPagingStatusText(pager, files.Count)
+                                </MudText>
                                 
                                 @foreach (var file in pager.PageItems)
                                 {
@@ -559,6 +553,15 @@
                                         </MudStack>
                                     </MudPaper>
                                 }
+
+                                <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Class="pt-2">
+                                    <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
+                                        <MudIconButton Icon="@Icons.Material.Filled.FirstPage" Size="Size.Small" Disabled="@(!pager.CanGoPrevious)" OnClick="@(() => GoToFirstInspectorPageAsync(OrderInspectorPagerKey, OrderDetailsPanelId))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.NavigateBefore" Size="Size.Small" Disabled="@(!pager.CanGoPrevious)" OnClick="@(() => GoToPreviousInspectorPageAsync(OrderInspectorPagerKey, files.Count, OrderDetailsPanelId))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.NavigateNext" Size="Size.Small" Disabled="@(!pager.CanGoNext)" OnClick="@(() => GoToNextInspectorPageAsync(OrderInspectorPagerKey, files.Count, OrderDetailsPanelId))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.LastPage" Size="Size.Small" Disabled="@(!pager.CanGoNext)" OnClick="@(() => GoToLastInspectorPageAsync(OrderInspectorPagerKey, files.Count, OrderDetailsPanelId))" />
+                                    </MudButtonGroup>
+                                </MudStack>
                             </MudStack>
                         }
                         else
@@ -625,7 +628,7 @@
                 </MudItem>
                 
                 <MudItem xs="12" md="8">
-                    <div class="details-panel">
+                    <div class="details-panel" id="@CriticalDetailsPanelId">
                         @if (!string.IsNullOrEmpty(SelectedCriticalProperty) && _criticalPropertyGroups.ContainsKey(SelectedCriticalProperty))
                         {
                             var files = _criticalPropertyGroups[SelectedCriticalProperty];
@@ -645,17 +648,9 @@
                                 
                                 <MudDivider />
 
-                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pb-2">
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                        @GetInspectorPagingStatusText(pager, files.Count)
-                                    </MudText>
-                                    <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
-                                        <MudIconButton Icon="@Icons.Material.Filled.FirstPage" Size="Size.Small" Disabled="@(!pager.CanGoPrevious)" OnClick="@(() => GoToFirstInspectorPage(CriticalInspectorPagerKey))" />
-                                        <MudIconButton Icon="@Icons.Material.Filled.NavigateBefore" Size="Size.Small" Disabled="@(!pager.CanGoPrevious)" OnClick="@(() => GoToPreviousInspectorPage(CriticalInspectorPagerKey, files.Count))" />
-                                        <MudIconButton Icon="@Icons.Material.Filled.NavigateNext" Size="Size.Small" Disabled="@(!pager.CanGoNext)" OnClick="@(() => GoToNextInspectorPage(CriticalInspectorPagerKey, files.Count))" />
-                                        <MudIconButton Icon="@Icons.Material.Filled.LastPage" Size="Size.Small" Disabled="@(!pager.CanGoNext)" OnClick="@(() => GoToLastInspectorPage(CriticalInspectorPagerKey, files.Count))" />
-                                    </MudButtonGroup>
-                                </MudStack>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="pb-2">
+                                    @GetInspectorPagingStatusText(pager, files.Count)
+                                </MudText>
                                 
                                 @foreach (var file in pager.PageItems)
                                 {
@@ -692,6 +687,15 @@
                                         </MudStack>
                                     </MudPaper>
                                 }
+
+                                <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Class="pt-2">
+                                    <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
+                                        <MudIconButton Icon="@Icons.Material.Filled.FirstPage" Size="Size.Small" Disabled="@(!pager.CanGoPrevious)" OnClick="@(() => GoToFirstInspectorPageAsync(CriticalInspectorPagerKey, CriticalDetailsPanelId))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.NavigateBefore" Size="Size.Small" Disabled="@(!pager.CanGoPrevious)" OnClick="@(() => GoToPreviousInspectorPageAsync(CriticalInspectorPagerKey, files.Count, CriticalDetailsPanelId))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.NavigateNext" Size="Size.Small" Disabled="@(!pager.CanGoNext)" OnClick="@(() => GoToNextInspectorPageAsync(CriticalInspectorPagerKey, files.Count, CriticalDetailsPanelId))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.LastPage" Size="Size.Small" Disabled="@(!pager.CanGoNext)" OnClick="@(() => GoToLastInspectorPageAsync(CriticalInspectorPagerKey, files.Count, CriticalDetailsPanelId))" />
+                                    </MudButtonGroup>
+                                </MudStack>
                             </MudStack>
                         }
                         else
@@ -811,6 +815,9 @@
     private const string ValueInspectorPagerKey = "value";
     private const string OrderInspectorPagerKey = "order";
     private const string CriticalInspectorPagerKey = "critical";
+    private const string ValueDetailsPanelId = "value-inspector-details-panel";
+    private const string OrderDetailsPanelId = "order-inspector-details-panel";
+    private const string CriticalDetailsPanelId = "critical-inspector-details-panel";
     
     private string SelectedValueProperty { get; set; } = "";
     private string SelectedOrderProperty { get; set; } = "";
@@ -1366,24 +1373,44 @@
         ResetInspectorPage(CriticalInspectorPagerKey);
     }
 
-    private void GoToFirstInspectorPage(string pagerKey)
+    private async Task GoToFirstInspectorPageAsync(string pagerKey, string detailsPanelId)
     {
         ResetInspectorPage(pagerKey);
+        await ScrollInspectorPanelToTopAsync(detailsPanelId);
     }
 
-    private void GoToPreviousInspectorPage(string pagerKey, int totalItems)
+    private async Task GoToPreviousInspectorPageAsync(string pagerKey, int totalItems, string detailsPanelId)
     {
         SetInspectorPage(pagerKey, GetClampedInspectorPageIndex(pagerKey, totalItems) - 1, totalItems);
+        await ScrollInspectorPanelToTopAsync(detailsPanelId);
     }
 
-    private void GoToNextInspectorPage(string pagerKey, int totalItems)
+    private async Task GoToNextInspectorPageAsync(string pagerKey, int totalItems, string detailsPanelId)
     {
         SetInspectorPage(pagerKey, GetClampedInspectorPageIndex(pagerKey, totalItems) + 1, totalItems);
+        await ScrollInspectorPanelToTopAsync(detailsPanelId);
     }
 
-    private void GoToLastInspectorPage(string pagerKey, int totalItems)
+    private async Task GoToLastInspectorPageAsync(string pagerKey, int totalItems, string detailsPanelId)
     {
         SetInspectorPage(pagerKey, GetInspectorPageCount(totalItems) - 1, totalItems);
+        await ScrollInspectorPanelToTopAsync(detailsPanelId);
+    }
+
+    private async Task ScrollInspectorPanelToTopAsync(string detailsPanelId)
+    {
+        if (string.IsNullOrWhiteSpace(detailsPanelId))
+        {
+            return;
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync("scrollElementToTop", detailsPanelId);
+        }
+        catch
+        {
+        }
     }
     
     private void SelectValueProperty(string prop)
