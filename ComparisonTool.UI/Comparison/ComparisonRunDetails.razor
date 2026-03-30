@@ -329,6 +329,7 @@
                         @if (!string.IsNullOrEmpty(SelectedValueProperty) && _valuePropertyGroups.ContainsKey(SelectedValueProperty))
                         {
                             var files = _valuePropertyGroups[SelectedValueProperty];
+                            var pager = GetInspectorPage(ValueInspectorPagerKey, files);
                             <MudStack Spacing="3">
                                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                                     <MudText Typo="Typo.h6">
@@ -339,8 +340,20 @@
                                 </MudStack>
                                 
                                 <MudDivider />
+
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pb-2">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        @GetInspectorPagingStatusText(pager, files.Count)
+                                    </MudText>
+                                    <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
+                                        <MudIconButton Icon="@Icons.Material.Filled.FirstPage" Size="Size.Small" Disabled="@(!pager.CanGoPrevious)" OnClick="@(() => GoToFirstInspectorPage(ValueInspectorPagerKey))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.NavigateBefore" Size="Size.Small" Disabled="@(!pager.CanGoPrevious)" OnClick="@(() => GoToPreviousInspectorPage(ValueInspectorPagerKey, files.Count))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.NavigateNext" Size="Size.Small" Disabled="@(!pager.CanGoNext)" OnClick="@(() => GoToNextInspectorPage(ValueInspectorPagerKey, files.Count))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.LastPage" Size="Size.Small" Disabled="@(!pager.CanGoNext)" OnClick="@(() => GoToLastInspectorPage(ValueInspectorPagerKey, files.Count))" />
+                                    </MudButtonGroup>
+                                </MudStack>
                                 
-                                @foreach (var file in files.Take(50))
+                                @foreach (var file in pager.PageItems)
                                 {
                                     <MudPaper Outlined="true" Class="file-diff-card pa-3">
                                         <MudStack Spacing="2">
@@ -383,13 +396,6 @@
                                             </MudGrid>
                                         </MudStack>
                                     </MudPaper>
-                                }
-                                
-                                @if (files.Count > 50)
-                                {
-                                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
-                                        Showing first 50 of @files.Count files. Use the filter to narrow down results.
-                                    </MudAlert>
                                 }
                             </MudStack>
                         }
@@ -491,6 +497,7 @@
                         @if (!string.IsNullOrEmpty(SelectedOrderProperty) && _orderPropertyGroups.ContainsKey(SelectedOrderProperty))
                         {
                             var files = _orderPropertyGroups[SelectedOrderProperty];
+                            var pager = GetInspectorPage(OrderInspectorPagerKey, files);
                             <MudStack Spacing="3">
                                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                                     <MudText Typo="Typo.h6">
@@ -501,8 +508,20 @@
                                 </MudStack>
                                 
                                 <MudDivider />
+
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pb-2">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        @GetInspectorPagingStatusText(pager, files.Count)
+                                    </MudText>
+                                    <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
+                                        <MudIconButton Icon="@Icons.Material.Filled.FirstPage" Size="Size.Small" Disabled="@(!pager.CanGoPrevious)" OnClick="@(() => GoToFirstInspectorPage(OrderInspectorPagerKey))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.NavigateBefore" Size="Size.Small" Disabled="@(!pager.CanGoPrevious)" OnClick="@(() => GoToPreviousInspectorPage(OrderInspectorPagerKey, files.Count))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.NavigateNext" Size="Size.Small" Disabled="@(!pager.CanGoNext)" OnClick="@(() => GoToNextInspectorPage(OrderInspectorPagerKey, files.Count))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.LastPage" Size="Size.Small" Disabled="@(!pager.CanGoNext)" OnClick="@(() => GoToLastInspectorPage(OrderInspectorPagerKey, files.Count))" />
+                                    </MudButtonGroup>
+                                </MudStack>
                                 
-                                @foreach (var file in files.Take(50))
+                                @foreach (var file in pager.PageItems)
                                 {
                                     <MudPaper Outlined="true" Class="file-diff-card pa-3">
                                         <MudStack Spacing="2">
@@ -610,6 +629,7 @@
                         @if (!string.IsNullOrEmpty(SelectedCriticalProperty) && _criticalPropertyGroups.ContainsKey(SelectedCriticalProperty))
                         {
                             var files = _criticalPropertyGroups[SelectedCriticalProperty];
+                            var pager = GetInspectorPage(CriticalInspectorPagerKey, files);
                             <MudStack Spacing="3">
                                 <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="mb-2">
                                     <MudText><strong>Critical Property:</strong> This property is vital to system functionality.</MudText>
@@ -624,8 +644,20 @@
                                 </MudStack>
                                 
                                 <MudDivider />
+
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pb-2">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        @GetInspectorPagingStatusText(pager, files.Count)
+                                    </MudText>
+                                    <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
+                                        <MudIconButton Icon="@Icons.Material.Filled.FirstPage" Size="Size.Small" Disabled="@(!pager.CanGoPrevious)" OnClick="@(() => GoToFirstInspectorPage(CriticalInspectorPagerKey))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.NavigateBefore" Size="Size.Small" Disabled="@(!pager.CanGoPrevious)" OnClick="@(() => GoToPreviousInspectorPage(CriticalInspectorPagerKey, files.Count))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.NavigateNext" Size="Size.Small" Disabled="@(!pager.CanGoNext)" OnClick="@(() => GoToNextInspectorPage(CriticalInspectorPagerKey, files.Count))" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.LastPage" Size="Size.Small" Disabled="@(!pager.CanGoNext)" OnClick="@(() => GoToLastInspectorPage(CriticalInspectorPagerKey, files.Count))" />
+                                    </MudButtonGroup>
+                                </MudStack>
                                 
-                                @foreach (var file in files.Take(50))
+                                @foreach (var file in pager.PageItems)
                                 {
                                     <MudPaper Outlined="true" Class="file-diff-card pa-3" Style="border-color: var(--mud-palette-error);">
                                         <MudStack Spacing="2">
@@ -775,6 +807,10 @@
     public EventCallback<string> OnFileSelected { get; set; }
     
     private int ActiveTabIndex { get; set; } = 0;
+    private const int InspectorPageSize = 50;
+    private const string ValueInspectorPagerKey = "value";
+    private const string OrderInspectorPagerKey = "order";
+    private const string CriticalInspectorPagerKey = "critical";
     
     private string SelectedValueProperty { get; set; } = "";
     private string SelectedOrderProperty { get; set; } = "";
@@ -789,6 +825,12 @@
     private Dictionary<string, List<FileDifference>> _orderPropertyGroups = new();
     private Dictionary<string, List<FileDifference>> _criticalPropertyGroups = new();
     private List<DifferenceGridItem> _allDifferences = new();
+    private readonly Dictionary<string, int> _inspectorPageIndices = new(StringComparer.Ordinal)
+    {
+        [ValueInspectorPagerKey] = 0,
+        [OrderInspectorPagerKey] = 0,
+        [CriticalInspectorPagerKey] = 0,
+    };
     
     // Tree view data structures
     private List<TreeItemData<string>> _valueTreeNodes = new();
@@ -843,6 +885,17 @@
         public bool IsCritical { get; set; }
         public bool IsOrdering { get; set; }
     }
+
+    private class InspectorPageResult
+    {
+        public IReadOnlyList<FileDifference> PageItems { get; set; } = Array.Empty<FileDifference>();
+        public int CurrentPage { get; set; }
+        public int TotalPages { get; set; }
+        public int StartItem { get; set; }
+        public int EndItem { get; set; }
+        public bool CanGoPrevious { get; set; }
+        public bool CanGoNext { get; set; }
+    }
     
     protected override void OnParametersSet()
     {
@@ -860,7 +913,18 @@
         _valueExpandInfoMessage = string.Empty;
         _orderExpandInfoMessage = string.Empty;
 
-        if (Analysis?.AllPatterns == null) return;
+        if (Analysis?.AllPatterns == null)
+        {
+            SelectedValueProperty = string.Empty;
+            SelectedOrderProperty = string.Empty;
+            SelectedCriticalProperty = string.Empty;
+            _valueTreeNodes = new List<TreeItemData<string>>();
+            _orderTreeNodes = new List<TreeItemData<string>>();
+            _valueLeafCount = 0;
+            _orderLeafCount = 0;
+            ResetAllInspectorPages();
+            return;
+        }
 
         // Build O(1) lookup dictionary for performance
         _filePairLookup = new Dictionary<string, FilePairComparisonResult>(StringComparer.Ordinal);
@@ -941,13 +1005,10 @@
                 }
             }
         }
-        
-        if (_valuePropertyGroups.Any() && string.IsNullOrEmpty(SelectedValueProperty))
-            SelectedValueProperty = _valuePropertyGroups.Keys.First();
-        if (_orderPropertyGroups.Any() && string.IsNullOrEmpty(SelectedOrderProperty))
-            SelectedOrderProperty = _orderPropertyGroups.Keys.First();
-        if (_criticalPropertyGroups.Any() && string.IsNullOrEmpty(SelectedCriticalProperty))
-            SelectedCriticalProperty = _criticalPropertyGroups.Keys.First();
+
+        SelectedValueProperty = SyncSelectedProperty(_valuePropertyGroups, SelectedValueProperty, ValueInspectorPagerKey);
+        SelectedOrderProperty = SyncSelectedProperty(_orderPropertyGroups, SelectedOrderProperty, OrderInspectorPagerKey);
+        SelectedCriticalProperty = SyncSelectedProperty(_criticalPropertyGroups, SelectedCriticalProperty, CriticalInspectorPagerKey);
         
         // Build hierarchical tree views
         _valueTreeNodes = BuildPropertyTree(_valuePropertyGroups);
@@ -1066,7 +1127,7 @@
         
         if (node.IsLeaf)
         {
-            SelectedValueProperty = node.FullPath;
+            SelectValueProperty(node.FullPath);
         }
         else
         {
@@ -1150,7 +1211,7 @@
         
         if (node.IsLeaf)
         {
-            SelectedOrderProperty = node.FullPath;
+            SelectOrderProperty(node.FullPath);
         }
         else
         {
@@ -1215,10 +1276,148 @@
 
         return count;
     }
+
+    private string SyncSelectedProperty(Dictionary<string, List<FileDifference>> propertyGroups, string selectedProperty, string pagerKey)
+    {
+        if (!propertyGroups.Any())
+        {
+            ResetInspectorPage(pagerKey);
+            return string.Empty;
+        }
+
+        if (string.IsNullOrEmpty(selectedProperty) || !propertyGroups.ContainsKey(selectedProperty))
+        {
+            ResetInspectorPage(pagerKey);
+            return propertyGroups.Keys.First();
+        }
+
+        SetInspectorPage(pagerKey, GetInspectorPageIndex(pagerKey), propertyGroups[selectedProperty].Count);
+        return selectedProperty;
+    }
+
+    private InspectorPageResult GetInspectorPage(string pagerKey, IReadOnlyList<FileDifference>? files)
+    {
+        var fileList = files ?? Array.Empty<FileDifference>();
+        var totalItems = fileList.Count;
+        var pageIndex = GetClampedInspectorPageIndex(pagerKey, totalItems);
+        var totalPages = GetInspectorPageCount(totalItems);
+        IReadOnlyList<FileDifference> pageItems = totalItems == 0
+            ? Array.Empty<FileDifference>()
+            : fileList.Skip(pageIndex * InspectorPageSize).Take(InspectorPageSize).ToArray();
+        var startItem = totalItems == 0 ? 0 : (pageIndex * InspectorPageSize) + 1;
+        var endItem = totalItems == 0 ? 0 : startItem + pageItems.Count - 1;
+
+        return new InspectorPageResult
+        {
+            PageItems = pageItems,
+            CurrentPage = pageIndex + 1,
+            TotalPages = totalPages,
+            StartItem = startItem,
+            EndItem = endItem,
+            CanGoPrevious = pageIndex > 0,
+            CanGoNext = pageIndex + 1 < totalPages,
+        };
+    }
+
+    private string GetInspectorPagingStatusText(InspectorPageResult pager, int totalItems)
+    {
+        if (totalItems == 0)
+        {
+            return "No files affected.";
+        }
+
+        return $"Showing {pager.StartItem:N0}-{pager.EndItem:N0} of {totalItems:N0} files | Page {pager.CurrentPage:N0} of {pager.TotalPages:N0}";
+    }
+
+    private int GetInspectorPageIndex(string pagerKey)
+    {
+        return _inspectorPageIndices.TryGetValue(pagerKey, out var pageIndex) ? pageIndex : 0;
+    }
+
+    private int GetInspectorPageCount(int totalItems)
+    {
+        return Math.Max(1, (int)Math.Ceiling(totalItems / (double)InspectorPageSize));
+    }
+
+    private int GetClampedInspectorPageIndex(string pagerKey, int totalItems)
+    {
+        return ClampInspectorPageIndex(GetInspectorPageIndex(pagerKey), totalItems);
+    }
+
+    private int ClampInspectorPageIndex(int pageIndex, int totalItems)
+    {
+        return Math.Clamp(pageIndex, 0, GetInspectorPageCount(totalItems) - 1);
+    }
+
+    private void SetInspectorPage(string pagerKey, int pageIndex, int totalItems)
+    {
+        _inspectorPageIndices[pagerKey] = ClampInspectorPageIndex(pageIndex, totalItems);
+    }
+
+    private void ResetInspectorPage(string pagerKey)
+    {
+        _inspectorPageIndices[pagerKey] = 0;
+    }
+
+    private void ResetAllInspectorPages()
+    {
+        ResetInspectorPage(ValueInspectorPagerKey);
+        ResetInspectorPage(OrderInspectorPagerKey);
+        ResetInspectorPage(CriticalInspectorPagerKey);
+    }
+
+    private void GoToFirstInspectorPage(string pagerKey)
+    {
+        ResetInspectorPage(pagerKey);
+    }
+
+    private void GoToPreviousInspectorPage(string pagerKey, int totalItems)
+    {
+        SetInspectorPage(pagerKey, GetClampedInspectorPageIndex(pagerKey, totalItems) - 1, totalItems);
+    }
+
+    private void GoToNextInspectorPage(string pagerKey, int totalItems)
+    {
+        SetInspectorPage(pagerKey, GetClampedInspectorPageIndex(pagerKey, totalItems) + 1, totalItems);
+    }
+
+    private void GoToLastInspectorPage(string pagerKey, int totalItems)
+    {
+        SetInspectorPage(pagerKey, GetInspectorPageCount(totalItems) - 1, totalItems);
+    }
     
-    private void SelectValueProperty(string prop) { SelectedValueProperty = prop; }
-    private void SelectOrderProperty(string prop) { SelectedOrderProperty = prop; }
-    private void SelectCriticalProperty(string prop) { SelectedCriticalProperty = prop; }
+    private void SelectValueProperty(string prop)
+    {
+        if (string.Equals(SelectedValueProperty, prop, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        SelectedValueProperty = prop;
+        ResetInspectorPage(ValueInspectorPagerKey);
+    }
+
+    private void SelectOrderProperty(string prop)
+    {
+        if (string.Equals(SelectedOrderProperty, prop, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        SelectedOrderProperty = prop;
+        ResetInspectorPage(OrderInspectorPagerKey);
+    }
+
+    private void SelectCriticalProperty(string prop)
+    {
+        if (string.Equals(SelectedCriticalProperty, prop, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        SelectedCriticalProperty = prop;
+        ResetInspectorPage(CriticalInspectorPagerKey);
+    }
     
     private IEnumerable<KeyValuePair<string, List<FileDifference>>> GetFilteredValueProperties()
     {
