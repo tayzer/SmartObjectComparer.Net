@@ -112,6 +112,11 @@ public static partial class RequestCompareCommand
             Description = "Path to JSON file containing IgnoreRuleDto definitions",
         };
 
+        var maskRulesFileOption = new Option<FileInfo?>("--mask-rules")
+        {
+            Description = "Path to JSON file containing MaskRuleDto definitions for response masking",
+        };
+
         var contentTypeOption = new Option<string?>("--content-type")
         {
             Description = "Override Content-Type header for all request bodies",
@@ -198,6 +203,7 @@ public static partial class RequestCompareCommand
             ignoreNamespacesOption,
             semanticAnalysisOption,
             ignoreRulesFileOption,
+            maskRulesFileOption,
             contentTypeOption,
             soapActionOption,
             rangeOption,
@@ -226,6 +232,7 @@ public static partial class RequestCompareCommand
             var ignoreNamespaces = parseResult.GetValue(ignoreNamespacesOption);
             var semanticAnalysis = parseResult.GetValue(semanticAnalysisOption);
             var ignoreRulesFile = parseResult.GetValue(ignoreRulesFileOption);
+            var maskRulesFile = parseResult.GetValue(maskRulesFileOption);
             var contentTypeOverride = parseResult.GetValue(contentTypeOption);
             var soapAction = parseResult.GetValue(soapActionOption);
             var requestRange = parseResult.GetValue(rangeOption);
@@ -250,6 +257,7 @@ public static partial class RequestCompareCommand
                 ignoreNamespaces,
                 semanticAnalysis,
                 ignoreRulesFile,
+                maskRulesFile,
                 contentTypeOverride,
                 soapAction,
                 requestRange,
@@ -358,6 +366,7 @@ public static partial class RequestCompareCommand
         bool ignoreNamespaces,
         bool semanticAnalysis,
         FileInfo? ignoreRulesFile,
+        FileInfo? maskRulesFile,
         string? contentTypeOverride,
         string? soapAction,
         string? requestRange,
@@ -434,6 +443,13 @@ public static partial class RequestCompareCommand
             return 1;
         }
 
+        var maskRulesResult = await LoadMaskRulesAsync(maskRulesFile, cancellationToken);
+        if (!maskRulesResult.IsSuccess)
+        {
+            Console.Error.WriteLine(maskRulesResult.ErrorMessage);
+            return 1;
+        }
+
         var soapHeaders = string.IsNullOrWhiteSpace(soapAction)
             ? null
             : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -456,6 +472,7 @@ public static partial class RequestCompareCommand
             EnableSemanticAnalysis = semanticAnalysis,
             IgnoreRules = ignoreRulesResult.IgnoreRules,
             SmartIgnoreRules = ignoreRulesResult.SmartIgnoreRules,
+            MaskRules = maskRulesResult.MaskRules,
             ContentTypeOverride = contentTypeOverride,
             HeadersA = soapHeaders,
             HeadersB = soapHeaders,
@@ -664,6 +681,97 @@ public static partial class RequestCompareCommand
         }
     }
 
+    internal static async Task<MaskRulesLoadResult> LoadMaskRulesAsync(
+        FileInfo? fileInfo,
+        CancellationToken cancellationToken)
+    {
+        if (fileInfo == null)
+        {
+            return MaskRulesLoadResult.Success(null);
+        }
+
+        if (!fileInfo.Exists)
+        {
+            return MaskRulesLoadResult.Failure($"Mask rules file not found: {fileInfo.FullName}");
+        }
+
+        try
+        {
+            var json = await File.ReadAllTextAsync(fileInfo.FullName, cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return MaskRulesLoadResult.Success(new List<MaskRuleDto>());
+            }
+
+            List<MaskRuleDto> rules;
+            if (json.TrimStart().StartsWith("[", StringComparison.Ordinal))
+            {
+                rules = JsonSerializer.Deserialize(json, IgnoreRulesJsonContext.Default.ListMaskRuleDto) ?? new List<MaskRuleDto>();
+            }
+            else
+            {
+                var container = JsonSerializer.Deserialize(json, IgnoreRulesJsonContext.Default.MaskRulesContainer) ?? new MaskRulesContainer();
+                rules = container.MaskRules ?? new List<MaskRuleDto>();
+            }
+
+            if (rules.Any(rule => rule is null))
+            {
+                return MaskRulesLoadResult.Failure("Invalid mask rules JSON: maskRules cannot contain null entries.");
+            }
+
+            rules = rules
+                .Select(rule => string.IsNullOrWhiteSpace(rule.MaskCharacter)
+                    ? rule with { MaskCharacter = "*" }
+                    : rule)
+                .ToList();
+
+            var validationError = ValidateMaskRules(rules);
+            if (validationError != null)
+            {
+                return MaskRulesLoadResult.Failure(validationError);
+            }
+
+            return MaskRulesLoadResult.Success(rules);
+        }
+        catch (JsonException ex)
+        {
+            return MaskRulesLoadResult.Failure($"Invalid mask rules JSON: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            return MaskRulesLoadResult.Failure($"Failed to read mask rules file: {ex.Message}");
+        }
+    }
+
+    private static string? ValidateMaskRules(IEnumerable<MaskRuleDto> rules)
+    {
+        foreach (var rule in rules)
+        {
+            if (rule is null)
+            {
+                return "Invalid mask rules JSON: maskRules cannot contain null entries.";
+            }
+
+            if (string.IsNullOrWhiteSpace(rule.PropertyPath))
+            {
+                return "Invalid mask rules JSON: each rule must include a non-empty propertyPath.";
+            }
+
+            if (rule.PreserveLastCharacters < 0)
+            {
+                return $"Invalid mask rules JSON: rule '{rule.PropertyPath}' has preserveLastCharacters {rule.PreserveLastCharacters}. Values must be zero or greater.";
+            }
+
+            if (string.IsNullOrWhiteSpace(rule.MaskCharacter) || rule.MaskCharacter.Length != 1)
+            {
+                return $"Invalid mask rules JSON: rule '{rule.PropertyPath}' must specify exactly one character for maskCharacter.";
+            }
+        }
+
+        return null;
+    }
+
     private sealed class IgnoreRulesContainer
     {
         public List<IgnoreRuleDto>? IgnoreRules { get; init; }
@@ -671,10 +779,17 @@ public static partial class RequestCompareCommand
         public List<SmartIgnoreRuleDto>? SmartIgnoreRules { get; init; }
     }
 
+    private sealed class MaskRulesContainer
+    {
+        public List<MaskRuleDto>? MaskRules { get; init; }
+    }
+
     [JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
     [JsonSerializable(typeof(List<IgnoreRuleDto>))]
     [JsonSerializable(typeof(List<SmartIgnoreRuleDto>))]
+    [JsonSerializable(typeof(List<MaskRuleDto>))]
     [JsonSerializable(typeof(IgnoreRulesContainer))]
+    [JsonSerializable(typeof(MaskRulesContainer))]
     private sealed partial class IgnoreRulesJsonContext : JsonSerializerContext
     {
     }
@@ -701,6 +816,29 @@ public static partial class RequestCompareCommand
 
         public static IgnoreRulesLoadResult Failure(string message)
             => new IgnoreRulesLoadResult
+            {
+                IsSuccess = false,
+                ErrorMessage = message,
+            };
+    }
+
+    internal sealed record MaskRulesLoadResult
+    {
+        public bool IsSuccess { get; init; }
+
+        public string? ErrorMessage { get; init; }
+
+        public List<MaskRuleDto>? MaskRules { get; init; }
+
+        public static MaskRulesLoadResult Success(List<MaskRuleDto>? maskRules)
+            => new MaskRulesLoadResult
+            {
+                IsSuccess = true,
+                MaskRules = maskRules,
+            };
+
+        public static MaskRulesLoadResult Failure(string message)
+            => new MaskRulesLoadResult
             {
                 IsSuccess = false,
                 ErrorMessage = message,

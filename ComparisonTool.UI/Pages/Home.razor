@@ -443,6 +443,9 @@
             {
                 <RequestComparisonPanel @ref="requestComparisonPanel" 
                                         OnComparisonComplete="HandleRequestComparisonComplete"
+                                        SharedSelectedModelName="@RequestSelectedModelName"
+                                        SharedSelectedModelNameChanged="@(value => RequestSelectedModelName = value)"
+                                        MaskRules="@RequestMaskRules"
                                         OnAcceptedDifferenceProfilesChanged="@RefreshSelectedRequestPairProfiles"
                                         OnPropertySelectorOpened="OpenRequestPropertySelector"
                                         OnTreePropertySelectorOpened="OpenRequestTreePropertySelector" />
@@ -590,6 +593,13 @@
                 }
             }
         </MudTabPanel>
+        <MudTabPanel Text="Mask Rules Studio">
+            <MaskRulesStudio AvailableModelNames="@DeserializationService.GetRegisteredModelNames()"
+                             SelectedModelName="@RequestSelectedModelName"
+                             SelectedModelNameChanged="@(value => RequestSelectedModelName = value)"
+                             MaskRules="@RequestMaskRules"
+                             MaskRulesChanged="HandleRequestMaskRulesChanged" />
+        </MudTabPanel>
     </MudTabs>
 </MudStack>
 
@@ -647,6 +657,8 @@
     private RequestComparisonPanel requestComparisonPanel;
     private HierarchicalPropertySelector requestPropertySelector;
     private ObjectTreePropertySelector requestTreePropertySelector;
+    private string? RequestSelectedModelName { get; set; }
+    private List<MaskRuleDto> RequestMaskRules { get; set; } = new();
 
     private bool CanRunFolderComparison =>
         !string.IsNullOrEmpty(SelectedModelName) &&
@@ -679,6 +691,8 @@
                     IgnoreCollectionOrder = rule.IgnoreCollectionOrder,
                 })
                 .ToList();
+
+            RequestSelectedModelName = SelectedModelName;
         }
         catch (Exception ex)
         {
@@ -869,6 +883,13 @@
                 requestComparisonPanel.IgnoreRules.Remove(rule);
             }
         }
+    }
+
+    private Task HandleRequestMaskRulesChanged(List<MaskRuleDto> maskRules)
+    {
+        RequestMaskRules = maskRules;
+        StateHasChanged();
+        return Task.CompletedTask;
     }
     
     private async Task BrowseDirectory1()

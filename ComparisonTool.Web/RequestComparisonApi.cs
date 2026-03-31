@@ -198,7 +198,15 @@ public static class RequestComparisonApi
             return Results.BadRequest("EndpointB must be a valid URL");
         }
 
-        var job = jobService.CreateJob(request);
+        RequestComparisonJob job;
+        try
+        {
+            job = jobService.CreateJob(request);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(ex.Message);
+        }
 
         // Publish initial progress event (best-effort, don't block job creation)
         try

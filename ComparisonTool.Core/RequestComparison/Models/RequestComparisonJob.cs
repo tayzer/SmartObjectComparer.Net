@@ -109,6 +109,9 @@ public record RequestComparisonJob
     /// <summary>Gets or sets the smart ignore rules for this job.</summary>
     public List<SmartIgnoreRuleDto> SmartIgnoreRules { get; set; } = new();
 
+    /// <summary>Gets or sets the response masking rules for this job.</summary>
+    public List<MaskRuleDto> MaskRules { get; set; } = new();
+
     /// <summary>Gets or sets a value indicating whether semantic analysis is enabled.</summary>
     public bool EnableSemanticAnalysis { get; set; } = true;
 

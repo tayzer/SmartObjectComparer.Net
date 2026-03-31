@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 
 namespace ComparisonTool.Cli.Reporting;
@@ -10,6 +11,7 @@ public static class HtmlReportWriter
 {
     private const string ResourceSuffix = "Resources.ReportTemplate.html";
     private const string ReportDataPlaceholder = "__REPORT_DATA_JSON__";
+    private static readonly UTF8Encoding Utf8WithoutBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     /// <summary>
     /// Writes a standalone HTML report file.
@@ -51,10 +53,20 @@ public static class HtmlReportWriter
             bootstrap = HtmlReportBundleBuilder.BuildSingleFile(context).Bootstrap;
         }
 
-        var reportJson = JsonSerializer.Serialize(bootstrap, ComparisonReportJson.CompactOptions);
-        var html = template.Replace(ReportDataPlaceholder, reportJson, StringComparison.Ordinal);
+        var templateSegments = template.Split(ReportDataPlaceholder, StringSplitOptions.None);
+        if (templateSegments.Length == 1)
+        {
+            throw new InvalidOperationException("Embedded HTML report template placeholder was not found in the CLI assembly.");
+        }
 
-        await File.WriteAllTextAsync(outputPath, html);
+        await using var stream = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
+        await WriteTemplateSegmentAsync(stream, templateSegments[0]);
+
+        for (var segmentIndex = 1; segmentIndex < templateSegments.Length; segmentIndex++)
+        {
+            await JsonSerializer.SerializeAsync(stream, bootstrap, ComparisonReportJson.CompactOptions);
+            await WriteTemplateSegmentAsync(stream, templateSegments[segmentIndex]);
+        }
     }
 
     private static string BuildDataRootPath(string outputPath)
@@ -78,5 +90,16 @@ public static class HtmlReportWriter
             ?? throw new InvalidOperationException($"Unable to open embedded resource '{resourceName}'.");
         using var reader = new StreamReader(stream);
         return await reader.ReadToEndAsync();
+    }
+
+    private static async Task WriteTemplateSegmentAsync(Stream stream, string value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return;
+        }
+
+        var bytes = Utf8WithoutBom.GetBytes(value);
+        await stream.WriteAsync(bytes.AsMemory(0, bytes.Length));
     }
 }

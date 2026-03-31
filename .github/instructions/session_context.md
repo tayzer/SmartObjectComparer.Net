@@ -1,233 +1,205 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2026-03-18T00:00:00Z
-sessionStatus: active
+lastUpdated: 2026-03-30T00:00:00Z
+sessionStatus: complete
 ---
 
 # Current Session Context
 
-## Latest Task
-Implement accepted-difference persistence and bug tracking for structured comparison differences across Web and Desktop.
+## Active Task
+Fix CLI request-comparison HTML report OutOfMemoryException during large runs
 
-## Latest Task Status
+## Todo List Status
 ```markdown
-- [x] Add shared accepted-difference fingerprinting and JSON-backed persistence in Core
-- [x] Register the persistence service in shared DI and host configuration
-- [x] Extend DetailedDifferencesView with persisted classifications and noise filtering
-- [x] Harden store access for cross-process reads/writes and malformed JSON
-- [x] Add accepted-difference profile management and import/export panels in configuration UI
-- [x] Refresh open detailed-difference views after profile imports/removals/clear-all
-- [x] Preserve immutable detail-view search paths while rendering relative property labels
-- [x] Enforce Known Bug ticket-ID invariant on profile imports
-- [x] Add unit tests for fingerprinting, persistence reload, malformed payloads, and concurrent saves
-- [x] Verify with `dotnet build ComparisonTool.sln`
-- [x] Verify with `dotnet test ComparisonTool.Tests/ComparisonTool.Tests.csproj --filter AcceptedDifferenceServiceTests`
+- [x] 🔍 Trace the request CLI HTML report generation path and identify the memory-heavy steps
+- [x] 🛠️ Stop optional full diff generation from rereading oversized request response files
+- [x] 💾 Stream static-site JSON payloads and final HTML output instead of building giant intermediate strings
+- [x] 🧪 Add focused regression coverage for single-file and default static-site report generation
+- [x] ✅ Run targeted validation and final review
 ```
 
-## Latest Session Notes
-- Added a shared accepted-difference store under `ComparisonTool.Core/AcceptedDifferences` with stable fingerprints based on normalized property paths plus scrubbed value patterns.
-- Relative accepted-difference store paths now resolve under the machine-level application data root, so Web and Desktop default to the same physical JSON store on the same machine.
-- Detailed structured-difference UI now supports `Accepted Difference`, `Known Bug`, and `Fixed / Verified` classifications and can hide accepted or known-bug noise while keeping fixed regressions visible.
-- Added reusable profile management/import-export UI in both file/folder and request comparison configuration panels.
-- Configuration-side profile changes now refresh the currently selected detailed comparison without forcing a rerun.
-- Store access now uses a sidecar lock file plus reload-before-write semantics to avoid lost updates across multiple service instances.
+## Recent File Changes
+- `ComparisonTool.Cli/Reporting/HtmlReportBundleData.cs`: Added a request-report diff size guard, passed request context into diff-document generation, and streamed static-site JSON payload writes
+- `ComparisonTool.Cli/Reporting/HtmlReportWriter.cs`: Replaced full-string HTML/bootstrap assembly with streamed template + JSON output writing
+- `ComparisonTool.Tests/Unit/Cli/HtmlReportBundleBuilderTests.cs`: Added coverage for oversized request responses, structured fallback preservation, and streamed static-site artifact generation
+
+## Key Technical Decisions
+- Decision: Omit the optional HTML `diffDocument` for oversized request response files instead of rereading the full saved responses
+- Rationale: Request raw-text comparison already truncates bodies to 5 KB, and the full side-by-side diff pane is secondary to the structured/raw difference summaries; skipping oversized diff payloads prevents report-generation memory spikes on large batches
+- Date: 2026-03-30
+- Decision: Stream JSON payloads and HTML bootstrap injection directly to disk
+- Rationale: Removes duplicate giant JSON/HTML string allocations from the report-writing path without changing report structure or UI contracts
+- Date: 2026-03-30
+
+## External Resources Referenced
+- Internal code inspection only
+
+## Blockers & Issues
+- None
+
+## Failed Approaches
+- Approach: Treat the HTML writer as the only problem area
+- Failure Reason: The main memory spike also came from rebuilding full diff documents from persisted response files during bundle generation
+- Lesson: The write path and the upstream optional diff payload construction both needed to be addressed to materially reduce peak memory usage
+
+## Environment Notes
+- Windows
+- .NET 10.0
+
+## Next Session Priority
+If large request reports still show high memory use, inspect the remaining per-chunk detail DTO footprint and consider an explicit guardrail for very large `SingleFile` HTML exports
+
+## Session Notes
+- Request comparisons now skip optional full diff payload generation when saved response files exceed the existing 5 KB raw-text comparison threshold
+- Missing/unreadable small request files still preserve the structured fallback diff behavior instead of silently losing detail
+- Static-site JSON chunk/index writes now use `JsonSerializer.SerializeAsync` directly to file streams
+- HTML report output now streams template prefix, bootstrap JSON, and suffix instead of allocating full `reportJson` and final HTML strings in memory
+- Validation completed:
+	- `dotnet test .\ComparisonTool.Tests\ComparisonTool.Tests.csproj --filter "FullyQualifiedName~HtmlReportBundleBuilderTests" --verbosity minimal` passed with 4/4 tests
+	- `dotnet build .\ComparisonTool.Cli\ComparisonTool.Cli.csproj --no-restore --verbosity minimal` passed
+	- Final review found one missing static-site regression test; it was added and revalidated
+
+---
+applyTo: '**'
+lastUpdated: 2026-03-23T01:05:00Z
+sessionStatus: complete
+---
+
+# Current Session Context
 
 ## Active Task
-Migrate from Blazor Server web UI to Blazor Hybrid (WPF + BlazorWebView) desktop app
+Improve the CLI HTML report UX for request-comparison runs
 
 ## Todo List Status
 ```markdown
-### Phase 1: Foundation
-- [x] Create platform service abstractions in ComparisonTool.Core/Abstractions
-- [x] Create ComparisonTool.UI Razor Class Library (shared components target)
-- [x] Create ComparisonTool.Desktop WPF project with BlazorWebView shell
-- [x] Implement desktop services (file export, folder picker, notifications, scroll)
-- [x] Implement in-process progress publisher/subscriber (replaces SignalR)
-- [x] Implement in-process request comparison gateway (replaces HTTP APIs)
-- [x] Update Directory.Packages.props with WebView.Wpf package
-- [x] Add both new projects to solution file
-- [ ] Move shared Razor components from Web to UI library
-- [ ] Update Web project to reference UI library (keep Web working)
-- [ ] Create web-side platform service implementations (IJSRuntime wrappers)
-- [ ] Verify Desktop shell compiles and renders Home page
-- [ ] Verify Web project still functions unchanged
-
-### Phase 2: Component Migration (Complete)
-- [x] Create Web Implementation Services
-- [x] Move Home.razor, RequestComparisonPanel.razor, and Shared components to ComparisonTool.UI
-- [x] Move Pages from Web/Components/Pages to UI
-- [x] Move Comparison components from Web/Components/Comparison to UI
-- [x] Move Shared components from Web/Components/Shared to UI
-- [x] Move Layout from Web/Components/Layout to UI
-- [x] Refactor IJSRuntime.InvokeVoidAsync("alert",...) calls to use INotificationService
-- [x] Refactor IJSRuntime.InvokeVoidAsync("downloadFile"/"saveAsFile",...) to use IFileExportService
-- [x] Refactor IJSRuntime.InvokeAsync<string>("browseFolder",...) to use IFolderPickerService
-- [x] Refactor IJSRuntime.InvokeVoidAsync("scrollToElement",...) to use IScrollService
-- [x] Refactor RequestComparisonPanel HTTP calls to use IRequestComparisonGateway
-- [x] Refactor ComparisonProgressService usage to use IProgressSubscriber
-
-*Note: The entire solution currently builds with 0 errors.*
-
-### Phase 3: Request Comparison Desktop Path
-- [x] Wire up request comparison flow end-to-end in Desktop
-- [x] Test full request comparison lifecycle in Desktop
-
-### Phase 4: Polish & Hardening
-- [ ] Native file save dialogs for all exports
-- [ ] Window state persistence
-- [ ] Error handling and crash recovery
-- [ ] Temp file lifecycle management
-- [ ] Performance testing with large datasets
+- [x] 🔍 Inspect the React report UI structure and validate available request-outcome data
+- [x] 🛠️ Rework the report flow to read as focus controls -> matching pairs -> selected pair detail
+- [x] 🧭 Shorten noisy property-path display while preserving full-path matching and context
+- [x] 🚦 Add dedicated response-outcome focus controls for non-success, mismatch, and failed pairs
+- [x] 🎨 Polish the navigator layout and overall report styling after tester feedback
+- [x] 🧱 Rework the focus-column layout so response outcomes and recurring patterns use space correctly
+- [x] ✅ Rebuild the ReportUI bundle and complete final review
 ```
 
 ## Recent File Changes
-- `ComparisonTool.Core/Abstractions/IFileExportService.cs`: New - platform-agnostic file export interface
-- `ComparisonTool.Core/Abstractions/IFolderPickerService.cs`: New - platform-agnostic folder picker interface
-- `ComparisonTool.Core/Abstractions/INotificationService.cs`: New - platform-agnostic alert/notification interface
-- `ComparisonTool.Core/Abstractions/IScrollService.cs`: New - platform-agnostic scroll service interface
-- `ComparisonTool.Core/Abstractions/IRequestComparisonGateway.cs`: New - replaces HTTP API for request comparison
-- `ComparisonTool.Core/Abstractions/IProgressSubscriber.cs`: New - replaces SignalR for progress updates
-- `ComparisonTool.UI/ComparisonTool.UI.csproj`: New - Razor Class Library for shared UI components
-- `ComparisonTool.UI/_Imports.razor`: New - shared Razor imports
-- `ComparisonTool.UI/wwwroot/js/app.js`: New - shared JS interop functions
-- `ComparisonTool.Desktop/ComparisonTool.Desktop.csproj`: New - WPF host project
-- `ComparisonTool.Desktop/App.xaml[.cs]`: New - WPF app with full DI setup
-- `ComparisonTool.Desktop/MainWindow.xaml[.cs]`: New - BlazorWebView host window
-- `ComparisonTool.Desktop/Main.razor`: New - root Blazor component for desktop
-- `ComparisonTool.Desktop/wwwroot/index.html`: New - BlazorWebView host page
-- `ComparisonTool.Desktop/Services/*.cs`: New - 7 desktop service implementations
-- `Directory.Packages.props`: Added Microsoft.AspNetCore.Components.WebView.Wpf
-- `ComparisonTool.sln`: Added ComparisonTool.UI and ComparisonTool.Desktop projects
+- `ComparisonTool.ReportUI/src/App.tsx`: Added response-outcome focus controls, shortened property-path rendering, clearer results/detail headings, response context chips, left-axis navigator expand/collapse behavior, and follow-up polish classes/copy for the primary navigator and result lists
+- `ComparisonTool.ReportUI/src/app.css`: Added focus-control layout/styles, response-context chip styling, property-path presentation helpers, updated navigator layout styling, stronger redesign styling, and follow-up fill behavior for the outcomes/pattern sections
 
 ## Key Technical Decisions
-- Decision: WPF + BlazorWebView over MAUI for desktop host
-- Rationale: Windows-only target, simpler setup, no MAUI overhead, direct WPF interop
-- Date: 2026-03-04
-
-- Decision: Shared UI library (ComparisonTool.UI) for component reuse
-- Rationale: Both Web and Desktop hosts reference same components; avoids duplication
-- Date: 2026-03-04
-
-- Decision: Platform abstractions in Core, implementations in host projects
-- Rationale: Clean dependency direction, testable, follows existing CLI pattern
-- Date: 2026-03-04
-
-- Decision: In-process services replace HTTP APIs and SignalR in Desktop
-- Rationale: No network overhead; direct service calls; follows ConsoleProgressPublisher pattern from CLI
-- Date: 2026-03-04
-
-## Architecture
-```
-ComparisonTool.Desktop (WPF+BlazorWebView) ─┐
-                                              ├─► ComparisonTool.UI (Razor Class Library)
-ComparisonTool.Web (Blazor Server) ──────────┘         │
-                                                       ▼
-                                              ComparisonTool.Core (Business Logic + Abstractions)
-```
+- Decision: Keep the payload/API unchanged and implement the tester feedback in the React report UI only
+- Rationale: `PairSummary` already exposes `pairOutcome`, HTTP statuses, error state, and full property paths, so the UX gaps could be addressed without expanding the CLI DTOs
+- Date: 2026-03-23
+- Decision: Treat response-outcome focus as the active result-set driver instead of stacking it with field/pattern focus
+- Rationale: Prevents hidden non-success pairs and keeps the focus summary and deep-dive behavior aligned with the user’s selected workflow
+- Date: 2026-03-23
 
 ## External Resources Referenced
-- https://learn.microsoft.com/en-us/aspnet/core/blazor/hybrid/
-
-## Blockers & Issues
-- None
-
-## Environment Notes
-- .NET 10.0 (SDK 10.0.103)
-- MudBlazor 8.15.0
-- Microsoft.AspNetCore.Components.WebView.Wpf 10.0.3
-
-## Next Steps
-Move Razor components from ComparisonTool.Web to ComparisonTool.UI, then wire up
-Web platform service implementations so both hosts render the same UI.
-
-## Todo List Status
-```markdown
-- [x] Verify reported CS1503 location and reproduce context
-- [x] Patch search field callback wiring in DetailedDifferencesView
-- [x] Re-run diagnostics to confirm error cleared
-- [x] Finalize session context
-```
-
-## Recent File Changes
-- `ComparisonTool.Core/Serialization/XmlDeserializationService.cs`: Made model serializer pre-caching non-fatal during registration (`RegisterDomainModel<T>` now catches and logs pre-cache exceptions, then falls back to lazy creation when model is actually used).
-- `ComparisonTool.Cli/Commands/RequestCompareCommand.cs`: Added `using ComparisonTool.Core.Serialization;`, updated `-m` option description, added early model-name validation after service provider creation — gives clear "Unknown model / Available models" error before any comparison starts.
-- `ComparisonTool.Cli/Commands/FolderCompareCommand.cs`: Added early model-name validation (identical pattern) after service provider creation.
-
-## Key Technical Decisions
-- Decision: Keep eager serializer pre-cache as a best-effort optimization only; never fail registration if one model serializer cannot pre-initialize.
-- Rationale: Request/folder runs should only fail for the selected `-m` model; unrelated registered models (for example `SoapEnvelope`) must not break startup/execution.
-- Date: 2026-03-02
-- Decision: Validate model names BEFORE creating the comparison job, using `IXmlDeserializationService.GetRegisteredModelNames()`.
-- Rationale: Previously unregistered names propagated deep into the pipeline producing per-file `ArgumentException` failures that were difficult to diagnose. The error the user saw ("ComplexOrderResponse cannot be serialized...") was a secondary/misleading error.
-- Date: 2026-03-02
-
-## Root Cause Analysis
-1. `CreditReportDomain` is not defined or registered anywhere in the codebase.
-2. `GetModelType("CreditReportDomain")` throws `ArgumentException` inside each file-pair comparison loop.
-3. Per-pair errors were stored in `FilePairComparisonResult.ErrorMessage` — the user saw a confusing error mentioning `ComplexOrderResponse` (unrelated secondary failure path).
-4. The `"Auto"` default was also broken — `"Auto"` is never registered, so it always failed at the same model-lookup stage.
-
-## External Resources Referenced
-- None (workspace-only investigation and fix).
+- Internal code inspection only
 
 ## Blockers & Issues
 - None
 
 ## Failed Approaches
-- None
+- Approach: Initial outcome-focus implementation left the field-selection state effectively active in the summary/detail workflow
+- Failure Reason: Results filtering and deep-dive focus could disagree when outcome focus was selected
+- Lesson: In this report UI, only one primary focus mode should drive the active result set at a time
 
 ## Environment Notes
-- .NET 10.0
+- Windows
+- React 18 + Vite single-file report bundle
 
 ## Next Session Priority
-No active tasks.
+If testers still struggle with the report, consider adding automated UI coverage for combined focus/search/review-state interactions before doing larger presentation changes
 
 ## Session Notes
-- Verified build: `dotnet build ComparisonTool.Cli/ComparisonTool.Cli.csproj` (0 errors).
-- Verified request flow with local mock endpoints and `-m ComplexOrderResponse` runs successfully (differences reported, no `SoapEnvelope` constructor failure).
-- Added upfront validation in both `RequestCompareCommand` and `FolderCompareCommand`.
-- `dotnet build` passes (0 errors).
-- Verified: `-m CreditReportDomain` → "Error: Unknown model name 'CreditReportDomain'. Available models: ComplexOrderResponse, SoapEnvelope."
-- Verified: no `-m` (Auto) → "Error: A domain model name must be specified with -m. 'Auto' is not a valid model name. Available models: ComplexOrderResponse, SoapEnvelope."
-- Verified: `-m ComplexOrderResponse` → passes validation, proceeds to comparison.
+- Added a dedicated `Response outcomes` focus area for non-success, status mismatch, comparison-error, and exact `pairOutcome` grouping
+- Equal-but-non-success pairs now remain reachable through outcome focus instead of being hidden by the default non-equal filter
+- Long field/property paths are shortened for display in pair chips and structured-difference headings while keeping the full path in tooltips/secondary text
+- The navigator’s expand/collapse affordance now sits on the left hierarchy axis with a larger hit target
+- Results and detail panels were relabeled and reframed to read as a clearer master-detail workflow
+- The field path navigator now fills the height of its section on desktop instead of being constrained to a small fixed-height scroll area
+- The right-hand focus column now uses space intentionally: the response-outcomes section sizes to its content and the recurring-patterns section takes the remaining height with a full-height scroll region
+- The report received a stronger visual redesign pass: darker hero header, cleaner white/slate surface system, more distinct metric cards, clearer section framing, and more obvious interaction styling for cards, lists, and controls
+- Validation completed:
+	- `npm run build` in `ComparisonTool.ReportUI` passed
+	- Final review found no remaining correctness or requirement-coverage issues
+	- Residual risk is limited to browser-level responsive verification because there is no automated UI coverage for these layouts
+
+---
+
+---
+applyTo: '**'
+lastUpdated: 2026-03-19T00:00:00Z
+sessionStatus: complete
+---
+
+# Current Session Context
+
+## Active Task
+Add CLI request-response masking rules for sensitive fields
 
 ## Todo List Status
 ```markdown
-- [x] Remove `--debug-non-success-bodies` and `--debug-artifacts-dir` from request CLI options
-- [x] Remove debug artifact export pipeline/helpers from request command
-- [x] Remove debug artifact metadata output from console/json reports
-- [x] Update README request example to use `--disable-truncation`
-- [x] Build `ComparisonTool.Cli` to verify compilation
+- [x] 🔍 Trace the CLI request-comparison flow and existing ignore-rules loading
+- [x] 🛠️ Add `--mask-rules` loading and shared mask-rule propagation
+- [x] 🛡️ Mask persisted response bodies before first write for JSON/XML request comparisons
+- [x] 🧪 Add focused CLI and masking-service tests, including UTF-16 XML coverage
+- [x] ✅ Run targeted validation and final review for leakage/regression risks
 ```
 
 ## Recent File Changes
-- `ComparisonTool.Cli/Commands/RequestCompareCommand.cs`: Removed legacy debug artifact options, execution branch, and helper types/methods.
-- `ComparisonTool.Cli/Reporting/ConsoleReportWriter.cs`: Removed debug artifact directory/index lines from summary output.
-- `ComparisonTool.Cli/Reporting/JsonReportWriter.cs`: Removed `debugArtifacts` JSON section and associated metadata helper methods.
-- `README.md`: Replaced debug artifact flags in request example with `--disable-truncation` and updated troubleshooting note.
+- `ComparisonTool.Cli/Commands/RequestCompareCommand.cs`: Added `--mask-rules`, mask-rule JSON loading/validation, and request-job propagation
+- `ComparisonTool.Core/RequestComparison/Models/ApiContracts.cs`: Added `MaskRuleDto` and optional `MaskRules` on the shared request contract
+- `ComparisonTool.Core/RequestComparison/Models/RequestComparisonJob.cs`: Added persisted per-job mask rules
+- `ComparisonTool.Core/RequestComparison/Services/ResponseMaskingService.cs`: Added JSON/XML string-field masking with property-path matching, charset handling, and pre-write masking support
+- `ComparisonTool.Core/RequestComparison/Services/RequestExecutionService.cs`: Masks endpoint responses before the first persisted write
+- `ComparisonTool.Core/RequestComparison/Services/RequestComparisonJobService.cs`: Validates mask rules at job creation
+- `ComparisonTool.Web/RequestComparisonApi.cs`: Returns `400` for invalid shared mask-rule input instead of surfacing a server error
+- `ComparisonTool.Cli/Infrastructure/ServiceProviderFactory.cs` and `ComparisonTool.Web/Program.cs`: Registered the masking service
+- `ComparisonTool.Tests/Unit/Cli/RequestCompareCommandTests.cs`: Added mask-rule loader tests
+- `ComparisonTool.Tests/Unit/RequestComparison/ResponseMaskingServiceTests.cs`: Added JSON, namespace-aware XML, and UTF-16 XML masking tests
+- `README.md`: Documented `--mask-rules` usage and JSON examples
 
 ## Key Technical Decisions
-- Decision: Fully retire debug-artifact export flags/logic now that inline report truncation can be disabled.
-- Rationale: Avoid duplicate troubleshooting paths and keep CLI/report behavior simpler and consistent.
-- Date: 2026-02-27
+- Decision: Use a dedicated `--mask-rules` JSON file parallel to `--ignore-rules`
+- Rationale: Keeps sensitive-value handling explicit and operator-controlled without overloading ignore semantics
+- Date: 2026-03-19
+- Decision: Mask response bodies before the first persisted write, not later in reporting
+- Rationale: Prevents masked fields from leaking into saved response files, raw-text comparisons, report payloads, and raw-content viewers
+- Date: 2026-03-19
+- Decision: Limit v1 masking to matched JSON/XML string values using the same normalized property-path style already used by comparison rules
+- Rationale: Covers payment-card and similar secrets with low deserialization risk while keeping rule syntax consistent across features
+- Date: 2026-03-19
+- Decision: Preserve charset information when masking, including UTF-16 XML payloads
+- Rationale: Avoids corrupting non-UTF8 response artifacts during masking and comparison
+- Date: 2026-03-19
 
 ## External Resources Referenced
-- None (workspace-only implementation).
+- Internal code inspection only
 
 ## Blockers & Issues
-- None
+- [NOTE] Focused validation passed, but the repository still has many pre-existing StyleCop and analyzer warnings unrelated to this feature
 
 ## Failed Approaches
-- None
+- Approach: Initial masking hook rewrote response files only after request execution completed
+- Failure Reason: That still allowed unmasked response bodies to hit disk before the masking pass
+- Lesson: Sensitive-value masking must happen before the first persisted write, not merely before comparison/reporting
 
 ## Environment Notes
 - .NET 10.0
+- Windows
 
 ## Next Session Priority
-No active tasks.
+If needed, add a request-comparison integration test that exercises `--mask-rules` end to end against a mock endpoint and verifies masked values never reach persisted job artifacts
 
 ## Session Notes
-Removed artifact export pathway and references; troubleshooting now relies on `--disable-truncation` inline report output. `dotnet build ComparisonTool.Cli/ComparisonTool.Cli.csproj` succeeds (warnings only).
+- Added `--mask-rules` to the CLI request command with JSON loading that accepts both top-level arrays and `{ "maskRules": [...] }` container objects.
+- Added `MaskRuleDto` with `propertyPath`, `preserveLastCharacters`, and `maskCharacter` semantics for string-field masking.
+- Request comparison now masks matched JSON/XML response fields before the first persisted write, so downstream comparisons and reports consume masked artifacts.
+- Shared validation now rejects invalid mask rules during job creation, and the web request-comparison API maps that failure to a `400` response.
+- Validation completed:
+	- `dotnet test .\ComparisonTool.Tests\ComparisonTool.Tests.csproj --filter "RequestCompareCommandTests|ResponseMaskingServiceTests"` passed with 16/16 tests
+	- Final review confirmed the original unmasked-on-disk leak path is closed after moving masking into `RequestExecutionService`
 
 ---
 # Previous Session Archive

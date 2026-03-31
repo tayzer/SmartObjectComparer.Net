@@ -74,7 +74,7 @@
                 <MudSelect T="string" 
                            Label="Select Domain Model" 
                            Value="selectedModelName"
-                           ValueChanged="@((string val) => selectedModelName = val)"
+                           ValueChanged="HandleSelectedModelChanged"
                            Variant="Variant.Outlined"
                            AnchorOrigin="Origin.BottomCenter">
                     @foreach (var modelName in availableModels)
@@ -82,6 +82,10 @@
                         <MudSelectItem Value="@modelName">@modelName</MudSelectItem>
                     }
                 </MudSelect>
+
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                    Mask rules configured in Mask Rules Studio: @MaskRules.Count
+                </MudAlert>
 
                 <MudExpansionPanels>
                     <MudExpansionPanel Text="Comparison Options">
@@ -369,6 +373,9 @@
 
 @code {
     [Parameter] public EventCallback<MultiFolderComparisonResult> OnComparisonComplete { get; set; }
+    [Parameter] public string? SharedSelectedModelName { get; set; }
+    [Parameter] public EventCallback<string> SharedSelectedModelNameChanged { get; set; }
+    [Parameter] public List<MaskRuleDto> MaskRules { get; set; } = new();
     [Parameter] public EventCallback OnAcceptedDifferenceProfilesChanged { get; set; }
     private const string CustomEndpointValue = "__custom__";
 
@@ -437,7 +444,9 @@
         availableModels = DeserializationService.GetRegisteredModelNames().ToList();
         if (availableModels.Count > 0)
         {
-            selectedModelName = availableModels[0];
+            selectedModelName = !string.IsNullOrWhiteSpace(SharedSelectedModelName)
+                ? SharedSelectedModelName
+                : availableModels[0];
         }
         
         var options = EndpointOptions.Value;
@@ -457,6 +466,21 @@
 
         timeoutMs = Configuration.GetValue("RequestComparison:DefaultTimeoutMs", 30000);
         maxConcurrency = Configuration.GetValue("RequestComparison:MaxConcurrency", 64);
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (!string.IsNullOrWhiteSpace(SharedSelectedModelName)
+            && !string.Equals(selectedModelName, SharedSelectedModelName, StringComparison.Ordinal))
+        {
+            selectedModelName = SharedSelectedModelName;
+        }
+    }
+
+    private async Task HandleSelectedModelChanged(string value)
+    {
+        selectedModelName = value;
+        await SharedSelectedModelNameChanged.InvokeAsync(value);
     }
 
     private async Task HandleFileSelection(InputFileChangeEventArgs e)
@@ -563,11 +587,25 @@
                         IgnoreCompletely = r.IgnoreCompletely, 
                         IgnoreCollectionOrder = r.IgnoreCollectionOrder 
                     }).ToList(),
+                MaskRules = MaskRules.Where(r => !string.IsNullOrWhiteSpace(r.PropertyPath))
+                    .Select(r => new MaskRuleDto
+                    {
+                        PropertyPath = r.PropertyPath,
+                        PreserveLastCharacters = r.PreserveLastCharacters,
+                        MaskCharacter = string.IsNullOrWhiteSpace(r.MaskCharacter) ? "*" : r.MaskCharacter
+                    }).ToList(),
                 SmartIgnoreRules = new List<SmartIgnoreRuleDto>()
             };
 
             var createResponse = await http.PostAsJsonAsync("/api/requests/compare", request);
-            createResponse.EnsureSuccessStatusCode();
+            if (!createResponse.IsSuccessStatusCode)
+            {
+                var apiError = await createResponse.Content.ReadAsStringAsync();
+                errorMessage = string.IsNullOrWhiteSpace(apiError)
+                    ? $"Comparison failed: {createResponse.ReasonPhrase}"
+                    : apiError;
+                return;
+            }
             
             var createResult = await createResponse.Content.ReadFromJsonAsync<CreateJobResponse>();
             currentJobId = createResult?.JobId;

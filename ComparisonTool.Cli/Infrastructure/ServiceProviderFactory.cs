@@ -44,6 +44,7 @@ public static class ServiceProviderFactory
         services.AddSingleton<RequestFileParserService>();
         services.AddSingleton<RequestExecutionService>();
         services.AddSingleton<RawTextComparisonService>();
+        services.AddSingleton<ResponseMaskingService>();
         services.AddSingleton<IComparisonProgressPublisher, ConsoleProgressPublisher>();
         services.AddSingleton<RequestComparisonJobService>();
 
