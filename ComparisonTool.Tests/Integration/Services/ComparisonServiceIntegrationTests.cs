@@ -702,6 +702,81 @@ public class ComparisonServiceIntegrationTests
         }
     }
 
+    [TestMethod]
+    public async Task CompareFoldersInBatchesAsync_WithSoapFaultFile_ShouldReturnErrorRowWithoutThrowing()
+    {
+        var testRoot = GetSpecificComplexModelTestRoot();
+        var actualPath = Path.Combine(testRoot, "Actual", "Actual_FaultException.xml");
+        var expectedPath = Path.Combine(testRoot, "Expected", "Expected_FaultException.xml");
+
+        var result = await comparisonService.CompareFoldersInBatchesAsync(
+            new List<string> { actualPath },
+            new List<string> { expectedPath },
+            "ComplexOrderResponse",
+            batchSize: 25);
+
+        result.TotalPairsCompared.Should().Be(1);
+        result.AllEqual.Should().BeFalse();
+        result.FilePairResults.Should().HaveCount(1);
+
+        var pair = result.FilePairResults[0];
+        pair.HasError.Should().BeTrue();
+        pair.ErrorMessage.Should().Contain("SOAP fault detected in response");
+        pair.ErrorMessage.Should().Contain("soap:Server");
+    }
+
+    [TestMethod]
+    public async Task CompareDirectoriesAsync_WithSoapFaultFile_ShouldReturnErrorRowWithoutThrowing()
+    {
+        var testRoot = GetSpecificComplexModelTestRoot();
+        var sourceActual = Path.Combine(testRoot, "Actual", "Actual_FaultException.xml");
+        var sourceExpected = Path.Combine(testRoot, "Expected", "Expected_FaultException.xml");
+
+        var tempRoot = Path.Combine(Path.GetTempPath(), "ComparisonToolFaultCopies", Guid.NewGuid().ToString("N"));
+        var actualDirectory = Path.Combine(tempRoot, "Actual");
+        var expectedDirectory = Path.Combine(tempRoot, "Expected");
+        Directory.CreateDirectory(actualDirectory);
+        Directory.CreateDirectory(expectedDirectory);
+
+        var targetActual = Path.Combine(actualDirectory, "Fault.xml");
+        var targetExpected = Path.Combine(expectedDirectory, "Fault.xml");
+        File.Copy(sourceActual, targetActual);
+        File.Copy(sourceExpected, targetExpected);
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddXmlComparisonServices(options =>
+            options.RegisterDomainModelWithRootElement<ComplexOrderResponse>("ComplexOrderResponse", "OrderManagementResponse"));
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var directoryComparisonService = scope.ServiceProvider.GetRequiredService<DirectoryComparisonService>();
+
+        try
+        {
+            var result = await directoryComparisonService.CompareDirectoriesAsync(
+                actualDirectory,
+                expectedDirectory,
+                "ComplexOrderResponse");
+
+            result.TotalPairsCompared.Should().Be(1);
+            result.AllEqual.Should().BeFalse();
+            result.FilePairResults.Should().HaveCount(1);
+
+            var pair = result.FilePairResults[0];
+            pair.HasError.Should().BeTrue();
+            pair.ErrorMessage.Should().Contain("SOAP fault detected in response");
+            pair.ErrorMessage.Should().Contain("order processing service encountered an internal error");
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
     private static string GetSpecificComplexModelTestRoot()
     {
         return Path.Combine(

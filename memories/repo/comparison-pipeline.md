@@ -1,0 +1,3 @@
+- RequestComparisonPanel still posts to /api/requests/compare and polls /api/requests/compare/{jobId}/status; Desktop registers IRequestComparisonGateway/InProcessRequestComparisonGateway but the shared UI does not use it yet.
+- XmlDeserializationService.TryDeserializeXml now detects SOAP fault envelopes before full deserialize and returns DeserializationResult.Failure with the fault code/message/detail instead of relying on serializer-event throws.
+- ComparisonOrchestrator and DirectoryComparisonService use CompareFilesWithCachingAsPairResultAsync for folder and batch flows so expected per-file deserialization failures become FilePairComparisonResult error rows; the single-pair throwing APIs still preserve their existing exception behavior.

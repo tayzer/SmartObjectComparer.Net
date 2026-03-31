@@ -385,6 +385,40 @@ public class XmlDeserializationServiceTests
     }
 
     [TestMethod]
+    public void TryDeserializeXml_WithSoapFaultEnvelope_ShouldReturnFailureWithoutThrowing()
+    {
+        // Arrange
+        service.RegisterDomainModel<SoapEnvelope>("SoapEnvelope");
+
+        var soapFaultXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<soap:Envelope xmlns:soap=""http://schemas.xmlsoap.org/soap/envelope/"">
+    <soap:Body>
+        <soap:Fault>
+            <faultcode>soap:Server</faultcode>
+            <faultstring>Order service unavailable</faultstring>
+            <detail>
+                <ServiceFault>
+                    <CorrelationId>corr-123</CorrelationId>
+                </ServiceFault>
+            </detail>
+        </soap:Fault>
+    </soap:Body>
+</soap:Envelope>";
+
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(soapFaultXml));
+
+        // Act
+        var result = service.TryDeserializeXml(stream, typeof(SoapEnvelope));
+
+        // Assert
+        result.Success.Should().BeFalse();
+        result.ErrorMessage.Should().Contain("SOAP fault detected in response");
+        result.ErrorMessage.Should().Contain("soap:Server");
+        result.ErrorMessage.Should().Contain("Order service unavailable");
+        result.ErrorMessage.Should().Contain("CorrelationId");
+    }
+
+    [TestMethod]
     public void DeserializeXml_SoapEnvelope_ShouldDeserializeWithPrefixedNamespaces()
     {
         // Arrange - SOAP envelope with prefixed namespaces (soap:Envelope, soap:Body)

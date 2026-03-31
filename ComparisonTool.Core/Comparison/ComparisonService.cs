@@ -132,6 +132,21 @@ public class ComparisonService : IComparisonService
         return ComparisonTool.Core.Comparison.Utilities.DifferenceFilter.FilterDuplicateDifferences(result, logger);
     }
 
+    public async Task<FilePairComparisonResult> CompareFilesWithCachingAsPairResultAsync(
+        Stream oldFileStream,
+        Stream newFileStream,
+        string modelName,
+        string oldFilePath,
+        string newFilePath,
+        CancellationToken cancellationToken = default)
+        => await comparisonOrchestrator.CompareFilesWithCachingAsPairResultAsync(
+            oldFileStream,
+            newFileStream,
+            modelName,
+            oldFilePath,
+            newFilePath,
+            cancellationToken).ConfigureAwait(false);
+
     /// <summary>
     /// Compare two files with auto-format detection (supports XML and JSON) - legacy method without caching.
     /// </summary>

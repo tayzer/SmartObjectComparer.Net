@@ -3,6 +3,7 @@ using System.Diagnostics;
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
+using ComparisonTool.Core.Comparison.Utilities;
 using ComparisonTool.Core.Serialization;
 using ComparisonTool.Core.Utilities;
 using KellermanSoftware.CompareNetObjects;
@@ -338,6 +339,122 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
         }).ConfigureAwait(false);
     }
 
+    public async Task<FilePairComparisonResult> CompareFilesWithCachingAsPairResultAsync(
+        Stream oldFileStream,
+        Stream newFileStream,
+        string modelName,
+        string oldFilePath,
+        string newFilePath,
+        CancellationToken cancellationToken = default)
+    {
+        if (deserializationFactory == null)
+        {
+            logger.LogDebug("DeserializationFactory not available, falling back to XML-only comparison for pair result");
+            return await CompareXmlFilesWithCachingAsPairResultAsync(
+                oldFileStream,
+                newFileStream,
+                modelName,
+                oldFilePath,
+                newFilePath,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        return await performanceTracker.TrackOperationAsync("CompareFilesWithCachingAsPairResult", async () =>
+        {
+            try
+            {
+                var oldFormat = FileTypeDetector.DetectFormat(oldFilePath);
+                var newFormat = FileTypeDetector.DetectFormat(newFilePath);
+
+                if (oldFormat != newFormat)
+                {
+                    return CreateErrorPairResult(
+                        oldFilePath,
+                        newFilePath,
+                        new InvalidOperationException($"Cannot compare files of different formats: {oldFormat} vs {newFormat}"));
+                }
+
+                logger.LogDebug("Comparing files in {Format} format: {OldFile} vs {NewFile}", oldFormat, oldFilePath, newFilePath);
+
+                var formatDeserializationService = deserializationFactory.GetService(oldFormat);
+                var configFingerprint = cacheService.GenerateConfigurationFingerprint(configService);
+                var file1Hash = cacheService.GenerateFileHash(oldFileStream);
+                var file2Hash = cacheService.GenerateFileHash(newFileStream);
+
+                if (cacheService.TryGetCachedComparison(file1Hash, file2Hash, configFingerprint, out var cachedResult))
+                {
+                    ComparisonPhaseTimingScope.Current?.RecordCacheHit();
+                    logger.LogDebug(
+                        "Using cached comparison result for files with hashes {File1Hash}..{File2Hash}",
+                        file1Hash[..8],
+                        file2Hash[..8]);
+                    return CreateSuccessPairResult(oldFilePath, newFilePath, cachedResult);
+                }
+
+                ComparisonPhaseTimingScope.Current?.RecordCacheMiss();
+
+                var modelType = formatDeserializationService.GetModelType(modelName);
+
+                var oldDeserializationStart = Stopwatch.GetTimestamp();
+                var oldResult = await performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}_{oldFormat}", async () =>
+                {
+                    return await Task.Run(
+                        () =>
+                        {
+                            oldFileStream.Position = 0;
+                            return formatDeserializationService.TryDeserialize(oldFileStream, modelType, oldFormat);
+                        }, cancellationToken).ConfigureAwait(false);
+                }).ConfigureAwait(false);
+                ComparisonPhaseTimingScope.Current?.AddDeserialization(Stopwatch.GetElapsedTime(oldDeserializationStart));
+
+                if (!oldResult.Success)
+                {
+                    return CreateErrorPairResult(
+                        oldFilePath,
+                        newFilePath,
+                        new InvalidOperationException($"Failed to deserialize old file ({oldFilePath}): {oldResult.ErrorMessage}"));
+                }
+
+                var newDeserializationStart = Stopwatch.GetTimestamp();
+                var newResult = await performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}_{newFormat}", async () =>
+                {
+                    return await Task.Run(
+                        () =>
+                        {
+                            newFileStream.Position = 0;
+                            return formatDeserializationService.TryDeserialize(newFileStream, modelType, newFormat);
+                        }, cancellationToken).ConfigureAwait(false);
+                }).ConfigureAwait(false);
+                ComparisonPhaseTimingScope.Current?.AddDeserialization(Stopwatch.GetElapsedTime(newDeserializationStart));
+
+                if (!newResult.Success)
+                {
+                    return CreateErrorPairResult(
+                        oldFilePath,
+                        newFilePath,
+                        new InvalidOperationException($"Failed to deserialize new file ({newFilePath}): {newResult.ErrorMessage}"));
+                }
+
+                var comparisonResult = await comparisonEngine.CompareObjectsAsync(
+                    oldResult.Value!,
+                    newResult.Value!,
+                    modelType,
+                    cancellationToken).ConfigureAwait(false);
+
+                cacheService.CacheComparison(file1Hash, file2Hash, configFingerprint, comparisonResult);
+                return CreateSuccessPairResult(oldFilePath, newFilePath, comparisonResult);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                return CreateErrorPairResult(oldFilePath, newFilePath, ex);
+            }
+        }).ConfigureAwait(false);
+    }
+
     /// <summary>
     /// Compare two files with auto-format detection (supports XML and JSON).
     /// </summary>
@@ -459,18 +576,15 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
 
                 using var file1Stream = await fileSystemService.OpenFileStreamAsync(file1Path, cancellationToken).ConfigureAwait(false);
                 using var file2Stream = await fileSystemService.OpenFileStreamAsync(file2Path, cancellationToken).ConfigureAwait(false);
-                var pairResult = await CompareFilesWithCachingAsync(file1Stream, file2Stream, modelName, file1Path, file2Path, cancellationToken).ConfigureAwait(false);
-                var categorizer = new DifferenceCategorizer();
-                var summary = categorizer.CategorizeAndSummarize(pairResult);
-                var filePairResult = new FilePairComparisonResult
-                {
-                    File1Name = Path.GetFileName(file1Path),
-                    File2Name = Path.GetFileName(file2Path),
-                    Result = pairResult,
-                    Summary = summary,
-                };
+                var filePairResult = await CompareFilesWithCachingAsPairResultAsync(
+                    file1Stream,
+                    file2Stream,
+                    modelName,
+                    file1Path,
+                    file2Path,
+                    cancellationToken).ConfigureAwait(false);
                 result.FilePairResults.Add(filePairResult);
-                if (!summary.AreEqual)
+                if (!filePairResult.AreEqual)
                 {
                     result.AllEqual = false;
                 }
@@ -482,8 +596,8 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
             }
         }
 
-        var equalCount = result.FilePairResults.Count(r => r.Summary?.AreEqual ?? true);
-        var differentCount = result.FilePairResults.Count(r => !(r.Summary?.AreEqual ?? true));
+        var equalCount = result.FilePairResults.Count(r => r.AreEqual);
+        var differentCount = result.FilePairResults.Count(r => !r.AreEqual);
         logger.LogInformation("Folder comparison completed. {EqualCount} equal, {DifferentCount} different", equalCount, differentCount);
         return result;
     }
@@ -626,12 +740,14 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
 
                                 try
                                 {
+                                    ct.ThrowIfCancellationRequested();
+
                                     // Open file streams without loading entirely into memory
                                     using var file1Stream = await fileSystemService.OpenFileStreamAsync(file1Path, ct).ConfigureAwait(false);
                                     using var file2Stream = await fileSystemService.OpenFileStreamAsync(file2Path, ct).ConfigureAwait(false);
 
-                                    // Perform comparison with caching using format-agnostic method
-                                    var comparisonResult = await CompareFilesWithCachingAsync(
+                                    // Perform comparison with caching using the batch-safe pair result path.
+                                    var pairResult = await CompareFilesWithCachingAsPairResultAsync(
                                         file1Stream,
                                         file2Stream,
                                         modelName,
@@ -639,26 +755,14 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                                         file2Path,
                                         ct).ConfigureAwait(false);
 
-                                    // Generate summary
-                                    var categorizer = new DifferenceCategorizer();
-                                    var summary = categorizer.CategorizeAndSummarize(comparisonResult);
-
-                                    // Create result
-                                    var pairResult = new FilePairComparisonResult
-                                    {
-                                        File1Name = file1Name,
-                                        File2Name = file2Name,
-                                        File1Path = file1Path,
-                                        File2Path = file2Path,
-                                        Result = comparisonResult,
-                                        Summary = summary,
-                                    };
+                                    pairResult.File1Name = file1Name;
+                                    pairResult.File2Name = file2Name;
 
                                     // Update result
                                     filePairResults.Add(pairResult);
 
                                     // If any differences, flag the overall result
-                                    if (!summary.AreEqual)
+                                    if (!pairResult.AreEqual)
                                     {
                                         Interlocked.Exchange(ref equalityFlag, 0);
                                     }
@@ -667,6 +771,10 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                                 {
                                     performanceTracker.StopOperation(operationId);
                                 }
+                            }
+                            catch (OperationCanceledException)
+                            {
+                                throw;
                             }
                             catch (Exception ex)
                             {
@@ -746,6 +854,126 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
 
             return result;
         }).ConfigureAwait(false);
+
+    private async Task<FilePairComparisonResult> CompareXmlFilesWithCachingAsPairResultAsync(
+        Stream oldXmlStream,
+        Stream newXmlStream,
+        string modelName,
+        string oldFilePath,
+        string newFilePath,
+        CancellationToken cancellationToken)
+        => await performanceTracker.TrackOperationAsync("CompareXmlFilesWithCachingAsPairResult", async () =>
+        {
+            try
+            {
+                var configFingerprint = cacheService.GenerateConfigurationFingerprint(configService);
+                var file1Hash = cacheService.GenerateFileHash(oldXmlStream);
+                var file2Hash = cacheService.GenerateFileHash(newXmlStream);
+
+                if (cacheService.TryGetCachedComparison(file1Hash, file2Hash, configFingerprint, out var cachedResult))
+                {
+                    logger.LogDebug(
+                        "Using cached comparison result for files with hashes {File1Hash}..{File2Hash}",
+                        file1Hash[..8],
+                        file2Hash[..8]);
+                    return CreateSuccessPairResult(oldFilePath, newFilePath, cachedResult);
+                }
+
+                logger.LogDebug("Cache miss - performing fresh XML pair comparison for {ModelName}", modelName);
+
+                var modelType = deserializationService.GetModelType(modelName);
+
+                var oldResult = await performanceTracker.TrackOperationAsync($"Deserialize_Old_{modelName}", async () =>
+                {
+                    return await Task.Run(
+                        () =>
+                        {
+                            oldXmlStream.Position = 0;
+                            return deserializationService.TryDeserializeXml(oldXmlStream, modelType);
+                        }, cancellationToken).ConfigureAwait(false);
+                }).ConfigureAwait(false);
+
+                if (!oldResult.Success)
+                {
+                    return CreateErrorPairResult(
+                        oldFilePath,
+                        newFilePath,
+                        new InvalidOperationException($"Failed to deserialize old XML: {oldResult.ErrorMessage}"));
+                }
+
+                var newResult = await performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}", async () =>
+                {
+                    return await Task.Run(
+                        () =>
+                        {
+                            newXmlStream.Position = 0;
+                            return deserializationService.TryDeserializeXml(newXmlStream, modelType);
+                        }, cancellationToken).ConfigureAwait(false);
+                }).ConfigureAwait(false);
+
+                if (!newResult.Success)
+                {
+                    return CreateErrorPairResult(
+                        oldFilePath,
+                        newFilePath,
+                        new InvalidOperationException($"Failed to deserialize new XML: {newResult.ErrorMessage}"));
+                }
+
+                var comparisonResult = await comparisonEngine.CompareObjectsAsync(
+                    oldResult.Value!,
+                    newResult.Value!,
+                    modelType,
+                    cancellationToken).ConfigureAwait(false);
+
+                cacheService.CacheComparison(file1Hash, file2Hash, configFingerprint, comparisonResult);
+                return CreateSuccessPairResult(oldFilePath, newFilePath, comparisonResult);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                return CreateErrorPairResult(oldFilePath, newFilePath, ex);
+            }
+        }).ConfigureAwait(false);
+
+    private FilePairComparisonResult CreateSuccessPairResult(
+        string oldFilePath,
+        string newFilePath,
+        ComparisonResult comparisonResult)
+    {
+        var filteredResult = DifferenceFilter.FilterDuplicateDifferences(comparisonResult, logger);
+        var categorizer = new DifferenceCategorizer();
+
+        return new FilePairComparisonResult
+        {
+            File1Name = Path.GetFileName(oldFilePath),
+            File2Name = Path.GetFileName(newFilePath),
+            File1Path = oldFilePath,
+            File2Path = newFilePath,
+            Result = filteredResult,
+            Summary = categorizer.CategorizeAndSummarize(filteredResult),
+        };
+    }
+
+    private FilePairComparisonResult CreateErrorPairResult(
+        string oldFilePath,
+        string newFilePath,
+        Exception exception)
+    {
+        var unwrapped = ExceptionUnwrapper.Unwrap(exception);
+
+        return new FilePairComparisonResult
+        {
+            File1Name = Path.GetFileName(oldFilePath),
+            File2Name = Path.GetFileName(newFilePath),
+            File1Path = oldFilePath,
+            File2Path = newFilePath,
+            ErrorMessage = ExceptionUnwrapper.GetDetailedMessage(exception),
+            ErrorType = unwrapped.GetType().Name,
+        };
+    }
 
     /// <summary>
     /// Calculate optimal batch size based on file count and system resources.

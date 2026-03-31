@@ -185,12 +185,15 @@ public class DirectoryComparisonService
                                     var (file1Path, file2Path, relativePath) = filePair;
                                     try
                                     {
+                                        ct.ThrowIfCancellationRequested();
+
                                         // Open file streams without loading entirely into memory
                                         using var file1Stream = await fileSystemService.OpenFileStreamAsync(file1Path, ct).ConfigureAwait(false);
                                         using var file2Stream = await fileSystemService.OpenFileStreamAsync(file2Path, ct).ConfigureAwait(false);
 
-                                        // Perform comparison using format-agnostic method
-                                        var comparisonResult = await comparisonService.CompareFilesWithCachingAsync(
+                                        // Perform comparison using the non-throwing batch path so expected
+                                        // deserialization failures become error rows instead of debugger noise.
+                                        var pairResult = await comparisonService.CompareFilesWithCachingAsPairResultAsync(
                                             file1Stream,
                                             file2Stream,
                                             modelName,
@@ -198,20 +201,8 @@ public class DirectoryComparisonService
                                             file2Path,
                                             ct).ConfigureAwait(false);
 
-                                        // Generate summary
-                                        var categorizer = new DifferenceCategorizer();
-                                        var summary = categorizer.CategorizeAndSummarize(comparisonResult);
-
-                                        // Create result
-                                        var pairResult = new FilePairComparisonResult
-                                        {
-                                            File1Name = Path.GetFileName(relativePath),
-                                            File2Name = Path.GetFileName(relativePath),
-                                            File1Path = file1Path,
-                                            File2Path = file2Path,
-                                            Result = comparisonResult,
-                                            Summary = summary,
-                                        };
+                                        pairResult.File1Name = Path.GetFileName(relativePath);
+                                        pairResult.File2Name = Path.GetFileName(relativePath);
 
                                         // Update result
                                         filePairResults.Add(pairResult);
@@ -220,7 +211,7 @@ public class DirectoryComparisonService
                                         comparisonLogService.LogFilePairResult(sessionId, pairResult);
 
                                         // Update equality flag in a thread-safe way
-                                        if (!summary.AreEqual)
+                                        if (!pairResult.AreEqual)
                                         {
                                             Interlocked.Exchange(ref equalityFlag, 0);
                                         }
@@ -234,6 +225,10 @@ public class DirectoryComparisonService
                                                 filePairs.Count,
                                                 $"Compared {completed} of {filePairs.Count} files"));
                                         }
+                                    }
+                                    catch (OperationCanceledException)
+                                    {
+                                        throw;
                                     }
                                     catch (Exception ex)
                                     {
@@ -288,8 +283,8 @@ public class DirectoryComparisonService
 
                         result.AllEqual = equalityFlag == 1; // Convert from int flag to bool
 
-                        var equal = result.FilePairResults.Count(r => r.Summary?.AreEqual ?? true);
-                        var different = result.FilePairResults.Count(r => !(r.Summary?.AreEqual ?? true));
+                        var equal = result.FilePairResults.Count(r => r.AreEqual);
+                        var different = result.FilePairResults.Count(r => !r.AreEqual);
                         logger.LogInformation(
                             "Directory comparison completed. {Equal} equal, {Different} different",
                             equal,
@@ -477,6 +472,7 @@ public class DirectoryComparisonService
 
                             try
                             {
+                                ct.ThrowIfCancellationRequested();
                                 var operationId = performanceTracker.StartOperation($"Compare_File_{index}");
 
                                 try
@@ -484,32 +480,23 @@ public class DirectoryComparisonService
                                     using var file1Stream = await fileSystemService.OpenFileStreamAsync(file1Path, ct).ConfigureAwait(false);
                                     using var file2Stream = await fileSystemService.OpenFileStreamAsync(file2Path, ct).ConfigureAwait(false);
 
-                                    var comparisonResult = await comparisonService.CompareFilesWithCachingAsync(
+                                    var pairResult = await comparisonService.CompareFilesWithCachingAsPairResultAsync(
                                         file1Stream,
                                         file2Stream,
                                         modelName,
                                         file1Path,
                                         file2Path,
                                         ct).ConfigureAwait(false);
-                                    var categorizer = new DifferenceCategorizer();
-                                    var summary = categorizer.CategorizeAndSummarize(comparisonResult);
 
-                                    var pairResult = new FilePairComparisonResult
-                                    {
-                                        File1Name = file1Name,
-                                        File2Name = file2Name,
-                                        File1Path = file1Path,
-                                        File2Path = file2Path,
-                                        Result = comparisonResult,
-                                        Summary = summary,
-                                    };
+                                    pairResult.File1Name = file1Name;
+                                    pairResult.File2Name = file2Name;
 
                                     filePairResults.Add(pairResult);
 
                                     // Log result to dedicated comparison log
                                     comparisonLogService.LogFilePairResult(sessionId, pairResult);
 
-                                    if (!summary.AreEqual)
+                                    if (!pairResult.AreEqual)
                                     {
                                         Interlocked.Exchange(ref equalityFlag, 0);
                                     }
@@ -518,6 +505,10 @@ public class DirectoryComparisonService
                                 {
                                     performanceTracker.StopOperation(operationId);
                                 }
+                            }
+                            catch (OperationCanceledException)
+                            {
+                                throw;
                             }
                             catch (Exception ex)
                             {
@@ -564,8 +555,8 @@ public class DirectoryComparisonService
                     result.FilePairResults = filePairResults.OrderBy(r => r.File1Name, StringComparer.Ordinal).ToList();
                     result.AllEqual = equalityFlag == 1;
 
-                    var equal = result.FilePairResults.Count(r => r.Summary?.AreEqual ?? true);
-                    var different = result.FilePairResults.Count(r => !(r.Summary?.AreEqual ?? true));
+                    var equal = result.FilePairResults.Count(r => r.AreEqual);
+                    var different = result.FilePairResults.Count(r => !r.AreEqual);
                     logger.LogInformation(
                         "Comparison completed. {Equal} equal, {Different} different",
                         equal,

@@ -87,57 +87,6 @@ public class XmlSerializerFactory
     }
 
     /// <summary>
-    /// Non-generic version of <see cref="CreateDefaultSerializer{T}"/> that creates a
-    /// namespace-agnostic serializer for a runtime-resolved type.
-    /// </summary>
-    private XmlSerializer CreateDefaultSerializer(Type type)
-    {
-        var overrides = new XmlAttributeOverrides();
-
-        var xmlRootAttr = type.GetCustomAttributes(typeof(XmlRootAttribute), true).FirstOrDefault() as XmlRootAttribute;
-        var hasNamespacedRoot = xmlRootAttr != null && !string.IsNullOrEmpty(xmlRootAttr.Namespace);
-
-        ProcessTypeForAttributeNormalization(type, overrides, new HashSet<Type>(), hasNamespacedRoot);
-
-        XmlSerializer serializer;
-        if (hasNamespacedRoot)
-        {
-            var namespaceIgnorantRootAttr = new XmlRootAttribute(xmlRootAttr!.ElementName)
-            {
-                IsNullable = xmlRootAttr.IsNullable,
-                Namespace = string.Empty,
-            };
-
-            serializer = new XmlSerializer(type, overrides, Type.EmptyTypes, namespaceIgnorantRootAttr, string.Empty);
-        }
-        else
-        {
-            serializer = new XmlSerializer(type, overrides);
-        }
-
-        serializer.UnknownElement += OnUnknownElement;
-        serializer.UnknownAttribute += OnUnknownAttribute;
-        serializer.UnknownNode += OnUnknownNode;
-
-        return serializer;
-    }
-
-    /// <summary>
-    /// Non-generic version of <see cref="CreateStrictSerializer{T}"/> that creates a
-    /// strict serializer for a runtime-resolved type.
-    /// </summary>
-    private XmlSerializer CreateStrictSerializer(Type type)
-    {
-        var serializer = new XmlSerializer(type);
-
-        serializer.UnknownElement += OnUnknownElement;
-        serializer.UnknownAttribute += OnUnknownAttribute;
-        serializer.UnknownNode += OnUnknownNode;
-
-        return serializer;
-    }
-
-    /// <summary>
     /// Creates a custom serializer for ComplexOrderResponse with specific root element configuration.
     /// Call RegisterType to register this serializer for the ComplexOrderResponse type.
     /// </summary>
@@ -187,6 +136,57 @@ public class XmlSerializerFactory
         var serializer = new XmlSerializer(type, overrides, Type.EmptyTypes, namespaceIgnorantRootAttr, string.Empty);
 
         // Add event handlers for unknown elements/attributes
+        serializer.UnknownElement += OnUnknownElement;
+        serializer.UnknownAttribute += OnUnknownAttribute;
+        serializer.UnknownNode += OnUnknownNode;
+
+        return serializer;
+    }
+
+    /// <summary>
+    /// Non-generic version of <see cref="CreateDefaultSerializer{T}"/> that creates a
+    /// namespace-agnostic serializer for a runtime-resolved type.
+    /// </summary>
+    private XmlSerializer CreateDefaultSerializer(Type type)
+    {
+        var overrides = new XmlAttributeOverrides();
+
+        var xmlRootAttr = type.GetCustomAttributes(typeof(XmlRootAttribute), true).FirstOrDefault() as XmlRootAttribute;
+        var hasNamespacedRoot = xmlRootAttr != null && !string.IsNullOrEmpty(xmlRootAttr.Namespace);
+
+        ProcessTypeForAttributeNormalization(type, overrides, new HashSet<Type>(), hasNamespacedRoot);
+
+        XmlSerializer serializer;
+        if (hasNamespacedRoot)
+        {
+            var namespaceIgnorantRootAttr = new XmlRootAttribute(xmlRootAttr!.ElementName)
+            {
+                IsNullable = xmlRootAttr.IsNullable,
+                Namespace = string.Empty,
+            };
+
+            serializer = new XmlSerializer(type, overrides, Type.EmptyTypes, namespaceIgnorantRootAttr, string.Empty);
+        }
+        else
+        {
+            serializer = new XmlSerializer(type, overrides);
+        }
+
+        serializer.UnknownElement += OnUnknownElement;
+        serializer.UnknownAttribute += OnUnknownAttribute;
+        serializer.UnknownNode += OnUnknownNode;
+
+        return serializer;
+    }
+
+    /// <summary>
+    /// Non-generic version of <see cref="CreateStrictSerializer{T}"/> that creates a
+    /// strict serializer for a runtime-resolved type.
+    /// </summary>
+    private XmlSerializer CreateStrictSerializer(Type type)
+    {
+        var serializer = new XmlSerializer(type);
+
         serializer.UnknownElement += OnUnknownElement;
         serializer.UnknownAttribute += OnUnknownAttribute;
         serializer.UnknownNode += OnUnknownNode;
@@ -445,9 +445,13 @@ public class XmlSerializerFactory
     {
         if (e.Element.LocalName == "Fault" || e.Element.Name.Contains("Fault"))
         {
-            throw new InvalidOperationException($"SOAP Fault detected in response: {e.Element.OuterXml}");
+            logger?.LogDebug(
+                "SOAP Fault element encountered during unknown-element handling: {ElementName}. " +
+                "TryDeserializeXml should surface this as a non-throwing comparison error.",
+                e.Element.Name);
+            return;
         }
-        
+
         logger?.LogDebug(
             "Unknown XML element encountered: {ElementName} at line {LineNumber}, column {LinePosition}. Ignoring element.",
             e.Element.Name,
