@@ -529,31 +529,33 @@ string.Equals(NormalizePropertyPath(d.Difference.PropertyName), path, StringComp
             var collectionDiffs = fileGroup
                 .Where(d => !categorizedDifferences.Contains(d.Difference) &&
                            d.Difference.PropertyName.Contains("["))
-                .GroupBy(d => ExtractCollectionName(d.Difference.PropertyName), StringComparer.Ordinal);
+                .GroupBy(d => ExtractInnermostCollectionScope(d.Difference.PropertyName), StringComparer.Ordinal);
 
             foreach (var collectionGroup in collectionDiffs)
             {
-                var collection = collectionGroup.Key;
-
-                // Only consider as an order issue if:
-                // 1. There are multiple differences in the same collection
-                // 2. The collection has more than one element (check indices)
-                // 3. The differences arent just missing properties
                 var uncategorizedInGroup = collectionGroup.ToList();
-                var indices = uncategorizedInGroup
-                    .Select(d => ExtractArrayIndex(d.Difference.PropertyName))
-                    .Where(c => c >= 0)
-                    .Distinct()
+                var collection = ExtractInnermostCollectionName(uncategorizedInGroup[0].Difference.PropertyName);
+                var likelyOrderDifferences = GetLikelyOrderDifferences(uncategorizedInGroup.Select(c => c.Difference));
+                if (likelyOrderDifferences.Count == 0)
+                {
+                    continue;
+                }
+
+                var matchingOrderDiffs = uncategorizedInGroup
+                    .Where(c => likelyOrderDifferences.Contains(c.Difference))
                     .ToList();
 
-                var hasMultipleIndices = indices.Count > 1;
-                var hasNonMissingDiffs = uncategorizedInGroup.Any(c => !IsPropertyMissing(c.Difference));
+                var indices = matchingOrderDiffs
+                    .Select(d => ExtractArrayIndex(d.Difference.PropertyName))
+                    .Where(index => index >= 0)
+                    .Distinct()
+                    .ToList();
 
                 // TODO: this is unique to the domain and should be fixed generally, maybe pass in values like this in DI?
                 // Special case: if we have only one Applicant but its showing as an order difference, likely a false positive.
                 var isSingleApplicant = collection.EndsWith("Applicant", StringComparison.Ordinal) && indices.Count <= 1;
 
-                if (hasMultipleIndices && hasNonMissingDiffs && !isSingleApplicant)
+                if (!isSingleApplicant)
                 {
                     var pattern = $"{collection}[Order]";
 
@@ -573,16 +575,16 @@ string.Equals(NormalizePropertyPath(d.Difference.PropertyName), path, StringComp
                             IsCollectionElement = true,
                             CollectionName = collection,
                             AffectedFiles = new List<string>() { filePair },
-                            Examples = uncategorizedInGroup.Take(3).Select(c => c.Difference).ToList(),
-                            OccurenceCount = uncategorizedInGroup.Count,
+                            Examples = matchingOrderDiffs.Take(3).Select(c => c.Difference).ToList(),
+                            OccurenceCount = matchingOrderDiffs.Count,
                             FileCount = 1,
                             IsCriticalProperty = false,
                             HumanReadableDescription = description,
                             RecommendAction = action,
                         };
 
-                        // Mark all differences in this collection group as categorized
-                        foreach (var diff in uncategorizedInGroup)
+                        // Mark only the differences with actual reorder evidence as categorized.
+                        foreach (var diff in matchingOrderDiffs)
                         {
                             categorizedDifferences.Add(diff.Difference);
                         }
@@ -590,14 +592,14 @@ string.Equals(NormalizePropertyPath(d.Difference.PropertyName), path, StringComp
                     else
                     {
                         var existingPattern = structuralPatterns[pattern];
-                        existingPattern.OccurenceCount += uncategorizedInGroup.Count;
+                        existingPattern.OccurenceCount += matchingOrderDiffs.Count;
                         if (!existingPattern.AffectedFiles.Contains(filePair, StringComparer.Ordinal))
                         {
                             existingPattern.AffectedFiles.Add(filePair);
                             existingPattern.FileCount++;
                         }
 
-                        foreach (var example in uncategorizedInGroup.Take(3).Select(c => c.Difference))
+                        foreach (var example in matchingOrderDiffs.Take(3).Select(c => c.Difference))
                         {
                             if (existingPattern.Examples.Count < 3)
                             {
@@ -605,8 +607,8 @@ string.Equals(NormalizePropertyPath(d.Difference.PropertyName), path, StringComp
                             }
                         }
 
-                        // Mark all differences in this collection group as categorized
-                        foreach (var diff in uncategorizedInGroup)
+                        // Mark only the differences with actual reorder evidence as categorized.
+                        foreach (var diff in matchingOrderDiffs)
                         {
                             categorizedDifferences.Add(diff.Difference);
                         }
@@ -680,9 +682,164 @@ string.Equals(NormalizePropertyPath(d.Difference.PropertyName), path, StringComp
         }
     }
 
+    private HashSet<Difference> GetLikelyOrderDifferences(IEnumerable<Difference> differences)
+    {
+        var likelyOrderDifferences = new HashSet<Difference>();
+
+        var collectionGroups = differences
+            .Where(diff => !IsPropertyMissing(diff) && diff.PropertyName.Contains("["))
+            .GroupBy(diff => ExtractInnermostCollectionScope(diff.PropertyName), StringComparer.Ordinal);
+
+        foreach (var collectionGroup in collectionGroups)
+        {
+            var collectionDiffs = collectionGroup.ToList();
+            var distinctIndices = collectionDiffs
+                .Select(diff => ExtractArrayIndex(diff.PropertyName))
+                .Where(index => index >= 0)
+                .Distinct()
+                .Count();
+
+            if (distinctIndices < 2)
+            {
+                continue;
+            }
+
+            var pathGroups = collectionDiffs
+                .Where(diff => diff.Object1Value != null &&
+                               diff.Object2Value != null)
+                .GroupBy(diff => NormalizePropertyPath(diff.PropertyName), StringComparer.Ordinal);
+
+            var candidatePathGroups = new List<(string NormalizedPath, List<(Difference Difference, int Index, string OldValue, string NewValue)> IndexedValues)>();
+
+            foreach (var pathGroup in pathGroups)
+            {
+                var indexedValues = pathGroup
+                    .Select(diff => (
+                        Difference: diff,
+                        Index: ExtractArrayIndex(diff.PropertyName),
+                        OldValue: diff.Object1Value?.ToString() ?? string.Empty,
+                        NewValue: diff.Object2Value?.ToString() ?? string.Empty))
+                    .Where(entry => entry.Index >= 0 &&
+                                    !string.Equals(entry.OldValue, entry.NewValue, StringComparison.Ordinal))
+                    .ToList();
+
+                if (!HasOrderSwapEvidence(indexedValues))
+                {
+                    continue;
+                }
+
+                candidatePathGroups.Add((pathGroup.Key, indexedValues));
+            }
+
+            foreach (var directItemCandidate in candidatePathGroups.Where(candidate => IsDirectCollectionItemPath(candidate.NormalizedPath)))
+            {
+                foreach (var indexedValue in directItemCandidate.IndexedValues)
+                {
+                    likelyOrderDifferences.Add(indexedValue.Difference);
+                }
+            }
+
+            var objectCandidates = candidatePathGroups
+                .Where(candidate => !IsDirectCollectionItemPath(candidate.NormalizedPath))
+                .ToList();
+
+            if (!objectCandidates.Any(candidate => LooksLikeIdentifierPropertyPath(candidate.NormalizedPath)))
+            {
+                continue;
+            }
+
+            foreach (var objectCandidate in objectCandidates)
+            {
+                foreach (var indexedValue in objectCandidate.IndexedValues)
+                {
+                    likelyOrderDifferences.Add(indexedValue.Difference);
+                }
+            }
+        }
+
+        return likelyOrderDifferences;
+    }
+
+    private static bool HasOrderSwapEvidence(
+        IReadOnlyList<(Difference Difference, int Index, string OldValue, string NewValue)> indexedValues)
+    {
+        if (indexedValues.Count < 2)
+        {
+            return false;
+        }
+
+        var distinctIndices = indexedValues
+            .Select(value => value.Index)
+            .Distinct()
+            .Count();
+
+        if (distinctIndices < 2)
+        {
+            return false;
+        }
+
+        var oldValues = indexedValues.Select(value => value.OldValue).ToList();
+        var newValues = indexedValues.Select(value => value.NewValue).ToList();
+
+        if (oldValues.Distinct(StringComparer.Ordinal).Count() != oldValues.Count ||
+            newValues.Distinct(StringComparer.Ordinal).Count() != newValues.Count)
+        {
+            return false;
+        }
+
+        return new HashSet<string>(oldValues, StringComparer.Ordinal)
+            .SetEquals(newValues);
+    }
+
+    private static bool IsDirectCollectionItemPath(string normalizedPath) =>
+        normalizedPath.EndsWith("[*]", StringComparison.Ordinal);
+
+    private static bool LooksLikeIdentifierPropertyPath(string normalizedPath)
+    {
+        if (string.IsNullOrWhiteSpace(normalizedPath) || IsDirectCollectionItemPath(normalizedPath))
+        {
+            return false;
+        }
+
+        var lastSegmentIndex = normalizedPath.LastIndexOf('.');
+        var propertyName = lastSegmentIndex >= 0
+            ? normalizedPath[(lastSegmentIndex + 1)..]
+            : normalizedPath;
+
+        return string.Equals(propertyName, "Name", StringComparison.OrdinalIgnoreCase) ||
+            propertyName.EndsWith("Id", StringComparison.OrdinalIgnoreCase) ||
+            propertyName.EndsWith("Key", StringComparison.OrdinalIgnoreCase) ||
+            propertyName.EndsWith("Code", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(propertyName, "SKU", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(propertyName, "Sku", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(propertyName, "Identifier", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(propertyName, "Guid", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(propertyName, "CertificationNumber", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private string ExtractInnermostCollectionName(string path)
+    {
+        var normalizedPath = NormalizePropertyPath(path);
+        var collectionMarkerIndex = normalizedPath.LastIndexOf("[*]", StringComparison.Ordinal);
+
+        return collectionMarkerIndex >= 0
+            ? normalizedPath[..collectionMarkerIndex]
+            : ExtractCollectionName(path);
+    }
+
+    private static string ExtractInnermostCollectionScope(string path)
+    {
+        var collectionMarkerIndex = path.LastIndexOf('[');
+
+        return collectionMarkerIndex > 0
+            ? path[..collectionMarkerIndex]
+            : path;
+    }
+
     private int ExtractArrayIndex(string differencePropertyName)
     {
-        var match = Regex.Match(differencePropertyName, @"\[(\d+)\]");
+        var matches = Regex.Matches(differencePropertyName, @"\[(\d+)\]");
+        var match = matches.Count > 0 ? matches[^1] : Match.Empty;
 
         if (match.Success && int.TryParse(match.Groups[1].Value, out var index))
         {
@@ -1230,6 +1387,7 @@ string.Equals(NormalizePropertyPath(d.Difference.PropertyName), path, StringComp
         var missingCount = 0;
         var orderCount = 0;
         var uncategorizedCount = 0;
+        var likelyOrderDifferences = GetLikelyOrderDifferences(differences);
 
         foreach (var diff in differences)
         {
@@ -1238,7 +1396,7 @@ string.Equals(NormalizePropertyPath(d.Difference.PropertyName), path, StringComp
             {
                 missingCount++;
             }
-            else if (IsOrderDifference(diff))
+            else if (likelyOrderDifferences.Contains(diff))
             {
                 orderCount++;
             }
@@ -1295,12 +1453,6 @@ string.Equals(NormalizePropertyPath(d.Difference.PropertyName), path, StringComp
 
         return "Uncategorized";
     }
-
-    private bool IsOrderDifference(Difference diff) =>
-        diff.PropertyName.Contains("[") &&
-        (diff.PropertyName.Contains("Order") ||
-         diff.PropertyName.Contains("Index") ||
-         diff.PropertyName.Contains("Position"));
 
     private bool IsValueDifference(Difference diff) =>
         !IsPropertyMissing(diff) &&

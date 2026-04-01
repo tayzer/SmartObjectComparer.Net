@@ -9,6 +9,7 @@ using ComparisonTool.Core.Serialization;
 using ComparisonTool.Core.Utilities;
 using ComparisonTool.Domain.Models;
 using FluentAssertions;
+using KellermanSoftware.CompareNetObjects;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -456,6 +457,85 @@ public class ComparisonServiceIntegrationTests
         }
     }
 
+        [TestMethod]
+        public async Task CompareFoldersInBatchesAsync_WhenHighPerformancePipelineRuns_ShouldMatchStandardDedupedDifferenceSet()
+        {
+                const int pairCount = 100;
+                const string actualXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<ComplexTestModel>
+    <Name>Example</Name>
+    <Items>
+        <ComplexTestModelItem>
+            <Id>1</Id>
+            <Value>Alpha</Value>
+        </ComplexTestModelItem>
+    </Items>
+</ComplexTestModel>";
+                const string expectedXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<ComplexTestModel>
+    <Name>Example</Name>
+    <Items>
+        <ComplexTestModelItem>
+            <Id>1</Id>
+            <Value>Alpha</Value>
+        </ComplexTestModelItem>
+        <ComplexTestModelItem>
+            <Id>2</Id>
+            <Value>Beta</Value>
+        </ComplexTestModelItem>
+    </Items>
+</ComplexTestModel>";
+
+                using var actualStream = new MemoryStream(Encoding.UTF8.GetBytes(actualXml));
+                using var expectedStream = new MemoryStream(Encoding.UTF8.GetBytes(expectedXml));
+
+                var standardResult = await comparisonService.CompareXmlFilesAsync(
+                        actualStream,
+                        expectedStream,
+                        "ComplexTestModel");
+
+                var expectedDifferences = standardResult.Differences
+                        .Select(CreateDifferenceSignature)
+                        .ToList();
+
+                expectedDifferences.Should().NotBeEmpty();
+                expectedDifferences.Should().OnlyContain(signature =>
+                        !signature.PropertyName.Contains("System.Collections.IList.Item", StringComparison.Ordinal));
+
+                var tempRoot = CreateComplexTestModelCopySet(pairCount, actualXml, expectedXml, out var actualPaths, out var expectedPaths);
+
+                try
+                {
+                        var batchResult = await comparisonService.CompareFoldersInBatchesAsync(
+                                actualPaths,
+                                expectedPaths,
+                                "ComplexTestModel",
+                                batchSize: 25);
+
+                        batchResult.TotalPairsCompared.Should().Be(pairCount);
+                        batchResult.FilePairResults.Should().HaveCount(pairCount);
+
+                        foreach (var pair in batchResult.FilePairResults)
+                        {
+                                pair.HasError.Should().BeFalse();
+                                pair.Result.Should().NotBeNull();
+
+                                var actualDifferences = pair.Result!.Differences
+                                        .Select(CreateDifferenceSignature)
+                                        .ToList();
+
+                                actualDifferences.Should().BeEquivalentTo(expectedDifferences);
+                        }
+                }
+                finally
+                {
+                        if (Directory.Exists(tempRoot))
+                        {
+                                Directory.Delete(tempRoot, recursive: true);
+                        }
+                }
+        }
+
     [TestMethod]
     public async Task CompareDirectoriesAsync_WhenLargeRunUsesHighPerformancePipeline_ShouldRespectConfigurationAndLogSessionResults()
     {
@@ -846,6 +926,42 @@ public class ComparisonServiceIntegrationTests
 
         return tempRoot;
     }
+
+    private static string CreateComplexTestModelCopySet(
+        int pairCount,
+        string actualXml,
+        string expectedXml,
+        out List<string> actualPaths,
+        out List<string> expectedPaths)
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "ComparisonToolComplexTestModelCopies", Guid.NewGuid().ToString("N"));
+        var actualDirectory = Path.Combine(tempRoot, "Actuals");
+        var expectedDirectory = Path.Combine(tempRoot, "Expecteds");
+
+        Directory.CreateDirectory(actualDirectory);
+        Directory.CreateDirectory(expectedDirectory);
+
+        actualPaths = new List<string>(pairCount);
+        expectedPaths = new List<string>(pairCount);
+
+        for (var index = 0; index < pairCount; index++)
+        {
+            var fileName = $"{index:D3}_ComplexTestModel.xml";
+            var actualPath = Path.Combine(actualDirectory, fileName);
+            var expectedPath = Path.Combine(expectedDirectory, fileName);
+
+            File.WriteAllText(actualPath, actualXml, Encoding.UTF8);
+            File.WriteAllText(expectedPath, expectedXml, Encoding.UTF8);
+
+            actualPaths.Add(actualPath);
+            expectedPaths.Add(expectedPath);
+        }
+
+        return tempRoot;
+    }
+
+    private static (string PropertyName, string? OldValue, string? NewValue) CreateDifferenceSignature(Difference diff) =>
+        (diff.PropertyName, diff.Object1Value?.ToString(), diff.Object2Value?.ToString());
 
     private static string CreateCustomerOrderJsonCopySet(int pairCount)
     {

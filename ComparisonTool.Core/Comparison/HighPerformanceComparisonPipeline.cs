@@ -10,6 +10,7 @@ using System.Threading.Channels;
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
+using ComparisonTool.Core.Comparison.Utilities;
 using ComparisonTool.Core.Serialization;
 using ComparisonTool.Core.Utilities;
 using KellermanSoftware.CompareNetObjects;
@@ -428,7 +429,8 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
                     () =>
                     {
                         var filteredResult = configService.FilterSmartIgnoredDifferences(comparisonResult, modelType);
-                        return configService.FilterIgnoredDifferences(filteredResult);
+                        filteredResult = configService.FilterIgnoredDifferences(filteredResult);
+                        return DifferenceFilter.FilterDuplicateDifferences(filteredResult, logger);
                     });
                 ComparisonPhaseTimingScope.Current?.AddFilter(Stopwatch.GetElapsedTime(filterStart));
 
