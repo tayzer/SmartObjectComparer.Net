@@ -300,6 +300,7 @@ public class RequestComparisonJobService
                         includeAllFiles: true,
                         enablePatternAnalysis: true,
                         enableSemanticAnalysis: job.EnableSemanticAnalysis,
+                        writeFlatDifferenceLog: false,
                         progress: comparisonProgress,
                         cancellationToken: cancellationToken).ConfigureAwait(false);
                 }
@@ -435,6 +436,8 @@ public class RequestComparisonJobService
                 .Where(r => !r.Success)
                 .Select(r => new { r.Request.RelativePath, r.ErrorMessage })
                 .ToList();
+
+            FlatDifferenceJsonLogWriter.TryWrite(comparisonResult, "request_compare", jobId, _logger);
 
             _results[jobId] = comparisonResult;
 

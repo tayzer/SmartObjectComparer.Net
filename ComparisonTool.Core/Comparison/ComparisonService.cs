@@ -184,7 +184,11 @@ public class ComparisonService : IComparisonService
         List<string> folder2Files,
         string modelName,
         CancellationToken cancellationToken = default)
-        => await comparisonOrchestrator.CompareFoldersAsync(folder1Files, folder2Files, modelName, cancellationToken).ConfigureAwait(false);
+    {
+        var result = await comparisonOrchestrator.CompareFoldersAsync(folder1Files, folder2Files, modelName, cancellationToken).ConfigureAwait(false);
+        FlatDifferenceJsonLogWriter.TryWrite(result, "folder_compare", null, logger);
+        return result;
+    }
 
     /// <summary>
     /// Compare multiple folder pairs of XML files in batches with parallel processing.
@@ -203,13 +207,18 @@ public class ComparisonService : IComparisonService
         int batchSize = 50,
         IProgress<(int Completed, int Total)>? progress = null,
         CancellationToken cancellationToken = default)
-        => await comparisonOrchestrator.CompareFoldersInBatchesAsync(
+    {
+        var result = await comparisonOrchestrator.CompareFoldersInBatchesAsync(
             folder1Files,
             folder2Files,
             modelName,
             batchSize,
             progress ?? new Progress<(int Completed, int Total)>(),
             cancellationToken).ConfigureAwait(false);
+
+        FlatDifferenceJsonLogWriter.TryWrite(result, "folder_compare_batch", null, logger);
+        return result;
+    }
 
     /// <summary>
     /// Analyze patterns across multiple file comparison results.
@@ -266,6 +275,11 @@ public class ComparisonService : IComparisonService
                     var differences = filePair.Result?.Differences ?? new List<Difference>();
                     foreach (var diff in differences)
                     {
+                        if (diff == null)
+                        {
+                            continue;
+                        }
+
                         var normalizedPath = NormalizePropertyPath(diff.PropertyName);
 
                         // Path pattern aggregation
@@ -461,6 +475,11 @@ public class ComparisonService : IComparisonService
             var fpDifferences = filePair.Result?.Differences ?? new System.Collections.Generic.List<KellermanSoftware.CompareNetObjects.Difference>();
             foreach (var diff in fpDifferences)
             {
+                if (diff == null)
+                {
+                    continue;
+                }
+
                 fingerprint.Add(NormalizePropertyPath(diff.PropertyName));
             }
 
@@ -742,7 +761,12 @@ public class ComparisonService : IComparisonService
     /// </summary>
     private string NormalizePropertyPath(string propertyPath)
     {
-        var normalized = PropertyPathNormalizer.NormalizePropertyPath(propertyPath, logger);
+        if (string.IsNullOrEmpty(propertyPath))
+        {
+            return string.Empty;
+        }
+
+        var normalized = PropertyPathNormalizer.NormalizePropertyPath(propertyPath, logger) ?? string.Empty;
 
         // Special debug logging for the specific paths mentioned in the issue
         if (propertyPath.Contains("System.Collections.IList.Item") || propertyPath.Contains("Residents"))

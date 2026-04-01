@@ -59,7 +59,8 @@ public class DirectoryComparisonService
         bool enablePatternAnalysis = true,
         bool enableSemanticAnalysis = true,
         IProgress<ComparisonProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool writeFlatDifferenceLog = true)
     {
         if (string.IsNullOrEmpty(modelName))
         {
@@ -296,6 +297,11 @@ public class DirectoryComparisonService
                             "Comparison completed"));
                     }
 
+                    if (writeFlatDifferenceLog)
+                    {
+                        FlatDifferenceJsonLogWriter.TryWrite(result, "directory_compare", sessionId, logger);
+                    }
+
                     await AnalyzeComparisonResultAsync(
                         result,
                         enablePatternAnalysis,
@@ -331,6 +337,10 @@ public class DirectoryComparisonService
         if (finalResult != null && phaseTimings != null)
         {
             FinalizeRunMetadata(finalResult, phaseTimings, "DirectoryComparison", performanceScopeId, propertyIgnoreCacheBaseline);
+            if (writeFlatDifferenceLog && !finalResult.Metadata.ContainsKey(FlatDifferenceJsonLogWriter.MetadataKey))
+            {
+                FlatDifferenceJsonLogWriter.TryWrite(finalResult, "directory_compare", sessionId, logger);
+            }
 
             if (sessionId != null)
             {
@@ -565,7 +575,10 @@ public class DirectoryComparisonService
                     progress?.Report(new ComparisonProgress(pairCount, pairCount, "Comparison completed"));
                     return Task.CompletedTask;
                 }).ConfigureAwait(false);
+
             }
+
+            FlatDifferenceJsonLogWriter.TryWrite(result, "folder_upload_compare", sessionId, logger);
 
             await AnalyzeComparisonResultAsync(
                 result,
@@ -584,6 +597,11 @@ public class DirectoryComparisonService
         if (finalResult != null && phaseTimings != null)
         {
             FinalizeRunMetadata(finalResult, phaseTimings, "FolderComparison", performanceScopeId, propertyIgnoreCacheBaseline);
+            if (!finalResult.Metadata.ContainsKey(FlatDifferenceJsonLogWriter.MetadataKey))
+            {
+                FlatDifferenceJsonLogWriter.TryWrite(finalResult, "folder_upload_compare", sessionId, logger);
+            }
+
             if (sessionId != null)
             {
                 comparisonLogService.EndSession(sessionId, finalResult);

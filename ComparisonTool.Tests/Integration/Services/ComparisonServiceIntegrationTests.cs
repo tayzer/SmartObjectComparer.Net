@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text;
+using System.Text.Json;
 using ComparisonTool.Core.Comparison;
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Configuration;
@@ -590,6 +591,133 @@ public class ComparisonServiceIntegrationTests
         folderResult.Metadata["IgnoreCollectionOrder"].Should().Be(false);
     }
 
+    [TestMethod]
+    public async Task AnalyzePatternsAsync_WhenDifferencePropertyNameIsNull_ShouldTreatItAsEmptyPathAsync()
+    {
+        var folderResult = new MultiFolderComparisonResult
+        {
+            AllEqual = false,
+            TotalPairsCompared = 2,
+            FilePairResults =
+            [
+                new()
+                {
+                    File1Name = "Actual1.xml",
+                    File2Name = "Expected1.xml",
+                    Result = new ComparisonResult(new ComparisonConfig())
+                    {
+                        Differences =
+                        {
+                            null!,
+                            new Difference
+                            {
+                                PropertyName = null!,
+                                Object1Value = "Old",
+                                Object2Value = "New",
+                            },
+                        },
+                    },
+                    Summary = new DifferenceSummary
+                    {
+                        AreEqual = false,
+                        TotalDifferenceCount = 2,
+                    },
+                },
+                new()
+                {
+                    File1Name = "Actual2.xml",
+                    File2Name = "Expected2.xml",
+                    Result = new ComparisonResult(new ComparisonConfig())
+                    {
+                        Differences =
+                        {
+                            new Difference
+                            {
+                                PropertyName = null!,
+                                Object1Value = "Old",
+                                Object2Value = "New",
+                            },
+                        },
+                    },
+                    Summary = new DifferenceSummary
+                    {
+                        AreEqual = false,
+                        TotalDifferenceCount = 1,
+                    },
+                },
+            ],
+        };
+
+        var analysis = await comparisonService.AnalyzePatternsAsync(folderResult);
+
+        analysis.TotalDifferences.Should().Be(3);
+        analysis.FilesWithDifferences.Should().Be(2);
+        analysis.CommonPathPatterns.Should().ContainSingle(pattern =>
+            pattern.PatternPath == string.Empty &&
+            pattern.FileCount == 2 &&
+            pattern.OccurrenceCount == 2);
+    }
+
+    [TestMethod]
+    public async Task CompareFoldersInBatchesAsync_WhenRunCompletes_ShouldWriteFlatDifferenceJsonLogAsync()
+    {
+        const string actualXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<ComplexTestModel>
+    <Name>Example</Name>
+    <Items>
+        <ComplexTestModelItem>
+            <Id>1</Id>
+            <Value>Alpha</Value>
+        </ComplexTestModelItem>
+    </Items>
+</ComplexTestModel>";
+
+        const string expectedXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<ComplexTestModel>
+    <Name>Example</Name>
+    <Items>
+        <ComplexTestModelItem>
+            <Id>1</Id>
+            <Value>Beta</Value>
+        </ComplexTestModelItem>
+    </Items>
+</ComplexTestModel>";
+
+        var tempRoot = CreateComplexTestModelCopySet(1, actualXml, expectedXml, out var actualPaths, out var expectedPaths);
+
+        try
+        {
+            var result = await comparisonService.CompareFoldersInBatchesAsync(actualPaths, expectedPaths, "ComplexTestModel", batchSize: 25);
+
+            result.Metadata.Should().ContainKey(FlatDifferenceJsonLogWriter.MetadataKey);
+            var outputPath = result.Metadata[FlatDifferenceJsonLogWriter.MetadataKey].Should().BeOfType<string>().Which;
+
+            try
+            {
+                File.Exists(outputPath).Should().BeTrue();
+
+                using var document = JsonDocument.Parse(File.ReadAllText(outputPath));
+                document.RootElement.ValueKind.Should().Be(JsonValueKind.Array);
+                document.RootElement.GetArrayLength().Should().BeGreaterThan(0);
+                document.RootElement[0].GetProperty("File1Name").GetString().Should().Be("000_ComplexTestModel.xml");
+            }
+            finally
+            {
+                if (File.Exists(outputPath))
+                {
+                    File.Delete(outputPath);
+                }
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
         [TestMethod]
         public async Task CompareFoldersInBatchesAsync_WhenHighPerformancePipelineRuns_ShouldMatchStandardDedupedDifferenceSet()
         {
@@ -692,6 +820,8 @@ public class ComparisonServiceIntegrationTests
         var tempRoot = CreateCollectionOrderingCopySet(pairCount, out _, out _);
         var actualDirectory = Path.Combine(tempRoot, "Actuals");
         var expectedDirectory = Path.Combine(tempRoot, "Expecteds");
+        string? initialOutputPath = null;
+        string? refreshedOutputPath = null;
 
         try
         {
@@ -706,8 +836,12 @@ public class ComparisonServiceIntegrationTests
             initialResult.FilePairResults.Should().OnlyContain(result => !result.AreEqual);
             initialResult.Metadata.Should().ContainKey("ComparisonSessionId");
             initialResult.Metadata.Should().ContainKey(ComparisonPhaseTimings.MetadataKey);
+            initialResult.Metadata.Should().ContainKey(FlatDifferenceJsonLogWriter.MetadataKey);
             initialResult.Metadata.Should().ContainKey("PerformanceReportTextPath");
             initialResult.Metadata.Should().ContainKey("PerformanceReportCsvPath");
+
+            initialOutputPath = initialResult.Metadata[FlatDifferenceJsonLogWriter.MetadataKey].Should().BeOfType<string>().Which;
+            File.Exists(initialOutputPath).Should().BeTrue();
 
             var initialPhaseTimings = initialResult.Metadata[ComparisonPhaseTimings.MetadataKey]
                 .Should().BeOfType<ComparisonPhaseTimings>().Which;
@@ -742,6 +876,10 @@ public class ComparisonServiceIntegrationTests
             refreshedResult.FilePairResults.Should().OnlyContain(result => result.AreEqual);
             refreshedResult.Metadata.Should().ContainKey("ComparisonSessionId");
             refreshedResult.Metadata.Should().ContainKey(ComparisonPhaseTimings.MetadataKey);
+            refreshedResult.Metadata.Should().ContainKey(FlatDifferenceJsonLogWriter.MetadataKey);
+
+            refreshedOutputPath = refreshedResult.Metadata[FlatDifferenceJsonLogWriter.MetadataKey].Should().BeOfType<string>().Which;
+            File.Exists(refreshedOutputPath).Should().BeTrue();
 
             var refreshedPhaseTimings = refreshedResult.Metadata[ComparisonPhaseTimings.MetadataKey]
                 .Should().BeOfType<ComparisonPhaseTimings>().Which;
@@ -761,6 +899,16 @@ public class ComparisonServiceIntegrationTests
         }
         finally
         {
+            if (initialOutputPath != null && File.Exists(initialOutputPath))
+            {
+                File.Delete(initialOutputPath);
+            }
+
+            if (refreshedOutputPath != null && File.Exists(refreshedOutputPath))
+            {
+                File.Delete(refreshedOutputPath);
+            }
+
             if (Directory.Exists(tempRoot))
             {
                 Directory.Delete(tempRoot, recursive: true);
@@ -796,6 +944,8 @@ public class ComparisonServiceIntegrationTests
         var actualDirectory = Path.Combine(tempRoot, "Actuals");
         var expectedDirectory = Path.Combine(tempRoot, "Expecteds");
 
+        string? outputPath = null;
+
         try
         {
             var result = await directoryComparisonService.CompareDirectoriesAsync(
@@ -805,6 +955,10 @@ public class ComparisonServiceIntegrationTests
 
             result.TotalPairsCompared.Should().Be(pairCount);
             result.Metadata.Should().ContainKey(ComparisonPhaseTimings.MetadataKey);
+            result.Metadata.Should().ContainKey(FlatDifferenceJsonLogWriter.MetadataKey);
+
+            outputPath = result.Metadata[FlatDifferenceJsonLogWriter.MetadataKey].Should().BeOfType<string>().Which;
+            File.Exists(outputPath).Should().BeTrue();
 
             var phaseTimings = result.Metadata[ComparisonPhaseTimings.MetadataKey]
                 .Should().BeOfType<ComparisonPhaseTimings>().Which;
@@ -821,6 +975,65 @@ public class ComparisonServiceIntegrationTests
         }
         finally
         {
+            if (outputPath != null && File.Exists(outputPath))
+            {
+                File.Delete(outputPath);
+            }
+
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
+    [TestMethod]
+    public async Task CompareDirectoriesAsync_WhenNoPairsExist_ShouldStillWriteEmptyFlatDifferenceJsonLogAsync()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddXmlComparisonServices(options =>
+            options.RegisterDomainModelWithRootElement<SoapEnvelope>("SoapEnvelope", "Envelope"));
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var directoryComparisonService = scope.ServiceProvider.GetRequiredService<DirectoryComparisonService>();
+
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"ComparisonTool_Empty_{Guid.NewGuid():N}");
+        var actualDirectory = Path.Combine(tempRoot, "Actuals");
+        var expectedDirectory = Path.Combine(tempRoot, "Expecteds");
+        Directory.CreateDirectory(actualDirectory);
+        Directory.CreateDirectory(expectedDirectory);
+
+        string? outputPath = null;
+
+        try
+        {
+            var result = await directoryComparisonService.CompareDirectoriesAsync(
+                actualDirectory,
+                expectedDirectory,
+                "SoapEnvelope");
+
+            result.AllEqual.Should().BeTrue();
+            result.TotalPairsCompared.Should().Be(0);
+            result.FilePairResults.Should().BeEmpty();
+            result.Metadata.Should().ContainKey(FlatDifferenceJsonLogWriter.MetadataKey);
+
+            outputPath = result.Metadata[FlatDifferenceJsonLogWriter.MetadataKey].Should().BeOfType<string>().Which;
+            File.Exists(outputPath).Should().BeTrue();
+
+            using var document = JsonDocument.Parse(File.ReadAllText(outputPath));
+            document.RootElement.ValueKind.Should().Be(JsonValueKind.Array);
+            document.RootElement.GetArrayLength().Should().Be(0);
+        }
+        finally
+        {
+            if (outputPath != null && File.Exists(outputPath))
+            {
+                File.Delete(outputPath);
+            }
+
             if (Directory.Exists(tempRoot))
             {
                 Directory.Delete(tempRoot, recursive: true);
