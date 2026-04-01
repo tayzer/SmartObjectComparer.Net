@@ -428,6 +428,7 @@ public class RequestComparisonJobService
                 && comparisonResult.FilePairResults.All(r => r.AreEqual);
 
             // Store execution metadata in result
+            comparisonResult.Metadata["IgnoreCollectionOrder"] = job.IgnoreCollectionOrder;
             comparisonResult.Metadata["RequestComparisonJobId"] = jobId;
             comparisonResult.Metadata["ExecutionOutcomeSummary"] = outcomeSummary;
             comparisonResult.Metadata["ExecutionResults"] = executionResults

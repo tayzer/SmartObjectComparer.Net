@@ -76,6 +76,42 @@ public class EnhancedStructuralDifferenceAnalyzerTests
     }
 
     [TestMethod]
+    public void AnalyzeStructuralPatterns_WhenIgnoreCollectionOrderIsEnabled_ShouldSuppressOrderClassification()
+    {
+        var analysis = Analyze(
+            true,
+            new Difference
+            {
+                PropertyName = "Items[0].Id",
+                Object1Value = "1",
+                Object2Value = "2",
+            },
+            new Difference
+            {
+                PropertyName = "Items[0].Value",
+                Object1Value = "A",
+                Object2Value = "B",
+            },
+            new Difference
+            {
+                PropertyName = "Items[1].Id",
+                Object1Value = "2",
+                Object2Value = "1",
+            },
+            new Difference
+            {
+                PropertyName = "Items[1].Value",
+                Object1Value = "B",
+                Object2Value = "A",
+            });
+
+        analysis.ElementOrderDifferences.Should().BeEmpty();
+        analysis.AllPatterns.Should().NotContain(pattern => pattern.Category == DifferenceCategory.CollectionItemChanged);
+        analysis.FileClassification.FileCounts["Order"].Should().Be(0);
+        analysis.FileClassification.FileCounts["Value"].Should().Be(1);
+    }
+
+    [TestMethod]
     public void AnalyzeStructuralPatterns_WhenPrimitiveCollectionItemsSwapAcrossIndices_ShouldClassifyAsOrder()
     {
         var analysis = Analyze(
@@ -253,6 +289,9 @@ public class EnhancedStructuralDifferenceAnalyzerTests
     }
 
     private static EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult Analyze(params Difference[] differences)
+        => Analyze(false, differences);
+
+    private static EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult Analyze(bool suppressOrderClassification, params Difference[] differences)
     {
         var comparisonResult = new ComparisonResult(new ComparisonConfig());
         comparisonResult.Differences.AddRange(differences);
@@ -277,7 +316,7 @@ public class EnhancedStructuralDifferenceAnalyzerTests
             },
         };
 
-        var analyzer = new EnhancedStructuralDifferenceAnalyzer(folderResult, NullLogger.Instance);
+        var analyzer = new EnhancedStructuralDifferenceAnalyzer(folderResult, NullLogger.Instance, suppressOrderClassification);
         return analyzer.AnalyzeStructuralPatterns();
     }
 }

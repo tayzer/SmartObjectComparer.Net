@@ -384,12 +384,17 @@ public class ComparisonService : IComparisonService
         AnalyzeStructualPatternsAsync(
             MultiFolderComparisonResult folderResult,
             CancellationToken cancellationToken = default)
-        => await Task.Run(
+    {
+        var ignoreCollectionOrder = ResolveIgnoreCollectionOrder(folderResult);
+
+        return await Task.Run(
             () =>
             {
-                logger.LogInformation("Starting enhanced structural pattern analysis");
+                logger.LogInformation(
+                    "Starting enhanced structural pattern analysis. Ignore collection order: {IgnoreCollectionOrder}",
+                    ignoreCollectionOrder);
 
-                var analyzer = new EnhancedStructuralDifferenceAnalyzer(folderResult, logger);
+                var analyzer = new EnhancedStructuralDifferenceAnalyzer(folderResult, logger, ignoreCollectionOrder);
                 var structuralAnalysis = analyzer.AnalyzeStructuralPatterns();
 
                 logger.LogInformation(
@@ -400,6 +405,25 @@ public class ComparisonService : IComparisonService
 
                 return structuralAnalysis;
             }, cancellationToken).ConfigureAwait(false);
+    }
+
+    private bool ResolveIgnoreCollectionOrder(MultiFolderComparisonResult folderResult)
+    {
+        if (folderResult.Metadata.TryGetValue("IgnoreCollectionOrder", out var rawValue))
+        {
+            if (rawValue is bool boolValue)
+            {
+                return boolValue;
+            }
+
+            if (rawValue is string stringValue && bool.TryParse(stringValue, out var parsedValue))
+            {
+                return parsedValue;
+            }
+        }
+
+        return configService.GetIgnoreCollectionOrder();
+    }
 
     private static string FormatValue(object? value)
     {

@@ -15,6 +15,7 @@ public class EnhancedStructuralDifferenceAnalyzer
 {
     private readonly MultiFolderComparisonResult folderResults;
     private readonly ILogger logger;
+    private readonly bool suppressOrderClassification;
 
     // TODO: This could be done with adding to DI, as we dont want to hardcode any domain stuff in this tool.
     // Known important properties that should be highlighted when missing
@@ -30,10 +31,11 @@ public class EnhancedStructuralDifferenceAnalyzer
         "Body.Response.SearchResult",
     };
 
-    public EnhancedStructuralDifferenceAnalyzer(MultiFolderComparisonResult folderResult, ILogger logger)
+    public EnhancedStructuralDifferenceAnalyzer(MultiFolderComparisonResult folderResult, ILogger logger, bool suppressOrderClassification = false)
     {
         folderResults = folderResult;
         this.logger = logger;
+        this.suppressOrderClassification = suppressOrderClassification;
     }
 
     public EnhancedStructuralAnalysisResult AnalyzeStructuralPatterns()
@@ -41,10 +43,11 @@ public class EnhancedStructuralDifferenceAnalyzer
         var (filesWithDifferencesCount, totalDifferencesCount) = GetAnalysisScopeSummary();
 
         logger?.LogInformation(
-            "Starting enhanced structural analysis for {FileCount} file pairs. Files with differences: {FilesWithDifferences}. Total differences to analyze: {TotalDifferences}",
+            "Starting enhanced structural analysis for {FileCount} file pairs. Files with differences: {FilesWithDifferences}. Total differences to analyze: {TotalDifferences}. Suppress order classification: {SuppressOrderClassification}",
             folderResults.FilePairResults.Count,
             filesWithDifferencesCount,
-            totalDifferencesCount);
+            totalDifferencesCount,
+            suppressOrderClassification);
 
         var result = new EnhancedStructuralAnalysisResult()
         {
@@ -168,7 +171,11 @@ public class EnhancedStructuralDifferenceAnalyzer
         AnalyzeCriticalMissingProperties(allDifferences, structuralPatterns, categorizedDifferences);
         AnalyzeMissingProperties(allDifferences, structuralPatterns, categorizedDifferences);
         AnalyzeCollectionElements(allDifferences, structuralPatterns, categorizedDifferences);
-        AnalyzeOrderDifferences(allDifferences, structuralPatterns, categorizedDifferences);
+        if (!suppressOrderClassification)
+        {
+            AnalyzeOrderDifferences(allDifferences, structuralPatterns, categorizedDifferences);
+        }
+
         AnalyzeValueDifferences(allDifferences, valueDifferences, structuralPatterns, categorizedDifferences);
         AnalyzeGeneralValueDifferences(allDifferences, structuralPatterns, categorizedDifferences);
 
@@ -684,6 +691,11 @@ string.Equals(NormalizePropertyPath(d.Difference.PropertyName), path, StringComp
 
     private HashSet<Difference> GetLikelyOrderDifferences(IEnumerable<Difference> differences)
     {
+        if (suppressOrderClassification)
+        {
+            return new HashSet<Difference>();
+        }
+
         var likelyOrderDifferences = new HashSet<Difference>();
 
         var collectionGroups = differences

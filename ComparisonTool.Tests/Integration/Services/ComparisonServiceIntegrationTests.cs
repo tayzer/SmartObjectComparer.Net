@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text;
 using ComparisonTool.Core.Comparison;
+using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.DI;
@@ -455,6 +456,138 @@ public class ComparisonServiceIntegrationTests
                 Directory.Delete(tempRoot, recursive: true);
             }
         }
+    }
+
+    [TestMethod]
+    public async Task AnalyzeStructualPatternsAsync_WhenResultMetadataSpecifiesIgnoreCollectionOrder_ShouldPreferMetadataOverCurrentConfigAsync()
+    {
+        configService.SetIgnoreCollectionOrder(false);
+
+        var folderResult = new MultiFolderComparisonResult
+        {
+            AllEqual = false,
+            TotalPairsCompared = 1,
+            FilePairResults = new List<FilePairComparisonResult>
+            {
+                new()
+                {
+                    File1Name = "Actual.xml",
+                    File2Name = "Expected.xml",
+                    Result = new ComparisonResult(new ComparisonConfig())
+                    {
+                        Differences =
+                        {
+                            new Difference
+                            {
+                                PropertyName = "Items[0].Id",
+                                Object1Value = "1",
+                                Object2Value = "2",
+                            },
+                            new Difference
+                            {
+                                PropertyName = "Items[0].Value",
+                                Object1Value = "A",
+                                Object2Value = "B",
+                            },
+                            new Difference
+                            {
+                                PropertyName = "Items[1].Id",
+                                Object1Value = "2",
+                                Object2Value = "1",
+                            },
+                            new Difference
+                            {
+                                PropertyName = "Items[1].Value",
+                                Object1Value = "B",
+                                Object2Value = "A",
+                            },
+                        },
+                    },
+                    Summary = new DifferenceSummary
+                    {
+                        AreEqual = false,
+                        TotalDifferenceCount = 4,
+                    },
+                },
+            },
+            Metadata = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["IgnoreCollectionOrder"] = true,
+            },
+        };
+
+        var analysis = await comparisonService.AnalyzeStructualPatternsAsync(folderResult);
+
+        analysis.ElementOrderDifferences.Should().BeEmpty();
+        analysis.FileClassification.FileCounts["Order"].Should().Be(0);
+        analysis.FileClassification.FileCounts["Value"].Should().Be(1);
+        folderResult.Metadata["IgnoreCollectionOrder"].Should().Be(true);
+    }
+
+    [TestMethod]
+    public async Task AnalyzeStructualPatternsAsync_WhenResultMetadataDisablesIgnoreCollectionOrder_ShouldPreferMetadataOverCurrentConfigAsync()
+    {
+        configService.SetIgnoreCollectionOrder(true);
+
+        var folderResult = new MultiFolderComparisonResult
+        {
+            AllEqual = false,
+            TotalPairsCompared = 1,
+            FilePairResults = new List<FilePairComparisonResult>
+            {
+                new()
+                {
+                    File1Name = "Actual.xml",
+                    File2Name = "Expected.xml",
+                    Result = new ComparisonResult(new ComparisonConfig())
+                    {
+                        Differences =
+                        {
+                            new Difference
+                            {
+                                PropertyName = "Items[0].Id",
+                                Object1Value = "1",
+                                Object2Value = "2",
+                            },
+                            new Difference
+                            {
+                                PropertyName = "Items[0].Value",
+                                Object1Value = "A",
+                                Object2Value = "B",
+                            },
+                            new Difference
+                            {
+                                PropertyName = "Items[1].Id",
+                                Object1Value = "2",
+                                Object2Value = "1",
+                            },
+                            new Difference
+                            {
+                                PropertyName = "Items[1].Value",
+                                Object1Value = "B",
+                                Object2Value = "A",
+                            },
+                        },
+                    },
+                    Summary = new DifferenceSummary
+                    {
+                        AreEqual = false,
+                        TotalDifferenceCount = 4,
+                    },
+                },
+            },
+            Metadata = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["IgnoreCollectionOrder"] = false,
+            },
+        };
+
+        var analysis = await comparisonService.AnalyzeStructualPatternsAsync(folderResult);
+
+        analysis.ElementOrderDifferences.Should().ContainSingle();
+        analysis.FileClassification.FileCounts["Order"].Should().Be(1);
+        analysis.FileClassification.FileCounts["Value"].Should().Be(0);
+        folderResult.Metadata["IgnoreCollectionOrder"].Should().Be(false);
     }
 
         [TestMethod]

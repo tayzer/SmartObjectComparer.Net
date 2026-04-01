@@ -1457,8 +1457,7 @@
                 "Starting request enhanced structural pattern analysis for {FilesWithDifferences} files with differences and {TotalDifferences} total differences.",
                 filesWithDifferences,
                 totalDifferences);
-            var enhancedStructuralAnalyzer = new EnhancedStructuralDifferenceAnalyzer(RequestComparisonResult, Logger);
-            RequestComparisonEnhancedAnalysis = enhancedStructuralAnalyzer.AnalyzeStructuralPatterns();
+            RequestComparisonEnhancedAnalysis = await ComparisonService.AnalyzeStructualPatternsAsync(RequestComparisonResult);
 
             if (RequestComparisonResult.Metadata.ContainsKey("EnhancedStructuralAnalysis"))
                 RequestComparisonResult.Metadata["EnhancedStructuralAnalysis"] = RequestComparisonEnhancedAnalysis;
@@ -1564,8 +1563,7 @@
             
             await Task.Delay(100); // Allow UI to update
 
-            var enhancedStructuralAnalyzer = new EnhancedStructuralDifferenceAnalyzer(result, Logger);
-            EnhancedStructuralAnalysis = await Task.Run(() => enhancedStructuralAnalyzer.AnalyzeStructuralPatterns());
+            EnhancedStructuralAnalysis = await ComparisonService.AnalyzeStructualPatternsAsync(result);
 
             Logger.LogInformation("Enhanced structural analysis completed. Found patterns: {Critical}, {MissingElements}, {MissingProps}, {ValueDiffs}, {GeneralDiffs}, {OrderDiffs}",
                 EnhancedStructuralAnalysis?.CriticalMissingElements?.Count ?? 0,
