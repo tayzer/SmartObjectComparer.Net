@@ -1,5 +1,69 @@
 ﻿---
 applyTo: '**'
+lastUpdated: 2026-04-10T00:00:00Z
+sessionStatus: complete
+---
+
+# Current Session Context
+
+## Active Task
+Keep the request-comparison full side-by-side toggle available for all response status pairs
+
+## Todo List Status
+```markdown
+- [x] Inspect the request detail routing and the raw/detail component split
+- [x] Add the full-file side-by-side toggle to the raw-text detail view
+- [x] Preserve the existing raw diff summary, status banners, and export flow
+- [x] Carry response content types into the selected pair and make the full-file loader charset-aware
+- [x] Add focused service coverage and run targeted validation
+```
+
+## Recent File Changes
+- `ComparisonTool.UI/Comparison/RawTextDifferencesView.razor`: Added the raw-differences/full-file toggle, lazy raw-content loading, and updated request-specific subtitle/empty-state copy
+- `ComparisonTool.Core/Comparison/Results/FilePairComparisonResult.cs`: Added request-only response content type metadata for endpoint A/B
+- `ComparisonTool.Core/RequestComparison/Services/RawTextComparisonService.cs`: Propagates response content types onto raw request pair results
+- `ComparisonTool.Core/RequestComparison/Services/RawContentService.cs`: Switched full-file loading to charset-aware byte decoding with BOM fallback
+- `ComparisonTool.Tests/Unit/RequestComparison/RawContentServiceTests.cs`: Added focused coverage for charset-aware full-file loading
+
+## Key Technical Decisions
+- Decision: Keep the existing `Home.razor` request-detail routing unchanged and add the full-file toggle directly to `RawTextDifferencesView`
+- Rationale: Non-success and mixed-status request pairs do not always have a structured `ComparisonResult`, so moving them into `DetailedDifferencesView` would risk regressing the current raw-diff experience
+- Date: 2026-04-10
+- Decision: Store request response content types on `FilePairComparisonResult` and use them in `RawContentService`
+- Rationale: The full-file side-by-side pane should decode the same response bodies consistently with the raw-diff comparison path, especially for UTF-16 responses
+- Date: 2026-04-10
+
+## External Resources Referenced
+- Internal code inspection only
+
+## Blockers & Issues
+- None
+
+## Failed Approaches
+- Approach: Change `Home.razor` routing so status-mismatch and both-non-success pairs render through `DetailedDifferencesView`
+- Failure Reason: Those pairs rely on `RawTextDifferencesView` for their primary summary and can lack structured differences entirely
+- Lesson: The safer fix was feature parity in the raw-text detail component, not rerouting
+
+## Environment Notes
+- Windows
+- .NET 10.0
+
+## Next Session Priority
+If more confidence is needed, add a Blazor component or end-to-end test that exercises the request comparison selection flow through `RawTextDifferencesView` and verifies the toggle/render path for status-mismatch and both-non-success pairs
+
+## Session Notes
+- Mixed success/non-success request pairs and both-non-success request pairs now keep a full side-by-side body comparison toggle in the live UI
+- The raw-text detail view preserves the existing status chips, raw diff table, empty states, and export behavior while adding the full-file pane as an alternate view
+- Full-file request response loading now honors declared charsets when available and falls back to BOM detection for file/folder raw pairs
+- Validation completed:
+	- `dotnet test .\ComparisonTool.Tests\ComparisonTool.Tests.csproj --filter "FullyQualifiedName~RawContentServiceTests|FullyQualifiedName~RawTextComparisonServiceTests" --verbosity minimal` passed with 26/26 tests
+	- `dotnet build .\ComparisonTool.UI\ComparisonTool.UI.csproj --no-restore --verbosity minimal` passed
+	- Final review reported no findings
+
+---
+
+---
+applyTo: '**'
 lastUpdated: 2026-03-30T00:00:00Z
 sessionStatus: complete
 ---

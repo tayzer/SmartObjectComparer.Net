@@ -48,6 +48,16 @@ public class FilePairComparisonResult
     public int? HttpStatusCodeB { get; set; }
 
     /// <summary>
+    /// Gets or sets the response content type from endpoint A (request comparison only).
+    /// </summary>
+    public string? ContentTypeA { get; set; }
+
+    /// <summary>
+    /// Gets or sets the response content type from endpoint B (request comparison only).
+    /// </summary>
+    public string? ContentTypeB { get; set; }
+
+    /// <summary>
     /// Gets or sets the classified pair outcome for request comparison results.
     /// Null for non-request-comparison (file/folder) results.
     /// </summary>

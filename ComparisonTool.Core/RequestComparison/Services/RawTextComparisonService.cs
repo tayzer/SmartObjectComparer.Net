@@ -58,6 +58,8 @@ public class RawTextComparisonService
             File2Path = exec.ResponsePathB,
             HttpStatusCodeA = exec.StatusCodeA,
             HttpStatusCodeB = exec.StatusCodeB,
+            ContentTypeA = exec.ContentTypeA,
+            ContentTypeB = exec.ContentTypeB,
             PairOutcome = classified.Outcome,
             RawTextDifferences = new List<RawTextDifference>(),
         };
