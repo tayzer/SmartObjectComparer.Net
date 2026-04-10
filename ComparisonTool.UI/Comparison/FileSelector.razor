@@ -1,0 +1,96 @@
+@namespace ComparisonTool.UI.Comparison
+@using ComparisonTool.UI.Shared
+@using System.Linq
+@using MudBlazor
+
+<MudPaper Elevation="2" Class="pa-4" Style="overflow: hidden;">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h6">Step 1: Select Files (XML or JSON)</MudText>
+        
+        <MudSelect T="string" 
+                   Label="Select Domain Model" 
+                   Value="SelectedModelNameLocal"
+                   ValueChanged="@((string val) => SelectedModelNameLocal = val)"
+                   Variant="Variant.Outlined"
+                   AnchorOrigin="Origin.BottomCenter"
+                   aria-label="Select domain model for comparison">
+            @foreach (var modelName in ModelNames)
+            {
+                <MudSelectItem Value="@modelName">@modelName</MudSelectItem>
+            }
+        </MudSelect>
+
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="6" Style="min-width: 0;">
+                <MudPaper Elevation="0" Class="pa-3" Style="background: var(--mud-palette-background-grey); border-radius: 8px;">
+                    <FolderUploadPanel Label="Expected Folder:"
+                                     Files="Folder1Files"
+                                     OnFilesChanged="HandleFolder1Changed" />
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" md="6" Style="min-width: 0;">
+                <MudPaper Elevation="0" Class="pa-3" Style="background: var(--mud-palette-background-grey); border-radius: 8px;">
+                    <FolderUploadPanel Label="Actual Folder:"
+                                     Files="Folder2Files"
+                                     OnFilesChanged="HandleFolder2Changed" />
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        @if (Folder1Files.Any() && Folder2Files.Any())
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                <strong>Files will be paired for comparison in order.</strong><br />
+                Expected files are sorted by filename, and Actual files are sorted by filename. 
+                Each Expected file will be compared with the corresponding Actual file.
+            </MudAlert>
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter]
+    public IEnumerable<string> ModelNames { get; set; } = Enumerable.Empty<string>();
+
+    [Parameter]
+    public string? SelectedModelName { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnModelNameChanged { get; set; }
+
+    [Parameter]
+    public List<string> Folder1Files { get; set; } = new();
+
+    [Parameter]
+    public List<string> Folder2Files { get; set; } = new();
+
+    [Parameter]
+    public EventCallback<List<string>> OnFolder1FilesChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<List<string>> OnFolder2FilesChanged { get; set; }
+
+    private string SelectedModelNameLocal
+    {
+        get => SelectedModelName ?? string.Empty;
+        set
+        {
+            if (SelectedModelName != value)
+            {
+                SelectedModelName = value;
+                OnModelNameChanged.InvokeAsync(value);
+            }
+        }
+    }
+
+    private async Task HandleFolder1Changed(List<string> files)
+    {
+        await OnFolder1FilesChanged.InvokeAsync(files);
+    }
+
+    private async Task HandleFolder2Changed(List<string> files)
+    {
+        await OnFolder2FilesChanged.InvokeAsync(files);
+    }
+}

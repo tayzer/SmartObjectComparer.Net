@@ -1,13 +1,18 @@
 using System.IO;
 using System.Text;
 using ComparisonTool.Core.Comparison;
+using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
+using ComparisonTool.Core.DI;
 using ComparisonTool.Core.Models;
 using ComparisonTool.Core.Serialization;
 using ComparisonTool.Core.Utilities;
 using ComparisonTool.Domain.Models;
 using FluentAssertions;
+using KellermanSoftware.CompareNetObjects;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -55,6 +60,8 @@ public class ComparisonServiceIntegrationTests
         var serializerFactory = new ComparisonTool.Core.Serialization.XmlSerializerFactory();
         serializerFactory.RegisterType<ComplexOrderResponse>(
             () => serializerFactory.CreateComplexOrderResponseSerializer());
+        serializerFactory.RegisterType<SoapEnvelope>(
+            () => serializerFactory.CreateNamespaceIgnorantSerializer<SoapEnvelope>("Envelope"));
         xmlService = new XmlDeserializationService(mockXmlLogger.Object, serializerFactory);
 
         fileService = new FileSystemService(mockFileLogger.Object);
@@ -91,6 +98,7 @@ public class ComparisonServiceIntegrationTests
         xmlService.RegisterDomainModel<TestModel>("TestModel");
         xmlService.RegisterDomainModel<ComplexTestModel>("ComplexTestModel");
         xmlService.RegisterDomainModel<ComplexOrderResponse>("ComplexOrderResponse");
+        xmlService.RegisterDomainModel<SoapEnvelope>("SoapEnvelope");
     }
 
     [TestMethod]
@@ -295,6 +303,579 @@ public class ComparisonServiceIntegrationTests
         result.AreEqual.Should().BeTrue();
     }
 
+    [TestMethod]
+    public async Task CompareXmlFilesAsync_WhenConfigurationChanges_ShouldRefreshComparisonLogicForSoapCollections()
+    {
+        var testRoot = GetCollectionOrderingTestRoot();
+        var actualPath = Path.Combine(testRoot, "Actuals", "OrderTest.xml");
+        var expectedPath = Path.Combine(testRoot, "Expecteds", "OrderTest.xml");
+        configService.IgnoreProperty("Body.Response.AddressLinks.Addresses[*].Id");
+
+        configService.SetIgnoreCollectionOrder(false);
+        configService.SetIgnoreTrailingWhitespaceAtEnd(false);
+
+        using var initialActualStream = File.OpenRead(actualPath);
+        using var initialExpectedStream = File.OpenRead(expectedPath);
+
+        var initialResult = await comparisonService.CompareXmlFilesAsync(
+            initialActualStream,
+            initialExpectedStream,
+            "SoapEnvelope");
+
+        initialResult.Should().NotBeNull();
+        initialResult.AreEqual.Should().BeFalse();
+        initialResult.Differences.Should().NotBeEmpty();
+
+        configService.SetIgnoreCollectionOrder(true);
+        configService.SetIgnoreTrailingWhitespaceAtEnd(true);
+
+        using var refreshedActualStream = File.OpenRead(actualPath);
+        using var refreshedExpectedStream = File.OpenRead(expectedPath);
+
+        var refreshedResult = await comparisonService.CompareXmlFilesAsync(
+            refreshedActualStream,
+            refreshedExpectedStream,
+            "SoapEnvelope");
+
+        refreshedResult.Should().NotBeNull();
+        refreshedResult.AreEqual.Should().BeTrue();
+        refreshedResult.Differences.Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public async Task CompareXmlFilesAsync_WithConfiguredDefaultsFromDi_ShouldHonorIgnoreOptions()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ComparisonSettings:MaxDifferences"] = "1000",
+                ["ComparisonSettings:DefaultIgnoreCollectionOrder"] = "true",
+                ["ComparisonSettings:DefaultIgnoreTrailingWhitespaceAtEnd"] = "true",
+            })
+            .Build();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddXmlComparisonServices(
+            configuration,
+            options => options.RegisterDomainModelWithRootElement<SoapEnvelope>("SoapEnvelope", "Envelope"));
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var scopedComparisonService = scope.ServiceProvider.GetRequiredService<IComparisonService>();
+        var scopedConfigService = scope.ServiceProvider.GetRequiredService<IComparisonConfigurationService>();
+
+        scopedConfigService.GetIgnoreCollectionOrder().Should().BeTrue();
+        scopedConfigService.GetIgnoreTrailingWhitespaceAtEnd().Should().BeTrue();
+        scopedConfigService.IgnoreProperty("Body.Response.AddressLinks.Addresses[*].Id");
+
+        var testRoot = GetCollectionOrderingTestRoot();
+        var actualPath = Path.Combine(testRoot, "Actuals", "OrderTest.xml");
+        var expectedPath = Path.Combine(testRoot, "Expecteds", "OrderTest.xml");
+
+        using var actualStream = File.OpenRead(actualPath);
+        using var expectedStream = File.OpenRead(expectedPath);
+
+        var result = await scopedComparisonService.CompareXmlFilesAsync(
+            actualStream,
+            expectedStream,
+            "SoapEnvelope");
+
+        result.Should().NotBeNull();
+        result.AreEqual.Should().BeTrue();
+        result.Differences.Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public async Task CompareXmlFilesAsync_WithIgnoredAddressIdentifiers_ShouldTreatReorderedAddressesAsEqual()
+    {
+        var testRoot = GetCollectionOrderingTestRoot();
+        var actualPath = Path.Combine(testRoot, "Actuals", "OrderTest.xml");
+        var expectedPath = Path.Combine(testRoot, "Expecteds", "OrderTest.xml");
+
+        configService.IgnoreProperty("Body.Response.AddressLinks.Addresses[*].Id");
+        configService.SetIgnoreCollectionOrder(true);
+        configService.SetIgnoreTrailingWhitespaceAtEnd(true);
+
+        using var actualStream = File.OpenRead(actualPath);
+        using var expectedStream = File.OpenRead(expectedPath);
+
+        var result = await comparisonService.CompareXmlFilesAsync(
+            actualStream,
+            expectedStream,
+            "SoapEnvelope");
+
+        result.Should().NotBeNull();
+        result.AreEqual.Should().BeTrue();
+        result.Differences.Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public async Task CompareFoldersInBatchesAsync_WhenConfigurationChanges_ShouldRefreshHighPerformancePipeline()
+    {
+        const int pairCount = 100;
+        configService.IgnoreProperty("Body.Response.AddressLinks.Addresses[*].Id");
+
+        configService.SetIgnoreCollectionOrder(false);
+        configService.SetIgnoreTrailingWhitespaceAtEnd(false);
+
+        var tempRoot = CreateCollectionOrderingCopySet(pairCount, out var actualPaths, out var expectedPaths);
+
+        try
+        {
+            var initialResult = await comparisonService.CompareFoldersInBatchesAsync(
+                actualPaths,
+                expectedPaths,
+                "SoapEnvelope",
+                batchSize: 25);
+
+            initialResult.TotalPairsCompared.Should().Be(pairCount);
+            initialResult.AllEqual.Should().BeFalse();
+            initialResult.FilePairResults.Should().HaveCount(pairCount);
+            initialResult.FilePairResults.Should().OnlyContain(result => !result.AreEqual);
+
+            configService.SetIgnoreCollectionOrder(true);
+            configService.SetIgnoreTrailingWhitespaceAtEnd(true);
+
+            var refreshedResult = await comparisonService.CompareFoldersInBatchesAsync(
+                actualPaths,
+                expectedPaths,
+                "SoapEnvelope",
+                batchSize: 25);
+
+            refreshedResult.TotalPairsCompared.Should().Be(pairCount);
+            refreshedResult.AllEqual.Should().BeTrue();
+            refreshedResult.FilePairResults.Should().HaveCount(pairCount);
+            refreshedResult.FilePairResults.Should().OnlyContain(result => result.AreEqual);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
+    [TestMethod]
+    public async Task AnalyzeStructualPatternsAsync_WhenResultMetadataSpecifiesIgnoreCollectionOrder_ShouldPreferMetadataOverCurrentConfigAsync()
+    {
+        configService.SetIgnoreCollectionOrder(false);
+
+        var folderResult = new MultiFolderComparisonResult
+        {
+            AllEqual = false,
+            TotalPairsCompared = 1,
+            FilePairResults = new List<FilePairComparisonResult>
+            {
+                new()
+                {
+                    File1Name = "Actual.xml",
+                    File2Name = "Expected.xml",
+                    Result = new ComparisonResult(new ComparisonConfig())
+                    {
+                        Differences =
+                        {
+                            new Difference
+                            {
+                                PropertyName = "Items[0].Id",
+                                Object1Value = "1",
+                                Object2Value = "2",
+                            },
+                            new Difference
+                            {
+                                PropertyName = "Items[0].Value",
+                                Object1Value = "A",
+                                Object2Value = "B",
+                            },
+                            new Difference
+                            {
+                                PropertyName = "Items[1].Id",
+                                Object1Value = "2",
+                                Object2Value = "1",
+                            },
+                            new Difference
+                            {
+                                PropertyName = "Items[1].Value",
+                                Object1Value = "B",
+                                Object2Value = "A",
+                            },
+                        },
+                    },
+                    Summary = new DifferenceSummary
+                    {
+                        AreEqual = false,
+                        TotalDifferenceCount = 4,
+                    },
+                },
+            },
+            Metadata = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["IgnoreCollectionOrder"] = true,
+            },
+        };
+
+        var analysis = await comparisonService.AnalyzeStructualPatternsAsync(folderResult);
+
+        analysis.ElementOrderDifferences.Should().BeEmpty();
+        analysis.FileClassification.FileCounts["Order"].Should().Be(0);
+        analysis.FileClassification.FileCounts["Value"].Should().Be(1);
+        folderResult.Metadata["IgnoreCollectionOrder"].Should().Be(true);
+    }
+
+    [TestMethod]
+    public async Task AnalyzeStructualPatternsAsync_WhenResultMetadataDisablesIgnoreCollectionOrder_ShouldPreferMetadataOverCurrentConfigAsync()
+    {
+        configService.SetIgnoreCollectionOrder(true);
+
+        var folderResult = new MultiFolderComparisonResult
+        {
+            AllEqual = false,
+            TotalPairsCompared = 1,
+            FilePairResults = new List<FilePairComparisonResult>
+            {
+                new()
+                {
+                    File1Name = "Actual.xml",
+                    File2Name = "Expected.xml",
+                    Result = new ComparisonResult(new ComparisonConfig())
+                    {
+                        Differences =
+                        {
+                            new Difference
+                            {
+                                PropertyName = "Items[0].Id",
+                                Object1Value = "1",
+                                Object2Value = "2",
+                            },
+                            new Difference
+                            {
+                                PropertyName = "Items[0].Value",
+                                Object1Value = "A",
+                                Object2Value = "B",
+                            },
+                            new Difference
+                            {
+                                PropertyName = "Items[1].Id",
+                                Object1Value = "2",
+                                Object2Value = "1",
+                            },
+                            new Difference
+                            {
+                                PropertyName = "Items[1].Value",
+                                Object1Value = "B",
+                                Object2Value = "A",
+                            },
+                        },
+                    },
+                    Summary = new DifferenceSummary
+                    {
+                        AreEqual = false,
+                        TotalDifferenceCount = 4,
+                    },
+                },
+            },
+            Metadata = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["IgnoreCollectionOrder"] = false,
+            },
+        };
+
+        var analysis = await comparisonService.AnalyzeStructualPatternsAsync(folderResult);
+
+        analysis.ElementOrderDifferences.Should().ContainSingle();
+        analysis.FileClassification.FileCounts["Order"].Should().Be(1);
+        analysis.FileClassification.FileCounts["Value"].Should().Be(0);
+        folderResult.Metadata["IgnoreCollectionOrder"].Should().Be(false);
+    }
+
+        [TestMethod]
+        public async Task CompareFoldersInBatchesAsync_WhenHighPerformancePipelineRuns_ShouldMatchStandardDedupedDifferenceSet()
+        {
+                const int pairCount = 100;
+                const string actualXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<ComplexTestModel>
+    <Name>Example</Name>
+    <Items>
+        <ComplexTestModelItem>
+            <Id>1</Id>
+            <Value>Alpha</Value>
+        </ComplexTestModelItem>
+    </Items>
+</ComplexTestModel>";
+                const string expectedXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<ComplexTestModel>
+    <Name>Example</Name>
+    <Items>
+        <ComplexTestModelItem>
+            <Id>1</Id>
+            <Value>Alpha</Value>
+        </ComplexTestModelItem>
+        <ComplexTestModelItem>
+            <Id>2</Id>
+            <Value>Beta</Value>
+        </ComplexTestModelItem>
+    </Items>
+</ComplexTestModel>";
+
+                using var actualStream = new MemoryStream(Encoding.UTF8.GetBytes(actualXml));
+                using var expectedStream = new MemoryStream(Encoding.UTF8.GetBytes(expectedXml));
+
+                var standardResult = await comparisonService.CompareXmlFilesAsync(
+                        actualStream,
+                        expectedStream,
+                        "ComplexTestModel");
+
+                var expectedDifferences = standardResult.Differences
+                        .Select(CreateDifferenceSignature)
+                        .ToList();
+
+                expectedDifferences.Should().NotBeEmpty();
+                expectedDifferences.Should().OnlyContain(signature =>
+                        !signature.PropertyName.Contains("System.Collections.IList.Item", StringComparison.Ordinal));
+
+                var tempRoot = CreateComplexTestModelCopySet(pairCount, actualXml, expectedXml, out var actualPaths, out var expectedPaths);
+
+                try
+                {
+                        var batchResult = await comparisonService.CompareFoldersInBatchesAsync(
+                                actualPaths,
+                                expectedPaths,
+                                "ComplexTestModel",
+                                batchSize: 25);
+
+                        batchResult.TotalPairsCompared.Should().Be(pairCount);
+                        batchResult.FilePairResults.Should().HaveCount(pairCount);
+
+                        foreach (var pair in batchResult.FilePairResults)
+                        {
+                                pair.HasError.Should().BeFalse();
+                                pair.Result.Should().NotBeNull();
+
+                                var actualDifferences = pair.Result!.Differences
+                                        .Select(CreateDifferenceSignature)
+                                        .ToList();
+
+                                actualDifferences.Should().BeEquivalentTo(expectedDifferences);
+                        }
+                }
+                finally
+                {
+                        if (Directory.Exists(tempRoot))
+                        {
+                                Directory.Delete(tempRoot, recursive: true);
+                        }
+                }
+        }
+
+    [TestMethod]
+    public async Task CompareDirectoriesAsync_WhenLargeRunUsesHighPerformancePipeline_ShouldRespectConfigurationAndLogSessionResults()
+    {
+        const int pairCount = 100;
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddXmlComparisonServices(options =>
+            options.RegisterDomainModelWithRootElement<SoapEnvelope>("SoapEnvelope", "Envelope"));
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var directoryComparisonService = scope.ServiceProvider.GetRequiredService<DirectoryComparisonService>();
+        var scopedConfigService = scope.ServiceProvider.GetRequiredService<IComparisonConfigurationService>();
+        var comparisonLogService = scope.ServiceProvider.GetRequiredService<IComparisonLogService>();
+
+        scopedConfigService.IgnoreProperty("Body.Response.AddressLinks.Addresses[*].Id");
+        scopedConfigService.SetIgnoreCollectionOrder(false);
+        scopedConfigService.SetIgnoreTrailingWhitespaceAtEnd(false);
+
+        var tempRoot = CreateCollectionOrderingCopySet(pairCount, out _, out _);
+        var actualDirectory = Path.Combine(tempRoot, "Actuals");
+        var expectedDirectory = Path.Combine(tempRoot, "Expecteds");
+
+        try
+        {
+            var initialResult = await directoryComparisonService.CompareDirectoriesAsync(
+                actualDirectory,
+                expectedDirectory,
+                "SoapEnvelope");
+
+            initialResult.TotalPairsCompared.Should().Be(pairCount);
+            initialResult.AllEqual.Should().BeFalse();
+            initialResult.FilePairResults.Should().HaveCount(pairCount);
+            initialResult.FilePairResults.Should().OnlyContain(result => !result.AreEqual);
+            initialResult.Metadata.Should().ContainKey("ComparisonSessionId");
+            initialResult.Metadata.Should().ContainKey(ComparisonPhaseTimings.MetadataKey);
+            initialResult.Metadata.Should().ContainKey("PerformanceReportTextPath");
+            initialResult.Metadata.Should().ContainKey("PerformanceReportCsvPath");
+
+            var initialPhaseTimings = initialResult.Metadata[ComparisonPhaseTimings.MetadataKey]
+                .Should().BeOfType<ComparisonPhaseTimings>().Which;
+            initialPhaseTimings.XmlDeserializationPrecheckMs.Should().BePositive();
+            initialPhaseTimings.XmlDeserializationFullDeserializeMs.Should().BePositive();
+            initialPhaseTimings.CompareMs.Should().BePositive();
+            initialPhaseTimings.FilterMs.Should().BePositive();
+            initialPhaseTimings.ComparisonMs.Should().Be(initialPhaseTimings.CompareMs + initialPhaseTimings.FilterMs);
+
+            var initialReportPath = initialResult.Metadata["PerformanceReportTextPath"].Should().BeOfType<string>().Which;
+            var initialReportText = File.ReadAllText(initialReportPath);
+            initialReportText.Should().Contain("HighPerfPipeline_ComparePair");
+            initialReportText.Should().Contain("HighPerfPipeline_FilterPair");
+
+            var initialSessionId = initialResult.Metadata["ComparisonSessionId"].Should().BeOfType<string>().Which;
+            var initialSessionStats = comparisonLogService.GetSessionStats(initialSessionId);
+            initialSessionStats.ProcessedFilePairs.Should().Be(pairCount);
+            initialSessionStats.DifferentFilePairs.Should().Be(pairCount);
+            initialSessionStats.ErrorFilePairs.Should().Be(0);
+
+            scopedConfigService.SetIgnoreCollectionOrder(true);
+            scopedConfigService.SetIgnoreTrailingWhitespaceAtEnd(true);
+
+            var refreshedResult = await directoryComparisonService.CompareDirectoriesAsync(
+                actualDirectory,
+                expectedDirectory,
+                "SoapEnvelope");
+
+            refreshedResult.TotalPairsCompared.Should().Be(pairCount);
+            refreshedResult.AllEqual.Should().BeTrue();
+            refreshedResult.FilePairResults.Should().HaveCount(pairCount);
+            refreshedResult.FilePairResults.Should().OnlyContain(result => result.AreEqual);
+            refreshedResult.Metadata.Should().ContainKey("ComparisonSessionId");
+            refreshedResult.Metadata.Should().ContainKey(ComparisonPhaseTimings.MetadataKey);
+
+            var refreshedPhaseTimings = refreshedResult.Metadata[ComparisonPhaseTimings.MetadataKey]
+                .Should().BeOfType<ComparisonPhaseTimings>().Which;
+            refreshedPhaseTimings.XmlDeserializationPrecheckMs.Should().BeGreaterThanOrEqualTo(0);
+            refreshedPhaseTimings.XmlDeserializationFullDeserializeMs.Should().BeGreaterThanOrEqualTo(0);
+            (refreshedPhaseTimings.CollectionOrderDeterministicOrderingMs + refreshedPhaseTimings.CollectionOrderFallbackMs)
+                .Should().BePositive();
+            refreshedPhaseTimings.CollectionOrderFallbackCount.Should().BeGreaterThanOrEqualTo(0);
+            AssertSupplementalMetricsPersisted(refreshedResult, refreshedPhaseTimings);
+
+            var refreshedSessionId = refreshedResult.Metadata["ComparisonSessionId"].Should().BeOfType<string>().Which;
+            var refreshedSessionStats = comparisonLogService.GetSessionStats(refreshedSessionId);
+            refreshedSessionStats.ProcessedFilePairs.Should().Be(pairCount);
+            refreshedSessionStats.EqualFilePairs.Should().Be(pairCount);
+            refreshedSessionStats.DifferentFilePairs.Should().Be(0);
+            refreshedSessionStats.ErrorFilePairs.Should().Be(0);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
+    [TestMethod]
+    public async Task CompareDirectoriesAsync_WhenStandardRunUsesComparisonEngine_ShouldRecordSplitPhaseTimings()
+    {
+        const int pairCount = 25;
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddXmlComparisonServices(options =>
+            options.RegisterDomainModelWithRootElement<SoapEnvelope>("SoapEnvelope", "Envelope"));
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var directoryComparisonService = scope.ServiceProvider.GetRequiredService<DirectoryComparisonService>();
+        var scopedConfigService = scope.ServiceProvider.GetRequiredService<IComparisonConfigurationService>();
+
+        scopedConfigService.IgnoreProperty("Body.Response.AddressLinks.Addresses[*].Id");
+        scopedConfigService.SetIgnoreCollectionOrder(false);
+        scopedConfigService.SetIgnoreTrailingWhitespaceAtEnd(true);
+        scopedConfigService.AddIgnoreRule(new IgnoreRule
+        {
+            PropertyPath = "Body.Response.AddressLinks.Addresses",
+            IgnoreCollectionOrder = true,
+        });
+
+        var tempRoot = CreateCollectionOrderingCopySet(pairCount, out _, out _);
+        var actualDirectory = Path.Combine(tempRoot, "Actuals");
+        var expectedDirectory = Path.Combine(tempRoot, "Expecteds");
+
+        try
+        {
+            var result = await directoryComparisonService.CompareDirectoriesAsync(
+                actualDirectory,
+                expectedDirectory,
+                "SoapEnvelope");
+
+            result.TotalPairsCompared.Should().Be(pairCount);
+            result.Metadata.Should().ContainKey(ComparisonPhaseTimings.MetadataKey);
+
+            var phaseTimings = result.Metadata[ComparisonPhaseTimings.MetadataKey]
+                .Should().BeOfType<ComparisonPhaseTimings>().Which;
+
+            phaseTimings.XmlDeserializationPrecheckMs.Should().BeGreaterThanOrEqualTo(0);
+            phaseTimings.XmlDeserializationFullDeserializeMs.Should().BeGreaterThanOrEqualTo(0);
+            phaseTimings.CompareMs.Should().BePositive();
+            phaseTimings.FilterMs.Should().BeGreaterThanOrEqualTo(0);
+            phaseTimings.ComparisonMs.Should().Be(phaseTimings.CompareMs + phaseTimings.FilterMs);
+            phaseTimings.CollectionOrderDeterministicOrderingMs.Should().BeGreaterThanOrEqualTo(0);
+            phaseTimings.CollectionOrderFallbackMs.Should().BeGreaterThanOrEqualTo(0);
+            phaseTimings.CollectionOrderFallbackCount.Should().BeGreaterThanOrEqualTo(0);
+            AssertSupplementalMetricsPersisted(result, phaseTimings);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
+    [TestMethod]
+    public async Task CompareDirectoriesAsync_WhenLargeJsonRunUsesHighPerformancePipeline_ShouldCompareJsonFilesSuccessfully()
+    {
+        const int pairCount = 100;
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddUnifiedComparisonServices(options =>
+            options.RegisterDomainModel<CustomerOrder>("CustomerOrder"));
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var directoryComparisonService = scope.ServiceProvider.GetRequiredService<DirectoryComparisonService>();
+        var comparisonLogService = scope.ServiceProvider.GetRequiredService<IComparisonLogService>();
+
+        var tempRoot = CreateCustomerOrderJsonCopySet(pairCount);
+        var actualDirectory = Path.Combine(tempRoot, "Actuals");
+        var expectedDirectory = Path.Combine(tempRoot, "Expecteds");
+
+        try
+        {
+            var result = await directoryComparisonService.CompareDirectoriesAsync(
+                actualDirectory,
+                expectedDirectory,
+                "CustomerOrder",
+                includeAllFiles: true);
+
+            result.TotalPairsCompared.Should().Be(pairCount);
+            result.AllEqual.Should().BeFalse();
+            result.FilePairResults.Should().HaveCount(pairCount);
+            result.FilePairResults.Should().OnlyContain(fileResult => !fileResult.AreEqual && !fileResult.HasError);
+            result.Metadata.Should().ContainKey("ComparisonSessionId");
+
+            var sessionId = result.Metadata["ComparisonSessionId"].Should().BeOfType<string>().Which;
+            var sessionStats = comparisonLogService.GetSessionStats(sessionId);
+            sessionStats.ProcessedFilePairs.Should().Be(pairCount);
+            sessionStats.DifferentFilePairs.Should().Be(pairCount);
+            sessionStats.ErrorFilePairs.Should().Be(0);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
     [DataTestMethod]
     [DataRow("Actual_4_Differences.xml", "Expected_4_Differences.xml", false)]
     [DataRow("Actual_Component_Timings_Order.xml", "Expected_Component_Timings_Order.xml", true)]
@@ -334,7 +915,100 @@ public class ComparisonServiceIntegrationTests
         }
     }
 
+    [TestMethod]
+    public async Task CompareFoldersInBatchesAsync_WithSoapFaultFile_ShouldReturnErrorRowWithoutThrowing()
+    {
+        var testRoot = GetSpecificComplexModelTestRoot();
+        var actualPath = Path.Combine(testRoot, "Actual", "Actual_FaultException.xml");
+        var expectedPath = Path.Combine(testRoot, "Expected", "Expected_FaultException.xml");
+
+        var result = await comparisonService.CompareFoldersInBatchesAsync(
+            new List<string> { actualPath },
+            new List<string> { expectedPath },
+            "ComplexOrderResponse",
+            batchSize: 25);
+
+        result.TotalPairsCompared.Should().Be(1);
+        result.AllEqual.Should().BeFalse();
+        result.FilePairResults.Should().HaveCount(1);
+
+        var pair = result.FilePairResults[0];
+        pair.HasError.Should().BeTrue();
+        pair.ErrorMessage.Should().Contain("SOAP fault detected in response");
+        pair.ErrorMessage.Should().Contain("soap:Server");
+    }
+
+    [TestMethod]
+    public async Task CompareDirectoriesAsync_WithSoapFaultFile_ShouldReturnErrorRowWithoutThrowing()
+    {
+        var testRoot = GetSpecificComplexModelTestRoot();
+        var sourceActual = Path.Combine(testRoot, "Actual", "Actual_FaultException.xml");
+        var sourceExpected = Path.Combine(testRoot, "Expected", "Expected_FaultException.xml");
+
+        var tempRoot = Path.Combine(Path.GetTempPath(), "ComparisonToolFaultCopies", Guid.NewGuid().ToString("N"));
+        var actualDirectory = Path.Combine(tempRoot, "Actual");
+        var expectedDirectory = Path.Combine(tempRoot, "Expected");
+        Directory.CreateDirectory(actualDirectory);
+        Directory.CreateDirectory(expectedDirectory);
+
+        var targetActual = Path.Combine(actualDirectory, "Fault.xml");
+        var targetExpected = Path.Combine(expectedDirectory, "Fault.xml");
+        File.Copy(sourceActual, targetActual);
+        File.Copy(sourceExpected, targetExpected);
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddXmlComparisonServices(options =>
+            options.RegisterDomainModelWithRootElement<ComplexOrderResponse>("ComplexOrderResponse", "OrderManagementResponse"));
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        var directoryComparisonService = scope.ServiceProvider.GetRequiredService<DirectoryComparisonService>();
+
+        try
+        {
+            var result = await directoryComparisonService.CompareDirectoriesAsync(
+                actualDirectory,
+                expectedDirectory,
+                "ComplexOrderResponse");
+
+            result.TotalPairsCompared.Should().Be(1);
+            result.AllEqual.Should().BeFalse();
+            result.FilePairResults.Should().HaveCount(1);
+
+            var pair = result.FilePairResults[0];
+            pair.HasError.Should().BeTrue();
+            pair.ErrorMessage.Should().Contain("SOAP fault detected in response");
+            pair.ErrorMessage.Should().Contain("order processing service encountered an internal error");
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
     private static string GetSpecificComplexModelTestRoot()
+    {
+        return Path.Combine(
+            GetSolutionRoot(),
+            "ComparisonTool.Domain",
+            "TestFiles",
+            "SpecificTests_ComplexModel");
+    }
+
+    private static string GetCollectionOrderingTestRoot()
+    {
+        return Path.Combine(
+            GetSolutionRoot(),
+            "ComparisonTool.Domain",
+            "TestFiles",
+            "CollectionOrdering");
+    }
+
+    private static string GetSolutionRoot()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);
 
@@ -348,11 +1022,130 @@ public class ComparisonServiceIntegrationTests
             throw new DirectoryNotFoundException("Could not locate ComparisonTool.sln to resolve test data paths.");
         }
 
-        return Path.Combine(
-            current.FullName,
-            "ComparisonTool.Domain",
-            "TestFiles",
-            "SpecificTests_ComplexModel");
+        return current.FullName;
+    }
+
+    private static string CreateCollectionOrderingCopySet(
+        int pairCount,
+        out List<string> actualPaths,
+        out List<string> expectedPaths)
+    {
+        var testRoot = GetCollectionOrderingTestRoot();
+        var sourceActualPath = Path.Combine(testRoot, "Actuals", "OrderTest.xml");
+        var sourceExpectedPath = Path.Combine(testRoot, "Expecteds", "OrderTest.xml");
+
+        var tempRoot = Path.Combine(Path.GetTempPath(), "ComparisonToolTests", Guid.NewGuid().ToString("N"));
+        var actualDirectory = Path.Combine(tempRoot, "Actuals");
+        var expectedDirectory = Path.Combine(tempRoot, "Expecteds");
+
+        Directory.CreateDirectory(actualDirectory);
+        Directory.CreateDirectory(expectedDirectory);
+
+        actualPaths = new List<string>(pairCount);
+        expectedPaths = new List<string>(pairCount);
+
+        for (var index = 0; index < pairCount; index++)
+        {
+            var fileName = $"{index:D3}_OrderTest.xml";
+            var actualPath = Path.Combine(actualDirectory, fileName);
+            var expectedPath = Path.Combine(expectedDirectory, fileName);
+
+            File.Copy(sourceActualPath, actualPath);
+            File.Copy(sourceExpectedPath, expectedPath);
+
+            actualPaths.Add(actualPath);
+            expectedPaths.Add(expectedPath);
+        }
+
+        return tempRoot;
+    }
+
+    private static string CreateComplexTestModelCopySet(
+        int pairCount,
+        string actualXml,
+        string expectedXml,
+        out List<string> actualPaths,
+        out List<string> expectedPaths)
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "ComparisonToolComplexTestModelCopies", Guid.NewGuid().ToString("N"));
+        var actualDirectory = Path.Combine(tempRoot, "Actuals");
+        var expectedDirectory = Path.Combine(tempRoot, "Expecteds");
+
+        Directory.CreateDirectory(actualDirectory);
+        Directory.CreateDirectory(expectedDirectory);
+
+        actualPaths = new List<string>(pairCount);
+        expectedPaths = new List<string>(pairCount);
+
+        for (var index = 0; index < pairCount; index++)
+        {
+            var fileName = $"{index:D3}_ComplexTestModel.xml";
+            var actualPath = Path.Combine(actualDirectory, fileName);
+            var expectedPath = Path.Combine(expectedDirectory, fileName);
+
+            File.WriteAllText(actualPath, actualXml, Encoding.UTF8);
+            File.WriteAllText(expectedPath, expectedXml, Encoding.UTF8);
+
+            actualPaths.Add(actualPath);
+            expectedPaths.Add(expectedPath);
+        }
+
+        return tempRoot;
+    }
+
+    private static (string PropertyName, string? OldValue, string? NewValue) CreateDifferenceSignature(Difference diff) =>
+        (diff.PropertyName, diff.Object1Value?.ToString(), diff.Object2Value?.ToString());
+
+    private static string CreateCustomerOrderJsonCopySet(int pairCount)
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "ComparisonToolJsonCopies", Guid.NewGuid().ToString("N"));
+        var actualDirectory = Path.Combine(tempRoot, "Actuals");
+        var expectedDirectory = Path.Combine(tempRoot, "Expecteds");
+        Directory.CreateDirectory(actualDirectory);
+        Directory.CreateDirectory(expectedDirectory);
+
+        var testRoot = Path.Combine(GetSolutionRoot(), "ComparisonTool.Domain", "TestFiles", "CustomerOrderTest");
+        var sourceActual = Path.Combine(testRoot, "Actual", "Original.json");
+        var sourceExpected = Path.Combine(testRoot, "Expected", "Modified.json");
+
+        for (var index = 0; index < pairCount; index++)
+        {
+            var fileName = $"{index + 1}.json";
+            File.Copy(sourceActual, Path.Combine(actualDirectory, fileName));
+            File.Copy(sourceExpected, Path.Combine(expectedDirectory, fileName));
+        }
+
+        return tempRoot;
+    }
+
+    private static void AssertSupplementalMetricsPersisted(
+        MultiFolderComparisonResult result,
+        ComparisonPhaseTimings phaseTimings)
+    {
+        result.Metadata.Should().ContainKey("PerformanceReportTextPath");
+        result.Metadata.Should().ContainKey("PerformanceReportCsvPath");
+
+        var textReportPath = result.Metadata["PerformanceReportTextPath"].Should().BeOfType<string>().Which;
+        var textReport = File.ReadAllText(textReportPath);
+        textReport.Should().MatchRegex("(?s)Operation: .*SUPPLEMENTAL METRICS");
+        textReport.Should().Contain($"XmlDeserializationPrecheckMs: {phaseTimings.XmlDeserializationPrecheckMs}");
+        textReport.Should().Contain($"XmlDeserializationFullDeserializeMs: {phaseTimings.XmlDeserializationFullDeserializeMs}");
+        textReport.Should().Contain($"CollectionOrderDeterministicOrderingMs: {phaseTimings.CollectionOrderDeterministicOrderingMs}");
+        textReport.Should().Contain($"CollectionOrderFallbackMs: {phaseTimings.CollectionOrderFallbackMs}");
+        textReport.Should().Contain($"CollectionOrderFallbackCount: {phaseTimings.CollectionOrderFallbackCount}");
+
+        var csvReportPath = result.Metadata["PerformanceReportCsvPath"].Should().BeOfType<string>().Which;
+        var csvLines = File.ReadAllLines(csvReportPath);
+        var blankLineIndex = Array.IndexOf(csvLines, string.Empty);
+
+        csvLines[0].Should().Be("Operation,CallCount,TotalTimeMs,AverageTimeMs,MedianTimeMs,MinTimeMs,MaxTimeMs");
+        blankLineIndex.Should().BeGreaterThan(0);
+        csvLines[blankLineIndex + 1].Should().Be("Metric,Value");
+        csvLines.Should().Contain($"XmlDeserializationPrecheckMs,{phaseTimings.XmlDeserializationPrecheckMs}");
+        csvLines.Should().Contain($"XmlDeserializationFullDeserializeMs,{phaseTimings.XmlDeserializationFullDeserializeMs}");
+        csvLines.Should().Contain($"CollectionOrderDeterministicOrderingMs,{phaseTimings.CollectionOrderDeterministicOrderingMs}");
+        csvLines.Should().Contain($"CollectionOrderFallbackMs,{phaseTimings.CollectionOrderFallbackMs}");
+        csvLines.Should().Contain($"CollectionOrderFallbackCount,{phaseTimings.CollectionOrderFallbackCount}");
     }
 
     [DataTestMethod]

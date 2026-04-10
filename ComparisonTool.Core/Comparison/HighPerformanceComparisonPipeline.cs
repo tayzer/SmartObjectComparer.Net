@@ -1,11 +1,16 @@
 using System.Buffers;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.IO.Hashing;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using System.Threading.Channels;
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
+using ComparisonTool.Core.Comparison.Utilities;
 using ComparisonTool.Core.Serialization;
 using ComparisonTool.Core.Utilities;
 using KellermanSoftware.CompareNetObjects;
@@ -19,6 +24,13 @@ namespace ComparisonTool.Core.Comparison;
 /// </summary>
 public sealed class HighPerformanceComparisonPipeline : IDisposable
 {
+    private const string PipelineRunOperationName = "HighPerfPipeline_Run";
+    private const string DeserializePairOperationName = "HighPerfPipeline_DeserializePair";
+    private const string ComparePairOperationName = "HighPerfPipeline_ComparePair";
+    private const string FilterPairOperationName = "HighPerfPipeline_FilterPair";
+    private const string SummarizePairOperationName = "HighPerfPipeline_SummarizePair";
+    private const string FinalizeResultsOperationName = "HighPerfPipeline_FinalizeResults";
+
     // OPTIMIZATION 4: Use XxHash64 instead of MD5 for faster hashing (non-cryptographic)
     private static readonly XxHash64 HashAlgorithm = new XxHash64();
 
@@ -29,13 +41,15 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
     private readonly PerformanceTracker performanceTracker;
 
     // OPTIMIZATION 1: Reuse CompareLogic instances per thread to avoid allocation
-    private readonly ThreadLocal<CompareLogic> threadLocalCompareLogic;
+    private ThreadLocal<CompareLogic> threadLocalCompareLogic;
+    private readonly object compareLogicRefreshLock = new object();
+    private volatile string cachedConfigFingerprint = string.Empty;
 
     // OPTIMIZATION 2: Pool DifferenceCategorizer instances
     private readonly ObjectPool<DifferenceCategorizer> categorizerPool;
 
-    // OPTIMIZATION 3: Cache deserialization delegate per type
-    private readonly ConcurrentDictionary<Type, Func<Stream, DeserializationResult>> cachedDeserializers = new ConcurrentDictionary<Type, Func<Stream, DeserializationResult>>();
+    // OPTIMIZATION 3: Cache deserialization delegates per type and format
+    private readonly ConcurrentDictionary<DeserializerCacheKey, Func<Stream, DeserializationResult>> cachedDeserializers = new ConcurrentDictionary<DeserializerCacheKey, Func<Stream, DeserializationResult>>();
 
     // Pipeline configuration
     private readonly int ioParallelism;
@@ -62,9 +76,8 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
         channelCapacity = cpuCores * 4; // Buffer to decouple stages
 
         // OPTIMIZATION 1: Thread-local CompareLogic to avoid allocation per file
-        threadLocalCompareLogic = new ThreadLocal<CompareLogic>(
-            () => CreateOptimizedCompareLogic(),
-            trackAllValues: false);
+        threadLocalCompareLogic = CreateThreadLocalCompareLogic();
+        cachedConfigFingerprint = GenerateConfigurationFingerprint();
 
         // OPTIMIZATION 2: Object pool for categorizers
         categorizerPool = new ObjectPool<DifferenceCategorizer>(
@@ -115,103 +128,106 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
         string modelName,
         IProgress<ComparisonProgress>? progress = null,
         CancellationToken cancellationToken = default)
-    {
-        var totalFiles = filePairs.Count;
-        logger.LogInformation(
-            "Starting high-performance comparison of {Count} file pairs with I/O parallelism {IoParallel} and CPU parallelism {CpuParallel}",
-            totalFiles,
-            ioParallelism,
-            cpuParallelism);
-
-        // Create bounded channels for back-pressure
-        var deserializationChannel = Channel.CreateBounded<DeserializedFilePair>(
-            new BoundedChannelOptions(channelCapacity)
-            {
-                FullMode = BoundedChannelFullMode.Wait,
-                SingleWriter = false,
-                SingleReader = false,
-            });
-
-        var comparisonChannel = Channel.CreateBounded<FilePairComparisonResult>(
-            new BoundedChannelOptions(channelCapacity)
-            {
-                FullMode = BoundedChannelFullMode.Wait,
-                SingleWriter = false,
-                SingleReader = true,
-            });
-
-        // Get model type once
-        var modelType = deserializationService.GetModelType(modelName);
-
-        // Cache the deserializer for this model type
-        var deserializer = GetOrCreateDeserializer(modelType);
-
-        // Results collection
-        var results = new ConcurrentBag<FilePairComparisonResult>();
-        var completedCount = 0;
-        var allEqual = true;
-
-        // Stage 1: I/O + Deserialization (I/O-bound producer)
-        var deserializationTask = RunDeserializationStageAsync(
-            filePairs,
-            deserializer,
-            deserializationChannel.Writer,
-            cancellationToken);
-
-        // Stage 2: Comparison (CPU-bound consumers)
-        var comparisonTasks = Enumerable.Range(0, cpuParallelism)
-            .Select(_ => RunComparisonStageAsync(
-                deserializationChannel.Reader,
-                comparisonChannel.Writer,
-                modelType,
-                cancellationToken))
-            .ToArray();
-
-        // Stage 3: Result aggregation (single consumer)
-        var aggregationTask = Task.Run(
+        => await performanceTracker.TrackOperationAsync(
+            PipelineRunOperationName,
             async () =>
-        {
-            await foreach (var result in comparisonChannel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             {
-                results.Add(result);
+                RefreshCompareLogicIfNeeded();
+                var totalFiles = filePairs.Count;
+                logger.LogInformation(
+                    "Starting high-performance comparison of {Count} file pairs with I/O parallelism {IoParallel} and CPU parallelism {CpuParallel}",
+                    totalFiles,
+                    ioParallelism,
+                    cpuParallelism);
 
-                if (!result.Summary?.AreEqual ?? false)
-                {
-                    allEqual = false;
-                }
+                // Create bounded channels for back-pressure
+                var deserializationChannel = Channel.CreateBounded<DeserializedFilePair>(
+                    new BoundedChannelOptions(channelCapacity)
+                    {
+                        FullMode = BoundedChannelFullMode.Wait,
+                        SingleWriter = false,
+                        SingleReader = false,
+                    });
 
-                var current = Interlocked.Increment(ref completedCount);
+                var comparisonChannel = Channel.CreateBounded<FilePairComparisonResult>(
+                    new BoundedChannelOptions(channelCapacity)
+                    {
+                        FullMode = BoundedChannelFullMode.Wait,
+                        SingleWriter = false,
+                        SingleReader = true,
+                    });
 
-                // Throttle progress updates to reduce UI thread contention
-                if (current % Math.Max(1, totalFiles / 100) == 0 || current == totalFiles)
-                {
-                    progress?.Report(new ComparisonProgress(
-                        current,
-                        totalFiles,
-                        $"Compared {current} of {totalFiles} files"));
-                }
-            }
-        }, cancellationToken);
+                // Get model type once
+                var modelType = deserializationService.GetModelType(modelName);
 
-        // Wait for deserialization to complete and close its channel
-        await deserializationTask.ConfigureAwait(false);
-        deserializationChannel.Writer.Complete();
+                // Results collection
+                var results = new ConcurrentBag<FilePairComparisonResult>();
+                var completedCount = 0;
+                var allEqual = true;
 
-        // Wait for all comparison tasks
-        await Task.WhenAll(comparisonTasks).ConfigureAwait(false);
-        comparisonChannel.Writer.Complete();
+                // Stage 1: I/O + Deserialization (I/O-bound producer)
+                var deserializationTask = RunDeserializationStageAsync(
+                    filePairs,
+                    modelType,
+                    deserializationChannel.Writer,
+                    cancellationToken);
 
-        // Wait for aggregation
-        await aggregationTask.ConfigureAwait(false);
+                // Stage 2: Comparison (CPU-bound consumers)
+                var comparisonTasks = Enumerable.Range(0, cpuParallelism)
+                    .Select(_ => RunComparisonStageAsync(
+                        deserializationChannel.Reader,
+                        comparisonChannel.Writer,
+                        modelType,
+                        cancellationToken))
+                    .ToArray();
 
-        return new MultiFolderComparisonResult
-        {
-            TotalPairsCompared = totalFiles,
-            AllEqual = allEqual,
-            FilePairResults = results.OrderBy(r => r.File1Name, StringComparer.Ordinal).ToList(),
-            Metadata = new Dictionary<string, object>(StringComparer.Ordinal),
-        };
-    }
+                // Stage 3: Result aggregation (single consumer)
+                var aggregationTask = Task.Run(
+                    async () =>
+                    {
+                        await foreach (var result in comparisonChannel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+                        {
+                            results.Add(result);
+
+                            if (!result.AreEqual)
+                            {
+                                allEqual = false;
+                            }
+
+                            var current = Interlocked.Increment(ref completedCount);
+
+                            // Throttle progress updates to reduce UI thread contention
+                            if (current % Math.Max(1, totalFiles / 100) == 0 || current == totalFiles)
+                            {
+                                progress?.Report(new ComparisonProgress(
+                                    current,
+                                    totalFiles,
+                                    $"Compared {current} of {totalFiles} files"));
+                            }
+                        }
+                    }, cancellationToken);
+
+                // Wait for deserialization to complete and close its channel
+                await deserializationTask.ConfigureAwait(false);
+                deserializationChannel.Writer.Complete();
+
+                // Wait for all comparison tasks
+                await Task.WhenAll(comparisonTasks).ConfigureAwait(false);
+                comparisonChannel.Writer.Complete();
+
+                // Wait for aggregation
+                await aggregationTask.ConfigureAwait(false);
+
+                return performanceTracker.TrackOperation(
+                    FinalizeResultsOperationName,
+                    () => new MultiFolderComparisonResult
+                    {
+                        TotalPairsCompared = totalFiles,
+                        AllEqual = allEqual,
+                        FilePairResults = results.OrderBy(r => r.File1Name, StringComparer.Ordinal).ToList(),
+                        Metadata = new Dictionary<string, object>(StringComparer.Ordinal),
+                    });
+            }).ConfigureAwait(false);
 
     public void Dispose() => threadLocalCompareLogic?.Dispose();
 
@@ -220,7 +236,7 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
     /// </summary>
     private async Task RunDeserializationStageAsync(
         IReadOnlyList<(string File1Path, string File2Path, string RelativePath)> filePairs,
-        Func<Stream, DeserializationResult> deserializer,
+        Type modelType,
         ChannelWriter<DeserializedFilePair> writer,
         CancellationToken cancellationToken)
         => await Parallel.ForEachAsync(
@@ -234,76 +250,102 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
             {
                 var (file1Path, file2Path, relativePath) = filePair;
 
-                try
-                {
-                    // OPTIMIZATION: Read and deserialize both files in parallel using TryDeserialize
-                    // which pre-validates root elements and catches exceptions internally —
-                    // no InvalidOperationException propagates to the debugger.
-                    var (result1, result2) = await DeserializeBothFilesAsync(
-                        file1Path, file2Path, deserializer, ct).ConfigureAwait(false);
-
-                    // Check for deserialization failures (returned as result, not as exception)
-                    if (!result1.Success || !result2.Success)
+                await performanceTracker.TrackOperationAsync(
+                    DeserializePairOperationName,
+                    async () =>
                     {
-                        var errorMessages = new List<string>();
-                        if (!result1.Success)
+                        try
                         {
-                            errorMessages.Add($"File 1: {result1.ErrorMessage}");
+                            var file1Format = FileTypeDetector.DetectFormat(file1Path);
+                            var file2Format = FileTypeDetector.DetectFormat(file2Path);
+                            if (file1Format != file2Format)
+                            {
+                                await writer.WriteAsync(
+                                    new DeserializedFilePair
+                                    {
+                                        File1Path = file1Path,
+                                        File2Path = file2Path,
+                                        RelativePath = relativePath,
+                                        ErrorMessage = $"Cannot compare files of different formats: {file1Format} vs {file2Format}",
+                                        ErrorType = nameof(InvalidOperationException),
+                                    },
+                                    ct).ConfigureAwait(false);
+                                return;
+                            }
+
+                            var deserializer = GetOrCreateDeserializer(modelType, file1Format);
+
+                            // OPTIMIZATION: Read and deserialize both files in parallel using TryDeserialize
+                            // which pre-validates root elements and catches exceptions internally —
+                            // no InvalidOperationException propagates to the debugger.
+                            var deserializationStart = Stopwatch.GetTimestamp();
+                            var (result1, result2) = await DeserializeBothFilesAsync(
+                                file1Path, file2Path, deserializer, ct).ConfigureAwait(false);
+                            ComparisonPhaseTimingScope.Current?.AddDeserialization(Stopwatch.GetElapsedTime(deserializationStart));
+
+                            // Check for deserialization failures (returned as result, not as exception)
+                            if (!result1.Success || !result2.Success)
+                            {
+                                var errorMessages = new List<string>();
+                                if (!result1.Success)
+                                {
+                                    errorMessages.Add($"File 1: {result1.ErrorMessage}");
+                                }
+
+                                if (!result2.Success)
+                                {
+                                    errorMessages.Add($"File 2: {result2.ErrorMessage}");
+                                }
+
+                                var combinedError = string.Join(" | ", errorMessages);
+                                logger.LogWarning("Deserialization failed for file pair {Path}: {Error}", relativePath, combinedError);
+
+                                var errorPair = new DeserializedFilePair
+                                {
+                                    File1Path = file1Path,
+                                    File2Path = file2Path,
+                                    RelativePath = relativePath,
+                                    Object1 = null,
+                                    Object2 = null,
+                                    ErrorMessage = combinedError,
+                                    ErrorType = "DeserializationError",
+                                };
+
+                                await writer.WriteAsync(errorPair, ct).ConfigureAwait(false);
+                                return;
+                            }
+
+                            var deserializedPair = new DeserializedFilePair
+                            {
+                                File1Path = file1Path,
+                                File2Path = file2Path,
+                                RelativePath = relativePath,
+                                Object1 = result1.Value,
+                                Object2 = result2.Value,
+                            };
+
+                            await writer.WriteAsync(deserializedPair, ct).ConfigureAwait(false);
                         }
-
-                        if (!result2.Success)
+                        catch (Exception ex)
                         {
-                            errorMessages.Add($"File 2: {result2.ErrorMessage}");
+                            // This catch is now only for truly unexpected errors (I/O failures, etc.)
+                            // Deserialization errors are handled above via DeserializationResult.
+                            logger.LogError(ex, "Unexpected error processing file pair: {Path}: {Message}", relativePath, ex.Message);
+
+                            var errorPair = new DeserializedFilePair
+                            {
+                                File1Path = file1Path,
+                                File2Path = file2Path,
+                                RelativePath = relativePath,
+                                Object1 = null,
+                                Object2 = null,
+                                ErrorMessage = ex.Message,
+                                ErrorType = ex.GetType().Name,
+                            };
+
+                            await writer.WriteAsync(errorPair, ct).ConfigureAwait(false);
                         }
-
-                        var combinedError = string.Join(" | ", errorMessages);
-                        logger.LogWarning("Deserialization failed for file pair {Path}: {Error}", relativePath, combinedError);
-
-                        var errorPair = new DeserializedFilePair
-                        {
-                            File1Path = file1Path,
-                            File2Path = file2Path,
-                            RelativePath = relativePath,
-                            Object1 = null,
-                            Object2 = null,
-                            ErrorMessage = combinedError,
-                            ErrorType = "DeserializationError",
-                        };
-
-                        await writer.WriteAsync(errorPair, ct).ConfigureAwait(false);
-                        return;
-                    }
-
-                    var deserializedPair = new DeserializedFilePair
-                    {
-                        File1Path = file1Path,
-                        File2Path = file2Path,
-                        RelativePath = relativePath,
-                        Object1 = result1.Value,
-                        Object2 = result2.Value,
-                    };
-
-                    await writer.WriteAsync(deserializedPair, ct).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    // This catch is now only for truly unexpected errors (I/O failures, etc.)
-                    // Deserialization errors are handled above via DeserializationResult.
-                    logger.LogError(ex, "Unexpected error processing file pair: {Path}: {Message}", relativePath, ex.Message);
-
-                    var errorPair = new DeserializedFilePair
-                    {
-                        File1Path = file1Path,
-                        File2Path = file2Path,
-                        RelativePath = relativePath,
-                        Object1 = null,
-                        Object2 = null,
-                        ErrorMessage = ex.Message,
-                        ErrorType = ex.GetType().Name,
-                    };
-
-                    await writer.WriteAsync(errorPair, ct).ConfigureAwait(false);
-                }
+                    }).ConfigureAwait(false);
             }).ConfigureAwait(false);
 
     /// <summary>
@@ -375,29 +417,43 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
             {
                 // OPTIMIZATION: Reuse thread-local CompareLogic
                 var compareLogic = threadLocalCompareLogic.Value!;
+                var compareStart = Stopwatch.GetTimestamp();
+                var comparisonResult = performanceTracker.TrackOperation(
+                    ComparePairOperationName,
+                    () => compareLogic.Compare(pair.Object1!, pair.Object2!));
+                ComparisonPhaseTimingScope.Current?.AddCompare(Stopwatch.GetElapsedTime(compareStart));
 
-                // Perform comparison
-                var result = compareLogic.Compare(pair.Object1!, pair.Object2!);
-
-                // Filter ignored differences
-                result = configService.FilterSmartIgnoredDifferences(result, modelType);
-                result = configService.FilterIgnoredDifferences(result);
+                var filterStart = Stopwatch.GetTimestamp();
+                var result = performanceTracker.TrackOperation(
+                    FilterPairOperationName,
+                    () =>
+                    {
+                        var filteredResult = configService.FilterSmartIgnoredDifferences(comparisonResult, modelType);
+                        filteredResult = configService.FilterIgnoredDifferences(filteredResult);
+                        return DifferenceFilter.FilterDuplicateDifferences(filteredResult, logger);
+                    });
+                ComparisonPhaseTimingScope.Current?.AddFilter(Stopwatch.GetElapsedTime(filterStart));
 
                 // OPTIMIZATION: Pool categorizer instances
                 var categorizer = categorizerPool.Get();
                 try
                 {
-                    var summary = categorizer.CategorizeAndSummarize(result);
+                    var pairResult = performanceTracker.TrackOperation(
+                        SummarizePairOperationName,
+                        () =>
+                        {
+                            var summary = categorizer.CategorizeAndSummarize(result);
 
-                    var pairResult = new FilePairComparisonResult
-                    {
-                        File1Name = Path.GetFileName(pair.File1Path),
-                        File2Name = Path.GetFileName(pair.File2Path),
-                        File1Path = pair.File1Path,
-                        File2Path = pair.File2Path,
-                        Result = result,
-                        Summary = summary,
-                    };
+                            return new FilePairComparisonResult
+                            {
+                                File1Name = Path.GetFileName(pair.File1Path),
+                                File2Name = Path.GetFileName(pair.File2Path),
+                                File1Path = pair.File1Path,
+                                File2Path = pair.File2Path,
+                                Result = result,
+                                Summary = summary,
+                            };
+                        });
 
                     await writer.WriteAsync(pairResult, cancellationToken).ConfigureAwait(false);
                 }
@@ -463,6 +519,32 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
         optimizedLogic.Config.MembersToInclude = new List<string>();
         optimizedLogic.Config.CustomComparers = new List<KellermanSoftware.CompareNetObjects.TypeComparers.BaseTypeComparer>();
 
+        var ignoreRules = configService.GetIgnoreRules();
+        var collectionOrderRules = ignoreRules.Where(r => r.IgnoreCollectionOrder && !r.IgnoreCompletely).ToList();
+        var ignoredPropertyPaths = ignoreRules
+            .Where(r => r.IgnoreCompletely)
+            .Select(r => r.PropertyPath)
+            .Distinct(System.StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (currentConfig.IgnoreCollectionOrder || collectionOrderRules.Any())
+        {
+            var propertiesWithIgnoreOrder = collectionOrderRules.Select(r => r.PropertyPath).ToList();
+            var expandedProperties = propertiesWithIgnoreOrder
+                .SelectMany(p => new[] { p, p.Replace("[*]", "[0]"), p.Replace("[*]", "[1]") })
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+
+            var collectionOrderComparer = new PropertySpecificCollectionOrderComparer(
+                RootComparerFactory.GetRootComparer(),
+                expandedProperties,
+                logger,
+                applyGlobally: currentConfig.IgnoreCollectionOrder,
+                ignoredPropertyPatterns: ignoredPropertyPaths);
+
+            optimizedLogic.Config.CustomComparers.Add(collectionOrderComparer);
+        }
+
         // Always ignore array length properties
         if (!optimizedLogic.Config.MembersToIgnore.Contains("Length", StringComparer.Ordinal))
         {
@@ -477,16 +559,81 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
         return optimizedLogic;
     }
 
+    private ThreadLocal<CompareLogic> CreateThreadLocalCompareLogic() => new ThreadLocal<CompareLogic>(
+        () => CreateOptimizedCompareLogic(),
+        trackAllValues: false);
+
+    private void RefreshCompareLogicIfNeeded()
+    {
+        var currentFingerprint = GenerateConfigurationFingerprint();
+        if (string.Equals(cachedConfigFingerprint, currentFingerprint, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        lock (compareLogicRefreshLock)
+        {
+            currentFingerprint = GenerateConfigurationFingerprint();
+            if (string.Equals(cachedConfigFingerprint, currentFingerprint, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            var previousThreadLocal = threadLocalCompareLogic;
+            threadLocalCompareLogic = CreateThreadLocalCompareLogic();
+            cachedConfigFingerprint = currentFingerprint;
+            previousThreadLocal.Dispose();
+        }
+    }
+
+    private string GenerateConfigurationFingerprint()
+    {
+        var config = new
+        {
+            GlobalIgnoreCollectionOrder = configService.GetIgnoreCollectionOrder(),
+            GlobalIgnoreStringCase = configService.GetIgnoreStringCase(),
+            GlobalIgnoreTrailingWhitespaceAtEnd = configService.GetIgnoreTrailingWhitespaceAtEnd(),
+            IgnoreRules = configService.GetIgnoreRules()
+                .OrderBy(rule => rule.PropertyPath, StringComparer.Ordinal)
+                .Select(rule => new { rule.PropertyPath, rule.IgnoreCompletely, rule.IgnoreCollectionOrder })
+                .ToList(),
+            SmartIgnoreRules = configService.GetSmartIgnoreRules()
+                .Where(rule => rule.IsEnabled)
+                .OrderBy(rule => rule.Type)
+                .ThenBy(rule => rule.Value, StringComparer.Ordinal)
+                .Select(rule => new { rule.Type, rule.Value, rule.IsEnabled })
+                .ToList(),
+        };
+
+        var json = JsonSerializer.Serialize(config);
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(json));
+        return Convert.ToBase64String(hash);
+    }
+
     /// <summary>
-    /// Get or create a cached deserializer delegate for the model type.
-    /// Uses <see cref="IXmlDeserializationService.TryDeserializeXml"/> directly instead of
-    /// reflection-based <see cref="IXmlDeserializationService.DeserializeXml{T}"/>,
-    /// eliminating both the reflection overhead and the exception throwing for expected
-    /// failures like SOAP faults or wrong root elements.
+    /// Get or create a cached deserializer delegate for the model type and format.
     /// </summary>
-    private Func<Stream, DeserializationResult> GetOrCreateDeserializer(Type modelType) =>
-        cachedDeserializers.GetOrAdd(modelType, type =>
-            stream => deserializationService.TryDeserializeXml(stream, type));
+    private Func<Stream, DeserializationResult> GetOrCreateDeserializer(Type modelType, SerializationFormat format) =>
+        cachedDeserializers.GetOrAdd(new DeserializerCacheKey(modelType, format), static (key, state) =>
+        {
+            var (pipeline, serviceFactory) = state;
+
+            if (key.Format == SerializationFormat.Xml)
+            {
+                return stream => pipeline.deserializationService.TryDeserializeXml(stream, key.ModelType);
+            }
+
+            if (serviceFactory == null)
+            {
+                return _ => DeserializationResult.Failure(
+                    $"No deserialization factory is available for {key.Format} format.");
+            }
+
+            var service = serviceFactory.GetService(key.Format);
+            return stream => service.TryDeserialize(stream, key.ModelType, key.Format);
+        }, (this, deserializationFactory));
+
+    private readonly record struct DeserializerCacheKey(Type ModelType, SerializationFormat Format);
 
     /// <summary>
     /// Internal class for passing deserialized objects between pipeline stages.

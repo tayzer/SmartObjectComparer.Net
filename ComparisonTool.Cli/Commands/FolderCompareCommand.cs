@@ -18,6 +18,8 @@ public static class FolderCompareCommand
     /// <summary>
     /// Creates the "folder" sub-command.
     /// </summary>
+    /// <param name="configuration">Application configuration used to build required services.</param>
+    /// <returns>The configured folder comparison command.</returns>
     public static Command Create(IConfiguration configuration)
     {
         var dir1Arg = new Argument<DirectoryInfo>("directory1") { Description = "Path to the first (expected) directory" };
@@ -135,7 +137,8 @@ public static class FolderCompareCommand
         {
             var dir1 = parseResult.GetValue(dir1Arg);
             var dir2 = parseResult.GetValue(dir2Arg);
-            var model = parseResult.GetValue(modelOption)!;
+            var model = parseResult.GetValue(modelOption)
+                ?? throw new InvalidOperationException("Missing required option --model.");
             var includeAll = parseResult.GetValue(includeAllOption);
             var patternAnalysis = parseResult.GetValue(patternAnalysisOption);
             var semanticAnalysis = parseResult.GetValue(semanticAnalysisOption);

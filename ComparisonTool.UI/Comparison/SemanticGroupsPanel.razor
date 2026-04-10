@@ -1,0 +1,251 @@
+@namespace ComparisonTool.UI.Comparison
+@using ComparisonTool.Core.Comparison.Analysis
+@using KellermanSoftware.CompareNetObjects
+@using MudBlazor
+
+<MudPaper Elevation="2" Class="pa-4 mt-4">
+    <MudStack Spacing="3">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.h5">Semantic Difference Groups</MudText>
+            <MudStack Row="true" Spacing="2">
+                <MudButton Variant="Variant.Outlined" Color="Color.Default" Size="Size.Small" OnClick="() => IsCollapsed = !IsCollapsed"
+                           StartIcon="@(IsCollapsed ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ExpandLess)">
+                    @(IsCollapsed ? "Expand" : "Collapse")
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" OnClick="ExportSemanticAnalysis"
+                           StartIcon="@Icons.Material.Filled.Download">
+                    Export Analysis
+                </MudButton>
+            </MudStack>
+        </MudStack>
+        
+        @if (!IsCollapsed)
+        {
+            @if (Analysis?.SemanticGroups == null || !Analysis.SemanticGroups.Any())
+            {
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                    No semantic difference groups have been identified.
+                </MudAlert>
+            }
+            else
+            {
+                <MudStack Spacing="1">
+                    <MudProgressLinear Value="@Analysis.CategorizedPercentage" Color="Color.Success" Size="Size.Large" Rounded="true">
+                        <MudText Typo="Typo.caption">@($"{Analysis.CategorizedPercentage:F1}% of differences semantically grouped")</MudText>
+                    </MudProgressLinear>
+                    <MudText Typo="Typo.caption" Color="Color.Default">
+                        @Analysis.CategorizedDifferences of @Analysis.TotalDifferences differences have been semantically categorized
+                    </MudText>
+                </MudStack>
+
+                <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true" Icon="@Icons.Material.Filled.Info">
+                    <MudText Typo="Typo.body2">
+                        <strong>What are Semantic Groups?</strong>
+                        These groups organize differences by their functional meaning rather than just by type.
+                        This helps you focus testing on related changes that might impact similar business logic.
+                    </MudText>
+                </MudAlert>
+
+                <MudSimpleTable Hover="true" Dense="true" Bordered="true" Elevation="0">
+                    <thead>
+                        <tr>
+                            <th>Semantic Group</th>
+                            <th>Description</th>
+                            <th>Differences</th>
+                            <th>Files</th>
+                            <th>Confidence</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var group in Analysis.SemanticGroups)
+                        {
+                            <tr @onclick="() => SelectGroup(group)" style="cursor: pointer; @(SelectedGroup == group ? "background-color: var(--mud-palette-primary-lighten);" : "")">
+                                <td><strong>@group.GroupName</strong></td>
+                                <td>@group.SemanticDescription</td>
+                                <td>@group.DifferenceCount</td>
+                                <td>@group.FileCount</td>
+                                <td style="min-width: 120px;">
+                                    <MudProgressLinear Value="@group.ConfidenceLevel" Color="@GetConfidenceColor(group.ConfidenceLevel)" Size="Size.Small" />
+                                </td>
+                                <td>
+                                    <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Default" OnClick="@((e) => { SelectGroup(group); })">
+                                        View
+                                    </MudButton>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+
+                @if (SelectedGroup != null)
+                {
+                    <MudPaper Elevation="1" Class="pa-4" Outlined="true">
+                        <MudStack Spacing="3">
+                            <MudText Typo="Typo.h6">@SelectedGroup.GroupName Details</MudText>
+                            <MudText Typo="Typo.body2">@SelectedGroup.SemanticDescription</MudText>
+
+                            <MudGrid Spacing="3">
+                                <MudItem xs="12" md="6">
+                                    <MudPaper Elevation="0" Outlined="true" Class="pa-3">
+                                        <MudText Typo="Typo.subtitle2" Class="mb-2">Affected Properties</MudText>
+                                        <MudList T="string" Dense="true">
+                                            @foreach (var prop in SelectedGroup.RelatedProperties.Take(10))
+                                            {
+                                                <MudListItem T="string">
+                                                    <MudText Typo="Typo.body2" Style="font-family: monospace;">@prop</MudText>
+                                                </MudListItem>
+                                            }
+                                            @if (SelectedGroup.RelatedProperties.Count > 10)
+                                            {
+                                                <MudListItem T="string">
+                                                    <MudText Typo="Typo.caption" Align="Align.Center">And @(SelectedGroup.RelatedProperties.Count - 10) more...</MudText>
+                                                </MudListItem>
+                                            }
+                                        </MudList>
+                                    </MudPaper>
+                                </MudItem>
+
+                                <MudItem xs="12" md="6">
+                                    <MudPaper Elevation="0" Outlined="true" Class="pa-3">
+                                        <MudText Typo="Typo.subtitle2" Class="mb-2">Affected Files</MudText>
+                                        <MudList T="string" Dense="true">
+                                            @foreach (var file in SelectedGroup.AffectedFiles.Take(10))
+                                            {
+                                                <MudListItem T="string">
+                                                    <MudText Typo="Typo.caption">@file</MudText>
+                                                </MudListItem>
+                                            }
+                                            @if (SelectedGroup.AffectedFiles.Count > 10)
+                                            {
+                                                <MudListItem T="string">
+                                                    <MudText Typo="Typo.caption" Align="Align.Center">And @(SelectedGroup.AffectedFiles.Count - 10) more...</MudText>
+                                                </MudListItem>
+                                            }
+                                        </MudList>
+                                    </MudPaper>
+                                </MudItem>
+                            </MudGrid>
+
+                            <MudStack Spacing="2">
+                                <MudText Typo="Typo.subtitle2">Example Differences</MudText>
+                                <MudSimpleTable Hover="true" Dense="true" Striped="true" Bordered="true" Elevation="0">
+                                    <thead>
+                                        <tr>
+                                            <th>Property</th>
+                                            <th>Old Value</th>
+                                            <th>New Value</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var diff in SelectedGroup.Differences.Take(10))
+                                        {
+                                            <tr>
+                                                <td><MudText Typo="Typo.body2" Style="font-family: monospace;">@diff.PropertyName</MudText></td>
+                                                <td><MudText Typo="Typo.body2" Color="Color.Error">@FormatValue(diff.Object1Value)</MudText></td>
+                                                <td><MudText Typo="Typo.body2" Color="Color.Success">@FormatValue(diff.Object2Value)</MudText></td>
+                                            </tr>
+                                        }
+                                        @if (SelectedGroup.Differences.Count > 10)
+                                        {
+                                            <tr>
+                                                <td colspan="3" style="text-align: center;">
+                                                    <MudText Typo="Typo.caption">And @(SelectedGroup.Differences.Count - 10) more differences...</MudText>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </MudSimpleTable>
+                            </MudStack>
+
+                            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Icon="@Icons.Material.Filled.Lightbulb">
+                                <MudText Typo="Typo.body2">
+                                    <strong>Testing Recommendation:</strong>
+                                    When testing these changes, focus on validating that @SelectedGroup.GroupName.ToLower()
+                                    are correctly handled throughout the application, especially for properties like
+                                    <span style="font-family: monospace;">@(SelectedGroup.RelatedProperties.FirstOrDefault() ?? "")</span>.
+                                </MudText>
+                                @{
+                                    var recommendation = GetTestingRecommendation(SelectedGroup.GroupName);
+                                    if (!string.IsNullOrEmpty(recommendation))
+                                    {
+                                        <MudText Typo="Typo.body2" Class="mt-2">@recommendation</MudText>
+                                    }
+                                }
+                            </MudAlert>
+                        </MudStack>
+                    </MudPaper>
+                }
+            }
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter]
+    public SemanticDifferenceAnalysis Analysis { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnExportAnalysis { get; set; }
+
+    private bool IsCollapsed = false;
+
+    private SemanticDifferenceGroup SelectedGroup { get; set; }
+
+    private void SelectGroup(SemanticDifferenceGroup group)
+    {
+        SelectedGroup = group;
+    }
+
+    private async Task ExportSemanticAnalysis()
+    {
+        if (Analysis != null)
+        {
+            await OnExportAnalysis.InvokeAsync("semantic-analysis-report.md");
+        }
+    }
+
+    private Color GetConfidenceColor(int confidence)
+    {
+        if (confidence >= 80) return Color.Success;
+        if (confidence >= 60) return Color.Info;
+        if (confidence >= 40) return Color.Warning;
+        return Color.Error;
+    }
+
+    private string FormatValue(object value)
+    {
+        if (value == null)
+            return "null";
+
+        if (value is DateTime dt)
+            return dt.ToString("yyyy-MM-dd HH:mm:ss");
+
+        if (value is string str && str.Length > 50)
+            return str.Substring(0, 47) + "...";
+
+        return value.ToString();
+    }
+
+    private string? GetTestingRecommendation(string groupName)
+    {
+        return groupName switch
+        {
+            "Status Changes" => "Verify the status transitions are valid according to business rules. Check that UI correctly reflects different statuses with appropriate styling. Confirm status-dependent behaviors work correctly.",
+
+            "ID Value Changes" => "Ensure consistent ID usage across related entities. Verify reference integrity - check that the new IDs are used consistently. Test lookup operations using the new ID values.",
+
+            "Timestamp/Date Changes" => "Verify date calculations and comparisons. Check date formatting in different contexts. Test date-sensitive business logic.",
+
+            "Score/Value Adjustments" => "Test calculations that depend on these values. Validate thresholds and boundaries still function correctly. Check that UI elements properly represent the new values.",
+
+            "Name/Description Changes" => "Check for text truncation in UI components. Verify translated content if localization is supported. Test search/filter functionality with the new text values.",
+
+            "Collection Order Changes" => "Verify sort operations behave correctly. Check pagination if applicable. Test operations that rely on specific positions within collections.",
+
+            "Tag Modifications" => "Test filtering and categorization features. Verify tag-based reporting. Check for visual indication of tags in the UI.",
+
+            _ => null
+        };
+    }
+}

@@ -56,6 +56,18 @@ public interface IComparisonService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Compare two files with auto-format detection (supports XML and JSON) with caching and
+    /// return a batch-friendly pair result instead of throwing for expected per-file failures.
+    /// </summary>
+    Task<FilePairComparisonResult> CompareFilesWithCachingAsPairResultAsync(
+        Stream oldFileStream,
+        Stream newFileStream,
+        string modelName,
+        string oldFilePath,
+        string newFilePath,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Compare multiple folder pairs of XML files.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>

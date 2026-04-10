@@ -1,0 +1,405 @@
+@namespace ComparisonTool.UI.Comparison
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@using ComparisonTool.Core.AcceptedDifferences
+@using ComparisonTool.Core.Abstractions
+
+@inject IAcceptedDifferenceService AcceptedDifferenceService
+@inject IJSRuntime JS
+
+@if (!AcceptedDifferenceService.IsEnabled)
+{
+    @if (ShowHeader)
+    {
+        <MudPaper Outlined="true" Class="pa-4">
+            <MudText Typo="Typo.body2" Color="Color.Default">Accepted-difference profiles are disabled.</MudText>
+        </MudPaper>
+    }
+}
+else
+{
+    if (ShowHeader)
+    {
+        <MudStack Spacing="2">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudText Typo="Typo.subtitle2">@Title</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default">@acceptedDifferenceProfiles.Count tracked</MudChip>
+                </MudStack>
+                <MudButton Variant="Variant.Outlined"
+                           Size="Size.Small"
+                           OnClick="ToggleCollapsed"
+                           EndIcon="@(isCollapsed ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ExpandLess)">
+                    @(isCollapsed ? "Show" : "Hide")
+                </MudButton>
+            </MudStack>
+
+            @if (!isCollapsed)
+            {
+                @RenderPanelBody()
+            }
+        </MudStack>
+    }
+    else
+    {
+        @RenderPanelBody()
+    }
+}
+
+@code {
+    private static readonly JsonSerializerOptions ExportJsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Converters = { new JsonStringEnumConverter() },
+    };
+
+    [Parameter] public string Title { get; set; } = "Accepted Difference Profiles";
+    [Parameter] public bool ShowHeader { get; set; } = true;
+    [Parameter] public bool StartCollapsed { get; set; } = true;
+    [Parameter] public EventCallback OnProfilesChanged { get; set; }
+
+    private readonly string importInputId = $"accepted-difference-import-{Guid.NewGuid():N}";
+    private List<AcceptedDifferenceProfile> acceptedDifferenceProfiles = new();
+    private bool isCollapsed;
+    private bool collapseInitialized;
+    private bool replaceExistingOnImport;
+    private string acceptedDifferenceSearchFilter = string.Empty;
+    private string acceptedDifferenceStatusFilter = "All";
+    private string profileStatusMessage = string.Empty;
+    private bool profileStatusIsError;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!collapseInitialized)
+        {
+            isCollapsed = StartCollapsed;
+            collapseInitialized = true;
+        }
+
+        await LoadProfilesAsync();
+    }
+
+    private RenderFragment RenderPanelBody() => @<MudStack Spacing="2">
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="flex-wrap">
+            <MudTextField @bind-Value="acceptedDifferenceSearchFilter"
+                          Placeholder="Search by path, notes, or ticket..."
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true"
+                          Style="min-width: 240px;" />
+            <MudSelect T="string"
+                       @bind-Value="acceptedDifferenceStatusFilter"
+                       Label="Status"
+                       Variant="Variant.Outlined"
+                       Margin="Margin.Dense"
+                       Style="min-width: 180px;">
+                <MudSelectItem Value='"All"'>All Statuses</MudSelectItem>
+                <MudSelectItem Value='"AcceptedDifference"'>Accepted Difference</MudSelectItem>
+                <MudSelectItem Value='"KnownBug"'>Known Bug</MudSelectItem>
+                <MudSelectItem Value='"FixedVerified"'>Fixed / Verified</MudSelectItem>
+            </MudSelect>
+            <MudSwitch T="bool"
+                       @bind-Value="replaceExistingOnImport"
+                       Color="Color.Warning"
+                       Label="Replace existing on import"
+                       Class="ma-0" />
+        </MudStack>
+
+        <MudStack Row="true" Spacing="2" Class="flex-wrap">
+            <MudChip T="string" Size="Size.Small" Color="Color.Default">@GetFilteredProfiles().Count() visible</MudChip>
+            @if (GetCountByStatus(AcceptedDifferenceStatus.AcceptedDifference) > 0)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Success">@GetCountByStatus(AcceptedDifferenceStatus.AcceptedDifference) Accepted</MudChip>
+            }
+            @if (GetCountByStatus(AcceptedDifferenceStatus.KnownBug) > 0)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Warning">@GetCountByStatus(AcceptedDifferenceStatus.KnownBug) Known Bugs</MudChip>
+            }
+            @if (GetCountByStatus(AcceptedDifferenceStatus.FixedVerified) > 0)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Info">@GetCountByStatus(AcceptedDifferenceStatus.FixedVerified) Fixed / Verified</MudChip>
+            }
+        </MudStack>
+
+        <MudStack Row="true" Spacing="2" Class="flex-wrap">
+            <InputFile OnChange="HandleAcceptedDifferenceImportFileSelected" accept=".json" id="@importInputId" style="display: none;" />
+            <MudButton Variant="Variant.Outlined"
+                       Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.Upload"
+                       HtmlTag="label"
+                       for="@importInputId">
+                Import Profiles...
+            </MudButton>
+            <MudButton Variant="Variant.Outlined"
+                       Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.Download"
+                       Disabled="@(!acceptedDifferenceProfiles.Any())"
+                       OnClick="ExportAcceptedDifferenceProfilesAsync">
+                Export Profiles
+            </MudButton>
+            <MudButton Variant="Variant.Outlined"
+                       Size="Size.Small"
+                       Color="Color.Error"
+                       StartIcon="@Icons.Material.Filled.DeleteSweep"
+                       Disabled="@(!acceptedDifferenceProfiles.Any())"
+                       OnClick="ClearAcceptedDifferenceProfilesAsync">
+                Clear All Profiles
+            </MudButton>
+        </MudStack>
+
+        @if (!string.IsNullOrWhiteSpace(profileStatusMessage))
+        {
+            <MudAlert Severity="@(profileStatusIsError ? Severity.Error : Severity.Success)" Variant="Variant.Outlined">
+                @profileStatusMessage
+            </MudAlert>
+        }
+
+        @if (acceptedDifferenceProfiles.Any())
+        {
+            <MudPaper Outlined="true" Style="max-height: 320px; overflow-y: auto;">
+                @foreach (var profile in GetFilteredProfiles())
+                {
+                    <MudStack Spacing="1" Class="pa-3">
+                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Spacing="2">
+                            <MudStack Spacing="1" Style="min-width: 0;">
+                                <MudText Typo="Typo.body2" Style="font-family: 'Consolas', 'Monaco', monospace; word-break: break-all;">
+                                    @profile.NormalizedPropertyPath
+                                </MudText>
+                                <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                                    <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(profile.Status)">@GetStatusLabel(profile.Status)</MudChip>
+                                    @if (!string.IsNullOrWhiteSpace(profile.TicketId))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Warning">@profile.TicketId</MudChip>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(profile.SamplePropertyPath) && !string.Equals(profile.SamplePropertyPath, profile.NormalizedPropertyPath, StringComparison.Ordinal))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Default">@profile.SamplePropertyPath</MudChip>
+                                    }
+                                </MudStack>
+                            </MudStack>
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                           Size="Size.Small"
+                                           Color="Color.Error"
+                                           OnClick="@(() => RemoveAcceptedDifferenceProfileAsync(profile))" />
+                        </MudStack>
+
+                        <MudText Typo="Typo.caption" Color="Color.Default">
+                            Expected: @profile.SampleExpectedValue
+                        </MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Default">
+                            Actual: @profile.SampleActualValue
+                        </MudText>
+                        @if (!string.IsNullOrWhiteSpace(profile.Notes))
+                        {
+                            <MudText Typo="Typo.body2">@profile.Notes</MudText>
+                        }
+                        <MudText Typo="Typo.caption" Color="Color.Default">
+                            Updated @profile.UpdatedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                        </MudText>
+                    </MudStack>
+                    <MudDivider />
+                }
+            </MudPaper>
+        }
+        else
+        {
+            <MudPaper Outlined="true" Class="pa-4" Style="text-align: center;">
+                <MudStack Row="true" Justify="Justify.Center" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Bookmarks" Color="Color.Default" />
+                    <MudText Typo="Typo.body2" Color="Color.Default">No accepted-difference profiles saved yet</MudText>
+                </MudStack>
+            </MudPaper>
+        }
+    </MudStack>;
+
+    private async Task LoadProfilesAsync()
+    {
+        acceptedDifferenceProfiles = (await AcceptedDifferenceService.GetAllAsync())
+            .OrderByDescending(profile => profile.UpdatedUtc)
+            .ThenBy(profile => profile.NormalizedPropertyPath, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private IEnumerable<AcceptedDifferenceProfile> GetFilteredProfiles()
+    {
+        IEnumerable<AcceptedDifferenceProfile> filtered = acceptedDifferenceProfiles;
+
+        if (!string.Equals(acceptedDifferenceStatusFilter, "All", StringComparison.Ordinal))
+        {
+            filtered = filtered.Where(profile => string.Equals(profile.Status.ToString(), acceptedDifferenceStatusFilter, StringComparison.Ordinal));
+        }
+
+        if (!string.IsNullOrWhiteSpace(acceptedDifferenceSearchFilter))
+        {
+            var filter = acceptedDifferenceSearchFilter.Trim();
+            filtered = filtered.Where(profile =>
+                profile.NormalizedPropertyPath.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                profile.SamplePropertyPath.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                (profile.Notes?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (profile.TicketId?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        return filtered;
+    }
+
+    private int GetCountByStatus(AcceptedDifferenceStatus status) => acceptedDifferenceProfiles.Count(profile => profile.Status == status);
+
+    private static string GetStatusLabel(AcceptedDifferenceStatus status) => status switch
+    {
+        AcceptedDifferenceStatus.AcceptedDifference => "Accepted Difference",
+        AcceptedDifferenceStatus.KnownBug => "Known Bug",
+        AcceptedDifferenceStatus.FixedVerified => "Fixed / Verified",
+        _ => status.ToString(),
+    };
+
+    private static Color GetStatusColor(AcceptedDifferenceStatus status) => status switch
+    {
+        AcceptedDifferenceStatus.AcceptedDifference => Color.Success,
+        AcceptedDifferenceStatus.KnownBug => Color.Warning,
+        AcceptedDifferenceStatus.FixedVerified => Color.Info,
+        _ => Color.Default,
+    };
+
+    private void ToggleCollapsed() => isCollapsed = !isCollapsed;
+
+    private async Task ExportAcceptedDifferenceProfilesAsync()
+    {
+        profileStatusMessage = string.Empty;
+        profileStatusIsError = false;
+
+        if (!acceptedDifferenceProfiles.Any())
+        {
+            profileStatusMessage = "No accepted-difference profiles to export.";
+            profileStatusIsError = true;
+            return;
+        }
+
+        try
+        {
+            var fileName = $"accepted_differences_{DateTime.Now:yyyyMMdd_HHmmss}.json";
+            var store = new AcceptedDifferenceProfileStore
+            {
+                Profiles = acceptedDifferenceProfiles.ToList(),
+            };
+
+            var json = JsonSerializer.Serialize(store, ExportJsonOptions);
+            await JS.InvokeVoidAsync("saveAsFile", fileName, "application/json", json);
+            profileStatusMessage = $"Exported {acceptedDifferenceProfiles.Count} accepted-difference profiles.";
+        }
+        catch (Exception ex)
+        {
+            profileStatusMessage = $"Export failed: {ex.Message}";
+            profileStatusIsError = true;
+        }
+    }
+
+    private async Task HandleAcceptedDifferenceImportFileSelected(InputFileChangeEventArgs e)
+    {
+        profileStatusMessage = string.Empty;
+        profileStatusIsError = false;
+
+        var file = e.File;
+        if (file == null)
+        {
+            profileStatusMessage = "No file selected.";
+            profileStatusIsError = true;
+            return;
+        }
+
+        if (!file.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        {
+            profileStatusMessage = "Invalid file type. Please select a .json profile export file.";
+            profileStatusIsError = true;
+            return;
+        }
+
+        try
+        {
+            const long maxFileSize = 2 * 1024 * 1024;
+            if (file.Size > maxFileSize)
+            {
+                profileStatusMessage = $"File size exceeds the limit of {maxFileSize / 1024 / 1024} MB.";
+                profileStatusIsError = true;
+                return;
+            }
+
+            await using var stream = file.OpenReadStream(maxFileSize);
+            using var reader = new StreamReader(stream);
+            var json = await reader.ReadToEndAsync();
+
+            var importedProfiles = DeserializeImportedProfiles(json);
+            if (importedProfiles.Count == 0)
+            {
+                profileStatusMessage = "File does not contain any valid accepted-difference profiles.";
+                profileStatusIsError = true;
+                return;
+            }
+
+            var importedCount = await AcceptedDifferenceService.ImportAsync(importedProfiles, replaceExistingOnImport);
+            await LoadProfilesAsync();
+            await NotifyProfilesChangedAsync();
+
+            var modeLabel = replaceExistingOnImport ? "replaced" : "merged";
+            profileStatusMessage = $"Successfully {modeLabel} {importedCount} accepted-difference profiles.";
+        }
+        catch (JsonException ex)
+        {
+            profileStatusMessage = $"Import failed: Invalid JSON format. {ex.Message}";
+            profileStatusIsError = true;
+        }
+        catch (Exception ex)
+        {
+            profileStatusMessage = $"Import failed: {ex.Message}";
+            profileStatusIsError = true;
+        }
+
+        StateHasChanged();
+    }
+
+    private static List<AcceptedDifferenceProfile> DeserializeImportedProfiles(string json)
+    {
+        var store = JsonSerializer.Deserialize<AcceptedDifferenceProfileStore>(json, ExportJsonOptions);
+        if (store?.Profiles?.Any() == true)
+        {
+            return store.Profiles.Where(profile => profile != null).ToList();
+        }
+
+        return JsonSerializer.Deserialize<List<AcceptedDifferenceProfile>>(json, ExportJsonOptions)
+            ?.Where(profile => profile != null)
+            .ToList()
+            ?? new List<AcceptedDifferenceProfile>();
+    }
+
+    private async Task RemoveAcceptedDifferenceProfileAsync(AcceptedDifferenceProfile profile)
+    {
+        var removed = await AcceptedDifferenceService.RemoveByFingerprintAsync(profile.Fingerprint);
+        if (removed)
+        {
+            await LoadProfilesAsync();
+            await NotifyProfilesChangedAsync();
+            profileStatusMessage = "Accepted-difference profile removed.";
+            profileStatusIsError = false;
+        }
+    }
+
+    private async Task ClearAcceptedDifferenceProfilesAsync()
+    {
+        await AcceptedDifferenceService.ClearAsync();
+        await LoadProfilesAsync();
+        await NotifyProfilesChangedAsync();
+        profileStatusMessage = "Cleared all accepted-difference profiles.";
+        profileStatusIsError = false;
+    }
+
+    private async Task NotifyProfilesChangedAsync()
+    {
+        if (OnProfilesChanged.HasDelegate)
+        {
+            await OnProfilesChanged.InvokeAsync();
+        }
+    }
+}

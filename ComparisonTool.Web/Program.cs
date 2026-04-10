@@ -1,14 +1,17 @@
 using System.Xml.Serialization;
+using ComparisonTool.Core.Abstractions;
+using ComparisonTool.Core.RequestComparison.Models;
 using ComparisonTool.Core.DI;
 using ComparisonTool.Core.Models;
 using ComparisonTool.Core.RequestComparison.Services;
 using ComparisonTool.Web;
 using ComparisonTool.Web.Hubs;
-using ComparisonTool.Web.Models;
+
 using ComparisonTool.Web.Components;
 using ComparisonTool.Web.Services;
 using MudBlazor.Services;
 using Serilog;
+using Blazored.LocalStorage;
 
 try
 {
@@ -40,6 +43,9 @@ builder.Services
 // Add MudBlazor services
 builder.Services.AddMudServices();
 
+// Add Blazored Local Storage
+builder.Services.AddBlazoredLocalStorage();
+
 // Add HttpClient for request comparison
 builder.Services.AddHttpClient("RequestComparison")
     .ConfigureHttpClient(client =>
@@ -56,6 +62,13 @@ builder.Services.AddSingleton<IComparisonProgressPublisher, SignalRProgressPubli
 builder.Services.AddSingleton<RequestComparisonJobService>();
 builder.Services.AddScoped<ComparisonProgressService>();
 builder.Services.AddScoped<RawContentService>();
+
+builder.Services.AddScoped<IFileExportService, WebFileExportService>();
+builder.Services.AddScoped<IFolderPickerService, WebFolderPickerService>();
+builder.Services.AddScoped<INotificationService, WebNotificationService>();
+builder.Services.AddScoped<IScrollService, WebScrollService>();
+builder.Services.AddScoped<IRequestComparisonGateway, WebRequestComparisonGateway>();
+builder.Services.AddScoped<IProgressSubscriber, WebProgressSubscriber>();
 
 builder.Services.Configure<RequestComparisonEndpointOptions>(
     builder.Configuration.GetSection("RequestComparison:EndpointOptions"));
@@ -93,6 +106,7 @@ app.UseStaticFiles();
 app.UseAntiforgery();
 
 app.MapRazorComponents<App>()
+    .AddAdditionalAssemblies(typeof(ComparisonTool.UI.Pages.Home).Assembly)
     .AddInteractiveServerRenderMode();
 
 // Map SignalR hub for comparison progress

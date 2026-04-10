@@ -1,0 +1,18 @@
+@using MudBlazor
+
+<MudThemeProvider />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudMainContent Class="pa-4">
+        <Router AppAssembly="typeof(Main).Assembly"
+                AdditionalAssemblies="new[] { typeof(ComparisonTool.UI._Imports).Assembly }">
+            <Found Context="routeData">
+                <RouteView RouteData="routeData" />
+                <FocusOnNavigate RouteData="routeData" Selector="h1" />
+            </Found>
+        </Router>
+    </MudMainContent>
+</MudLayout>

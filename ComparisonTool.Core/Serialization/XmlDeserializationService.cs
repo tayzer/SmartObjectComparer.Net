@@ -1,6 +1,9 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Xml;
+using System.Xml.Linq;
 using System.Xml.Serialization;
+using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.Comparison.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -207,6 +210,7 @@ public class XmlDeserializationService : IXmlDeserializationService
 
             // Step 1: Pre-validate by reading the root element and checking CanDeserialize.
             // This catches root element mismatches (SOAP faults, wrong schemas) WITHOUT throwing.
+            var precheckStart = Stopwatch.GetTimestamp();
             using (var preCheckReader = XmlReader.Create(xmlStream, GetOptimizedReaderSettings()))
             {
                 XmlReader effectiveReader = preCheckReader;
@@ -221,11 +225,19 @@ public class XmlDeserializationService : IXmlDeserializationService
                 }
                 catch (XmlException ex)
                 {
+                    ComparisonPhaseTimingScope.Current?.AddXmlDeserializationPrecheck(Stopwatch.GetElapsedTime(precheckStart));
                     return DeserializationResult.Failure($"Malformed XML: {ex.Message}");
                 }
 
                 if (!serializer.CanDeserialize(effectiveReader))
                 {
+                    if (TryDetectSoapFault(xmlStream, out var soapFaultMessage))
+                    {
+                        ComparisonPhaseTimingScope.Current?.AddXmlDeserializationPrecheck(Stopwatch.GetElapsedTime(precheckStart));
+                        return DeserializationResult.Failure(soapFaultMessage!);
+                    }
+
+                    ComparisonPhaseTimingScope.Current?.AddXmlDeserializationPrecheck(Stopwatch.GetElapsedTime(precheckStart));
                     var actualRoot = effectiveReader.LocalName;
                     var actualNs = effectiveReader.NamespaceURI;
                     var expectedRoot = GetExpectedRootElementName(modelType);
@@ -240,6 +252,14 @@ public class XmlDeserializationService : IXmlDeserializationService
                 }
             }
 
+            if (TryDetectSoapFault(xmlStream, out var nestedSoapFaultMessage))
+            {
+                ComparisonPhaseTimingScope.Current?.AddXmlDeserializationPrecheck(Stopwatch.GetElapsedTime(precheckStart));
+                return DeserializationResult.Failure(nestedSoapFaultMessage!);
+            }
+
+            ComparisonPhaseTimingScope.Current?.AddXmlDeserializationPrecheck(Stopwatch.GetElapsedTime(precheckStart));
+
             // Step 2: Root element matches — perform full deserialization.
             // Reset the stream and create a fresh reader.
             xmlStream.Position = 0;
@@ -251,7 +271,18 @@ public class XmlDeserializationService : IXmlDeserializationService
                 logger.LogDebug("Using namespace-agnostic reader for type {Type} (xsi:nil preserved)", modelType.Name);
             }
 
-            var result = serializer.Deserialize(deserializeReader);
+            var fullDeserializeStart = Stopwatch.GetTimestamp();
+            object? result;
+            try
+            {
+                result = serializer.Deserialize(deserializeReader);
+            }
+            finally
+            {
+                ComparisonPhaseTimingScope.Current?.AddXmlDeserializationFullDeserialize(
+                    Stopwatch.GetElapsedTime(fullDeserializeStart));
+            }
+
             if (result == null)
             {
                 return DeserializationResult.Failure(
@@ -354,6 +385,101 @@ public class XmlDeserializationService : IXmlDeserializationService
             "CLEARED ALL CACHES: {DeserializationCache} deserialization entries, {SerializerCache} serializer entries removed",
             deserializationCount,
             serializerCount);
+    }
+
+    private bool TryDetectSoapFault(Stream xmlStream, out string? errorMessage)
+    {
+        errorMessage = null;
+
+        if (!xmlStream.CanSeek)
+        {
+            return false;
+        }
+
+        var originalPosition = xmlStream.Position;
+        xmlStream.Position = 0;
+
+        try
+        {
+            using var reader = XmlReader.Create(xmlStream, GetOptimizedReaderSettings());
+            reader.MoveToContent();
+            if (!string.Equals(reader.LocalName, "Envelope", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            while (reader.Read())
+            {
+                if (reader.NodeType != XmlNodeType.Element || !string.Equals(reader.LocalName, "Fault", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                using var faultReader = reader.ReadSubtree();
+                errorMessage = BuildSoapFaultErrorMessage(faultReader);
+                return true;
+            }
+        }
+        catch (XmlException ex)
+        {
+            logger.LogDebug(ex, "Skipping SOAP fault precheck because the XML could not be scanned safely.");
+        }
+        finally
+        {
+            xmlStream.Position = originalPosition;
+        }
+
+        return false;
+    }
+
+    private static string BuildSoapFaultErrorMessage(XmlReader faultReader)
+    {
+        faultReader.MoveToContent();
+        var faultElement = XElement.Load(faultReader, LoadOptions.None);
+        if (faultElement.IsEmpty)
+        {
+            return "SOAP fault detected in response.";
+        }
+
+        var faultCode = GetFirstDescendantValue(faultElement, "faultcode")
+            ?? GetFirstDescendantValue(faultElement, "Value");
+
+        var faultString = GetFirstDescendantValue(faultElement, "faultstring")
+            ?? GetFirstDescendantValue(faultElement, "Text");
+
+        var detailXml = faultElement
+            .DescendantsAndSelf()
+            .FirstOrDefault(element => string.Equals(element.Name.LocalName, "detail", StringComparison.Ordinal) || string.Equals(element.Name.LocalName, "Detail", StringComparison.Ordinal))
+            ?.ToString(SaveOptions.DisableFormatting);
+
+        var message = "SOAP fault detected in response";
+        if (!string.IsNullOrWhiteSpace(faultCode))
+        {
+            message += $": code '{faultCode}'";
+        }
+
+        if (!string.IsNullOrWhiteSpace(faultString))
+        {
+            message += faultCode == null
+                ? $": {faultString}"
+                : $", message '{faultString}'";
+        }
+
+        if (!string.IsNullOrWhiteSpace(detailXml))
+        {
+            message += $". Detail: {detailXml}";
+        }
+
+        return message + ".";
+    }
+
+    private static string? GetFirstDescendantValue(XElement rootElement, string localName)
+    {
+        return rootElement
+            .DescendantsAndSelf()
+            .FirstOrDefault(element => string.Equals(element.Name.LocalName, localName, StringComparison.Ordinal))
+            ?.Value
+            .Trim();
     }
 
     /// <summary>

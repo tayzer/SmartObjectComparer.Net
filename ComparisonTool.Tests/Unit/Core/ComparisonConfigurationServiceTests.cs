@@ -238,6 +238,21 @@ public class ComparisonConfigurationServiceTests
     }
 
     [TestMethod]
+    public void ApplyConfiguredSettings_WhenCachedConfigurationIsReapplied_ShouldPreserveCaseSensitivity()
+    {
+        // Arrange
+        this.service.SetIgnoreStringCase(true);
+
+        // Act
+        this.service.ApplyConfiguredSettings();
+        this.service.ApplyConfiguredSettings();
+
+        // Assert
+        this.service.GetIgnoreStringCase().Should().BeTrue();
+        this.service.GetCurrentConfig().CaseSensitive.Should().BeFalse();
+    }
+
+    [TestMethod]
     public void FilterIgnoredDifferences_WithIgnoredProperty_ShouldFilterOutDifferences()
     {
         // Arrange
@@ -259,6 +274,122 @@ public class ComparisonConfigurationServiceTests
         // Assert
         filteredResult.Differences.Should().HaveCount(1);
         filteredResult.Differences.First().PropertyName.Should().Be("OtherProperty");
+    }
+
+    [TestMethod]
+    public void FilterIgnoredDifferences_WithLargeIgnoreSetAndIgnoredParentProperty_ShouldFilterNestedDifference()
+    {
+        // Arrange
+        var config = this.service.GetCurrentConfig();
+        var result = new ComparisonResult(config)
+        {
+            Differences = new List<Difference>
+            {
+                new () { PropertyName = "OrderData.Customer.Name", Object1Value = "Old", Object2Value = "New" },
+                new () { PropertyName = "OrderData.Supplier.Name", Object1Value = "Old", Object2Value = "New" },
+            },
+        };
+
+        this.AddPaddingIgnoreRules();
+        this.service.IgnoreProperty("OrderData.Customer");
+
+        // Act
+        var filteredResult = this.service.FilterIgnoredDifferences(result);
+
+        // Assert
+        filteredResult.Differences.Should().ContainSingle(d => d.PropertyName == "OrderData.Supplier.Name");
+    }
+
+    [TestMethod]
+    public void FilterIgnoredDifferences_WithLargeIgnoreSetAndIgnoredCollectionRoot_ShouldFilterCollectionItemDifference()
+    {
+        // Arrange
+        var config = this.service.GetCurrentConfig();
+        var result = new ComparisonResult(config)
+        {
+            Differences = new List<Difference>
+            {
+                new () { PropertyName = "Metadata.Performance.ComponentTimings[3].CallCount", Object1Value = "1", Object2Value = "2" },
+                new () { PropertyName = "Metadata.Version", Object1Value = "1", Object2Value = "2" },
+            },
+        };
+
+        this.AddPaddingIgnoreRules();
+        this.service.IgnoreProperty("Metadata.Performance.ComponentTimings");
+
+        // Act
+        var filteredResult = this.service.FilterIgnoredDifferences(result);
+
+        // Assert
+        filteredResult.Differences.Should().ContainSingle(d => d.PropertyName == "Metadata.Version");
+    }
+
+    [TestMethod]
+    public void FilterIgnoredDifferences_WithLargeIgnoreSetAndWildcardCollectionPattern_ShouldFilterMatchingDifference()
+    {
+        // Arrange
+        var config = this.service.GetCurrentConfig();
+        var result = new ComparisonResult(config)
+        {
+            Differences = new List<Difference>
+            {
+                new () { PropertyName = "OrderData.Items[7].Product.Category.Attributes[2].Name", Object1Value = "Old", Object2Value = "New" },
+                new () { PropertyName = "OrderData.Items[7].Product.Category.Attributes[2].Value", Object1Value = "Old", Object2Value = "New" },
+            },
+        };
+
+        this.AddPaddingIgnoreRules();
+        this.service.AddIgnoreRule(new IgnoreRule
+        {
+            PropertyPath = "OrderData.Items[*].Product.Category.Attributes[*].Name",
+            IgnoreCompletely = true,
+        });
+
+        // Act
+        var filteredResult = this.service.FilterIgnoredDifferences(result);
+
+        // Assert
+        filteredResult.Differences.Should().ContainSingle(d => d.PropertyName == "OrderData.Items[7].Product.Category.Attributes[2].Value");
+    }
+
+    [TestMethod]
+    public void FilterIgnoredDifferences_WhenIgnoreRulesChange_ShouldRebuildCachedDirectMatcher()
+    {
+        // Arrange
+        var config = this.service.GetCurrentConfig();
+        var initialResult = new ComparisonResult(config)
+        {
+            Differences = new List<Difference>
+            {
+                new () { PropertyName = "OrderData.Customer.Name", Object1Value = "Old", Object2Value = "New" },
+                new () { PropertyName = "OrderData.Supplier.Name", Object1Value = "Old", Object2Value = "New" },
+            },
+        };
+
+        this.AddPaddingIgnoreRules();
+        this.service.IgnoreProperty("OrderData.Customer");
+
+        // Act
+        var initiallyFiltered = this.service.FilterIgnoredDifferences(initialResult);
+
+        this.service.RemoveIgnoredProperty("OrderData.Customer");
+
+        var refreshedResult = new ComparisonResult(config)
+        {
+            Differences = new List<Difference>
+            {
+                new () { PropertyName = "OrderData.Customer.Name", Object1Value = "Old", Object2Value = "New" },
+                new () { PropertyName = "OrderData.Supplier.Name", Object1Value = "Old", Object2Value = "New" },
+            },
+        };
+
+        var refreshedFiltered = this.service.FilterIgnoredDifferences(refreshedResult);
+
+        // Assert
+        initiallyFiltered.Differences.Should().ContainSingle(d => d.PropertyName == "OrderData.Supplier.Name");
+        refreshedFiltered.Differences.Should().HaveCount(2);
+        refreshedFiltered.Differences.Should().Contain(d => d.PropertyName == "OrderData.Customer.Name");
+        refreshedFiltered.Differences.Should().Contain(d => d.PropertyName == "OrderData.Supplier.Name");
     }
 
     [TestMethod]
@@ -413,6 +544,14 @@ public class ComparisonConfigurationServiceTests
         public string? IgnoredProperty
         {
             get; set;
+        }
+    }
+
+    private void AddPaddingIgnoreRules(int count = 10)
+    {
+        for (var index = 0; index < count; index++)
+        {
+            this.service.IgnoreProperty($"Padding.Ignore.{index}");
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿using ComparisonTool.Core.RequestComparison.Models;
+using ComparisonTool.Core.RequestComparison.Models;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.SignalR.Client;
 

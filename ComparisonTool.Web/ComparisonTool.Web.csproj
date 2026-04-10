@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <PackageReference Include="Blazor.Bootstrap" />
+    <PackageReference Include="Blazored.LocalStorage" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
     <PackageReference Include="DiffPlex" />
     <PackageReference Include="MudBlazor" />
@@ -28,6 +29,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ComparisonTool.Core\ComparisonTool.Core.csproj" />
+    <ProjectReference Include="..\ComparisonTool.UI\ComparisonTool.UI.csproj" />
   </ItemGroup>
 
   <ItemGroup>

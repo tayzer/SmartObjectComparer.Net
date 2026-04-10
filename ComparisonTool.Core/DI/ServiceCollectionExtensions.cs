@@ -1,4 +1,6 @@
 using System.Xml.Serialization;
+using ComparisonTool.Core.AcceptedDifferences;
+using ComparisonTool.Core.Abstractions;
 using ComparisonTool.Core.Comparison;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Models;
@@ -7,6 +9,7 @@ using ComparisonTool.Core.Utilities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using CoreXmlSerializerFactory = ComparisonTool.Core.Serialization.XmlSerializerFactory;
 
 namespace ComparisonTool.Core.DI;
@@ -222,10 +225,12 @@ public static class ServiceCollectionExtensions
 
     private static void ConfigureOptionsFromConfiguration(IServiceCollection services, IConfiguration? configuration)
     {
+        services.AddOptions();
+
         if (configuration != null)
         {
-            services.AddOptions();
             services.Configure<ComparisonConfigurationOptions>(configuration.GetSection("ComparisonSettings"));
+            services.Configure<AcceptedDifferencesOptions>(configuration.GetSection("AcceptedDifferences"));
         }
     }
 
@@ -242,11 +247,14 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<PerformanceTracker>();
         services.AddSingleton<SystemResourceMonitor>();
         services.AddSingleton<ComparisonResultCacheService>();
+        services.AddSingleton<AcceptedDifferenceFingerprintBuilder>();
+        services.AddSingleton<IAcceptedDifferenceService, AcceptedDifferenceService>();
 
         services.AddSingleton<IComparisonConfigurationService>(provider =>
         {
             var logger = provider.GetRequiredService<ILogger<ComparisonConfigurationService>>();
-            var configurationService = new ComparisonConfigurationService(logger);
+            var options = provider.GetService<IOptions<ComparisonConfigurationOptions>>();
+            var configurationService = new ComparisonConfigurationService(logger, options);
             var cacheService = provider.GetRequiredService<ComparisonResultCacheService>();
             configurationService.SetCacheService(cacheService);
             return configurationService;
