@@ -464,6 +464,27 @@ public class RawTextComparisonServiceTests
     }
 
     [TestMethod]
+    public async Task CompareFilesRawAsync_FullContentMode_FindsDifferencesBeyondPreviewLimit()
+    {
+        var sharedPrefix = new string('X', 6 * 1024);
+        var (file1, file2) = CreatePlainFiles(
+            $"{sharedPrefix}\nTAIL_A",
+            $"{sharedPrefix}\nTAIL_B");
+
+        var previewDiffs = await service.CompareFilesRawAsync(file1, file2);
+        var fullDiffs = await service.CompareFilesRawAsync(file1, file2, RawFileComparisonMode.FullContent);
+
+        previewDiffs.Should().Contain(diff => diff.Description != null && diff.Description.Contains("truncated"));
+        previewDiffs.Should().NotContain(diff => diff.TextA == "TAIL_A" || diff.TextB == "TAIL_B");
+
+        fullDiffs.Should().NotContain(diff => diff.Description != null && diff.Description.Contains("truncated"));
+        fullDiffs.Should().Contain(diff =>
+            diff.Type == RawTextDifferenceType.Modified &&
+            diff.TextA == "TAIL_A" &&
+            diff.TextB == "TAIL_B");
+    }
+
+    [TestMethod]
     public async Task CompareFilesRawAsync_RespectsCancel()
     {
         var (file1, file2) = CreatePlainFiles("a", "b");

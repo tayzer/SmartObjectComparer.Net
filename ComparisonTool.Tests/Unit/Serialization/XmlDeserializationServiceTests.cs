@@ -416,6 +416,8 @@ public class XmlDeserializationServiceTests
         result.ErrorMessage.Should().Contain("soap:Server");
         result.ErrorMessage.Should().Contain("Order service unavailable");
         result.ErrorMessage.Should().Contain("CorrelationId");
+        result.FailureKind.Should().Be(DeserializationFailureKind.SoapFault);
+        result.IsRecognizedNonSuccessPayload.Should().BeTrue();
     }
 
     [TestMethod]

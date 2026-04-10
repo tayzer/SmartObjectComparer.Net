@@ -214,13 +214,16 @@ public class JsonDeserializationService : IDeserializationService
     {
         if (stream == null)
         {
-            return DeserializationResult.Failure("JSON stream cannot be null.");
+            return DeserializationResult.Failure(
+                "JSON stream cannot be null.",
+                DeserializationFailureKind.InvalidInput);
         }
 
         if (format.HasValue && format.Value != SerializationFormat.Json)
         {
             return DeserializationResult.Failure(
-                $"JsonDeserializationService only supports JSON format, but {format.Value} was specified.");
+                $"JsonDeserializationService only supports JSON format, but {format.Value} was specified.",
+                DeserializationFailureKind.UnsupportedFormat);
         }
 
         try
@@ -229,18 +232,24 @@ public class JsonDeserializationService : IDeserializationService
             var result = JsonSerializer.Deserialize(stream, modelType, serializerOptions);
             if (result == null)
             {
-                return DeserializationResult.Failure($"Deserialization of type {modelType.Name} returned null.");
+                return DeserializationResult.Failure(
+                    $"Deserialization of type {modelType.Name} returned null.",
+                    DeserializationFailureKind.NullResult);
             }
 
             return DeserializationResult.Ok(result);
         }
         catch (JsonException ex)
         {
-            return DeserializationResult.Failure($"Invalid JSON format: {ex.Message}");
+            return DeserializationResult.Failure(
+                $"Invalid JSON format: {ex.Message}",
+                DeserializationFailureKind.MalformedPayload);
         }
         catch (Exception ex)
         {
-            return DeserializationResult.Failure($"JSON deserialization error: {ex.Message}");
+            return DeserializationResult.Failure(
+                $"JSON deserialization error: {ex.Message}",
+                DeserializationFailureKind.DeserializationError);
         }
     }
 

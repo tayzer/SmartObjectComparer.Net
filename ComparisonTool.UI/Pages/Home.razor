@@ -381,6 +381,12 @@
                     <ErrorDetailView SelectedPair="@selectedFolderPair"
                                      RawFileDifferences="@FolderRawFileDifferences" />
                 }
+                else if (ShouldRenderRawTextDetail(selectedFolderPair))
+                {
+                    <RawTextDifferencesView SelectedPair="@selectedFolderPair"
+                                            OnExportResults="@ExportFolderResults"
+                                            SectionId="file-detailed-differences-section" />
+                }
                 else if (DifferenceSummary != null)
                 {
                     <DetailedDifferencesView SelectedPair="@selectedFolderPair"
@@ -552,7 +558,8 @@
                         else if (ShouldRenderRawRequestDetail(selectedRequestPair))
                         {
                             <RawTextDifferencesView SelectedPair="@selectedRequestPair"
-                                                    OnExportResults="@ExportRequestSelectedPairResults" />
+                                                    OnExportResults="@ExportRequestSelectedPairResults"
+                                                    SectionId="request-detailed-differences-section" />
                         }
                         else if (DifferenceSummary != null)
                         {
@@ -955,8 +962,8 @@
                 progress: progressReporter,
                 cancellationToken: cancellationToken);
                 
-            // Select the first result if there are differences
-            if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 0)
+            // Select the first result when the run has differences or exposes raw-comparison rows.
+            if (ShouldAutoSelectFolderPair(FolderComparisonResult))
             {
                 await SelectPairResult(0);
             }
@@ -1040,8 +1047,8 @@
                     SemanticAnalysis = semanticAnalysisObj as SemanticDifferenceAnalysis;
                 }
                 
-                // Select the first result if there are differences
-                if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 0)
+                // Select the first result when the run has differences or exposes raw-comparison rows.
+                if (ShouldAutoSelectFolderPair(FolderComparisonResult))
                 {
                     await SelectPairResult(0);
                 }
@@ -1070,8 +1077,8 @@
                     batchProgressReporter,
                     cancellationToken);
 
-                // Select the first result if there are differences
-                if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 0)
+                // Select the first result when the run has differences or exposes raw-comparison rows.
+                if (ShouldAutoSelectFolderPair(FolderComparisonResult))
                 {
                     await SelectPairResult(0);
                 }
@@ -1163,16 +1170,18 @@
             FolderRawFileDifferences = null;
         }
 
+        var detailSectionId = GetFolderDetailSectionId(selectedPair);
+
         // Scroll to the detailed differences section after selection
         if (scrollToDetails)
         {
             try
             {
-                await JS.InvokeVoidAsync("scrollToElement", "detailed-differences-section");
+                await JS.InvokeVoidAsync("scrollToElement", detailSectionId);
             }
             catch (Exception ex)
             {
-                Logger.LogWarning(ex, "Failed to scroll to detailed differences section.");
+                Logger.LogWarning(ex, "Failed to scroll to detailed differences section {SectionId}.", detailSectionId);
             }
         }
         
@@ -1431,6 +1440,20 @@
         return string.Equals(NormalizeIdentifier(left), NormalizeIdentifier(right), StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool ShouldRenderRawTextDetail(FilePairComparisonResult selectedPair)
+    {
+        return selectedPair.RawTextDifferences != null ||
+               selectedPair.PairOutcome == RequestPairOutcome.StatusCodeMismatch ||
+               selectedPair.PairOutcome == RequestPairOutcome.BothNonSuccess;
+    }
+
+    private static bool ShouldAutoSelectFolderPair(MultiFolderComparisonResult result)
+    {
+        return result != null &&
+               result.FilePairResults.Count > 0 &&
+               (!result.AllEqual || result.FilePairResults.Any(ShouldRenderRawTextDetail));
+    }
+
     private static bool ShouldRenderRawRequestDetail(FilePairComparisonResult selectedPair)
     {
         return selectedPair.PairOutcome == RequestPairOutcome.StatusCodeMismatch ||
@@ -1438,9 +1461,16 @@
                (selectedPair.RawTextDifferences != null && selectedPair.RawTextDifferences.Count > 0);
     }
 
+    private static string GetFolderDetailSectionId(FilePairComparisonResult selectedPair)
+    {
+        return ShouldRenderRawTextDetail(selectedPair)
+            ? "file-detailed-differences-section"
+            : "detailed-differences-section";
+    }
+
     private static string GetRequestDetailSectionId(FilePairComparisonResult selectedPair)
     {
-        return ShouldRenderRawRequestDetail(selectedPair)
+        return ShouldRenderRawTextDetail(selectedPair)
             ? "request-detailed-differences-section"
             : "detailed-differences-section";
     }
@@ -1616,7 +1646,7 @@
             }
 
             filesWithDifferences++;
-            totalDifferences += filePairResult.Result?.Differences?.Count ?? 0;
+            totalDifferences += filePairResult.Summary.TotalDifferenceCount;
         }
 
         return (filesWithDifferences, totalDifferences);
@@ -1638,7 +1668,15 @@
                         $"Actual file: **{selectedPair.File2Name}**\n\n" +
                           $"---\n\n";
 
-            var report = FileUtilities.GenerateReportMarkdown(selectedPair.Summary, headerInfo);
+            var report = selectedPair.RawTextDifferences != null
+                ? headerInfo + FileUtilities.GenerateFolderComparisonReport(new MultiFolderComparisonResult
+                {
+                    AllEqual = selectedPair.AreEqual,
+                    TotalPairsCompared = 1,
+                    FilePairResults = new List<FilePairComparisonResult> { selectedPair },
+                    Metadata = new Dictionary<string, object>(StringComparer.Ordinal),
+                })
+                : FileUtilities.GenerateReportMarkdown(selectedPair.Summary!, headerInfo);
 
             await JS.InvokeVoidAsync(
                 "saveAsFile",

@@ -1200,6 +1200,15 @@ internal static class HtmlReportBundleBuilder
             };
         }
 
+        if (pair.RawTextDifferences != null)
+        {
+            return new PairPreviewDto
+            {
+                Label = "Raw comparison matched",
+                Change = "Compared as raw XML/text and no differences were found.",
+            };
+        }
+
         return new PairPreviewDto
         {
             Label = "No differences",
@@ -1267,7 +1276,7 @@ internal static class HtmlReportBundleBuilder
             return "error";
         }
 
-        if (rawDifferenceCount > 0)
+        if (pair.RawTextDifferences != null)
         {
             return "raw-text";
         }

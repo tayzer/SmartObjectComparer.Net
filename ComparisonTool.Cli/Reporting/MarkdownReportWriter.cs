@@ -276,8 +276,15 @@ public static class MarkdownReportWriter
                 sb.AppendLine($"*... and {pair.Result.Differences.Count - DifferencesPerPairLimit} more differences*");
             }
         }
-        else if (pair.RawTextDifferences != null && pair.RawTextDifferences.Count > 0)
+        else if (pair.RawTextDifferences != null)
         {
+            if (pair.RawTextDifferences.Count == 0)
+            {
+                sb.AppendLine("**Raw XML/text comparison matched.** The pair was compared as raw content and no differences were found.");
+                sb.AppendLine();
+                return;
+            }
+
             sb.AppendLine("**Raw text differences:**");
             sb.AppendLine();
 

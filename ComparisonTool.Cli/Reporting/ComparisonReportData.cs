@@ -289,7 +289,7 @@ internal static class ComparisonReportMapper
             return "error";
         }
 
-        if (rawDifferenceCount > 0)
+        if (pair.RawTextDifferences != null)
         {
             return "raw-text";
         }

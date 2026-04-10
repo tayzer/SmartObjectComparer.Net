@@ -2,6 +2,7 @@ using System.Text;
 using ComparisonTool.Core.Comparison;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
+using ComparisonTool.Core.RequestComparison.Services;
 using ComparisonTool.Core.Serialization;
 using ComparisonTool.Core.Utilities;
 using ComparisonTool.Domain.Models;
@@ -56,6 +57,7 @@ public class CompleteComparisonWorkflowTests
         performanceTracker = new PerformanceTracker(mockPerfLogger.Object);
         resourceMonitor = new SystemResourceMonitor(mockResourceLogger.Object);
         cacheService = new ComparisonResultCacheService(mockLogger.Object);
+        var rawTextComparisonService = new RawTextComparisonService(Mock.Of<ILogger<RawTextComparisonService>>());
 
         var mockComparisonEngineLogger = new Mock<ILogger<ComparisonEngine>>();
         var comparisonEngine = new ComparisonEngine(mockComparisonEngineLogger.Object, configService, performanceTracker);
@@ -69,7 +71,8 @@ public class CompleteComparisonWorkflowTests
             performanceTracker,
             resourceMonitor,
             cacheService,
-            comparisonEngine);
+            comparisonEngine,
+            rawTextComparisonService);
 
         comparisonService = new ComparisonService(
             mockLogger.Object,

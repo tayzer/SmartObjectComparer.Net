@@ -201,7 +201,8 @@ internal class XmlDeserializationServiceAdapter : IDeserializationService
         if (format.HasValue && format.Value != SerializationFormat.Xml)
         {
             return DeserializationResult.Failure(
-                $"XmlDeserializationService only supports XML format, but {format.Value} was specified.");
+                $"XmlDeserializationService only supports XML format, but {format.Value} was specified.",
+                DeserializationFailureKind.UnsupportedFormat);
         }
 
         return xmlService.TryDeserializeXml(stream, modelType);

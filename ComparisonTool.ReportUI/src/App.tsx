@@ -281,7 +281,7 @@ function ReportWorkspace({ bootstrap }: { bootstrap: ReportBootstrap }) {
 			if (activeSelectionNode != null) {
 				base = base.filter((pair) => pairMatchesSelection(pair, activeSelectionNode.selection, patternInfoLookup));
 			} else if (!outcomeFocusActive) {
-				base = base.filter((pair) => getPairStatus(pair) !== 'equal');
+				base = base.filter((pair) => getPairStatus(pair) !== 'equal' || pair.comparisonKind === 'raw-text');
 			}
 		}
 
@@ -862,33 +862,40 @@ function ReportWorkspace({ bootstrap }: { bootstrap: ReportBootstrap }) {
 														);
 													})}
 												</div>
-											) : selectedDetail != null && selectedDetail.rawTextDifferences.length > 0 ? (
-												<div className="structured-list">
-													{selectedDetail.rawTextDifferences.map((difference, indexValue) => {
-														const key = buildRawEvidenceKey(difference, indexValue);
-														return (
-															<div
-																className="structured-item"
-																key={key}
-															>
-																<div className="structured-item-header">
-																	<strong>{humanizeLabel(difference.type)}</strong>
-																</div>
-																<p className="value-block">{difference.description}</p>
-																<div className="structured-diff-grid">
-																	<div className="structured-value expected">
-																		<p className="eyebrow">Text A</p>
-																		<pre className="value-block">{difference.textA ?? '—'}</pre>
+											) : selectedDetail != null && selectedPair != null && selectedPair.comparisonKind === 'raw-text' ? (
+												selectedDetail.rawTextDifferences.length > 0 ? (
+													<div className="structured-list">
+														{selectedDetail.rawTextDifferences.map((difference, indexValue) => {
+															const key = buildRawEvidenceKey(difference, indexValue);
+															return (
+																<div
+																	className="structured-item"
+																	key={key}
+																>
+																	<div className="structured-item-header">
+																		<strong>{humanizeLabel(difference.type)}</strong>
 																	</div>
-																	<div className="structured-value actual">
-																		<p className="eyebrow">Text B</p>
-																		<pre className="value-block">{difference.textB ?? '—'}</pre>
+																	<p className="value-block">{difference.description}</p>
+																	<div className="structured-diff-grid">
+																		<div className="structured-value expected">
+																			<p className="eyebrow">Text A</p>
+																			<pre className="value-block">{difference.textA ?? '—'}</pre>
+																		</div>
+																		<div className="structured-value actual">
+																			<p className="eyebrow">Text B</p>
+																			<pre className="value-block">{difference.textB ?? '—'}</pre>
+																		</div>
 																	</div>
 																</div>
-															</div>
-														);
-													})}
-												</div>
+															);
+														})}
+													</div>
+												) : (
+													<div className="empty-state compact-empty-state">
+														<strong>Raw XML/text contents are identical</strong>
+														<p className="muted">This pair was compared as raw content and no differences were found.</p>
+													</div>
+												)
 											) : (
 												<div className="empty-state compact-empty-state">
 													<strong>No structured differences were emitted for this pair</strong>
@@ -1475,6 +1482,10 @@ function getPairPreviewLabel(pair: PairSummary): string {
 		return pair.errorType ?? 'Comparison error';
 	}
 
+	if (pair.areEqual && pair.comparisonKind === 'raw-text') {
+		return 'Raw comparison matched';
+	}
+
 	if (pair.areEqual) {
 		return 'No differences';
 	}
@@ -1489,6 +1500,10 @@ function getPairPreviewChange(pair: PairSummary): string {
 
 	if (pair.hasError) {
 		return pair.errorMessage ?? 'An error interrupted this comparison.';
+	}
+
+	if (pair.areEqual && pair.comparisonKind === 'raw-text') {
+		return 'Compared as raw XML/text and no differences were found.';
 	}
 
 	if (pair.areEqual) {

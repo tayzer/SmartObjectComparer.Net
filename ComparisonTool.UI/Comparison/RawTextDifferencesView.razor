@@ -32,16 +32,16 @@
     }
 </style>
 
-<MudPaper Elevation="2" Class="mt-4" id="request-detailed-differences-section">
+<MudPaper Elevation="2" Class="mt-4" id="@SectionId">
     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pa-3"
               Style="background: var(--mud-palette-surface);">
         <MudStack Spacing="0">
             <MudText Typo="Typo.h6">
                 <MudIcon Icon="@Icons.Material.Filled.Code" Class="mr-2" />
-                Raw Response Comparison
+                @GetTitle()
             </MudText>
             <MudText Typo="Typo.caption" Color="Color.Default">
-                @SelectedPair.File1Name — Non-success response comparison
+                @GetSubtitle()
             </MudText>
         </MudStack>
         <MudButton Variant="Variant.Outlined"
@@ -55,7 +55,7 @@
     <MudDivider />
 
     @* HTTP Status Code Banner *@
-    @if (SelectedPair.HttpStatusCodeA.HasValue && SelectedPair.HttpStatusCodeB.HasValue)
+    @if (HasHttpStatusMetadata)
     {
         <div class="pa-4">
             <MudAlert Severity="@GetBannerSeverity()" Variant="Variant.Outlined" Class="mb-3">
@@ -113,8 +113,8 @@
                     <tr>
                         <th style="width: 50px;">Type</th>
                         <th style="width: 70px;">Line</th>
-                        <th>Endpoint A</th>
-                        <th>Endpoint B</th>
+                        <th>@GetColumnHeaderA()</th>
+                        <th>@GetColumnHeaderB()</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -168,7 +168,7 @@
     {
         <div class="pa-4">
             <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
-                Response bodies are identical. The difference is only in HTTP status codes.
+                @GetEmptyStateMessage()
             </MudAlert>
         </div>
     }
@@ -190,6 +190,11 @@
     [Parameter]
     public EventCallback OnExportResults { get; set; }
 
+    [Parameter]
+    public string SectionId { get; set; } = "raw-text-differences-section";
+
+    private bool HasHttpStatusMetadata => SelectedPair.HttpStatusCodeA.HasValue && SelectedPair.HttpStatusCodeB.HasValue;
+
     private static Color GetStatusCodeColor(int statusCode) => statusCode switch
     {
         >= 200 and < 300 => Color.Success,
@@ -207,6 +212,22 @@
             return Severity.Error;
         return Severity.Info;
     }
+
+    private string GetTitle() => HasHttpStatusMetadata
+        ? "Raw Response Comparison"
+        : "Raw File Comparison";
+
+    private string GetSubtitle() => HasHttpStatusMetadata
+        ? $"{SelectedPair.File1Name} - Non-success response comparison"
+        : $"{SelectedPair.File1Name} vs {SelectedPair.File2Name} - Full raw content comparison";
+
+    private string GetColumnHeaderA() => HasHttpStatusMetadata ? "Endpoint A" : "File A";
+
+    private string GetColumnHeaderB() => HasHttpStatusMetadata ? "Endpoint B" : "File B";
+
+    private string GetEmptyStateMessage() => HasHttpStatusMetadata
+        ? "Response bodies are identical. The difference is only in HTTP status codes."
+        : "The file contents are identical.";
 
     private static string GetDiffRowClass(RawTextDifference diff) => diff.Type switch
     {

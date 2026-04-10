@@ -6,6 +6,7 @@ using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.DI;
 using ComparisonTool.Core.Models;
+using ComparisonTool.Core.RequestComparison.Services;
 using ComparisonTool.Core.Serialization;
 using ComparisonTool.Core.Utilities;
 using ComparisonTool.Domain.Models;
@@ -37,6 +38,7 @@ public class ComparisonServiceIntegrationTests
     private readonly SystemResourceMonitor resourceMonitor;
     private readonly ComparisonResultCacheService cacheService;
     private readonly ComparisonService comparisonService;
+    private readonly RawTextComparisonService rawTextComparisonService;
 
     public ComparisonServiceIntegrationTests()
     {
@@ -68,6 +70,7 @@ public class ComparisonServiceIntegrationTests
         performanceTracker = new PerformanceTracker(mockPerfLogger.Object);
         resourceMonitor = new SystemResourceMonitor(mockResourceLogger.Object);
         cacheService = new ComparisonResultCacheService(mockLogger.Object);
+        rawTextComparisonService = new RawTextComparisonService(Mock.Of<ILogger<RawTextComparisonService>>());
 
         var mockComparisonEngineLogger = new Mock<ILogger<ComparisonEngine>>();
         var comparisonEngine = new ComparisonEngine(mockComparisonEngineLogger.Object, configService, performanceTracker);
@@ -81,7 +84,8 @@ public class ComparisonServiceIntegrationTests
             performanceTracker,
             resourceMonitor,
             cacheService,
-            comparisonEngine);
+            comparisonEngine,
+            rawTextComparisonService);
 
         comparisonService = new ComparisonService(
             mockLogger.Object,
@@ -469,7 +473,7 @@ public class ComparisonServiceIntegrationTests
             TotalPairsCompared = 1,
             FilePairResults = new List<FilePairComparisonResult>
             {
-                new()
+                new FilePairComparisonResult
                 {
                     File1Name = "Actual.xml",
                     File2Name = "Expected.xml",
@@ -535,7 +539,7 @@ public class ComparisonServiceIntegrationTests
             TotalPairsCompared = 1,
             FilePairResults = new List<FilePairComparisonResult>
             {
-                new()
+                new FilePairComparisonResult
                 {
                     File1Name = "Actual.xml",
                     File2Name = "Expected.xml",
@@ -590,11 +594,11 @@ public class ComparisonServiceIntegrationTests
         folderResult.Metadata["IgnoreCollectionOrder"].Should().Be(false);
     }
 
-        [TestMethod]
-        public async Task CompareFoldersInBatchesAsync_WhenHighPerformancePipelineRuns_ShouldMatchStandardDedupedDifferenceSet()
-        {
-                const int pairCount = 100;
-                const string actualXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+    [TestMethod]
+    public async Task CompareFoldersInBatchesAsync_WhenHighPerformancePipelineRuns_ShouldMatchStandardDedupedDifferenceSet()
+    {
+        const int pairCount = 100;
+        const string actualXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <ComplexTestModel>
     <Name>Example</Name>
     <Items>
@@ -604,7 +608,7 @@ public class ComparisonServiceIntegrationTests
         </ComplexTestModelItem>
     </Items>
 </ComplexTestModel>";
-                const string expectedXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
+        const string expectedXml = @"<?xml version=""1.0"" encoding=""utf-8""?>
 <ComplexTestModel>
     <Name>Example</Name>
     <Items>
@@ -619,55 +623,94 @@ public class ComparisonServiceIntegrationTests
     </Items>
 </ComplexTestModel>";
 
-                using var actualStream = new MemoryStream(Encoding.UTF8.GetBytes(actualXml));
-                using var expectedStream = new MemoryStream(Encoding.UTF8.GetBytes(expectedXml));
+        using var actualStream = new MemoryStream(Encoding.UTF8.GetBytes(actualXml));
+        using var expectedStream = new MemoryStream(Encoding.UTF8.GetBytes(expectedXml));
 
-                var standardResult = await comparisonService.CompareXmlFilesAsync(
-                        actualStream,
-                        expectedStream,
-                        "ComplexTestModel");
+        var standardResult = await comparisonService.CompareXmlFilesAsync(
+            actualStream,
+            expectedStream,
+            "ComplexTestModel");
 
-                var expectedDifferences = standardResult.Differences
-                        .Select(CreateDifferenceSignature)
-                        .ToList();
+        var expectedDifferences = standardResult.Differences
+            .Select(CreateDifferenceSignature)
+            .ToList();
 
-                expectedDifferences.Should().NotBeEmpty();
-                expectedDifferences.Should().OnlyContain(signature =>
-                        !signature.PropertyName.Contains("System.Collections.IList.Item", StringComparison.Ordinal));
+        expectedDifferences.Should().NotBeEmpty();
+        expectedDifferences.Should().OnlyContain(signature =>
+            !signature.PropertyName.Contains("System.Collections.IList.Item", StringComparison.Ordinal));
 
-                var tempRoot = CreateComplexTestModelCopySet(pairCount, actualXml, expectedXml, out var actualPaths, out var expectedPaths);
+        var tempRoot = CreateComplexTestModelCopySet(pairCount, actualXml, expectedXml, out var actualPaths, out var expectedPaths);
 
-                try
-                {
-                        var batchResult = await comparisonService.CompareFoldersInBatchesAsync(
-                                actualPaths,
-                                expectedPaths,
-                                "ComplexTestModel",
-                                batchSize: 25);
+        try
+        {
+            var batchResult = await comparisonService.CompareFoldersInBatchesAsync(
+                actualPaths,
+                expectedPaths,
+                "ComplexTestModel",
+                batchSize: 25);
 
-                        batchResult.TotalPairsCompared.Should().Be(pairCount);
-                        batchResult.FilePairResults.Should().HaveCount(pairCount);
+            batchResult.TotalPairsCompared.Should().Be(pairCount);
+            batchResult.FilePairResults.Should().HaveCount(pairCount);
 
-                        foreach (var pair in batchResult.FilePairResults)
-                        {
-                                pair.HasError.Should().BeFalse();
-                                pair.Result.Should().NotBeNull();
+            foreach (var pair in batchResult.FilePairResults)
+            {
+                pair.HasError.Should().BeFalse();
+                pair.Result.Should().NotBeNull();
 
-                                var actualDifferences = pair.Result!.Differences
-                                        .Select(CreateDifferenceSignature)
-                                        .ToList();
+                var actualDifferences = pair.Result!.Differences
+                    .Select(CreateDifferenceSignature)
+                    .ToList();
 
-                                actualDifferences.Should().BeEquivalentTo(expectedDifferences);
-                        }
-                }
-                finally
-                {
-                        if (Directory.Exists(tempRoot))
-                        {
-                                Directory.Delete(tempRoot, recursive: true);
-                        }
-                }
+                actualDifferences.Should().BeEquivalentTo(expectedDifferences);
+            }
         }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
+    [DataTestMethod]
+
+    // [DataRow("Actual_MalformedXml.xml", "Expected_MalformedXml.xml", "Malformed XML with unclosed tags")]
+    // [DataRow("Actual_TruncatedXml.xml", "Expected_TruncatedXml.xml", "Truncated XML cut off mid-element")]
+    // [DataRow("Actual_EmptyFile.xml", "Expected_EmptyFile.xml", "Empty file with no content")]
+    // [DataRow("Actual_WrongRootElement.xml", "Expected_WrongRootElement.xml", "Wrong root element / different schema")]
+    [DataRow("Actual_FaultException.xml", "Expected_FaultException.xml", "SOAP fault exception response instead of expected data")]
+    public async Task CompareXmlFilesAsync_WithErrorScenarioFiles_ShouldThrowOnDeserialization(
+        string actualFileName,
+        string expectedFileName,
+        string scenarioDescription)
+    {
+        // These file pairs exercise scenarios where the Actual side has content that
+        // cannot be deserialized as a ComplexOrderResponse. Deserialization uses
+        // TryDeserializeXml which pre-validates the root element, catching SOAP faults
+        // and wrong schemas WITHOUT throwing from XmlSerializer.Deserialize().
+        // The pre-validation failure is returned as a DeserializationResult.Failure,
+        // then the orchestrator wraps it in an InvalidOperationException for callers
+        // that expect exceptions (like this test). In the File/Folder Comparison UI,
+        // errors are caught by DirectoryComparisonService and rendered via ErrorDetailView.razor.
+        var testRoot = GetSpecificComplexModelTestRoot();
+        var actualPath = Path.Combine(testRoot, "Actual", actualFileName);
+        var expectedPath = Path.Combine(testRoot, "Expected", expectedFileName);
+
+        File.Exists(actualPath).Should().BeTrue($"Actual file should exist for scenario: {scenarioDescription}");
+        File.Exists(expectedPath).Should().BeTrue($"Expected file should exist for scenario: {scenarioDescription}");
+
+        using var actualStream = File.OpenRead(actualPath);
+        using var expectedStream = File.OpenRead(expectedPath);
+
+        var action = () => comparisonService.CompareXmlFilesAsync(
+            actualStream,
+            expectedStream,
+            "ComplexOrderResponse");
+
+        await action.Should().ThrowAsync<Exception>(
+            $"Deserialization should fail for scenario: {scenarioDescription}");
+    }
 
     [TestMethod]
     public async Task CompareDirectoriesAsync_WhenLargeRunUsesHighPerformancePipeline_ShouldRespectConfigurationAndLogSessionResults()
@@ -916,7 +959,7 @@ public class ComparisonServiceIntegrationTests
     }
 
     [TestMethod]
-    public async Task CompareFoldersInBatchesAsync_WithSoapFaultFile_ShouldReturnErrorRowWithoutThrowing()
+    public async Task CompareFoldersInBatchesAsync_WithMixedSuccessAndSoapFault_ShouldReturnErrorRowWithoutThrowing()
     {
         var testRoot = GetSpecificComplexModelTestRoot();
         var actualPath = Path.Combine(testRoot, "Actual", "Actual_FaultException.xml");
@@ -939,7 +982,7 @@ public class ComparisonServiceIntegrationTests
     }
 
     [TestMethod]
-    public async Task CompareDirectoriesAsync_WithSoapFaultFile_ShouldReturnErrorRowWithoutThrowing()
+    public async Task CompareDirectoriesAsync_WithMixedSuccessAndSoapFault_ShouldReturnErrorRowWithoutThrowing()
     {
         var testRoot = GetSpecificComplexModelTestRoot();
         var sourceActual = Path.Combine(testRoot, "Actual", "Actual_FaultException.xml");
@@ -980,6 +1023,169 @@ public class ComparisonServiceIntegrationTests
             pair.HasError.Should().BeTrue();
             pair.ErrorMessage.Should().Contain("SOAP fault detected in response");
             pair.ErrorMessage.Should().Contain("order processing service encountered an internal error");
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
+    [TestMethod]
+    public async Task CompareFoldersInBatchesAsync_WhenBothFilesAreSoapFaultsAndEqual_ShouldReturnEqualRawPair()
+    {
+        var faultXml = CreateSoapFaultXml(
+            "Order service unavailable",
+            "corr-equal-001",
+            "SVC-5001");
+
+        var tempRoot = CreateXmlCopySet(
+            new List<(string FileName, string ActualXml, string ExpectedXml)>
+            {
+                ("000_Fault.xml", faultXml, faultXml),
+            },
+            out var actualPaths,
+            out var expectedPaths);
+
+        try
+        {
+            var result = await comparisonService.CompareFoldersInBatchesAsync(
+                actualPaths,
+                expectedPaths,
+                "ComplexOrderResponse",
+                batchSize: 25);
+
+            result.TotalPairsCompared.Should().Be(1);
+            result.AllEqual.Should().BeTrue();
+            result.FilePairResults.Should().HaveCount(1);
+
+            var pair = result.FilePairResults[0];
+            pair.HasError.Should().BeFalse();
+            pair.ErrorMessage.Should().BeNull();
+            pair.Result.Should().BeNull();
+            pair.AreEqual.Should().BeTrue();
+            pair.RawTextDifferences.Should().NotBeNull();
+            pair.RawTextDifferences.Should().BeEmpty();
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
+    [TestMethod]
+    public async Task CompareFoldersInBatchesAsync_WhenBothFilesAreSoapFaultsAndDifferent_ShouldReturnNonErrorRawDiffPair()
+    {
+        var actualFaultXml = CreateSoapFaultXml(
+            "Order service unavailable",
+            "corr-diff-a",
+            "SVC-5001");
+        var expectedFaultXml = CreateSoapFaultXml(
+            "Inventory service unavailable",
+            "corr-diff-b",
+            "SVC-5002");
+
+        var tempRoot = CreateXmlCopySet(
+            new List<(string FileName, string ActualXml, string ExpectedXml)>
+            {
+                ("000_Fault.xml", actualFaultXml, expectedFaultXml),
+            },
+            out var actualPaths,
+            out var expectedPaths);
+
+        try
+        {
+            var result = await comparisonService.CompareFoldersInBatchesAsync(
+                actualPaths,
+                expectedPaths,
+                "ComplexOrderResponse",
+                batchSize: 25);
+
+            result.TotalPairsCompared.Should().Be(1);
+            result.AllEqual.Should().BeFalse();
+            result.FilePairResults.Should().HaveCount(1);
+
+            var pair = result.FilePairResults[0];
+            pair.HasError.Should().BeFalse();
+            pair.ErrorMessage.Should().BeNull();
+            pair.Result.Should().BeNull();
+            pair.AreEqual.Should().BeFalse();
+            pair.RawTextDifferences.Should().NotBeNull();
+            pair.RawTextDifferences.Should().NotBeEmpty();
+
+            var structuralAnalysis = await comparisonService.AnalyzeStructualPatternsAsync(result);
+            structuralAnalysis.TotalDifferencesFound.Should().Be(pair.RawTextDifferences.Count);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
+    [TestMethod]
+    public async Task CompareFoldersInBatchesAsync_WhenHighPerformancePipelineProcessesSoapFaultPairs_ShouldReturnRawNonErrorResults()
+    {
+        const int pairCount = 100;
+        var pairs = Enumerable.Range(0, pairCount)
+            .Select(index =>
+            {
+                var actualFaultXml = CreateSoapFaultXml(
+                    $"Service unavailable {index}",
+                    $"corr-a-{index}",
+                    $"SVC-A-{index:D3}");
+                var expectedFaultXml = index % 2 == 0
+                    ? actualFaultXml
+                    : CreateSoapFaultXml(
+                        $"Service mismatch {index}",
+                        $"corr-b-{index}",
+                        $"SVC-B-{index:D3}");
+
+                return ($"{index:D3}_Fault.xml", actualFaultXml, expectedFaultXml);
+            })
+            .ToList();
+
+        var tempRoot = CreateXmlCopySet(pairs, out var actualPaths, out var expectedPaths);
+
+        try
+        {
+            var result = await comparisonService.CompareFoldersInBatchesAsync(
+                actualPaths,
+                expectedPaths,
+                "ComplexOrderResponse",
+                batchSize: 25);
+
+            result.TotalPairsCompared.Should().Be(pairCount);
+            result.AllEqual.Should().BeFalse();
+            result.FilePairResults.Should().HaveCount(pairCount);
+            result.FilePairResults.Should().OnlyContain(pair => !pair.HasError && pair.RawTextDifferences != null);
+
+            var patternAnalysis = await comparisonService.AnalyzePatternsAsync(result);
+            patternAnalysis.SimilarFileGroups.Should().BeEmpty();
+
+            for (var index = 0; index < pairCount; index++)
+            {
+                var fileName = $"{index:D3}_Fault.xml";
+                var pair = result.FilePairResults.Single(item => item.File1Name == fileName);
+
+                if (index % 2 == 0)
+                {
+                    pair.AreEqual.Should().BeTrue();
+                    pair.RawTextDifferences.Should().BeEmpty();
+                }
+                else
+                {
+                    pair.AreEqual.Should().BeFalse();
+                    pair.RawTextDifferences.Should().NotBeEmpty();
+                }
+            }
         }
         finally
         {
@@ -1093,6 +1299,55 @@ public class ComparisonServiceIntegrationTests
         return tempRoot;
     }
 
+    private static string CreateXmlCopySet(
+        IEnumerable<(string FileName, string ActualXml, string ExpectedXml)> pairs,
+        out List<string> actualPaths,
+        out List<string> expectedPaths)
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "ComparisonToolSoapFaultCopies", Guid.NewGuid().ToString("N"));
+        var actualDirectory = Path.Combine(tempRoot, "Actuals");
+        var expectedDirectory = Path.Combine(tempRoot, "Expecteds");
+
+        Directory.CreateDirectory(actualDirectory);
+        Directory.CreateDirectory(expectedDirectory);
+
+        actualPaths = new List<string>();
+        expectedPaths = new List<string>();
+
+        foreach (var (fileName, actualXml, expectedXml) in pairs)
+        {
+            var actualPath = Path.Combine(actualDirectory, fileName);
+            var expectedPath = Path.Combine(expectedDirectory, fileName);
+
+            File.WriteAllText(actualPath, actualXml, Encoding.UTF8);
+            File.WriteAllText(expectedPath, expectedXml, Encoding.UTF8);
+
+            actualPaths.Add(actualPath);
+            expectedPaths.Add(expectedPath);
+        }
+
+        return tempRoot;
+    }
+
+    private static string CreateSoapFaultXml(string faultString, string correlationId, string errorCode)
+    {
+        return $@"<?xml version=""1.0"" encoding=""utf-8""?>
+<soap:Envelope xmlns:soap=""http://schemas.xmlsoap.org/soap/envelope/"">
+    <soap:Body>
+        <soap:Fault>
+            <faultcode>soap:Server</faultcode>
+            <faultstring>{faultString}</faultstring>
+            <detail>
+                <ServiceFault xmlns=""urn:example.co.uk/soap:faults"">
+                    <ErrorCode>{errorCode}</ErrorCode>
+                    <CorrelationId>{correlationId}</CorrelationId>
+                </ServiceFault>
+            </detail>
+        </soap:Fault>
+    </soap:Body>
+</soap:Envelope>";
+    }
+
     private static (string PropertyName, string? OldValue, string? NewValue) CreateDifferenceSignature(Difference diff) =>
         (diff.PropertyName, diff.Object1Value?.ToString(), diff.Object2Value?.ToString());
 
@@ -1146,44 +1401,6 @@ public class ComparisonServiceIntegrationTests
         csvLines.Should().Contain($"CollectionOrderDeterministicOrderingMs,{phaseTimings.CollectionOrderDeterministicOrderingMs}");
         csvLines.Should().Contain($"CollectionOrderFallbackMs,{phaseTimings.CollectionOrderFallbackMs}");
         csvLines.Should().Contain($"CollectionOrderFallbackCount,{phaseTimings.CollectionOrderFallbackCount}");
-    }
-
-    [DataTestMethod]
-    //[DataRow("Actual_MalformedXml.xml", "Expected_MalformedXml.xml", "Malformed XML with unclosed tags")]
-    //[DataRow("Actual_TruncatedXml.xml", "Expected_TruncatedXml.xml", "Truncated XML cut off mid-element")]
-    //[DataRow("Actual_EmptyFile.xml", "Expected_EmptyFile.xml", "Empty file with no content")]
-    //[DataRow("Actual_WrongRootElement.xml", "Expected_WrongRootElement.xml", "Wrong root element / different schema")]
-    [DataRow("Actual_FaultException.xml", "Expected_FaultException.xml", "SOAP fault exception response instead of expected data")]
-    public async Task CompareXmlFilesAsync_WithErrorScenarioFiles_ShouldThrowOnDeserialization(
-        string actualFileName,
-        string expectedFileName,
-        string scenarioDescription)
-    {
-        // These file pairs exercise scenarios where the Actual side has content that
-        // cannot be deserialized as a ComplexOrderResponse. Deserialization uses
-        // TryDeserializeXml which pre-validates the root element, catching SOAP faults
-        // and wrong schemas WITHOUT throwing from XmlSerializer.Deserialize().
-        // The pre-validation failure is returned as a DeserializationResult.Failure,
-        // then the orchestrator wraps it in an InvalidOperationException for callers
-        // that expect exceptions (like this test). In the File/Folder Comparison UI,
-        // errors are caught by DirectoryComparisonService and rendered via ErrorDetailView.razor.
-        var testRoot = GetSpecificComplexModelTestRoot();
-        var actualPath = Path.Combine(testRoot, "Actual", actualFileName);
-        var expectedPath = Path.Combine(testRoot, "Expected", expectedFileName);
-
-        File.Exists(actualPath).Should().BeTrue($"Actual file should exist for scenario: {scenarioDescription}");
-        File.Exists(expectedPath).Should().BeTrue($"Expected file should exist for scenario: {scenarioDescription}");
-
-        using var actualStream = File.OpenRead(actualPath);
-        using var expectedStream = File.OpenRead(expectedPath);
-
-        var action = () => comparisonService.CompareXmlFilesAsync(
-            actualStream,
-            expectedStream,
-            "ComplexOrderResponse");
-
-        await action.Should().ThrowAsync<Exception>(
-            $"Deserialization should fail for scenario: {scenarioDescription}");
     }
 
     [TestMethod]

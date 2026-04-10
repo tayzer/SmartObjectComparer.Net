@@ -4,6 +4,7 @@ using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.Comparison.Utilities;
+using ComparisonTool.Core.RequestComparison.Services;
 using ComparisonTool.Core.Serialization;
 using ComparisonTool.Core.Utilities;
 using KellermanSoftware.CompareNetObjects;
@@ -30,6 +31,7 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
     private readonly SystemResourceMonitor resourceMonitor;
     private readonly ComparisonResultCacheService cacheService;
     private readonly IComparisonEngine comparisonEngine;
+    private readonly RawTextComparisonService rawTextComparisonService;
 
     // High-performance pipeline for large batch operations
     private readonly Lazy<HighPerformanceComparisonPipeline> highPerformancePipeline;
@@ -43,6 +45,7 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
         SystemResourceMonitor resourceMonitor,
         ComparisonResultCacheService cacheService,
         IComparisonEngine comparisonEngine,
+        RawTextComparisonService rawTextComparisonService,
         DeserializationServiceFactory? deserializationFactory = null,
         ILoggerFactory? loggerFactory = null)
     {
@@ -54,6 +57,7 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
         this.resourceMonitor = resourceMonitor;
         this.cacheService = cacheService;
         this.comparisonEngine = comparisonEngine;
+        this.rawTextComparisonService = rawTextComparisonService;
         this.deserializationFactory = deserializationFactory;
 
         // Lazy-initialize high-performance pipeline to avoid circular dependencies
@@ -66,6 +70,7 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                 configService,
                 deserializationService,
                 performanceTracker,
+                rawTextComparisonService,
                 deserializationFactory);
         });
     }
@@ -407,14 +412,6 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                 }).ConfigureAwait(false);
                 ComparisonPhaseTimingScope.Current?.AddDeserialization(Stopwatch.GetElapsedTime(oldDeserializationStart));
 
-                if (!oldResult.Success)
-                {
-                    return CreateErrorPairResult(
-                        oldFilePath,
-                        newFilePath,
-                        new InvalidOperationException($"Failed to deserialize old file ({oldFilePath}): {oldResult.ErrorMessage}"));
-                }
-
                 var newDeserializationStart = Stopwatch.GetTimestamp();
                 var newResult = await performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}_{newFormat}", async () =>
                 {
@@ -427,12 +424,16 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                 }).ConfigureAwait(false);
                 ComparisonPhaseTimingScope.Current?.AddDeserialization(Stopwatch.GetElapsedTime(newDeserializationStart));
 
-                if (!newResult.Success)
+                var specialPairResult = await TryCreatePairResultFromDeserializationAsync(
+                    oldFilePath,
+                    newFilePath,
+                    oldResult,
+                    newResult,
+                    cancellationToken).ConfigureAwait(false);
+
+                if (specialPairResult != null)
                 {
-                    return CreateErrorPairResult(
-                        oldFilePath,
-                        newFilePath,
-                        new InvalidOperationException($"Failed to deserialize new file ({newFilePath}): {newResult.ErrorMessage}"));
+                    return specialPairResult;
                 }
 
                 var comparisonResult = await comparisonEngine.CompareObjectsAsync(
@@ -893,14 +894,6 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                         }, cancellationToken).ConfigureAwait(false);
                 }).ConfigureAwait(false);
 
-                if (!oldResult.Success)
-                {
-                    return CreateErrorPairResult(
-                        oldFilePath,
-                        newFilePath,
-                        new InvalidOperationException($"Failed to deserialize old XML: {oldResult.ErrorMessage}"));
-                }
-
                 var newResult = await performanceTracker.TrackOperationAsync($"Deserialize_New_{modelName}", async () =>
                 {
                     return await Task.Run(
@@ -911,12 +904,16 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
                         }, cancellationToken).ConfigureAwait(false);
                 }).ConfigureAwait(false);
 
-                if (!newResult.Success)
+                var specialPairResult = await TryCreatePairResultFromDeserializationAsync(
+                    oldFilePath,
+                    newFilePath,
+                    oldResult,
+                    newResult,
+                    cancellationToken).ConfigureAwait(false);
+
+                if (specialPairResult != null)
                 {
-                    return CreateErrorPairResult(
-                        oldFilePath,
-                        newFilePath,
-                        new InvalidOperationException($"Failed to deserialize new XML: {newResult.ErrorMessage}"));
+                    return specialPairResult;
                 }
 
                 var comparisonResult = await comparisonEngine.CompareObjectsAsync(
@@ -955,6 +952,56 @@ public class ComparisonOrchestrator : IComparisonOrchestrator
             Result = filteredResult,
             Summary = categorizer.CategorizeAndSummarize(filteredResult),
         };
+    }
+
+    private async Task<FilePairComparisonResult?> TryCreatePairResultFromDeserializationAsync(
+        string oldFilePath,
+        string newFilePath,
+        DeserializationResult oldResult,
+        DeserializationResult newResult,
+        CancellationToken cancellationToken)
+    {
+        if (oldResult.Success && newResult.Success)
+        {
+            return null;
+        }
+
+        if (!oldResult.Success && !newResult.Success &&
+            oldResult.IsRecognizedNonSuccessPayload &&
+            newResult.IsRecognizedNonSuccessPayload)
+        {
+            return await rawTextComparisonService.CompareFilesAsRawPairAsync(
+                oldFilePath,
+                newFilePath,
+                RawFileComparisonMode.FullContent,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        return CreateDeserializationErrorPairResult(oldFilePath, newFilePath, oldResult, newResult);
+    }
+
+    private FilePairComparisonResult CreateDeserializationErrorPairResult(
+        string oldFilePath,
+        string newFilePath,
+        DeserializationResult oldResult,
+        DeserializationResult newResult)
+    {
+        var errorMessages = new List<string>(capacity: 2);
+
+        if (!oldResult.Success)
+        {
+            errorMessages.Add($"Failed to deserialize old file ({oldFilePath}): {oldResult.ErrorMessage}");
+        }
+
+        if (!newResult.Success)
+        {
+            errorMessages.Add($"Failed to deserialize new file ({newFilePath}): {newResult.ErrorMessage}");
+        }
+
+        return CreateErrorPairResult(
+            oldFilePath,
+            newFilePath,
+            new InvalidOperationException(string.Join(" | ", errorMessages)));
     }
 
     private FilePairComparisonResult CreateErrorPairResult(

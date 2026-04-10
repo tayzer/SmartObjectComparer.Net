@@ -457,8 +457,14 @@ public class ComparisonService : IComparisonService
             }
 
             var pairIdentifier = $"{filePair.File1Name} vs {filePair.File2Name}";
-            var fingerprint = new HashSet<string>(System.StringComparer.Ordinal);
             var fpDifferences = filePair.Result?.Differences ?? new System.Collections.Generic.List<KellermanSoftware.CompareNetObjects.Difference>();
+
+            if (fpDifferences.Count == 0)
+            {
+                continue;
+            }
+
+            var fingerprint = new HashSet<string>(System.StringComparer.Ordinal);
             foreach (var diff in fpDifferences)
             {
                 fingerprint.Add(NormalizePropertyPath(diff.PropertyName));
