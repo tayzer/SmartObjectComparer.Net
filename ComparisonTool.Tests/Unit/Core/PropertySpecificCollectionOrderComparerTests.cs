@@ -1,11 +1,11 @@
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
-using FluentAssertions;
 using KellermanSoftware.CompareNetObjects;
 using KellermanSoftware.CompareNetObjects.TypeComparers;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Shouldly;
 
 namespace ComparisonTool.Tests.Unit.Core;
 
@@ -37,8 +37,8 @@ public class PropertySpecificCollectionOrderComparerTests
 
         var result = compareLogic.Compare(left, right);
 
-        result.AreEqual.Should().BeTrue();
-        result.Differences.Should().BeEmpty();
+        result.AreEqual.ShouldBeTrue();
+        result.Differences.ShouldBeEmpty();
     }
 
     [TestMethod]
@@ -66,8 +66,8 @@ public class PropertySpecificCollectionOrderComparerTests
 
         var result = compareLogic.Compare(left, right);
 
-        result.AreEqual.Should().BeTrue();
-        result.Differences.Should().BeEmpty();
+        result.AreEqual.ShouldBeTrue();
+        result.Differences.ShouldBeEmpty();
     }
 
     [TestMethod]
@@ -87,8 +87,8 @@ public class PropertySpecificCollectionOrderComparerTests
 
         var result = compareLogic.Compare(left, right);
 
-        result.AreEqual.Should().BeTrue();
-        result.Differences.Should().BeEmpty();
+        result.AreEqual.ShouldBeTrue();
+        result.Differences.ShouldBeEmpty();
     }
 
     [TestMethod]
@@ -116,8 +116,8 @@ public class PropertySpecificCollectionOrderComparerTests
 
         var result = compareLogic.Compare(left, right);
 
-        result.AreEqual.Should().BeTrue();
-        result.Differences.Should().BeEmpty();
+        result.AreEqual.ShouldBeTrue();
+        result.Differences.ShouldBeEmpty();
     }
 
     [TestMethod]
@@ -153,11 +153,11 @@ public class PropertySpecificCollectionOrderComparerTests
         var result = compareLogic.Compare(left, right);
         var snapshot = phaseTimings.CreateSnapshot();
 
-        result.Should().NotBeNull();
-        logger.WarningMessages.Should().ContainSingle(message => message.Contains("falling back to O(n²) comparison", StringComparison.Ordinal));
-        snapshot.CollectionOrderFallbackCount.Should().Be(1);
-        snapshot.CollectionOrderDeterministicOrderingMs.Should().BeGreaterThanOrEqualTo(0);
-        snapshot.CollectionOrderFallbackMs.Should().BeGreaterThanOrEqualTo(0);
+        result.ShouldNotBeNull();
+        logger.WarningMessages.Count(message => message.Contains("falling back to O(n²) comparison", StringComparison.Ordinal)).ShouldBe(1);
+        snapshot.CollectionOrderFallbackCount.ShouldBe(1);
+        snapshot.CollectionOrderDeterministicOrderingMs.ShouldBeGreaterThanOrEqualTo(0);
+        snapshot.CollectionOrderFallbackMs.ShouldBeGreaterThanOrEqualTo(0);
     }
 
     [TestMethod]
@@ -189,10 +189,10 @@ public class PropertySpecificCollectionOrderComparerTests
 
         var result = compareLogic.Compare(left, right);
 
-        result.AreEqual.Should().BeFalse();
-        result.Differences.Should().NotBeEmpty();
-        result.Differences.Should().NotContain(d => d.PropertyName.Contains("Value"));
-        result.Differences.Should().OnlyContain(d => d.PropertyName.Contains(".Id", StringComparison.Ordinal));
+        result.AreEqual.ShouldBeFalse();
+        result.Differences.ShouldNotBeEmpty();
+        result.Differences.Any(d => d.PropertyName.Contains("Value", StringComparison.Ordinal)).ShouldBeFalse();
+        result.Differences.All(d => d.PropertyName.Contains(".Id", StringComparison.Ordinal)).ShouldBeTrue();
     }
 
     [TestMethod]
@@ -225,9 +225,9 @@ public class PropertySpecificCollectionOrderComparerTests
 
         var result = compareLogic.Compare(left, right);
 
-        result.AreEqual.Should().BeTrue();
-        result.Differences.Should().BeEmpty();
-        logger.WarningMessages.Should().BeEmpty();
+        result.AreEqual.ShouldBeTrue();
+        result.Differences.ShouldBeEmpty();
+        logger.WarningMessages.ShouldBeEmpty();
     }
 
     [TestMethod]
@@ -260,9 +260,9 @@ public class PropertySpecificCollectionOrderComparerTests
 
         var result = compareLogic.Compare(left, right);
 
-        result.AreEqual.Should().BeTrue();
-        result.Differences.Should().BeEmpty();
-        logger.WarningMessages.Should().BeEmpty();
+        result.AreEqual.ShouldBeTrue();
+        result.Differences.ShouldBeEmpty();
+        logger.WarningMessages.ShouldBeEmpty();
     }
 
     private static CompareLogic CreateCompareLogic(

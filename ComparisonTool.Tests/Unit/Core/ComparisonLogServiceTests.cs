@@ -1,9 +1,9 @@
 using ComparisonTool.Core.Comparison;
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Results;
-using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Shouldly;
 
 namespace ComparisonTool.Tests.Unit.Core;
 
@@ -27,14 +27,16 @@ public class ComparisonLogServiceTests
 
         var stats = service.GetSessionStats(sessionId);
 
-        stats.TotalFilePairs.Should().Be(totalResults);
-        stats.ProcessedFilePairs.Should().Be(totalResults);
-        stats.EqualFilePairs.Should().Be(30);
-        stats.DifferentFilePairs.Should().Be(40);
-        stats.ErrorFilePairs.Should().Be(50);
-        stats.FilesWithErrors.Should().HaveCount(50);
-        stats.ErrorsByType.Should().Contain(new KeyValuePair<string, int>("NullReferenceException", 35));
-        stats.ErrorsByType.Should().Contain(new KeyValuePair<string, int>("TaskCanceledException", 15));
+        stats.TotalFilePairs.ShouldBe(totalResults);
+        stats.ProcessedFilePairs.ShouldBe(totalResults);
+        stats.EqualFilePairs.ShouldBe(30);
+        stats.DifferentFilePairs.ShouldBe(40);
+        stats.ErrorFilePairs.ShouldBe(50);
+        stats.FilesWithErrors.Count.ShouldBe(50);
+        stats.ErrorsByType.TryGetValue("NullReferenceException", out var nullReferenceCount).ShouldBeTrue();
+        nullReferenceCount.ShouldBe(35);
+        stats.ErrorsByType.TryGetValue("TaskCanceledException", out var taskCanceledCount).ShouldBeTrue();
+        taskCanceledCount.ShouldBe(15);
     }
 
     [TestMethod]
@@ -54,18 +56,20 @@ public class ComparisonLogServiceTests
 
         var secondSnapshot = service.GetSessionStats(sessionId);
 
-        firstSnapshot.ProcessedFilePairs.Should().Be(1);
-        firstSnapshot.ErrorFilePairs.Should().Be(1);
-        firstSnapshot.ErrorsByType.Should().ContainKey("Injected");
-        firstSnapshot.FilesWithErrors.Should().Contain("Injected.xml vs Injected.xml");
+        firstSnapshot.ProcessedFilePairs.ShouldBe(1);
+        firstSnapshot.ErrorFilePairs.ShouldBe(1);
+        firstSnapshot.ErrorsByType.ContainsKey("Injected").ShouldBeTrue();
+        firstSnapshot.FilesWithErrors.ShouldContain("Injected.xml vs Injected.xml");
 
-        secondSnapshot.ProcessedFilePairs.Should().Be(3);
-        secondSnapshot.DifferentFilePairs.Should().Be(1);
-        secondSnapshot.ErrorFilePairs.Should().Be(2);
-        secondSnapshot.ErrorsByType.Should().Contain(new KeyValuePair<string, int>("NullReferenceException", 1));
-        secondSnapshot.ErrorsByType.Should().Contain(new KeyValuePair<string, int>("TaskCanceledException", 1));
-        secondSnapshot.ErrorsByType.Should().NotContainKey("Injected");
-        secondSnapshot.FilesWithErrors.Should().NotContain("Injected.xml vs Injected.xml");
+        secondSnapshot.ProcessedFilePairs.ShouldBe(3);
+        secondSnapshot.DifferentFilePairs.ShouldBe(1);
+        secondSnapshot.ErrorFilePairs.ShouldBe(2);
+        secondSnapshot.ErrorsByType.TryGetValue("NullReferenceException", out var secondNullReferenceCount).ShouldBeTrue();
+        secondNullReferenceCount.ShouldBe(1);
+        secondSnapshot.ErrorsByType.TryGetValue("TaskCanceledException", out var secondTaskCanceledCount).ShouldBeTrue();
+        secondTaskCanceledCount.ShouldBe(1);
+        secondSnapshot.ErrorsByType.ContainsKey("Injected").ShouldBeFalse();
+        secondSnapshot.FilesWithErrors.Contains("Injected.xml vs Injected.xml").ShouldBeFalse();
     }
 
     [TestMethod]
@@ -93,10 +97,11 @@ public class ComparisonLogServiceTests
         await readerTask;
 
         var finalSnapshot = service.GetSessionStats(sessionId);
-        finalSnapshot.ProcessedFilePairs.Should().Be(totalResults);
-        finalSnapshot.ErrorFilePairs.Should().Be(totalResults);
-        finalSnapshot.ErrorsByType.Should().Contain(new KeyValuePair<string, int>("NullReferenceException", totalResults));
-        finalSnapshot.FilesWithErrors.Should().HaveCount(totalResults);
+        finalSnapshot.ProcessedFilePairs.ShouldBe(totalResults);
+        finalSnapshot.ErrorFilePairs.ShouldBe(totalResults);
+        finalSnapshot.ErrorsByType.TryGetValue("NullReferenceException", out var finalNullReferenceCount).ShouldBeTrue();
+        finalNullReferenceCount.ShouldBe(totalResults);
+        finalSnapshot.FilesWithErrors.Count.ShouldBe(totalResults);
     }
 
     [TestMethod]
@@ -110,11 +115,11 @@ public class ComparisonLogServiceTests
         service.LogFilePairResult(sessionId, CreateErrorResult(2, "NullReferenceException"));
 
         var snapshot = service.GetSessionStats(sessionId);
-        snapshot.ProcessedFilePairs.Should().Be(1);
-        snapshot.DifferentFilePairs.Should().Be(1);
-        snapshot.ErrorFilePairs.Should().Be(0);
-        snapshot.ErrorsByType.Should().BeEmpty();
-        snapshot.EndTime.Should().NotBeNull();
+        snapshot.ProcessedFilePairs.ShouldBe(1);
+        snapshot.DifferentFilePairs.ShouldBe(1);
+        snapshot.ErrorFilePairs.ShouldBe(0);
+        snapshot.ErrorsByType.ShouldBeEmpty();
+        snapshot.EndTime.ShouldNotBeNull();
     }
 
     private static ComparisonLogService CreateService() => new(NullLogger<ComparisonLogService>.Instance);
