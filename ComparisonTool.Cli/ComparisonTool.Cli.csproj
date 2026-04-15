@@ -41,18 +41,19 @@
     <BlazorReportPublishDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\ComparisonTool.Report\bin\publish\wwwroot\'))</BlazorReportPublishDir>
   </PropertyGroup>
 
-  <!-- Publishes the Blazor Report WASM project to generate static assets.
-       Only runs if the _framework directory doesn't exist (first build or after clean).
-       If ComparisonTool.Report source changes, delete ComparisonTool.Report\bin\publish\ to force re-publish,
-       or run: dotnet publish ComparisonTool.Report -c Release -o ComparisonTool.Report\bin\publish -->
-  <Target Name="PublishBlazorReport" BeforeTargets="BeforeBuild" Condition="!Exists('$(BlazorReportPublishDir)_framework')">
+    <!-- Publishes the Blazor Report WASM project to generate static assets.
+      This runs on each CLI build/publish so report host-page changes always flow into
+      generated report artifacts without requiring a manual clean of the publish folder. -->
+    <Target Name="PublishBlazorReport" BeforeTargets="BeforeBuild">
     <Exec Command="dotnet publish ..\ComparisonTool.Report\ComparisonTool.Report.csproj -c Release -o ..\ComparisonTool.Report\bin\publish" />
   </Target>
 
   <ItemGroup>
-    <None Include="..\ComparisonTool.Report\bin\publish\wwwroot\**\*" Link="BlazorReportAssets\%(RecursiveDir)%(Filename)%(Extension)">
+    <Content Include="..\ComparisonTool.Report\bin\publish\wwwroot\**\*" Link="BlazorReportAssets\%(RecursiveDir)%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

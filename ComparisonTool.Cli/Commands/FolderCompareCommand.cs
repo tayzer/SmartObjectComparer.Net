@@ -296,8 +296,9 @@ public static class FolderCompareCommand
                     break;
                 case OutputFormat.Html:
                     var blazorDir = Path.Combine(resolvedOutputDir, $"comparison-result-{DateTime.Now:yyyyMMdd-HHmmss}");
-                    var indexPath = await BlazorReportWriter.WriteAsync(reportContext, blazorDir, enhancedAnalysis);
-                    Console.WriteLine($"  HTML report: {indexPath}");
+                    var htmlPath = await BlazorReportWriter.WriteAsync(reportContext, blazorDir, enhancedAnalysis);
+                    Console.WriteLine($"  HTML report: {htmlPath}");
+                    Console.WriteLine($"  Local view:  run {Path.Combine(blazorDir, "serve.cmd")}");
                     break;
             }
         }

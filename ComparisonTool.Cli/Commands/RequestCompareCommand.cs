@@ -517,8 +517,9 @@ public static partial class RequestCompareCommand
                     break;
                 case OutputFormat.Html:
                     var blazorDir = Path.Combine(resolvedOutputDir, $"request-comparison-{outputTimestamp}");
-                    var indexPath = await BlazorReportWriter.WriteAsync(reportContext, blazorDir);
-                    Console.WriteLine($"  HTML report: {indexPath}");
+                    var htmlPath = await BlazorReportWriter.WriteAsync(reportContext, blazorDir);
+                    Console.WriteLine($"  HTML report: {htmlPath}");
+                    Console.WriteLine($"  Local view:  run {Path.Combine(blazorDir, "serve.cmd")}");
                     break;
                 case OutputFormat.Markdown:
                     var mdPath = Path.Combine(resolvedOutputDir, $"request-comparison-{outputTimestamp}.md");

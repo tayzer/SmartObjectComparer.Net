@@ -17,9 +17,8 @@ $ContentType = "application/xml"
 $IgnoreRulesPath = ""
 $OutputDirectory = "C:\Dev\GitMain\ComparisonTool\reports"
 $OutputType = @("Console", "Markdown", "Html")
-# Use SingleFile here because this script is intended for local runs where testers open the artifact directly from disk.
-# Switch to StaticSite when serving the report directory over HTTP and you want chunked lazy loading.
-$HtmlMode = "SingleFile"
+# Html output generates a Jenkins-style redirector .html file plus a companion folder
+# containing the Blazor assets.
 # ------------------------------
 
 Write-Host "Building CLI project..."
@@ -61,13 +60,10 @@ if (-not [string]::IsNullOrWhiteSpace($IgnoreRulesPath))
     $arguments += @("--ignore-rules", $IgnoreRulesPath)
 }
 
-if ($OutputType -contains "Html" -and -not [string]::IsNullOrWhiteSpace($HtmlMode))
-{
-    $arguments += @("--html-mode", $HtmlMode)
-}
-
 Write-Host "Running request comparison..."
 Write-Host "$exePath $($arguments -join ' ')"
 
 & $exePath @arguments
-exit $LASTEXITCODE
+$cliExitCode = $LASTEXITCODE
+
+exit $cliExitCode

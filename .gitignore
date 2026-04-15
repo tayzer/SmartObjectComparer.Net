@@ -370,3 +370,4 @@ FodyWeavers.xsd
 ComparisonTool.Web/PerformanceReports/
 /reports
 /PerformanceReports
+/scripts/PerformanceReports
