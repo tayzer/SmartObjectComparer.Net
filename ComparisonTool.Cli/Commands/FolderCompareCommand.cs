@@ -89,13 +89,6 @@ public static class FolderCompareCommand
             DefaultValueFactory = _ => new[] { OutputFormat.Console },
         };
 
-        var htmlModeOption = new Option<HtmlReportMode>("--html-mode")
-        {
-            Description = "HTML output mode: SingleFile or StaticSite",
-            Arity = ArgumentArity.ZeroOrOne,
-            DefaultValueFactory = _ => HtmlReportMode.SingleFile,
-        };
-
         var pageSizeOption = new Option<int>("--page-size")
         {
             Description = "Max file pairs per markdown page (0 = no pagination, all in one file)",
@@ -131,7 +124,6 @@ public static class FolderCompareCommand
             ignoreTrailingWhitespaceOption,
             outputOption,
             formatOption,
-            htmlModeOption,
             pageSizeOption,
             disableTruncationOption,
         };
@@ -150,7 +142,6 @@ public static class FolderCompareCommand
             var ignoreTrailingWhitespaceAtEnd = parseResult.GetValue(ignoreTrailingWhitespaceOption);
             var outputDir = parseResult.GetValue(outputOption);
             var formats = parseResult.GetValue(formatOption) ?? new[] { OutputFormat.Console };
-            var htmlMode = parseResult.GetValue(htmlModeOption);
             var pageSize = parseResult.GetValue(pageSizeOption);
             var disableTruncation = parseResult.GetValue(disableTruncationOption);
 
@@ -167,7 +158,6 @@ public static class FolderCompareCommand
                 ignoreTrailingWhitespaceAtEnd,
                 outputDir,
                 formats,
-                htmlMode,
                 pageSize,
                 disableTruncation,
                 cancellationToken);
@@ -189,7 +179,6 @@ public static class FolderCompareCommand
         bool ignoreTrailingWhitespaceAtEnd,
         DirectoryInfo? outputDir,
         OutputFormat[] formats,
-        HtmlReportMode htmlMode,
         int markdownPageSize,
         bool disableTruncation,
         CancellationToken cancellationToken)
@@ -281,7 +270,6 @@ public static class FolderCompareCommand
             ModelName = modelName,
             MostAffectedFields = MostAffectedFieldsAggregator.Build(result),
             MarkdownPageSize = markdownPageSize,
-            HtmlMode = htmlMode,
             DisableTruncation = disableTruncation,
         };
 
@@ -307,9 +295,9 @@ public static class FolderCompareCommand
                     Console.WriteLine($"  Markdown report: {mdPath}{pageSuffix}");
                     break;
                 case OutputFormat.Html:
-                    var htmlPath = Path.Combine(resolvedOutputDir, $"comparison-result-{DateTime.Now:yyyyMMdd-HHmmss}.html");
-                    await HtmlReportWriter.WriteAsync(reportContext, htmlPath);
-                    Console.WriteLine($"  HTML report: {htmlPath}");
+                    var blazorDir = Path.Combine(resolvedOutputDir, $"comparison-result-{DateTime.Now:yyyyMMdd-HHmmss}");
+                    var indexPath = await BlazorReportWriter.WriteAsync(reportContext, blazorDir, enhancedAnalysis);
+                    Console.WriteLine($"  HTML report: {indexPath}");
                     break;
             }
         }

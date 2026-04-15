@@ -37,18 +37,22 @@
         </Content>
     </ItemGroup>
 
-  <Target Name="RestoreReportUIDependencies" BeforeTargets="BuildReportUI" Condition="!Exists('..\ComparisonTool.ReportUI\node_modules')">
-    <Exec Command="npm ci" WorkingDirectory="..\ComparisonTool.ReportUI" />
-  </Target>
+  <PropertyGroup>
+    <BlazorReportPublishDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\ComparisonTool.Report\bin\publish\wwwroot\'))</BlazorReportPublishDir>
+  </PropertyGroup>
 
-  <Target Name="BuildReportUI" BeforeTargets="BeforeBuild">
-    <Exec Command="npm run build" WorkingDirectory="..\ComparisonTool.ReportUI" />
+  <!-- Publishes the Blazor Report WASM project to generate static assets.
+       Only runs if the _framework directory doesn't exist (first build or after clean).
+       If ComparisonTool.Report source changes, delete ComparisonTool.Report\bin\publish\ to force re-publish,
+       or run: dotnet publish ComparisonTool.Report -c Release -o ComparisonTool.Report\bin\publish -->
+  <Target Name="PublishBlazorReport" BeforeTargets="BeforeBuild" Condition="!Exists('$(BlazorReportPublishDir)_framework')">
+    <Exec Command="dotnet publish ..\ComparisonTool.Report\ComparisonTool.Report.csproj -c Release -o ..\ComparisonTool.Report\bin\publish" />
   </Target>
 
   <ItemGroup>
-    <EmbeddedResource Include="..\ComparisonTool.ReportUI\dist\index.html">
-      <Link>Resources\ReportTemplate.html</Link>
-    </EmbeddedResource>
+    <None Include="..\ComparisonTool.Report\bin\publish\wwwroot\**\*" Link="BlazorReportAssets\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

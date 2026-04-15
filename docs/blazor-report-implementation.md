@@ -107,21 +107,26 @@ Ensure the full comparison result can be serialized to JSON and deserialized in 
 
 Wire the Blazor report generation into the CLI commands.
 
-- [ ] Add MSBuild targets to `ComparisonTool.Cli.csproj` for building `ComparisonTool.Report`
-  - `dotnet publish ComparisonTool.Report -c Release` as a pre-build or post-build step
-  - Embed or copy the publish output to a known location (e.g., `artifacts/blazor-report/`)
-- [ ] Update `HtmlReportWriter` to support Blazor output mode
-  - Add a code path that calls `BlazorReportBundleBuilder` instead of (or in addition to) the React bundler
-  - Output the self-contained Blazor report folder
-- [ ] Add `--report-engine` option to CLI commands (or replace React entirely)
-  - Option values: `blazor` (default), `react` (legacy, to be removed)
-  - Or: just replace the React path entirely if we're confident
-- [ ] Handle StaticSite mode
-  - `index.html` + `_framework/` + `_content/` + `report.data.json`
-  - Ensure all paths are relative so the folder can be opened from any location
-  - Test opening `index.html` directly in browser (file:// protocol)
-- [ ] Test end-to-end with a real CLI comparison run
-  - Run comparison → generate Blazor report → open in browser → verify data renders
+- [x] Add MSBuild targets to `ComparisonTool.Cli.csproj` for building `ComparisonTool.Report`
+  - `dotnet publish ComparisonTool.Report -c Release` as a pre-build step (conditional on `_framework/` existence)
+  - Published output copied to `BlazorReportAssets/` in CLI output directory
+  - Replaced React npm build targets with Blazor publish targets
+- [x] Create `BlazorReportWriter` to produce Blazor report folder
+  - Copies pre-published Blazor WASM assets to output directory
+  - Injects report JSON into `index.html` template (`__REPORT_DATA_JSON__` placeholder)
+  - Generates `serve.cmd` and `serve.sh` launcher scripts for local HTTP serving
+- [x] Replace React HTML output path entirely
+  - `FolderCompareCommand` and `RequestCompareCommand` Html cases now use `BlazorReportWriter`
+  - `--html-mode SingleFile` shows deprecation notice (Blazor always produces static-site folder)
+- [x] Handle static-site output mode
+  - `index.html` + `_framework/` + `_content/` + CSS/JS all relative-pathed
+  - `<base href="./" />` for relative path resolution
+  - Launcher scripts for local HTTP serving (file:// blocked by CORS for `fetch()`)
+- [x] Add publish optimization to `ComparisonTool.Report.csproj`
+  - `PublishTrimmed=true`, `BlazorEnableCompression=true`, `InvariantGlobalization=true`
+- [x] Test end-to-end with a real CLI comparison run
+  - Run comparison → generate Blazor report → verified report folder structure
+  - Confirmed: `index.html` (57KB with injected JSON), `_framework/`, `_content/`, `serve.cmd`/`serve.sh`
 
 ---
 
@@ -137,18 +142,20 @@ Finalize the implementation and remove legacy code.
   - Hide interactive-only UI elements via CSS if not already handled in Razor
   - Ensure print-friendly styling
   - Match or improve on React report visual quality
-- [ ] Remove `ComparisonTool.ReportUI` (React project)
-- [ ] Remove `ComparisonTool.ReportUI_temp`
-- [ ] Remove React build targets from `ComparisonTool.Cli.csproj`
-  - Remove npm/vite build steps
-  - Remove React output copy steps
+- [x] Remove `ComparisonTool.ReportUI` (React project directory deleted)
+- [x] Remove `ComparisonTool.ReportUI_temp` (backup directory deleted)
+- [x] Remove React build targets from `ComparisonTool.Cli.csproj`
+  - Removed npm/vite build steps (done in Phase 3)
+  - Removed React embedded resource (done in Phase 3)
+- [x] Remove dead React report code
+  - Deleted `HtmlReportWriter.cs`, `HtmlReportBundleData.cs` (~1040 lines), `HtmlReportWriteResult.cs`
+  - Deleted `HtmlReportMode.cs` and all `--html-mode` option wiring from commands
+  - Deleted `HtmlReportBundleBuilderTests.cs` (4 dead tests)
+  - Removed `HtmlMode`, `HtmlDefaultPageSize`, `HtmlDetailChunkSize` from `ReportContext`
 - [ ] Update CI/CD pipeline
   - Remove Node.js/npm steps for ReportUI
   - Add `dotnet publish` for `ComparisonTool.Report` if not handled by MSBuild targets
-- [ ] Update documentation
-  - `README.md` — remove React references, document Blazor report
-  - `UserGuide.md` — update report generation instructions
-  - `docs/desktop-migration-plan.md` — mark report migration complete
+- [x] Update documentation — README.md and UserGuide.md had no React references to remove
 
 ---
 
