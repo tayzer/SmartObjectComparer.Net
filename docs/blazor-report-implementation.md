@@ -22,6 +22,7 @@ CLI comparison run
 Key points:
 - `ComparisonTool.Report` is a standalone Blazor WASM project referencing `ComparisonTool.UI` and `ComparisonTool.Core`
 - At runtime it reads embedded JSON (no API calls) via `ReportDataService`
+- Static report Full File View uses raw content embedded into `ReportBootstrapData`; XML and JSON payloads are pretty-formatted during CLI bundle generation for display.
 - All interactive services (folder picker, request comparison, progress) are stubbed as no-ops
 - File export uses JS interop `saveAsFile` for downloading filtered results
 
@@ -165,7 +166,7 @@ Finalize the implementation and remove legacy code.
 |------|--------|------------|
 | **Blazor WASM file size** | `_framework/` can be 5-15MB+ depending on trimming | Enable IL trimming + compression in publish. The report is opened locally, not served over slow networks, so this is acceptable. |
 | **`Difference` serialization** | `KellermanSoftware.CompareNetObjects.Difference` has `object`-typed properties that don't round-trip cleanly with `System.Text.Json` | Custom `JsonConverter<Difference>` that serializes object properties as their string representation. Verified via round-trip tests. |
-| **RawContentService gap** | `ComparisonTool.UI` components may depend on `RawContentService` to fetch file content on demand — not available in static report | Embed raw content in `ReportBootstrapData` if needed, or gracefully degrade (show "content not available in static report"). |
+| **RawContentService gap** | `ComparisonTool.UI` components may depend on `RawContentService` to fetch file content on demand — not available in static report | Embed raw content in `ReportBootstrapData` for static Full File View, and if embedded content is missing in browser mode show an unavailable message instead of touching host file paths. |
 | **MudBlazor providers** | Missing `MudThemeProvider` / `MudPopoverProvider` etc. causes silent rendering failures | `App.razor` must include all required MudBlazor provider components. Verified by visual inspection of rendered report. |
 | **file:// protocol restrictions** | Some browsers block `fetch()` / `XMLHttpRequest` from `file://` URLs | Blazor WASM boots from inline resources. Use inline `<script>` JSON rather than external fetch. Alternatively, document that a local HTTP server is needed (e.g., `python -m http.server`). |
 | **Component coupling to interactive services** | UI components may call services that are no-op in report mode, causing null refs or confusing UX | All stub services return safe defaults. UI components should null-check or use `[CascadingParameter]` for report-mode awareness. |

@@ -3,6 +3,7 @@ using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.RequestComparison.Services;
 using ComparisonTool.Core.Serialization.BlazorReport;
+using ComparisonTool.Core.Utilities;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ComparisonTool.Cli.Reporting;
@@ -61,8 +62,14 @@ internal static class BlazorReportBundleBuilder
                 if (rawContent.IsLoaded)
                 {
                     clonedPair.HasEmbeddedRawContent = true;
-                    clonedPair.EmbeddedRawContentA = rawContent.ContentA;
-                    clonedPair.EmbeddedRawContentB = rawContent.ContentB;
+                    clonedPair.EmbeddedRawContentA = StructuredTextDisplayFormatter.FormatForDisplay(
+                        rawContent.ContentA,
+                        pair.ContentTypeA,
+                        pair.File1Name);
+                    clonedPair.EmbeddedRawContentB = StructuredTextDisplayFormatter.FormatForDisplay(
+                        rawContent.ContentB,
+                        pair.ContentTypeB,
+                        pair.File2Name);
                     clonedPair.EmbeddedRawContentTruncatedA = rawContent.IsTruncatedA;
                     clonedPair.EmbeddedRawContentTruncatedB = rawContent.IsTruncatedB;
                 }
