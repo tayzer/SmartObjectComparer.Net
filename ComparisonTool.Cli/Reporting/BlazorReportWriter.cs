@@ -50,7 +50,7 @@ internal static class BlazorReportWriter
         }
 
         var template = await File.ReadAllTextAsync(templatePath, Utf8WithoutBom);
-        var reportJson = BlazorReportBundleBuilder.BuildJson(context, enhancedAnalysis);
+        var reportJson = await BlazorReportBundleBuilder.BuildJsonAsync(context, enhancedAnalysis);
 
         var injected = template.Replace(ReportDataPlaceholder, reportJson);
 

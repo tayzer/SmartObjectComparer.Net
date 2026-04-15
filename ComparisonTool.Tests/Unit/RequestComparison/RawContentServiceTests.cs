@@ -57,4 +57,28 @@ public sealed class RawContentServiceTests
         result.ContentA.Should().Be(body);
         result.ContentB.Should().Be(body);
     }
+
+    [TestMethod]
+    public async Task LoadRawContentAsync_UsesEmbeddedContentBeforeDiskAccess()
+    {
+        var pair = new FilePairComparisonResult
+        {
+            HasEmbeddedRawContent = true,
+            EmbeddedRawContentA = "<embedded>a</embedded>",
+            EmbeddedRawContentB = "<embedded>b</embedded>",
+            EmbeddedRawContentTruncatedA = true,
+            EmbeddedRawContentTruncatedB = false,
+            File1Path = Path.Combine(tempDir, "missing-a.xml"),
+            File2Path = Path.Combine(tempDir, "missing-b.xml"),
+        };
+
+        var result = await service.LoadRawContentAsync(pair);
+
+        result.IsLoaded.Should().BeTrue();
+        result.ErrorMessage.Should().BeNull();
+        result.ContentA.Should().Be("<embedded>a</embedded>");
+        result.ContentB.Should().Be("<embedded>b</embedded>");
+        result.IsTruncatedA.Should().BeTrue();
+        result.IsTruncatedB.Should().BeFalse();
+    }
 }

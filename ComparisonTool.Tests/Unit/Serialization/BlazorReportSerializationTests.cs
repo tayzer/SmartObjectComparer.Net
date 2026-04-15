@@ -185,4 +185,41 @@ public class BlazorReportSerializationTests
         m.JobId.Should().Be("job-99");
         m.ElapsedSeconds.Should().Be(42.567);
     }
+
+    [TestMethod]
+    public void ReportBootstrapData_RoundTrips_EmbeddedRawContent()
+    {
+        var bootstrapData = new ReportBootstrapData
+        {
+            Result = new MultiFolderComparisonResult
+            {
+                AllEqual = false,
+                TotalPairsCompared = 1,
+                FilePairResults = new List<FilePairComparisonResult>
+                {
+                    new()
+                    {
+                        File1Name = "request1.xml",
+                        File2Name = "request1.xml",
+                        HasEmbeddedRawContent = true,
+                        EmbeddedRawContentA = "<fault>endpoint-a</fault>",
+                        EmbeddedRawContentB = "<fault>endpoint-b</fault>",
+                        EmbeddedRawContentTruncatedA = true,
+                        EmbeddedRawContentTruncatedB = false,
+                    },
+                },
+            },
+        };
+
+        var json = JsonSerializer.Serialize(bootstrapData, BlazorReportSerializerOptions.Default);
+        var result = JsonSerializer.Deserialize<ReportBootstrapData>(json, BlazorReportSerializerOptions.Default)!;
+
+        result.Result!.FilePairResults.Should().ContainSingle();
+        var pair = result.Result.FilePairResults[0];
+        pair.HasEmbeddedRawContent.Should().BeTrue();
+        pair.EmbeddedRawContentA.Should().Be("<fault>endpoint-a</fault>");
+        pair.EmbeddedRawContentB.Should().Be("<fault>endpoint-b</fault>");
+        pair.EmbeddedRawContentTruncatedA.Should().BeTrue();
+        pair.EmbeddedRawContentTruncatedB.Should().BeFalse();
+    }
 }

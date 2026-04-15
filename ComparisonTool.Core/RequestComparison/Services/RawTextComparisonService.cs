@@ -237,6 +237,43 @@ public class RawTextComparisonService
     }
 
     /// <summary>
+    /// Compares two already-loaded text bodies as raw text.
+    /// Used by static report hosts that cannot reopen the original source files from disk.
+    /// </summary>
+    public List<RawTextDifference> CompareContentRaw(
+        string? contentA,
+        string? contentB,
+        bool isTruncatedA = false,
+        bool isTruncatedB = false,
+        RawFileComparisonMode mode = RawFileComparisonMode.Preview)
+    {
+        var diffs = new List<RawTextDifference>();
+        var useFullContent = mode == RawFileComparisonMode.FullContent;
+        var maxDiffLines = useFullContent ? int.MaxValue : MaxDiffLines;
+
+        var linesA = SplitLines(contentA);
+        var linesB = SplitLines(contentB);
+
+        if (linesA.Length == 0 && linesB.Length == 0)
+        {
+            return diffs;
+        }
+
+        diffs.AddRange(ComputeLineDifferences(linesA, linesB, maxDiffLines));
+
+        if (!useFullContent && (isTruncatedA || isTruncatedB))
+        {
+            diffs.Add(new RawTextDifference
+            {
+                Type = RawTextDifferenceType.Modified,
+                Description = "File content truncated for report preview.",
+            });
+        }
+
+        return diffs;
+    }
+
+    /// <summary>
     /// Reads response or file content from disk, optionally truncating the content for preview mode.
     /// </summary>
     private static async Task<(string[] lines, bool wasTruncated)> ReadResponseBodyAsync(
@@ -305,6 +342,13 @@ public class RawTextComparisonService
         return text.Length > 0 && text[0] == '\uFEFF'
             ? text[1..]
             : text;
+    }
+
+    private static string[] SplitLines(string? text)
+    {
+        return string.IsNullOrEmpty(text)
+            ? Array.Empty<string>()
+            : text.Split('\n');
     }
 
     private static Encoding ResolveEncoding(byte[] buffer, int bytesRead, string? contentType)

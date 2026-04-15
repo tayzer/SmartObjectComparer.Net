@@ -34,6 +34,22 @@ public class RawContentService
     {
         var result = new RawContentResult();
 
+        if (pair.HasEmbeddedRawContent)
+        {
+            result.ContentA = pair.EmbeddedRawContentA ?? string.Empty;
+            result.ContentB = pair.EmbeddedRawContentB ?? string.Empty;
+            result.IsTruncatedA = pair.EmbeddedRawContentTruncatedA;
+            result.IsTruncatedB = pair.EmbeddedRawContentTruncatedB;
+            result.IsLoaded = true;
+            return result;
+        }
+
+        if (OperatingSystem.IsBrowser())
+        {
+            result.ErrorMessage = "Full File View is unavailable because this static report does not include embedded source content for the selected pair.";
+            return result;
+        }
+
         if (string.IsNullOrEmpty(pair.File1Path) || string.IsNullOrEmpty(pair.File2Path))
         {
             logger.LogWarning("Cannot load raw content: file paths are not available on the comparison result.");

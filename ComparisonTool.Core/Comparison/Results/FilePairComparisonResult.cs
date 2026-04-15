@@ -70,6 +70,32 @@ public class FilePairComparisonResult
     public List<RawTextDifference>? RawTextDifferences { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether report-bundled raw content is available for this pair.
+    /// Static HTML reports use this instead of trying to reopen host file-system paths from the browser.
+    /// </summary>
+    public bool HasEmbeddedRawContent { get; set; }
+
+    /// <summary>
+    /// Gets or sets report-bundled raw content for endpoint/file A when available.
+    /// </summary>
+    public string? EmbeddedRawContentA { get; set; }
+
+    /// <summary>
+    /// Gets or sets report-bundled raw content for endpoint/file B when available.
+    /// </summary>
+    public string? EmbeddedRawContentB { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether report-bundled raw content A was truncated.
+    /// </summary>
+    public bool EmbeddedRawContentTruncatedA { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether report-bundled raw content B was truncated.
+    /// </summary>
+    public bool EmbeddedRawContentTruncatedB { get; set; }
+
+    /// <summary>
     /// Gets or sets error information if the comparison failed.
     /// When HasError is true, the files could not be compared (e.g., FileNotFound, deserialization errors).
     /// </summary>

@@ -262,12 +262,22 @@ else if (FolderComparisonResult != null)
         }
 
         // Compute raw file diff for error detail view
-        if (selectedPair.HasError && !string.IsNullOrEmpty(selectedPair.File1Path))
+        if (selectedPair.HasError)
         {
             try
             {
-                RawFileDifferences = await RawTextComparisonService.CompareFilesRawAsync(
-                    selectedPair.File1Path, selectedPair.File2Path);
+                if (selectedPair.HasEmbeddedRawContent)
+                {
+                    RawFileDifferences = RawTextComparisonService.CompareContentRaw(
+                        selectedPair.EmbeddedRawContentA,
+                        selectedPair.EmbeddedRawContentB,
+                        selectedPair.EmbeddedRawContentTruncatedA,
+                        selectedPair.EmbeddedRawContentTruncatedB);
+                }
+                else
+                {
+                    RawFileDifferences = null;
+                }
             }
             catch (Exception ex)
             {
