@@ -16,7 +16,7 @@ public class SystemResourceMonitor
     private const int ResourceCheckCacheTimeMs = 1000; // Only check resources every second
 
     private readonly ILogger<SystemResourceMonitor> logger;
-    private readonly Process currentProcess;
+    private readonly Process? currentProcess;
 
     // Cache values to avoid frequent checks
     private DateTime lastCpuCheck = DateTime.MinValue;
@@ -27,7 +27,15 @@ public class SystemResourceMonitor
     public SystemResourceMonitor(ILogger<SystemResourceMonitor> logger)
     {
         this.logger = logger;
-        currentProcess = Process.GetCurrentProcess();
+
+        try
+        {
+            currentProcess = Process.GetCurrentProcess();
+        }
+        catch (PlatformNotSupportedException ex)
+        {
+            logger.LogInformation(ex, "Process metrics are not available on this platform. Falling back to default resource heuristics.");
+        }
     }
 
     /// <summary>
@@ -36,6 +44,11 @@ public class SystemResourceMonitor
     /// <returns></returns>
     public double GetCpuUsage()
     {
+        if (currentProcess == null)
+        {
+            return 50;
+        }
+
         if ((DateTime.Now - lastCpuCheck).TotalMilliseconds < ResourceCheckCacheTimeMs)
         {
             return cachedCpuUsage;
@@ -76,6 +89,11 @@ public class SystemResourceMonitor
     /// <returns></returns>
     public double GetMemoryUsage()
     {
+        if (currentProcess == null)
+        {
+            return 50;
+        }
+
         if ((DateTime.Now - lastMemoryCheck).TotalMilliseconds < ResourceCheckCacheTimeMs)
         {
             return cachedMemoryUsage;

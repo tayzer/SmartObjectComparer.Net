@@ -1,11 +1,13 @@
 @page "/"
 @page "/index.html"
+@using ComparisonTool.Core.Comparison
 @using ComparisonTool.Core.Comparison.Analysis
 @using ComparisonTool.Core.Comparison.Results
 @using ComparisonTool.Core.RequestComparison.Services
 @using ComparisonTool.UI.Comparison
 @using KellermanSoftware.CompareNetObjects
 @inject ReportDataService ReportDataService
+@inject IComparisonService ComparisonService
 @inject RawTextComparisonService RawTextComparisonService
 @inject IJSRuntime JS
 @inject ILogger<Report> Logger
@@ -91,16 +93,28 @@ else if (FolderComparisonResult != null)
             </MudPaper>
         }
 
-        <!-- Enhanced Structural Analysis / Summary -->
         @if (EnhancedStructuralAnalysis != null)
         {
             <ComparisonRunDetails Analysis="@EnhancedStructuralAnalysis"
                                   FolderComparisonResult="@FolderComparisonResult"
                                   OnFileSelected="@HandleInspectorFileSelected" />
         }
-        else
+
+        @if (!string.IsNullOrWhiteSpace(analysisErrorMessage))
         {
-            <EnhancedDifferenceSummary Summary="@DifferenceSummary" FolderResult="@FolderComparisonResult" />
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.h6">Comparison Run Details Unavailable</MudText>
+                    <MudText Typo="Typo.body2">@analysisErrorMessage</MudText>
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Warning"
+                               Size="Size.Small"
+                               OnClick="RetryEnhancedAnalysis"
+                               aria-label="Retry comparison run details analysis">
+                        Retry Comparison Run Details
+                    </MudButton>
+                </MudStack>
+            </MudAlert>
         }
 
         <!-- File Pair List -->
@@ -136,23 +150,16 @@ else if (FolderComparisonResult != null)
                                          FolderResult="@FolderComparisonResult" />
             }
         }
-
-        <!-- Semantic Analysis -->
-        @if (SemanticAnalysis != null)
-        {
-            <SemanticGroupsPanel Analysis="@SemanticAnalysis"
-                                 OnExportAnalysis="@ExportSemanticAnalysis" />
-        }
     </MudStack>
 }
 
 @code {
     private bool isLoaded;
     private string? errorMessage;
+    private string? analysisErrorMessage;
 
     private MultiFolderComparisonResult? FolderComparisonResult;
     private EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult? EnhancedStructuralAnalysis;
-    private SemanticDifferenceAnalysis? SemanticAnalysis;
     private ReportMetadata? metadata;
 
     private ComparisonResult? ComparisonResult;
@@ -171,8 +178,10 @@ else if (FolderComparisonResult != null)
                 var data = await ReportDataService.LoadAsync();
                 FolderComparisonResult = data.Result;
                 EnhancedStructuralAnalysis = data.EnhancedAnalysis;
-                SemanticAnalysis = data.SemanticAnalysis;
                 metadata = data.Metadata;
+                analysisErrorMessage = null;
+
+                await EnsureEnhancedAnalysisAsync();
 
                 // Auto-select first pair if there are differences
                 if (FolderComparisonResult != null &&
@@ -191,6 +200,46 @@ else if (FolderComparisonResult != null)
             }
 
             StateHasChanged();
+        }
+    }
+
+    private async Task RetryEnhancedAnalysis()
+    {
+        analysisErrorMessage = null;
+        await EnsureEnhancedAnalysisAsync();
+        StateHasChanged();
+    }
+
+    private async Task EnsureEnhancedAnalysisAsync()
+    {
+        if (FolderComparisonResult == null || FolderComparisonResult.AllEqual || EnhancedStructuralAnalysis != null)
+        {
+            return;
+        }
+
+        try
+        {
+            EnhancedStructuralAnalysis = await ComparisonService.AnalyzeStructualPatternsAsync(FolderComparisonResult);
+
+            if (EnhancedStructuralAnalysis == null)
+            {
+                analysisErrorMessage = "Enhanced structural analysis did not return comparison run details.";
+                return;
+            }
+
+            if (FolderComparisonResult.Metadata.ContainsKey("EnhancedStructuralAnalysis"))
+            {
+                FolderComparisonResult.Metadata["EnhancedStructuralAnalysis"] = EnhancedStructuralAnalysis;
+            }
+            else
+            {
+                FolderComparisonResult.Metadata.Add("EnhancedStructuralAnalysis", EnhancedStructuralAnalysis);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to generate comparison run details for the report.");
+            analysisErrorMessage = ex.Message;
         }
     }
 

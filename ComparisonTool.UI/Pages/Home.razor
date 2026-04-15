@@ -294,75 +294,28 @@
                     </MudPaper>
                 }
 
-                @if (EnableEnhancedStructuralAnalysis)
+                @if (EnhancedStructuralAnalysis != null)
                 {
-                    @if (EnhancedStructuralAnalysis != null)
-                    {
-                        <ComparisonRunDetails Analysis="@EnhancedStructuralAnalysis"
-                                              FolderComparisonResult="@FolderComparisonResult"
-                                              OnFileSelected="@HandleInspectorFileSelected" />
-                    }
-                    else
-                    {
-                        <EnhancedDifferenceSummary Summary="@DifferenceSummary" FolderResult="@FolderComparisonResult" />
-                    }
-                }
-                else
-                {
-                    <!-- Enhanced Structural Analysis is disabled - show traditional summary -->
-                    <EnhancedDifferenceSummary Summary="@DifferenceSummary" FolderResult="@FolderComparisonResult" />
+                    <ComparisonRunDetails Analysis="@EnhancedStructuralAnalysis"
+                                          FolderComparisonResult="@FolderComparisonResult"
+                                          OnFileSelected="@HandleInspectorFileSelected" />
                 }
 
-                @if (EnableEnhancedStructuralAnalysis && FolderComparisonResult != null && !FolderComparisonResult.AllEqual)
+                @if (FolderComparisonResult != null && !FolderComparisonResult.AllEqual && !string.IsNullOrWhiteSpace(EnhancedStructuralAnalysisErrorMessage))
                 {
-                    @if (IsEnhancedStructuralAnalysisRunning)
-                    {
-                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-3">
-                            <MudStack Spacing="2">
-                                <MudText Typo="Typo.h6">Enhanced Structural Analysis Running</MudText>
-                                <MudText Typo="Typo.body2">
-                                    @EnhancedStructuralAnalysisStatusMessage
-                                </MudText>
-                                <MudText Typo="Typo.caption" Color="Color.Default">
-                                    File comparison results are ready below. Enhanced analysis is continuing automatically in the background.
-                                </MudText>
-                            </MudStack>
-                        </MudAlert>
-                    }
-                    else if (!string.IsNullOrWhiteSpace(EnhancedStructuralAnalysisErrorMessage))
-                    {
-                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-3">
-                            <MudStack Spacing="2">
-                                <MudText Typo="Typo.h6">Enhanced Structural Analysis Failed</MudText>
-                                <MudText Typo="Typo.body2">@EnhancedStructuralAnalysisErrorMessage</MudText>
-                                <MudButton Variant="Variant.Filled"
-                                           Color="Color.Warning"
-                                           Size="Size.Small"
-                                           OnClick="@(() => StartEnhancedStructuralAnalysisInBackground(FolderComparisonResult))"
-                                           aria-label="Retry enhanced structural analysis">
-                                    Retry Enhanced Structural Analysis
-                                </MudButton>
-                            </MudStack>
-                        </MudAlert>
-                    }
-                    else if (EnhancedStructuralAnalysis == null)
-                    {
-                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mb-3">
-                            <MudStack Spacing="2">
-                                <MudText Typo="Typo.h6">Enhanced Structural Analysis Pending</MudText>
-                                <MudText Typo="Typo.body2">
-                                    Enhanced analysis is enabled but has not completed for this result set yet.
-                                </MudText>
-                                <MudButton Variant="Variant.Filled"
-                                           Color="Color.Success"
-                                           Size="Size.Small"
-                                           OnClick="@(() => StartEnhancedStructuralAnalysisInBackground(FolderComparisonResult))"
-                                           aria-label="Run enhanced structural analysis">
-                                    Run Enhanced Structural Analysis
-                                </MudButton>
-                            </MudStack>
-                        </MudAlert>
-                    }
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-3">
+                        <MudStack Spacing="2">
+                            <MudText Typo="Typo.h6">Comparison Run Details Unavailable</MudText>
+                            <MudText Typo="Typo.body2">@EnhancedStructuralAnalysisErrorMessage</MudText>
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Warning"
+                                       Size="Size.Small"
+                                       OnClick="@(() => StartEnhancedStructuralAnalysisInBackground(FolderComparisonResult))"
+                                       aria-label="Retry enhanced structural analysis">
+                                Retry Comparison Run Details
+                            </MudButton>
+                        </MudStack>
+                    </MudAlert>
                 }
                 
                 <FileComparisonResults Result="@FolderComparisonResult"
@@ -396,31 +349,6 @@
                                              OnExportResults="@ExportFolderResults"
                                              FolderResult="@FolderComparisonResult" />
                 }
-            }
-
-            @if (EnableEnhancedStructuralAnalysis && FolderComparisonResult != null && !FolderComparisonResult.AllEqual && EnhancedStructuralAnalysis == null)
-            {
-                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">
-                    <MudStack Spacing="2">
-                        <MudText Typo="Typo.h6">Enhanced Structural Analysis</MudText>
-                        <MudText Typo="Typo.body2">
-                            Enhanced structural analysis is enabled but no patterns were found or the analysis didn't run.
-                        </MudText>
-                        <MudButton Variant="Variant.Filled" 
-                                   Color="Color.Success" 
-                                   Size="Size.Small" 
-                                   OnClick="@(() => StartEnhancedStructuralAnalysisInBackground(FolderComparisonResult))"
-                                   aria-label="Run enhanced structural analysis">
-                            Run Enhanced Structural Analysis
-                        </MudButton>
-                    </MudStack>
-                </MudAlert>
-            }
-
-            @if (SemanticAnalysis != null && EnableSemanticAnalysis)
-            {
-                <SemanticGroupsPanel Analysis="@SemanticAnalysis"
-                                     OnExportAnalysis="@ExportSemanticAnalysisReport" />
             }
 
             <HierarchicalPropertySelector @ref="propertySelector"
@@ -518,25 +446,6 @@
                                                       FolderComparisonResult="@RequestComparisonResult"
                                                       OnFileSelected="@HandleRequestInspectorFileSelected" />
                             }
-                            else if (EnableEnhancedStructuralAnalysis && !RequestComparisonResult.AllEqual)
-                            {
-                                <MudPaper Elevation="2" Class="pa-4">
-                                    <MudStack Spacing="3">
-                                        <MudText Typo="Typo.h5">Comparison Overview</MudText>
-                                        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="py-6">
-                                            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
-                                            <MudText Typo="Typo.h6" Class="mt-3">Generating Enhanced Analysis...</MudText>
-                                            <MudText Typo="Typo.body2" Color="Color.Default">
-                                                Please wait while we analyze structural patterns and categorize differences.
-                                            </MudText>
-                                        </MudStack>
-                                    </MudStack>
-                                </MudPaper>
-                            }
-                            else
-                            {
-                                <EnhancedDifferenceSummary Summary="@DifferenceSummary" FolderResult="@RequestComparisonResult" />
-                            }
 
                             <FileComparisonResults Result="@RequestComparisonResult"
                                                    SelectedPairIndex="@SelectedRequestPairIndex"
@@ -572,29 +481,21 @@
                         }
                     }
 
-                    @if (EnableEnhancedStructuralAnalysis && RequestComparisonResult != null && !RequestComparisonResult.AllEqual && RequestComparisonEnhancedAnalysis == null)
+                    @if (RequestComparisonResult != null && !RequestComparisonResult.AllEqual && !string.IsNullOrWhiteSpace(RequestEnhancedStructuralAnalysisErrorMessage))
                     {
-                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-3">
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mt-3">
                             <MudStack Spacing="2">
-                                <MudText Typo="Typo.h6">Enhanced Structural Analysis</MudText>
-                                <MudText Typo="Typo.body2">
-                                    Enhanced structural analysis is enabled but no patterns were found or the analysis didn't run.
-                                </MudText>
+                                <MudText Typo="Typo.h6">Comparison Run Details Unavailable</MudText>
+                                <MudText Typo="Typo.body2">@RequestEnhancedStructuralAnalysisErrorMessage</MudText>
                                 <MudButton Variant="Variant.Filled"
-                                           Color="Color.Success"
+                                           Color="Color.Warning"
                                            Size="Size.Small"
                                            OnClick="GenerateRequestEnhancedStructuralAnalysis"
-                                           aria-label="Run request enhanced structural analysis">
-                                    Run Enhanced Structural Analysis
+                                           aria-label="Retry request enhanced structural analysis">
+                                    Retry Comparison Run Details
                                 </MudButton>
                             </MudStack>
                         </MudAlert>
-                    }
-
-                    @if (RequestComparisonSemanticAnalysis != null)
-                    {
-                        <SemanticGroupsPanel Analysis="@RequestComparisonSemanticAnalysis"
-                                             OnExportAnalysis="@ExportRequestSemanticAnalysisReport" />
                     }
                 }
             }
@@ -656,6 +557,7 @@
     private int SelectedRequestPairIndex { get; set; } = -1;
     private SemanticDifferenceAnalysis RequestComparisonSemanticAnalysis { get; set; }
     private EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult RequestComparisonEnhancedAnalysis { get; set; }
+    private string RequestEnhancedStructuralAnalysisErrorMessage { get; set; } = string.Empty;
     private List<RawTextDifference>? RequestRawFileDifferences { get; set; }
     private ObjectTreePropertySelector treePropertySelector;
     
@@ -951,7 +853,7 @@
             });
             
             // Run the comparison
-            FolderComparisonResult = await DirectoryComparisonService.CompareDirectoriesAsync(
+            var comparisonResult = await DirectoryComparisonService.CompareDirectoriesAsync(
                 Directory1Path,
                 Directory2Path,
                 SelectedModelName,
@@ -960,24 +862,8 @@
                 enableSemanticAnalysis: EnableSemanticAnalysis,
                 progress: progressReporter,
                 cancellationToken: cancellationToken);
-                
-            // Select the first result when the run has differences or exposes raw-comparison rows.
-            if (ShouldAutoSelectFolderPair(FolderComparisonResult))
-            {
-                await SelectPairResult(0);
-            }
-            
-            // Get semantic analysis from metadata if available
-            if (FolderComparisonResult.Metadata.TryGetValue("SemanticAnalysis", out var semanticAnalysisObj))
-            {
-                SemanticAnalysis = semanticAnalysisObj as SemanticDifferenceAnalysis;
-            }
-            
-            // Generate enhanced structural analysis if enabled and there are differences
-            if (EnableEnhancedStructuralAnalysis && !FolderComparisonResult.AllEqual)
-            {
-                StartEnhancedStructuralAnalysisInBackground(FolderComparisonResult);
-            }
+
+            await FinalizeFolderComparisonAsync(comparisonResult);
         }
         catch (OperationCanceledException)
         {
@@ -1031,7 +917,7 @@
             // Use folder uploads method
             if (Folder1Files.Count > 500 || Folder2Files.Count > 500)
             {
-                FolderComparisonResult = await DirectoryComparisonService.CompareFolderUploadsAsync(
+                var comparisonResult = await DirectoryComparisonService.CompareFolderUploadsAsync(
                     Folder1Files,
                     Folder2Files,
                     SelectedModelName,
@@ -1039,24 +925,8 @@
                     EnableSemanticAnalysis,
                     progressReporter,
                     cancellationToken);
-                    
-                // Get semantic analysis from metadata if available
-                if (FolderComparisonResult.Metadata.TryGetValue("SemanticAnalysis", out var semanticAnalysisObj))
-                {
-                    SemanticAnalysis = semanticAnalysisObj as SemanticDifferenceAnalysis;
-                }
-                
-                // Select the first result when the run has differences or exposes raw-comparison rows.
-                if (ShouldAutoSelectFolderPair(FolderComparisonResult))
-                {
-                    await SelectPairResult(0);
-                }
-                
-                // Generate enhanced structural analysis if enabled
-                if (EnableEnhancedStructuralAnalysis && !FolderComparisonResult.AllEqual)
-                {
-                    StartEnhancedStructuralAnalysisInBackground(FolderComparisonResult);
-                }
+
+                await FinalizeFolderComparisonAsync(comparisonResult);
             }
             else
             {
@@ -1068,7 +938,7 @@
                 });
 
                 // Use batch comparison service with caching for smaller sets
-                FolderComparisonResult = await ComparisonService.CompareFoldersInBatchesAsync(
+                var comparisonResult = await ComparisonService.CompareFoldersInBatchesAsync(
                     Folder1Files,
                     Folder2Files,
                     SelectedModelName,
@@ -1076,23 +946,15 @@
                     batchProgressReporter,
                     cancellationToken);
 
-                // Select the first result when the run has differences or exposes raw-comparison rows.
-                if (ShouldAutoSelectFolderPair(FolderComparisonResult))
+                // Generate semantic analysis if needed
+                if (!comparisonResult.AllEqual && comparisonResult.FilePairResults.Count > 1 && EnableSemanticAnalysis)
                 {
-                    await SelectPairResult(0);
+                    FolderComparisonResult = comparisonResult;
+                    await GenerateSemanticAnalysis();
+                    FolderComparisonResult = null;
                 }
 
-                // Generate semantic analysis if needed
-                if (!FolderComparisonResult.AllEqual && FolderComparisonResult.FilePairResults.Count > 1 && EnableSemanticAnalysis)
-                {
-                    await GenerateSemanticAnalysis();
-                }
-                
-                // Generate enhanced structural analysis if enabled
-                if (EnableEnhancedStructuralAnalysis && !FolderComparisonResult.AllEqual)
-                {
-                    StartEnhancedStructuralAnalysisInBackground(FolderComparisonResult);
-                }
+                await FinalizeFolderComparisonAsync(comparisonResult);
             }
         }
         catch (OperationCanceledException)
@@ -1109,6 +971,32 @@
             IsComparing = false;
             IsCancellable = false;
             StateHasChanged();
+        }
+    }
+
+    private async Task FinalizeFolderComparisonAsync(MultiFolderComparisonResult comparisonResult)
+    {
+        FolderComparisonResult = comparisonResult;
+
+        if (FolderComparisonResult.Metadata.TryGetValue("SemanticAnalysis", out var semanticAnalysisObj))
+        {
+            SemanticAnalysis = semanticAnalysisObj as SemanticDifferenceAnalysis;
+        }
+
+        if (EnableEnhancedStructuralAnalysis && !FolderComparisonResult.AllEqual)
+        {
+            FolderComparisonResult = null;
+            Progress = new ComparisonProgress(
+                comparisonResult.TotalPairsCompared,
+                comparisonResult.TotalPairsCompared,
+                "Preparing comparison run details...");
+            await GenerateEnhancedStructuralAnalysis(comparisonResult);
+            FolderComparisonResult = comparisonResult;
+        }
+
+        if (ShouldAutoSelectFolderPair(comparisonResult))
+        {
+            await SelectPairResult(0);
         }
     }
     
@@ -1206,9 +1094,10 @@
     // Request Comparison handlers
     private async Task HandleRequestComparisonComplete(MultiFolderComparisonResult result)
     {
-        RequestComparisonResult = result;
+        RequestComparisonResult = null;
         RequestComparisonSemanticAnalysis = null;
         RequestComparisonEnhancedAnalysis = null;
+        RequestEnhancedStructuralAnalysisErrorMessage = string.Empty;
         RequestRawFileDifferences = null;
         SelectedRequestPairIndex = -1;
         
@@ -1226,8 +1115,10 @@
 
         if (EnableEnhancedStructuralAnalysis && !result.AllEqual && RequestComparisonEnhancedAnalysis == null)
         {
-            await GenerateRequestEnhancedStructuralAnalysis();
+            RequestComparisonEnhancedAnalysis = await GenerateRequestEnhancedStructuralAnalysisCore(result);
         }
+
+        RequestComparisonResult = result;
         
         // Select first result if there are differences
         if (!result.AllEqual && result.FilePairResults.Count > 0)
@@ -1476,28 +1367,43 @@
 
     private async Task GenerateRequestEnhancedStructuralAnalysis()
     {
-        if (RequestComparisonResult == null)
-            return;
+        RequestComparisonEnhancedAnalysis = await GenerateRequestEnhancedStructuralAnalysisCore(RequestComparisonResult);
+        StateHasChanged();
+    }
+
+    private async Task<EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult?> GenerateRequestEnhancedStructuralAnalysisCore(MultiFolderComparisonResult? result)
+    {
+        if (result == null)
+            return null;
 
         try
         {
-            var (filesWithDifferences, totalDifferences) = GetAnalysisScopeSummary(RequestComparisonResult);
+            RequestEnhancedStructuralAnalysisErrorMessage = string.Empty;
+            var (filesWithDifferences, totalDifferences) = GetAnalysisScopeSummary(result);
             Logger.LogInformation(
                 "Starting request enhanced structural pattern analysis for {FilesWithDifferences} files with differences and {TotalDifferences} total differences.",
                 filesWithDifferences,
                 totalDifferences);
-            RequestComparisonEnhancedAnalysis = await ComparisonService.AnalyzeStructualPatternsAsync(RequestComparisonResult);
+            var analysis = await ComparisonService.AnalyzeStructualPatternsAsync(result);
 
-            if (RequestComparisonResult.Metadata.ContainsKey("EnhancedStructuralAnalysis"))
-                RequestComparisonResult.Metadata["EnhancedStructuralAnalysis"] = RequestComparisonEnhancedAnalysis;
+            if (analysis == null)
+            {
+                RequestEnhancedStructuralAnalysisErrorMessage = "Enhanced structural analysis did not return comparison run details.";
+                return null;
+            }
+
+            if (result.Metadata.ContainsKey("EnhancedStructuralAnalysis"))
+                result.Metadata["EnhancedStructuralAnalysis"] = analysis;
             else
-                RequestComparisonResult.Metadata.Add("EnhancedStructuralAnalysis", RequestComparisonEnhancedAnalysis);
+                result.Metadata.Add("EnhancedStructuralAnalysis", analysis);
 
-            StateHasChanged();
+            return analysis;
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error generating request enhanced structural pattern analysis");
+            RequestEnhancedStructuralAnalysisErrorMessage = ex.Message;
+            return null;
         }
     }
     
