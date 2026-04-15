@@ -1,0 +1,23 @@
+@using MudBlazor
+
+<MudThemeProvider />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudMainContent Class="pa-4">
+        <Router AppAssembly="typeof(App).Assembly"
+                AdditionalAssemblies="new[] { typeof(ComparisonTool.UI._Imports).Assembly }">
+            <Found Context="routeData">
+                <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.ReportLayout)" />
+                <FocusOnNavigate RouteData="routeData" Selector="h1" />
+            </Found>
+            <NotFound>
+                <LayoutView Layout="typeof(Layout.ReportLayout)">
+                    <MudText Typo="Typo.h5" Color="Color.Error">Page not found</MudText>
+                </LayoutView>
+            </NotFound>
+        </Router>
+    </MudMainContent>
+</MudLayout>

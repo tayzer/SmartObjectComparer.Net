@@ -31,6 +31,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ComparisonTool.UI", "Compar
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ComparisonTool.Desktop", "ComparisonTool.Desktop\ComparisonTool.Desktop.csproj", "{F2B3C4D5-E6F7-4A89-0B1C-2D3E4F5A6B7C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ComparisonTool.Report", "ComparisonTool.Report\ComparisonTool.Report.csproj", "{590CCBC1-3445-4888-8ED3-F277EE442B9B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -149,6 +151,18 @@ Global
 		{F2B3C4D5-E6F7-4A89-0B1C-2D3E4F5A6B7C}.Release|x64.Build.0 = Release|Any CPU
 		{F2B3C4D5-E6F7-4A89-0B1C-2D3E4F5A6B7C}.Release|x86.ActiveCfg = Release|Any CPU
 		{F2B3C4D5-E6F7-4A89-0B1C-2D3E4F5A6B7C}.Release|x86.Build.0 = Release|Any CPU
+		{590CCBC1-3445-4888-8ED3-F277EE442B9B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{590CCBC1-3445-4888-8ED3-F277EE442B9B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{590CCBC1-3445-4888-8ED3-F277EE442B9B}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{590CCBC1-3445-4888-8ED3-F277EE442B9B}.Debug|x64.Build.0 = Debug|Any CPU
+		{590CCBC1-3445-4888-8ED3-F277EE442B9B}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{590CCBC1-3445-4888-8ED3-F277EE442B9B}.Debug|x86.Build.0 = Debug|Any CPU
+		{590CCBC1-3445-4888-8ED3-F277EE442B9B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{590CCBC1-3445-4888-8ED3-F277EE442B9B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{590CCBC1-3445-4888-8ED3-F277EE442B9B}.Release|x64.ActiveCfg = Release|Any CPU
+		{590CCBC1-3445-4888-8ED3-F277EE442B9B}.Release|x64.Build.0 = Release|Any CPU
+		{590CCBC1-3445-4888-8ED3-F277EE442B9B}.Release|x86.ActiveCfg = Release|Any CPU
+		{590CCBC1-3445-4888-8ED3-F277EE442B9B}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

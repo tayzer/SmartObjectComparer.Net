@@ -3,10 +3,13 @@ using System.Diagnostics;
 using ComparisonTool.Cli.Infrastructure;
 using ComparisonTool.Cli.Reporting;
 using ComparisonTool.Core.Comparison;
+using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Serialization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ComparisonTool.Cli.Commands;
 
@@ -255,6 +258,18 @@ public static class FolderCompareCommand
 
         stopwatch.Stop();
         Console.WriteLine(); // newline after progress bar
+
+        EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult? enhancedAnalysis = null;
+        if (patternAnalysis && !result.AllEqual)
+        {
+            var analyzer = new EnhancedStructuralDifferenceAnalyzer(result, NullLogger.Instance, ignoreCollectionOrder);
+            enhancedAnalysis = analyzer.AnalyzeStructuralPatterns();
+        }
+
+        if (enhancedAnalysis != null)
+        {
+            result.Metadata["EnhancedStructuralAnalysis"] = enhancedAnalysis;
+        }
 
         var reportContext = new ReportContext
         {
