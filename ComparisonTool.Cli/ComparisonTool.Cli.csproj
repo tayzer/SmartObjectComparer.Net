@@ -39,21 +39,34 @@
 
   <PropertyGroup>
     <BlazorReportPublishDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\ComparisonTool.Report\bin\publish\wwwroot\'))</BlazorReportPublishDir>
+    <BlazorReportBuildOutputDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\ComparisonTool.Report\bin\publish-build\'))</BlazorReportBuildOutputDir>
   </PropertyGroup>
 
     <!-- Publishes the Blazor Report WASM project to generate static assets.
       This runs on each CLI build/publish so report host-page changes always flow into
       generated report artifacts without requiring a manual clean of the publish folder. -->
     <Target Name="PublishBlazorReport" BeforeTargets="BeforeBuild">
-    <Exec Command="dotnet publish ..\ComparisonTool.Report\ComparisonTool.Report.csproj -c Release -o ..\ComparisonTool.Report\bin\publish" />
+    <Exec Command="dotnet publish ..\ComparisonTool.Report\ComparisonTool.Report.csproj -c Release -o ..\ComparisonTool.Report\bin\publish -p:OutputPath=$(BlazorReportBuildOutputDir)" />
   </Target>
 
-  <ItemGroup>
-    <Content Include="..\ComparisonTool.Report\bin\publish\wwwroot\**\*" Link="BlazorReportAssets\%(RecursiveDir)%(Filename)%(Extension)">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-  </ItemGroup>
+  <Target Name="CopyBlazorReportAssetsToBuildOutput" AfterTargets="Build" DependsOnTargets="PublishBlazorReport">
+    <ItemGroup>
+      <BlazorReportAssetFiles Include="$(BlazorReportPublishDir)**\*" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(BlazorReportAssetFiles)"
+          DestinationFiles="@(BlazorReportAssetFiles->'$(OutputPath)BlazorReportAssets\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopyBlazorReportAssetsToPublishOutput" AfterTargets="Publish" DependsOnTargets="PublishBlazorReport">
+    <ItemGroup>
+      <BlazorReportAssetFiles Include="$(BlazorReportPublishDir)**\*" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(BlazorReportAssetFiles)"
+          DestinationFiles="@(BlazorReportAssetFiles->'$(PublishDir)BlazorReportAssets\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

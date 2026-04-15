@@ -80,13 +80,13 @@ internal static class BlazorReportWriter
             "</head>",
             "<body>",
             "    <div id=\"message\" style=\"font-family:Segoe UI,Roboto,sans-serif;padding:32px;line-height:1.6;color:#102a43;max-width:760px;margin:0 auto;\">",
-            $"        <p>Loading report... If it does not open automatically, <a href=\"{reportFolderName}/index.html\">click here</a>.</p>",
+            $"        <p>Loading report... If it does not open automatically, <a href=\"{reportFolderName}/\">click here</a>.</p>",
             "    </div>",
             "    <script>",
             "        if (window.location.protocol === 'file:') {",
             "            document.getElementById('message').innerHTML = '<h2 style=\"margin:0 0 12px;\">This report cannot be opened directly from disk</h2><p>Blazor WebAssembly reports must be served over HTTP. Jenkins artifacts work because Jenkins serves them over HTTP.</p><p>For local testing, serve this folder with a local web server and open <strong>" + reportFolderName + ".html</strong> through that server.</p>';",
             "        } else {",
-            $"            window.location.replace(\"{reportFolderName}/index.html\");",
+            $"            window.location.replace(\"{reportFolderName}/\");",
             "        }",
             "    </script>",
             "</body>",
@@ -163,6 +163,7 @@ internal static class BlazorReportWriter
 setlocal
 set PORT=8890
 set DIR=%~dp0
+if "%DIR:~-1%"=="\" set DIR=%DIR:~0,-1%
 
 echo.
 echo  Comparison Report Server
@@ -175,14 +176,14 @@ echo.
 :: Try python first (most reliable HTTP server)
 where python >nul 2>&1
 if %errorlevel%==0 (
-    start http://localhost:%PORT%
+    start http://localhost:%PORT%/
     python -m http.server %PORT% -d "%DIR%"
     goto :eof
 )
 
 :: Try PowerShell HTTP listener (available on all Windows)
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "$port=%PORT%; $dir='%DIR%'; Start-Process 'http://localhost:'+$port;" ^
+    "$port=%PORT%; $dir='%DIR%'; Start-Process ('http://localhost:'+$port+'/');" ^
     "$listener=[System.Net.HttpListener]::new(); $listener.Prefixes.Add('http://localhost:'+$port+'/');" ^
     "$listener.Start(); Write-Host 'Serving on http://localhost:'+$port; Write-Host 'Press Ctrl+C to stop.';" ^
     "try { while($listener.IsListening) { $ctx=$listener.GetContext(); $req=$ctx.Request;" ^

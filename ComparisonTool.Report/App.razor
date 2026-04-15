@@ -7,8 +7,7 @@
 
 <MudLayout>
     <MudMainContent Class="pa-4">
-        <Router AppAssembly="typeof(App).Assembly"
-                AdditionalAssemblies="new[] { typeof(ComparisonTool.UI._Imports).Assembly }">
+        <Router AppAssembly="typeof(App).Assembly">
             <Found Context="routeData">
                 <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.ReportLayout)" />
                 <FocusOnNavigate RouteData="routeData" Selector="h1" />
