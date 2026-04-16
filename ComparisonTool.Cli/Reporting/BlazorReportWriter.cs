@@ -1,5 +1,8 @@
 using System.Text;
+using System.Text.Json;
 using ComparisonTool.Core.Comparison.Analysis;
+using ComparisonTool.Core.Comparison.Results;
+using ComparisonTool.Core.Serialization.BlazorReport;
 
 namespace ComparisonTool.Cli.Reporting;
 
@@ -10,9 +13,9 @@ namespace ComparisonTool.Cli.Reporting;
 /// </summary>
 internal static class BlazorReportWriter
 {
-    private const string ReportDataPlaceholder = "__REPORT_DATA_JSON__";
     private const string BlazorAssetsSubdirectory = "BlazorReportAssets";
-    private static readonly UTF8Encoding Utf8WithoutBom = new(encoderShouldEmitUTF8Identifier: false);
+    private const string BootstrapDataFileName = "report.data.json";
+    private static readonly UTF8Encoding Utf8WithoutBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
     /// <summary>
     /// Writes a Blazor WASM report folder to the specified output directory.
@@ -42,32 +45,21 @@ internal static class BlazorReportWriter
         var assetFileCount = Directory.GetFiles(blazorAssetsDir, "*", SearchOption.AllDirectories).Length;
         Console.WriteLine($"Found {assetFileCount} Blazor asset files.");
 
-        if(assetFileCount == 0)
+        if (assetFileCount == 0)
         {
             throw new InvalidOperationException($"Blazor assets directory '{blazorAssetsDir}' is empty.");
         }
 
         Directory.CreateDirectory(outputDirectory);
 
-        // Copy all Blazor WASM assets (except index.html) to the output directory.
-        var copiedCount = CopyDirectory(blazorAssetsDir, outputDirectory, excludeFileName: "index.html");
+        // Copy all Blazor WASM assets to the output directory.
+        var copiedCount = CopyDirectory(blazorAssetsDir, outputDirectory);
         Console.WriteLine($"Copied {copiedCount} Blazor asset files to report output directory.");
 
-        // Read the template index.html, inject the report data JSON, and write to output.
-        var templatePath = Path.Combine(blazorAssetsDir, "index.html");
-        if (!File.Exists(templatePath))
-        {
-            throw new InvalidOperationException(
-                $"Blazor report template index.html not found at '{templatePath}'.");
-        }
-
-        var template = await File.ReadAllTextAsync(templatePath, Utf8WithoutBom);
-        var reportJson = await BlazorReportBundleBuilder.BuildJsonAsync(context, enhancedAnalysis);
-
-        var injected = template.Replace(ReportDataPlaceholder, reportJson);
-
-        var indexPath = Path.Combine(outputDirectory, "index.html");
-        await File.WriteAllTextAsync(indexPath, injected, Utf8WithoutBom);
+        var bootstrapData = await BlazorReportBundleBuilder.BuildBootstrapDataAsync(context, enhancedAnalysis).ConfigureAwait(false);
+        await WriteBootstrapDataAsync(outputDirectory, bootstrapData).ConfigureAwait(false);
+        var sidecarCount = await WriteBundledRawContentAssetsAsync(context.Result, outputDirectory).ConfigureAwait(false);
+        Console.WriteLine($"Wrote {sidecarCount} raw content sidecar files.");
 
         await WriteLauncherScriptsAsync(outputDirectory);
 
@@ -78,6 +70,57 @@ internal static class BlazorReportWriter
         await WriteRedirectorHtmlAsync(redirectPath, folderName);
 
         return redirectPath;
+    }
+
+    private static async Task WriteBootstrapDataAsync(string outputDirectory, ReportBootstrapData bootstrapData)
+    {
+        var outputPath = Path.Combine(outputDirectory, BootstrapDataFileName);
+
+        await using var stream = new FileStream(
+            outputPath,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.None,
+            4096,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        await JsonSerializer.SerializeAsync(stream, bootstrapData, BlazorReportSerializerOptions.Default).ConfigureAwait(false);
+    }
+
+    private static async Task<int> WriteBundledRawContentAssetsAsync(MultiFolderComparisonResult result, string outputDirectory)
+    {
+        var sidecarCount = 0;
+
+        for (var index = 0; index < result.FilePairResults.Count; index++)
+        {
+            var pair = result.FilePairResults[index];
+            if (!BlazorReportBundleBuilder.ShouldWriteBundledRawContentSidecar(pair))
+            {
+                continue;
+            }
+
+            var sidecarPath = Path.Combine(outputDirectory, BlazorReportBundleBuilder.BuildBundledRawContentPath(pair, index));
+            var sidecarDirectory = Path.GetDirectoryName(sidecarPath);
+            if (!string.IsNullOrWhiteSpace(sidecarDirectory))
+            {
+                Directory.CreateDirectory(sidecarDirectory);
+            }
+
+            var bundledContent = await BlazorReportBundleBuilder.BuildBundledRawContentDataAsync(pair).ConfigureAwait(false);
+
+            await using var stream = new FileStream(
+                sidecarPath,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None,
+                4096,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+            await JsonSerializer.SerializeAsync(stream, bundledContent, BlazorReportSerializerOptions.Default).ConfigureAwait(false);
+            sidecarCount++;
+        }
+
+        return sidecarCount;
     }
 
     private static async Task WriteRedirectorHtmlAsync(string redirectPath, string reportFolderName)
@@ -119,6 +162,7 @@ internal static class BlazorReportWriter
                 paths.Add(Path.Combine(exeDir, BlazorAssetsSubdirectory));
             }
         }
+
         var baseDir = AppContext.BaseDirectory;
         if (!string.IsNullOrEmpty(baseDir))
         {
@@ -141,7 +185,7 @@ internal static class BlazorReportWriter
             var exists = Directory.Exists(path);
             var hasFramework = exists && Directory.Exists(Path.Combine(path, "_framework"));
             Console.WriteLine($"Checking for Blazor assets in '{path}' - Exists: {exists}, Has _framework: {hasFramework}");
-            if(exists && hasFramework)
+            if (exists && hasFramework)
             {
                 return path;
             }

@@ -13,6 +13,7 @@ namespace ComparisonTool.Core.RequestComparison.Services;
 public class RawContentService
 {
     private readonly ILogger<RawContentService> logger;
+    private readonly IBundledRawContentAccessor? bundledRawContentAccessor;
 
     /// <summary>
     /// Maximum number of bytes to read per file. Files larger than this are truncated.
@@ -20,8 +21,14 @@ public class RawContentService
     private const int MaxFileSizeBytes = 512 * 1024; // 512 KB
 
     public RawContentService(ILogger<RawContentService> logger)
+        : this(logger, bundledRawContentAccessor: null)
+    {
+    }
+
+    public RawContentService(ILogger<RawContentService> logger, IBundledRawContentAccessor? bundledRawContentAccessor)
     {
         this.logger = logger;
+        this.bundledRawContentAccessor = bundledRawContentAccessor;
     }
 
     /// <summary>
@@ -42,6 +49,15 @@ public class RawContentService
             result.IsTruncatedB = pair.EmbeddedRawContentTruncatedB;
             result.IsLoaded = true;
             return result;
+        }
+
+        if (this.bundledRawContentAccessor != null)
+        {
+            var bundledResult = await this.bundledRawContentAccessor.TryLoadAsync(pair).ConfigureAwait(false);
+            if (bundledResult != null)
+            {
+                return bundledResult;
+            }
         }
 
         if (OperatingSystem.IsBrowser())

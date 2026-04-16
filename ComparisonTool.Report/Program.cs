@@ -22,8 +22,14 @@ builder.Services.AddUnifiedComparisonServices(builder.Configuration, options =>
 builder.Services.AddMudServices();
 builder.Services.AddBlazoredLocalStorage();
 
-// Report data service - reads and deserializes the embedded report JSON
-builder.Services.AddSingleton<ReportDataService>();
+builder.Services.AddScoped(_ => new HttpClient
+{
+    BaseAddress = new Uri(builder.HostEnvironment.BaseAddress),
+});
+
+// Report data service - reads and deserializes the packaged report JSON
+builder.Services.AddScoped<ReportDataService>();
+builder.Services.AddScoped<IBundledRawContentAccessor, HttpBundledRawContentAccessor>();
 
 // Platform service stubs for read-only report context
 builder.Services.AddSingleton<IFileExportService, WasmFileExportService>();

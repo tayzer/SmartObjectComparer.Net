@@ -96,6 +96,12 @@ public class FilePairComparisonResult
     public bool EmbeddedRawContentTruncatedB { get; set; }
 
     /// <summary>
+    /// Gets or sets the relative path to report-bundled raw content for this pair.
+    /// Static HTML reports use this to lazy-load Full File View content without embedding every body in the main bootstrap JSON.
+    /// </summary>
+    public string? BundledRawContentPath { get; set; }
+
+    /// <summary>
     /// Gets or sets error information if the comparison failed.
     /// When HasError is true, the files could not be compared (e.g., FileNotFound, deserialization errors).
     /// </summary>

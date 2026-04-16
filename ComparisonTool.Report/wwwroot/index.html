@@ -31,13 +31,7 @@
         <a class="dismiss">&#x1f5d9;</a>
     </div>
 
-    <script id="report-data" type="application/json">__REPORT_DATA_JSON__</script>
-
     <script>
-        window.getReportData = function () {
-            return document.getElementById('report-data').textContent;
-        };
-
         if (window.location.protocol === 'file:') {
             document.getElementById('app').innerHTML = `
                 <div style="display:flex;justify-content:center;align-items:center;min-height:100vh;padding:32px;background:linear-gradient(180deg,#f7f9fc 0%,#eef3f8 100%);font-family:Roboto,Segoe UI,sans-serif;box-sizing:border-box;">

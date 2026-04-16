@@ -81,4 +81,55 @@ public sealed class RawContentServiceTests
         result.IsTruncatedA.Should().BeTrue();
         result.IsTruncatedB.Should().BeFalse();
     }
+
+    [TestMethod]
+    public async Task LoadRawContentAsync_UsesBundledRawContentAccessorBeforeDiskAccess()
+    {
+        var accessor = new StubBundledRawContentAccessor(
+            new RawContentResult
+            {
+                ContentA = "bundled-a",
+                ContentB = "bundled-b",
+                IsTruncatedA = false,
+                IsTruncatedB = true,
+                IsLoaded = true,
+            });
+        var logger = new Mock<ILogger<RawContentService>>();
+        service = new RawContentService(logger.Object, accessor);
+
+        var pair = new FilePairComparisonResult
+        {
+            BundledRawContentPath = "raw/pair-1.json",
+            File1Path = Path.Combine(tempDir, "missing-a.xml"),
+            File2Path = Path.Combine(tempDir, "missing-b.xml"),
+        };
+
+        var result = await service.LoadRawContentAsync(pair);
+
+        result.IsLoaded.Should().BeTrue();
+        result.ErrorMessage.Should().BeNull();
+        result.ContentA.Should().Be("bundled-a");
+        result.ContentB.Should().Be("bundled-b");
+        result.IsTruncatedA.Should().BeFalse();
+        result.IsTruncatedB.Should().BeTrue();
+        accessor.InvocationCount.Should().Be(1);
+    }
+
+    private sealed class StubBundledRawContentAccessor : IBundledRawContentAccessor
+    {
+        private readonly RawContentResult result;
+
+        public StubBundledRawContentAccessor(RawContentResult result)
+        {
+            this.result = result;
+        }
+
+        public int InvocationCount { get; private set; }
+
+        public Task<RawContentResult?> TryLoadAsync(FilePairComparisonResult pair)
+        {
+            InvocationCount++;
+            return Task.FromResult<RawContentResult?>(result);
+        }
+    }
 }

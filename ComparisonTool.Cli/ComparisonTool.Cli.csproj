@@ -38,9 +38,7 @@
     </ItemGroup>
 
     <PropertyGroup>
-        <BlazorReportAssetsSourceDir Condition="'$(BlazorReportAssetsSourceDir)' == ''">
-            $([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\ComparisonTool.Report\bin\publish\wwwroot\'))
-        </BlazorReportAssetsSourceDir>
+        <BlazorReportAssetsSourceDir Condition="'$(BlazorReportAssetsSourceDir)' == ''">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\ComparisonTool.Report\bin\publish\wwwroot\'))</BlazorReportAssetsSourceDir>
     </PropertyGroup>
 
     <Target Name="CopyBlazorReportAssetsToBuildOutput" AfterTargets="Build" Condition="Exists('$(BlazorReportAssetsSourceDir)')">
@@ -61,7 +59,7 @@
         <Message Text="Finished copying Blazor report assets." Importance="High" />
     </Target>
 
-    <Target Name="ValidateBlazorReportAssets" BeforeTargets="CopyBlazorReportAssetsToBuildOutput;CopyBlazorReportAssetsToPublishOutput"Condition="'$(BlazorReportAssetsSourceDir)' != '' AND !Exists('$(BlazorReportAssetsSourceDir)')">
+    <Target Name="ValidateBlazorReportAssets" BeforeTargets="CopyBlazorReportAssetsToBuildOutput;CopyBlazorReportAssetsToPublishOutput" Condition="'$(BlazorReportAssetsSourceDir)' != '' AND !Exists('$(BlazorReportAssetsSourceDir)')">
         <Warning Text="Blazor report assets source directory '$(BlazorReportAssetsSourceDir)' does not exist. Blazor report assets will not be copied." />
     </Target>
 

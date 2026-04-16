@@ -2,7 +2,7 @@
 
 ## Overview
 
-Replace the React-based `ComparisonTool.ReportUI` with a Blazor WASM report (`ComparisonTool.Report`) that reuses the existing `ComparisonTool.UI` Razor components. The CLI will serialize the full `MultiFolderComparisonResult` to JSON, inject it into a Blazor WASM template, and produce a self-contained report folder that opens in any browser without a server.
+Replace the React-based `ComparisonTool.ReportUI` with a Blazor WASM report (`ComparisonTool.Report`) that reuses the existing `ComparisonTool.UI` Razor components. The CLI serializes the full `MultiFolderComparisonResult` to `report.data.json`, writes per-pair raw-content sidecars for Full File View, and produces a self-contained report folder that opens in any browser without a server.
 
 This eliminates the React/TypeScript toolchain dependency, removes data-shape duplication between C# and TypeScript, and lets the report share the exact same UI components as the desktop/web app.
 
@@ -11,18 +11,20 @@ This eliminates the React/TypeScript toolchain dependency, removes data-shape du
 ```
 CLI comparison run
   → MultiFolderComparisonResult + analysis results
-  → Serialize to ReportBootstrapData JSON
+  → Serialize to report.data.json
   → BlazorReportBundleBuilder:
       - Copy pre-built Blazor WASM publish output (_framework/, _content/, index.html)
-      - Inject JSON into <script id="report-data"> in index.html (or write report.data.json)
-  → Output: self-contained folder (index.html + _framework/ + _content/ + data)
-  → Open in browser — Blazor WASM boots, ReportDataService reads JSON, renders report
+      - Write `report.data.json` at the report root
+      - Write `raw/{pairId}.json` sidecars for non-error Full File View content
+  → Output: self-contained folder (index.html + report.data.json + raw/ + _framework/ + _content/)
+  → Open in browser — Blazor WASM boots, ReportDataService fetches `report.data.json`, and RawContentService loads sidecars on demand for Full File View
 ```
 
 Key points:
 - `ComparisonTool.Report` is a standalone Blazor WASM project referencing `ComparisonTool.UI` and `ComparisonTool.Core`
-- At runtime it reads embedded JSON (no API calls) via `ReportDataService`
-- Static report Full File View uses raw content embedded into `ReportBootstrapData`; XML and JSON payloads are pretty-formatted during CLI bundle generation for display.
+- At runtime it fetches `report.data.json` via `ReportDataService`
+- Static report Full File View uses raw-content sidecars referenced by each pair; XML and JSON payloads are pretty-formatted during CLI bundle generation for display.
+- Error pairs remain embedded in the bootstrap payload for the current error-detail flow.
 - All interactive services (folder picker, request comparison, progress) are stubbed as no-ops
 - File export uses JS interop `saveAsFile` for downloading filtered results
 
@@ -41,15 +43,15 @@ Create the `ComparisonTool.Report` Blazor WASM project and verify it builds.
 - [x] Create `ComparisonTool.Report/wwwroot/index.html`
   - MudBlazor CSS (`_content/MudBlazor/MudBlazor.min.css`)
   - `<script src="_framework/blazor.webassembly.js"></script>`
-  - `<script id="report-data" type="application/json"></script>` placeholder for injected data
   - `<div id="app">Loading report...</div>`
 - [x] Create `ComparisonTool.Report/Program.cs`
   - `WebAssemblyHostBuilder.CreateDefault(args)`
   - `AddUnifiedComparisonServices()` from `ComparisonTool.Core`
   - `AddMudServices()`
   - `AddBlazoredLocalStorage()`
+  - Register scoped `HttpClient` with the report base address
   - Register stub/WASM service implementations
-  - Register `ReportDataService` as singleton
+  - Register `ReportDataService` as scoped
 - [x] Create `ComparisonTool.Report/_Imports.razor`
   - Match imports from `ComparisonTool.UI/_Imports.razor`
   - Add `@using ComparisonTool.Report.Services`
@@ -57,9 +59,11 @@ Create the `ComparisonTool.Report` Blazor WASM project and verify it builds.
   - `<MudThemeProvider>`, `<MudPopoverProvider>`, `<MudDialogProvider>`, `<MudSnackbarProvider>`
   - `<Router>` with `<Found>` / `<NotFound>`
 - [x] Create `ComparisonTool.Report/Services/ReportDataService.cs`
-  - Reads JSON from `<script id="report-data">` via JS interop
+  - Reads `report.data.json` via `HttpClient`
   - Deserializes to `ReportBootstrapData` (or `MultiFolderComparisonResult` initially)
   - Exposes data as property/task for components to consume
+- [x] Create `ComparisonTool.Report/Services/HttpBundledRawContentAccessor.cs`
+  - Loads `raw/{pairId}.json` sidecars over HTTP for shared Full File View components
 - [x] Create stub services:
   - [x] `WasmFileExportService` — JS interop `saveAsFile` for downloading content
   - [x] `WasmScrollService` — JS interop `scrollToElement`
@@ -94,9 +98,10 @@ Ensure the full comparison result can be serialized to JSON and deserialized in 
   - Populate `EnhancedStructuralAnalysisResult` on the bootstrap data
 - [x] Create `BlazorReportBundleBuilder` in `ComparisonTool.Cli/Reporting/`
   - Takes `ReportBootstrapData` + path to pre-built Blazor WASM output
-  - Serializes data to JSON
-  - Injects into `index.html` `<script id="report-data">` tag (or writes `report.data.json`)
-  - Copies `_framework/`, `_content/`, and modified `index.html` to output directory
+  - Serializes bootstrap data to `report.data.json`
+  - Keeps error-pair raw content embedded for the current error-detail view
+  - Assigns `BundledRawContentPath` references for non-error pairs with available source paths
+  - Copies `_framework/`, `_content/`, and `index.html` to output directory unchanged
 - [x] Verify round-trip serialization
   - Serialize a real `MultiFolderComparisonResult` from a CLI run
   - Deserialize in a test
@@ -114,13 +119,14 @@ Wire the Blazor report generation into the CLI commands.
   - Replaced React npm build targets with Blazor publish targets
 - [x] Create `BlazorReportWriter` to produce Blazor report folder
   - Copies pre-published Blazor WASM assets to output directory
-  - Injects report JSON into `index.html` template (`__REPORT_DATA_JSON__` placeholder)
+  - Writes `report.data.json` to the report root
+  - Writes `raw/{pairId}.json` sidecars for non-error Full File View content
   - Generates `serve.cmd` and `serve.sh` launcher scripts for local HTTP serving
 - [x] Replace React HTML output path entirely
   - `FolderCompareCommand` and `RequestCompareCommand` Html cases now use `BlazorReportWriter`
   - `--html-mode SingleFile` shows deprecation notice (Blazor always produces static-site folder)
 - [x] Handle static-site output mode
-  - `index.html` + `_framework/` + `_content/` + CSS/JS all relative-pathed
+  - `index.html` + `report.data.json` + `raw/` + `_framework/` + `_content/` + CSS/JS all relative-pathed
   - `<base href="./" />` for relative path resolution
   - Launcher scripts for local HTTP serving (file:// blocked by CORS for `fetch()`)
 - [x] Add publish optimization to `ComparisonTool.Report.csproj`
@@ -136,9 +142,9 @@ Wire the Blazor report generation into the CLI commands.
 Finalize the implementation and remove legacy code.
 
 - [ ] Handle large reports
-  - Evaluate inline JSON size limits (very large `<script>` tags may cause issues)
-  - Implement chunked loading if needed (similar to React StaticSite approach)
-  - Consider external `report.data.json` file with fetch on load as default strategy
+  - Monitor `report.data.json` size and `raw/` sidecar file count on large request-comparison runs
+  - Implement sharded raw-content manifests if per-pair sidecar count becomes an artifact-hosting bottleneck
+  - Evaluate whether error pairs should also move to sidecars in a future cleanup
 - [ ] Report-specific CSS tweaks
   - Hide interactive-only UI elements via CSS if not already handled in Razor
   - Ensure print-friendly styling
@@ -166,7 +172,7 @@ Finalize the implementation and remove legacy code.
 |------|--------|------------|
 | **Blazor WASM file size** | `_framework/` can be 5-15MB+ depending on trimming | Enable IL trimming + compression in publish. The report is opened locally, not served over slow networks, so this is acceptable. |
 | **`Difference` serialization** | `KellermanSoftware.CompareNetObjects.Difference` has `object`-typed properties that don't round-trip cleanly with `System.Text.Json` | Custom `JsonConverter<Difference>` that serializes object properties as their string representation. Verified via round-trip tests. |
-| **RawContentService gap** | `ComparisonTool.UI` components may depend on `RawContentService` to fetch file content on demand — not available in static report | Embed raw content in `ReportBootstrapData` for static Full File View, and if embedded content is missing in browser mode show an unavailable message instead of touching host file paths. |
+| **RawContentService gap** | `ComparisonTool.UI` components lazy-load Full File View content, but browsers cannot reopen host file-system paths from a static report | Use `BundledRawContentPath` sidecars for non-error pairs and keep error pairs embedded until the error-detail flow is migrated. |
 | **MudBlazor providers** | Missing `MudThemeProvider` / `MudPopoverProvider` etc. causes silent rendering failures | `App.razor` must include all required MudBlazor provider components. Verified by visual inspection of rendered report. |
-| **file:// protocol restrictions** | Some browsers block `fetch()` / `XMLHttpRequest` from `file://` URLs | Blazor WASM boots from inline resources. Use inline `<script>` JSON rather than external fetch. Alternatively, document that a local HTTP server is needed (e.g., `python -m http.server`). |
+| **file:// protocol restrictions** | Browsers block `fetch()` / `XMLHttpRequest` from `file://` URLs, and the report now loads `report.data.json` and raw sidecars over HTTP | Keep the explicit file:// warning and local-server launch scripts. Jenkins artifacts work because Jenkins serves the report over HTTP. |
 | **Component coupling to interactive services** | UI components may call services that are no-op in report mode, causing null refs or confusing UX | All stub services return safe defaults. UI components should null-check or use `[CascadingParameter]` for report-mode awareness. |

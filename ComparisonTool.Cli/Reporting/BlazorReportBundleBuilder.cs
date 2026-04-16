@@ -15,14 +15,19 @@ namespace ComparisonTool.Cli.Reporting;
 /// </summary>
 internal static class BlazorReportBundleBuilder
 {
+    private const string BundledRawContentDirectoryName = "raw";
+
     /// <summary>
-    /// Builds a serialized JSON string for the Blazor report from the given report context.
+    /// Builds the bootstrap data object for the Blazor report from the given report context.
     /// </summary>
-    public static async Task<string> BuildJsonAsync(ReportContext context, EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult? enhancedAnalysis = null)
+    /// <param name="context">The report context containing the comparison result and report metadata.</param>
+    /// <param name="enhancedAnalysis">The optional enhanced structural analysis to embed in the report payload.</param>
+    /// <returns>The report bootstrap data.</returns>
+    public static async Task<ReportBootstrapData> BuildBootstrapDataAsync(ReportContext context, EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult? enhancedAnalysis = null)
     {
         var reportResult = await CreateReportResultAsync(context.Result).ConfigureAwait(false);
 
-        var bootstrapData = new ReportBootstrapData
+        return new ReportBootstrapData
         {
             Result = reportResult,
             EnhancedAnalysis = enhancedAnalysis,
@@ -43,36 +48,72 @@ internal static class BlazorReportBundleBuilder
                 ElapsedSeconds = Math.Round(context.Elapsed.TotalSeconds, 2),
             },
         };
+    }
 
+    /// <summary>
+    /// Builds a serialized JSON string for the Blazor report from the given report context.
+    /// </summary>
+    /// <param name="context">The report context containing the comparison result and report metadata.</param>
+    /// <param name="enhancedAnalysis">The optional enhanced structural analysis to embed in the report payload.</param>
+    /// <returns>The serialized report bootstrap JSON.</returns>
+    public static async Task<string> BuildJsonAsync(ReportContext context, EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult? enhancedAnalysis = null)
+    {
+        var bootstrapData = await BuildBootstrapDataAsync(context, enhancedAnalysis).ConfigureAwait(false);
         return JsonSerializer.Serialize(bootstrapData, BlazorReportSerializerOptions.Default);
+    }
+
+    public static string BuildBundledRawContentPath(FilePairComparisonResult pair, int index) =>
+        $"{BundledRawContentDirectoryName}/{ComparisonReportIdentity.BuildPairId(pair, index)}.json";
+
+    public static bool ShouldWriteBundledRawContentSidecar(FilePairComparisonResult pair) =>
+        !pair.HasError
+        && !string.IsNullOrWhiteSpace(pair.File1Path)
+        && !string.IsNullOrWhiteSpace(pair.File2Path);
+
+    public static async Task<BundledRawContentData> BuildBundledRawContentDataAsync(FilePairComparisonResult pair)
+    {
+        var rawContentService = new RawContentService(NullLogger<RawContentService>.Instance);
+        var rawContent = await rawContentService.LoadRawContentAsync(pair).ConfigureAwait(false);
+
+        if (!rawContent.IsLoaded)
+        {
+            return new BundledRawContentData
+            {
+                ErrorMessage = rawContent.ErrorMessage,
+            };
+        }
+
+        return new BundledRawContentData
+        {
+            ContentA = StructuredTextDisplayFormatter.FormatForDisplay(
+                rawContent.ContentA,
+                pair.ContentTypeA,
+                pair.File1Name),
+            ContentB = StructuredTextDisplayFormatter.FormatForDisplay(
+                rawContent.ContentB,
+                pair.ContentTypeB,
+                pair.File2Name),
+            IsTruncatedA = rawContent.IsTruncatedA,
+            IsTruncatedB = rawContent.IsTruncatedB,
+        };
     }
 
     private static async Task<MultiFolderComparisonResult> CreateReportResultAsync(MultiFolderComparisonResult source)
     {
-        var rawContentService = new RawContentService(NullLogger<RawContentService>.Instance);
         var filePairResults = new List<FilePairComparisonResult>(source.FilePairResults.Count);
 
-        foreach (var pair in source.FilePairResults)
+        for (var index = 0; index < source.FilePairResults.Count; index++)
         {
+            var pair = source.FilePairResults[index];
             var clonedPair = ClonePair(pair);
 
             if (ShouldEmbedRawContent(pair))
             {
-                var rawContent = await rawContentService.LoadRawContentAsync(pair).ConfigureAwait(false);
-                if (rawContent.IsLoaded)
-                {
-                    clonedPair.HasEmbeddedRawContent = true;
-                    clonedPair.EmbeddedRawContentA = StructuredTextDisplayFormatter.FormatForDisplay(
-                        rawContent.ContentA,
-                        pair.ContentTypeA,
-                        pair.File1Name);
-                    clonedPair.EmbeddedRawContentB = StructuredTextDisplayFormatter.FormatForDisplay(
-                        rawContent.ContentB,
-                        pair.ContentTypeB,
-                        pair.File2Name);
-                    clonedPair.EmbeddedRawContentTruncatedA = rawContent.IsTruncatedA;
-                    clonedPair.EmbeddedRawContentTruncatedB = rawContent.IsTruncatedB;
-                }
+                await PopulateEmbeddedRawContentAsync(clonedPair, pair).ConfigureAwait(false);
+            }
+            else if (ShouldWriteBundledRawContentSidecar(pair))
+            {
+                clonedPair.BundledRawContentPath = BuildBundledRawContentPath(pair, index);
             }
 
             filePairResults.Add(clonedPair);
@@ -87,15 +128,28 @@ internal static class BlazorReportBundleBuilder
         };
     }
 
-    private static bool ShouldEmbedRawContent(FilePairComparisonResult pair)
+    private static bool ShouldEmbedRawContent(FilePairComparisonResult pair) =>
+        pair.HasError
+        && !string.IsNullOrWhiteSpace(pair.File1Path)
+        && !string.IsNullOrWhiteSpace(pair.File2Path);
+
+    private static async Task PopulateEmbeddedRawContentAsync(FilePairComparisonResult targetPair, FilePairComparisonResult sourcePair)
     {
-        return !string.IsNullOrWhiteSpace(pair.File1Path)
-            && !string.IsNullOrWhiteSpace(pair.File2Path);
+        var bundledContent = await BuildBundledRawContentDataAsync(sourcePair).ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(bundledContent.ErrorMessage))
+        {
+            return;
+        }
+
+        targetPair.HasEmbeddedRawContent = true;
+        targetPair.EmbeddedRawContentA = bundledContent.ContentA;
+        targetPair.EmbeddedRawContentB = bundledContent.ContentB;
+        targetPair.EmbeddedRawContentTruncatedA = bundledContent.IsTruncatedA;
+        targetPair.EmbeddedRawContentTruncatedB = bundledContent.IsTruncatedB;
     }
 
-    private static FilePairComparisonResult ClonePair(FilePairComparisonResult pair)
-    {
-        return new FilePairComparisonResult
+    private static FilePairComparisonResult ClonePair(FilePairComparisonResult pair) =>
+        new FilePairComparisonResult
         {
             File1Name = pair.File1Name,
             File2Name = pair.File2Name,
@@ -110,8 +164,8 @@ internal static class BlazorReportBundleBuilder
             ContentTypeB = pair.ContentTypeB,
             PairOutcome = pair.PairOutcome,
             RawTextDifferences = pair.RawTextDifferences,
+            BundledRawContentPath = pair.BundledRawContentPath,
             ErrorMessage = pair.ErrorMessage,
             ErrorType = pair.ErrorType,
         };
-    }
 }

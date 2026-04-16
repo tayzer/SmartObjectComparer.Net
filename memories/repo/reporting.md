@@ -1,0 +1,3 @@
+- Static Blazor CLI reports now load bootstrap data from `report.data.json` and non-error Full File View content from per-pair `raw/{pairId}.json` sidecars.
+- `FilePairComparisonResult.BundledRawContentPath` is the static-report contract for lazy Full File View loading; `RawContentService` uses an optional bundled-content accessor before browser fallback.
+- Error pairs remain embedded for the current Report.razor error-detail flow; non-error pairs use sidecars to avoid embedding every raw body in the main bootstrap payload.

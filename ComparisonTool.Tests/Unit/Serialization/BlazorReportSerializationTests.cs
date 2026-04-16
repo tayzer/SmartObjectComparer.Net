@@ -222,4 +222,32 @@ public class BlazorReportSerializationTests
         pair.EmbeddedRawContentTruncatedA.Should().BeTrue();
         pair.EmbeddedRawContentTruncatedB.Should().BeFalse();
     }
+
+    [TestMethod]
+    public void ReportBootstrapData_RoundTrips_BundledRawContentPath()
+    {
+        var bootstrapData = new ReportBootstrapData
+        {
+            Result = new MultiFolderComparisonResult
+            {
+                AllEqual = false,
+                TotalPairsCompared = 1,
+                FilePairResults = new List<FilePairComparisonResult>
+                {
+                    new()
+                    {
+                        File1Name = "request1.xml",
+                        File2Name = "request1.xml",
+                        BundledRawContentPath = "raw/pair-1-a1b2c3d4.json",
+                    },
+                },
+            },
+        };
+
+        var json = JsonSerializer.Serialize(bootstrapData, BlazorReportSerializerOptions.Default);
+        var result = JsonSerializer.Deserialize<ReportBootstrapData>(json, BlazorReportSerializerOptions.Default)!;
+
+        result.Result!.FilePairResults.Should().ContainSingle();
+        result.Result.FilePairResults[0].BundledRawContentPath.Should().Be("raw/pair-1-a1b2c3d4.json");
+    }
 }
