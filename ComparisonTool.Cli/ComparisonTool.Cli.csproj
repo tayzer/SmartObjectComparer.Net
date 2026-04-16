@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
@@ -20,7 +20,7 @@
         <PackageReference Include="Serilog.Sinks.Console" />
         <PackageReference Include="Serilog.Sinks.File" />
         <PackageReference Include="System.CommandLine" />
-      <PackageReference Include="DiffPlex" />
+        <PackageReference Include="DiffPlex" />
     </ItemGroup>
 
     <ItemGroup>
@@ -37,36 +37,32 @@
         </Content>
     </ItemGroup>
 
-  <PropertyGroup>
-    <BlazorReportPublishDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\ComparisonTool.Report\bin\publish\wwwroot\'))</BlazorReportPublishDir>
-    <BlazorReportBuildOutputDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\ComparisonTool.Report\bin\publish-build\'))</BlazorReportBuildOutputDir>
-  </PropertyGroup>
+    <PropertyGroup>
+        <BlazorReportAssetsSourceDir Condition="'$(BlazorReportAssetsSourceDir)' == ''">
+            $([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\ComparisonTool.Report\bin\publish\wwwroot\'))
+        </BlazorReportAssetsSourceDir>
+    </PropertyGroup>
 
-    <!-- Publishes the Blazor Report WASM project to generate static assets.
-      This runs on each CLI build/publish so report host-page changes always flow into
-      generated report artifacts without requiring a manual clean of the publish folder. -->
-    <Target Name="PublishBlazorReport" BeforeTargets="BeforeBuild">
-    <Exec Command="dotnet publish ..\ComparisonTool.Report\ComparisonTool.Report.csproj -c Release -o ..\ComparisonTool.Report\bin\publish -p:OutputPath=$(BlazorReportBuildOutputDir)" />
-  </Target>
+    <Target Name="CopyBlazorReportAssetsToBuildOutput" AfterTargets="Build" Condition="Exists('$(BlazorReportAssetsSourceDir)')">
+        <ItemGroup>
+            <BlazorReportAssetsFiles Include="$(BlazorReportAssetsSourceDir)**\*" />
+        </ItemGroup>
+        <Message Text="Copying $(BlazorReportAssetsSourceDir) -> $(OutputPath)BlazorReportAssets\" Importance="High" />
+        <Copy SourceFiles="@(BlazorReportAssetsFiles)" DestinationFiles="@(BlazorReportAssetsFiles->'$(OutputPath)BlazorReportAssets\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+        <Message Text="Finished copying Blazor report assets." Importance="High" />
+    </Target>
 
-  <Target Name="CopyBlazorReportAssetsToBuildOutput" AfterTargets="Build" DependsOnTargets="PublishBlazorReport">
-    <ItemGroup>
-      <BlazorReportAssetFiles Include="$(BlazorReportPublishDir)**\*" />
-    </ItemGroup>
+    <Target Name="CopyBlazorReportAssetsToPublishOutput" AfterTargets="Publish" Condition="Exists('$(BlazorReportAssetsSourceDir)')">
+        <ItemGroup>
+            <BlazorReportAssetsFiles Include="$(BlazorReportAssetsSourceDir)**\*" />
+        </ItemGroup>
+        <Message Text="Copying $(BlazorReportAssetsSourceDir) -> $(PublishDir)BlazorReportAssets\" Importance="High" />
+        <Copy SourceFiles="@(BlazorReportAssetsFiles)" DestinationFiles="@(BlazorReportAssetsFiles->'$(PublishDir)BlazorReportAssets\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+        <Message Text="Finished copying Blazor report assets." Importance="High" />
+    </Target>
 
-    <Copy SourceFiles="@(BlazorReportAssetFiles)"
-          DestinationFiles="@(BlazorReportAssetFiles->'$(OutputPath)BlazorReportAssets\%(RecursiveDir)%(Filename)%(Extension)')"
-          SkipUnchangedFiles="true" />
-  </Target>
-
-  <Target Name="CopyBlazorReportAssetsToPublishOutput" AfterTargets="Publish" DependsOnTargets="PublishBlazorReport">
-    <ItemGroup>
-      <BlazorReportAssetFiles Include="$(BlazorReportPublishDir)**\*" />
-    </ItemGroup>
-
-    <Copy SourceFiles="@(BlazorReportAssetFiles)"
-          DestinationFiles="@(BlazorReportAssetFiles->'$(PublishDir)BlazorReportAssets\%(RecursiveDir)%(Filename)%(Extension)')"
-          SkipUnchangedFiles="true" />
-  </Target>
+    <Target Name="ValidateBlazorReportAssets" BeforeTargets="CopyBlazorReportAssetsToBuildOutput;CopyBlazorReportAssetsToPublishOutput"Condition="'$(BlazorReportAssetsSourceDir)' != '' AND !Exists('$(BlazorReportAssetsSourceDir)')">
+        <Warning Text="Blazor report assets source directory '$(BlazorReportAssetsSourceDir)' does not exist. Blazor report assets will not be copied." />
+    </Target>
 
 </Project>

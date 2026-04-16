@@ -8,9 +8,9 @@
 
     <!-- MudBlazor Fonts and Icons -->
     <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
-    <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
+    <link href="./_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
 
-    <link rel="stylesheet" href="css/app.css" />
+    <link rel="stylesheet" href="./css/app.css" />
 </head>
 <body>
     <div id="app">
@@ -55,15 +55,15 @@ open http://localhost:8890/index.html</div>
     <script>
         if (window.location.protocol !== 'file:') {
             const blazorScript = document.createElement('script');
-            blazorScript.src = '_framework/blazor.webassembly.js';
+            blazorScript.src = './_framework/blazor.webassembly.js';
             document.body.appendChild(blazorScript);
 
             const mudScript = document.createElement('script');
-            mudScript.src = '_content/MudBlazor/MudBlazor.min.js';
+            mudScript.src = './_content/MudBlazor/MudBlazor.min.js';
             document.body.appendChild(mudScript);
 
             const appScript = document.createElement('script');
-            appScript.src = '_content/ComparisonTool.UI/js/app.js';
+            appScript.src = './_content/ComparisonTool.UI/js/app.js';
             document.body.appendChild(appScript);
         }
     </script>

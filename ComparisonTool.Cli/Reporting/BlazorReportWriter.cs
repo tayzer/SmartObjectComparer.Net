@@ -31,15 +31,27 @@ internal static class BlazorReportWriter
         var blazorAssetsDir = ResolveBlazorAssetsDirectory();
         if (blazorAssetsDir == null)
         {
+            var searchedPaths = GetSearchedPaths();
+
             throw new InvalidOperationException(
-                "Blazor report assets not found. Ensure the ComparisonTool.Report project has been published " +
-                "and the BlazorReportAssets directory exists alongside the CLI executable.");
+                $"Blazor report assets directory not found. Searched paths: {string.Join(", ", searchedPaths)}");
+        }
+
+        Console.WriteLine($"Using Blazor assets from: {blazorAssetsDir}");
+
+        var assetFileCount = Directory.GetFiles(blazorAssetsDir, "*", SearchOption.AllDirectories).Length;
+        Console.WriteLine($"Found {assetFileCount} Blazor asset files.");
+
+        if(assetFileCount == 0)
+        {
+            throw new InvalidOperationException($"Blazor assets directory '{blazorAssetsDir}' is empty.");
         }
 
         Directory.CreateDirectory(outputDirectory);
 
         // Copy all Blazor WASM assets (except index.html) to the output directory.
-        CopyDirectory(blazorAssetsDir, outputDirectory, excludeFileName: "index.html");
+        var copiedCount = CopyDirectory(blazorAssetsDir, outputDirectory, excludeFileName: "index.html");
+        Console.WriteLine($"Copied {copiedCount} Blazor asset files to report output directory.");
 
         // Read the template index.html, inject the report data JSON, and write to output.
         var templatePath = Path.Combine(blazorAssetsDir, "index.html");
@@ -95,41 +107,53 @@ internal static class BlazorReportWriter
         await File.WriteAllTextAsync(redirectPath, html, Utf8WithoutBom);
     }
 
-    private static string? ResolveBlazorAssetsDirectory()
+    private static IEnumerable<string> GetSearchedPaths()
     {
-        // For single-file publish, AppContext.BaseDirectory points to the extraction
-        // directory. But BlazorReportAssets use ExcludeFromSingleFile=true, so they
-        // sit alongside the actual exe on disk. Use the process path first.
+        var paths = new List<string>();
         var exePath = Environment.ProcessPath;
         if (!string.IsNullOrEmpty(exePath))
         {
             var exeDir = Path.GetDirectoryName(exePath);
             if (!string.IsNullOrEmpty(exeDir))
             {
-                var candidate = Path.Combine(exeDir, BlazorAssetsSubdirectory);
-                if (Directory.Exists(candidate) && Directory.Exists(Path.Combine(candidate, "_framework")))
-                {
-                    return candidate;
-                }
+                paths.Add(Path.Combine(exeDir, BlazorAssetsSubdirectory));
             }
         }
-
-        // Fallback: AppContext.BaseDirectory (dev-time builds, non-single-file).
         var baseDir = AppContext.BaseDirectory;
         if (!string.IsNullOrEmpty(baseDir))
         {
-            var candidate = Path.Combine(baseDir, BlazorAssetsSubdirectory);
-            if (Directory.Exists(candidate) && Directory.Exists(Path.Combine(candidate, "_framework")))
+            paths.Add(Path.Combine(baseDir, BlazorAssetsSubdirectory));
+        }
+
+        var currentDir = Directory.GetCurrentDirectory();
+        if (!string.IsNullOrEmpty(currentDir))
+        {
+            paths.Add(Path.Combine(currentDir, BlazorAssetsSubdirectory));
+        }
+
+        return paths;
+    }
+
+    private static string? ResolveBlazorAssetsDirectory()
+    {
+        foreach (var path in GetSearchedPaths())
+        {
+            var exists = Directory.Exists(path);
+            var hasFramework = exists && Directory.Exists(Path.Combine(path, "_framework"));
+            Console.WriteLine($"Checking for Blazor assets in '{path}' - Exists: {exists}, Has _framework: {hasFramework}");
+            if(exists && hasFramework)
             {
-                return candidate;
+                return path;
             }
         }
 
         return null;
     }
 
-    private static void CopyDirectory(string sourceDir, string targetDir, string? excludeFileName = null)
+    private static int CopyDirectory(string sourceDir, string targetDir, string? excludeFileName = null)
     {
+        var copied = 0;
+
         foreach (var dirPath in Directory.GetDirectories(sourceDir, "*", SearchOption.AllDirectories))
         {
             var relativePath = Path.GetRelativePath(sourceDir, dirPath);
@@ -153,7 +177,10 @@ internal static class BlazorReportWriter
             }
 
             File.Copy(filePath, destPath, overwrite: true);
+            copied++;
         }
+
+        return copied;
     }
 
     private static async Task WriteLauncherScriptsAsync(string outputDirectory)
