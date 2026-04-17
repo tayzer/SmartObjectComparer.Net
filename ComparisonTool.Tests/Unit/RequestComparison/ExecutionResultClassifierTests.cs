@@ -1,6 +1,6 @@
 using ComparisonTool.Core.RequestComparison.Models;
-using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Shouldly;
 
 namespace ComparisonTool.Tests.Unit.RequestComparison;
 
@@ -33,7 +33,7 @@ public class ExecutionResultClassifierTests
 
         var outcome = ExecutionResultClassifier.Classify(result);
 
-        outcome.Should().Be(RequestPairOutcome.BothSuccess);
+        outcome.ShouldBe(RequestPairOutcome.BothSuccess);
     }
 
     [TestMethod]
@@ -46,7 +46,7 @@ public class ExecutionResultClassifierTests
 
         var outcome = ExecutionResultClassifier.Classify(result);
 
-        outcome.Should().Be(RequestPairOutcome.BothSuccess);
+        outcome.ShouldBe(RequestPairOutcome.BothSuccess);
     }
 
     [TestMethod]
@@ -60,7 +60,7 @@ public class ExecutionResultClassifierTests
 
         var outcome = ExecutionResultClassifier.Classify(result);
 
-        outcome.Should().Be(RequestPairOutcome.StatusCodeMismatch);
+        outcome.ShouldBe(RequestPairOutcome.StatusCodeMismatch);
     }
 
     [TestMethod]
@@ -73,7 +73,7 @@ public class ExecutionResultClassifierTests
 
         var outcome = ExecutionResultClassifier.Classify(result);
 
-        outcome.Should().Be(RequestPairOutcome.StatusCodeMismatch);
+        outcome.ShouldBe(RequestPairOutcome.StatusCodeMismatch);
     }
 
     [TestMethod]
@@ -87,7 +87,7 @@ public class ExecutionResultClassifierTests
 
         var outcome = ExecutionResultClassifier.Classify(result);
 
-        outcome.Should().Be(RequestPairOutcome.BothNonSuccess);
+        outcome.ShouldBe(RequestPairOutcome.BothNonSuccess);
     }
 
     [TestMethod]
@@ -97,7 +97,7 @@ public class ExecutionResultClassifierTests
 
         var outcome = ExecutionResultClassifier.Classify(result);
 
-        outcome.Should().Be(RequestPairOutcome.OneOrBothFailed);
+        outcome.ShouldBe(RequestPairOutcome.OneOrBothFailed);
     }
 
     [TestMethod]
@@ -114,11 +114,11 @@ public class ExecutionResultClassifierTests
         // (302, 200) => StatusCodeMismatch
         if (statusA is >= 200 and < 300 || statusB is >= 200 and < 300)
         {
-            outcome.Should().Be(RequestPairOutcome.StatusCodeMismatch);
+            outcome.ShouldBe(RequestPairOutcome.StatusCodeMismatch);
         }
         else
         {
-            outcome.Should().Be(RequestPairOutcome.BothNonSuccess);
+            outcome.ShouldBe(RequestPairOutcome.BothNonSuccess);
         }
     }
 
@@ -137,11 +137,11 @@ public class ExecutionResultClassifierTests
 
         var classified = ExecutionResultClassifier.ClassifyAll(results);
 
-        classified.Should().HaveCount(4);
-        classified[0].Outcome.Should().Be(RequestPairOutcome.BothSuccess);
-        classified[1].Outcome.Should().Be(RequestPairOutcome.StatusCodeMismatch);
-        classified[2].Outcome.Should().Be(RequestPairOutcome.BothNonSuccess);
-        classified[3].Outcome.Should().Be(RequestPairOutcome.OneOrBothFailed);
+        classified.Count.ShouldBe(4);
+        classified[0].Outcome.ShouldBe(RequestPairOutcome.BothSuccess);
+        classified[1].Outcome.ShouldBe(RequestPairOutcome.StatusCodeMismatch);
+        classified[2].Outcome.ShouldBe(RequestPairOutcome.BothNonSuccess);
+        classified[3].Outcome.ShouldBe(RequestPairOutcome.OneOrBothFailed);
     }
 
     [TestMethod]
@@ -154,7 +154,7 @@ public class ExecutionResultClassifierTests
 
         var classified = ExecutionResultClassifier.ClassifyAll(results);
 
-        classified[0].OutcomeReason.Should().Be("A=200, B=500");
+        classified[0].OutcomeReason.ShouldBe("A=200, B=500");
     }
 
     [TestMethod]
@@ -167,7 +167,7 @@ public class ExecutionResultClassifierTests
 
         var classified = ExecutionResultClassifier.ClassifyAll(results);
 
-        classified[0].OutcomeReason.Should().Be("Failed: DNS resolution failed");
+        classified[0].OutcomeReason.ShouldBe("Failed: DNS resolution failed");
     }
 
     [TestMethod]
@@ -175,7 +175,7 @@ public class ExecutionResultClassifierTests
     {
         var classified = ExecutionResultClassifier.ClassifyAll(Array.Empty<RequestExecutionResult>());
 
-        classified.Should().BeEmpty();
+        classified.ShouldBeEmpty();
     }
 
     // --- Summarize tests ---
@@ -196,11 +196,11 @@ public class ExecutionResultClassifierTests
         var classified = ExecutionResultClassifier.ClassifyAll(results);
         var summary = ExecutionResultClassifier.Summarize(classified);
 
-        summary.TotalRequests.Should().Be(6);
-        summary.BothSuccess.Should().Be(2);
-        summary.StatusCodeMismatch.Should().Be(1);
-        summary.BothNonSuccess.Should().Be(1);
-        summary.OneOrBothFailed.Should().Be(2);
+        summary.TotalRequests.ShouldBe(6);
+        summary.BothSuccess.ShouldBe(2);
+        summary.StatusCodeMismatch.ShouldBe(1);
+        summary.BothNonSuccess.ShouldBe(1);
+        summary.OneOrBothFailed.ShouldBe(2);
     }
 
     [TestMethod]
@@ -215,11 +215,11 @@ public class ExecutionResultClassifierTests
         var classified = ExecutionResultClassifier.ClassifyAll(results);
         var summary = ExecutionResultClassifier.Summarize(classified);
 
-        summary.TotalRequests.Should().Be(2);
-        summary.BothSuccess.Should().Be(2);
-        summary.StatusCodeMismatch.Should().Be(0);
-        summary.BothNonSuccess.Should().Be(0);
-        summary.OneOrBothFailed.Should().Be(0);
+        summary.TotalRequests.ShouldBe(2);
+        summary.BothSuccess.ShouldBe(2);
+        summary.StatusCodeMismatch.ShouldBe(0);
+        summary.BothNonSuccess.ShouldBe(0);
+        summary.OneOrBothFailed.ShouldBe(0);
     }
 
     [TestMethod]
@@ -228,11 +228,11 @@ public class ExecutionResultClassifierTests
         var classified = ExecutionResultClassifier.ClassifyAll(Array.Empty<RequestExecutionResult>());
         var summary = ExecutionResultClassifier.Summarize(classified);
 
-        summary.TotalRequests.Should().Be(0);
-        summary.BothSuccess.Should().Be(0);
-        summary.StatusCodeMismatch.Should().Be(0);
-        summary.BothNonSuccess.Should().Be(0);
-        summary.OneOrBothFailed.Should().Be(0);
+        summary.TotalRequests.ShouldBe(0);
+        summary.BothSuccess.ShouldBe(0);
+        summary.StatusCodeMismatch.ShouldBe(0);
+        summary.BothNonSuccess.ShouldBe(0);
+        summary.OneOrBothFailed.ShouldBe(0);
     }
 
     // --- Boundary / edge case tests ---
@@ -244,7 +244,7 @@ public class ExecutionResultClassifierTests
 
         var outcome = ExecutionResultClassifier.Classify(result);
 
-        outcome.Should().Be(RequestPairOutcome.StatusCodeMismatch);
+        outcome.ShouldBe(RequestPairOutcome.StatusCodeMismatch);
     }
 
     [TestMethod]
@@ -254,7 +254,7 @@ public class ExecutionResultClassifierTests
 
         var outcome = ExecutionResultClassifier.Classify(result);
 
-        outcome.Should().Be(RequestPairOutcome.StatusCodeMismatch);
+        outcome.ShouldBe(RequestPairOutcome.StatusCodeMismatch);
     }
 
     [TestMethod]
@@ -264,6 +264,6 @@ public class ExecutionResultClassifierTests
 
         var outcome = ExecutionResultClassifier.Classify(result);
 
-        outcome.Should().Be(RequestPairOutcome.BothSuccess);
+        outcome.ShouldBe(RequestPairOutcome.BothSuccess);
     }
 }

@@ -74,7 +74,7 @@ Keep code consistent and easy to read across contributors, reduce churn in code 
 
 ## Testing conventions
 - Framework: MSTest only (no xUnit / NUnit). Existing xUnit tests will be migrated incrementally.
-- Additional libraries: Moq + AutoFixture (+ AutoFixture.AutoMoq). FluentAssertions may remain temporarily but new tests should prefer native MSTest + Assert patterns unless expressiveness needed.
+- Additional libraries: Moq + AutoFixture (+ AutoFixture.AutoMoq) + Shouldly. Prefer Shouldly for expressive assertions and native MSTest `Assert` when it is simpler.
 - Test naming pattern: `MethodUnderTest_StateUnderTest_ExpectedResult`.
 - Project structure: Use separate test project names with suffixes: `.UnitTests`, `.IntegrationTests`, `.EndToEndTests` as needed. Current `ComparisonTool.Tests` will be refactored into multiple projects if scope grows.
 - Unit tests: small, fast, deterministic.
@@ -85,7 +85,7 @@ Keep code consistent and easy to read across contributors, reduce churn in code 
 Current tests use xUnit attributes (`[Fact]`). Migration plan:
 1. Introduce MSTest packages alongside xUnit (transitional phase).
 2. Convert attributes: `[Fact]` -> `[TestMethod]`, remove xUnit-specific features.
-3. Replace `Assert` patterns / FluentAssertions chains where simple MSTest assertions suffice.
+3. Replace xUnit `Assert` patterns with MSTest assertions or Shouldly based on clarity and intent.
 4. Remove xUnit packages once conversion complete.
 
 ## Pull requests & code review

@@ -1,9 +1,9 @@
 using ComparisonTool.Core.AcceptedDifferences;
-using FluentAssertions;
 using KellermanSoftware.CompareNetObjects;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Shouldly;
 
 namespace ComparisonTool.Tests.Unit.Core;
 
@@ -36,10 +36,10 @@ public class AcceptedDifferenceServiceTests
         var first = builder.Create(CreateDifference("Orders[0].OrderId", 12345, 67890));
         var second = builder.Create(CreateDifference("Orders[9].OrderId", 54321, 98765));
 
-        first.NormalizedPropertyPath.Should().Be("Orders[*].OrderId");
-        first.Fingerprint.Should().Be(second.Fingerprint);
-        first.ExpectedValuePattern.Should().Be("<identifier>");
-        first.ActualValuePattern.Should().Be("<identifier>");
+        first.NormalizedPropertyPath.ShouldBe("Orders[*].OrderId");
+        first.Fingerprint.ShouldBe(second.Fingerprint);
+        first.ExpectedValuePattern.ShouldBe("<identifier>");
+        first.ActualValuePattern.ShouldBe("<identifier>");
     }
 
     [TestMethod]
@@ -54,9 +54,9 @@ public class AcceptedDifferenceServiceTests
         var matches = await reloadedService.GetMatchesAsync(new[] { future });
         var futureFingerprint = service.CreateFingerprint(future).Fingerprint;
 
-        matches.Should().ContainKey(futureFingerprint);
-        matches[futureFingerprint].Status.Should().Be(AcceptedDifferenceStatus.AcceptedDifference);
-        matches[futureFingerprint].Fingerprint.Should().Be(saved.Fingerprint);
+        matches.ContainsKey(futureFingerprint).ShouldBeTrue();
+        matches[futureFingerprint].Status.ShouldBe(AcceptedDifferenceStatus.AcceptedDifference);
+        matches[futureFingerprint].Fingerprint.ShouldBe(saved.Fingerprint);
     }
 
     [TestMethod]
@@ -67,7 +67,7 @@ public class AcceptedDifferenceServiceTests
 
         var action = async () => await service.SaveAsync(difference, AcceptedDifferenceStatus.KnownBug);
 
-        await action.Should().ThrowAsync<ArgumentException>();
+        await Should.ThrowAsync<ArgumentException>(action);
     }
 
     [TestMethod]
@@ -80,8 +80,8 @@ public class AcceptedDifferenceServiceTests
         var removed = await service.RemoveAsync(difference);
         var matches = await service.GetMatchesAsync(new[] { difference });
 
-        removed.Should().BeTrue();
-        matches.Should().BeEmpty();
+        removed.ShouldBeTrue();
+        matches.ShouldBeEmpty();
     }
 
     [TestMethod]
@@ -93,7 +93,7 @@ public class AcceptedDifferenceServiceTests
         var service = CreateService(storePath);
         var matches = await service.GetMatchesAsync(new[] { CreateDifference("Order.Id", 1, 2) });
 
-        matches.Should().BeEmpty();
+        matches.ShouldBeEmpty();
     }
 
     [TestMethod]
@@ -105,7 +105,7 @@ public class AcceptedDifferenceServiceTests
         var service = CreateService(storePath);
         var matches = await service.GetMatchesAsync(new[] { CreateDifference("Order.Id", 1, 2) });
 
-        matches.Should().BeEmpty();
+        matches.ShouldBeEmpty();
     }
 
     [TestMethod]
@@ -124,9 +124,9 @@ public class AcceptedDifferenceServiceTests
         var reloadedService = CreateService(storePath);
         var matches = await reloadedService.GetMatchesAsync(new[] { firstDifference, secondDifference });
 
-        matches.Should().HaveCount(2);
-        matches.Values.Should().Contain(profile => profile.Status == AcceptedDifferenceStatus.AcceptedDifference);
-        matches.Values.Should().Contain(profile => profile.TicketId == "BUG-2026");
+        matches.Count.ShouldBe(2);
+        matches.Values.Any(profile => profile.Status == AcceptedDifferenceStatus.AcceptedDifference).ShouldBeTrue();
+        matches.Values.Any(profile => profile.TicketId == "BUG-2026").ShouldBeTrue();
     }
 
     [TestMethod]
@@ -154,9 +154,9 @@ public class AcceptedDifferenceServiceTests
         var importedCount = await service.ImportAsync(importedProfiles, replaceExisting: true);
         var profiles = await service.GetAllAsync();
 
-        importedCount.Should().Be(1);
-        profiles.Should().HaveCount(1);
-        profiles[0].Fingerprint.Should().Be("imported-fingerprint");
+        importedCount.ShouldBe(1);
+        profiles.Count.ShouldBe(1);
+        profiles[0].Fingerprint.ShouldBe("imported-fingerprint");
     }
 
     [TestMethod]
@@ -169,7 +169,7 @@ public class AcceptedDifferenceServiceTests
         await service.ClearAsync();
         var profiles = await service.GetAllAsync();
 
-        profiles.Should().BeEmpty();
+        profiles.ShouldBeEmpty();
     }
 
     [TestMethod]
@@ -188,7 +188,7 @@ public class AcceptedDifferenceServiceTests
 
         var action = async () => await service.ImportAsync(importedProfiles);
 
-        await action.Should().ThrowAsync<ArgumentException>();
+        await Should.ThrowAsync<ArgumentException>(action);
     }
 
     private AcceptedDifferenceFingerprintBuilder CreateFingerprintBuilder() =>
