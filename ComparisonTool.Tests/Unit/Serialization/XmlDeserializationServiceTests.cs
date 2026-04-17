@@ -5,10 +5,10 @@ using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.Models;
 using ComparisonTool.Core.Serialization;
 using ComparisonTool.Domain.Models;
-using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+using Shouldly;
 using CoreXmlSerializerFactory = ComparisonTool.Core.Serialization.XmlSerializerFactory;
 
 namespace ComparisonTool.Tests.Unit.Serialization;
@@ -31,7 +31,7 @@ public class XmlDeserializationServiceTests
     public void Constructor_ShouldInitializeCorrectly()
     {
         // Act & Assert
-        service.Should().NotBeNull();
+        service.ShouldNotBeNull();
     }
 
     [TestMethod]
@@ -45,7 +45,7 @@ public class XmlDeserializationServiceTests
 
         // Assert
         var registeredType = service.GetModelType(modelName);
-        registeredType.Should().Be(typeof(TestModel));
+        registeredType.ShouldBe(typeof(TestModel));
     }
 
     [TestMethod]
@@ -60,7 +60,7 @@ public class XmlDeserializationServiceTests
 
         // Assert
         var registeredType = service.GetModelType(modelName);
-        registeredType.Should().Be(typeof(AnotherTestModel));
+        registeredType.ShouldBe(typeof(AnotherTestModel));
     }
 
     [TestMethod]
@@ -71,8 +71,8 @@ public class XmlDeserializationServiceTests
 
         // Act & Assert
         var action = () => service.GetModelType(modelName);
-        action.Should().Throw<ArgumentException>()
-            .WithMessage("*No model registered with name*");
+        var exception = Should.Throw<ArgumentException>(action);
+        exception.Message.ShouldContain("No model registered with name");
     }
 
     [TestMethod]
@@ -94,9 +94,9 @@ public class XmlDeserializationServiceTests
         var result = service.DeserializeXml<TestModel>(stream);
 
         // Assert
-        result.Should().NotBeNull();
-        result.StringProperty.Should().Be("Test Value");
-        result.IntProperty.Should().Be(42);
+        result.ShouldNotBeNull();
+        result.StringProperty.ShouldBe("Test Value");
+        result.IntProperty.ShouldBe(42);
     }
 
     [TestMethod]
@@ -115,7 +115,7 @@ public class XmlDeserializationServiceTests
 
         // Act & Assert
         var action = () => service.DeserializeXml<TestModel>(stream);
-        action.Should().Throw<InvalidOperationException>(); // XmlSerializer throws InvalidOperationException, not XmlException
+        Should.Throw<InvalidOperationException>(action); // XmlSerializer throws InvalidOperationException, not XmlException
     }
 
     [TestMethod]
@@ -129,7 +129,7 @@ public class XmlDeserializationServiceTests
 
         // Act & Assert
         var action = () => service.DeserializeXml<TestModel>(stream);
-        action.Should().Throw<InvalidOperationException>();
+        Should.Throw<InvalidOperationException>(action);
     }
 
     [TestMethod]
@@ -160,13 +160,13 @@ public class XmlDeserializationServiceTests
         var result = service.DeserializeXml<ComplexTestModel>(stream);
 
         // Assert
-        result.Should().NotBeNull();
-        result.Name.Should().Be("Test Complex Model");
-        result.Items.Should().HaveCount(2);
-        result.Items[0].Id.Should().Be(1);
-        result.Items[0].Value.Should().Be("Item 1");
-        result.Items[1].Id.Should().Be(2);
-        result.Items[1].Value.Should().Be("Item 2");
+        result.ShouldNotBeNull();
+        result.Name.ShouldBe("Test Complex Model");
+        result.Items.Count.ShouldBe(2);
+        result.Items[0].Id.ShouldBe(1);
+        result.Items[0].Value.ShouldBe("Item 1");
+        result.Items[1].Id.ShouldBe(2);
+        result.Items[1].Value.ShouldBe("Item 2");
     }
 
     [TestMethod]
@@ -188,9 +188,9 @@ public class XmlDeserializationServiceTests
         var result = service.DeserializeXml<TestModel>(stream);
 
         // Assert
-        result.Should().NotBeNull();
-        result.StringProperty.Should().Be(string.Empty);
-        result.IntProperty.Should().Be(0);
+        result.ShouldNotBeNull();
+        result.StringProperty.ShouldBe(string.Empty);
+        result.IntProperty.ShouldBe(0);
     }
 
     [TestMethod]
@@ -211,9 +211,9 @@ public class XmlDeserializationServiceTests
         var result = service.DeserializeXml<TestModel>(stream);
 
         // Assert
-        result.Should().NotBeNull();
-        result.StringProperty.Should().Be("Only This Property");
-        result.IntProperty.Should().Be(0); // Default value
+        result.ShouldNotBeNull();
+        result.StringProperty.ShouldBe("Only This Property");
+        result.IntProperty.ShouldBe(0); // Default value
     }
 
     [TestMethod]
@@ -237,9 +237,9 @@ public class XmlDeserializationServiceTests
         var result = service.DeserializeXml<TestModel>(stream);
 
         // Assert
-        result.Should().NotBeNull();
-        result.StringProperty.Should().Be("Namespace Test");
-        result.IntProperty.Should().Be(123);
+        result.ShouldNotBeNull();
+        result.StringProperty.ShouldBe("Namespace Test");
+        result.IntProperty.ShouldBe(123);
     }
 
     [TestMethod]
@@ -262,10 +262,10 @@ public class XmlDeserializationServiceTests
         var result = service.DeserializeXml<NamespacedTestModel>(stream);
 
         // Assert
-        result.Should().NotBeNull();
-        result.Id.Should().Be("TEST-001");
-        result.Name.Should().Be("Test Item");
-        result.Value.Should().Be(42);
+        result.ShouldNotBeNull();
+        result.Id.ShouldBe("TEST-001");
+        result.Name.ShouldBe("Test Item");
+        result.Value.ShouldBe(42);
     }
 
     [TestMethod]
@@ -288,10 +288,10 @@ public class XmlDeserializationServiceTests
         var result = service.DeserializeXml<NamespacedTestModel>(stream);
 
         // Assert
-        result.Should().NotBeNull();
-        result.Id.Should().Be("TEST-002");
-        result.Name.Should().Be("No Namespace Item");
-        result.Value.Should().Be(99);
+        result.ShouldNotBeNull();
+        result.Id.ShouldBe("TEST-002");
+        result.Name.ShouldBe("No Namespace Item");
+        result.Value.ShouldBe(99);
     }
 
     [TestMethod]
@@ -314,10 +314,10 @@ public class XmlDeserializationServiceTests
         var result = service.DeserializeXml<NamespacedTestModel>(stream);
 
         // Assert
-        result.Should().NotBeNull();
-        result.Id.Should().Be("TEST-003");
-        result.Name.Should().Be("Matching Namespace Item");
-        result.Value.Should().Be(123);
+        result.ShouldNotBeNull();
+        result.Id.ShouldBe("TEST-003");
+        result.Name.ShouldBe("Matching Namespace Item");
+        result.Value.ShouldBe(123);
     }
 
     [TestMethod]
@@ -341,15 +341,15 @@ public class XmlDeserializationServiceTests
             {
                 using var stream = new MemoryStream(xml, writable: false);
                 var result = service.TryDeserializeXml(stream, typeof(TestModel));
-                result.Success.Should().BeTrue();
+                result.Success.ShouldBeTrue();
             }
         }
 
         var snapshot = phaseTimings.CreateSnapshot();
 
         // Assert
-        snapshot.XmlDeserializationPrecheckMs.Should().BeGreaterThanOrEqualTo(0);
-        snapshot.XmlDeserializationFullDeserializeMs.Should().BeGreaterThanOrEqualTo(0);
+        snapshot.XmlDeserializationPrecheckMs.ShouldBeGreaterThanOrEqualTo(0);
+        snapshot.XmlDeserializationFullDeserializeMs.ShouldBeGreaterThanOrEqualTo(0);
     }
 
     [TestMethod]
@@ -373,15 +373,15 @@ public class XmlDeserializationServiceTests
             {
                 using var stream = new MemoryStream(xml, writable: false);
                 var result = service.TryDeserializeXml(stream, typeof(TestModel));
-                result.Success.Should().BeFalse();
+                result.Success.ShouldBeFalse();
             }
         }
 
         var snapshot = phaseTimings.CreateSnapshot();
 
         // Assert
-        snapshot.XmlDeserializationPrecheckMs.Should().BeGreaterThanOrEqualTo(0);
-        snapshot.XmlDeserializationFullDeserializeMs.Should().Be(0);
+        snapshot.XmlDeserializationPrecheckMs.ShouldBeGreaterThanOrEqualTo(0);
+        snapshot.XmlDeserializationFullDeserializeMs.ShouldBe(0);
     }
 
     [TestMethod]
@@ -411,11 +411,11 @@ public class XmlDeserializationServiceTests
         var result = service.TryDeserializeXml(stream, typeof(SoapEnvelope));
 
         // Assert
-        result.Success.Should().BeFalse();
-        result.ErrorMessage.Should().Contain("SOAP fault detected in response");
-        result.ErrorMessage.Should().Contain("soap:Server");
-        result.ErrorMessage.Should().Contain("Order service unavailable");
-        result.ErrorMessage.Should().Contain("CorrelationId");
+        result.Success.ShouldBeFalse();
+        result.ErrorMessage.ShouldContain("SOAP fault detected in response");
+        result.ErrorMessage.ShouldContain("soap:Server");
+        result.ErrorMessage.ShouldContain("Order service unavailable");
+        result.ErrorMessage.ShouldContain("CorrelationId");
     }
 
     [TestMethod]
@@ -446,14 +446,14 @@ public class XmlDeserializationServiceTests
         var result = service.DeserializeXml<SoapEnvelope>(stream);
 
         // Assert
-        result.Should().NotBeNull();
-        result.Body.Should().NotBeNull();
-        result.Body!.Response.Should().NotBeNull();
-        result.Body.Response!.ReportId.Should().Be("test-report-123");
-        result.Body.Response.Summary.Should().NotBeNull();
-        result.Body.Response.Summary.TotalResults.Should().Be(5);
-        result.Body.Response.Summary.SuccessCount.Should().Be(3);
-        result.Body.Response.Summary.FailureCount.Should().Be(2);
+        result.ShouldNotBeNull();
+        result.Body.ShouldNotBeNull();
+        result.Body!.Response.ShouldNotBeNull();
+        result.Body.Response!.ReportId.ShouldBe("test-report-123");
+        result.Body.Response.Summary.ShouldNotBeNull();
+        result.Body.Response.Summary.TotalResults.ShouldBe(5);
+        result.Body.Response.Summary.SuccessCount.ShouldBe(3);
+        result.Body.Response.Summary.FailureCount.ShouldBe(2);
     }
 
     [TestMethod]
@@ -507,18 +507,18 @@ public class XmlDeserializationServiceTests
         var result = service.DeserializeXml<SoapEnvelope>(stream);
 
         // Assert - Verify ALL nested elements are populated correctly
-        result.Should().NotBeNull();
-        result.Body.Should().NotBeNull("Body element should be deserialized");
-        result.Body!.Response.Should().NotBeNull("SearchResponse should be deserialized");
-        result.Body.Response!.ReportId.Should().Be("test-report-456");
-        result.Body.Response.Summary.Should().NotBeNull();
-        result.Body.Response.Summary.TotalResults.Should().Be(10);
-        result.Body.Response.Results.Should().NotBeNull();
-        result.Body.Response.Results.Should().HaveCount(1);
-        result.Body.Response.Results[0].Id.Should().Be(1);
-        result.Body.Response.Results[0].Name.Should().Be("First Item");
-        result.Body.Response.Results[0].Details.Description.Should().Be("First item description");
-        result.Body.Response.Results[0].Tags.Should().Contain("Important");
+        result.ShouldNotBeNull();
+        result.Body.ShouldNotBeNull();
+        result.Body!.Response.ShouldNotBeNull();
+        result.Body.Response!.ReportId.ShouldBe("test-report-456");
+        result.Body.Response.Summary.ShouldNotBeNull();
+        result.Body.Response.Summary.TotalResults.ShouldBe(10);
+        result.Body.Response.Results.ShouldNotBeNull();
+        result.Body.Response.Results.Count.ShouldBe(1);
+        result.Body.Response.Results[0].Id.ShouldBe(1);
+        result.Body.Response.Results[0].Name.ShouldBe("First Item");
+        result.Body.Response.Results[0].Details.Description.ShouldBe("First item description");
+        result.Body.Response.Results[0].Tags.ShouldContain("Important");
     }
 
     [TestMethod]
@@ -533,10 +533,10 @@ public class XmlDeserializationServiceTests
 
         // Act — must not throw
         var act = () => serviceUnderTest.RegisterDomainModel<TestModel>("ThrowingModel");
-        act.Should().NotThrow();
+        Should.NotThrow(act);
 
         // Assert — model is still present in the registry
-        serviceUnderTest.GetRegisteredModelNames().Should().Contain("ThrowingModel");
+        serviceUnderTest.GetRegisteredModelNames().ShouldContain("ThrowingModel");
 
         // Assert — a warning was logged mentioning the model name and failure
         warnLogger.Verify(
@@ -553,7 +553,7 @@ public class XmlDeserializationServiceTests
     public void IgnoreXmlNamespaces_ShouldBeTrueByDefault()
     {
         // Assert
-        service.IgnoreXmlNamespaces.Should().BeTrue();
+        service.IgnoreXmlNamespaces.ShouldBeTrue();
     }
 
     [TestMethod]
@@ -567,8 +567,8 @@ public class XmlDeserializationServiceTests
         var registeredModels = service.GetRegisteredModelNames();
 
         // Assert
-        registeredModels.Should().Contain("Model1");
-        registeredModels.Should().Contain("Model2");
+        registeredModels.ShouldContain("Model1");
+        registeredModels.ShouldContain("Model2");
     }
 
     [TestMethod]
@@ -597,9 +597,9 @@ public class XmlDeserializationServiceTests
         var result2 = service.DeserializeXml<TestModel>(stream);
 
         // Assert
-        result1.Should().NotBeNull();
-        result2.Should().NotBeNull();
-        result1.StringProperty.Should().Be(result2.StringProperty);
+        result1.ShouldNotBeNull();
+        result2.ShouldNotBeNull();
+        result1.StringProperty.ShouldBe(result2.StringProperty);
     }
 
     [TestMethod]
@@ -609,9 +609,8 @@ public class XmlDeserializationServiceTests
         var stats = service.GetCacheStatistics();
 
         // Assert
-        stats.Should().NotBeNull();
-        stats.CacheSize.Should().BeGreaterThanOrEqualTo(0);
-        stats.SerializerCacheSize.Should().BeGreaterThanOrEqualTo(0);
+        stats.CacheSize.ShouldBeGreaterThanOrEqualTo(0);
+        stats.SerializerCacheSize.ShouldBeGreaterThanOrEqualTo(0);
     }
 
     // Test helper classes

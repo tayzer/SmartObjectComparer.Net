@@ -1,5 +1,62 @@
 ﻿---
 applyTo: '**'
+lastUpdated: 2026-04-14T00:00:00Z
+sessionStatus: complete
+---
+
+# Current Session Context
+
+## Active Task
+Migrate the test project from FluentAssertions to Shouldly
+
+## Todo List Status
+```markdown
+- [x] 🔍 Trace package and assertion usage in `ComparisonTool.Tests`
+- [x] 🛠️ Add Shouldly, convert all test assertions, and preserve test intent
+- [x] 🧹 Remove FluentAssertions from central package management and test project references
+- [x] ✅ Run full test validation, refresh guidance, and complete final review
+```
+
+## Recent File Changes
+- `Directory.Packages.props`: Replaced the central test assertion package entry with Shouldly
+- `ComparisonTool.Tests/ComparisonTool.Tests.csproj`: Swapped the test project package reference from FluentAssertions to Shouldly
+- `ComparisonTool.Tests/**/*.cs`: Converted FluentAssertions usage to Shouldly across the test project, including explicit LINQ/regex rewrites where there was no direct API match
+- `CODING_STANDARD.md` and `.github/instructions/memory.instruction.md`: Updated test guidance to standardize on Shouldly
+
+## Key Technical Decisions
+- Decision: Add Shouldly first, keep FluentAssertions only until the first converted slice validated, then remove FluentAssertions after the full source migration
+- Rationale: Kept the first validation tight and avoided turning every remaining test file into an immediate compile failure
+- Date: 2026-04-14
+- Decision: Replace non-1:1 FluentAssertions helpers with deterministic projections, explicit LINQ predicates, and regex checks rather than introducing custom assertion abstractions
+- Rationale: Preserves test intent with minimal new infrastructure and keeps the resulting tests idiomatic for MSTest + Shouldly
+- Date: 2026-04-14
+
+## External Resources Referenced
+- Internal code inspection only
+
+## Blockers & Issues
+- None
+
+## Failed Approaches
+- None
+
+## Environment Notes
+- Windows
+- .NET 10.0
+- MSTest + Shouldly + Moq for testing
+
+## Next Session Priority
+If future test work adds new assertion helpers, keep them aligned with Shouldly rather than reintroducing multiple assertion styles
+
+## Session Notes
+- All `ComparisonTool.Tests` source files now use Shouldly instead of FluentAssertions
+- FluentAssertions has been removed from `Directory.Packages.props` and `ComparisonTool.Tests/ComparisonTool.Tests.csproj`
+- Validation completed:
+	- `dotnet test .\ComparisonTool.Tests\ComparisonTool.Tests.csproj` passed with 226/226 tests
+	- Final review found only stale guidance/build-artifact references; guidance was updated and generated artifacts were queued for cleanup/rebuild
+
+---
+applyTo: '**'
 lastUpdated: 2026-03-30T00:00:00Z
 sessionStatus: complete
 ---
@@ -485,16 +542,16 @@ Implement Request Folder Comparison feature (RC-101 through RC-114) - COMPLETED
 ## Blockers & Issues
 - **[RESOLVED]** String interpolation issues in PowerShell here-strings - fixed by using replace operations
 - **[RESOLVED]** Missing IHttpClientFactory package - added Microsoft.Extensions.Http
-- **[RESOLVED]** Wrong test framework (xUnit vs MSTest) - rewrote tests using MSTest + FluentAssertions
+- **[RESOLVED]** Wrong test framework (xUnit vs MSTest) - rewrote tests using MSTest and the project-standard assertion library
 
 ## Failed Approaches
 - Approach: Using Assert.ThrowsExceptionAsync from MSTest directly
-- Failure Reason: Project uses FluentAssertions pattern `await action.Should().ThrowAsync<T>()`
+- Failure Reason: Project at the time used chained delegate-based exception assertions rather than MSTest's built-in helper pattern
 - Lesson: Check existing test patterns before writing new tests
 
 ## Environment Notes
 - .NET 8.0
-- MSTest + FluentAssertions + Moq for testing
+- MSTest + project-standard assertions + Moq for testing
 - New named HttpClient: RequestComparison
 - Feature flag: `FeatureFlags:RequestComparisonEnabled = true`
 - Config section: `RequestComparison` with MaxConcurrency=64, DefaultTimeoutMs=30000

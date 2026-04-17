@@ -5,11 +5,11 @@ using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.Serialization;
 using ComparisonTool.Core.Utilities;
 using ComparisonTool.Domain.Models;
-using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+using Shouldly;
 
 namespace ComparisonTool.Tests.EndToEnd.Workflows;
 
@@ -99,9 +99,9 @@ public class CompleteComparisonWorkflowTests
         var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestOrderModel");
 
         // Assert
-        result.Should().NotBeNull();
-        result.Differences.Should().BeEmpty();
-        result.AreEqual.Should().BeTrue();
+        result.ShouldNotBeNull();
+        result.Differences.ShouldBeEmpty();
+        result.AreEqual.ShouldBeTrue();
     }
 
     [TestMethod]
@@ -118,10 +118,10 @@ public class CompleteComparisonWorkflowTests
         var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestOrderModel");
 
         // Assert
-        result.Should().NotBeNull();
-        result.Differences.Should().HaveCount(1);
-        result.Differences.First().PropertyName.Should().Contain("CustomerName");
-        result.AreEqual.Should().BeFalse();
+        result.ShouldNotBeNull();
+        result.Differences.Count.ShouldBe(1);
+        result.Differences.First().PropertyName.ShouldContain("CustomerName");
+        result.AreEqual.ShouldBeFalse();
     }
 
     [TestMethod]
@@ -142,9 +142,9 @@ public class CompleteComparisonWorkflowTests
         var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestOrderModel");
 
         // Assert
-        result.Should().NotBeNull();
-        result.Differences.Should().BeEmpty();
-        result.AreEqual.Should().BeTrue();
+        result.ShouldNotBeNull();
+        result.Differences.ShouldBeEmpty();
+        result.AreEqual.ShouldBeTrue();
     }
 
     [TestMethod]
@@ -172,10 +172,10 @@ public class CompleteComparisonWorkflowTests
         var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestOrderModel");
 
         // Assert
-        result.Should().NotBeNull();
-        result.Differences.Should().NotBeEmpty();
-        result.Differences.Should().Contain(d => d.PropertyName.Contains("Name"));
-        result.AreEqual.Should().BeFalse();
+        result.ShouldNotBeNull();
+        result.Differences.ShouldNotBeEmpty();
+        result.Differences.Any(d => d.PropertyName.Contains("Name", StringComparison.Ordinal)).ShouldBeTrue();
+        result.AreEqual.ShouldBeFalse();
     }
 
     [TestMethod]
@@ -206,9 +206,9 @@ public class CompleteComparisonWorkflowTests
         var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestOrderModel");
 
         // Assert
-        result.Should().NotBeNull();
-        result.Differences.Should().BeEmpty();
-        result.AreEqual.Should().BeTrue();
+        result.ShouldNotBeNull();
+        result.Differences.ShouldBeEmpty();
+        result.AreEqual.ShouldBeTrue();
     }
 
     [TestMethod]
@@ -233,11 +233,11 @@ public class CompleteComparisonWorkflowTests
             stream1, stream2, "TestOrderModel", "order1.xml", "order2.xml");
 
         // Assert
-        result1.Should().NotBeNull();
-        result2.Should().NotBeNull();
-        result1.AreEqual.Should().BeTrue();
-        result2.AreEqual.Should().BeTrue();
-        result1.Differences.Should().BeEquivalentTo(result2.Differences);
+        result1.ShouldNotBeNull();
+        result2.ShouldNotBeNull();
+        result1.AreEqual.ShouldBeTrue();
+        result2.AreEqual.ShouldBeTrue();
+        CreateDifferenceSignatures(result1.Differences).ShouldBe(CreateDifferenceSignatures(result2.Differences));
     }
 
     [TestMethod]
@@ -268,12 +268,12 @@ public class CompleteComparisonWorkflowTests
         var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestOrderModel");
 
         // Assert
-        result.Should().NotBeNull();
+        result.ShouldNotBeNull();
 
         // Note: Smart ignore rules may not work as expected in this test scenario
         // The comparison engine might still find differences due to how it processes complex objects
         // This test demonstrates the setup but doesn't guarantee the filtering behavior
-        result.AreEqual.Should().BeFalse(); // Expecting differences due to complex object comparison
+        result.AreEqual.ShouldBeFalse(); // Expecting differences due to complex object comparison
     }
 
     [TestMethod]
@@ -289,8 +289,8 @@ public class CompleteComparisonWorkflowTests
         var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestOrderModel");
 
         // Assert
-        result.Should().NotBeNull();
-        result.AreEqual.Should().BeTrue();
+        result.ShouldNotBeNull();
+        result.AreEqual.ShouldBeTrue();
 
         // Performance tracking should have recorded operations
         // Note: In a real scenario, you might want to verify that performance data was logged
@@ -338,6 +338,18 @@ public class CompleteComparisonWorkflowTests
     <OrderDate>2024-01-01T00:00:00</OrderDate>
 </TestOrderModel>";
     }
+
+    private static (string PropertyName, string? OldValue, string? NewValue)[] CreateDifferenceSignatures(
+        IEnumerable<KellermanSoftware.CompareNetObjects.Difference> differences)
+        => differences
+            .Select(difference => (
+                PropertyName: difference.PropertyName,
+                OldValue: difference.Object1Value?.ToString(),
+                NewValue: difference.Object2Value?.ToString()))
+            .OrderBy(signature => signature.PropertyName, StringComparer.Ordinal)
+            .ThenBy(signature => signature.OldValue, StringComparer.Ordinal)
+            .ThenBy(signature => signature.NewValue, StringComparer.Ordinal)
+            .ToArray();
 
     // Test helper classes
     [System.Xml.Serialization.XmlRoot("TestOrderModel")]

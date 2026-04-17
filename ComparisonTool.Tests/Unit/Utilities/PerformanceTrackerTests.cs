@@ -1,8 +1,9 @@
 using System.IO;
+using System.Text.RegularExpressions;
 using ComparisonTool.Core.Utilities;
-using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Shouldly;
 
 namespace ComparisonTool.Tests.Unit.Utilities;
 
@@ -30,12 +31,12 @@ public class PerformanceTrackerTests
         var scopedMetrics = tracker.GetMetricsForScope("run-a");
         var globalMetrics = tracker.GetMetrics();
 
-        scopedMetrics.Keys.Should().Contain(new[] { "CompareDirectoriesAsync", "SharedOperation" });
-        scopedMetrics.Keys.Should().NotContain(new[] { "run-a", "run-b", "UnscopedOperation" });
-        scopedMetrics["SharedOperation"].CallCount.Should().Be(1);
+        new[] { "CompareDirectoriesAsync", "SharedOperation" }.All(scopedMetrics.ContainsKey).ShouldBeTrue();
+        new[] { "run-a", "run-b", "UnscopedOperation" }.Any(scopedMetrics.ContainsKey).ShouldBeFalse();
+        scopedMetrics["SharedOperation"].CallCount.ShouldBe(1);
 
-        globalMetrics["SharedOperation"].CallCount.Should().Be(2);
-        globalMetrics.Should().ContainKey("UnscopedOperation");
+        globalMetrics["SharedOperation"].CallCount.ShouldBe(2);
+        globalMetrics.ContainsKey("UnscopedOperation").ShouldBeTrue();
     }
 
     [TestMethod]
@@ -64,10 +65,10 @@ public class PerformanceTrackerTests
 
             var reportContents = File.ReadAllText(reportPath);
 
-            reportContents.Should().Contain("ScopedOperation");
-            reportContents.Should().NotContain("OtherScopedOperation");
-            reportContents.Should().NotContain("UnscopedOperation");
-            reportContents.Should().NotContain("run-a::");
+            reportContents.ShouldContain("ScopedOperation");
+            reportContents.ShouldNotContain("OtherScopedOperation");
+            reportContents.ShouldNotContain("UnscopedOperation");
+            reportContents.ShouldNotContain("run-a::");
         }
         finally
         {
@@ -104,11 +105,11 @@ public class PerformanceTrackerTests
 
             var reportContents = File.ReadAllText(reportPath);
 
-            reportContents.Should().Contain("Operation: ScopedOperation");
-            reportContents.Should().MatchRegex("(?s)Operation: ScopedOperation.*SUPPLEMENTAL METRICS");
-            reportContents.Should().Contain("CollectionOrderDeterministicOrderingMs: 12");
-            reportContents.Should().Contain("CollectionOrderFallbackMs: 3");
-            reportContents.Should().Contain("CollectionOrderFallbackCount: 1");
+            reportContents.ShouldContain("Operation: ScopedOperation");
+            Regex.IsMatch(reportContents, "(?s)Operation: ScopedOperation.*SUPPLEMENTAL METRICS").ShouldBeTrue();
+            reportContents.ShouldContain("CollectionOrderDeterministicOrderingMs: 12");
+            reportContents.ShouldContain("CollectionOrderFallbackMs: 3");
+            reportContents.ShouldContain("CollectionOrderFallbackCount: 1");
         }
         finally
         {
@@ -146,12 +147,12 @@ public class PerformanceTrackerTests
             var reportLines = File.ReadAllLines(reportPath);
             var blankLineIndex = Array.IndexOf(reportLines, string.Empty);
 
-            reportLines[0].Should().Be("Operation,CallCount,TotalTimeMs,AverageTimeMs,MedianTimeMs,MinTimeMs,MaxTimeMs");
-            blankLineIndex.Should().BeGreaterThan(0);
-            reportLines[blankLineIndex + 1].Should().Be("Metric,Value");
-            reportLines.Should().Contain("CollectionOrderDeterministicOrderingMs,12");
-            reportLines.Should().Contain("CollectionOrderFallbackMs,3");
-            reportLines.Should().Contain("CollectionOrderFallbackCount,1");
+            reportLines[0].ShouldBe("Operation,CallCount,TotalTimeMs,AverageTimeMs,MedianTimeMs,MinTimeMs,MaxTimeMs");
+            blankLineIndex.ShouldBeGreaterThan(0);
+            reportLines[blankLineIndex + 1].ShouldBe("Metric,Value");
+            reportLines.ShouldContain("CollectionOrderDeterministicOrderingMs,12");
+            reportLines.ShouldContain("CollectionOrderFallbackMs,3");
+            reportLines.ShouldContain("CollectionOrderFallbackCount,1");
         }
         finally
         {

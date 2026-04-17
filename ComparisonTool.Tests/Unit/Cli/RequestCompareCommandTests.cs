@@ -1,6 +1,6 @@
 using ComparisonTool.Cli.Commands;
-using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Shouldly;
 
 namespace ComparisonTool.Tests.Unit.Cli;
 
@@ -35,10 +35,10 @@ public sealed class RequestCompareCommandTests : IDisposable
 
         var selection = RequestCompareCommand.CreateRequestBatchSelection(requestDirectory, "2-3");
 
-        selection.TotalEligibleFileCount.Should().Be(3);
-        selection.SelectedFileCount.Should().Be(2);
-        selection.AppliedRange.ToString().Should().Be("2-3");
-        selection.SelectedFiles.Select(file => file.Name).Should().Equal("b.xml", "c.txt");
+        selection.TotalEligibleFileCount.ShouldBe(3);
+        selection.SelectedFileCount.ShouldBe(2);
+        selection.AppliedRange.ToString().ShouldBe("2-3");
+        selection.SelectedFiles.Select(file => file.Name).ToArray().ShouldBe(new[] { "b.xml", "c.txt" });
     }
 
     [TestMethod]
@@ -48,11 +48,11 @@ public sealed class RequestCompareCommandTests : IDisposable
 
         var selection = RequestCompareCommand.CreateRequestBatchSelection(requestDirectory, "2-99");
 
-        selection.TotalEligibleFileCount.Should().Be(3);
-        selection.SelectedFileCount.Should().Be(2);
-        selection.AppliedRange.ToString().Should().Be("2-3");
-        selection.AppliedRangeDisplay.Should().Be("2-3 (requested 2-99)");
-        selection.SelectedFiles.Select(file => file.Name).Should().Equal("b.xml", "c.txt");
+        selection.TotalEligibleFileCount.ShouldBe(3);
+        selection.SelectedFileCount.ShouldBe(2);
+        selection.AppliedRange.ToString().ShouldBe("2-3");
+        selection.AppliedRangeDisplay.ShouldBe("2-3 (requested 2-99)");
+        selection.SelectedFiles.Select(file => file.Name).ToArray().ShouldBe(new[] { "b.xml", "c.txt" });
     }
 
     [TestMethod]
@@ -70,7 +70,7 @@ public sealed class RequestCompareCommandTests : IDisposable
 
         var filesToStage = RequestCompareCommand.GetFilesToStage(selection);
 
-        filesToStage.Select(file => file.Name).Should().Equal("002.json", "002.json.headers.json");
+        filesToStage.Select(file => file.Name).ToArray().ShouldBe(new[] { "002.json", "002.json.headers.json" });
     }
 
     [TestMethod]
@@ -84,8 +84,8 @@ public sealed class RequestCompareCommandTests : IDisposable
 
         Action action = () => RequestCompareCommand.CreateRequestBatchSelection(requestDirectory, rangeText);
 
-        action.Should().Throw<ArgumentException>()
-            .WithMessage($"*{expectedMessage}*");
+        var exception = Should.Throw<ArgumentException>(action);
+        exception.Message.ShouldContain(expectedMessage);
     }
 
     [TestMethod]
@@ -95,8 +95,8 @@ public sealed class RequestCompareCommandTests : IDisposable
 
         Action action = () => RequestCompareCommand.CreateRequestBatchSelection(requestDirectory, "4-5");
 
-        action.Should().Throw<ArgumentOutOfRangeException>()
-            .WithMessage("*exceeds the available eligible request file count 3*");
+        var exception = Should.Throw<ArgumentOutOfRangeException>(action);
+        exception.Message.ShouldContain("exceeds the available eligible request file count 3");
     }
 
         [TestMethod]
@@ -115,11 +115,12 @@ public sealed class RequestCompareCommandTests : IDisposable
 
                 var result = await RequestCompareCommand.LoadMaskRulesAsync(file, CancellationToken.None);
 
-                result.IsSuccess.Should().BeTrue();
-                result.MaskRules.Should().ContainSingle();
-                result.MaskRules![0].PropertyPath.Should().Be("Order.Payments[*].CardNumber");
-                result.MaskRules[0].PreserveLastCharacters.Should().Be(4);
-                result.MaskRules[0].MaskCharacter.Should().Be("*");
+                result.IsSuccess.ShouldBeTrue();
+                result.MaskRules.ShouldNotBeNull();
+                result.MaskRules!.Count.ShouldBe(1);
+                result.MaskRules[0].PropertyPath.ShouldBe("Order.Payments[*].CardNumber");
+                result.MaskRules[0].PreserveLastCharacters.ShouldBe(4);
+                result.MaskRules[0].MaskCharacter.ShouldBe("*");
         }
 
         [TestMethod]
@@ -140,10 +141,11 @@ public sealed class RequestCompareCommandTests : IDisposable
 
                 var result = await RequestCompareCommand.LoadMaskRulesAsync(file, CancellationToken.None);
 
-                result.IsSuccess.Should().BeTrue();
-                result.MaskRules.Should().ContainSingle();
-                result.MaskRules![0].MaskCharacter.Should().Be("#");
-                result.MaskRules[0].PreserveLastCharacters.Should().Be(0);
+                result.IsSuccess.ShouldBeTrue();
+                result.MaskRules.ShouldNotBeNull();
+                result.MaskRules!.Count.ShouldBe(1);
+                result.MaskRules[0].MaskCharacter.ShouldBe("#");
+                result.MaskRules[0].PreserveLastCharacters.ShouldBe(0);
         }
 
         [TestMethod]
@@ -162,8 +164,8 @@ public sealed class RequestCompareCommandTests : IDisposable
 
                 var result = await RequestCompareCommand.LoadMaskRulesAsync(file, CancellationToken.None);
 
-                result.IsSuccess.Should().BeFalse();
-                result.ErrorMessage.Should().Contain("exactly one character");
+                result.IsSuccess.ShouldBeFalse();
+                result.ErrorMessage.ShouldContain("exactly one character");
         }
 
             [TestMethod]
@@ -179,8 +181,8 @@ public sealed class RequestCompareCommandTests : IDisposable
 
                 var result = await RequestCompareCommand.LoadMaskRulesAsync(file, CancellationToken.None);
 
-                result.IsSuccess.Should().BeFalse();
-                result.ErrorMessage.Should().Contain("cannot contain null entries");
+                result.IsSuccess.ShouldBeFalse();
+                result.ErrorMessage.ShouldContain("cannot contain null entries");
             }
 
     private DirectoryInfo CreateRequestDirectory(params string[] fileNames)

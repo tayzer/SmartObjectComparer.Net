@@ -1,9 +1,9 @@
 using System.Text.Json;
 using ComparisonTool.Cli.Reporting;
 using ComparisonTool.Core.Comparison.Results;
-using FluentAssertions;
 using KellermanSoftware.CompareNetObjects;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Shouldly;
 
 namespace ComparisonTool.Tests.Unit.Cli;
 
@@ -46,7 +46,7 @@ public sealed class HtmlReportBundleBuilderTests
             .Pairs[0]
             .DiffDocument;
 
-        diffDocument.Should().BeNull();
+        diffDocument.ShouldBeNull();
     }
 
     [TestMethod]
@@ -67,9 +67,9 @@ public sealed class HtmlReportBundleBuilderTests
             .Pairs[0]
             .DiffDocument;
 
-        diffDocument.Should().NotBeNull();
-        diffDocument!.Format.Should().Be("text");
-        diffDocument.Lines.Should().NotBeEmpty();
+        diffDocument.ShouldNotBeNull();
+        diffDocument!.Format.ShouldBe("text");
+        diffDocument.Lines.ShouldNotBeEmpty();
     }
 
     [TestMethod]
@@ -88,11 +88,11 @@ public sealed class HtmlReportBundleBuilderTests
         await HtmlReportWriter.WriteAsync(context, outputPath);
 
         var chunkPath = Path.Combine(tempDirectory, "request-comparison-large.data", "chunks", "pairs-0001.json");
-        File.Exists(chunkPath).Should().BeTrue();
+        File.Exists(chunkPath).ShouldBeTrue();
 
         using var chunkDocument = JsonDocument.Parse(await File.ReadAllTextAsync(chunkPath));
         var pairElement = chunkDocument.RootElement.GetProperty("pairs")[0];
-        pairElement.TryGetProperty("diffDocument", out _).Should().BeFalse();
+        pairElement.TryGetProperty("diffDocument", out _).ShouldBeFalse();
     }
 
     [TestMethod]
@@ -110,26 +110,26 @@ public sealed class HtmlReportBundleBuilderTests
 
         await HtmlReportWriter.WriteAsync(context, outputPath);
 
-        File.Exists(outputPath).Should().BeTrue();
+        File.Exists(outputPath).ShouldBeTrue();
         var html = await File.ReadAllTextAsync(outputPath);
-        html.Should().NotContain("__REPORT_DATA_JSON__");
-        html.Should().Contain("\"mode\":\"static-site\"");
-        html.Should().Contain("request-comparison.data/index.json");
+        html.ShouldNotContain("__REPORT_DATA_JSON__");
+        html.ShouldContain("\"mode\":\"static-site\"");
+        html.ShouldContain("request-comparison.data/index.json");
 
         var indexPath = Path.Combine(tempDirectory, "request-comparison.data", "index.json");
-        File.Exists(indexPath).Should().BeTrue();
+        File.Exists(indexPath).ShouldBeTrue();
 
         using (var indexDocument = JsonDocument.Parse(await File.ReadAllTextAsync(indexPath)))
         {
-            indexDocument.RootElement.GetProperty("totalPairs").GetInt32().Should().Be(1);
-            indexDocument.RootElement.GetProperty("pairs").GetArrayLength().Should().Be(1);
+            indexDocument.RootElement.GetProperty("totalPairs").GetInt32().ShouldBe(1);
+            indexDocument.RootElement.GetProperty("pairs").GetArrayLength().ShouldBe(1);
         }
 
         var chunkPath = Path.Combine(tempDirectory, "request-comparison.data", "chunks", "pairs-0001.json");
-        File.Exists(chunkPath).Should().BeTrue();
+        File.Exists(chunkPath).ShouldBeTrue();
 
         using var chunkDocument = JsonDocument.Parse(await File.ReadAllTextAsync(chunkPath));
-        chunkDocument.RootElement.GetProperty("pairs").GetArrayLength().Should().Be(1);
+        chunkDocument.RootElement.GetProperty("pairs").GetArrayLength().ShouldBe(1);
     }
 
     private static ReportContext CreateRequestContext(FilePairComparisonResult pair, HtmlReportMode htmlMode)
