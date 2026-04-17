@@ -1,9 +1,9 @@
 using System.IO;
 using ComparisonTool.Core.Utilities;
-using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+using Shouldly;
 
 namespace ComparisonTool.Tests.Unit.Utilities;
 
@@ -34,7 +34,7 @@ public class FileSystemServiceTests : IDisposable
     public void Constructor_ShouldInitializeCorrectly()
     {
         // Act & Assert
-        this.service.Should().NotBeNull();
+        this.service.ShouldNotBeNull();
     }
 
     [TestMethod]
@@ -48,8 +48,8 @@ public class FileSystemServiceTests : IDisposable
         var files = await this.service.GetXmlFilesFromDirectoryAsync(this.testDirectory);
 
         // Assert
-        files.Should().NotBeNull();
-        files.Should().Contain(f => Path.GetFileName(f.FilePath) == "testfile.xml");
+        files.ShouldNotBeNull();
+        files.Any(f => Path.GetFileName(f.FilePath) == "testfile.xml").ShouldBeTrue();
     }
 
     [TestMethod]
@@ -60,7 +60,7 @@ public class FileSystemServiceTests : IDisposable
 
         // Act & Assert
         var action = () => this.service.GetXmlFilesFromDirectoryAsync(nonExistentDir);
-        await action.Should().ThrowAsync<DirectoryNotFoundException>();
+        await Should.ThrowAsync<DirectoryNotFoundException>(action);
     }
 
     [TestMethod]
@@ -75,10 +75,10 @@ public class FileSystemServiceTests : IDisposable
         using var stream = await this.service.GetFileAsMemoryStreamAsync(testFile);
 
         // Assert
-        stream.Should().NotBeNull();
+        stream.ShouldNotBeNull();
         using var reader = new StreamReader(stream);
         var result = await reader.ReadToEndAsync();
-        result.Should().Be(content);
+        result.ShouldBe(content);
     }
 
     [TestMethod]
@@ -89,7 +89,7 @@ public class FileSystemServiceTests : IDisposable
 
         // Act & Assert
         var action = () => this.service.GetFileAsMemoryStreamAsync(nonExistentFile);
-        await action.Should().ThrowAsync<FileNotFoundException>();
+        await Should.ThrowAsync<FileNotFoundException>(action);
     }
 
     [TestMethod]
@@ -104,10 +104,10 @@ public class FileSystemServiceTests : IDisposable
         using var stream = await this.service.OpenFileStreamAsync(testFile);
 
         // Assert
-        stream.Should().NotBeNull();
+        stream.ShouldNotBeNull();
         using var reader = new StreamReader(stream);
         var result = await reader.ReadToEndAsync();
-        result.Should().Be(content);
+        result.ShouldBe(content);
     }
 
     [TestMethod]
@@ -118,7 +118,7 @@ public class FileSystemServiceTests : IDisposable
 
         // Act & Assert
         var action = () => this.service.OpenFileStreamAsync(nonExistentFile);
-        await action.Should().ThrowAsync<FileNotFoundException>();
+        await Should.ThrowAsync<FileNotFoundException>(action);
     }
 
     [TestMethod]
@@ -141,11 +141,11 @@ public class FileSystemServiceTests : IDisposable
         var pairs = await this.service.CreateFilePairsAsync(tempDir1, tempDir2);
 
         // Assert
-        pairs.Should().NotBeNull();
-        pairs.Should().HaveCount(1);
-        pairs[0].File1Path.Should().Be(file1);
-        pairs[0].File2Path.Should().Be(file2);
-        pairs[0].RelativePath.Should().Be("test.xml");
+        pairs.ShouldNotBeNull();
+        pairs.Count.ShouldBe(1);
+        pairs[0].File1Path.ShouldBe(file1);
+        pairs[0].File2Path.ShouldBe(file2);
+        pairs[0].RelativePath.ShouldBe("test.xml");
     }
 
     [TestMethod]
@@ -158,7 +158,7 @@ public class FileSystemServiceTests : IDisposable
 
         // Act & Assert
         var action = () => this.service.CreateFilePairsAsync(nonExistentDir, tempDir);
-        await action.Should().ThrowAsync<DirectoryNotFoundException>();
+        await Should.ThrowAsync<DirectoryNotFoundException>(action);
     }
 
     [TestMethod]
@@ -178,14 +178,14 @@ public class FileSystemServiceTests : IDisposable
             var result = await this.service.MapFilesByFolderAsync(files);
 
             // Assert
-            result.Should().NotBeNull();
-            result.Should().ContainKey(string.Empty);
-            result.Should().ContainKey("folder");
-            result.Should().ContainKey("folder/subfolder");
+            result.ShouldNotBeNull();
+            result.ContainsKey(string.Empty).ShouldBeTrue();
+            result.ContainsKey("folder").ShouldBeTrue();
+            result.ContainsKey("folder/subfolder").ShouldBeTrue();
 
-            result[string.Empty].Should().HaveCount(1);
-            result["folder"].Should().HaveCount(1);
-            result["folder/subfolder"].Should().HaveCount(1);
+            result[string.Empty].Count.ShouldBe(1);
+            result["folder"].Count.ShouldBe(1);
+            result["folder/subfolder"].Count.ShouldBe(1);
         }
         finally
         {
@@ -207,7 +207,7 @@ public class FileSystemServiceTests : IDisposable
         var result = await this.service.MapFilesByFolderAsync(files);
 
         // Assert
-        result.Should().NotBeNull();
-        result.Should().BeEmpty();
+        result.ShouldNotBeNull();
+        result.ShouldBeEmpty();
     }
 }

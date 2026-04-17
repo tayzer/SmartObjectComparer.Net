@@ -23,6 +23,7 @@ applyTo: '**'
 - StyleCop analyzers enabled globally
 - Nullable reference types enabled
 - Services registered via extension methods in DI namespace
+- Tests use MSTest + Shouldly + Moq; FluentAssertions has been removed from the test stack
 - XML doc comments on public APIs
 
 ## User Preferences
