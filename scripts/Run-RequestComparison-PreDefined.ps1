@@ -5,9 +5,11 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $cliProject = Join-Path $repoRoot "ComparisonTool.Cli\ComparisonTool.Cli.csproj"
+$reportProject = Join-Path $repoRoot "ComparisonTool.Report\ComparisonTool.Report.csproj"
 $reportPublishDir = Join-Path $repoRoot "ComparisonTool.Report\bin\publish"
 $publishDir = Join-Path $repoRoot "ComparisonTool.Cli\bin\Release\net10.0\publish"
 $exePath = Join-Path $publishDir "comparisontool.exe"
+$reportAssetsDir = Join-Path $reportPublishDir "wwwroot"
 
 # ---- Hardcoded parameters ----
 $RequestFolder = "C:\Dev\GitMain\ComparisonTool\ComparisonTool.MockApi\MockRequests"
@@ -30,6 +32,18 @@ if (Test-Path $reportPublishDir)
 if (Test-Path $publishDir)
 {
     Remove-Item -Path $publishDir -Recurse -Force
+}
+
+Write-Host "Publishing Blazor report assets..."
+& dotnet publish $reportProject -c Release -o $reportPublishDir
+if ($LASTEXITCODE -ne 0)
+{
+    throw "dotnet publish for ComparisonTool.Report failed with exit code $LASTEXITCODE"
+}
+
+if (-not (Test-Path (Join-Path $reportAssetsDir "index.html")))
+{
+    throw "Blazor report publish output was not found at $reportAssetsDir"
 }
 
 Write-Host "Building CLI project..."
