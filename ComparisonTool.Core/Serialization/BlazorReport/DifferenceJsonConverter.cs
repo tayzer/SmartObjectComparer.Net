@@ -52,19 +52,52 @@ public sealed class DifferenceJsonConverter : JsonConverter<Difference>
                     break;
                 case "parentPropertyName":
                     // ParentPropertyName is read-only on Difference; skip it
-                    reader.Skip();
+                    SafeSkip(ref reader);
                     break;
                 case "messageShort":
                     // MessageShort is read-only on Difference; skip it on deserialization
-                    reader.Skip();
+                    SafeSkip(ref reader);
                     break;
                 default:
-                    reader.Skip();
+                    SafeSkip(ref reader);
                     break;
             }
         }
 
         throw new JsonException("Unexpected end of JSON.");
+    }
+
+    private static void SafeSkip(ref Utf8JsonReader reader)
+    {
+        switch (reader.TokenType)
+        {
+            case JsonTokenType.StartObject:
+                PerformSafeSkip(reader);
+                break;
+            case JsonTokenType.StartArray:
+                PerformSafeSkip(reader);
+                break;
+            default:
+                // For simple values, just skip
+                break;
+        }
+    }
+
+    private static void PerformSafeSkip(Utf8JsonReader reader)
+    {
+        int depth = 1;
+        while (depth > 0 && reader.Read())
+        {
+            switch (reader.TokenType)
+            {
+                case JsonTokenType.StartObject or JsonTokenType.StartArray:
+                    depth++;
+                    break;
+                case JsonTokenType.EndObject or JsonTokenType.EndArray:
+                    depth--;
+                    break;
+            }
+        }
     }
 
     public override void Write(Utf8JsonWriter writer, Difference value, JsonSerializerOptions options)
@@ -99,9 +132,8 @@ public sealed class DifferenceJsonConverter : JsonConverter<Difference>
         }
     }
 
-    private static object? ReadValue(ref Utf8JsonReader reader)
-    {
-        return reader.TokenType switch
+    private static object? ReadValue(ref Utf8JsonReader reader) =>
+        reader.TokenType switch
         {
             JsonTokenType.Null => null,
             JsonTokenType.String => reader.GetString(),
@@ -110,5 +142,4 @@ public sealed class DifferenceJsonConverter : JsonConverter<Difference>
             JsonTokenType.False => false,
             _ => throw new JsonException($"Unexpected token type {reader.TokenType} for difference value."),
         };
-    }
 }

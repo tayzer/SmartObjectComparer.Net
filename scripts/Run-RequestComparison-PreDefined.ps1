@@ -86,14 +86,55 @@ if ($OutputType -contains "Html")
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
 
-    if ($latestReport -and (Test-Path (Join-Path $latestReport.FullName "serve.cmd")))
+    $latestRedirector = if ($latestReport)
+    {
+        "$($latestReport.FullName).html"
+    }
+    else
+    {
+        $null
+    }
+
+    if ($latestReport -and $latestRedirector -and (Test-Path $latestRedirector))
     {
         Get-NetTCPConnection -LocalPort 8890 -State Listen -ErrorAction SilentlyContinue |
             ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
 
+        $redirectFileName = [System.IO.Path]::GetFileName($latestRedirector)
+        $redirectUrl = "http://localhost:8890/$redirectFileName"
+        $pythonCommand = Get-Command python -ErrorAction SilentlyContinue
+
+        if (-not $pythonCommand)
+        {
+            $pythonCommand = Get-Command py -ErrorAction SilentlyContinue
+        }
+
         Write-Host ""
-        Write-Host "Launching local report server from: $($latestReport.FullName)"
-        Start-Process -FilePath (Join-Path $latestReport.FullName "serve.cmd") -WorkingDirectory $latestReport.FullName
+        Write-Host "Launching Jenkins-like local artifact server from: $OutputDirectory"
+        Write-Host "Opening report entry point: $redirectUrl"
+
+        if ($pythonCommand)
+        {
+            if ($pythonCommand.Name -match "^py(\.exe)?$")
+            {
+                Start-Process -FilePath $pythonCommand.Source -ArgumentList @("-3", "-m", "http.server", "8890", "-d", $OutputDirectory) -WorkingDirectory $OutputDirectory
+            }
+            else
+            {
+                Start-Process -FilePath $pythonCommand.Source -ArgumentList @("-m", "http.server", "8890", "-d", $OutputDirectory) -WorkingDirectory $OutputDirectory
+            }
+
+            Start-Process $redirectUrl
+        }
+        elseif (Test-Path (Join-Path $latestReport.FullName "serve.cmd"))
+        {
+            Write-Warning "Python was not found. Falling back to the report-folder server, which is useful for local smoke testing but does not exactly match Jenkins artifact hosting."
+            Start-Process -FilePath (Join-Path $latestReport.FullName "serve.cmd") -WorkingDirectory $latestReport.FullName
+        }
+        else
+        {
+            Write-Warning "No local HTTP server could be started automatically. Serve '$OutputDirectory' over HTTP and open '$redirectFileName'."
+        }
     }
     else
     {
