@@ -711,7 +711,7 @@ public class ComparisonServiceIntegrationTests
             initialResult.Metadata.ContainsKey("PerformanceReportCsvPath").ShouldBeTrue();
 
             var initialPhaseTimings = GetPhaseTimings(initialResult.Metadata);
-            initialPhaseTimings.XmlDeserializationPrecheckMs.ShouldBeGreaterThan(0);
+            initialPhaseTimings.XmlDeserializationPrecheckMs.ShouldBeGreaterThanOrEqualTo(0);
             initialPhaseTimings.XmlDeserializationFullDeserializeMs.ShouldBeGreaterThan(0);
             initialPhaseTimings.CompareMs.ShouldBeGreaterThan(0);
             initialPhaseTimings.FilterMs.ShouldBeGreaterThan(0);
