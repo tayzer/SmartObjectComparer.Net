@@ -3,8 +3,8 @@ using ComparisonTool.Cli.Reporting;
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.Serialization.BlazorReport;
-using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Shouldly;
 
 namespace ComparisonTool.Tests.Unit.Cli;
 
@@ -60,15 +60,16 @@ public sealed class BlazorReportBundleBuilderTests : IDisposable
         var report = JsonSerializer.Deserialize<ReportBootstrapData>(json, BlazorReportSerializerOptions.Default);
         Assert.IsNotNull(report);
         Assert.IsNotNull(report.Result);
-        var pair = report.Result!.FilePairResults.Should().ContainSingle().Subject;
+        report.Result!.FilePairResults.Count.ShouldBe(1);
+        var pair = report.Result!.FilePairResults[0];
 
-        pair.HasEmbeddedRawContent.Should().BeFalse();
-        pair.EmbeddedRawContentA.Should().BeNull();
-        pair.EmbeddedRawContentB.Should().BeNull();
-        pair.EmbeddedRawContentTruncatedA.Should().BeFalse();
-        pair.EmbeddedRawContentTruncatedB.Should().BeFalse();
-        pair.BundledRawContentPath.Should().Be(BlazorReportBundleBuilder.BuildBundledRawContentPath(sourcePair, 0));
-        pair.RawTextDifferences.Should().ContainSingle();
+        pair.HasEmbeddedRawContent.ShouldBeFalse();
+        pair.EmbeddedRawContentA.ShouldBeNull();
+        pair.EmbeddedRawContentB.ShouldBeNull();
+        pair.EmbeddedRawContentTruncatedA.ShouldBeFalse();
+        pair.EmbeddedRawContentTruncatedB.ShouldBeFalse();
+        pair.BundledRawContentPath.ShouldBe(BlazorReportBundleBuilder.BuildBundledRawContentPath(sourcePair, 0));
+        pair.RawTextDifferences!.Count.ShouldBe(1);
     }
 
     [TestMethod]
@@ -91,14 +92,15 @@ public sealed class BlazorReportBundleBuilderTests : IDisposable
         var report = JsonSerializer.Deserialize<ReportBootstrapData>(json, BlazorReportSerializerOptions.Default);
         Assert.IsNotNull(report);
         Assert.IsNotNull(report.Result);
-        var pair = report.Result!.FilePairResults.Should().ContainSingle().Subject;
+        report.Result!.FilePairResults.Count.ShouldBe(1);
+        var pair = report.Result!.FilePairResults[0];
 
-        pair.HasEmbeddedRawContent.Should().BeTrue();
-        pair.EmbeddedRawContentA.Should().Be("fault-a");
-        pair.EmbeddedRawContentB.Should().Be("fault-b");
-        pair.EmbeddedRawContentTruncatedA.Should().BeFalse();
-        pair.EmbeddedRawContentTruncatedB.Should().BeFalse();
-        pair.BundledRawContentPath.Should().BeNull();
+        pair.HasEmbeddedRawContent.ShouldBeTrue();
+        pair.EmbeddedRawContentA.ShouldBe("fault-a");
+        pair.EmbeddedRawContentB.ShouldBe("fault-b");
+        pair.EmbeddedRawContentTruncatedA.ShouldBeFalse();
+        pair.EmbeddedRawContentTruncatedB.ShouldBeFalse();
+        pair.BundledRawContentPath.ShouldBeNull();
     }
 
     private static ReportContext CreateContext(FilePairComparisonResult pair)

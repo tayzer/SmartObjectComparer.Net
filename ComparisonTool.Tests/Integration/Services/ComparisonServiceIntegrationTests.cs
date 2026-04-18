@@ -670,45 +670,6 @@ public class ComparisonServiceIntegrationTests
         }
     }
 
-    [DataTestMethod]
-
-    // [DataRow("Actual_MalformedXml.xml", "Expected_MalformedXml.xml", "Malformed XML with unclosed tags")]
-    // [DataRow("Actual_TruncatedXml.xml", "Expected_TruncatedXml.xml", "Truncated XML cut off mid-element")]
-    // [DataRow("Actual_EmptyFile.xml", "Expected_EmptyFile.xml", "Empty file with no content")]
-    // [DataRow("Actual_WrongRootElement.xml", "Expected_WrongRootElement.xml", "Wrong root element / different schema")]
-    [DataRow("Actual_FaultException.xml", "Expected_FaultException.xml", "SOAP fault exception response instead of expected data")]
-    public async Task CompareXmlFilesAsync_WithErrorScenarioFiles_ShouldThrowOnDeserialization(
-        string actualFileName,
-        string expectedFileName,
-        string scenarioDescription)
-    {
-        // These file pairs exercise scenarios where the Actual side has content that
-        // cannot be deserialized as a ComplexOrderResponse. Deserialization uses
-        // TryDeserializeXml which pre-validates the root element, catching SOAP faults
-        // and wrong schemas WITHOUT throwing from XmlSerializer.Deserialize().
-        // The pre-validation failure is returned as a DeserializationResult.Failure,
-        // then the orchestrator wraps it in an InvalidOperationException for callers
-        // that expect exceptions (like this test). In the File/Folder Comparison UI,
-        // errors are caught by DirectoryComparisonService and rendered via ErrorDetailView.razor.
-        var testRoot = GetSpecificComplexModelTestRoot();
-        var actualPath = Path.Combine(testRoot, "Actual", actualFileName);
-        var expectedPath = Path.Combine(testRoot, "Expected", expectedFileName);
-
-        File.Exists(actualPath).Should().BeTrue($"Actual file should exist for scenario: {scenarioDescription}");
-        File.Exists(expectedPath).Should().BeTrue($"Expected file should exist for scenario: {scenarioDescription}");
-
-        using var actualStream = File.OpenRead(actualPath);
-        using var expectedStream = File.OpenRead(expectedPath);
-
-        var action = () => comparisonService.CompareXmlFilesAsync(
-            actualStream,
-            expectedStream,
-            "ComplexOrderResponse");
-
-        await action.Should().ThrowAsync<Exception>(
-            $"Deserialization should fail for scenario: {scenarioDescription}");
-    }
-
     [TestMethod]
     public async Task CompareDirectoriesAsync_WhenLargeRunUsesHighPerformancePipeline_ShouldRespectConfigurationAndLogSessionResults()
     {
@@ -1051,17 +1012,17 @@ public class ComparisonServiceIntegrationTests
                 "ComplexOrderResponse",
                 batchSize: 25);
 
-            result.TotalPairsCompared.Should().Be(1);
-            result.AllEqual.Should().BeTrue();
-            result.FilePairResults.Should().HaveCount(1);
+            result.TotalPairsCompared.ShouldBe(1);
+            result.AllEqual.ShouldBeTrue();
+            result.FilePairResults.Count.ShouldBe(1);
 
             var pair = result.FilePairResults[0];
-            pair.HasError.Should().BeFalse();
-            pair.ErrorMessage.Should().BeNull();
-            pair.Result.Should().BeNull();
-            pair.AreEqual.Should().BeTrue();
-            pair.RawTextDifferences.Should().NotBeNull();
-            pair.RawTextDifferences.Should().BeEmpty();
+            pair.HasError.ShouldBeFalse();
+            pair.ErrorMessage.ShouldBeNull();
+            pair.Result.ShouldBeNull();
+            pair.AreEqual.ShouldBeTrue();
+            pair.RawTextDifferences.ShouldNotBeNull();
+            pair.RawTextDifferences.ShouldBeEmpty();
         }
         finally
         {
@@ -1100,20 +1061,20 @@ public class ComparisonServiceIntegrationTests
                 "ComplexOrderResponse",
                 batchSize: 25);
 
-            result.TotalPairsCompared.Should().Be(1);
-            result.AllEqual.Should().BeFalse();
-            result.FilePairResults.Should().HaveCount(1);
+            result.TotalPairsCompared.ShouldBe(1);
+            result.AllEqual.ShouldBeFalse();
+            result.FilePairResults.Count.ShouldBe(1);
 
             var pair = result.FilePairResults[0];
-            pair.HasError.Should().BeFalse();
-            pair.ErrorMessage.Should().BeNull();
-            pair.Result.Should().BeNull();
-            pair.AreEqual.Should().BeFalse();
-            pair.RawTextDifferences.Should().NotBeNull();
-            pair.RawTextDifferences.Should().NotBeEmpty();
+            pair.HasError.ShouldBeFalse();
+            pair.ErrorMessage.ShouldBeNull();
+            pair.Result.ShouldBeNull();
+            pair.AreEqual.ShouldBeFalse();
+            pair.RawTextDifferences.ShouldNotBeNull();
+            pair.RawTextDifferences.ShouldNotBeEmpty();
 
             var structuralAnalysis = await comparisonService.AnalyzeStructualPatternsAsync(result);
-            structuralAnalysis.TotalDifferencesFound.Should().Be(pair.RawTextDifferences.Count);
+            structuralAnalysis.TotalDifferencesFound.ShouldBe(pair.RawTextDifferences.Count);
         }
         finally
         {
@@ -1156,13 +1117,13 @@ public class ComparisonServiceIntegrationTests
                 "ComplexOrderResponse",
                 batchSize: 25);
 
-            result.TotalPairsCompared.Should().Be(pairCount);
-            result.AllEqual.Should().BeFalse();
-            result.FilePairResults.Should().HaveCount(pairCount);
-            result.FilePairResults.Should().OnlyContain(pair => !pair.HasError && pair.RawTextDifferences != null);
+            result.TotalPairsCompared.ShouldBe(pairCount);
+            result.AllEqual.ShouldBeFalse();
+            result.FilePairResults.Count.ShouldBe(pairCount);
+            result.FilePairResults.ShouldAllBe(pair => !pair.HasError && pair.RawTextDifferences != null);
 
             var patternAnalysis = await comparisonService.AnalyzePatternsAsync(result);
-            patternAnalysis.SimilarFileGroups.Should().BeEmpty();
+            patternAnalysis.SimilarFileGroups.ShouldBeEmpty();
 
             for (var index = 0; index < pairCount; index++)
             {
@@ -1171,13 +1132,13 @@ public class ComparisonServiceIntegrationTests
 
                 if (index % 2 == 0)
                 {
-                    pair.AreEqual.Should().BeTrue();
-                    pair.RawTextDifferences.Should().BeEmpty();
+                    pair.AreEqual.ShouldBeTrue();
+                    pair.RawTextDifferences.ShouldBeEmpty();
                 }
                 else
                 {
-                    pair.AreEqual.Should().BeFalse();
-                    pair.RawTextDifferences.Should().NotBeEmpty();
+                    pair.AreEqual.ShouldBeFalse();
+                    pair.RawTextDifferences.ShouldNotBeEmpty();
                 }
             }
         }

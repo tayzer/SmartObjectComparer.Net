@@ -474,11 +474,11 @@ public class RawTextComparisonServiceTests
         var previewDiffs = await service.CompareFilesRawAsync(file1, file2);
         var fullDiffs = await service.CompareFilesRawAsync(file1, file2, RawFileComparisonMode.FullContent);
 
-        previewDiffs.Should().Contain(diff => diff.Description != null && diff.Description.Contains("truncated"));
-        previewDiffs.Should().NotContain(diff => diff.TextA == "TAIL_A" || diff.TextB == "TAIL_B");
+        previewDiffs.ShouldContain(diff => diff.Description != null && diff.Description.Contains("truncated"));
+        previewDiffs.ShouldNotContain(diff => diff.TextA == "TAIL_A" || diff.TextB == "TAIL_B");
 
-        fullDiffs.Should().NotContain(diff => diff.Description != null && diff.Description.Contains("truncated"));
-        fullDiffs.Should().Contain(diff =>
+        fullDiffs.ShouldNotContain(diff => diff.Description != null && diff.Description.Contains("truncated"));
+        fullDiffs.ShouldContain(diff =>
             diff.Type == RawTextDifferenceType.Modified &&
             diff.TextA == "TAIL_A" &&
             diff.TextB == "TAIL_B");

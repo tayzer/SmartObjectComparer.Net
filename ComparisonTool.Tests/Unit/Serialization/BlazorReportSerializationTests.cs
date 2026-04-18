@@ -2,9 +2,9 @@ using System.Text.Json;
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.Serialization.BlazorReport;
-using FluentAssertions;
 using KellermanSoftware.CompareNetObjects;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Shouldly;
 
 namespace ComparisonTool.Tests.Unit.Serialization;
 
@@ -66,14 +66,14 @@ public class BlazorReportSerializationTests
         var result = JsonSerializer.Deserialize<ReportBootstrapData>(json, BlazorReportSerializerOptions.Default)!;
 
         // Assert
-        result.Result!.AllEqual.Should().Be(false);
-        result.Result.TotalPairsCompared.Should().Be(1);
-        result.Result.FilePairResults[0].File1Name.Should().Be("expected.xml");
-        result.Result.FilePairResults[0].Result!.Differences[0].PropertyName.Should().Be("Root.Name");
-        result.Result.FilePairResults[0].Result!.Differences[0].Object1Value.Should().Be("Alice");
-        result.Result.FilePairResults[0].Result!.Differences[0].Object2Value.Should().Be("Bob");
-        result.Metadata!.ReportId.Should().Be("test-report-001");
-        result.Metadata.ElapsedSeconds.Should().Be(1.234);
+        result.Result!.AllEqual.ShouldBe(false);
+        result.Result.TotalPairsCompared.ShouldBe(1);
+        result.Result.FilePairResults[0].File1Name.ShouldBe("expected.xml");
+        result.Result.FilePairResults[0].Result!.Differences[0].PropertyName.ShouldBe("Root.Name");
+        result.Result.FilePairResults[0].Result!.Differences[0].Object1Value.ShouldBe("Alice");
+        result.Result.FilePairResults[0].Result!.Differences[0].Object2Value.ShouldBe("Bob");
+        result.Metadata!.ReportId.ShouldBe("test-report-001");
+        result.Metadata.ElapsedSeconds.ShouldBe(1.234);
     }
 
     [TestMethod]
@@ -97,10 +97,10 @@ public class BlazorReportSerializationTests
 
         // Assert
         var roundTripped = result.Differences[0];
-        roundTripped.PropertyName.Should().Be("Root.Items[0].Value");
-        roundTripped.Object1Value.Should().Be("100");
-        roundTripped.Object2Value.Should().Be("200");
-        roundTripped.ChildPropertyName.Should().Be("Value");
+        roundTripped.PropertyName.ShouldBe("Root.Items[0].Value");
+        roundTripped.Object1Value.ShouldBe("100");
+        roundTripped.Object2Value.ShouldBe("200");
+        roundTripped.ChildPropertyName.ShouldBe("Value");
 
         // ParentPropertyName is read-only (computed from PropertyName) on Difference;
         // it is NOT deserialized from JSON, but is recomputed from the round-tripped PropertyName.
@@ -132,11 +132,11 @@ public class BlazorReportSerializationTests
         var result = JsonSerializer.Deserialize<ReportBootstrapData>(json, BlazorReportSerializerOptions.Default)!;
 
         // Assert
-        result.EnhancedAnalysis.Should().BeNull();
-        result.SemanticAnalysis.Should().BeNull();
-        result.Result!.FilePairResults.Should().BeEmpty();
-        result.Result.AllEqual.Should().BeTrue();
-        result.Metadata!.ReportId.Should().Be("empty-test");
+        result.EnhancedAnalysis.ShouldBeNull();
+        result.SemanticAnalysis.ShouldBeNull();
+        result.Result!.FilePairResults.ShouldBeEmpty();
+        result.Result.AllEqual.ShouldBeTrue();
+        result.Metadata!.ReportId.ShouldBe("empty-test");
     }
 
     [TestMethod]
@@ -174,16 +174,16 @@ public class BlazorReportSerializationTests
 
         // Assert
         var m = result.Metadata!;
-        m.ReportId.Should().Be("rpt-42");
-        m.GeneratedAt.Should().Be("2026-04-15T12:30:00Z");
-        m.Command.Should().Be("request");
-        m.ModelName.Should().Be("ComplexOrderResponse");
-        m.Directory1.Should().Be(@"C:\Dir1");
-        m.Directory2.Should().Be(@"C:\Dir2");
-        m.EndpointA.Should().Be("https://api-a.example.com");
-        m.EndpointB.Should().Be("https://api-b.example.com");
-        m.JobId.Should().Be("job-99");
-        m.ElapsedSeconds.Should().Be(42.567);
+        m.ReportId.ShouldBe("rpt-42");
+        m.GeneratedAt.ShouldBe("2026-04-15T12:30:00Z");
+        m.Command.ShouldBe("request");
+        m.ModelName.ShouldBe("ComplexOrderResponse");
+        m.Directory1.ShouldBe(@"C:\Dir1");
+        m.Directory2.ShouldBe(@"C:\Dir2");
+        m.EndpointA.ShouldBe("https://api-a.example.com");
+        m.EndpointB.ShouldBe("https://api-b.example.com");
+        m.JobId.ShouldBe("job-99");
+        m.ElapsedSeconds.ShouldBe(42.567);
     }
 
     [TestMethod]
@@ -214,13 +214,13 @@ public class BlazorReportSerializationTests
         var json = JsonSerializer.Serialize(bootstrapData, BlazorReportSerializerOptions.Default);
         var result = JsonSerializer.Deserialize<ReportBootstrapData>(json, BlazorReportSerializerOptions.Default)!;
 
-        result.Result!.FilePairResults.Should().ContainSingle();
+        result.Result!.FilePairResults.Count.ShouldBe(1);
         var pair = result.Result.FilePairResults[0];
-        pair.HasEmbeddedRawContent.Should().BeTrue();
-        pair.EmbeddedRawContentA.Should().Be("<fault>endpoint-a</fault>");
-        pair.EmbeddedRawContentB.Should().Be("<fault>endpoint-b</fault>");
-        pair.EmbeddedRawContentTruncatedA.Should().BeTrue();
-        pair.EmbeddedRawContentTruncatedB.Should().BeFalse();
+        pair.HasEmbeddedRawContent.ShouldBeTrue();
+        pair.EmbeddedRawContentA.ShouldBe("<fault>endpoint-a</fault>");
+        pair.EmbeddedRawContentB.ShouldBe("<fault>endpoint-b</fault>");
+        pair.EmbeddedRawContentTruncatedA.ShouldBeTrue();
+        pair.EmbeddedRawContentTruncatedB.ShouldBeFalse();
     }
 
     [TestMethod]
@@ -247,7 +247,7 @@ public class BlazorReportSerializationTests
         var json = JsonSerializer.Serialize(bootstrapData, BlazorReportSerializerOptions.Default);
         var result = JsonSerializer.Deserialize<ReportBootstrapData>(json, BlazorReportSerializerOptions.Default)!;
 
-        result.Result!.FilePairResults.Should().ContainSingle();
-        result.Result.FilePairResults[0].BundledRawContentPath.Should().Be("raw/pair-1-a1b2c3d4.json");
+        result.Result!.FilePairResults.Count.ShouldBe(1);
+        result.Result.FilePairResults[0].BundledRawContentPath.ShouldBe("raw/pair-1-a1b2c3d4.json");
     }
 }

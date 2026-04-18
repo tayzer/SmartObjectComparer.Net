@@ -1,10 +1,10 @@
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.RequestComparison.Services;
-using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System.Text;
 using Moq;
+using Shouldly;
+using System.Text;
 
 namespace ComparisonTool.Tests.Unit.RequestComparison;
 
@@ -52,10 +52,10 @@ public sealed class RawContentServiceTests
 
         var result = await service.LoadRawContentAsync(pair);
 
-        result.IsLoaded.Should().BeTrue();
-        result.ErrorMessage.Should().BeNull();
-        result.ContentA.Should().Be(body);
-        result.ContentB.Should().Be(body);
+        result.IsLoaded.ShouldBeTrue();
+        result.ErrorMessage.ShouldBeNull();
+        result.ContentA.ShouldBe(body);
+        result.ContentB.ShouldBe(body);
     }
 
     [TestMethod]
@@ -74,12 +74,12 @@ public sealed class RawContentServiceTests
 
         var result = await service.LoadRawContentAsync(pair);
 
-        result.IsLoaded.Should().BeTrue();
-        result.ErrorMessage.Should().BeNull();
-        result.ContentA.Should().Be("<embedded>a</embedded>");
-        result.ContentB.Should().Be("<embedded>b</embedded>");
-        result.IsTruncatedA.Should().BeTrue();
-        result.IsTruncatedB.Should().BeFalse();
+        result.IsLoaded.ShouldBeTrue();
+        result.ErrorMessage.ShouldBeNull();
+        result.ContentA.ShouldBe("<embedded>a</embedded>");
+        result.ContentB.ShouldBe("<embedded>b</embedded>");
+        result.IsTruncatedA.ShouldBeTrue();
+        result.IsTruncatedB.ShouldBeFalse();
     }
 
     [TestMethod]
@@ -106,13 +106,13 @@ public sealed class RawContentServiceTests
 
         var result = await service.LoadRawContentAsync(pair);
 
-        result.IsLoaded.Should().BeTrue();
-        result.ErrorMessage.Should().BeNull();
-        result.ContentA.Should().Be("bundled-a");
-        result.ContentB.Should().Be("bundled-b");
-        result.IsTruncatedA.Should().BeFalse();
-        result.IsTruncatedB.Should().BeTrue();
-        accessor.InvocationCount.Should().Be(1);
+        result.IsLoaded.ShouldBeTrue();
+        result.ErrorMessage.ShouldBeNull();
+        result.ContentA.ShouldBe("bundled-a");
+        result.ContentB.ShouldBe("bundled-b");
+        result.IsTruncatedA.ShouldBeFalse();
+        result.IsTruncatedB.ShouldBeTrue();
+        accessor.InvocationCount.ShouldBe(1);
     }
 
     private sealed class StubBundledRawContentAccessor : IBundledRawContentAccessor

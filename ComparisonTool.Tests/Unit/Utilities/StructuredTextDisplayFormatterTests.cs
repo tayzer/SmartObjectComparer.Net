@@ -1,6 +1,6 @@
 using ComparisonTool.Core.Utilities;
-using FluentAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Shouldly;
 
 namespace ComparisonTool.Tests.Unit.Utilities;
 
@@ -14,9 +14,9 @@ public class StructuredTextDisplayFormatterTests
 
         var formatted = StructuredTextDisplayFormatter.FormatForDisplay(json, "application/json", "payload.json");
 
-        formatted.Should().Contain("\n");
-        formatted.Should().Contain("  \"name\": \"Alice\"");
-        formatted.Should().Contain("  \"items\": [");
+        formatted.ShouldContain("\n");
+        formatted.ShouldContain("  \"name\": \"Alice\"");
+        formatted.ShouldContain("  \"items\": [");
     }
 
     [TestMethod]
@@ -26,10 +26,10 @@ public class StructuredTextDisplayFormatterTests
 
         var formatted = StructuredTextDisplayFormatter.FormatForDisplay(xml, "application/xml", "payload.xml");
 
-        formatted.Should().Contain("\n");
-        formatted.Should().Contain("<root>");
-        formatted.Should().Contain("  <item id=\"1\">value</item>");
-        formatted.Should().Contain("  <item id=\"2\">other</item>");
+        formatted.ShouldContain("\n");
+        formatted.ShouldContain("<root>");
+        formatted.ShouldContain("  <item id=\"1\">value</item>");
+        formatted.ShouldContain("  <item id=\"2\">other</item>");
     }
 
     [TestMethod]
@@ -39,6 +39,6 @@ public class StructuredTextDisplayFormatterTests
 
         var formatted = StructuredTextDisplayFormatter.FormatForDisplay(invalidJson, "application/json", "payload.json");
 
-        formatted.Should().Be(invalidJson);
+        formatted.ShouldBe(invalidJson);
     }
 }
