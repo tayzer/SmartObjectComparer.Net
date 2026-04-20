@@ -13,6 +13,7 @@ namespace ComparisonTool.Core.RequestComparison.Services;
 public class RawContentService
 {
     private readonly ILogger<RawContentService> logger;
+    private readonly IBundledRawContentAccessor? bundledRawContentAccessor;
 
     /// <summary>
     /// Maximum number of bytes to read per file. Files larger than this are truncated.
@@ -20,8 +21,14 @@ public class RawContentService
     private const int MaxFileSizeBytes = 512 * 1024; // 512 KB
 
     public RawContentService(ILogger<RawContentService> logger)
+        : this(logger, bundledRawContentAccessor: null)
+    {
+    }
+
+    public RawContentService(ILogger<RawContentService> logger, IBundledRawContentAccessor? bundledRawContentAccessor)
     {
         this.logger = logger;
+        this.bundledRawContentAccessor = bundledRawContentAccessor;
     }
 
     /// <summary>
@@ -33,6 +40,31 @@ public class RawContentService
     public async Task<RawContentResult> LoadRawContentAsync(FilePairComparisonResult pair)
     {
         var result = new RawContentResult();
+
+        if (pair.HasEmbeddedRawContent)
+        {
+            result.ContentA = pair.EmbeddedRawContentA ?? string.Empty;
+            result.ContentB = pair.EmbeddedRawContentB ?? string.Empty;
+            result.IsTruncatedA = pair.EmbeddedRawContentTruncatedA;
+            result.IsTruncatedB = pair.EmbeddedRawContentTruncatedB;
+            result.IsLoaded = true;
+            return result;
+        }
+
+        if (this.bundledRawContentAccessor != null)
+        {
+            var bundledResult = await this.bundledRawContentAccessor.TryLoadAsync(pair).ConfigureAwait(false);
+            if (bundledResult != null)
+            {
+                return bundledResult;
+            }
+        }
+
+        if (OperatingSystem.IsBrowser())
+        {
+            result.ErrorMessage = "Full File View is unavailable because this static report does not include embedded source content for the selected pair.";
+            return result;
+        }
 
         if (string.IsNullOrEmpty(pair.File1Path) || string.IsNullOrEmpty(pair.File2Path))
         {

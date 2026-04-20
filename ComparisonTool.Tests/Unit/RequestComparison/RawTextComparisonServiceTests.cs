@@ -1,10 +1,10 @@
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.RequestComparison.Models;
 using ComparisonTool.Core.RequestComparison.Services;
-using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+using Shouldly;
 using System.Text;
 
 namespace ComparisonTool.Tests.Unit.RequestComparison;
@@ -88,10 +88,10 @@ public class RawTextComparisonServiceTests
 
         var result = await service.CompareRawAsync(classified);
 
-        result.PairOutcome.Should().Be(RequestPairOutcome.OneOrBothFailed);
-        result.ErrorMessage.Should().Contain("Connection timed out");
-        result.ErrorType.Should().Be("HttpRequestException");
-        result.RawTextDifferences.Should().BeEmpty();
+        result.PairOutcome.ShouldBe(RequestPairOutcome.OneOrBothFailed);
+        result.ErrorMessage.ShouldContain("Connection timed out");
+        result.ErrorType.ShouldBe("HttpRequestException");
+        result.RawTextDifferences.ShouldBeEmpty();
     }
 
     // --- StatusCodeMismatch tests ---
@@ -106,10 +106,10 @@ public class RawTextComparisonServiceTests
 
         var result = await service.CompareRawAsync(classified);
 
-        result.PairOutcome.Should().Be(RequestPairOutcome.StatusCodeMismatch);
-        result.HttpStatusCodeA.Should().Be(200);
-        result.HttpStatusCodeB.Should().Be(500);
-        result.RawTextDifferences.Should().Contain(d => d.Type == RawTextDifferenceType.StatusCodeDifference);
+        result.PairOutcome.ShouldBe(RequestPairOutcome.StatusCodeMismatch);
+        result.HttpStatusCodeA.ShouldBe(200);
+        result.HttpStatusCodeB.ShouldBe(500);
+        result.RawTextDifferences.Any(d => d.Type == RawTextDifferenceType.StatusCodeDifference).ShouldBeTrue();
     }
 
     [TestMethod]
@@ -122,12 +122,12 @@ public class RawTextComparisonServiceTests
 
         var result = await service.CompareRawAsync(classified);
 
-        result.RawTextDifferences.Should().HaveCountGreaterThanOrEqualTo(2); // status diff + body diff
-        result.RawTextDifferences.Should().Contain(d => d.Type == RawTextDifferenceType.StatusCodeDifference);
-        result.RawTextDifferences.Should().Contain(d =>
+        result.RawTextDifferences.Count.ShouldBeGreaterThanOrEqualTo(2); // status diff + body diff
+        result.RawTextDifferences.Any(d => d.Type == RawTextDifferenceType.StatusCodeDifference).ShouldBeTrue();
+        result.RawTextDifferences.Any(d =>
             d.Type == RawTextDifferenceType.Modified ||
             d.Type == RawTextDifferenceType.OnlyInA ||
-            d.Type == RawTextDifferenceType.OnlyInB);
+            d.Type == RawTextDifferenceType.OnlyInB).ShouldBeTrue();
     }
 
     // --- BothNonSuccess tests ---
@@ -142,8 +142,8 @@ public class RawTextComparisonServiceTests
 
         var result = await service.CompareRawAsync(classified);
 
-        result.PairOutcome.Should().Be(RequestPairOutcome.BothNonSuccess);
-        result.RawTextDifferences.Should().NotContain(d => d.Type == RawTextDifferenceType.StatusCodeDifference);
+        result.PairOutcome.ShouldBe(RequestPairOutcome.BothNonSuccess);
+        result.RawTextDifferences.Any(d => d.Type == RawTextDifferenceType.StatusCodeDifference).ShouldBeFalse();
     }
 
     [TestMethod]
@@ -156,10 +156,10 @@ public class RawTextComparisonServiceTests
 
         var result = await service.CompareRawAsync(classified);
 
-        result.ErrorMessage.Should().BeNull();
-        result.HasError.Should().BeFalse();
-        result.Summary.Should().NotBeNull();
-        result.AreEqual.Should().BeTrue();
+        result.ErrorMessage.ShouldBeNull();
+        result.HasError.ShouldBeFalse();
+        result.Summary.ShouldNotBeNull();
+        result.AreEqual.ShouldBeTrue();
     }
 
     [TestMethod]
@@ -172,11 +172,11 @@ public class RawTextComparisonServiceTests
 
         var result = await service.CompareRawAsync(classified);
 
-        result.AreEqual.Should().BeFalse();
-        result.RawTextDifferences.Should().Contain(d =>
+        result.AreEqual.ShouldBeFalse();
+        result.RawTextDifferences.Any(d =>
             d.Type == RawTextDifferenceType.Modified ||
             d.Type == RawTextDifferenceType.OnlyInA ||
-            d.Type == RawTextDifferenceType.OnlyInB);
+            d.Type == RawTextDifferenceType.OnlyInB).ShouldBeTrue();
     }
 
     // --- Identical bodies ---
@@ -192,9 +192,9 @@ public class RawTextComparisonServiceTests
         var result = await service.CompareRawAsync(classified);
 
         // Should have only the status code diff, no body diffs
-        result.AreEqual.Should().BeFalse();
-        result.RawTextDifferences.Should().HaveCount(1);
-        result.RawTextDifferences[0].Type.Should().Be(RawTextDifferenceType.StatusCodeDifference);
+        result.AreEqual.ShouldBeFalse();
+        result.RawTextDifferences.Count.ShouldBe(1);
+        result.RawTextDifferences[0].Type.ShouldBe(RawTextDifferenceType.StatusCodeDifference);
     }
 
     // --- Missing/empty response files ---
@@ -210,7 +210,7 @@ public class RawTextComparisonServiceTests
         var result = await service.CompareRawAsync(classified);
 
         // Should not throw. Status code diff is still present.
-        result.RawTextDifferences.Should().Contain(d => d.Type == RawTextDifferenceType.StatusCodeDifference);
+        result.RawTextDifferences.Any(d => d.Type == RawTextDifferenceType.StatusCodeDifference).ShouldBeTrue();
     }
 
     [TestMethod]
@@ -224,7 +224,7 @@ public class RawTextComparisonServiceTests
         var result = await service.CompareRawAsync(classified);
 
         // Empty bodies are identical (after the empty string split)
-        result.Should().NotBeNull();
+        result.ShouldNotBeNull();
     }
 
     // --- Multi-line diff tests ---
@@ -241,8 +241,8 @@ public class RawTextComparisonServiceTests
 
         var result = await service.CompareRawAsync(classified);
 
-        result.RawTextDifferences.Should().Contain(d =>
-            d.Type == RawTextDifferenceType.OnlyInB && d.TextB == "INSERTED");
+        result.RawTextDifferences.Any(d =>
+            d.Type == RawTextDifferenceType.OnlyInB && d.TextB == "INSERTED").ShouldBeTrue();
     }
 
     [TestMethod]
@@ -257,8 +257,8 @@ public class RawTextComparisonServiceTests
 
         var result = await service.CompareRawAsync(classified);
 
-        result.RawTextDifferences.Should().Contain(d =>
-            d.Type == RawTextDifferenceType.OnlyInA && d.TextA == "REMOVED");
+        result.RawTextDifferences.Any(d =>
+            d.Type == RawTextDifferenceType.OnlyInA && d.TextA == "REMOVED").ShouldBeTrue();
     }
 
     [TestMethod]
@@ -273,10 +273,10 @@ public class RawTextComparisonServiceTests
 
         var result = await service.CompareRawAsync(classified);
 
-        result.RawTextDifferences.Should().Contain(d =>
+        result.RawTextDifferences.Any(d =>
             d.Type == RawTextDifferenceType.Modified &&
             d.TextA == "original" &&
-            d.TextB == "changed");
+            d.TextB == "changed").ShouldBeTrue();
     }
 
     [TestMethod]
@@ -300,7 +300,7 @@ public class RawTextComparisonServiceTests
 
         var result = await service.CompareRawAsync(classified);
 
-        result.RawTextDifferences.Should().ContainSingle(diff => diff.Type == RawTextDifferenceType.StatusCodeDifference);
+        result.RawTextDifferences.Count(diff => diff.Type == RawTextDifferenceType.StatusCodeDifference).ShouldBe(1);
     }
 
     // --- CompareAllRawAsync batch tests ---
@@ -324,9 +324,9 @@ public class RawTextComparisonServiceTests
 
         var results = await service.CompareAllRawAsync(classified);
 
-        results.Should().HaveCount(2);
-        results[0].PairOutcome.Should().Be(RequestPairOutcome.StatusCodeMismatch);
-        results[1].PairOutcome.Should().Be(RequestPairOutcome.BothNonSuccess);
+        results.Count.ShouldBe(2);
+        results[0].PairOutcome.ShouldBe(RequestPairOutcome.StatusCodeMismatch);
+        results[1].PairOutcome.ShouldBe(RequestPairOutcome.BothNonSuccess);
     }
 
     [TestMethod]
@@ -334,7 +334,7 @@ public class RawTextComparisonServiceTests
     {
         var results = await service.CompareAllRawAsync(Array.Empty<ClassifiedExecutionResult>());
 
-        results.Should().BeEmpty();
+        results.ShouldBeEmpty();
     }
 
     [TestMethod]
@@ -353,10 +353,10 @@ public class RawTextComparisonServiceTests
 
         var results = await service.CompareAllRawAsync(classified, progress);
 
-        results.Should().HaveCount(1);
+        results.Count.ShouldBe(1);
         // Progress reporting is async via SynchronizationContext, so we give it a moment
         await Task.Delay(100);
-        progressReports.Should().NotBeEmpty();
+        progressReports.ShouldNotBeEmpty();
     }
 
     // --- CancellationToken ---
@@ -376,7 +376,7 @@ public class RawTextComparisonServiceTests
 
         var act = () => service.CompareAllRawAsync(classified, cancellationToken: cts.Token);
 
-        await act.Should().ThrowAsync<OperationCanceledException>();
+        await Should.ThrowAsync<OperationCanceledException>(act);
     }
 
     // --- File path properties ---
@@ -391,8 +391,8 @@ public class RawTextComparisonServiceTests
 
         var result = await service.CompareRawAsync(classified);
 
-        result.File1Name.Should().Be("test.xml");
-        result.File2Name.Should().Be("test.xml");
+        result.File1Name.ShouldBe("test.xml");
+        result.File2Name.ShouldBe("test.xml");
     }
 
     // --- CompareFilesRawAsync tests ---
@@ -414,7 +414,7 @@ public class RawTextComparisonServiceTests
 
         var diffs = await service.CompareFilesRawAsync(file1, file2);
 
-        diffs.Should().BeEmpty();
+        diffs.ShouldBeEmpty();
     }
 
     [TestMethod]
@@ -426,8 +426,8 @@ public class RawTextComparisonServiceTests
 
         var diffs = await service.CompareFilesRawAsync(file1, file2);
 
-        diffs.Should().NotBeEmpty();
-        diffs.Should().Contain(d => d.Type == RawTextDifferenceType.Modified);
+        diffs.ShouldNotBeEmpty();
+        diffs.Any(d => d.Type == RawTextDifferenceType.Modified).ShouldBeTrue();
     }
 
     [TestMethod]
@@ -435,7 +435,7 @@ public class RawTextComparisonServiceTests
     {
         var diffs = await service.CompareFilesRawAsync(null, null);
 
-        diffs.Should().BeEmpty();
+        diffs.ShouldBeEmpty();
     }
 
     [TestMethod]
@@ -446,8 +446,8 @@ public class RawTextComparisonServiceTests
 
         var diffs = await service.CompareFilesRawAsync(file1, missingPath);
 
-        diffs.Should().NotBeEmpty();
-        diffs.Should().Contain(d => d.Type == RawTextDifferenceType.OnlyInA);
+        diffs.ShouldNotBeEmpty();
+        diffs.Any(d => d.Type == RawTextDifferenceType.OnlyInA).ShouldBeTrue();
     }
 
     [TestMethod]
@@ -459,8 +459,8 @@ public class RawTextComparisonServiceTests
 
         var diffs = await service.CompareFilesRawAsync(file1, file2);
 
-        diffs.Should().NotBeEmpty();
-        diffs.Should().Contain(d => d.Description != null && d.Description.Contains("truncated"));
+        diffs.ShouldNotBeEmpty();
+        diffs.Any(d => d.Description != null && d.Description.Contains("truncated", StringComparison.Ordinal)).ShouldBeTrue();
     }
 
     [TestMethod]
@@ -474,11 +474,11 @@ public class RawTextComparisonServiceTests
         var previewDiffs = await service.CompareFilesRawAsync(file1, file2);
         var fullDiffs = await service.CompareFilesRawAsync(file1, file2, RawFileComparisonMode.FullContent);
 
-        previewDiffs.Should().Contain(diff => diff.Description != null && diff.Description.Contains("truncated"));
-        previewDiffs.Should().NotContain(diff => diff.TextA == "TAIL_A" || diff.TextB == "TAIL_B");
+        previewDiffs.ShouldContain(diff => diff.Description != null && diff.Description.Contains("truncated"));
+        previewDiffs.ShouldNotContain(diff => diff.TextA == "TAIL_A" || diff.TextB == "TAIL_B");
 
-        fullDiffs.Should().NotContain(diff => diff.Description != null && diff.Description.Contains("truncated"));
-        fullDiffs.Should().Contain(diff =>
+        fullDiffs.ShouldNotContain(diff => diff.Description != null && diff.Description.Contains("truncated"));
+        fullDiffs.ShouldContain(diff =>
             diff.Type == RawTextDifferenceType.Modified &&
             diff.TextA == "TAIL_A" &&
             diff.TextB == "TAIL_B");
@@ -493,6 +493,6 @@ public class RawTextComparisonServiceTests
 
         var act = () => service.CompareFilesRawAsync(file1, file2, cts.Token);
 
-        await act.Should().ThrowAsync<OperationCanceledException>();
+        await Should.ThrowAsync<OperationCanceledException>(act);
     }
 }

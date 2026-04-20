@@ -1,0 +1,6 @@
+- Any change to architecture, design conventions, coding standards, or process must be surfaced explicitly before implementation.
+- The proposal must include rationale, trade-offs, affected artifacts, approval status, and verification impact.
+- Approved durable decisions should be recorded in the owning doc first, then summarized in `memories/repo/`.
+- Tentative ideas belong in plans or proposals, not final memory records.
+- If a new decision replaces an older one, mark the older record as superseded instead of silently overwriting it.
+- Do not create a second source of truth when an existing document already owns the topic.

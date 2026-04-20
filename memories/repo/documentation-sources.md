@@ -1,0 +1,8 @@
+- `README.md` owns product context, core capability framing, and the high-level architecture overview.
+- `CODING_STANDARD.md` owns coding, naming, async, logging, and testing conventions.
+- `docs/request-comparison-flow-overview.md` owns the request-comparison execution flow and key performance measures.
+- `docs/request-comparison-progress-plan.md`, `docs/RequestComparisonPlan.md`, and `docs/blazor-report-implementation.md` own active planning context for major features and migrations.
+- `docs/architecture/copilot-agent-system.md` owns the Copilot agent model, routing rules, memory model, and example workflows.
+- `docs/architecture/adr/` owns approved architecture decision records.
+- `docs/design/` owns approved reusable UI/UX guidance.
+- Update the canonical doc first, then the matching summary in `memories/repo/`.

@@ -1,10 +1,10 @@
 ﻿using System.IO;
 using System.Text.Json;
 using ComparisonTool.Core.RequestComparison.Services;
-using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+using Shouldly;
 
 namespace ComparisonTool.Tests.Unit.RequestComparison;
 
@@ -43,7 +43,7 @@ public class RequestFileParserServiceTests : IDisposable
     public void GetContentType_ReturnsCorrectContentType(string extension, string expectedContentType)
     {
         var result = RequestFileParserService.GetContentType(extension);
-        result.Should().Be(expectedContentType);
+        result.ShouldBe(expectedContentType);
     }
 
     [TestMethod]
@@ -53,7 +53,7 @@ public class RequestFileParserServiceTests : IDisposable
 
         Func<Task> action = () => this.service.ParseRequestBatchAsync(nonExistentBatchId);
 
-        await action.Should().ThrowAsync<DirectoryNotFoundException>();
+        await Should.ThrowAsync<DirectoryNotFoundException>(action);
     }
 
     [TestMethod]
@@ -76,11 +76,11 @@ public class RequestFileParserServiceTests : IDisposable
         var result = await this.service.ParseRequestBatchAsync(batchId);
 
         // Assert
-        result.Should().HaveCount(2);
-        result.Should().Contain(r => r.RelativePath == "request1.json");
-        result.Should().Contain(r => r.RelativePath == "request2.xml");
-        result.Should().Contain(r => r.ContentType == "application/json");
-        result.Should().Contain(r => r.ContentType == "application/xml");
+        result.Count.ShouldBe(2);
+        result.Any(r => r.RelativePath == "request1.json").ShouldBeTrue();
+        result.Any(r => r.RelativePath == "request2.xml").ShouldBeTrue();
+        result.Any(r => r.ContentType == "application/json").ShouldBeTrue();
+        result.Any(r => r.ContentType == "application/xml").ShouldBeTrue();
     }
 
     [TestMethod]
@@ -104,11 +104,11 @@ public class RequestFileParserServiceTests : IDisposable
         var result = await this.service.ParseRequestBatchAsync(batchId);
 
         // Assert
-        result.Should().HaveCount(1);
+        result.Count.ShouldBe(1);
         var request = result[0];
-        request.RelativePath.Should().Be("request.json");
-        request.Headers.Should().ContainKey("X-Custom");
-        request.Headers["X-Custom"].Should().Be("value123");
+        request.RelativePath.ShouldBe("request.json");
+        request.Headers.ContainsKey("X-Custom").ShouldBeTrue();
+        request.Headers["X-Custom"].ShouldBe("value123");
     }
 
     [TestMethod]
@@ -131,8 +131,8 @@ public class RequestFileParserServiceTests : IDisposable
         var result = await this.service.ParseRequestBatchAsync(batchId);
 
         // Assert - should only include the request file, not the headers file
-        result.Should().HaveCount(1);
-        result[0].RelativePath.Should().Be("request.json");
+        result.Count.ShouldBe(1);
+        result[0].RelativePath.ShouldBe("request.json");
     }
 
     [TestMethod]
@@ -153,7 +153,7 @@ public class RequestFileParserServiceTests : IDisposable
         var result = await this.service.ParseRequestBatchAsync(batchId);
 
         // Assert
-        result.Should().HaveCount(1);
-        result[0].RelativePath.Should().Be(Path.Combine("subdir", "nested.json"));
+        result.Count.ShouldBe(1);
+        result[0].RelativePath.ShouldBe(Path.Combine("subdir", "nested.json"));
     }
 }

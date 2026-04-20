@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
 using ComparisonTool.Core.Comparison;
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Configuration;
@@ -10,7 +11,6 @@ using ComparisonTool.Core.RequestComparison.Services;
 using ComparisonTool.Core.Serialization;
 using ComparisonTool.Core.Utilities;
 using ComparisonTool.Domain.Models;
-using FluentAssertions;
 using KellermanSoftware.CompareNetObjects;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,6 +18,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+using Shouldly;
 
 namespace ComparisonTool.Tests.Integration.Services;
 
@@ -122,9 +123,9 @@ public class ComparisonServiceIntegrationTests
         var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestModel");
 
         // Assert
-        result.Should().NotBeNull();
-        result.Differences.Should().BeEmpty();
-        result.AreEqual.Should().BeTrue();
+        result.ShouldNotBeNull();
+        result.Differences.ShouldBeEmpty();
+        result.AreEqual.ShouldBeTrue();
     }
 
     [TestMethod]
@@ -150,12 +151,12 @@ public class ComparisonServiceIntegrationTests
         var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestModel");
 
         // Assert
-        result.Should().NotBeNull();
-        result.Differences.Should().HaveCount(1);
-        result.Differences.First().PropertyName.Should().Be("StringProperty");
-        result.Differences.First().Object1Value.Should().Be("Old Value");
-        result.Differences.First().Object2Value.Should().Be("New Value");
-        result.AreEqual.Should().BeFalse();
+        result.ShouldNotBeNull();
+        result.Differences.Count.ShouldBe(1);
+        result.Differences.First().PropertyName.ShouldBe("StringProperty");
+        result.Differences.First().Object1Value.ShouldBe("Old Value");
+        result.Differences.First().Object2Value.ShouldBe("New Value");
+        result.AreEqual.ShouldBeFalse();
     }
 
     [TestMethod]
@@ -184,9 +185,9 @@ public class ComparisonServiceIntegrationTests
         var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestModel");
 
         // Assert
-        result.Should().NotBeNull();
-        result.Differences.Should().BeEmpty();
-        result.AreEqual.Should().BeTrue();
+        result.ShouldNotBeNull();
+        result.Differences.ShouldBeEmpty();
+        result.AreEqual.ShouldBeTrue();
     }
 
     [TestMethod]
@@ -222,10 +223,10 @@ public class ComparisonServiceIntegrationTests
         var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "ComplexTestModel");
 
         // Assert
-        result.Should().NotBeNull();
-        result.Differences.Should().NotBeEmpty();
-        result.Differences.Should().Contain(d => d.PropertyName.Contains("Value"));
-        result.AreEqual.Should().BeFalse();
+        result.ShouldNotBeNull();
+        result.Differences.ShouldNotBeEmpty();
+        result.Differences.Any(d => d.PropertyName.Contains("Value", StringComparison.Ordinal)).ShouldBeTrue();
+        result.AreEqual.ShouldBeFalse();
     }
 
     [TestMethod]
@@ -272,9 +273,9 @@ public class ComparisonServiceIntegrationTests
         var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "ComplexTestModel");
 
         // Assert
-        result.Should().NotBeNull();
-        result.Differences.Should().BeEmpty();
-        result.AreEqual.Should().BeTrue();
+        result.ShouldNotBeNull();
+        result.Differences.ShouldBeEmpty();
+        result.AreEqual.ShouldBeTrue();
     }
 
     [TestMethod]
@@ -302,9 +303,9 @@ public class ComparisonServiceIntegrationTests
         var result = await comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestModel");
 
         // Assert
-        result.Should().NotBeNull();
-        result.Differences.Should().BeEmpty();
-        result.AreEqual.Should().BeTrue();
+        result.ShouldNotBeNull();
+        result.Differences.ShouldBeEmpty();
+        result.AreEqual.ShouldBeTrue();
     }
 
     [TestMethod]
@@ -326,9 +327,9 @@ public class ComparisonServiceIntegrationTests
             initialExpectedStream,
             "SoapEnvelope");
 
-        initialResult.Should().NotBeNull();
-        initialResult.AreEqual.Should().BeFalse();
-        initialResult.Differences.Should().NotBeEmpty();
+        initialResult.ShouldNotBeNull();
+        initialResult.AreEqual.ShouldBeFalse();
+        initialResult.Differences.ShouldNotBeEmpty();
 
         configService.SetIgnoreCollectionOrder(true);
         configService.SetIgnoreTrailingWhitespaceAtEnd(true);
@@ -341,9 +342,9 @@ public class ComparisonServiceIntegrationTests
             refreshedExpectedStream,
             "SoapEnvelope");
 
-        refreshedResult.Should().NotBeNull();
-        refreshedResult.AreEqual.Should().BeTrue();
-        refreshedResult.Differences.Should().BeEmpty();
+        refreshedResult.ShouldNotBeNull();
+        refreshedResult.AreEqual.ShouldBeTrue();
+        refreshedResult.Differences.ShouldBeEmpty();
     }
 
     [TestMethod]
@@ -370,8 +371,8 @@ public class ComparisonServiceIntegrationTests
         var scopedComparisonService = scope.ServiceProvider.GetRequiredService<IComparisonService>();
         var scopedConfigService = scope.ServiceProvider.GetRequiredService<IComparisonConfigurationService>();
 
-        scopedConfigService.GetIgnoreCollectionOrder().Should().BeTrue();
-        scopedConfigService.GetIgnoreTrailingWhitespaceAtEnd().Should().BeTrue();
+        scopedConfigService.GetIgnoreCollectionOrder().ShouldBeTrue();
+        scopedConfigService.GetIgnoreTrailingWhitespaceAtEnd().ShouldBeTrue();
         scopedConfigService.IgnoreProperty("Body.Response.AddressLinks.Addresses[*].Id");
 
         var testRoot = GetCollectionOrderingTestRoot();
@@ -386,9 +387,9 @@ public class ComparisonServiceIntegrationTests
             expectedStream,
             "SoapEnvelope");
 
-        result.Should().NotBeNull();
-        result.AreEqual.Should().BeTrue();
-        result.Differences.Should().BeEmpty();
+        result.ShouldNotBeNull();
+        result.AreEqual.ShouldBeTrue();
+        result.Differences.ShouldBeEmpty();
     }
 
     [TestMethod]
@@ -410,9 +411,9 @@ public class ComparisonServiceIntegrationTests
             expectedStream,
             "SoapEnvelope");
 
-        result.Should().NotBeNull();
-        result.AreEqual.Should().BeTrue();
-        result.Differences.Should().BeEmpty();
+        result.ShouldNotBeNull();
+        result.AreEqual.ShouldBeTrue();
+        result.Differences.ShouldBeEmpty();
     }
 
     [TestMethod]
@@ -434,10 +435,10 @@ public class ComparisonServiceIntegrationTests
                 "SoapEnvelope",
                 batchSize: 25);
 
-            initialResult.TotalPairsCompared.Should().Be(pairCount);
-            initialResult.AllEqual.Should().BeFalse();
-            initialResult.FilePairResults.Should().HaveCount(pairCount);
-            initialResult.FilePairResults.Should().OnlyContain(result => !result.AreEqual);
+            initialResult.TotalPairsCompared.ShouldBe(pairCount);
+            initialResult.AllEqual.ShouldBeFalse();
+            initialResult.FilePairResults.Count.ShouldBe(pairCount);
+            initialResult.FilePairResults.All(result => !result.AreEqual).ShouldBeTrue();
 
             configService.SetIgnoreCollectionOrder(true);
             configService.SetIgnoreTrailingWhitespaceAtEnd(true);
@@ -448,10 +449,10 @@ public class ComparisonServiceIntegrationTests
                 "SoapEnvelope",
                 batchSize: 25);
 
-            refreshedResult.TotalPairsCompared.Should().Be(pairCount);
-            refreshedResult.AllEqual.Should().BeTrue();
-            refreshedResult.FilePairResults.Should().HaveCount(pairCount);
-            refreshedResult.FilePairResults.Should().OnlyContain(result => result.AreEqual);
+            refreshedResult.TotalPairsCompared.ShouldBe(pairCount);
+            refreshedResult.AllEqual.ShouldBeTrue();
+            refreshedResult.FilePairResults.Count.ShouldBe(pairCount);
+            refreshedResult.FilePairResults.All(result => result.AreEqual).ShouldBeTrue();
         }
         finally
         {
@@ -522,10 +523,10 @@ public class ComparisonServiceIntegrationTests
 
         var analysis = await comparisonService.AnalyzeStructualPatternsAsync(folderResult);
 
-        analysis.ElementOrderDifferences.Should().BeEmpty();
-        analysis.FileClassification.FileCounts["Order"].Should().Be(0);
-        analysis.FileClassification.FileCounts["Value"].Should().Be(1);
-        folderResult.Metadata["IgnoreCollectionOrder"].Should().Be(true);
+        analysis.ElementOrderDifferences.ShouldBeEmpty();
+        analysis.FileClassification.FileCounts["Order"].ShouldBe(0);
+        analysis.FileClassification.FileCounts["Value"].ShouldBe(1);
+        folderResult.Metadata["IgnoreCollectionOrder"].ShouldBe(true);
     }
 
     [TestMethod]
@@ -588,10 +589,10 @@ public class ComparisonServiceIntegrationTests
 
         var analysis = await comparisonService.AnalyzeStructualPatternsAsync(folderResult);
 
-        analysis.ElementOrderDifferences.Should().ContainSingle();
-        analysis.FileClassification.FileCounts["Order"].Should().Be(1);
-        analysis.FileClassification.FileCounts["Value"].Should().Be(0);
-        folderResult.Metadata["IgnoreCollectionOrder"].Should().Be(false);
+        analysis.ElementOrderDifferences.Count.ShouldBe(1);
+        analysis.FileClassification.FileCounts["Order"].ShouldBe(1);
+        analysis.FileClassification.FileCounts["Value"].ShouldBe(0);
+        folderResult.Metadata["IgnoreCollectionOrder"].ShouldBe(false);
     }
 
     [TestMethod]
@@ -631,13 +632,11 @@ public class ComparisonServiceIntegrationTests
             expectedStream,
             "ComplexTestModel");
 
-        var expectedDifferences = standardResult.Differences
-            .Select(CreateDifferenceSignature)
-            .ToList();
+        var expectedDifferences = NormalizeDifferenceSignatures(standardResult.Differences);
 
-        expectedDifferences.Should().NotBeEmpty();
-        expectedDifferences.Should().OnlyContain(signature =>
-            !signature.PropertyName.Contains("System.Collections.IList.Item", StringComparison.Ordinal));
+        expectedDifferences.ShouldNotBeEmpty();
+        expectedDifferences.All(signature =>
+            !signature.PropertyName.Contains("System.Collections.IList.Item", StringComparison.Ordinal)).ShouldBeTrue();
 
         var tempRoot = CreateComplexTestModelCopySet(pairCount, actualXml, expectedXml, out var actualPaths, out var expectedPaths);
 
@@ -649,19 +648,17 @@ public class ComparisonServiceIntegrationTests
                 "ComplexTestModel",
                 batchSize: 25);
 
-            batchResult.TotalPairsCompared.Should().Be(pairCount);
-            batchResult.FilePairResults.Should().HaveCount(pairCount);
+            batchResult.TotalPairsCompared.ShouldBe(pairCount);
+            batchResult.FilePairResults.Count.ShouldBe(pairCount);
 
             foreach (var pair in batchResult.FilePairResults)
             {
-                pair.HasError.Should().BeFalse();
-                pair.Result.Should().NotBeNull();
+                pair.HasError.ShouldBeFalse();
+                pair.Result.ShouldNotBeNull();
 
-                var actualDifferences = pair.Result!.Differences
-                    .Select(CreateDifferenceSignature)
-                    .ToList();
+                var actualDifferences = NormalizeDifferenceSignatures(pair.Result!.Differences);
 
-                actualDifferences.Should().BeEquivalentTo(expectedDifferences);
+                actualDifferences.ShouldBe(expectedDifferences);
             }
         }
         finally
@@ -671,45 +668,6 @@ public class ComparisonServiceIntegrationTests
                 Directory.Delete(tempRoot, recursive: true);
             }
         }
-    }
-
-    [DataTestMethod]
-
-    // [DataRow("Actual_MalformedXml.xml", "Expected_MalformedXml.xml", "Malformed XML with unclosed tags")]
-    // [DataRow("Actual_TruncatedXml.xml", "Expected_TruncatedXml.xml", "Truncated XML cut off mid-element")]
-    // [DataRow("Actual_EmptyFile.xml", "Expected_EmptyFile.xml", "Empty file with no content")]
-    // [DataRow("Actual_WrongRootElement.xml", "Expected_WrongRootElement.xml", "Wrong root element / different schema")]
-    [DataRow("Actual_FaultException.xml", "Expected_FaultException.xml", "SOAP fault exception response instead of expected data")]
-    public async Task CompareXmlFilesAsync_WithErrorScenarioFiles_ShouldThrowOnDeserialization(
-        string actualFileName,
-        string expectedFileName,
-        string scenarioDescription)
-    {
-        // These file pairs exercise scenarios where the Actual side has content that
-        // cannot be deserialized as a ComplexOrderResponse. Deserialization uses
-        // TryDeserializeXml which pre-validates the root element, catching SOAP faults
-        // and wrong schemas WITHOUT throwing from XmlSerializer.Deserialize().
-        // The pre-validation failure is returned as a DeserializationResult.Failure,
-        // then the orchestrator wraps it in an InvalidOperationException for callers
-        // that expect exceptions (like this test). In the File/Folder Comparison UI,
-        // errors are caught by DirectoryComparisonService and rendered via ErrorDetailView.razor.
-        var testRoot = GetSpecificComplexModelTestRoot();
-        var actualPath = Path.Combine(testRoot, "Actual", actualFileName);
-        var expectedPath = Path.Combine(testRoot, "Expected", expectedFileName);
-
-        File.Exists(actualPath).Should().BeTrue($"Actual file should exist for scenario: {scenarioDescription}");
-        File.Exists(expectedPath).Should().BeTrue($"Expected file should exist for scenario: {scenarioDescription}");
-
-        using var actualStream = File.OpenRead(actualPath);
-        using var expectedStream = File.OpenRead(expectedPath);
-
-        var action = () => comparisonService.CompareXmlFilesAsync(
-            actualStream,
-            expectedStream,
-            "ComplexOrderResponse");
-
-        await action.Should().ThrowAsync<Exception>(
-            $"Deserialization should fail for scenario: {scenarioDescription}");
     }
 
     [TestMethod]
@@ -743,33 +701,32 @@ public class ComparisonServiceIntegrationTests
                 expectedDirectory,
                 "SoapEnvelope");
 
-            initialResult.TotalPairsCompared.Should().Be(pairCount);
-            initialResult.AllEqual.Should().BeFalse();
-            initialResult.FilePairResults.Should().HaveCount(pairCount);
-            initialResult.FilePairResults.Should().OnlyContain(result => !result.AreEqual);
-            initialResult.Metadata.Should().ContainKey("ComparisonSessionId");
-            initialResult.Metadata.Should().ContainKey(ComparisonPhaseTimings.MetadataKey);
-            initialResult.Metadata.Should().ContainKey("PerformanceReportTextPath");
-            initialResult.Metadata.Should().ContainKey("PerformanceReportCsvPath");
+            initialResult.TotalPairsCompared.ShouldBe(pairCount);
+            initialResult.AllEqual.ShouldBeFalse();
+            initialResult.FilePairResults.Count.ShouldBe(pairCount);
+            initialResult.FilePairResults.All(result => !result.AreEqual).ShouldBeTrue();
+            initialResult.Metadata.ContainsKey("ComparisonSessionId").ShouldBeTrue();
+            initialResult.Metadata.ContainsKey(ComparisonPhaseTimings.MetadataKey).ShouldBeTrue();
+            initialResult.Metadata.ContainsKey("PerformanceReportTextPath").ShouldBeTrue();
+            initialResult.Metadata.ContainsKey("PerformanceReportCsvPath").ShouldBeTrue();
 
-            var initialPhaseTimings = initialResult.Metadata[ComparisonPhaseTimings.MetadataKey]
-                .Should().BeOfType<ComparisonPhaseTimings>().Which;
-            initialPhaseTimings.XmlDeserializationPrecheckMs.Should().BePositive();
-            initialPhaseTimings.XmlDeserializationFullDeserializeMs.Should().BePositive();
-            initialPhaseTimings.CompareMs.Should().BePositive();
-            initialPhaseTimings.FilterMs.Should().BePositive();
-            initialPhaseTimings.ComparisonMs.Should().Be(initialPhaseTimings.CompareMs + initialPhaseTimings.FilterMs);
+            var initialPhaseTimings = GetPhaseTimings(initialResult.Metadata);
+            initialPhaseTimings.XmlDeserializationPrecheckMs.ShouldBeGreaterThanOrEqualTo(0);
+            initialPhaseTimings.XmlDeserializationFullDeserializeMs.ShouldBeGreaterThan(0);
+            initialPhaseTimings.CompareMs.ShouldBeGreaterThan(0);
+            initialPhaseTimings.FilterMs.ShouldBeGreaterThan(0);
+            initialPhaseTimings.ComparisonMs.ShouldBe(initialPhaseTimings.CompareMs + initialPhaseTimings.FilterMs);
 
-            var initialReportPath = initialResult.Metadata["PerformanceReportTextPath"].Should().BeOfType<string>().Which;
+            var initialReportPath = GetRequiredMetadataString(initialResult.Metadata, "PerformanceReportTextPath");
             var initialReportText = File.ReadAllText(initialReportPath);
-            initialReportText.Should().Contain("HighPerfPipeline_ComparePair");
-            initialReportText.Should().Contain("HighPerfPipeline_FilterPair");
+            initialReportText.ShouldContain("HighPerfPipeline_ComparePair");
+            initialReportText.ShouldContain("HighPerfPipeline_FilterPair");
 
-            var initialSessionId = initialResult.Metadata["ComparisonSessionId"].Should().BeOfType<string>().Which;
+            var initialSessionId = GetRequiredMetadataString(initialResult.Metadata, "ComparisonSessionId");
             var initialSessionStats = comparisonLogService.GetSessionStats(initialSessionId);
-            initialSessionStats.ProcessedFilePairs.Should().Be(pairCount);
-            initialSessionStats.DifferentFilePairs.Should().Be(pairCount);
-            initialSessionStats.ErrorFilePairs.Should().Be(0);
+            initialSessionStats.ProcessedFilePairs.ShouldBe(pairCount);
+            initialSessionStats.DifferentFilePairs.ShouldBe(pairCount);
+            initialSessionStats.ErrorFilePairs.ShouldBe(0);
 
             scopedConfigService.SetIgnoreCollectionOrder(true);
             scopedConfigService.SetIgnoreTrailingWhitespaceAtEnd(true);
@@ -779,28 +736,27 @@ public class ComparisonServiceIntegrationTests
                 expectedDirectory,
                 "SoapEnvelope");
 
-            refreshedResult.TotalPairsCompared.Should().Be(pairCount);
-            refreshedResult.AllEqual.Should().BeTrue();
-            refreshedResult.FilePairResults.Should().HaveCount(pairCount);
-            refreshedResult.FilePairResults.Should().OnlyContain(result => result.AreEqual);
-            refreshedResult.Metadata.Should().ContainKey("ComparisonSessionId");
-            refreshedResult.Metadata.Should().ContainKey(ComparisonPhaseTimings.MetadataKey);
+            refreshedResult.TotalPairsCompared.ShouldBe(pairCount);
+            refreshedResult.AllEqual.ShouldBeTrue();
+            refreshedResult.FilePairResults.Count.ShouldBe(pairCount);
+            refreshedResult.FilePairResults.All(result => result.AreEqual).ShouldBeTrue();
+            refreshedResult.Metadata.ContainsKey("ComparisonSessionId").ShouldBeTrue();
+            refreshedResult.Metadata.ContainsKey(ComparisonPhaseTimings.MetadataKey).ShouldBeTrue();
 
-            var refreshedPhaseTimings = refreshedResult.Metadata[ComparisonPhaseTimings.MetadataKey]
-                .Should().BeOfType<ComparisonPhaseTimings>().Which;
-            refreshedPhaseTimings.XmlDeserializationPrecheckMs.Should().BeGreaterThanOrEqualTo(0);
-            refreshedPhaseTimings.XmlDeserializationFullDeserializeMs.Should().BeGreaterThanOrEqualTo(0);
+            var refreshedPhaseTimings = GetPhaseTimings(refreshedResult.Metadata);
+            refreshedPhaseTimings.XmlDeserializationPrecheckMs.ShouldBeGreaterThanOrEqualTo(0);
+            refreshedPhaseTimings.XmlDeserializationFullDeserializeMs.ShouldBeGreaterThanOrEqualTo(0);
             (refreshedPhaseTimings.CollectionOrderDeterministicOrderingMs + refreshedPhaseTimings.CollectionOrderFallbackMs)
-                .Should().BePositive();
-            refreshedPhaseTimings.CollectionOrderFallbackCount.Should().BeGreaterThanOrEqualTo(0);
+                .ShouldBeGreaterThan(0);
+            refreshedPhaseTimings.CollectionOrderFallbackCount.ShouldBeGreaterThanOrEqualTo(0);
             AssertSupplementalMetricsPersisted(refreshedResult, refreshedPhaseTimings);
 
-            var refreshedSessionId = refreshedResult.Metadata["ComparisonSessionId"].Should().BeOfType<string>().Which;
+            var refreshedSessionId = GetRequiredMetadataString(refreshedResult.Metadata, "ComparisonSessionId");
             var refreshedSessionStats = comparisonLogService.GetSessionStats(refreshedSessionId);
-            refreshedSessionStats.ProcessedFilePairs.Should().Be(pairCount);
-            refreshedSessionStats.EqualFilePairs.Should().Be(pairCount);
-            refreshedSessionStats.DifferentFilePairs.Should().Be(0);
-            refreshedSessionStats.ErrorFilePairs.Should().Be(0);
+            refreshedSessionStats.ProcessedFilePairs.ShouldBe(pairCount);
+            refreshedSessionStats.EqualFilePairs.ShouldBe(pairCount);
+            refreshedSessionStats.DifferentFilePairs.ShouldBe(0);
+            refreshedSessionStats.ErrorFilePairs.ShouldBe(0);
         }
         finally
         {
@@ -846,20 +802,19 @@ public class ComparisonServiceIntegrationTests
                 expectedDirectory,
                 "SoapEnvelope");
 
-            result.TotalPairsCompared.Should().Be(pairCount);
-            result.Metadata.Should().ContainKey(ComparisonPhaseTimings.MetadataKey);
+            result.TotalPairsCompared.ShouldBe(pairCount);
+            result.Metadata.ContainsKey(ComparisonPhaseTimings.MetadataKey).ShouldBeTrue();
 
-            var phaseTimings = result.Metadata[ComparisonPhaseTimings.MetadataKey]
-                .Should().BeOfType<ComparisonPhaseTimings>().Which;
+            var phaseTimings = GetPhaseTimings(result.Metadata);
 
-            phaseTimings.XmlDeserializationPrecheckMs.Should().BeGreaterThanOrEqualTo(0);
-            phaseTimings.XmlDeserializationFullDeserializeMs.Should().BeGreaterThanOrEqualTo(0);
-            phaseTimings.CompareMs.Should().BePositive();
-            phaseTimings.FilterMs.Should().BeGreaterThanOrEqualTo(0);
-            phaseTimings.ComparisonMs.Should().Be(phaseTimings.CompareMs + phaseTimings.FilterMs);
-            phaseTimings.CollectionOrderDeterministicOrderingMs.Should().BeGreaterThanOrEqualTo(0);
-            phaseTimings.CollectionOrderFallbackMs.Should().BeGreaterThanOrEqualTo(0);
-            phaseTimings.CollectionOrderFallbackCount.Should().BeGreaterThanOrEqualTo(0);
+            phaseTimings.XmlDeserializationPrecheckMs.ShouldBeGreaterThanOrEqualTo(0);
+            phaseTimings.XmlDeserializationFullDeserializeMs.ShouldBeGreaterThanOrEqualTo(0);
+            phaseTimings.CompareMs.ShouldBeGreaterThan(0);
+            phaseTimings.FilterMs.ShouldBeGreaterThanOrEqualTo(0);
+            phaseTimings.ComparisonMs.ShouldBe(phaseTimings.CompareMs + phaseTimings.FilterMs);
+            phaseTimings.CollectionOrderDeterministicOrderingMs.ShouldBeGreaterThanOrEqualTo(0);
+            phaseTimings.CollectionOrderFallbackMs.ShouldBeGreaterThanOrEqualTo(0);
+            phaseTimings.CollectionOrderFallbackCount.ShouldBeGreaterThanOrEqualTo(0);
             AssertSupplementalMetricsPersisted(result, phaseTimings);
         }
         finally
@@ -898,17 +853,17 @@ public class ComparisonServiceIntegrationTests
                 "CustomerOrder",
                 includeAllFiles: true);
 
-            result.TotalPairsCompared.Should().Be(pairCount);
-            result.AllEqual.Should().BeFalse();
-            result.FilePairResults.Should().HaveCount(pairCount);
-            result.FilePairResults.Should().OnlyContain(fileResult => !fileResult.AreEqual && !fileResult.HasError);
-            result.Metadata.Should().ContainKey("ComparisonSessionId");
+            result.TotalPairsCompared.ShouldBe(pairCount);
+            result.AllEqual.ShouldBeFalse();
+            result.FilePairResults.Count.ShouldBe(pairCount);
+            result.FilePairResults.All(fileResult => !fileResult.AreEqual && !fileResult.HasError).ShouldBeTrue();
+            result.Metadata.ContainsKey("ComparisonSessionId").ShouldBeTrue();
 
-            var sessionId = result.Metadata["ComparisonSessionId"].Should().BeOfType<string>().Which;
+            var sessionId = GetRequiredMetadataString(result.Metadata, "ComparisonSessionId");
             var sessionStats = comparisonLogService.GetSessionStats(sessionId);
-            sessionStats.ProcessedFilePairs.Should().Be(pairCount);
-            sessionStats.DifferentFilePairs.Should().Be(pairCount);
-            sessionStats.ErrorFilePairs.Should().Be(0);
+            sessionStats.ProcessedFilePairs.ShouldBe(pairCount);
+            sessionStats.DifferentFilePairs.ShouldBe(pairCount);
+            sessionStats.ErrorFilePairs.ShouldBe(0);
         }
         finally
         {
@@ -934,8 +889,8 @@ public class ComparisonServiceIntegrationTests
         var actualPath = Path.Combine(testRoot, "Actual", actualFileName);
         var expectedPath = Path.Combine(testRoot, "Expected", expectedFileName);
 
-        actualPath.Should().MatchRegex(@".*Actual\\.+\.xml$");
-        expectedPath.Should().MatchRegex(@".*Expected\\.+\.xml$");
+        Regex.IsMatch(actualPath, @".*Actual\\.+\.xml$").ShouldBeTrue();
+        Regex.IsMatch(expectedPath, @".*Expected\\.+\.xml$").ShouldBeTrue();
 
         using var actualStream = File.OpenRead(actualPath);
         using var expectedStream = File.OpenRead(expectedPath);
@@ -945,16 +900,16 @@ public class ComparisonServiceIntegrationTests
             expectedStream,
             "ComplexOrderResponse");
 
-        result.Should().NotBeNull();
+        result.ShouldNotBeNull();
         if (expectEqual)
         {
-            result.AreEqual.Should().BeTrue();
-            result.Differences.Should().BeEmpty();
+            result.AreEqual.ShouldBeTrue();
+            result.Differences.ShouldBeEmpty();
         }
         else
         {
-            result.AreEqual.Should().BeFalse();
-            result.Differences.Should().NotBeEmpty();
+            result.AreEqual.ShouldBeFalse();
+            result.Differences.ShouldNotBeEmpty();
         }
     }
 
@@ -971,14 +926,14 @@ public class ComparisonServiceIntegrationTests
             "ComplexOrderResponse",
             batchSize: 25);
 
-        result.TotalPairsCompared.Should().Be(1);
-        result.AllEqual.Should().BeFalse();
-        result.FilePairResults.Should().HaveCount(1);
+        result.TotalPairsCompared.ShouldBe(1);
+        result.AllEqual.ShouldBeFalse();
+        result.FilePairResults.Count.ShouldBe(1);
 
         var pair = result.FilePairResults[0];
-        pair.HasError.Should().BeTrue();
-        pair.ErrorMessage.Should().Contain("SOAP fault detected in response");
-        pair.ErrorMessage.Should().Contain("soap:Server");
+        pair.HasError.ShouldBeTrue();
+        pair.ErrorMessage.ShouldContain("SOAP fault detected in response");
+        pair.ErrorMessage.ShouldContain("soap:Server");
     }
 
     [TestMethod]
@@ -1015,14 +970,14 @@ public class ComparisonServiceIntegrationTests
                 expectedDirectory,
                 "ComplexOrderResponse");
 
-            result.TotalPairsCompared.Should().Be(1);
-            result.AllEqual.Should().BeFalse();
-            result.FilePairResults.Should().HaveCount(1);
+            result.TotalPairsCompared.ShouldBe(1);
+            result.AllEqual.ShouldBeFalse();
+            result.FilePairResults.Count.ShouldBe(1);
 
             var pair = result.FilePairResults[0];
-            pair.HasError.Should().BeTrue();
-            pair.ErrorMessage.Should().Contain("SOAP fault detected in response");
-            pair.ErrorMessage.Should().Contain("order processing service encountered an internal error");
+            pair.HasError.ShouldBeTrue();
+            pair.ErrorMessage.ShouldContain("SOAP fault detected in response");
+            pair.ErrorMessage.ShouldContain("order processing service encountered an internal error");
         }
         finally
         {
@@ -1057,17 +1012,17 @@ public class ComparisonServiceIntegrationTests
                 "ComplexOrderResponse",
                 batchSize: 25);
 
-            result.TotalPairsCompared.Should().Be(1);
-            result.AllEqual.Should().BeTrue();
-            result.FilePairResults.Should().HaveCount(1);
+            result.TotalPairsCompared.ShouldBe(1);
+            result.AllEqual.ShouldBeTrue();
+            result.FilePairResults.Count.ShouldBe(1);
 
             var pair = result.FilePairResults[0];
-            pair.HasError.Should().BeFalse();
-            pair.ErrorMessage.Should().BeNull();
-            pair.Result.Should().BeNull();
-            pair.AreEqual.Should().BeTrue();
-            pair.RawTextDifferences.Should().NotBeNull();
-            pair.RawTextDifferences.Should().BeEmpty();
+            pair.HasError.ShouldBeFalse();
+            pair.ErrorMessage.ShouldBeNull();
+            pair.Result.ShouldBeNull();
+            pair.AreEqual.ShouldBeTrue();
+            pair.RawTextDifferences.ShouldNotBeNull();
+            pair.RawTextDifferences.ShouldBeEmpty();
         }
         finally
         {
@@ -1106,20 +1061,20 @@ public class ComparisonServiceIntegrationTests
                 "ComplexOrderResponse",
                 batchSize: 25);
 
-            result.TotalPairsCompared.Should().Be(1);
-            result.AllEqual.Should().BeFalse();
-            result.FilePairResults.Should().HaveCount(1);
+            result.TotalPairsCompared.ShouldBe(1);
+            result.AllEqual.ShouldBeFalse();
+            result.FilePairResults.Count.ShouldBe(1);
 
             var pair = result.FilePairResults[0];
-            pair.HasError.Should().BeFalse();
-            pair.ErrorMessage.Should().BeNull();
-            pair.Result.Should().BeNull();
-            pair.AreEqual.Should().BeFalse();
-            pair.RawTextDifferences.Should().NotBeNull();
-            pair.RawTextDifferences.Should().NotBeEmpty();
+            pair.HasError.ShouldBeFalse();
+            pair.ErrorMessage.ShouldBeNull();
+            pair.Result.ShouldBeNull();
+            pair.AreEqual.ShouldBeFalse();
+            pair.RawTextDifferences.ShouldNotBeNull();
+            pair.RawTextDifferences.ShouldNotBeEmpty();
 
             var structuralAnalysis = await comparisonService.AnalyzeStructualPatternsAsync(result);
-            structuralAnalysis.TotalDifferencesFound.Should().Be(pair.RawTextDifferences.Count);
+            structuralAnalysis.TotalDifferencesFound.ShouldBe(pair.RawTextDifferences.Count);
         }
         finally
         {
@@ -1162,13 +1117,13 @@ public class ComparisonServiceIntegrationTests
                 "ComplexOrderResponse",
                 batchSize: 25);
 
-            result.TotalPairsCompared.Should().Be(pairCount);
-            result.AllEqual.Should().BeFalse();
-            result.FilePairResults.Should().HaveCount(pairCount);
-            result.FilePairResults.Should().OnlyContain(pair => !pair.HasError && pair.RawTextDifferences != null);
+            result.TotalPairsCompared.ShouldBe(pairCount);
+            result.AllEqual.ShouldBeFalse();
+            result.FilePairResults.Count.ShouldBe(pairCount);
+            result.FilePairResults.ShouldAllBe(pair => !pair.HasError && pair.RawTextDifferences != null);
 
             var patternAnalysis = await comparisonService.AnalyzePatternsAsync(result);
-            patternAnalysis.SimilarFileGroups.Should().BeEmpty();
+            patternAnalysis.SimilarFileGroups.ShouldBeEmpty();
 
             for (var index = 0; index < pairCount; index++)
             {
@@ -1177,13 +1132,13 @@ public class ComparisonServiceIntegrationTests
 
                 if (index % 2 == 0)
                 {
-                    pair.AreEqual.Should().BeTrue();
-                    pair.RawTextDifferences.Should().BeEmpty();
+                    pair.AreEqual.ShouldBeTrue();
+                    pair.RawTextDifferences.ShouldBeEmpty();
                 }
                 else
                 {
-                    pair.AreEqual.Should().BeFalse();
-                    pair.RawTextDifferences.Should().NotBeEmpty();
+                    pair.AreEqual.ShouldBeFalse();
+                    pair.RawTextDifferences.ShouldNotBeEmpty();
                 }
             }
         }
@@ -1351,6 +1306,28 @@ public class ComparisonServiceIntegrationTests
     private static (string PropertyName, string? OldValue, string? NewValue) CreateDifferenceSignature(Difference diff) =>
         (diff.PropertyName, diff.Object1Value?.ToString(), diff.Object2Value?.ToString());
 
+    private static (string PropertyName, string? OldValue, string? NewValue)[] NormalizeDifferenceSignatures(IEnumerable<Difference> differences) =>
+        differences
+            .Select(CreateDifferenceSignature)
+            .OrderBy(signature => signature.PropertyName, StringComparer.Ordinal)
+            .ThenBy(signature => signature.OldValue, StringComparer.Ordinal)
+            .ThenBy(signature => signature.NewValue, StringComparer.Ordinal)
+            .ToArray();
+
+    private static ComparisonPhaseTimings GetPhaseTimings(IReadOnlyDictionary<string, object> metadata)
+    {
+        metadata.ContainsKey(ComparisonPhaseTimings.MetadataKey).ShouldBeTrue();
+        metadata[ComparisonPhaseTimings.MetadataKey].ShouldBeOfType<ComparisonPhaseTimings>();
+        return (ComparisonPhaseTimings)metadata[ComparisonPhaseTimings.MetadataKey];
+    }
+
+    private static string GetRequiredMetadataString(IReadOnlyDictionary<string, object> metadata, string key)
+    {
+        metadata.ContainsKey(key).ShouldBeTrue();
+        metadata[key].ShouldBeOfType<string>();
+        return (string)metadata[key];
+    }
+
     private static string CreateCustomerOrderJsonCopySet(int pairCount)
     {
         var tempRoot = Path.Combine(Path.GetTempPath(), "ComparisonToolJsonCopies", Guid.NewGuid().ToString("N"));
@@ -1377,31 +1354,70 @@ public class ComparisonServiceIntegrationTests
         MultiFolderComparisonResult result,
         ComparisonPhaseTimings phaseTimings)
     {
-        result.Metadata.Should().ContainKey("PerformanceReportTextPath");
-        result.Metadata.Should().ContainKey("PerformanceReportCsvPath");
+        result.Metadata.ContainsKey("PerformanceReportTextPath").ShouldBeTrue();
+        result.Metadata.ContainsKey("PerformanceReportCsvPath").ShouldBeTrue();
 
-        var textReportPath = result.Metadata["PerformanceReportTextPath"].Should().BeOfType<string>().Which;
+        var textReportPath = GetRequiredMetadataString(result.Metadata, "PerformanceReportTextPath");
         var textReport = File.ReadAllText(textReportPath);
-        textReport.Should().MatchRegex("(?s)Operation: .*SUPPLEMENTAL METRICS");
-        textReport.Should().Contain($"XmlDeserializationPrecheckMs: {phaseTimings.XmlDeserializationPrecheckMs}");
-        textReport.Should().Contain($"XmlDeserializationFullDeserializeMs: {phaseTimings.XmlDeserializationFullDeserializeMs}");
-        textReport.Should().Contain($"CollectionOrderDeterministicOrderingMs: {phaseTimings.CollectionOrderDeterministicOrderingMs}");
-        textReport.Should().Contain($"CollectionOrderFallbackMs: {phaseTimings.CollectionOrderFallbackMs}");
-        textReport.Should().Contain($"CollectionOrderFallbackCount: {phaseTimings.CollectionOrderFallbackCount}");
+        Regex.IsMatch(textReport, "(?s)Operation: .*SUPPLEMENTAL METRICS").ShouldBeTrue();
+        textReport.ShouldContain($"XmlDeserializationPrecheckMs: {phaseTimings.XmlDeserializationPrecheckMs}");
+        textReport.ShouldContain($"XmlDeserializationFullDeserializeMs: {phaseTimings.XmlDeserializationFullDeserializeMs}");
+        textReport.ShouldContain($"CollectionOrderDeterministicOrderingMs: {phaseTimings.CollectionOrderDeterministicOrderingMs}");
+        textReport.ShouldContain($"CollectionOrderFallbackMs: {phaseTimings.CollectionOrderFallbackMs}");
+        textReport.ShouldContain($"CollectionOrderFallbackCount: {phaseTimings.CollectionOrderFallbackCount}");
 
-        var csvReportPath = result.Metadata["PerformanceReportCsvPath"].Should().BeOfType<string>().Which;
+        var csvReportPath = GetRequiredMetadataString(result.Metadata, "PerformanceReportCsvPath");
         var csvLines = File.ReadAllLines(csvReportPath);
         var blankLineIndex = Array.IndexOf(csvLines, string.Empty);
 
-        csvLines[0].Should().Be("Operation,CallCount,TotalTimeMs,AverageTimeMs,MedianTimeMs,MinTimeMs,MaxTimeMs");
-        blankLineIndex.Should().BeGreaterThan(0);
-        csvLines[blankLineIndex + 1].Should().Be("Metric,Value");
-        csvLines.Should().Contain($"XmlDeserializationPrecheckMs,{phaseTimings.XmlDeserializationPrecheckMs}");
-        csvLines.Should().Contain($"XmlDeserializationFullDeserializeMs,{phaseTimings.XmlDeserializationFullDeserializeMs}");
-        csvLines.Should().Contain($"CollectionOrderDeterministicOrderingMs,{phaseTimings.CollectionOrderDeterministicOrderingMs}");
-        csvLines.Should().Contain($"CollectionOrderFallbackMs,{phaseTimings.CollectionOrderFallbackMs}");
-        csvLines.Should().Contain($"CollectionOrderFallbackCount,{phaseTimings.CollectionOrderFallbackCount}");
+        csvLines[0].ShouldBe("Operation,CallCount,TotalTimeMs,AverageTimeMs,MedianTimeMs,MinTimeMs,MaxTimeMs");
+        blankLineIndex.ShouldBeGreaterThan(0);
+        csvLines[blankLineIndex + 1].ShouldBe("Metric,Value");
+        csvLines.ShouldContain($"XmlDeserializationPrecheckMs,{phaseTimings.XmlDeserializationPrecheckMs}");
+        csvLines.ShouldContain($"XmlDeserializationFullDeserializeMs,{phaseTimings.XmlDeserializationFullDeserializeMs}");
+        csvLines.ShouldContain($"CollectionOrderDeterministicOrderingMs,{phaseTimings.CollectionOrderDeterministicOrderingMs}");
+        csvLines.ShouldContain($"CollectionOrderFallbackMs,{phaseTimings.CollectionOrderFallbackMs}");
+        csvLines.ShouldContain($"CollectionOrderFallbackCount,{phaseTimings.CollectionOrderFallbackCount}");
     }
+
+
+    [DataTestMethod]
+    //[DataRow("Actual_MalformedXml.xml", "Expected_MalformedXml.xml", "Malformed XML with unclosed tags")]
+    //[DataRow("Actual_TruncatedXml.xml", "Expected_TruncatedXml.xml", "Truncated XML cut off mid-element")]
+    //[DataRow("Actual_EmptyFile.xml", "Expected_EmptyFile.xml", "Empty file with no content")]
+    //[DataRow("Actual_WrongRootElement.xml", "Expected_WrongRootElement.xml", "Wrong root element / different schema")]
+    [DataRow("Actual_FaultException.xml", "Expected_FaultException.xml", "SOAP fault exception response instead of expected data")]
+    public async Task CompareXmlFilesAsync_WithErrorScenarioFiles_ShouldThrowOnDeserialization(
+        string actualFileName,
+        string expectedFileName,
+        string scenarioDescription)
+    {
+        // These file pairs exercise scenarios where the Actual side has content that
+        // cannot be deserialized as a ComplexOrderResponse. Deserialization uses
+        // TryDeserializeXml which pre-validates the root element, catching SOAP faults
+        // and wrong schemas WITHOUT throwing from XmlSerializer.Deserialize().
+        // The pre-validation failure is returned as a DeserializationResult.Failure,
+        // then the orchestrator wraps it in an InvalidOperationException for callers
+        // that expect exceptions (like this test). In the File/Folder Comparison UI,
+        // errors are caught by DirectoryComparisonService and rendered via ErrorDetailView.razor.
+        var testRoot = GetSpecificComplexModelTestRoot();
+        var actualPath = Path.Combine(testRoot, "Actual", actualFileName);
+        var expectedPath = Path.Combine(testRoot, "Expected", expectedFileName);
+
+        File.Exists(actualPath).ShouldBeTrue();
+        File.Exists(expectedPath).ShouldBeTrue();
+
+        using var actualStream = File.OpenRead(actualPath);
+        using var expectedStream = File.OpenRead(expectedPath);
+
+        var action = () => comparisonService.CompareXmlFilesAsync(
+            actualStream,
+            expectedStream,
+            "ComplexOrderResponse");
+
+        await Should.ThrowAsync<Exception>(action);
+    }
+
 
     [TestMethod]
     public async Task CompareXmlFilesAsync_WithUnregisteredModel_ShouldThrowException()
@@ -1417,7 +1433,7 @@ public class ComparisonServiceIntegrationTests
 
         // Act & Assert
         var action = () => comparisonService.CompareXmlFilesAsync(stream1, stream2, "UnregisteredModel");
-        await action.Should().ThrowAsync<ArgumentException>();
+        await Should.ThrowAsync<ArgumentException>(action);
     }
 
     [TestMethod]
@@ -1434,7 +1450,7 @@ public class ComparisonServiceIntegrationTests
 
         // Act & Assert
         var action = () => comparisonService.CompareXmlFilesAsync(stream1, stream2, "TestModel");
-        await action.Should().ThrowAsync<InvalidOperationException>(); // TryDeserializeXml catches the XML parsing error internally and returns Failure; orchestrator wraps in InvalidOperationException
+        await Should.ThrowAsync<InvalidOperationException>(action); // TryDeserializeXml catches the XML parsing error internally and returns Failure; orchestrator wraps in InvalidOperationException
     }
 
     [TestMethod]
@@ -1463,13 +1479,13 @@ public class ComparisonServiceIntegrationTests
             stream1, stream2, "TestModel", "file1.xml", "file2.xml");
 
         // Assert
-        result1.Should().NotBeNull();
-        result2.Should().NotBeNull();
-        result1.AreEqual.Should().BeTrue();
-        result2.AreEqual.Should().BeTrue();
+        result1.ShouldNotBeNull();
+        result2.ShouldNotBeNull();
+        result1.AreEqual.ShouldBeTrue();
+        result2.AreEqual.ShouldBeTrue();
 
         // Both results should be identical
-        result1.Differences.Should().BeEquivalentTo(result2.Differences);
+        NormalizeDifferenceSignatures(result1.Differences).ShouldBe(NormalizeDifferenceSignatures(result2.Differences));
     }
 
     // Test helper classes

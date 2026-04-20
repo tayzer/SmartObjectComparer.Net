@@ -2,12 +2,12 @@ using System.Text.Json;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.Utilities;
-using FluentAssertions;
 using KellermanSoftware.CompareNetObjects;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+using Shouldly;
 
 namespace ComparisonTool.Tests.Unit.Core;
 
@@ -36,11 +36,11 @@ public class ComparisonConfigurationServiceTests
     public void Constructor_WithValidOptions_ShouldInitializeCorrectly()
     {
         // Act & Assert
-        this.service.Should().NotBeNull();
-        this.service.GetCurrentConfig().Should().NotBeNull();
-        this.service.GetCurrentConfig().MaxDifferences.Should().Be(1000);
-        this.service.GetCurrentConfig().IgnoreCollectionOrder.Should().BeTrue();
-        this.service.GetCurrentConfig().CaseSensitive.Should().BeTrue(); // DefaultIgnoreStringCase = false
+        this.service.ShouldNotBeNull();
+        this.service.GetCurrentConfig().ShouldNotBeNull();
+        this.service.GetCurrentConfig().MaxDifferences.ShouldBe(1000);
+        this.service.GetCurrentConfig().IgnoreCollectionOrder.ShouldBeTrue();
+        this.service.GetCurrentConfig().CaseSensitive.ShouldBeTrue(); // DefaultIgnoreStringCase = false
     }
 
     [TestMethod]
@@ -50,9 +50,9 @@ public class ComparisonConfigurationServiceTests
         var compareLogic = this.service.GetCompareLogic();
 
         // Assert
-        compareLogic.Should().NotBeNull();
-        compareLogic.Config.Should().NotBeNull();
-        compareLogic.Config.MaxDifferences.Should().Be(1000);
+        compareLogic.ShouldNotBeNull();
+        compareLogic.Config.ShouldNotBeNull();
+        compareLogic.Config.MaxDifferences.ShouldBe(1000);
     }
 
     [TestMethod]
@@ -63,9 +63,9 @@ public class ComparisonConfigurationServiceTests
         var compareLogic2 = this.service.GetThreadSafeCompareLogic();
 
         // Assert
-        compareLogic1.Should().NotBeNull();
-        compareLogic2.Should().NotBeNull();
-        compareLogic1.Should().NotBeSameAs(compareLogic2);
+        compareLogic1.ShouldNotBeNull();
+        compareLogic2.ShouldNotBeNull();
+        ReferenceEquals(compareLogic1, compareLogic2).ShouldBeFalse();
     }
 
     [TestMethod]
@@ -78,8 +78,8 @@ public class ComparisonConfigurationServiceTests
         this.service.SetIgnoreCollectionOrder(!originalValue);
 
         // Assert
-        this.service.GetIgnoreCollectionOrder().Should().Be(!originalValue);
-        this.service.GetCurrentConfig().IgnoreCollectionOrder.Should().Be(!originalValue);
+        this.service.GetIgnoreCollectionOrder().ShouldBe(!originalValue);
+        this.service.GetCurrentConfig().IgnoreCollectionOrder.ShouldBe(!originalValue);
     }
 
     [TestMethod]
@@ -92,8 +92,8 @@ public class ComparisonConfigurationServiceTests
         this.service.SetIgnoreStringCase(!originalValue);
 
         // Assert
-        this.service.GetIgnoreStringCase().Should().Be(!originalValue);
-        this.service.GetCurrentConfig().CaseSensitive.Should().Be(originalValue); // CaseSensitive is inverse of IgnoreStringCase
+        this.service.GetIgnoreStringCase().ShouldBe(!originalValue);
+        this.service.GetCurrentConfig().CaseSensitive.ShouldBe(originalValue); // CaseSensitive is inverse of IgnoreStringCase
     }
 
     [TestMethod]
@@ -106,7 +106,7 @@ public class ComparisonConfigurationServiceTests
         this.service.SetIgnoreTrailingWhitespaceAtEnd(!originalValue);
 
         // Assert
-        this.service.GetIgnoreTrailingWhitespaceAtEnd().Should().Be(!originalValue);
+        this.service.GetIgnoreTrailingWhitespaceAtEnd().ShouldBe(!originalValue);
     }
 
     [TestMethod]
@@ -129,8 +129,8 @@ public class ComparisonConfigurationServiceTests
         var filteredResult = this.service.FilterIgnoredDifferences(result);
 
         // Assert
-        filteredResult.Differences.Should().HaveCount(1);
-        filteredResult.Differences.Should().ContainSingle(d => d.PropertyName == "OtherProperty");
+        filteredResult.Differences.Count.ShouldBe(1);
+        filteredResult.Differences.Count(d => d.PropertyName == "OtherProperty").ShouldBe(1);
     }
 
     [TestMethod]
@@ -144,7 +144,7 @@ public class ComparisonConfigurationServiceTests
 
         // Assert
         var ignoredProperties = this.service.GetIgnoredProperties();
-        ignoredProperties.Should().Contain(propertyPath);
+        ignoredProperties.Contains(propertyPath).ShouldBeTrue();
     }
 
     [TestMethod]
@@ -159,7 +159,7 @@ public class ComparisonConfigurationServiceTests
 
         // Assert
         var ignoredProperties = this.service.GetIgnoredProperties();
-        ignoredProperties.Should().NotContain(propertyPath);
+        ignoredProperties.Contains(propertyPath).ShouldBeFalse();
     }
 
     [TestMethod]
@@ -177,8 +177,8 @@ public class ComparisonConfigurationServiceTests
 
         // Assert
         var rules = this.service.GetIgnoreRules();
-        rules.Should().ContainSingle();
-        rules.First().PropertyPath.Should().Be("TestProperty");
+        rules.Count.ShouldBe(1);
+        rules.First().PropertyPath.ShouldBe("TestProperty");
     }
 
     [TestMethod]
@@ -197,10 +197,10 @@ public class ComparisonConfigurationServiceTests
 
         // Assert
         var resultRules = this.service.GetIgnoreRules();
-        resultRules.Should().HaveCount(3);
-        resultRules.Should().Contain(r => r.PropertyPath == "Property1");
-        resultRules.Should().Contain(r => r.PropertyPath == "Property2");
-        resultRules.Should().Contain(r => r.PropertyPath == "Property3");
+        resultRules.Count.ShouldBe(3);
+        resultRules.Any(r => r.PropertyPath == "Property1").ShouldBeTrue();
+        resultRules.Any(r => r.PropertyPath == "Property2").ShouldBeTrue();
+        resultRules.Any(r => r.PropertyPath == "Property3").ShouldBeTrue();
     }
 
     [TestMethod]
@@ -214,7 +214,7 @@ public class ComparisonConfigurationServiceTests
 
         // Assert
         var rules = this.service.GetIgnoreRules();
-        rules.Should().BeEmpty();
+        rules.ShouldBeEmpty();
     }
 
     [TestMethod]
@@ -234,7 +234,7 @@ public class ComparisonConfigurationServiceTests
         // The configuration should be applied - we can verify by checking that the settings are reflected
         // in the compare logic configuration
         var compareLogic = this.service.GetCompareLogic();
-        compareLogic.Config.Should().NotBeNull();
+        compareLogic.Config.ShouldNotBeNull();
     }
 
     [TestMethod]
@@ -248,8 +248,8 @@ public class ComparisonConfigurationServiceTests
         this.service.ApplyConfiguredSettings();
 
         // Assert
-        this.service.GetIgnoreStringCase().Should().BeTrue();
-        this.service.GetCurrentConfig().CaseSensitive.Should().BeFalse();
+        this.service.GetIgnoreStringCase().ShouldBeTrue();
+        this.service.GetCurrentConfig().CaseSensitive.ShouldBeFalse();
     }
 
     [TestMethod]
@@ -272,8 +272,8 @@ public class ComparisonConfigurationServiceTests
         var filteredResult = this.service.FilterIgnoredDifferences(result);
 
         // Assert
-        filteredResult.Differences.Should().HaveCount(1);
-        filteredResult.Differences.First().PropertyName.Should().Be("OtherProperty");
+        filteredResult.Differences.Count.ShouldBe(1);
+        filteredResult.Differences.First().PropertyName.ShouldBe("OtherProperty");
     }
 
     [TestMethod]
@@ -297,7 +297,7 @@ public class ComparisonConfigurationServiceTests
         var filteredResult = this.service.FilterIgnoredDifferences(result);
 
         // Assert
-        filteredResult.Differences.Should().ContainSingle(d => d.PropertyName == "OrderData.Supplier.Name");
+        filteredResult.Differences.Count(d => d.PropertyName == "OrderData.Supplier.Name").ShouldBe(1);
     }
 
     [TestMethod]
@@ -321,7 +321,7 @@ public class ComparisonConfigurationServiceTests
         var filteredResult = this.service.FilterIgnoredDifferences(result);
 
         // Assert
-        filteredResult.Differences.Should().ContainSingle(d => d.PropertyName == "Metadata.Version");
+        filteredResult.Differences.Count(d => d.PropertyName == "Metadata.Version").ShouldBe(1);
     }
 
     [TestMethod]
@@ -349,7 +349,7 @@ public class ComparisonConfigurationServiceTests
         var filteredResult = this.service.FilterIgnoredDifferences(result);
 
         // Assert
-        filteredResult.Differences.Should().ContainSingle(d => d.PropertyName == "OrderData.Items[7].Product.Category.Attributes[2].Value");
+        filteredResult.Differences.Count(d => d.PropertyName == "OrderData.Items[7].Product.Category.Attributes[2].Value").ShouldBe(1);
     }
 
     [TestMethod]
@@ -386,10 +386,10 @@ public class ComparisonConfigurationServiceTests
         var refreshedFiltered = this.service.FilterIgnoredDifferences(refreshedResult);
 
         // Assert
-        initiallyFiltered.Differences.Should().ContainSingle(d => d.PropertyName == "OrderData.Supplier.Name");
-        refreshedFiltered.Differences.Should().HaveCount(2);
-        refreshedFiltered.Differences.Should().Contain(d => d.PropertyName == "OrderData.Customer.Name");
-        refreshedFiltered.Differences.Should().Contain(d => d.PropertyName == "OrderData.Supplier.Name");
+        initiallyFiltered.Differences.Count(d => d.PropertyName == "OrderData.Supplier.Name").ShouldBe(1);
+        refreshedFiltered.Differences.Count.ShouldBe(2);
+        refreshedFiltered.Differences.Any(d => d.PropertyName == "OrderData.Customer.Name").ShouldBeTrue();
+        refreshedFiltered.Differences.Any(d => d.PropertyName == "OrderData.Supplier.Name").ShouldBeTrue();
     }
 
     [TestMethod]
@@ -403,8 +403,8 @@ public class ComparisonConfigurationServiceTests
 
         // Assert
         var rules = this.service.GetSmartIgnoreRules();
-        rules.Should().ContainSingle();
-        rules.First().Value.Should().Be("Test.*");
+        rules.Count.ShouldBe(1);
+        rules.First().Value.ShouldBe("Test.*");
     }
 
     [TestMethod]
@@ -419,7 +419,7 @@ public class ComparisonConfigurationServiceTests
 
         // Assert
         var rules = this.service.GetSmartIgnoreRules();
-        rules.Should().BeEmpty();
+        rules.ShouldBeEmpty();
     }
 
     [TestMethod]
@@ -434,7 +434,7 @@ public class ComparisonConfigurationServiceTests
 
         // Assert
         var rules = this.service.GetSmartIgnoreRules();
-        rules.Should().BeEmpty();
+        rules.ShouldBeEmpty();
     }
 
     [TestMethod]
@@ -457,8 +457,8 @@ public class ComparisonConfigurationServiceTests
         var filteredResult = this.service.FilterSmartIgnoredDifferences(result);
 
         // Assert
-        filteredResult.Differences.Should().HaveCount(1);
-        filteredResult.Differences.First().PropertyName.Should().Be("OtherProperty");
+        filteredResult.Differences.Count.ShouldBe(1);
+        filteredResult.Differences.First().PropertyName.ShouldBe("OtherProperty");
     }
 
     [TestMethod]
@@ -472,8 +472,8 @@ public class ComparisonConfigurationServiceTests
         this.service.NormalizePropertyValues(testObject, propertyNames);
 
         // Assert
-        testObject.StringProperty.Should().Be(string.Empty); // NormalizePropertyValues sets strings to empty string, not null
-        testObject.IntProperty.Should().Be(0);
+        testObject.StringProperty.ShouldBe(string.Empty); // NormalizePropertyValues sets strings to empty string, not null
+        testObject.IntProperty.ShouldBe(0);
     }
 
     [TestMethod]
@@ -492,7 +492,7 @@ public class ComparisonConfigurationServiceTests
         var userRules = this.service.GetUserIgnoreRules();
 
         // Assert
-        userRules.Should().ContainSingle(r => r.PropertyPath == "UserProperty");
+        userRules.Count(r => r.PropertyPath == "UserProperty").ShouldBe(1);
     }
 
     [TestMethod]
@@ -505,7 +505,7 @@ public class ComparisonConfigurationServiceTests
         var userRules = this.service.GetUserIgnoreRules();
 
         // Assert
-        userRules.Should().NotContain(r => r.PropertyPath == "IgnoredProperty");
+        userRules.Any(r => r.PropertyPath == "IgnoredProperty").ShouldBeFalse();
     }
 
     [TestMethod]
@@ -516,7 +516,7 @@ public class ComparisonConfigurationServiceTests
 
         // Assert
         var ignoredProperties = this.service.GetIgnoredProperties();
-        ignoredProperties.Should().Contain("IgnoredProperty");
+        ignoredProperties.Contains("IgnoredProperty").ShouldBeTrue();
     }
 
     // Test helper classes

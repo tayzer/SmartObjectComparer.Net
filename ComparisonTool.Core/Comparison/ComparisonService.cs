@@ -748,6 +748,11 @@ public class ComparisonService : IComparisonService
     /// </summary>
     private string NormalizePropertyPath(string propertyPath)
     {
+        if (string.IsNullOrEmpty(propertyPath))
+        {
+            return propertyPath;
+        }
+
         var normalized = PropertyPathNormalizer.NormalizePropertyPath(propertyPath, logger);
 
         // Special debug logging for the specific paths mentioned in the issue

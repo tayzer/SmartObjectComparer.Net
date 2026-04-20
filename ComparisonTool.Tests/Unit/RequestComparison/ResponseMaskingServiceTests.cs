@@ -2,10 +2,10 @@ using System.Text;
 using System.Text.Json;
 using ComparisonTool.Core.RequestComparison.Models;
 using ComparisonTool.Core.RequestComparison.Services;
-using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
+using Shouldly;
 
 namespace ComparisonTool.Tests.Unit.RequestComparison;
 
@@ -68,10 +68,10 @@ public sealed class ResponseMaskingServiceTests : IDisposable
         await service.MaskResponsesAsync(new[] { executionResult }, rules, CancellationToken.None);
 
         var maskedJson = await File.ReadAllTextAsync(responseFile.FullName);
-        maskedJson.Should().NotContain("4111111111111111");
-        maskedJson.Should().NotContain("5555555555554444");
-        maskedJson.Should().Contain("************1111");
-        maskedJson.Should().Contain("************4444");
+        maskedJson.ShouldNotContain("4111111111111111");
+        maskedJson.ShouldNotContain("5555555555554444");
+        maskedJson.ShouldContain("************1111");
+        maskedJson.ShouldContain("************4444");
 
         using var document = JsonDocument.Parse(maskedJson);
         document.RootElement
@@ -79,7 +79,7 @@ public sealed class ResponseMaskingServiceTests : IDisposable
             .GetProperty("payments")[0]
             .GetProperty("amount")
             .GetDecimal()
-            .Should().Be(12.34m);
+            .ShouldBe(12.34m);
     }
 
     [TestMethod]
@@ -112,10 +112,10 @@ public sealed class ResponseMaskingServiceTests : IDisposable
         await service.MaskResponsesAsync(new[] { executionResult }, rules, CancellationToken.None);
 
         var maskedXml = await File.ReadAllTextAsync(responseFile.FullName);
-        maskedXml.Should().NotContain("4111111111111111");
-        maskedXml.Should().NotContain("5555555555554444");
-        maskedXml.Should().Contain("############1111");
-        maskedXml.Should().Contain("############4444");
+        maskedXml.ShouldNotContain("4111111111111111");
+        maskedXml.ShouldNotContain("5555555555554444");
+        maskedXml.ShouldContain("############1111");
+        maskedXml.ShouldContain("############4444");
     }
 
     [TestMethod]
@@ -146,8 +146,8 @@ public sealed class ResponseMaskingServiceTests : IDisposable
         await service.MaskResponsesAsync(new[] { executionResult }, rules, CancellationToken.None);
 
         var maskedXml = await File.ReadAllTextAsync(responseFile.FullName, Encoding.Unicode);
-        maskedXml.Should().Contain("************1111");
-        maskedXml.Should().NotContain("4111111111111111");
+        maskedXml.ShouldContain("************1111");
+        maskedXml.ShouldNotContain("4111111111111111");
     }
 
     [TestMethod]
@@ -173,8 +173,8 @@ public sealed class ResponseMaskingServiceTests : IDisposable
         await service.MaskResponsesAsync(new[] { executionResult }, rules, CancellationToken.None);
 
         var maskedJson = await File.ReadAllTextAsync(responseFile.FullName);
-        maskedJson.Should().Contain("************1111");
-        maskedJson.Should().NotContain("4111111111111111");
+        maskedJson.ShouldContain("************1111");
+        maskedJson.ShouldNotContain("4111111111111111");
     }
 
     [TestMethod]
@@ -204,8 +204,8 @@ public sealed class ResponseMaskingServiceTests : IDisposable
         await service.MaskResponsesAsync(new[] { executionResult }, rules, CancellationToken.None);
 
         var maskedXml = await File.ReadAllTextAsync(responseFile.FullName);
-        maskedXml.Should().Contain("************1111");
-        maskedXml.Should().NotContain("4111111111111111");
+        maskedXml.ShouldContain("************1111");
+        maskedXml.ShouldNotContain("4111111111111111");
     }
 
     [TestMethod]
@@ -224,7 +224,7 @@ public sealed class ResponseMaskingServiceTests : IDisposable
 
         var masked = service.MaskContent(original, "application/json", "response.json", rules);
 
-        masked.Should().Equal(original);
+        masked.SequenceEqual(original).ShouldBeTrue();
     }
 
     [TestMethod]
@@ -243,7 +243,7 @@ public sealed class ResponseMaskingServiceTests : IDisposable
 
         var masked = service.MaskContent(original, "application/xml", "response.xml", rules);
 
-        masked.Should().Equal(original);
+        masked.SequenceEqual(original).ShouldBeTrue();
     }
 
     private static RequestExecutionResult CreateExecutionResult(string responsePathA, string contentTypeA)

@@ -1,10 +1,10 @@
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
-using FluentAssertions;
 using KellermanSoftware.CompareNetObjects;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Shouldly;
 
 namespace ComparisonTool.Tests.Unit.Core;
 
@@ -28,13 +28,13 @@ public class EnhancedStructuralDifferenceAnalyzerTests
                 Object2Value = "Beta Updated",
             });
 
-        analysis.ElementOrderDifferences.Should().BeEmpty();
-        analysis.AllPatterns.Should().ContainSingle(pattern =>
+        analysis.ElementOrderDifferences.ShouldBeEmpty();
+        analysis.AllPatterns.Count(pattern =>
             pattern.FullPattern == "OrderData.Items[*].Product.Name" &&
             pattern.Category == DifferenceCategory.GeneralValueChanged &&
-            pattern.OccurenceCount == 2);
-        analysis.FileClassification.FileCounts["Order"].Should().Be(0);
-        analysis.FileClassification.FileCounts["Value"].Should().Be(1);
+            pattern.OccurenceCount == 2).ShouldBe(1);
+        analysis.FileClassification.FileCounts["Order"].ShouldBe(0);
+        analysis.FileClassification.FileCounts["Value"].ShouldBe(1);
     }
 
     [TestMethod]
@@ -66,13 +66,13 @@ public class EnhancedStructuralDifferenceAnalyzerTests
                 Object2Value = "A",
             });
 
-        analysis.ElementOrderDifferences.Should().ContainSingle();
+        analysis.ElementOrderDifferences.Count.ShouldBe(1);
         var pattern = analysis.ElementOrderDifferences.Single();
-        pattern.FullPattern.Should().Be("Items[Order]");
-        pattern.OccurenceCount.Should().Be(4);
-        pattern.FileCount.Should().Be(1);
-        analysis.FileClassification.FileCounts["Order"].Should().Be(1);
-        analysis.FileClassification.FileCounts["Value"].Should().Be(0);
+        pattern.FullPattern.ShouldBe("Items[Order]");
+        pattern.OccurenceCount.ShouldBe(4);
+        pattern.FileCount.ShouldBe(1);
+        analysis.FileClassification.FileCounts["Order"].ShouldBe(1);
+        analysis.FileClassification.FileCounts["Value"].ShouldBe(0);
     }
 
     [TestMethod]
@@ -105,10 +105,10 @@ public class EnhancedStructuralDifferenceAnalyzerTests
                 Object2Value = "A",
             });
 
-        analysis.ElementOrderDifferences.Should().BeEmpty();
-        analysis.AllPatterns.Should().NotContain(pattern => pattern.Category == DifferenceCategory.CollectionItemChanged);
-        analysis.FileClassification.FileCounts["Order"].Should().Be(0);
-        analysis.FileClassification.FileCounts["Value"].Should().Be(1);
+        analysis.ElementOrderDifferences.ShouldBeEmpty();
+        analysis.AllPatterns.Any(pattern => pattern.Category == DifferenceCategory.CollectionItemChanged).ShouldBeFalse();
+        analysis.FileClassification.FileCounts["Order"].ShouldBe(0);
+        analysis.FileClassification.FileCounts["Value"].ShouldBe(1);
     }
 
     [TestMethod]
@@ -128,10 +128,10 @@ public class EnhancedStructuralDifferenceAnalyzerTests
                 Object2Value = "A",
             });
 
-        analysis.ElementOrderDifferences.Should().ContainSingle();
-        analysis.ElementOrderDifferences[0].FullPattern.Should().Be("Values[Order]");
-        analysis.ElementOrderDifferences[0].OccurenceCount.Should().Be(2);
-        analysis.FileClassification.FileCounts["Order"].Should().Be(1);
+        analysis.ElementOrderDifferences.Count.ShouldBe(1);
+        analysis.ElementOrderDifferences[0].FullPattern.ShouldBe("Values[Order]");
+        analysis.ElementOrderDifferences[0].OccurenceCount.ShouldBe(2);
+        analysis.FileClassification.FileCounts["Order"].ShouldBe(1);
     }
 
     [TestMethod]
@@ -151,13 +151,13 @@ public class EnhancedStructuralDifferenceAnalyzerTests
                 Object2Value = "D",
             });
 
-        analysis.ElementOrderDifferences.Should().BeEmpty();
-        analysis.AllPatterns.Should().ContainSingle(pattern =>
+        analysis.ElementOrderDifferences.ShouldBeEmpty();
+        analysis.AllPatterns.Count(pattern =>
             pattern.FullPattern == "Values[*]" &&
             pattern.Category == DifferenceCategory.GeneralValueChanged &&
-            pattern.OccurenceCount == 2);
-        analysis.FileClassification.FileCounts["Order"].Should().Be(0);
-        analysis.FileClassification.FileCounts["Value"].Should().Be(1);
+            pattern.OccurenceCount == 2).ShouldBe(1);
+        analysis.FileClassification.FileCounts["Order"].ShouldBe(0);
+        analysis.FileClassification.FileCounts["Value"].ShouldBe(1);
     }
 
     [TestMethod]
@@ -177,12 +177,12 @@ public class EnhancedStructuralDifferenceAnalyzerTests
                 Object2Value = "False",
             });
 
-        analysis.ElementOrderDifferences.Should().BeEmpty();
-        analysis.AllPatterns.Should().ContainSingle(pattern =>
+        analysis.ElementOrderDifferences.ShouldBeEmpty();
+        analysis.AllPatterns.Count(pattern =>
             pattern.FullPattern == "Metadata.EnabledFeatures[*].Enabled" &&
-            pattern.OccurenceCount == 2);
-        analysis.FileClassification.FileCounts["Order"].Should().Be(0);
-        analysis.FileClassification.FileCounts["Value"].Should().Be(1);
+            pattern.OccurenceCount == 2).ShouldBe(1);
+        analysis.FileClassification.FileCounts["Order"].ShouldBe(0);
+        analysis.FileClassification.FileCounts["Value"].ShouldBe(1);
     }
 
     [TestMethod]
@@ -214,17 +214,17 @@ public class EnhancedStructuralDifferenceAnalyzerTests
                 Object2Value = "True",
             });
 
-        analysis.ElementOrderDifferences.Should().BeEmpty();
-        analysis.AllPatterns.Should().Contain(pattern =>
+        analysis.ElementOrderDifferences.ShouldBeEmpty();
+        analysis.AllPatterns.Any(pattern =>
             pattern.FullPattern == "OrderData.Customer.Addresses[*].Type" &&
             pattern.Category == DifferenceCategory.GeneralValueChanged &&
-            pattern.OccurenceCount == 2);
-        analysis.AllPatterns.Should().Contain(pattern =>
+            pattern.OccurenceCount == 2).ShouldBeTrue();
+        analysis.AllPatterns.Any(pattern =>
             pattern.FullPattern == "OrderData.Customer.Addresses[*].IsDefault" &&
             pattern.Category == DifferenceCategory.GeneralValueChanged &&
-            pattern.OccurenceCount == 2);
-        analysis.FileClassification.FileCounts["Order"].Should().Be(0);
-        analysis.FileClassification.FileCounts["Value"].Should().Be(1);
+            pattern.OccurenceCount == 2).ShouldBeTrue();
+        analysis.FileClassification.FileCounts["Order"].ShouldBe(0);
+        analysis.FileClassification.FileCounts["Value"].ShouldBe(1);
     }
 
     [TestMethod]
@@ -244,10 +244,10 @@ public class EnhancedStructuralDifferenceAnalyzerTests
                 Object2Value = "Red",
             });
 
-        analysis.ElementOrderDifferences.Should().ContainSingle();
-        analysis.ElementOrderDifferences[0].FullPattern.Should().Be("Items[*].Attributes[Order]");
-        analysis.ElementOrderDifferences[0].OccurenceCount.Should().Be(2);
-        analysis.FileClassification.FileCounts["Order"].Should().Be(1);
+        analysis.ElementOrderDifferences.Count.ShouldBe(1);
+        analysis.ElementOrderDifferences[0].FullPattern.ShouldBe("Items[*].Attributes[Order]");
+        analysis.ElementOrderDifferences[0].OccurenceCount.ShouldBe(2);
+        analysis.FileClassification.FileCounts["Order"].ShouldBe(1);
     }
 
     [TestMethod]
@@ -279,13 +279,13 @@ public class EnhancedStructuralDifferenceAnalyzerTests
                 Object2Value = "XL",
             });
 
-        analysis.ElementOrderDifferences.Should().ContainSingle();
-        analysis.ElementOrderDifferences[0].FullPattern.Should().Be("Items[*].Attributes[Order]");
-        analysis.ElementOrderDifferences[0].OccurenceCount.Should().Be(2);
-        analysis.AllPatterns.Should().ContainSingle(pattern =>
+        analysis.ElementOrderDifferences.Count.ShouldBe(1);
+        analysis.ElementOrderDifferences[0].FullPattern.ShouldBe("Items[*].Attributes[Order]");
+        analysis.ElementOrderDifferences[0].OccurenceCount.ShouldBe(2);
+        analysis.AllPatterns.Count(pattern =>
             pattern.FullPattern == "Items[*].Attributes[*].Name" &&
             pattern.Category == DifferenceCategory.GeneralValueChanged &&
-            pattern.OccurenceCount == 2);
+            pattern.OccurenceCount == 2).ShouldBe(1);
     }
 
     private static EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult Analyze(params Difference[] differences)

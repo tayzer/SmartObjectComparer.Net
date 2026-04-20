@@ -1,10 +1,10 @@
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.RequestComparison.Services;
-using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System.Text;
 using Moq;
+using Shouldly;
+using System.Text;
 
 namespace ComparisonTool.Tests.Unit.RequestComparison;
 
@@ -52,9 +52,84 @@ public sealed class RawContentServiceTests
 
         var result = await service.LoadRawContentAsync(pair);
 
-        result.IsLoaded.Should().BeTrue();
-        result.ErrorMessage.Should().BeNull();
-        result.ContentA.Should().Be(body);
-        result.ContentB.Should().Be(body);
+        result.IsLoaded.ShouldBeTrue();
+        result.ErrorMessage.ShouldBeNull();
+        result.ContentA.ShouldBe(body);
+        result.ContentB.ShouldBe(body);
+    }
+
+    [TestMethod]
+    public async Task LoadRawContentAsync_UsesEmbeddedContentBeforeDiskAccess()
+    {
+        var pair = new FilePairComparisonResult
+        {
+            HasEmbeddedRawContent = true,
+            EmbeddedRawContentA = "<embedded>a</embedded>",
+            EmbeddedRawContentB = "<embedded>b</embedded>",
+            EmbeddedRawContentTruncatedA = true,
+            EmbeddedRawContentTruncatedB = false,
+            File1Path = Path.Combine(tempDir, "missing-a.xml"),
+            File2Path = Path.Combine(tempDir, "missing-b.xml"),
+        };
+
+        var result = await service.LoadRawContentAsync(pair);
+
+        result.IsLoaded.ShouldBeTrue();
+        result.ErrorMessage.ShouldBeNull();
+        result.ContentA.ShouldBe("<embedded>a</embedded>");
+        result.ContentB.ShouldBe("<embedded>b</embedded>");
+        result.IsTruncatedA.ShouldBeTrue();
+        result.IsTruncatedB.ShouldBeFalse();
+    }
+
+    [TestMethod]
+    public async Task LoadRawContentAsync_UsesBundledRawContentAccessorBeforeDiskAccess()
+    {
+        var accessor = new StubBundledRawContentAccessor(
+            new RawContentResult
+            {
+                ContentA = "bundled-a",
+                ContentB = "bundled-b",
+                IsTruncatedA = false,
+                IsTruncatedB = true,
+                IsLoaded = true,
+            });
+        var logger = new Mock<ILogger<RawContentService>>();
+        service = new RawContentService(logger.Object, accessor);
+
+        var pair = new FilePairComparisonResult
+        {
+            BundledRawContentPath = "raw/pair-1.json",
+            File1Path = Path.Combine(tempDir, "missing-a.xml"),
+            File2Path = Path.Combine(tempDir, "missing-b.xml"),
+        };
+
+        var result = await service.LoadRawContentAsync(pair);
+
+        result.IsLoaded.ShouldBeTrue();
+        result.ErrorMessage.ShouldBeNull();
+        result.ContentA.ShouldBe("bundled-a");
+        result.ContentB.ShouldBe("bundled-b");
+        result.IsTruncatedA.ShouldBeFalse();
+        result.IsTruncatedB.ShouldBeTrue();
+        accessor.InvocationCount.ShouldBe(1);
+    }
+
+    private sealed class StubBundledRawContentAccessor : IBundledRawContentAccessor
+    {
+        private readonly RawContentResult result;
+
+        public StubBundledRawContentAccessor(RawContentResult result)
+        {
+            this.result = result;
+        }
+
+        public int InvocationCount { get; private set; }
+
+        public Task<RawContentResult?> TryLoadAsync(FilePairComparisonResult pair)
+        {
+            InvocationCount++;
+            return Task.FromResult<RawContentResult?>(result);
+        }
     }
 }
