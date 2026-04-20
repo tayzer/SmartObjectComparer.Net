@@ -53,6 +53,7 @@ public class EnhancedStructuralDifferenceAnalyzer
         {
             TotalFilesAnalyzed = folderResults.FilePairResults.Count,
             FilesWithDifferences = filesWithDifferencesCount,
+            TotalDifferencesFound = totalDifferencesCount,
         };
 
         var allDifferences = new List<(Difference difference, string FilePair, FilePairComparisonResult Result)>();
@@ -78,7 +79,6 @@ public class EnhancedStructuralDifferenceAnalyzer
             foreach (var difference in filePairResult.Result?.Differences ?? new System.Collections.Generic.List<KellermanSoftware.CompareNetObjects.Difference>())
             {
                 allDifferences.Add((difference, pairIdentifier, filePairResult));
-                result.TotalDifferencesFound++;
 
                 // Extract parent path for this difference
                 var segments = ExtractPathSegments(difference.PropertyName);
@@ -304,7 +304,7 @@ public class EnhancedStructuralDifferenceAnalyzer
             }
 
             filesWithDifferences++;
-            totalDifferences += filePairResult.Result?.Differences?.Count ?? 0;
+            totalDifferences += filePairResult.Summary.TotalDifferenceCount;
         }
 
         return (filesWithDifferences, totalDifferences);

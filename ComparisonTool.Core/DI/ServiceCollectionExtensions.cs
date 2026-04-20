@@ -4,10 +4,12 @@ using ComparisonTool.Core.Abstractions;
 using ComparisonTool.Core.Comparison;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Models;
+using ComparisonTool.Core.RequestComparison.Services;
 using ComparisonTool.Core.Serialization;
 using ComparisonTool.Core.Utilities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using CoreXmlSerializerFactory = ComparisonTool.Core.Serialization.XmlSerializerFactory;
@@ -273,6 +275,7 @@ public static class ServiceCollectionExtensions
 
     private static void RegisterComparisonServices(IServiceCollection services)
     {
+        services.TryAddSingleton<RawTextComparisonService>();
         services.AddScoped<IComparisonEngine, ComparisonEngine>();
         services.AddScoped<IComparisonOrchestrator>(CreateComparisonOrchestrator);
         services.AddScoped<HighPerformanceComparisonPipeline>();
@@ -292,6 +295,7 @@ public static class ServiceCollectionExtensions
         provider.GetRequiredService<SystemResourceMonitor>(),
         provider.GetRequiredService<ComparisonResultCacheService>(),
         provider.GetRequiredService<IComparisonEngine>(),
+        provider.GetRequiredService<RawTextComparisonService>(),
         provider.GetService<DeserializationServiceFactory>(),
         provider.GetRequiredService<ILoggerFactory>());
 }

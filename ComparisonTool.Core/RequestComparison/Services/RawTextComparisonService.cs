@@ -7,6 +7,12 @@ using System.Text;
 
 namespace ComparisonTool.Core.RequestComparison.Services;
 
+public enum RawFileComparisonMode
+{
+    Preview,
+    FullContent,
+}
+
 /// <summary>
 /// Service for comparing HTTP response bodies as raw text when domain-model comparison
 /// is not appropriate (non-success status codes, content-type mismatches, etc.).
@@ -52,6 +58,8 @@ public class RawTextComparisonService
             File2Path = exec.ResponsePathB,
             HttpStatusCodeA = exec.StatusCodeA,
             HttpStatusCodeB = exec.StatusCodeB,
+            ContentTypeA = exec.ContentTypeA,
+            ContentTypeB = exec.ContentTypeB,
             PairOutcome = classified.Outcome,
             RawTextDifferences = new List<RawTextDifference>(),
         };
@@ -77,10 +85,10 @@ public class RawTextComparisonService
         }
 
         // Read response bodies and perform line-by-line comparison
-        var bodyA = await ReadResponseBodyAsync(exec.ResponsePathA, exec.ContentTypeA, cancellationToken).ConfigureAwait(false);
-        var bodyB = await ReadResponseBodyAsync(exec.ResponsePathB, exec.ContentTypeB, cancellationToken).ConfigureAwait(false);
+        var bodyA = await ReadResponseBodyAsync(exec.ResponsePathA, exec.ContentTypeA, MaxBodyBytes, cancellationToken).ConfigureAwait(false);
+        var bodyB = await ReadResponseBodyAsync(exec.ResponsePathB, exec.ContentTypeB, MaxBodyBytes, cancellationToken).ConfigureAwait(false);
 
-        var textDiffs = ComputeLineDifferences(bodyA.lines, bodyB.lines);
+        var textDiffs = ComputeLineDifferences(bodyA.lines, bodyB.lines, MaxDiffLines);
         pairResult.RawTextDifferences.AddRange(textDiffs);
 
         // If bodies were truncated, add a notice
@@ -154,15 +162,26 @@ public class RawTextComparisonService
     /// <param name="file2Path">Full path to the second file (may be null or missing).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A list of raw text differences between the two files.</returns>
+    public Task<List<RawTextDifference>> CompareFilesRawAsync(
+        string? file1Path,
+        string? file2Path,
+        CancellationToken cancellationToken = default)
+        => CompareFilesRawAsync(file1Path, file2Path, RawFileComparisonMode.Preview, cancellationToken);
+
     public async Task<List<RawTextDifference>> CompareFilesRawAsync(
         string? file1Path,
         string? file2Path,
+        RawFileComparisonMode mode,
         CancellationToken cancellationToken = default)
     {
         var diffs = new List<RawTextDifference>();
 
-        var bodyA = await ReadResponseBodyAsync(file1Path, null, cancellationToken).ConfigureAwait(false);
-        var bodyB = await ReadResponseBodyAsync(file2Path, null, cancellationToken).ConfigureAwait(false);
+        var useFullContent = mode == RawFileComparisonMode.FullContent;
+        int? maxBytesToRead = useFullContent ? null : MaxBodyBytes;
+        var maxDiffLines = useFullContent ? int.MaxValue : MaxDiffLines;
+
+        var bodyA = await ReadResponseBodyAsync(file1Path, null, maxBytesToRead, cancellationToken).ConfigureAwait(false);
+        var bodyB = await ReadResponseBodyAsync(file2Path, null, maxBytesToRead, cancellationToken).ConfigureAwait(false);
 
         // If both files are missing/empty, nothing to diff
         if (bodyA.lines.Length == 0 && bodyB.lines.Length == 0)
@@ -170,10 +189,10 @@ public class RawTextComparisonService
             return diffs;
         }
 
-        var textDiffs = ComputeLineDifferences(bodyA.lines, bodyB.lines);
+        var textDiffs = ComputeLineDifferences(bodyA.lines, bodyB.lines, maxDiffLines);
         diffs.AddRange(textDiffs);
 
-        if (bodyA.wasTruncated || bodyB.wasTruncated)
+        if (!useFullContent && (bodyA.wasTruncated || bodyB.wasTruncated))
         {
             diffs.Add(new RawTextDifference
             {
@@ -192,11 +211,75 @@ public class RawTextComparisonService
     }
 
     /// <summary>
-    /// Reads a response body from disk, truncating to <see cref="MaxBodyBytes"/>.
+    /// Compares two files on disk as raw text and returns a standard non-error file-pair result.
+    /// </summary>
+    public async Task<FilePairComparisonResult> CompareFilesAsRawPairAsync(
+        string? file1Path,
+        string? file2Path,
+        RawFileComparisonMode mode,
+        CancellationToken cancellationToken = default)
+    {
+        var diffs = await CompareFilesRawAsync(file1Path, file2Path, mode, cancellationToken).ConfigureAwait(false);
+
+        return new FilePairComparisonResult
+        {
+            File1Name = Path.GetFileName(file1Path) ?? string.Empty,
+            File2Name = Path.GetFileName(file2Path) ?? string.Empty,
+            File1Path = file1Path,
+            File2Path = file2Path,
+            RawTextDifferences = diffs,
+            Summary = new DifferenceSummary
+            {
+                AreEqual = diffs.Count == 0,
+                TotalDifferenceCount = diffs.Count,
+            },
+        };
+    }
+
+    /// <summary>
+    /// Compares two already-loaded text bodies as raw text.
+    /// Used by static report hosts that cannot reopen the original source files from disk.
+    /// </summary>
+    public List<RawTextDifference> CompareContentRaw(
+        string? contentA,
+        string? contentB,
+        bool isTruncatedA = false,
+        bool isTruncatedB = false,
+        RawFileComparisonMode mode = RawFileComparisonMode.Preview)
+    {
+        var diffs = new List<RawTextDifference>();
+        var useFullContent = mode == RawFileComparisonMode.FullContent;
+        var maxDiffLines = useFullContent ? int.MaxValue : MaxDiffLines;
+
+        var linesA = SplitLines(contentA);
+        var linesB = SplitLines(contentB);
+
+        if (linesA.Length == 0 && linesB.Length == 0)
+        {
+            return diffs;
+        }
+
+        diffs.AddRange(ComputeLineDifferences(linesA, linesB, maxDiffLines));
+
+        if (!useFullContent && (isTruncatedA || isTruncatedB))
+        {
+            diffs.Add(new RawTextDifference
+            {
+                Type = RawTextDifferenceType.Modified,
+                Description = "File content truncated for report preview.",
+            });
+        }
+
+        return diffs;
+    }
+
+    /// <summary>
+    /// Reads response or file content from disk, optionally truncating the content for preview mode.
     /// </summary>
     private static async Task<(string[] lines, bool wasTruncated)> ReadResponseBodyAsync(
         string? filePath,
         string? contentType,
+        int? maxBytesToRead,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
@@ -205,8 +288,15 @@ public class RawTextComparisonService
         }
 
         var fileInfo = new FileInfo(filePath);
-        var wasTruncated = fileInfo.Length > MaxBodyBytes;
-        var bytesToRead = (int)Math.Min(fileInfo.Length, MaxBodyBytes);
+        if (fileInfo.Length == 0)
+        {
+            return (Array.Empty<string>(), false);
+        }
+
+        var bytesToRead = maxBytesToRead.HasValue
+            ? (int)Math.Min(fileInfo.Length, maxBytesToRead.Value)
+            : checked((int)fileInfo.Length);
+        var wasTruncated = maxBytesToRead.HasValue && fileInfo.Length > maxBytesToRead.Value;
 
         var buffer = new byte[bytesToRead];
         await using var stream = new FileStream(
@@ -217,11 +307,32 @@ public class RawTextComparisonService
             4096,
             FileOptions.Asynchronous | FileOptions.SequentialScan);
 
-        var bytesRead = await stream.ReadAsync(buffer.AsMemory(0, bytesToRead), cancellationToken).ConfigureAwait(false);
+        var bytesRead = await ReadToBufferAsync(stream, buffer, cancellationToken).ConfigureAwait(false);
         var text = DecodeText(buffer, bytesRead, contentType);
         var lines = text.Split('\n');
 
         return (lines, wasTruncated);
+    }
+
+    private static async Task<int> ReadToBufferAsync(FileStream stream, byte[] buffer, CancellationToken cancellationToken)
+    {
+        var totalBytesRead = 0;
+
+        while (totalBytesRead < buffer.Length)
+        {
+            var bytesRead = await stream.ReadAsync(
+                buffer.AsMemory(totalBytesRead, buffer.Length - totalBytesRead),
+                cancellationToken).ConfigureAwait(false);
+
+            if (bytesRead == 0)
+            {
+                break;
+            }
+
+            totalBytesRead += bytesRead;
+        }
+
+        return totalBytesRead;
     }
 
     private static string DecodeText(byte[] buffer, int bytesRead, string? contentType)
@@ -231,6 +342,13 @@ public class RawTextComparisonService
         return text.Length > 0 && text[0] == '\uFEFF'
             ? text[1..]
             : text;
+    }
+
+    private static string[] SplitLines(string? text)
+    {
+        return string.IsNullOrEmpty(text)
+            ? Array.Empty<string>()
+            : text.Split('\n');
     }
 
     private static Encoding ResolveEncoding(byte[] buffer, int bytesRead, string? contentType)
@@ -269,7 +387,7 @@ public class RawTextComparisonService
     /// <summary>
     /// Computes line-by-line differences between two text bodies using a simple LCS-based approach.
     /// </summary>
-    private static List<RawTextDifference> ComputeLineDifferences(string[] linesA, string[] linesB)
+    private static List<RawTextDifference> ComputeLineDifferences(string[] linesA, string[] linesB, int maxDiffLines)
     {
         var diffs = new List<RawTextDifference>();
 
@@ -277,7 +395,7 @@ public class RawTextComparisonService
         var indexA = 0;
         var indexB = 0;
 
-        while (indexA < linesA.Length && indexB < linesB.Length && diffs.Count < MaxDiffLines)
+        while (indexA < linesA.Length && indexB < linesB.Length && diffs.Count < maxDiffLines)
         {
             var lineA = linesA[indexA].TrimEnd('\r');
             var lineB = linesB[indexB].TrimEnd('\r');
@@ -296,7 +414,7 @@ public class RawTextComparisonService
             if (foundInB >= 0 && (foundInA < 0 || foundInB - indexB <= foundInA - indexA))
             {
                 // Lines in B before foundInB are additions (only in B)
-                for (var i = indexB; i < foundInB && diffs.Count < MaxDiffLines; i++)
+                for (var i = indexB; i < foundInB && diffs.Count < maxDiffLines; i++)
                 {
                     diffs.Add(new RawTextDifference
                     {
@@ -312,7 +430,7 @@ public class RawTextComparisonService
             else if (foundInA >= 0)
             {
                 // Lines in A before foundInA are deletions (only in A)
-                for (var i = indexA; i < foundInA && diffs.Count < MaxDiffLines; i++)
+                for (var i = indexA; i < foundInA && diffs.Count < maxDiffLines; i++)
                 {
                     diffs.Add(new RawTextDifference
                     {
@@ -344,7 +462,7 @@ public class RawTextComparisonService
         }
 
         // Remaining lines in A are only-in-A
-        while (indexA < linesA.Length && diffs.Count < MaxDiffLines)
+        while (indexA < linesA.Length && diffs.Count < maxDiffLines)
         {
             diffs.Add(new RawTextDifference
             {
@@ -358,7 +476,7 @@ public class RawTextComparisonService
         }
 
         // Remaining lines in B are only-in-B
-        while (indexB < linesB.Length && diffs.Count < MaxDiffLines)
+        while (indexB < linesB.Length && diffs.Count < maxDiffLines)
         {
             diffs.Add(new RawTextDifference
             {

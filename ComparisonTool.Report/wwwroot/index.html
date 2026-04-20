@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Comparison Report</title>
+    <base href="./" />
+
+    <!-- MudBlazor Fonts and Icons -->
+    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
+    <link href="./_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
+
+    <link rel="stylesheet" href="./css/app.css" />
+</head>
+<body>
+    <div id="app">
+        <div style="display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column">
+            <h3>Loading Comparison Report...</h3>
+            <div style="margin-top:16px;width:200px;height:4px;background:#e0e0e0;border-radius:2px;overflow:hidden">
+                <div style="width:40%;height:100%;background:#1976d2;border-radius:2px;animation:loading 1.5s ease-in-out infinite"></div>
+            </div>
+        </div>
+        <style>
+            @keyframes loading { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
+        </style>
+    </div>
+
+    <div id="blazor-error-ui" style="display:none">
+        An unhandled error has occurred.
+        <a href="" class="reload">Reload</a>
+        <a class="dismiss">&#x1f5d9;</a>
+    </div>
+
+    <script>
+        if (window.location.protocol === 'file:') {
+            document.getElementById('app').innerHTML = `
+                <div style="display:flex;justify-content:center;align-items:center;min-height:100vh;padding:32px;background:linear-gradient(180deg,#f7f9fc 0%,#eef3f8 100%);font-family:Roboto,Segoe UI,sans-serif;box-sizing:border-box;">
+                    <div style="max-width:760px;background:white;border:1px solid #d9e2ec;border-radius:16px;padding:32px;box-shadow:0 20px 50px rgba(15,23,42,0.08);color:#102a43;">
+                        <h2 style="margin:0 0 12px;font-size:28px;line-height:1.2;">This report cannot be opened directly from disk</h2>
+                        <p style="margin:0 0 16px;font-size:16px;line-height:1.6;">Blazor WebAssembly reports must be served over HTTP. Opening this file with <strong>file://</strong> causes the browser to block the runtime files that power the report.</p>
+                        <p style="margin:0 0 16px;font-size:16px;line-height:1.6;">For Jenkins artifacts, this is expected to work because Jenkins serves artifacts over HTTP. For local testing, serve this report folder with any local web server and then open <strong>index.html</strong> through that server.</p>
+                        <div style="background:#f0f4f8;border-radius:12px;padding:16px 18px;font-family:Consolas,Monaco,monospace;font-size:14px;line-height:1.7;white-space:pre-wrap;">python -m http.server 8890
+open http://localhost:8890/index.html</div>
+                    </div>
+                </div>`;
+        }
+    </script>
+
+    <script>
+        if (window.location.protocol !== 'file:') {
+            const blazorScript = document.createElement('script');
+            blazorScript.src = './_framework/blazor.webassembly.js';
+            document.body.appendChild(blazorScript);
+
+            const mudScript = document.createElement('script');
+            mudScript.src = './_content/MudBlazor/MudBlazor.min.js';
+            document.body.appendChild(mudScript);
+
+            const appScript = document.createElement('script');
+            appScript.src = './_content/ComparisonTool.UI/js/app.js';
+            document.body.appendChild(appScript);
+        }
+    </script>
+</body>
+</html>

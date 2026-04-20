@@ -11,6 +11,7 @@ using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.Comparison.Utilities;
+using ComparisonTool.Core.RequestComparison.Services;
 using ComparisonTool.Core.Serialization;
 using ComparisonTool.Core.Utilities;
 using KellermanSoftware.CompareNetObjects;
@@ -39,6 +40,7 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
     private readonly IXmlDeserializationService deserializationService;
     private readonly DeserializationServiceFactory? deserializationFactory;
     private readonly PerformanceTracker performanceTracker;
+    private readonly RawTextComparisonService rawTextComparisonService;
 
     // OPTIMIZATION 1: Reuse CompareLogic instances per thread to avoid allocation
     private ThreadLocal<CompareLogic> threadLocalCompareLogic;
@@ -61,12 +63,14 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
         IComparisonConfigurationService configService,
         IXmlDeserializationService deserializationService,
         PerformanceTracker performanceTracker,
+        RawTextComparisonService rawTextComparisonService,
         DeserializationServiceFactory? deserializationFactory = null)
     {
         this.logger = logger;
         this.configService = configService;
         this.deserializationService = deserializationService;
         this.performanceTracker = performanceTracker;
+        this.rawTextComparisonService = rawTextComparisonService;
         this.deserializationFactory = deserializationFactory;
 
         // Calculate optimal parallelism based on system resources
@@ -286,6 +290,28 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
                             // Check for deserialization failures (returned as result, not as exception)
                             if (!result1.Success || !result2.Success)
                             {
+                                if (!result1.Success && !result2.Success &&
+                                    result1.IsRecognizedNonSuccessPayload &&
+                                    result2.IsRecognizedNonSuccessPayload)
+                                {
+                                    var rawPairResult = await rawTextComparisonService.CompareFilesAsRawPairAsync(
+                                        file1Path,
+                                        file2Path,
+                                        RawFileComparisonMode.FullContent,
+                                        ct).ConfigureAwait(false);
+
+                                    var rawPair = new DeserializedFilePair
+                                    {
+                                        File1Path = file1Path,
+                                        File2Path = file2Path,
+                                        RelativePath = relativePath,
+                                        RawComparisonResult = rawPairResult,
+                                    };
+
+                                    await writer.WriteAsync(rawPair, ct).ConfigureAwait(false);
+                                    return;
+                                }
+
                                 var errorMessages = new List<string>();
                                 if (!result1.Success)
                                 {
@@ -396,6 +422,12 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
     {
         await foreach (var pair in reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
         {
+            if (pair.RawComparisonResult != null)
+            {
+                await writer.WriteAsync(pair.RawComparisonResult, cancellationToken).ConfigureAwait(false);
+                continue;
+            }
+
             // CRITICAL FIX: Check if the deserialization stage passed an error
             if (pair.HasError)
             {
@@ -626,7 +658,8 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
             if (serviceFactory == null)
             {
                 return _ => DeserializationResult.Failure(
-                    $"No deserialization factory is available for {key.Format} format.");
+                    $"No deserialization factory is available for {key.Format} format.",
+                    DeserializationFailureKind.UnsupportedFormat);
             }
 
             var service = serviceFactory.GetService(key.Format);
@@ -661,6 +694,11 @@ public sealed class HighPerformanceComparisonPipeline : IDisposable
         }
 
         public object? Object2
+        {
+            get; init;
+        }
+
+        public FilePairComparisonResult? RawComparisonResult
         {
             get; init;
         }

@@ -32,6 +32,7 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
         "ReferenceId",
         "CustomerId",
         "TransactionId",
+        "AccountNumber",
         "Name",
         "Key",
         "Code",
@@ -401,6 +402,8 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
         out object?[] orderedItems1,
         out object?[] orderedItems2)
     {
+        // Strategy 1: look for a shared identifier property (e.g. "Id") that we can use as a sort key
+
         foreach (var propertyName in GetCandidateIdentifierPropertyNames(collectionPath, items1, items2))
         {
             if (!TryBuildIdentifierEntries(items1, propertyName, out var entries1) ||
@@ -414,7 +417,13 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
             return true;
         }
 
-        // Composite key fallback: hash all scalar properties
+        // Strategy 2: look for a shared nested identifier (e.g. "Product.Id") that we can use as a sort key
+        if (TryCreateOrderedObjectCollectionViaNestedIdentifier(collectionPath, items1, items2, out orderedItems1, out orderedItems2))
+        {
+            return true;
+        }
+
+        // Strategy 3: fallback to hashing all scalar properties to create a composite key (guaranteed to work but more expensive)
         if (TryBuildCompositeKeyEntries(collectionPath, items1, out var compositeEntries1) &&
             TryBuildCompositeKeyEntries(collectionPath, items2, out var compositeEntries2))
         {
@@ -426,6 +435,123 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
         orderedItems1 = Array.Empty<object?>();
         orderedItems2 = Array.Empty<object?>();
         return false;
+    }
+
+    private bool TryCreateOrderedObjectCollectionViaNestedIdentifier(string? collectionPath, IReadOnlyList<object?> items1, IReadOnlyList<object?> items2, out object?[] orderedItems1, out object?[] orderedItems2)
+    {
+        orderedItems1 = Array.Empty<object?>();
+        orderedItems2 = Array.Empty<object?>();
+
+        if(items1.Count == 0 || items2.Count == 0)
+        {
+            return false;
+        }
+
+        var itemType1 = items1[0]?.GetType();
+        if(itemType1 == null || IsSimpleScalarType(itemType1))
+        {
+            return false;
+        }
+
+        foreach (var childPropertyInfo in GetReadableProperties(itemType1).Where(c => !IsSimpleScalarType(c.PropertyType) && !typeof(IEnumerable).IsAssignableFrom(c.PropertyType)))
+        {
+            var childItems1 = ExtractChildItems(items1, childPropertyInfo);
+            var childItems2 = ExtractChildItems(items2, childPropertyInfo);
+
+            if(childItems1.Count == 0 || childItems2.Count == 0)
+            {
+                continue;
+            }
+
+            foreach(var identifierName in GetCandidateIdentifierPropertyNames(collectionPath, childItems1, childItems2))
+            {
+                if(!TryBuildNestedIdentifierEntries(items1, childPropertyInfo, identifierName, out var entries1) ||
+                   !TryBuildNestedIdentifierEntries(items2, childPropertyInfo, identifierName, out var entries2))
+                {
+                    continue;
+                }
+
+                orderedItems1 = OrderEntries(entries1);
+                orderedItems2 = OrderEntries(entries2);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool TryBuildNestedIdentifierEntries(IReadOnlyList<object?> items1, PropertyInfo childPropertyInfo, string identifierName, out List<OrderedCollectionEntry> entries)
+    {
+        entries = new List<OrderedCollectionEntry>(items1.Count);
+        var keys = new HashSet<string>(System.StringComparer.Ordinal);
+
+        foreach (var item in items1)
+        {
+            if (item == null)
+            {
+                entries.Clear();
+                return false;
+            }
+
+            object? childItem;
+            try
+            {
+                childItem = childPropertyInfo.GetValue(item);
+            }
+            catch
+            {
+                entries.Clear();
+                return false;
+            }
+
+            if (childItem == null)
+            {
+                entries.Clear();
+                return false;
+            }
+
+            var identifierProperty = GetIdentifierProperty(childItem.GetType(), identifierName);
+            if (identifierProperty == null)
+            {
+                entries.Clear();
+                return false;
+            }
+
+            var identifierValue = identifierProperty.GetValue(childItem);
+            if(!TryCreateScalarKey(identifierValue, out var key) || !keys.Add(key))
+            {
+                // Duplicate identifier — fail so composite key fallback handles this correctly
+                entries.Clear();
+                return false;
+            }
+
+            entries.Add(new OrderedCollectionEntry(key, item));
+        }
+
+        return true;
+    }
+
+    private IReadOnlyList<object?> ExtractChildItems(IReadOnlyList<object?> items1, PropertyInfo childPropertyInfo)
+    {
+        var result = new List<object?>(items1.Count);
+        foreach (var item in items1)
+        {
+            if(item == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                result.Add(childPropertyInfo.GetValue(item));
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        return result;
     }
 
     private IEnumerable<string> GetCandidateIdentifierPropertyNames(
@@ -509,6 +635,7 @@ public class PropertySpecificCollectionOrderComparer : BaseTypeComparer
         propertyName.EndsWith("Id", StringComparison.OrdinalIgnoreCase) ||
         propertyName.EndsWith("Key", StringComparison.OrdinalIgnoreCase) ||
         propertyName.EndsWith("Code", StringComparison.OrdinalIgnoreCase) ||
+        propertyName.EndsWith("Number", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(propertyName, "SKU", StringComparison.OrdinalIgnoreCase) ||
         string.Equals(propertyName, "Identifier", StringComparison.OrdinalIgnoreCase);
 

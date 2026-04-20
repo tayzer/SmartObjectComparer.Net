@@ -192,13 +192,16 @@ public class XmlDeserializationService : IXmlDeserializationService
     {
         if (xmlStream == null)
         {
-            return DeserializationResult.Failure("XML stream cannot be null.");
+            return DeserializationResult.Failure(
+                "XML stream cannot be null.",
+                DeserializationFailureKind.InvalidInput);
         }
 
         if (xmlStream.Length == 0)
         {
             return DeserializationResult.Failure(
-                "XML stream is empty (0 bytes). The file may be empty or corrupt.");
+                "XML stream is empty (0 bytes). The file may be empty or corrupt.",
+                DeserializationFailureKind.EmptyPayload);
         }
 
         try
@@ -226,7 +229,9 @@ public class XmlDeserializationService : IXmlDeserializationService
                 catch (XmlException ex)
                 {
                     ComparisonPhaseTimingScope.Current?.AddXmlDeserializationPrecheck(Stopwatch.GetElapsedTime(precheckStart));
-                    return DeserializationResult.Failure($"Malformed XML: {ex.Message}");
+                    return DeserializationResult.Failure(
+                        $"Malformed XML: {ex.Message}",
+                        DeserializationFailureKind.MalformedPayload);
                 }
 
                 if (!serializer.CanDeserialize(effectiveReader))
@@ -234,7 +239,9 @@ public class XmlDeserializationService : IXmlDeserializationService
                     if (TryDetectSoapFault(xmlStream, out var soapFaultMessage))
                     {
                         ComparisonPhaseTimingScope.Current?.AddXmlDeserializationPrecheck(Stopwatch.GetElapsedTime(precheckStart));
-                        return DeserializationResult.Failure(soapFaultMessage!);
+                        return DeserializationResult.Failure(
+                            soapFaultMessage!,
+                            DeserializationFailureKind.SoapFault);
                     }
 
                     ComparisonPhaseTimingScope.Current?.AddXmlDeserializationPrecheck(Stopwatch.GetElapsedTime(precheckStart));
@@ -248,14 +255,17 @@ public class XmlDeserializationService : IXmlDeserializationService
 
                     return DeserializationResult.Failure(
                         $"Root element mismatch: found {detail} but expected <{expectedRoot}>. " +
-                        "The file may contain a SOAP fault, error response, or different schema.");
+                        "The file may contain a SOAP fault, error response, or different schema.",
+                        DeserializationFailureKind.RootElementMismatch);
                 }
             }
 
             if (TryDetectSoapFault(xmlStream, out var nestedSoapFaultMessage))
             {
                 ComparisonPhaseTimingScope.Current?.AddXmlDeserializationPrecheck(Stopwatch.GetElapsedTime(precheckStart));
-                return DeserializationResult.Failure(nestedSoapFaultMessage!);
+                return DeserializationResult.Failure(
+                    nestedSoapFaultMessage!,
+                    DeserializationFailureKind.SoapFault);
             }
 
             ComparisonPhaseTimingScope.Current?.AddXmlDeserializationPrecheck(Stopwatch.GetElapsedTime(precheckStart));
@@ -286,7 +296,8 @@ public class XmlDeserializationService : IXmlDeserializationService
             if (result == null)
             {
                 return DeserializationResult.Failure(
-                    $"Deserialization of type {modelType.Name} returned null.");
+                    $"Deserialization of type {modelType.Name} returned null.",
+                    DeserializationFailureKind.NullResult);
             }
 
             return DeserializationResult.Ok(result);
@@ -299,17 +310,23 @@ public class XmlDeserializationService : IXmlDeserializationService
                 ? $"{ex.Message} → {ex.InnerException.Message}"
                 : ex.Message;
             logger.LogWarning(ex, "Deserialization error for type {Type} (past pre-validation): {Message}", modelType.Name, message);
-            return DeserializationResult.Failure($"Deserialization error: {message}");
+            return DeserializationResult.Failure(
+                $"Deserialization error: {message}",
+                DeserializationFailureKind.DeserializationError);
         }
         catch (XmlException ex)
         {
             logger.LogWarning(ex, "XML parsing error for type {Type}: {Message}", modelType.Name, ex.Message);
-            return DeserializationResult.Failure($"XML parsing error: {ex.Message}");
+            return DeserializationResult.Failure(
+                $"XML parsing error: {ex.Message}",
+                DeserializationFailureKind.MalformedPayload);
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Unexpected error during TryDeserializeXml for type {Type}", modelType.Name);
-            return DeserializationResult.Failure($"Unexpected error: {ex.Message}");
+            return DeserializationResult.Failure(
+                $"Unexpected error: {ex.Message}",
+                DeserializationFailureKind.UnexpectedError);
         }
     }
 

@@ -1,35 +1,32 @@
 ﻿---
 applyTo: '**'
-lastUpdated: 2026-04-14T00:00:00Z
+lastUpdated: 2026-04-15T00:00:00Z
 sessionStatus: complete
 ---
 
 # Current Session Context
 
 ## Active Task
-Migrate the test project from FluentAssertions to Shouldly
+Fix the Blazor report WebAssembly crash caused by platform-specific process metrics during enhanced-analysis rendering
 
 ## Todo List Status
 ```markdown
-- [x] 🔍 Trace package and assertion usage in `ComparisonTool.Tests`
-- [x] 🛠️ Add Shouldly, convert all test assertions, and preserve test intent
-- [x] 🧹 Remove FluentAssertions from central package management and test project references
-- [x] ✅ Run full test validation, refresh guidance, and complete final review
+- [x] Trace the Blazor report crash path from the browser error to the service activation chain
+- [x] Make `SystemResourceMonitor` tolerate platforms without `Process.GetCurrentProcess()`
+- [x] Preserve existing resource heuristics on supported hosts while falling back safely on WASM
+- [x] Run focused validation and final review
 ```
 
 ## Recent File Changes
-- `Directory.Packages.props`: Replaced the central test assertion package entry with Shouldly
-- `ComparisonTool.Tests/ComparisonTool.Tests.csproj`: Swapped the test project package reference from FluentAssertions to Shouldly
-- `ComparisonTool.Tests/**/*.cs`: Converted FluentAssertions usage to Shouldly across the test project, including explicit LINQ/regex rewrites where there was no direct API match
-- `CODING_STANDARD.md` and `.github/instructions/memory.instruction.md`: Updated test guidance to standardize on Shouldly
+- `ComparisonTool.Core/Utilities/SystemResourceMonitor.cs`: Made process metrics optional so WebAssembly can resolve the shared comparison services without throwing `PlatformNotSupportedException`
 
 ## Key Technical Decisions
-- Decision: Add Shouldly first, keep FluentAssertions only until the first converted slice validated, then remove FluentAssertions after the full source migration
-- Rationale: Kept the first validation tight and avoided turning every remaining test file into an immediate compile failure
-- Date: 2026-04-14
-- Decision: Replace non-1:1 FluentAssertions helpers with deterministic projections, explicit LINQ predicates, and regex checks rather than introducing custom assertion abstractions
-- Rationale: Preserves test intent with minimal new infrastructure and keeps the resulting tests idiomatic for MSTest + Shouldly
-- Date: 2026-04-14
+- Decision: Fix the report crash in `SystemResourceMonitor` itself instead of adding another report-only service override
+- Rationale: `SystemResourceMonitor` is registered through the shared core DI path, and the actual failure was constructor-time use of `Process.GetCurrentProcess()` on WASM; handling that at the source preserves the same service graph across hosts
+- Date: 2026-04-15
+- Decision: Return neutral fallback resource usage values when process metrics are unavailable
+- Rationale: Unsupported platforms lose adaptive tuning but keep safe behavior for parallelism and batch-size calculations without crashing component activation
+- Date: 2026-04-15
 
 ## External Resources Referenced
 - Internal code inspection only
@@ -38,22 +35,26 @@ Migrate the test project from FluentAssertions to Shouldly
 - None
 
 ## Failed Approaches
-- None
+- Approach: Assume the Blazor report error was caused by the new report page logic itself
+- Failure Reason: The stack trace showed the failure happened earlier, during DI activation of `SystemResourceMonitor`, before report rendering could use the newly added enhanced-analysis path
+- Lesson: In the WASM report host, shared service construction must be browser-safe before any UI-path diagnosis matters
 
 ## Environment Notes
 - Windows
 - .NET 10.0
-- MSTest + Shouldly + Moq for testing
 
 ## Next Session Priority
-If future test work adds new assertion helpers, keep them aligned with Shouldly rather than reintroducing multiple assertion styles
+If additional confidence is needed, open a generated Blazor report in a browser and confirm the enhanced-analysis path now loads without the prior `Process_PlatformNotSupported` crash
 
 ## Session Notes
-- All `ComparisonTool.Tests` source files now use Shouldly instead of FluentAssertions
-- FluentAssertions has been removed from `Directory.Packages.props` and `ComparisonTool.Tests/ComparisonTool.Tests.csproj`
+- Root cause: the Blazor report host resolves the shared comparison services when it now generates enhanced analysis at report load time, and `SystemResourceMonitor` previously threw in its constructor on WASM because `Process.GetCurrentProcess()` is not supported there
+- `SystemResourceMonitor` now treats process metrics as optional and falls back to neutral resource-usage heuristics when platform APIs are unavailable
+- This keeps the shared DI graph intact for the report host while avoiding the browser crash during enhanced-analysis rendering
 - Validation completed:
-	- `dotnet test .\ComparisonTool.Tests\ComparisonTool.Tests.csproj` passed with 226/226 tests
-	- Final review found only stale guidance/build-artifact references; guidance was updated and generated artifacts were queued for cleanup/rebuild
+	- `dotnet build .\ComparisonTool.Report\ComparisonTool.Report.csproj --no-restore --verbosity minimal` passed
+	- Final review reported no findings
+
+---
 
 ---
 applyTo: '**'
@@ -542,16 +543,16 @@ Implement Request Folder Comparison feature (RC-101 through RC-114) - COMPLETED
 ## Blockers & Issues
 - **[RESOLVED]** String interpolation issues in PowerShell here-strings - fixed by using replace operations
 - **[RESOLVED]** Missing IHttpClientFactory package - added Microsoft.Extensions.Http
-- **[RESOLVED]** Wrong test framework (xUnit vs MSTest) - rewrote tests using MSTest and the project-standard assertion library
+- **[RESOLVED]** Wrong test framework (xUnit vs MSTest) - rewrote tests using MSTest + FluentAssertions
 
 ## Failed Approaches
 - Approach: Using Assert.ThrowsExceptionAsync from MSTest directly
-- Failure Reason: Project at the time used chained delegate-based exception assertions rather than MSTest's built-in helper pattern
+- Failure Reason: Project uses FluentAssertions pattern `await action.Should().ThrowAsync<T>()`
 - Lesson: Check existing test patterns before writing new tests
 
 ## Environment Notes
 - .NET 8.0
-- MSTest + project-standard assertions + Moq for testing
+- MSTest + FluentAssertions + Moq for testing
 - New named HttpClient: RequestComparison
 - Feature flag: `FeatureFlags:RequestComparisonEnabled = true`
 - Config section: `RequestComparison` with MaxConcurrency=64, DefaultTimeoutMs=30000

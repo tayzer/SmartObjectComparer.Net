@@ -503,14 +503,62 @@ public class FileUtilities : IFileUtilities
         AppendLineInvariant(sb, "## Pair {0}: {1} vs {2}", pairNumber, result.File1Name, result.File2Name);
         sb.AppendLine();
 
+        if (result.RawTextDifferences != null)
+        {
+            AppendLineInvariant(sb, "**Total Differences: {0}**", result.Summary?.TotalDifferenceCount ?? result.RawTextDifferences?.Count ?? 0);
+            sb.AppendLine();
+
+            if (result.RawTextDifferences.Count == 0)
+            {
+                sb.AppendLine("**Raw XML/text comparison completed with no differences.** The files were compared as raw content and matched exactly.");
+                sb.AppendLine();
+                return;
+            }
+
+            sb.AppendLine("### Raw XML/Text Differences");
+            sb.AppendLine();
+
+            foreach (var diff in result.RawTextDifferences.Take(10))
+            {
+                var lineInfo = diff.LineNumberA.HasValue || diff.LineNumberB.HasValue
+                    ? $"A:{diff.LineNumberA?.ToString(CultureInfo.InvariantCulture) ?? "-"} / B:{diff.LineNumberB?.ToString(CultureInfo.InvariantCulture) ?? "-"}"
+                    : "Line: n/a";
+
+                sb.AppendLine($"- Type: `{diff.Type}` ({lineInfo})");
+
+                if (!string.IsNullOrWhiteSpace(diff.TextA))
+                {
+                    sb.AppendLine($"  - Expected: `{FormatValue(diff.TextA, 200)}`");
+                }
+
+                if (!string.IsNullOrWhiteSpace(diff.TextB))
+                {
+                    sb.AppendLine($"  - Actual: `{FormatValue(diff.TextB, 200)}`");
+                }
+
+                if (!string.IsNullOrWhiteSpace(diff.Description))
+                {
+                    sb.AppendLine($"  - Description: {diff.Description}");
+                }
+
+                sb.AppendLine();
+            }
+
+            if (result.RawTextDifferences.Count > 10)
+            {
+                AppendLineInvariant(sb, "*...and {0} more raw differences*", result.RawTextDifferences.Count - 10);
+                sb.AppendLine();
+            }
+
+            return;
+        }
+
         if (result.AreEqual)
         {
             sb.AppendLine("**No differences found.** The objects are identical according to current comparison rules.");
         }
         else
         {
-            AppendLineInvariant(sb, "**Total Differences: {0}**", result.Summary.TotalDifferenceCount);
-            sb.AppendLine();
 
             sb.AppendLine("### Differences by Category");
             sb.AppendLine();

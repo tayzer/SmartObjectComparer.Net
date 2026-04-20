@@ -262,7 +262,7 @@ public class XmlSerializerFactory
     /// </summary>
     private void ProcessTypeForAttributeNormalization(Type type, XmlAttributeOverrides overrides, HashSet<Type> processedTypes, bool removeNamespaces)
     {
-        if (type.IsPrimitive || type == typeof(string) || type == typeof(DateTime) || type == typeof(decimal))
+        if (IsUnsupportedByXmlSerializer(type))
         {
             return;
         }
@@ -274,9 +274,47 @@ public class XmlSerializerFactory
 
         foreach (var property in type.GetProperties())
         {
+            if(IsUnsupportedByXmlSerializer(property.PropertyType))
+            {
+                continue; // Skip properties that can't be serialized
+            }
+
+            if (property.PropertyType.IsArray)
+            {
+                var elementType = property.PropertyType.GetElementType();
+                if(elementType != null && IsUnsupportedByXmlSerializer(elementType))
+                {
+                    continue; // Skip array properties with unsupported element types
+                }
+            }
+
             ProcessPropertyForAttributeNormalization(property, type, overrides, removeNamespaces);
             ProcessPropertyTypeRecursively(property.PropertyType, overrides, processedTypes, removeNamespaces);
         }
+    }
+
+    private static bool IsUnsupportedByXmlSerializer(Type type)
+    {
+        var effectiveType = type.IsArray ? type.GetElementType() ?? type : type;
+
+        if (effectiveType.IsGenericType)
+        {
+            var args = effectiveType.GetGenericArguments();
+            if (args.Length == 1)
+            {
+                effectiveType = args[0];
+            }
+        }
+
+
+        // TODO: Make sure guid is fine here
+        if (effectiveType.IsPrimitive || effectiveType == typeof(string) || effectiveType == typeof(decimal) || effectiveType == typeof(DateTime) || effectiveType == typeof(Guid))
+        {
+            return false;
+        }
+
+        var ns = effectiveType.Namespace;
+        return ns != null && (ns.StartsWith("System.Xml.Linq", StringComparison.Ordinal) || ns.StartsWith("System.Xml.XPath", StringComparison.Ordinal));
     }
 
     private void ProcessPropertyForAttributeNormalization(PropertyInfo property, Type type, XmlAttributeOverrides overrides, bool removeNamespaces)

@@ -1,5 +1,7 @@
 using ComparisonTool.Core.Comparison.Results;
 using Microsoft.Extensions.Logging;
+using System.Net.Http.Headers;
+using System.Text;
 
 namespace ComparisonTool.Core.RequestComparison.Services;
 
@@ -11,6 +13,7 @@ namespace ComparisonTool.Core.RequestComparison.Services;
 public class RawContentService
 {
     private readonly ILogger<RawContentService> logger;
+    private readonly IBundledRawContentAccessor? bundledRawContentAccessor;
 
     /// <summary>
     /// Maximum number of bytes to read per file. Files larger than this are truncated.
@@ -18,8 +21,14 @@ public class RawContentService
     private const int MaxFileSizeBytes = 512 * 1024; // 512 KB
 
     public RawContentService(ILogger<RawContentService> logger)
+        : this(logger, bundledRawContentAccessor: null)
+    {
+    }
+
+    public RawContentService(ILogger<RawContentService> logger, IBundledRawContentAccessor? bundledRawContentAccessor)
     {
         this.logger = logger;
+        this.bundledRawContentAccessor = bundledRawContentAccessor;
     }
 
     /// <summary>
@@ -32,6 +41,31 @@ public class RawContentService
     {
         var result = new RawContentResult();
 
+        if (pair.HasEmbeddedRawContent)
+        {
+            result.ContentA = pair.EmbeddedRawContentA ?? string.Empty;
+            result.ContentB = pair.EmbeddedRawContentB ?? string.Empty;
+            result.IsTruncatedA = pair.EmbeddedRawContentTruncatedA;
+            result.IsTruncatedB = pair.EmbeddedRawContentTruncatedB;
+            result.IsLoaded = true;
+            return result;
+        }
+
+        if (this.bundledRawContentAccessor != null)
+        {
+            var bundledResult = await this.bundledRawContentAccessor.TryLoadAsync(pair).ConfigureAwait(false);
+            if (bundledResult != null)
+            {
+                return bundledResult;
+            }
+        }
+
+        if (OperatingSystem.IsBrowser())
+        {
+            result.ErrorMessage = "Full File View is unavailable because this static report does not include embedded source content for the selected pair.";
+            return result;
+        }
+
         if (string.IsNullOrEmpty(pair.File1Path) || string.IsNullOrEmpty(pair.File2Path))
         {
             logger.LogWarning("Cannot load raw content: file paths are not available on the comparison result.");
@@ -42,8 +76,8 @@ public class RawContentService
 
         try
         {
-            var taskA = ReadFileContentAsync(pair.File1Path);
-            var taskB = ReadFileContentAsync(pair.File2Path);
+            var taskA = ReadFileContentAsync(pair.File1Path, pair.ContentTypeA);
+            var taskB = ReadFileContentAsync(pair.File2Path, pair.ContentTypeB);
 
             await Task.WhenAll(taskA, taskB);
 
@@ -70,7 +104,7 @@ public class RawContentService
         return result;
     }
 
-    private async Task<(string content, bool isTruncated)> ReadFileContentAsync(string filePath)
+    private async Task<(string content, bool isTruncated)> ReadFileContentAsync(string filePath, string? contentType)
     {
         if (!File.Exists(filePath))
         {
@@ -89,18 +123,80 @@ public class RawContentService
                 MaxFileSizeBytes);
         }
 
-        using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        using var reader = new StreamReader(stream);
+        var bytesToRead = (int)Math.Min(fileInfo.Length, MaxFileSizeBytes);
+        var buffer = new byte[bytesToRead];
 
-        if (isTruncated)
+        await using var stream = new FileStream(
+            filePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            4096,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        var bytesRead = await ReadToBufferAsync(stream, buffer).ConfigureAwait(false);
+        return (DecodeText(buffer, bytesRead, contentType), isTruncated);
+    }
+
+    private static async Task<int> ReadToBufferAsync(FileStream stream, byte[] buffer)
+    {
+        var totalBytesRead = 0;
+
+        while (totalBytesRead < buffer.Length)
         {
-            var buffer = new char[MaxFileSizeBytes];
-            var charsRead = await reader.ReadBlockAsync(buffer, 0, MaxFileSizeBytes);
-            return (new string(buffer, 0, charsRead), true);
+            var bytesRead = await stream.ReadAsync(buffer.AsMemory(totalBytesRead, buffer.Length - totalBytesRead)).ConfigureAwait(false);
+            if (bytesRead == 0)
+            {
+                break;
+            }
+
+            totalBytesRead += bytesRead;
         }
 
-        var content = await reader.ReadToEndAsync();
-        return (content, false);
+        return totalBytesRead;
+    }
+
+    private static string DecodeText(byte[] buffer, int bytesRead, string? contentType)
+    {
+        var encoding = ResolveEncoding(buffer, bytesRead, contentType);
+        var text = encoding.GetString(buffer, 0, bytesRead);
+
+        return text.Length > 0 && text[0] == '\uFEFF'
+            ? text[1..]
+            : text;
+    }
+
+    private static Encoding ResolveEncoding(byte[] buffer, int bytesRead, string? contentType)
+    {
+        if (!string.IsNullOrWhiteSpace(contentType)
+            && MediaTypeHeaderValue.TryParse(contentType, out var header)
+            && !string.IsNullOrWhiteSpace(header.CharSet))
+        {
+            try
+            {
+                return Encoding.GetEncoding(header.CharSet.Trim('"'));
+            }
+            catch (ArgumentException)
+            {
+            }
+        }
+
+        if (bytesRead >= 3 && buffer[0] == 0xEF && buffer[1] == 0xBB && buffer[2] == 0xBF)
+        {
+            return Encoding.UTF8;
+        }
+
+        if (bytesRead >= 2 && buffer[0] == 0xFF && buffer[1] == 0xFE)
+        {
+            return Encoding.Unicode;
+        }
+
+        if (bytesRead >= 2 && buffer[0] == 0xFE && buffer[1] == 0xFF)
+        {
+            return Encoding.BigEndianUnicode;
+        }
+
+        return Encoding.UTF8;
     }
 }
 

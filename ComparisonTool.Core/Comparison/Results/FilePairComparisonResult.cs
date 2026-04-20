@@ -48,6 +48,16 @@ public class FilePairComparisonResult
     public int? HttpStatusCodeB { get; set; }
 
     /// <summary>
+    /// Gets or sets the response content type from endpoint A (request comparison only).
+    /// </summary>
+    public string? ContentTypeA { get; set; }
+
+    /// <summary>
+    /// Gets or sets the response content type from endpoint B (request comparison only).
+    /// </summary>
+    public string? ContentTypeB { get; set; }
+
+    /// <summary>
     /// Gets or sets the classified pair outcome for request comparison results.
     /// Null for non-request-comparison (file/folder) results.
     /// </summary>
@@ -58,6 +68,38 @@ public class FilePairComparisonResult
     /// (e.g. non-success HTTP responses).
     /// </summary>
     public List<RawTextDifference>? RawTextDifferences { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether report-bundled raw content is available for this pair.
+    /// Static HTML reports use this instead of trying to reopen host file-system paths from the browser.
+    /// </summary>
+    public bool HasEmbeddedRawContent { get; set; }
+
+    /// <summary>
+    /// Gets or sets report-bundled raw content for endpoint/file A when available.
+    /// </summary>
+    public string? EmbeddedRawContentA { get; set; }
+
+    /// <summary>
+    /// Gets or sets report-bundled raw content for endpoint/file B when available.
+    /// </summary>
+    public string? EmbeddedRawContentB { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether report-bundled raw content A was truncated.
+    /// </summary>
+    public bool EmbeddedRawContentTruncatedA { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether report-bundled raw content B was truncated.
+    /// </summary>
+    public bool EmbeddedRawContentTruncatedB { get; set; }
+
+    /// <summary>
+    /// Gets or sets the relative path to report-bundled raw content for this pair.
+    /// Static HTML reports use this to lazy-load Full File View content without embedding every body in the main bootstrap JSON.
+    /// </summary>
+    public string? BundledRawContentPath { get; set; }
 
     /// <summary>
     /// Gets or sets error information if the comparison failed.
