@@ -1,5 +1,7 @@
 ﻿namespace ComparisonTool.Core.RequestComparison.Models;
 
+using ComparisonTool.Core.Serialization;
+
 /// <summary>
 /// Represents metadata about a request file including headers.
 /// </summary>
@@ -13,6 +15,9 @@ public record RequestFileInfo
 
     /// <summary>Gets the content type inferred from file extension.</summary>
     public required string ContentType { get; init; }
+
+    /// <summary>Gets the detected serialization format when the request file uses a supported structured payload.</summary>
+    public SerializationFormat? DetectedFormat { get; init; }
 
     /// <summary>Gets the per-request headers from sidecar file.</summary>
     public IReadOnlyDictionary<string, string> Headers { get; init; } = new Dictionary<string, string>();

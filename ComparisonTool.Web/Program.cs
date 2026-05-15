@@ -3,6 +3,7 @@ using ComparisonTool.Core.Abstractions;
 using ComparisonTool.Core.RequestComparison.Models;
 using ComparisonTool.Core.DI;
 using ComparisonTool.Core.Models;
+using ComparisonTool.Core.RequestComparison.AlternateContracts;
 using ComparisonTool.Core.RequestComparison.Services;
 using ComparisonTool.Web;
 using ComparisonTool.Web.Hubs;
@@ -32,6 +33,7 @@ builder.Services
     {
         // Register SoapEnvelope with custom root element name
         options.RegisterDomainModelWithRootElement<SoapEnvelope>("SoapEnvelope", "Envelope");
+        RequestComparisonAlternateContractSampleRegistration.RegisterComparisonModels(options);
     })
     .AddRazorComponents()
     .AddInteractiveServerComponents(options =>
@@ -39,6 +41,10 @@ builder.Services
         options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(30);
         options.DisconnectedCircuitMaxRetained = 100;
     });
+
+// Sample alternate-contract wiring using repo-local test models for discoverability only.
+builder.Services.AddRequestComparisonAlternateContractProfiles(
+    RequestComparisonAlternateContractSampleRegistration.RegisterProfiles);
 
 // Add MudBlazor services
 builder.Services.AddMudServices();

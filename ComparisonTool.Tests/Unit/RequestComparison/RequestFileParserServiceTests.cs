@@ -81,6 +81,8 @@ public class RequestFileParserServiceTests : IDisposable
         result.Any(r => r.RelativePath == "request2.xml").ShouldBeTrue();
         result.Any(r => r.ContentType == "application/json").ShouldBeTrue();
         result.Any(r => r.ContentType == "application/xml").ShouldBeTrue();
+        result.Single(r => r.RelativePath == "request1.json").DetectedFormat.ShouldBe(ComparisonTool.Core.Serialization.SerializationFormat.Json);
+        result.Single(r => r.RelativePath == "request2.xml").DetectedFormat.ShouldBe(ComparisonTool.Core.Serialization.SerializationFormat.Xml);
     }
 
     [TestMethod]
@@ -133,6 +135,7 @@ public class RequestFileParserServiceTests : IDisposable
         // Assert - should only include the request file, not the headers file
         result.Count.ShouldBe(1);
         result[0].RelativePath.ShouldBe("request.json");
+        result[0].DetectedFormat.ShouldBe(ComparisonTool.Core.Serialization.SerializationFormat.Json);
     }
 
     [TestMethod]

@@ -2,7 +2,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net.Http.Headers;
-using System.Text.Json;
 using ComparisonTool.Core.RequestComparison.Models;
 using Microsoft.Extensions.Logging;
 
@@ -16,17 +15,19 @@ public class RequestExecutionService : IDisposable
     private readonly ILogger<RequestExecutionService> _logger;
     private readonly HttpClient _httpClient;
     private readonly ResponseMaskingService _responseMaskingService;
-    private readonly ArrayPool<byte> _bufferPool = ArrayPool<byte>.Shared;
+    private readonly RequestComparisonAlternateContractTransformationService _alternateContractTransformationService;
     private const int BufferSize = 81920; // 80KB buffer
 
     public RequestExecutionService(
         ILogger<RequestExecutionService> logger,
         IHttpClientFactory httpClientFactory,
-        ResponseMaskingService responseMaskingService)
+        ResponseMaskingService responseMaskingService,
+        RequestComparisonAlternateContractTransformationService alternateContractTransformationService)
     {
         _logger = logger;
         _httpClient = httpClientFactory.CreateClient("RequestComparison");
         _responseMaskingService = responseMaskingService;
+        _alternateContractTransformationService = alternateContractTransformationService;
     }
 
     /// <summary>
@@ -97,18 +98,35 @@ public class RequestExecutionService : IDisposable
             var headersA = MergeHeaders(job.HeadersA, request.Headers);
             var headersB = MergeHeaders(job.HeadersB, request.Headers);
 
+            var sourceRequestBody = await ReadRequestBodyAsync(requestBodyStream, cancellationToken).ConfigureAwait(false);
+
             // Execute both requests in parallel
-            var contentType = string.IsNullOrWhiteSpace(job.ContentTypeOverride)
+            var contentTypeA = string.IsNullOrWhiteSpace(job.ContentTypeOverride)
                 ? request.ContentType
                 : job.ContentTypeOverride;
 
+            var endpointBRequestBody = sourceRequestBody;
+            var contentTypeB = contentTypeA;
+            if (job.UseAlternateContractForEndpointB)
+            {
+                var alternateRequest = await _alternateContractTransformationService.PrepareEndpointBRequestAsync(
+                    job,
+                    request,
+                    sourceRequestBody,
+                    cancellationToken).ConfigureAwait(false);
+
+                endpointBRequestBody = alternateRequest.Body;
+                contentTypeB = alternateRequest.ContentType;
+            }
+
             var (responseA, responseB) = await ExecuteBothEndpointsAsync(
                 job,
-                request,
-                requestBodyStream,
+                sourceRequestBody,
+                contentTypeA,
                 headersA,
+                endpointBRequestBody,
                 headersB,
-                contentType,
+                contentTypeB,
                 cancellationToken).ConfigureAwait(false);
 
             // Generate deterministic response file paths
@@ -120,11 +138,21 @@ public class RequestExecutionService : IDisposable
             Directory.CreateDirectory(Path.GetDirectoryName(responsePathA)!);
             Directory.CreateDirectory(Path.GetDirectoryName(responsePathB)!);
 
-            var contentA = job.MaskRules.Count > 0
-                ? _responseMaskingService.MaskContent(responseA.content, responseA.contentType, responsePathA, job.MaskRules)
+            IReadOnlyList<MaskRuleDto> endpointAMaskRules = job.MaskRules;
+            IReadOnlyList<MaskRuleDto> endpointBMaskRules = job.MaskRules;
+
+            if (job.MaskRules.Count > 0 && job.UseAlternateContractForEndpointB)
+            {
+                endpointBMaskRules = _alternateContractTransformationService.GetEndpointBRawResponseMaskRules(job);
+            }
+
+            var shouldMaskResponses = job.MaskRules.Count > 0;
+
+            var contentA = shouldMaskResponses
+                ? _responseMaskingService.MaskContent(responseA.content, responseA.contentType, responsePathA, endpointAMaskRules)
                 : responseA.content;
-            var contentB = job.MaskRules.Count > 0
-                ? _responseMaskingService.MaskContent(responseB.content, responseB.contentType, responsePathB, job.MaskRules)
+            var contentB = shouldMaskResponses
+                ? _responseMaskingService.MaskContent(responseB.content, responseB.contentType, responsePathB, endpointBMaskRules)
                 : responseB.content;
 
             // Stream responses to disk
@@ -163,23 +191,19 @@ public class RequestExecutionService : IDisposable
 
     private async Task<((System.Net.HttpStatusCode statusCode, byte[] content, string? contentType) responseA, (System.Net.HttpStatusCode statusCode, byte[] content, string? contentType) responseB)> ExecuteBothEndpointsAsync(
         RequestComparisonJob job,
-        RequestFileInfo request,
-        Stream requestBodyStream,
+        byte[] requestBodyA,
+        string contentTypeA,
         Dictionary<string, string> headersA,
+        byte[] requestBodyB,
         Dictionary<string, string> headersB,
-        string contentType,
+        string contentTypeB,
         CancellationToken cancellationToken)
     {
-        // Read request body into memory for sending to both endpoints
-        using var memoryStream = new MemoryStream();
-        await requestBodyStream.CopyToAsync(memoryStream, cancellationToken).ConfigureAwait(false);
-        var requestBody = memoryStream.ToArray();
-
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(TimeSpan.FromMilliseconds(job.TimeoutMs));
 
-        var taskA = SendRequestAsync(job.EndpointA, requestBody, contentType, headersA, cts.Token);
-        var taskB = SendRequestAsync(job.EndpointB, requestBody, contentType, headersB, cts.Token);
+        var taskA = SendRequestAsync(job.EndpointA, requestBodyA, contentTypeA, headersA, cts.Token);
+        var taskB = SendRequestAsync(job.EndpointB, requestBodyB, contentTypeB, headersB, cts.Token);
 
         await Task.WhenAll(taskA, taskB).ConfigureAwait(false);
 
@@ -220,6 +244,13 @@ public class RequestExecutionService : IDisposable
             FileOptions.Asynchronous | FileOptions.SequentialScan);
 
         await fileStream.WriteAsync(content, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<byte[]> ReadRequestBodyAsync(Stream requestBodyStream, CancellationToken cancellationToken)
+    {
+        using var memoryStream = new MemoryStream();
+        await requestBodyStream.CopyToAsync(memoryStream, cancellationToken).ConfigureAwait(false);
+        return memoryStream.ToArray();
     }
 
     private static Dictionary<string, string> MergeHeaders(

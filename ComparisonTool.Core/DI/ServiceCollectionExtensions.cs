@@ -4,6 +4,7 @@ using ComparisonTool.Core.Abstractions;
 using ComparisonTool.Core.Comparison;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Models;
+using ComparisonTool.Core.RequestComparison.AlternateContracts;
 using ComparisonTool.Core.RequestComparison.Services;
 using ComparisonTool.Core.Serialization;
 using ComparisonTool.Core.Utilities;
@@ -91,6 +92,24 @@ public static class ServiceCollectionExtensions
 
             return service;
         });
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers alternate endpoint-B request/response profiles used by request comparison.
+    /// </summary>
+    public static IServiceCollection AddRequestComparisonAlternateContractProfiles(
+        this IServiceCollection services,
+        Action<RequestComparisonAlternateContractOptions> configureOptions)
+    {
+        var options = new RequestComparisonAlternateContractOptions();
+        configureOptions(options);
+
+        foreach (var profile in options.Profiles)
+        {
+            services.AddSingleton(profile);
+        }
 
         return services;
     }
@@ -238,6 +257,9 @@ public static class ServiceCollectionExtensions
 
     private static void RegisterCoreServices(IServiceCollection services, XmlComparisonOptions options)
     {
+        services.TryAddSingleton<IRequestComparisonAlternateContractProfileRegistry, RequestComparisonAlternateContractProfileRegistry>();
+        services.TryAddSingleton<RequestComparisonAlternateContractTransformationService>();
+
         services.AddSingleton<CoreXmlSerializerFactory>(provider =>
         {
             var logger = provider.GetRequiredService<ILogger<CoreXmlSerializerFactory>>();

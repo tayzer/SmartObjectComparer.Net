@@ -89,6 +89,12 @@ public record RequestComparisonJob
     /// <summary>Gets or sets the model name for comparison.</summary>
     public string ModelName { get; set; } = "Auto";
 
+    /// <summary>Gets or sets a value indicating whether endpoint B uses an alternate request/response contract.</summary>
+    public bool UseAlternateContractForEndpointB { get; set; } = false;
+
+    /// <summary>Gets or sets the alternate contract profile identifier used to resolve request/response mappers.</summary>
+    public string? AlternateContractProfileId { get; set; }
+
     // --- Comparison Configuration Parity with Home ---
 
     /// <summary>Gets or sets a value indicating whether to ignore collection order.</summary>

@@ -1,5 +1,6 @@
 ﻿using System.Text.Json;
 using ComparisonTool.Core.RequestComparison.Models;
+using ComparisonTool.Core.Utilities;
 using Microsoft.Extensions.Logging;
 
 namespace ComparisonTool.Core.RequestComparison.Services;
@@ -80,6 +81,7 @@ public class RequestFileParserService
         var fileInfo = new FileInfo(filePath);
         var extension = fileInfo.Extension.ToLowerInvariant();
         var contentType = GetContentType(extension);
+        var detectedFormat = TryDetectStructuredFormat(filePath);
 
         // Check for sidecar header file
         var headers = await LoadSidecarHeadersAsync(filePath, cancellationToken)
@@ -90,6 +92,7 @@ public class RequestFileParserService
             RelativePath = relativePath,
             FilePath = filePath,
             ContentType = contentType,
+            DetectedFormat = detectedFormat,
             Headers = headers,
             FileSize = fileInfo.Length
         };
@@ -140,6 +143,18 @@ public class RequestFileParserService
         return ContentTypeMap.TryGetValue(extension, out var contentType)
             ? contentType
             : "text/plain";
+    }
+
+    private static ComparisonTool.Core.Serialization.SerializationFormat? TryDetectStructuredFormat(string filePath)
+    {
+        try
+        {
+            return FileTypeDetector.DetectFormat(filePath);
+        }
+        catch (NotSupportedException)
+        {
+            return null;
+        }
     }
 
     /// <summary>

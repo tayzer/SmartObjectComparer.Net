@@ -2,6 +2,7 @@ using System.Windows;
 using ComparisonTool.Core.Abstractions;
 using ComparisonTool.Core.DI;
 using ComparisonTool.Core.Models;
+using ComparisonTool.Core.RequestComparison.AlternateContracts;
 using ComparisonTool.Core.RequestComparison.Services;
 using ComparisonTool.Desktop.Services;
 using Microsoft.Extensions.Configuration;
@@ -56,7 +57,12 @@ public partial class App : System.Windows.Application
         services.AddUnifiedComparisonServices(configuration, options =>
         {
             options.RegisterDomainModelWithRootElement<SoapEnvelope>("SoapEnvelope", "Envelope");
+            RequestComparisonAlternateContractSampleRegistration.RegisterComparisonModels(options);
         });
+
+        // Sample alternate-contract wiring using repo-local test models for discoverability only.
+        services.AddRequestComparisonAlternateContractProfiles(
+            RequestComparisonAlternateContractSampleRegistration.RegisterProfiles);
 
         // MudBlazor
         services.AddMudServices();
@@ -81,6 +87,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<RequestFileParserService>();
         services.AddSingleton<RequestExecutionService>();
         services.AddSingleton<RawTextComparisonService>();
+        services.AddSingleton<ResponseMaskingService>();
         services.AddSingleton<RequestComparisonJobService>();
         services.AddScoped<ComparisonTool.Core.RequestComparison.Services.RawContentService>();
 

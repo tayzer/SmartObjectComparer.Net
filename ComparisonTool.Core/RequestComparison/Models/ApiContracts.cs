@@ -41,6 +41,12 @@ public record CreateRequestComparisonJobRequest
     /// <summary>Gets the model name to use for comparison.</summary>
     public string? ModelName { get; init; }
 
+    /// <summary>Gets a value indicating whether endpoint B uses an alternate request/response contract.</summary>
+    public bool UseAlternateContractForEndpointB { get; init; } = false;
+
+    /// <summary>Gets the optional alternate contract profile identifier used to resolve request/response mappers.</summary>
+    public string? AlternateContractProfileId { get; init; }
+
     // --- Comparison Configuration Parity with Home ---
 
     /// <summary>Gets a value indicating whether to ignore collection order during comparison.</summary>

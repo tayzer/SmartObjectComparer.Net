@@ -5,6 +5,7 @@ using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.RequestComparison.Models;
 using ComparisonTool.Core.Serialization;
+using ComparisonTool.Core.Utilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -20,6 +21,7 @@ public class RequestComparisonJobService
     private readonly RequestFileParserService _parserService;
     private readonly RawTextComparisonService _rawTextComparisonService;
     private readonly ResponseMaskingService _responseMaskingService;
+    private readonly RequestComparisonAlternateContractTransformationService _alternateContractTransformationService;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IComparisonProgressPublisher? _progressPublisher;
     private readonly ConcurrentDictionary<string, RequestComparisonJob> _jobs = new();
@@ -33,6 +35,7 @@ public class RequestComparisonJobService
         RequestFileParserService parserService,
         RawTextComparisonService rawTextComparisonService,
         ResponseMaskingService responseMaskingService,
+        RequestComparisonAlternateContractTransformationService alternateContractTransformationService,
         IServiceScopeFactory scopeFactory,
         IComparisonProgressPublisher? progressPublisher = null)
     {
@@ -41,6 +44,7 @@ public class RequestComparisonJobService
         _parserService = parserService;
         _rawTextComparisonService = rawTextComparisonService;
         _responseMaskingService = responseMaskingService;
+        _alternateContractTransformationService = alternateContractTransformationService;
         _scopeFactory = scopeFactory;
         _progressPublisher = progressPublisher;
     }
@@ -111,6 +115,8 @@ public class RequestComparisonJobService
             TimeoutMs = request.TimeoutMs,
             MaxConcurrency = request.MaxConcurrency,
             ModelName = request.ModelName ?? "Auto",
+            UseAlternateContractForEndpointB = request.UseAlternateContractForEndpointB,
+            AlternateContractProfileId = request.AlternateContractProfileId,
             // Comparison configuration parity with Home
             IgnoreCollectionOrder = request.IgnoreCollectionOrder,
             IgnoreStringCase = request.IgnoreStringCase,
@@ -126,6 +132,12 @@ public class RequestComparisonJobService
         if (job.MaskRules.Count > 0)
         {
             _responseMaskingService.ValidateRules(job.MaskRules);
+        }
+
+        if (job.UseAlternateContractForEndpointB &&
+            !_alternateContractTransformationService.TryResolveProfile(job, out _, out var profileResolutionError))
+        {
+            throw new InvalidOperationException(profileResolutionError);
         }
 
         _jobs[job.JobId] = job;
@@ -243,32 +255,16 @@ public class RequestComparisonJobService
                     Directory.CreateDirectory(tempDirA);
                     Directory.CreateDirectory(tempDirB);
 
-                    // Copy success response files to temp directories in parallel
+                    // Materialize success response files to temp directories in parallel.
+                    // Alternate-contract jobs normalize endpoint B into canonical XML first.
                     var copyTasks = successPairs.Select(async successPair =>
                     {
                         var exec = successPair.Execution;
                         if (exec.ResponsePathA != null && exec.ResponsePathB != null &&
                             File.Exists(exec.ResponsePathA) && File.Exists(exec.ResponsePathB))
                         {
-                            var relativePath = exec.Request.RelativePath;
-                            // Sanitize path: remove path traversal attempts and normalize separators
-                            var sanitizedPath = relativePath
-                                .Replace("..", "_")
-                                .Replace('/', Path.DirectorySeparatorChar)
-                                .Replace('\\', Path.DirectorySeparatorChar)
-                                .TrimStart(Path.DirectorySeparatorChar);
-
-                            var targetPathA = Path.Combine(tempDirA, sanitizedPath);
-                            var targetPathB = Path.Combine(tempDirB, sanitizedPath);
-
-                            // Ensure subdirectories exist
-                            Directory.CreateDirectory(Path.GetDirectoryName(targetPathA)!);
-                            Directory.CreateDirectory(Path.GetDirectoryName(targetPathB)!);
-
-                            // Copy files asynchronously
-                            await Task.WhenAll(
-                                CopyFileAsync(exec.ResponsePathA, targetPathA, cancellationToken),
-                                CopyFileAsync(exec.ResponsePathB, targetPathB, cancellationToken)).ConfigureAwait(false);
+                            await MaterializeSuccessPairForComparisonAsync(job, exec, tempDirA, tempDirB, cancellationToken)
+                                .ConfigureAwait(false);
                         }
                     }).ToList();
 
@@ -406,6 +402,8 @@ public class RequestComparisonJobService
                         pairResult.PairOutcome = RequestPairOutcome.BothSuccess;
                         pairResult.HttpStatusCodeA = execResult.Execution.StatusCodeA;
                         pairResult.HttpStatusCodeB = execResult.Execution.StatusCodeB;
+                        pairResult.ContentTypeA = execResult.Execution.ContentTypeA;
+                        pairResult.ContentTypeB = execResult.Execution.ContentTypeB;
 
                         // Propagate original response file paths for side-by-side raw content viewing.
                         // The temp directory paths set by DirectoryComparisonService are deleted after comparison,
@@ -431,6 +429,8 @@ public class RequestComparisonJobService
             comparisonResult.Metadata["IgnoreCollectionOrder"] = job.IgnoreCollectionOrder;
             comparisonResult.Metadata["RequestComparisonJobId"] = jobId;
             comparisonResult.Metadata["ExecutionOutcomeSummary"] = outcomeSummary;
+            comparisonResult.Metadata["UseAlternateContractForEndpointB"] = job.UseAlternateContractForEndpointB;
+            comparisonResult.Metadata["AlternateContractProfileId"] = job.AlternateContractProfileId;
             comparisonResult.Metadata["ExecutionResults"] = executionResults
                 .Where(r => !r.Success)
                 .Select(r => new { r.Request.RelativePath, r.ErrorMessage })
@@ -565,6 +565,73 @@ public class RequestComparisonJobService
         configService.ApplyConfiguredSettings();
     }
 
+    private async Task MaterializeSuccessPairForComparisonAsync(
+        RequestComparisonJob job,
+        RequestExecutionResult executionResult,
+        string tempDirA,
+        string tempDirB,
+        CancellationToken cancellationToken)
+    {
+        if (!job.UseAlternateContractForEndpointB)
+        {
+            var targetPathA = BuildComparisonTargetPath(tempDirA, executionResult.Request.RelativePath);
+            var targetPathB = BuildComparisonTargetPath(tempDirB, executionResult.Request.RelativePath);
+
+            Directory.CreateDirectory(Path.GetDirectoryName(targetPathA)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(targetPathB)!);
+
+            await Task.WhenAll(
+                CopyFileAsync(executionResult.ResponsePathA!, targetPathA, cancellationToken),
+                CopyFileAsync(executionResult.ResponsePathB!, targetPathB, cancellationToken)).ConfigureAwait(false);
+            return;
+        }
+
+        var canonicalRelativePath = BuildCanonicalXmlRelativePath(executionResult.Request.RelativePath);
+        var targetCanonicalPathA = Path.Combine(tempDirA, canonicalRelativePath);
+        var targetCanonicalPathB = Path.Combine(tempDirB, canonicalRelativePath);
+
+        Directory.CreateDirectory(Path.GetDirectoryName(targetCanonicalPathA)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(targetCanonicalPathB)!);
+
+        var normalizedA = await _alternateContractTransformationService.NormalizeEndpointAResponseAsync(
+            job,
+            executionResult,
+            cancellationToken).ConfigureAwait(false);
+        var normalizedB = await _alternateContractTransformationService.NormalizeEndpointBResponseAsync(
+            job,
+            executionResult,
+            cancellationToken).ConfigureAwait(false);
+
+        var contentA = job.MaskRules.Count > 0
+            ? _responseMaskingService.MaskContent(normalizedA.Body, normalizedA.ContentType, targetCanonicalPathA, job.MaskRules)
+            : normalizedA.Body;
+        var contentB = job.MaskRules.Count > 0
+            ? _responseMaskingService.MaskContent(normalizedB.Body, normalizedB.ContentType, targetCanonicalPathB, job.MaskRules)
+            : normalizedB.Body;
+
+        await Task.WhenAll(
+            WriteFileAsync(targetCanonicalPathA, contentA, cancellationToken),
+            WriteFileAsync(targetCanonicalPathB, contentB, cancellationToken)).ConfigureAwait(false);
+    }
+
+    private static string BuildComparisonTargetPath(string rootDirectory, string requestRelativePath)
+    {
+        var sanitizedPath = SanitizeRelativePath(requestRelativePath);
+        return Path.Combine(rootDirectory, sanitizedPath);
+    }
+
+    private static string BuildCanonicalXmlRelativePath(string requestRelativePath)
+    {
+        var sanitizedPath = SanitizeRelativePath(requestRelativePath);
+        return Path.ChangeExtension(sanitizedPath, FileTypeDetector.GetFileExtension(SerializationFormat.Xml));
+    }
+
+    private static string SanitizeRelativePath(string relativePath) => relativePath
+        .Replace("..", "_")
+        .Replace('/', Path.DirectorySeparatorChar)
+        .Replace('\\', Path.DirectorySeparatorChar)
+        .TrimStart(Path.DirectorySeparatorChar);
+
     private static async Task CopyFileAsync(string sourcePath, string destinationPath, CancellationToken cancellationToken)
     {
         const int bufferSize = 81920; // 80KB buffer
@@ -585,5 +652,19 @@ public class RequestComparisonJobService
             FileOptions.Asynchronous | FileOptions.SequentialScan);
 
         await sourceStream.CopyToAsync(destinationStream, bufferSize, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task WriteFileAsync(string destinationPath, byte[] content, CancellationToken cancellationToken)
+    {
+        const int bufferSize = 81920; // 80KB buffer
+        await using var destinationStream = new FileStream(
+            destinationPath,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.None,
+            bufferSize,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        await destinationStream.WriteAsync(content, cancellationToken).ConfigureAwait(false);
     }
 }

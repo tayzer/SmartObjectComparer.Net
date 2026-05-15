@@ -1,5 +1,6 @@
 using ComparisonTool.Core.DI;
 using ComparisonTool.Core.Models;
+using ComparisonTool.Core.RequestComparison.AlternateContracts;
 using ComparisonTool.Core.RequestComparison.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,7 +32,12 @@ public static class ServiceProviderFactory
         services.AddUnifiedComparisonServices(configuration, options =>
         {
             options.RegisterDomainModelWithRootElement<SoapEnvelope>("SoapEnvelope", "Envelope");
+            RequestComparisonAlternateContractSampleRegistration.RegisterComparisonModels(options);
         });
+
+        // Sample alternate-contract wiring using repo-local test models for discoverability only.
+        services.AddRequestComparisonAlternateContractProfiles(
+            RequestComparisonAlternateContractSampleRegistration.RegisterProfiles);
 
         // HTTP client for request comparison
         services.AddHttpClient("RequestComparison")

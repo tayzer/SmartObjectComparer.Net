@@ -3,6 +3,7 @@
 @using ComparisonTool.Core.Comparison.Results
 @using ComparisonTool.Core.RequestComparison.Models
 @using ComparisonTool.Core.RequestComparison.Services
+@using ComparisonTool.Core.RequestComparison.AlternateContracts
 @using ComparisonTool.Core.Serialization
 @using ComparisonTool.Domain.Models
 @using ComparisonTool.Core.Abstractions
@@ -15,6 +16,7 @@
 @inject IConfiguration Configuration
 @inject IOptions<RequestComparisonEndpointOptions> EndpointOptions
 @inject IDeserializationService DeserializationService
+@inject IRequestComparisonAlternateContractProfileRegistry AlternateContractProfileRegistry
 @inject IComparisonConfigurationService ConfigService
 @inject RequestComparisonJobService JobService
 @inject IProgressSubscriber ProgressService
@@ -86,6 +88,42 @@
                 <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
                     Mask rules configured in Mask Rules Studio: @MaskRules.Count
                 </MudAlert>
+
+                <MudSwitch T="bool"
+                           Label="Endpoint B uses alternate request/response contract"
+                           Value="endpointBUsesAlternateContract"
+                           ValueChanged="HandleAlternateContractToggleChanged"
+                           Color="Color.Primary" />
+
+                @if (endpointBUsesAlternateContract)
+                {
+                    @if (availableAlternateContractProfiles.Count == 0)
+                    {
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                            No alternate contract profiles are registered for @selectedModelName.
+                        </MudAlert>
+                    }
+                    else if (availableAlternateContractProfiles.Count == 1)
+                    {
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                            Using alternate contract profile: @selectedAlternateContractProfileId
+                        </MudAlert>
+                    }
+                    else
+                    {
+                        <MudSelect T="string"
+                                   Label="Alternate Contract Profile"
+                                   Value="selectedAlternateContractProfileId"
+                                   ValueChanged="HandleAlternateContractProfileChanged"
+                                   Variant="Variant.Outlined"
+                                   AnchorOrigin="Origin.BottomCenter">
+                            @foreach (var profileId in availableAlternateContractProfiles)
+                            {
+                                <MudSelectItem Value="@profileId">@profileId</MudSelectItem>
+                            }
+                        </MudSelect>
+                    }
+                }
 
                 <MudExpansionPanels>
                     <MudExpansionPanel Text="Comparison Options">
@@ -393,6 +431,9 @@
     private bool ignoreXmlNamespaces = true;
     private bool enableSemanticAnalysis = true;
     private bool enableEnhancedStructuralAnalysis = true;
+    private bool endpointBUsesAlternateContract = false;
+    private List<string> availableAlternateContractProfiles = new();
+    private string? selectedAlternateContractProfileId;
     public List<IgnoreRule> IgnoreRules { get; set; } = new();
     
     // Event callbacks for property selectors
@@ -430,10 +471,14 @@
         !string.IsNullOrWhiteSpace(endpointA) && 
         !string.IsNullOrWhiteSpace(endpointB) && 
         !string.IsNullOrWhiteSpace(selectedModelName) &&
+        (!endpointBUsesAlternateContract || CanResolveAlternateContractProfile) &&
         !isRunning;
     
     private bool IsModelSelected => !string.IsNullOrEmpty(selectedModelName);
     private string IgnoreRulesLabel => $"Ignore Rules ({IgnoreRules.Count} rules)";
+    private bool CanResolveAlternateContractProfile =>
+        availableAlternateContractProfiles.Count == 1 ||
+        !string.IsNullOrWhiteSpace(selectedAlternateContractProfileId);
 
     protected override void OnInitialized()
     {
@@ -447,6 +492,7 @@
             selectedModelName = !string.IsNullOrWhiteSpace(SharedSelectedModelName)
                 ? SharedSelectedModelName
                 : availableModels[0];
+            RefreshAlternateContractProfiles();
         }
         
         var options = EndpointOptions.Value;
@@ -474,13 +520,28 @@
             && !string.Equals(selectedModelName, SharedSelectedModelName, StringComparison.Ordinal))
         {
             selectedModelName = SharedSelectedModelName;
+            RefreshAlternateContractProfiles();
         }
     }
 
     private async Task HandleSelectedModelChanged(string value)
     {
         selectedModelName = value;
+        RefreshAlternateContractProfiles();
         await SharedSelectedModelNameChanged.InvokeAsync(value);
+    }
+
+    private Task HandleAlternateContractToggleChanged(bool value)
+    {
+        endpointBUsesAlternateContract = value;
+        RefreshAlternateContractProfiles();
+        return Task.CompletedTask;
+    }
+
+    private Task HandleAlternateContractProfileChanged(string value)
+    {
+        selectedAlternateContractProfileId = value;
+        return Task.CompletedTask;
     }
 
     private async Task HandleFileSelection(InputFileChangeEventArgs e)
@@ -572,6 +633,10 @@
                     : contentTypeOverride,
                 TimeoutMs = timeoutMs,
                 MaxConcurrency = maxConcurrency,
+                UseAlternateContractForEndpointB = endpointBUsesAlternateContract,
+                AlternateContractProfileId = endpointBUsesAlternateContract
+                    ? selectedAlternateContractProfileId
+                    : null,
                 // Configuration parity with Home
                 ModelName = selectedModelName,
                 IgnoreCollectionOrder = ignoreCollectionOrder,
@@ -752,6 +817,40 @@
     private async Task OpenPropertySelector()
     {
         await OnPropertySelectorOpened.InvokeAsync();
+    }
+
+    private void RefreshAlternateContractProfiles()
+    {
+        if (string.IsNullOrWhiteSpace(selectedModelName))
+        {
+            availableAlternateContractProfiles = new List<string>();
+            selectedAlternateContractProfileId = null;
+            return;
+        }
+
+        availableAlternateContractProfiles = AlternateContractProfileRegistry
+            .GetProfileIds(selectedModelName)
+            .ToList();
+
+        if (!endpointBUsesAlternateContract)
+        {
+            selectedAlternateContractProfileId = null;
+            return;
+        }
+
+        if (availableAlternateContractProfiles.Count == 1)
+        {
+            selectedAlternateContractProfileId = availableAlternateContractProfiles[0];
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(selectedAlternateContractProfileId) &&
+            availableAlternateContractProfiles.Contains(selectedAlternateContractProfileId, StringComparer.Ordinal))
+        {
+            return;
+        }
+
+        selectedAlternateContractProfileId = null;
     }
 
     private async Task OpenTreePropertySelector()
