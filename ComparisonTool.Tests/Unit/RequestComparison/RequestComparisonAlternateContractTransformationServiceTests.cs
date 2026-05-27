@@ -134,6 +134,25 @@ public class RequestComparisonAlternateContractTransformationServiceTests : IDis
         translatedRules[0].MaskCharacter.ShouldBe("#");
     }
 
+    [TestMethod]
+    public void GetEffectiveIgnoreRules_MergesProfileDefaultsWithRuntimeRules()
+    {
+        using var serviceProvider = CreateServiceProvider();
+        var transformationService = serviceProvider.GetRequiredService<RequestComparisonAlternateContractTransformationService>();
+        var job = CreateJob();
+        job.IgnoreRules.Add(new IgnoreRuleDto
+        {
+            PropertyPath = "CanonicalResponse.SecretToken",
+            IgnoreCompletely = true,
+        });
+
+        var effectiveRules = transformationService.GetEffectiveIgnoreRules(job);
+
+        effectiveRules.Count.ShouldBe(2);
+        effectiveRules.Any(rule => string.Equals(rule.PropertyPath, "CanonicalResponse.Name", StringComparison.Ordinal)).ShouldBeTrue();
+        effectiveRules.Any(rule => string.Equals(rule.PropertyPath, "CanonicalResponse.SecretToken", StringComparison.Ordinal)).ShouldBeTrue();
+    }
+
     private static ServiceProvider CreateServiceProvider()
     {
         var services = new ServiceCollection();
@@ -162,6 +181,11 @@ public class RequestComparisonAlternateContractTransformationServiceTests : IDis
                     .SupportSourceRequestFormats(SerializationFormat.Xml)
                     .UseAlternateRequestFormat(SerializationFormat.Json, "application/json")
                     .UseAlternateResponseFormat(SerializationFormat.Json)
+                    .AddDefaultIgnoreRule(new IgnoreRuleDto
+                    {
+                        PropertyPath = "CanonicalResponse.Name",
+                        IgnoreCompletely = true,
+                    })
                     .MapCanonicalResponsePropertyPath("CanonicalResponse.SecretToken", "Payload.RawToken"));
         });
 

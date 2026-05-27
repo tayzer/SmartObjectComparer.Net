@@ -1,4 +1,6 @@
 using ComparisonTool.Core.Serialization;
+using ComparisonTool.Core.RequestComparison.Models;
+using ComparisonTool.Core.RequestComparison.Services;
 using ComparisonTool.Core.Utilities;
 
 namespace ComparisonTool.Core.RequestComparison.AlternateContracts;
@@ -40,6 +42,23 @@ public sealed class RequestComparisonAlternateContractProfile
     public SerializationFormat AlternateResponseFormat { get; init; } = SerializationFormat.Json;
 
     /// <summary>
+    /// Gets the format used for the normalized comparison payload persisted for downstream comparison.
+    /// Defaults to XML for backward compatibility with the original alternate-contract flow.
+    /// </summary>
+    public SerializationFormat CanonicalResponseFormat { get; init; } = SerializationFormat.Xml;
+
+    /// <summary>
+    /// Gets the content type used for the normalized comparison payload persisted for downstream comparison.
+    /// </summary>
+    public string CanonicalResponseContentType { get; init; } = GetDefaultContentType(SerializationFormat.Xml);
+
+    /// <summary>
+    /// Gets profile-owned ignore rules applied ahead of runtime request-comparison ignore rules.
+    /// These rules are expressed against the canonical comparison model used downstream.
+    /// </summary>
+    public IReadOnlyList<IgnoreRuleDto> DefaultIgnoreRules { get; init; } = Array.Empty<IgnoreRuleDto>();
+
+    /// <summary>
     /// Gets the canonical-to-alternate raw response property path translations used for endpoint B masking.
     /// </summary>
     public IReadOnlyDictionary<string, string> CanonicalToAlternateResponseMaskPathMap { get; init; } =
@@ -66,6 +85,17 @@ public sealed class RequestComparisonAlternateContractProfile
 
     /// <summary>Gets the optional override used to serialize the canonical response payload for comparison.</summary>
     public Func<object, byte[]>? SerializeCanonicalResponseOverride { get; init; }
+
+    /// <summary>
+    /// Gets the optional override used to prepare the outbound endpoint B request.
+    /// This supports custom per-request processing such as token-service lookups.
+    /// </summary>
+    public Func<AlternateContractRequestPreparationContext, CancellationToken, ValueTask<PreparedAlternateContractRequest>>? PrepareAlternateRequestOverride { get; init; }
+
+    /// <summary>
+    /// Gets the optional override used to normalize the endpoint A response into the canonical comparison payload.
+    /// </summary>
+    public Func<AlternateContractEndpointAResponseNormalizationContext, CancellationToken, ValueTask<NormalizedAlternateContractResponse>>? NormalizeEndpointAResponseOverride { get; init; }
 
     /// <summary>
     /// Validates the profile configuration.
@@ -100,6 +130,24 @@ public sealed class RequestComparisonAlternateContractProfile
         if (string.IsNullOrWhiteSpace(AlternateRequestContentType))
         {
             throw new InvalidOperationException($"Alternate contract profile '{ProfileId}' must specify an endpoint B request content type.");
+        }
+
+        if (string.IsNullOrWhiteSpace(CanonicalResponseContentType))
+        {
+            throw new InvalidOperationException($"Alternate contract profile '{ProfileId}' must specify a canonical comparison response content type.");
+        }
+
+        foreach (var ignoreRule in DefaultIgnoreRules)
+        {
+            if (ignoreRule is null)
+            {
+                throw new InvalidOperationException($"Alternate contract profile '{ProfileId}' cannot contain null default ignore rules.");
+            }
+
+            if (string.IsNullOrWhiteSpace(ignoreRule.PropertyPath))
+            {
+                throw new InvalidOperationException($"Alternate contract profile '{ProfileId}' contains a default ignore rule with an empty property path.");
+            }
         }
 
         foreach (var mapping in CanonicalToAlternateResponseMaskPathMap)
@@ -157,11 +205,16 @@ public sealed class RequestComparisonAlternateContractProfileBuilder<TCanonicalR
     private SerializationFormat alternateRequestFormat = SerializationFormat.Json;
     private string alternateRequestContentType = RequestComparisonAlternateContractProfile.GetDefaultContentType(SerializationFormat.Json);
     private SerializationFormat alternateResponseFormat = SerializationFormat.Json;
+    private SerializationFormat canonicalResponseFormat = SerializationFormat.Xml;
+    private string canonicalResponseContentType = RequestComparisonAlternateContractProfile.GetDefaultContentType(SerializationFormat.Xml);
     private readonly Dictionary<string, string> canonicalToAlternateResponseMaskPathMap = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<IgnoreRuleDto> defaultIgnoreRules = new();
     private Func<Stream, SerializationFormat, TCanonicalRequest>? deserializeCanonicalRequestOverride;
     private Func<TAlternateRequest, byte[]>? serializeAlternateRequestOverride;
     private Func<Stream, string?, TAlternateResponse>? deserializeAlternateResponseOverride;
     private Func<TCanonicalResponse, byte[]>? serializeCanonicalResponseOverride;
+    private Func<AlternateContractRequestPreparationContext<TCanonicalRequest>, CancellationToken, ValueTask<PreparedAlternateContractRequest>>? prepareAlternateRequestOverride;
+    private Func<AlternateContractEndpointAResponseNormalizationContext, CancellationToken, ValueTask<NormalizedAlternateContractResponse>>? normalizeEndpointAResponseOverride;
 
     /// <summary>
     /// Replaces the set of supported source request formats.
@@ -197,6 +250,20 @@ public sealed class RequestComparisonAlternateContractProfileBuilder<TCanonicalR
     public RequestComparisonAlternateContractProfileBuilder<TCanonicalRequest, TAlternateRequest, TCanonicalResponse, TAlternateResponse> UseAlternateResponseFormat(SerializationFormat format)
     {
         alternateResponseFormat = format;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures the format and content type used for the normalized comparison payload.
+    /// </summary>
+    public RequestComparisonAlternateContractProfileBuilder<TCanonicalRequest, TAlternateRequest, TCanonicalResponse, TAlternateResponse> UseCanonicalResponseFormat(
+        SerializationFormat format,
+        string? contentType = null)
+    {
+        canonicalResponseFormat = format;
+        canonicalResponseContentType = string.IsNullOrWhiteSpace(contentType)
+            ? RequestComparisonAlternateContractProfile.GetDefaultContentType(format)
+            : contentType;
         return this;
     }
 
@@ -269,6 +336,48 @@ public sealed class RequestComparisonAlternateContractProfileBuilder<TCanonicalR
         return this;
     }
 
+    /// <summary>
+    /// Supplies a custom endpoint B request preparation delegate.
+    /// This can perform custom processing such as auth/token lookups before sending endpoint B.
+    /// </summary>
+    public RequestComparisonAlternateContractProfileBuilder<TCanonicalRequest, TAlternateRequest, TCanonicalResponse, TAlternateResponse> UseAlternateRequestPreparation(
+        Func<AlternateContractRequestPreparationContext<TCanonicalRequest>, CancellationToken, ValueTask<PreparedAlternateContractRequest>> prepareRequest)
+    {
+        prepareAlternateRequestOverride = prepareRequest;
+        return this;
+    }
+
+    /// <summary>
+    /// Supplies a custom endpoint A response normalization delegate.
+    /// This can map endpoint A's native response contract into the canonical comparison payload.
+    /// </summary>
+    public RequestComparisonAlternateContractProfileBuilder<TCanonicalRequest, TAlternateRequest, TCanonicalResponse, TAlternateResponse> UseEndpointAResponseNormalizer(
+        Func<AlternateContractEndpointAResponseNormalizationContext, CancellationToken, ValueTask<NormalizedAlternateContractResponse>> normalizer)
+    {
+        normalizeEndpointAResponseOverride = normalizer;
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a profile-owned default ignore rule expressed against the canonical comparison model.
+    /// </summary>
+    public RequestComparisonAlternateContractProfileBuilder<TCanonicalRequest, TAlternateRequest, TCanonicalResponse, TAlternateResponse> AddDefaultIgnoreRule(IgnoreRuleDto ignoreRule)
+    {
+        ArgumentNullException.ThrowIfNull(ignoreRule);
+        defaultIgnoreRules.Add(ignoreRule);
+        return this;
+    }
+
+    /// <summary>
+    /// Adds multiple profile-owned default ignore rules expressed against the canonical comparison model.
+    /// </summary>
+    public RequestComparisonAlternateContractProfileBuilder<TCanonicalRequest, TAlternateRequest, TCanonicalResponse, TAlternateResponse> AddDefaultIgnoreRules(IEnumerable<IgnoreRuleDto> ignoreRules)
+    {
+        ArgumentNullException.ThrowIfNull(ignoreRules);
+        defaultIgnoreRules.AddRange(ignoreRules);
+        return this;
+    }
+
     internal RequestComparisonAlternateContractProfile Build(
         string canonicalModelName,
         string profileId,
@@ -287,6 +396,9 @@ public sealed class RequestComparisonAlternateContractProfileBuilder<TCanonicalR
             AlternateRequestFormat = alternateRequestFormat,
             AlternateRequestContentType = alternateRequestContentType,
             AlternateResponseFormat = alternateResponseFormat,
+            CanonicalResponseFormat = canonicalResponseFormat,
+            CanonicalResponseContentType = canonicalResponseContentType,
+            DefaultIgnoreRules = defaultIgnoreRules.ToArray(),
             CanonicalToAlternateResponseMaskPathMap = new Dictionary<string, string>(canonicalToAlternateResponseMaskPathMap, StringComparer.OrdinalIgnoreCase),
             MapCanonicalRequestToAlternate = request => requestMapper((TCanonicalRequest)request),
             MapAlternateResponseToCanonical = response => responseMapper((TAlternateResponse)response),
@@ -301,7 +413,19 @@ public sealed class RequestComparisonAlternateContractProfileBuilder<TCanonicalR
                 : (stream, contentType) => ExecuteDeserializer(() => deserializeAlternateResponseOverride(stream, contentType)),
             SerializeCanonicalResponseOverride = serializeCanonicalResponseOverride == null
                 ? null
-                : value => serializeCanonicalResponseOverride((TCanonicalResponse)value)
+                : value => serializeCanonicalResponseOverride((TCanonicalResponse)value),
+            PrepareAlternateRequestOverride = prepareAlternateRequestOverride == null
+                ? null
+                : (context, cancellationToken) => prepareAlternateRequestOverride(
+                    new AlternateContractRequestPreparationContext<TCanonicalRequest>(
+                        context.Job,
+                        context.Request,
+                        context.SourceRequestBody,
+                        context.SourceFormat,
+                        (TCanonicalRequest)context.CanonicalRequest,
+                        context.Services),
+                    cancellationToken),
+            NormalizeEndpointAResponseOverride = normalizeEndpointAResponseOverride
         };
 
         profile.Validate();
@@ -323,3 +447,34 @@ public sealed class RequestComparisonAlternateContractProfileBuilder<TCanonicalR
         }
     }
 }
+
+/// <summary>
+/// Provides the data needed to prepare an alternate endpoint B request.
+/// </summary>
+public sealed record AlternateContractRequestPreparationContext(
+    RequestComparisonJob Job,
+    RequestFileInfo Request,
+    byte[] SourceRequestBody,
+    SerializationFormat SourceFormat,
+    object CanonicalRequest,
+    IServiceProvider Services);
+
+/// <summary>
+/// Strongly typed request-preparation context for alternate endpoint B requests.
+/// </summary>
+public sealed record AlternateContractRequestPreparationContext<TCanonicalRequest>(
+    RequestComparisonJob Job,
+    RequestFileInfo Request,
+    byte[] SourceRequestBody,
+    SerializationFormat SourceFormat,
+    TCanonicalRequest CanonicalRequest,
+    IServiceProvider Services)
+    where TCanonicalRequest : class;
+
+/// <summary>
+/// Provides the data needed to normalize an endpoint A response into the canonical comparison payload.
+/// </summary>
+public sealed record AlternateContractEndpointAResponseNormalizationContext(
+    RequestComparisonJob Job,
+    RequestExecutionResult ExecutionResult,
+    IServiceProvider Services);

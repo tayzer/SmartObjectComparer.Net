@@ -225,6 +225,9 @@ public class RequestComparisonJobService
                 c.Outcome == RequestPairOutcome.StatusCodeMismatch ||
                 c.Outcome == RequestPairOutcome.BothNonSuccess).ToList();
             var failedPairs = classified.Where(c => c.Outcome == RequestPairOutcome.OneOrBothFailed).ToList();
+            var alternateContractProfile = job.UseAlternateContractForEndpointB
+                ? _alternateContractTransformationService.ResolveProfile(job)
+                : null;
 
             _logger.LogInformation(
                 "Job {JobId} classification: BothSuccess={BothSuccess}, StatusCodeMismatch={StatusCodeMismatch}, BothNonSuccess={BothNonSuccess}, OneOrBothFailed={Failed}",
@@ -247,11 +250,26 @@ public class RequestComparisonJobService
                 // Phase 3a: Domain-model comparison for BothSuccess pairs (existing pipeline)
                 // Create temporary directories with only success response files to avoid
                 // domain-model comparison attempting to deserialize non-success responses
-                var tempDirA = Path.Combine(Path.GetTempPath(), $"success_responses_a_{jobId}");
-                var tempDirB = Path.Combine(Path.GetTempPath(), $"success_responses_b_{jobId}");
+                var usePersistentComparisonDirectories = alternateContractProfile != null;
+                var tempDirA = usePersistentComparisonDirectories
+                    ? Path.Combine(Path.GetTempPath(), "ComparisonToolJobs", job.JobId, "comparisonA")
+                    : Path.Combine(Path.GetTempPath(), $"success_responses_a_{jobId}");
+                var tempDirB = usePersistentComparisonDirectories
+                    ? Path.Combine(Path.GetTempPath(), "ComparisonToolJobs", job.JobId, "comparisonB")
+                    : Path.Combine(Path.GetTempPath(), $"success_responses_b_{jobId}");
 
                 try
                 {
+                    if (Directory.Exists(tempDirA))
+                    {
+                        Directory.Delete(tempDirA, recursive: true);
+                    }
+
+                    if (Directory.Exists(tempDirB))
+                    {
+                        Directory.Delete(tempDirB, recursive: true);
+                    }
+
                     Directory.CreateDirectory(tempDirA);
                     Directory.CreateDirectory(tempDirB);
 
@@ -288,11 +306,12 @@ public class RequestComparisonJobService
                     ApplyJobConfiguration(job, configService, xmlDeserializationService);
 
                     var comparisonService = scope.ServiceProvider.GetRequiredService<DirectoryComparisonService>();
+                    var comparisonModelName = alternateContractProfile?.CanonicalModelName ?? job.ModelName;
 
                     comparisonResult = await comparisonService.CompareDirectoriesAsync(
                         tempDirA,
                         tempDirB,
-                        job.ModelName,
+                        comparisonModelName,
                         includeAllFiles: true,
                         enablePatternAnalysis: true,
                         enableSemanticAnalysis: job.EnableSemanticAnalysis,
@@ -301,25 +320,28 @@ public class RequestComparisonJobService
                 }
                 finally
                 {
-                    // Clean up temporary directories
-                    try
+                    // Keep alternate-contract comparison artifacts for raw side-by-side view and report bundling.
+                    if (!usePersistentComparisonDirectories)
                     {
-                        if (Directory.Exists(tempDirA))
-                            Directory.Delete(tempDirA, recursive: true);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to delete temporary directory {TempDir}", tempDirA);
-                    }
+                        try
+                        {
+                            if (Directory.Exists(tempDirA))
+                                Directory.Delete(tempDirA, recursive: true);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to delete temporary directory {TempDir}", tempDirA);
+                        }
 
-                    try
-                    {
-                        if (Directory.Exists(tempDirB))
-                            Directory.Delete(tempDirB, recursive: true);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to delete temporary directory {TempDir}", tempDirB);
+                        try
+                        {
+                            if (Directory.Exists(tempDirB))
+                                Directory.Delete(tempDirB, recursive: true);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to delete temporary directory {TempDir}", tempDirB);
+                        }
                     }
                 }
             }
@@ -396,19 +418,29 @@ public class RequestComparisonJobService
                                 StringComparison.OrdinalIgnoreCase));
                     }
 
+                    if (execResult == null)
+                    {
+                        execResult = successPairs.FirstOrDefault(c =>
+                            string.Equals(
+                                Path.GetFileNameWithoutExtension(c.Execution.Request.RelativePath),
+                                Path.GetFileNameWithoutExtension(pairResult.File1Name),
+                                StringComparison.OrdinalIgnoreCase));
+                    }
+
                     if (execResult != null)
                     {
                         pairResult.RequestRelativePath = execResult.Execution.Request.RelativePath;
                         pairResult.PairOutcome = RequestPairOutcome.BothSuccess;
                         pairResult.HttpStatusCodeA = execResult.Execution.StatusCodeA;
                         pairResult.HttpStatusCodeB = execResult.Execution.StatusCodeB;
-                        pairResult.ContentTypeA = execResult.Execution.ContentTypeA;
-                        pairResult.ContentTypeB = execResult.Execution.ContentTypeB;
+                        pairResult.ContentTypeA = alternateContractProfile?.CanonicalResponseContentType ?? execResult.Execution.ContentTypeA;
+                        pairResult.ContentTypeB = alternateContractProfile?.CanonicalResponseContentType ?? execResult.Execution.ContentTypeB;
 
-                        // Propagate original response file paths for side-by-side raw content viewing.
-                        // The temp directory paths set by DirectoryComparisonService are deleted after comparison,
-                        // so we remap to the original response files which persist for the job lifetime.
-                        if (execResult.Execution.ResponsePathA != null && execResult.Execution.ResponsePathB != null)
+                        // Non-alternate jobs compare directly against the persisted endpoint responses, so keep
+                        // side-by-side raw content pointed at the original response bodies.
+                        if (alternateContractProfile == null &&
+                            execResult.Execution.ResponsePathA != null &&
+                            execResult.Execution.ResponsePathB != null)
                         {
                             pairResult.File1Path = execResult.Execution.ResponsePathA;
                             pairResult.File2Path = execResult.Execution.ResponsePathB;
@@ -431,6 +463,11 @@ public class RequestComparisonJobService
             comparisonResult.Metadata["ExecutionOutcomeSummary"] = outcomeSummary;
             comparisonResult.Metadata["UseAlternateContractForEndpointB"] = job.UseAlternateContractForEndpointB;
             comparisonResult.Metadata["AlternateContractProfileId"] = job.AlternateContractProfileId;
+            if (alternateContractProfile != null)
+            {
+                comparisonResult.Metadata["AlternateContractCanonicalResponseFormat"] = alternateContractProfile.CanonicalResponseFormat.ToString();
+                comparisonResult.Metadata["AlternateContractDefaultIgnoreRuleCount"] = alternateContractProfile.DefaultIgnoreRules.Count;
+            }
             comparisonResult.Metadata["ExecutionResults"] = executionResults
                 .Where(r => !r.Success)
                 .Select(r => new { r.Request.RelativePath, r.ErrorMessage })
@@ -510,14 +547,17 @@ public class RequestComparisonJobService
         IComparisonConfigurationService configService,
         IXmlDeserializationService xmlDeserializationService)
     {
+        var effectiveIgnoreRules = _alternateContractTransformationService.GetEffectiveIgnoreRules(job);
+
         _logger.LogInformation(
-            "Applying job configuration for {JobId}: IgnoreCollectionOrder={IgnoreCollectionOrder}, IgnoreStringCase={IgnoreStringCase}, IgnoreTrailingWhitespaceAtEnd={IgnoreTrailingWhitespaceAtEnd}, IgnoreXmlNamespaces={IgnoreXmlNamespaces}, IgnoreRules={IgnoreRuleCount}, SmartIgnoreRules={SmartIgnoreRuleCount}",
+            "Applying job configuration for {JobId}: IgnoreCollectionOrder={IgnoreCollectionOrder}, IgnoreStringCase={IgnoreStringCase}, IgnoreTrailingWhitespaceAtEnd={IgnoreTrailingWhitespaceAtEnd}, IgnoreXmlNamespaces={IgnoreXmlNamespaces}, IgnoreRules={IgnoreRuleCount}, EffectiveIgnoreRules={EffectiveIgnoreRuleCount}, SmartIgnoreRules={SmartIgnoreRuleCount}",
             job.JobId,
             job.IgnoreCollectionOrder,
             job.IgnoreStringCase,
             job.IgnoreTrailingWhitespaceAtEnd,
             job.IgnoreXmlNamespaces,
             job.IgnoreRules.Count,
+            effectiveIgnoreRules.Count,
             job.SmartIgnoreRules.Count);
 
         // Clear existing rules to start fresh for this job
@@ -531,7 +571,7 @@ public class RequestComparisonJobService
         xmlDeserializationService.IgnoreXmlNamespaces = job.IgnoreXmlNamespaces;
 
         // Apply ignore rules
-        foreach (var ruleDto in job.IgnoreRules)
+        foreach (var ruleDto in effectiveIgnoreRules)
         {
             var rule = new IgnoreRule
             {
@@ -586,7 +626,8 @@ public class RequestComparisonJobService
             return;
         }
 
-        var canonicalRelativePath = BuildCanonicalXmlRelativePath(executionResult.Request.RelativePath);
+        var profile = _alternateContractTransformationService.ResolveProfile(job);
+        var canonicalRelativePath = BuildCanonicalRelativePath(executionResult.Request.RelativePath, profile.CanonicalResponseFormat);
         var targetCanonicalPathA = Path.Combine(tempDirA, canonicalRelativePath);
         var targetCanonicalPathB = Path.Combine(tempDirB, canonicalRelativePath);
 
@@ -620,10 +661,10 @@ public class RequestComparisonJobService
         return Path.Combine(rootDirectory, sanitizedPath);
     }
 
-    private static string BuildCanonicalXmlRelativePath(string requestRelativePath)
+    private static string BuildCanonicalRelativePath(string requestRelativePath, SerializationFormat format)
     {
         var sanitizedPath = SanitizeRelativePath(requestRelativePath);
-        return Path.ChangeExtension(sanitizedPath, FileTypeDetector.GetFileExtension(SerializationFormat.Xml));
+        return Path.ChangeExtension(sanitizedPath, FileTypeDetector.GetFileExtension(format));
     }
 
     private static string SanitizeRelativePath(string relativePath) => relativePath

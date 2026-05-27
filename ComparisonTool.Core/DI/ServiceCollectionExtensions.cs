@@ -22,6 +22,8 @@ namespace ComparisonTool.Core.DI;
 /// </summary>
 public static class ServiceCollectionExtensions
 {
+    private sealed record SharedDomainModelRegistration(string ModelName, Type ModelType);
+
     /// <summary>
     /// Add XML comparison services with proper dependency injection.
     /// </summary>
@@ -89,6 +91,8 @@ public static class ServiceCollectionExtensions
 
             // Register test domain model for JSON/XML comparison testing
             service.RegisterDomainModel<ComparisonTool.Domain.Models.CustomerOrder>("CustomerOrder");
+
+            ApplySharedDomainModelRegistrations(provider, service);
 
             return service;
         });
@@ -199,23 +203,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection RegisterDomainModel<T>(this IServiceCollection services, string modelName)
         where T : class
     {
-        services.AddSingleton<Action<IServiceProvider>>(provider => serviceProvider =>
-        {
-            // Register with unified service if available
-            var unifiedService = serviceProvider.GetService<IDeserializationService>();
-            if (unifiedService != null)
-            {
-                unifiedService.RegisterDomainModel<T>(modelName);
-                return;
-            }
-
-            // Fallback to individual services
-            var xmlService = serviceProvider.GetService<IXmlDeserializationService>();
-            xmlService?.RegisterDomainModel<T>(modelName);
-
-            var jsonService = serviceProvider.GetService<JsonDeserializationService>();
-            jsonService?.RegisterDomainModel<T>(modelName);
-        });
+        services.AddSingleton(new SharedDomainModelRegistration(modelName, typeof(T)));
 
         return services;
     }
@@ -291,8 +279,25 @@ public static class ServiceCollectionExtensions
             var configService = provider.GetRequiredService<IComparisonConfigurationService>();
             var service = new XmlDeserializationService(logger, serializerFactory, configService);
             options.ApplyDomainModelRegistrations(service);
+            ApplySharedDomainModelRegistrations(provider, service);
             return service;
         });
+    }
+
+    private static void ApplySharedDomainModelRegistrations(IServiceProvider provider, object service)
+    {
+        var registrations = provider.GetServices<SharedDomainModelRegistration>();
+        var registerMethod = service.GetType().GetMethod(nameof(IXmlDeserializationService.RegisterDomainModel));
+        if (registerMethod == null)
+        {
+            return;
+        }
+
+        foreach (var registration in registrations)
+        {
+            var genericRegisterMethod = registerMethod.MakeGenericMethod(registration.ModelType);
+            genericRegisterMethod.Invoke(service, new object[] { registration.ModelName });
+        }
     }
 
     private static void RegisterComparisonServices(IServiceCollection services)

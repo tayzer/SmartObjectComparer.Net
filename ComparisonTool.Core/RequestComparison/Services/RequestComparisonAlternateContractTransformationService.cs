@@ -24,6 +24,7 @@ public sealed class RequestComparisonAlternateContractTransformationService
     private readonly IXmlDeserializationService xmlDeserializationService;
     private readonly JsonDeserializationService jsonDeserializationService;
     private readonly XmlSerializerFactory xmlSerializerFactory;
+    private readonly IServiceProvider services;
     private readonly ILogger<RequestComparisonAlternateContractTransformationService> logger;
 
     public RequestComparisonAlternateContractTransformationService(
@@ -31,12 +32,14 @@ public sealed class RequestComparisonAlternateContractTransformationService
         IXmlDeserializationService xmlDeserializationService,
         JsonDeserializationService jsonDeserializationService,
         XmlSerializerFactory xmlSerializerFactory,
+        IServiceProvider services,
         ILogger<RequestComparisonAlternateContractTransformationService> logger)
     {
         this.profileRegistry = profileRegistry;
         this.xmlDeserializationService = xmlDeserializationService;
         this.jsonDeserializationService = jsonDeserializationService;
         this.xmlSerializerFactory = xmlSerializerFactory;
+        this.services = services;
         this.logger = logger;
     }
 
@@ -81,6 +84,30 @@ public sealed class RequestComparisonAlternateContractTransformationService
     }
 
     /// <summary>
+    /// Gets the effective ignore rules for downstream structured comparison.
+    /// Profile-owned defaults are applied before runtime job rules.
+    /// </summary>
+    public IReadOnlyList<IgnoreRuleDto> GetEffectiveIgnoreRules(RequestComparisonJob job)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+
+        if (!job.UseAlternateContractForEndpointB)
+        {
+            return job.IgnoreRules;
+        }
+
+        var profile = ResolveProfile(job);
+        if (profile.DefaultIgnoreRules.Count == 0)
+        {
+            return job.IgnoreRules;
+        }
+
+        return profile.DefaultIgnoreRules
+            .Concat(job.IgnoreRules)
+            .ToArray();
+    }
+
+    /// <summary>
     /// Transforms the uploaded canonical request into the endpoint B request payload.
     /// </summary>
     public Task<PreparedAlternateContractRequest> PrepareEndpointBRequestAsync(
@@ -109,6 +136,20 @@ public sealed class RequestComparisonAlternateContractTransformationService
 
         using var stream = new MemoryStream(sourceRequestBody, writable: false);
         var canonicalRequest = DeserializeCanonicalRequest(profile, stream, sourceFormat.Value, request.RelativePath);
+
+        if (profile.PrepareAlternateRequestOverride != null)
+        {
+            return profile.PrepareAlternateRequestOverride(
+                new AlternateContractRequestPreparationContext(
+                    job,
+                    request,
+                    sourceRequestBody,
+                    sourceFormat.Value,
+                    canonicalRequest,
+                    services),
+                cancellationToken).AsTask();
+        }
+
         var alternateRequest = profile.MapCanonicalRequestToAlternate(canonicalRequest);
         var serializedRequest = SerializeAlternateRequest(profile, alternateRequest);
 
@@ -153,8 +194,8 @@ public sealed class RequestComparisonAlternateContractTransformationService
 
         return Task.FromResult(new NormalizedAlternateContractResponse(
             canonicalBytes,
-            SerializationFormat.Xml,
-            RequestComparisonAlternateContractProfile.GetDefaultContentType(SerializationFormat.Xml),
+            profile.CanonicalResponseFormat,
+            profile.CanonicalResponseContentType,
             profile.ProfileId));
     }
 
@@ -174,7 +215,19 @@ public sealed class RequestComparisonAlternateContractTransformationService
             throw new InvalidOperationException($"Endpoint A response file for request '{executionResult.Request.RelativePath}' is not available.");
         }
 
-        var modelType = xmlDeserializationService.GetModelType(job.ModelName);
+        var profile = ResolveProfile(job);
+        if (profile.NormalizeEndpointAResponseOverride != null)
+        {
+            var normalized = await profile.NormalizeEndpointAResponseOverride(
+                new AlternateContractEndpointAResponseNormalizationContext(job, executionResult, services),
+                cancellationToken).ConfigureAwait(false);
+
+            return string.IsNullOrWhiteSpace(normalized.ProfileId)
+                ? normalized with { ProfileId = profile.ProfileId }
+                : normalized;
+        }
+
+        var modelType = profile.CanonicalResponseType;
         await using var stream = File.OpenRead(executionResult.ResponsePathA);
         var deserializationResult = DeserializeWithDetectedFormat(stream, executionResult.ContentTypeA, executionResult.ResponsePathA, modelType);
         if (!deserializationResult.Success)
@@ -183,12 +236,12 @@ public sealed class RequestComparisonAlternateContractTransformationService
                 $"Failed to deserialize endpoint A response for '{executionResult.Request.RelativePath}': {deserializationResult.ErrorMessage}");
         }
 
-        var canonicalBytes = SerializeCanonicalResponseObject(deserializationResult.Value!, modelType);
+        var canonicalBytes = SerializeCanonicalResponse(profile, deserializationResult.Value!);
         return new NormalizedAlternateContractResponse(
             canonicalBytes,
-            SerializationFormat.Xml,
-            RequestComparisonAlternateContractProfile.GetDefaultContentType(SerializationFormat.Xml),
-            null);
+            profile.CanonicalResponseFormat,
+            profile.CanonicalResponseContentType,
+            profile.ProfileId);
     }
 
     private object DeserializeCanonicalRequest(
@@ -246,7 +299,7 @@ public sealed class RequestComparisonAlternateContractTransformationService
             return profile.SerializeCanonicalResponseOverride(canonicalResponse);
         }
 
-        return SerializeCanonicalResponseObject(canonicalResponse, profile.CanonicalResponseType);
+        return SerializeByFormat(canonicalResponse, profile.CanonicalResponseType, profile.CanonicalResponseFormat);
     }
 
     private byte[] SerializeCanonicalResponseObject(object canonicalResponse, Type canonicalType)
