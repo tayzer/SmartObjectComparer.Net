@@ -115,6 +115,33 @@ public sealed class RawContentServiceTests
         accessor.InvocationCount.ShouldBe(1);
     }
 
+    [TestMethod]
+    public async Task LoadRawContentAsync_LoadsNormalizedJsonArtifactsFromDisk()
+    {
+        var pathA = Path.Combine(tempDir, "comparison-a.json");
+        var pathB = Path.Combine(tempDir, "comparison-b.json");
+        const string bodyA = "{\"resultCode\":\"00\",\"sourceSystem\":\"endpoint-a\"}";
+        const string bodyB = "{\"resultCode\":\"00\",\"sourceSystem\":\"endpoint-b\"}";
+
+        await File.WriteAllTextAsync(pathA, bodyA, Encoding.UTF8);
+        await File.WriteAllTextAsync(pathB, bodyB, Encoding.UTF8);
+
+        var pair = new FilePairComparisonResult
+        {
+            File1Path = pathA,
+            File2Path = pathB,
+            ContentTypeA = "application/json",
+            ContentTypeB = "application/json",
+        };
+
+        var result = await service.LoadRawContentAsync(pair);
+
+        result.IsLoaded.ShouldBeTrue();
+        result.ErrorMessage.ShouldBeNull();
+        result.ContentA.ShouldBe(bodyA);
+        result.ContentB.ShouldBe(bodyB);
+    }
+
     private sealed class StubBundledRawContentAccessor : IBundledRawContentAccessor
     {
         private readonly RawContentResult result;

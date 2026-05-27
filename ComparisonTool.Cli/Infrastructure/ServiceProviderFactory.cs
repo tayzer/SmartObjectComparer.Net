@@ -21,6 +21,8 @@ public static class ServiceProviderFactory
     {
         var services = new ServiceCollection();
 
+        RequestComparisonAlternateContractBuiltInRegistration.RegisterSharedComparisonModels(services);
+
         // Logging via Serilog
         services.AddLogging(builder =>
         {
@@ -32,12 +34,10 @@ public static class ServiceProviderFactory
         services.AddUnifiedComparisonServices(configuration, options =>
         {
             options.RegisterDomainModelWithRootElement<SoapEnvelope>("SoapEnvelope", "Envelope");
-            RequestComparisonAlternateContractSampleRegistration.RegisterComparisonModels(options);
+            RequestComparisonAlternateContractBuiltInRegistration.RegisterXmlComparisonModels(options);
         });
 
-        // Sample alternate-contract wiring using repo-local test models for discoverability only.
-        services.AddRequestComparisonAlternateContractProfiles(
-            RequestComparisonAlternateContractSampleRegistration.RegisterProfiles);
+        services.AddBuiltInRequestComparisonAlternateContracts(configuration);
 
         // HTTP client for request comparison
         services.AddHttpClient("RequestComparison")

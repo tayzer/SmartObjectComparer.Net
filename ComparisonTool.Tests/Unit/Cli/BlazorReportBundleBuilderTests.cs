@@ -103,6 +103,31 @@ public sealed class BlazorReportBundleBuilderTests : IDisposable
         pair.BundledRawContentPath.ShouldBeNull();
     }
 
+    [TestMethod]
+    public async Task BuildBundledRawContentDataAsync_WhenPairUsesNormalizedJsonArtifacts_FormatsJsonForDisplay()
+    {
+        var fileA = this.CreateTempFile("success-a.json", "{\"resultCode\":\"00\",\"sourceSystem\":\"endpoint-a\"}");
+        var fileB = this.CreateTempFile("success-b.json", "{\"resultCode\":\"00\",\"sourceSystem\":\"endpoint-b\"}");
+        var pair = new FilePairComparisonResult
+        {
+            File1Name = fileA.Name,
+            File2Name = fileB.Name,
+            File1Path = fileA.FullName,
+            File2Path = fileB.FullName,
+            ContentTypeA = "application/json",
+            ContentTypeB = "application/json",
+        };
+
+        var bundled = await BlazorReportBundleBuilder.BuildBundledRawContentDataAsync(pair).ConfigureAwait(false);
+
+        bundled.ErrorMessage.ShouldBeNull();
+        bundled.ContentA.ShouldContain("\n  \"resultCode\": \"00\"");
+        bundled.ContentA.ShouldContain("\n  \"sourceSystem\": \"endpoint-a\"");
+        bundled.ContentB.ShouldContain("\n  \"sourceSystem\": \"endpoint-b\"");
+        bundled.IsTruncatedA.ShouldBeFalse();
+        bundled.IsTruncatedB.ShouldBeFalse();
+    }
+
     private static ReportContext CreateContext(FilePairComparisonResult pair)
     {
         return new ReportContext

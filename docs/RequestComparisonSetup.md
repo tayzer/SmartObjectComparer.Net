@@ -2,6 +2,8 @@
 
 How to integrate your own SOAP/REST domain models into the ComparisonTool request comparison feature.
 
+If you want a task-oriented recipe instead of the API reference, start with [RequestComparisonCustomUseCaseGuide.md](RequestComparisonCustomUseCaseGuide.md).
+
 ---
 
 ## 1. Overview
@@ -130,9 +132,11 @@ public class MyJsonGetOrderResponse
 
 ---
 
-## 4. Step 2: Register the canonical XML model
+## 4. Step 2: Register the comparison model
 
-This call goes **inside** the `AddUnifiedComparisonServices()` (or `AddXmlComparisonServices()`) delegate. It registers the canonical request/response type with the XML deserialization service so the tool can deserialize uploaded request files.
+If the downstream comparison model is XML, register it inside the `AddUnifiedComparisonServices()` (or `AddXmlComparisonServices()`) delegate.
+
+If the downstream comparison model is JSON, register it on `IServiceCollection` with `services.RegisterDomainModel<T>(...)` so the shared XML/JSON deserializers both see it and the model appears in the Request Comparison dropdown.
 
 ### Most common: SOAP envelope with a different root element name
 
@@ -177,6 +181,25 @@ options.IgnoreXmlNamespaces = false; // strict — namespaces must match exactly
 ### The `modelName` string
 
 The value you pass as `modelName` is the key the tool uses everywhere: it appears in the comparison panel's model dropdown and it **must exactly match** the `canonicalModelName` you specify in step 4. Choose a stable, descriptive string — it is user-visible.
+
+### When the downstream comparison model is JSON
+
+This is the important difference for the new custom-profile flow. The comparison model is no longer the SOAP/XML response type; it is the JSON model both endpoints are normalized into before diffing.
+
+```csharp
+// Registers the JSON comparison model with the shared XML/JSON deserializer graph.
+services.RegisterDomainModel<MyExpectedJsonResponse>("MyExpectedJsonResponse");
+
+services.AddUnifiedComparisonServices(configuration, options =>
+{
+    // This XML registration still belongs here because the uploaded source request is SOAP/XML.
+    options.RegisterDomainModelWithRootElement<MyRequestEnvelope>(
+        modelName: "MySoapRequestEnvelope",
+        rootElementName: "Envelope");
+});
+```
+
+If you only register the JSON model inside `XmlComparisonOptions`, it will not be available consistently for JSON comparison and it may not appear in the model selector.
 
 ---
 
@@ -311,6 +334,10 @@ services.AddRequestComparisonAlternateContractProfiles(options =>
 | `UseAlternateRequestSerializer(Func<T, byte[]>, contentType?)` | Override how `TAlternateRequest` is serialized for the endpoint B HTTP body | Built-in JSON serializer |
 | `UseAlternateResponseDeserializer(Func<Stream, string?, T>)` | Override how endpoint B's response body is deserialized into `TAlternateResponse` | Built-in JSON deserializer |
 | `UseCanonicalResponseSerializer(Func<T, byte[]>)` | Override how `TCanonicalResponse` is serialized for comparison output | Built-in XML serializer |
+| `UseCanonicalResponseFormat(format, contentType?)` | Change the normalized comparison artifact format persisted for downstream diffing | `Xml` / `application/xml` |
+| `UseAlternateRequestPreparation(...)` | Replace simple request mapping with async per-request preparation, such as a token-service lookup | Disabled |
+| `UseEndpointAResponseNormalizer(...)` | Normalize endpoint A's raw response directly into the downstream comparison artifact | Disabled |
+| `AddDefaultIgnoreRule(...)` / `AddDefaultIgnoreRules(...)` | Apply profile-owned ignore rules before job-specific ignore rules | None |
 
 ---
 
@@ -327,8 +354,40 @@ The `canonicalModelName` string is the only link between the two registrations. 
 ### Call-order requirements
 
 - **Step 2 must be inside** the `AddUnifiedComparisonServices` (or `AddXmlComparisonServices`) delegate. Calling it after the method returns has no effect.
+- **JSON comparison models are different:** register them with `services.RegisterDomainModel<T>(...)` on the service collection, not only inside `XmlComparisonOptions`.
 - **Step 4 must be a separate** `AddRequestComparisonAlternateContractProfiles` call. It does not go inside `AddUnifiedComparisonServices`.
 - The two calls can appear in any order relative to each other — they both register singletons that are resolved at request time.
+
+### Built-in host wiring pattern
+
+The repo now uses this pattern for the built-in SOAP-to-JSON expected-model sample:
+
+```csharp
+RequestComparisonAlternateContractBuiltInRegistration.RegisterSharedComparisonModels(builder.Services);
+
+builder.Services.AddUnifiedComparisonServices(builder.Configuration, options =>
+{
+        options.RegisterDomainModelWithRootElement<SoapEnvelope>("SoapEnvelope", "Envelope");
+        RequestComparisonAlternateContractBuiltInRegistration.RegisterXmlComparisonModels(options);
+});
+
+builder.Services.AddBuiltInRequestComparisonAlternateContracts(builder.Configuration);
+```
+
+The matching token-service configuration lives under:
+
+```json
+{
+    "RequestComparison": {
+        "AlternateContracts": {
+            "ExpectedJsonCustomerLookup": {
+                "AuthorizationTokenUrl": "http://localhost:5055/api/mock/authorisation-token",
+                "HttpClientName": "RequestComparison"
+            }
+        }
+    }
+}
+```
 
 ---
 
@@ -340,6 +399,8 @@ Once the registration is in place and the host restarts:
 2. Enable **"Use Alternate Contract for Endpoint B"**.
 3. Select your profile from the **alternate contract profile** dropdown (identified by the `profileId` you registered).
 4. Upload an XML request file and run the comparison as normal.
+
+If the comparison model does not appear in the first dropdown, the host almost always forgot the `services.RegisterDomainModel<T>(...)` call for the downstream JSON model.
 
 The tool deserializes the uploaded file into `TCanonicalRequest`, maps it to `TAlternateRequest`, sends it to endpoint B, receives `TAlternateResponse`, maps it back to `TCanonicalResponse`, and then diffs the two canonical responses.
 

@@ -1,8 +1,10 @@
 using System.Text;
+using System.Text.Json;
 using System.Xml;
 using System.Xml.Serialization;
 using ComparisonTool.Core.Models;
 using Microsoft.AspNetCore.Http.HttpResults;
+using RequestComparisonDomain = ComparisonTool.Domain.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,6 +32,72 @@ app.MapPost("/api/mock/b", async (HttpRequest request) =>
     var contentType = request.ContentType ?? "text/plain";
 
     return BuildResponse("B", body, contentType, includeDiff: true);
+});
+
+app.MapPost("/api/mock/authorisation-token", async (HttpRequest request) =>
+{
+    var payload = await request.ReadFromJsonAsync<RequestComparisonDomain.ExpectedJsonCustomerLookupAuthorizationTokenRequest>();
+    if (payload == null)
+    {
+        return Results.BadRequest(new { error = "Invalid auth request" });
+    }
+
+    return Results.Json(new RequestComparisonDomain.ExpectedJsonCustomerLookupAuthorizationTokenResponse
+    {
+        AuthorizationToken = $"AUTHZ-{payload.CustomerId}",
+        BackupAuthorizationToken = $"BACKUP-{payload.CustomerId}",
+    });
+});
+
+app.MapPost("/api/mock/customer-lookup/soap", async (HttpRequest request) =>
+{
+    var body = await new StreamReader(request.Body).ReadToEndAsync();
+    var lookupRequest = DeserializeXml<RequestComparisonDomain.ExpectedJsonCustomerLookupSoapRequestEnvelope>(body);
+    var customerId = lookupRequest.Body.CustomerLookupRequest.CustomerId;
+    var isSuccess = string.Equals(customerId, "1001", StringComparison.Ordinal);
+
+    if (!isSuccess)
+    {
+        return Results.Text("<error><message>Invalid request</message></error>", "application/xml", statusCode: StatusCodes.Status400BadRequest);
+    }
+
+    return Results.Text(
+        SerializeToXml(new RequestComparisonDomain.ExpectedJsonCustomerLookupSoapResponseEnvelope
+        {
+            Body = new RequestComparisonDomain.ExpectedJsonCustomerLookupSoapResponseBody
+            {
+                CustomerLookupResponse = new RequestComparisonDomain.ExpectedJsonCustomerLookupSoapResponse
+                {
+                    StatusCode = "00",
+                    CustomerName = "Alpha",
+                    TraceId = "trace-1001",
+                },
+            },
+        }),
+        "application/xml");
+});
+
+app.MapPost("/api/mock/customer-lookup/json", async (HttpRequest request) =>
+{
+    var payload = await request.ReadFromJsonAsync<RequestComparisonDomain.ExpectedJsonCustomerLookupAlternateRequest>();
+    if (payload == null)
+    {
+        return Results.BadRequest(new { error = "Invalid lookup request" });
+    }
+
+    var isSuccess = string.Equals(payload.LookupId, "1001", StringComparison.Ordinal);
+    if (!isSuccess)
+    {
+        return Results.BadRequest(new { error = "invalid request" });
+    }
+
+    return Results.Json(new RequestComparisonDomain.ExpectedJsonCustomerLookupAlternateResponse
+    {
+        ResultCode = "00",
+        CustomerName = "Alpha",
+        TraceId = "trace-1001",
+        SourceSystem = "endpoint-b",
+    });
 });
 
 app.Run();
@@ -128,6 +196,14 @@ static string SerializeToXml<T>(T value)
     using var xmlWriter = XmlWriter.Create(writer, settings);
     serializer.Serialize(xmlWriter, value, namespaces);
     return writer.ToString();
+}
+
+static T DeserializeXml<T>(string xml)
+{
+    var serializer = new XmlSerializer(typeof(T));
+    using var reader = new StringReader(xml);
+    return (T)(serializer.Deserialize(reader) ?? throw new InvalidOperationException(
+        $"Deserialization for '{typeof(T).Name}' returned null."));
 }
 
 sealed class Utf8StringWriter : StringWriter

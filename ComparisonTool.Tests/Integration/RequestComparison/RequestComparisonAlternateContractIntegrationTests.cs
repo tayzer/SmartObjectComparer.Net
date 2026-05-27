@@ -10,6 +10,7 @@ using ComparisonTool.Core.RequestComparison.Models;
 using ComparisonTool.Core.RequestComparison.Services;
 using ComparisonTool.Core.Serialization;
 using ComparisonTool.Domain.Models;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -21,8 +22,8 @@ namespace ComparisonTool.Tests.Integration.RequestComparison;
 [TestClass]
 public sealed class RequestComparisonAlternateContractIntegrationTests : IDisposable
 {
-    private const string AdvancedExpectedModelName = "AdvancedExpectedJsonCustomerLookupResponse";
-    private const string AdvancedProfileId = "advanced-soap-to-json-expected";
+    private const string AdvancedExpectedModelName = RequestComparisonExpectedJsonCustomerLookupRegistration.ExpectedModelName;
+    private const string AdvancedProfileId = RequestComparisonExpectedJsonCustomerLookupRegistration.ProfileId;
 
     private readonly List<string> createdDirectories = new();
 
@@ -165,7 +166,7 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
 
         var endpointBRequests = handler.GetCapturedRequests("endpoint-b.test");
         endpointBRequests.Count.ShouldBe(2);
-        endpointBRequests.Any(request => request.Body.Contains("\"AuthorizationToken\":\"AUTHZ-1001\"", StringComparison.Ordinal)).ShouldBeTrue();
+        endpointBRequests.Any(request => request.Body.Contains("\"authorizationToken\":\"AUTHZ-1001\"", StringComparison.Ordinal)).ShouldBeTrue();
         endpointBRequests.All(request => !request.Body.Contains("BACKUP-", StringComparison.Ordinal)).ShouldBeTrue();
 
         var successPair = result.FilePairResults.Single(pair =>
@@ -186,8 +187,8 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
 
         normalizedEndpointA.TrimStart().StartsWith("{", StringComparison.Ordinal).ShouldBeTrue();
         normalizedEndpointB.TrimStart().StartsWith("{", StringComparison.Ordinal).ShouldBeTrue();
-        normalizedEndpointA.ShouldContain("\"SourceSystem\":\"endpoint-a\"", Case.Sensitive);
-        normalizedEndpointB.ShouldContain("\"SourceSystem\":\"endpoint-b\"", Case.Sensitive);
+        normalizedEndpointA.ShouldContain("\"sourceSystem\":\"endpoint-a\"", Case.Sensitive);
+        normalizedEndpointB.ShouldContain("\"sourceSystem\":\"endpoint-b\"", Case.Sensitive);
 
         var rawPair = result.FilePairResults.Single(pair =>
             string.Equals(pair.RequestRelativePath, "error-request.xml", StringComparison.Ordinal));
@@ -204,12 +205,12 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
         var services = new ServiceCollection();
 
         services.AddLogging(builder => builder.AddDebug().SetMinimumLevel(LogLevel.Warning));
+        RequestComparisonAlternateContractBuiltInRegistration.RegisterSharedComparisonModels(services);
         services.AddUnifiedComparisonServices(options =>
         {
-            RequestComparisonAlternateContractSampleRegistration.RegisterComparisonModels(options);
+            RequestComparisonAlternateContractBuiltInRegistration.RegisterXmlComparisonModels(options);
         });
-        services.AddRequestComparisonAlternateContractProfiles(
-            RequestComparisonAlternateContractSampleRegistration.RegisterProfiles);
+        services.AddBuiltInRequestComparisonAlternateContracts();
         services.AddSingleton<IHttpClientFactory>(new TestHttpClientFactory(handler));
         services.AddSingleton<RequestFileParserService>();
         services.AddSingleton<ResponseMaskingService>();
@@ -224,93 +225,21 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
     private static ServiceProvider CreateAdvancedServiceProvider(AdvancedAlternateContractTestHttpMessageHandler handler)
     {
         var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [$"{ExpectedJsonCustomerLookupAlternateContractOptions.ConfigurationSectionName}:AuthorizationTokenUrl"] = "https://auth.test/authorisation-token",
+            })
+            .Build();
 
         services.AddLogging(builder => builder.AddDebug().SetMinimumLevel(LogLevel.Warning));
-        services.AddUnifiedComparisonServices();
-        services.RegisterDomainModel<ExpectedJsonCustomerLookupResponse>(AdvancedExpectedModelName);
-        services.AddRequestComparisonAlternateContractProfiles(options =>
+        services.AddSingleton<IConfiguration>(configuration);
+        RequestComparisonAlternateContractBuiltInRegistration.RegisterSharedComparisonModels(services);
+        services.AddUnifiedComparisonServices(configuration, options =>
         {
-            options.RegisterProfile<AdvancedSoapCustomerLookupRequestEnvelope, AdvancedAlternateJsonCustomerLookupRequest, ExpectedJsonCustomerLookupResponse, AdvancedAlternateJsonCustomerLookupResponse>(
-                canonicalModelName: AdvancedExpectedModelName,
-                profileId: AdvancedProfileId,
-                requestMapper: request => new AdvancedAlternateJsonCustomerLookupRequest
-                {
-                    LookupId = request.Body.CustomerLookupRequest.CustomerId,
-                },
-                responseMapper: response => new ExpectedJsonCustomerLookupResponse
-                {
-                    ResultCode = response.ResultCode,
-                    CustomerName = response.CustomerName,
-                    TraceId = response.TraceId,
-                    SourceSystem = response.SourceSystem,
-                },
-                configure: builder => builder
-                    .SupportSourceRequestFormats(SerializationFormat.Xml)
-                    .UseAlternateRequestFormat(SerializationFormat.Json, "application/json")
-                    .UseAlternateResponseFormat(SerializationFormat.Json)
-                    .UseCanonicalResponseFormat(SerializationFormat.Json, "application/json")
-                    .UseAlternateRequestPreparation(async (context, cancellationToken) =>
-                    {
-                        var clientFactory = context.Services.GetRequiredService<IHttpClientFactory>();
-                        using var client = clientFactory.CreateClient("RequestComparison");
-
-                        var tokenRequest = new AdvancedAuthorisationTokenRequest
-                        {
-                            CustomerId = context.CanonicalRequest.Body.CustomerLookupRequest.CustomerId,
-                            AuthenticationToken = context.CanonicalRequest.Body.CustomerLookupRequest.AuthenticationToken,
-                        };
-
-                        using var response = await client.PostAsync(
-                            "https://auth.test/authorisation-token",
-                            new StringContent(JsonSerializer.Serialize(tokenRequest), Encoding.UTF8, "application/json"),
-                            cancellationToken).ConfigureAwait(false);
-                        response.EnsureSuccessStatusCode();
-
-                        var payload = JsonSerializer.Deserialize<AdvancedAuthorisationTokenResponse>(
-                            await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false))
-                            ?? throw new InvalidOperationException("Auth service did not return a payload.");
-
-                        var outboundRequest = new AdvancedAlternateJsonCustomerLookupRequest
-                        {
-                            LookupId = tokenRequest.CustomerId,
-                            AuthorizationToken = payload.AuthorizationToken,
-                        };
-
-                        return new PreparedAlternateContractRequest(
-                            JsonSerializer.SerializeToUtf8Bytes(outboundRequest),
-                            "application/json",
-                            SerializationFormat.Json,
-                            AdvancedProfileId);
-                    })
-                    .UseEndpointAResponseNormalizer(async (context, cancellationToken) =>
-                    {
-                        ArgumentNullException.ThrowIfNull(context.ExecutionResult.ResponsePathA);
-
-                        await using var stream = File.OpenRead(context.ExecutionResult.ResponsePathA);
-                        var serializer = new XmlSerializer(typeof(AdvancedSoapCustomerLookupResponseEnvelope));
-                        var soapResponse = (AdvancedSoapCustomerLookupResponseEnvelope?)serializer.Deserialize(stream)
-                            ?? throw new InvalidOperationException("Endpoint A SOAP response could not be deserialized.");
-
-                        var normalized = new ExpectedJsonCustomerLookupResponse
-                        {
-                            ResultCode = soapResponse.Body.CustomerLookupResponse.StatusCode,
-                            CustomerName = soapResponse.Body.CustomerLookupResponse.CustomerName,
-                            TraceId = soapResponse.Body.CustomerLookupResponse.TraceId,
-                            SourceSystem = "endpoint-a",
-                        };
-
-                        return new NormalizedAlternateContractResponse(
-                            JsonSerializer.SerializeToUtf8Bytes(normalized),
-                            SerializationFormat.Json,
-                            "application/json",
-                            null);
-                    })
-                    .AddDefaultIgnoreRule(new IgnoreRuleDto
-                    {
-                        PropertyPath = "ExpectedJsonCustomerLookupResponse.SourceSystem",
-                        IgnoreCompletely = true,
-                    }));
+            RequestComparisonAlternateContractBuiltInRegistration.RegisterXmlComparisonModels(options);
         });
+        services.AddBuiltInRequestComparisonAlternateContracts(configuration);
         services.AddSingleton<IHttpClientFactory>(new TestHttpClientFactory(handler));
         services.AddSingleton<RequestFileParserService>();
         services.AddSingleton<ResponseMaskingService>();
@@ -362,11 +291,11 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
         Directory.CreateDirectory(batchPath);
         createdDirectories.Add(batchPath);
 
-        var successRequest = new AdvancedSoapCustomerLookupRequestEnvelope
+        var successRequest = new ExpectedJsonCustomerLookupSoapRequestEnvelope
         {
-            Body = new AdvancedSoapCustomerLookupRequestBody
+            Body = new ExpectedJsonCustomerLookupSoapRequestBody
             {
-                CustomerLookupRequest = new AdvancedSoapCustomerLookupRequest
+                CustomerLookupRequest = new ExpectedJsonCustomerLookupSoapRequest
                 {
                     CustomerId = "1001",
                     AuthenticationToken = "AUTH-1001",
@@ -374,11 +303,11 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
             },
         };
 
-        var errorRequest = new AdvancedSoapCustomerLookupRequestEnvelope
+        var errorRequest = new ExpectedJsonCustomerLookupSoapRequestEnvelope
         {
-            Body = new AdvancedSoapCustomerLookupRequestBody
+            Body = new ExpectedJsonCustomerLookupSoapRequestBody
             {
-                CustomerLookupRequest = new AdvancedSoapCustomerLookupRequest
+                CustomerLookupRequest = new ExpectedJsonCustomerLookupSoapRequest
                 {
                     CustomerId = "4000",
                     AuthenticationToken = "AUTH-4000",
@@ -529,10 +458,10 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
 
         private static HttpResponseMessage CreateAuthResponse(string requestBody)
         {
-            var request = JsonSerializer.Deserialize<AdvancedAuthorisationTokenRequest>(requestBody)
+            var request = JsonSerializer.Deserialize<ExpectedJsonCustomerLookupAuthorizationTokenRequest>(requestBody)
                 ?? throw new InvalidOperationException("Auth request could not be deserialized.");
 
-            var response = new AdvancedAuthorisationTokenResponse
+            var response = new ExpectedJsonCustomerLookupAuthorizationTokenResponse
             {
                 AuthorizationToken = $"AUTHZ-{request.CustomerId}",
                 BackupAuthorizationToken = $"BACKUP-{request.CustomerId}",
@@ -546,7 +475,7 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
 
         private static HttpResponseMessage CreateSoapResponse(string requestBody)
         {
-            var request = DeserializeXml<AdvancedSoapCustomerLookupRequestEnvelope>(requestBody);
+            var request = DeserializeXml<ExpectedJsonCustomerLookupSoapRequestEnvelope>(requestBody);
             var customerId = request.Body.CustomerLookupRequest.CustomerId;
             var isSuccess = string.Equals(customerId, "1001", StringComparison.Ordinal);
 
@@ -558,11 +487,11 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
                 };
             }
 
-            var response = new AdvancedSoapCustomerLookupResponseEnvelope
+            var response = new ExpectedJsonCustomerLookupSoapResponseEnvelope
             {
-                Body = new AdvancedSoapCustomerLookupResponseBody
+                Body = new ExpectedJsonCustomerLookupSoapResponseBody
                 {
-                    CustomerLookupResponse = new AdvancedSoapCustomerLookupResponse
+                    CustomerLookupResponse = new ExpectedJsonCustomerLookupSoapResponse
                     {
                         StatusCode = "00",
                         CustomerName = "Alpha",
@@ -579,7 +508,7 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
 
         private static HttpResponseMessage CreateJsonResponse(string requestBody)
         {
-            var request = JsonSerializer.Deserialize<AdvancedAlternateJsonCustomerLookupRequest>(requestBody)
+            var request = JsonSerializer.Deserialize<ExpectedJsonCustomerLookupAlternateRequest>(requestBody)
                 ?? throw new InvalidOperationException("Alternate JSON request could not be deserialized.");
             var isSuccess = string.Equals(request.LookupId, "1001", StringComparison.Ordinal);
 
@@ -591,7 +520,7 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
                 };
             }
 
-            var response = new AdvancedAlternateJsonCustomerLookupResponse
+            var response = new ExpectedJsonCustomerLookupAlternateResponse
             {
                 ResultCode = "00",
                 CustomerName = "Alpha",
@@ -636,86 +565,5 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
     {
         public Task PublishAsync(ComparisonProgressUpdate update, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
-    }
-
-    [XmlRoot("Envelope")]
-    public class AdvancedSoapCustomerLookupRequestEnvelope
-    {
-        public AdvancedSoapCustomerLookupRequestBody Body { get; set; } = new();
-    }
-
-    public class AdvancedSoapCustomerLookupRequestBody
-    {
-        public AdvancedSoapCustomerLookupRequest CustomerLookupRequest { get; set; } = new();
-    }
-
-    public class AdvancedSoapCustomerLookupRequest
-    {
-        public string CustomerId { get; set; } = string.Empty;
-
-        public string AuthenticationToken { get; set; } = string.Empty;
-    }
-
-    [XmlRoot("Envelope")]
-    public class AdvancedSoapCustomerLookupResponseEnvelope
-    {
-        public AdvancedSoapCustomerLookupResponseBody Body { get; set; } = new();
-    }
-
-    public class AdvancedSoapCustomerLookupResponseBody
-    {
-        public AdvancedSoapCustomerLookupResponse CustomerLookupResponse { get; set; } = new();
-    }
-
-    public class AdvancedSoapCustomerLookupResponse
-    {
-        public string StatusCode { get; set; } = string.Empty;
-
-        public string CustomerName { get; set; } = string.Empty;
-
-        public string TraceId { get; set; } = string.Empty;
-    }
-
-    public class AdvancedAuthorisationTokenRequest
-    {
-        public string CustomerId { get; set; } = string.Empty;
-
-        public string AuthenticationToken { get; set; } = string.Empty;
-    }
-
-    public class AdvancedAuthorisationTokenResponse
-    {
-        public string AuthorizationToken { get; set; } = string.Empty;
-
-        public string BackupAuthorizationToken { get; set; } = string.Empty;
-    }
-
-    public class AdvancedAlternateJsonCustomerLookupRequest
-    {
-        public string LookupId { get; set; } = string.Empty;
-
-        public string AuthorizationToken { get; set; } = string.Empty;
-    }
-
-    public class AdvancedAlternateJsonCustomerLookupResponse
-    {
-        public string ResultCode { get; set; } = string.Empty;
-
-        public string CustomerName { get; set; } = string.Empty;
-
-        public string TraceId { get; set; } = string.Empty;
-
-        public string SourceSystem { get; set; } = string.Empty;
-    }
-
-    public class ExpectedJsonCustomerLookupResponse
-    {
-        public string ResultCode { get; set; } = string.Empty;
-
-        public string CustomerName { get; set; } = string.Empty;
-
-        public string TraceId { get; set; } = string.Empty;
-
-        public string SourceSystem { get; set; } = string.Empty;
     }
 }

@@ -107,6 +107,11 @@ Tracks consistent value changes across properties, helping identify configuratio
 4. **Run Analysis**: Execute comparison with desired analysis types enabled
 5. **Review Results**: Use the interactive UI to explore patterns and differences
 
+For request-comparison custom integrations, use these repo guides:
+
+- [docs/RequestComparisonCustomUseCaseGuide.md](docs/RequestComparisonCustomUseCaseGuide.md) for the task-oriented setup path
+- [docs/RequestComparisonSetup.md](docs/RequestComparisonSetup.md) for the lower-level registration reference
+
 #### CLI
 
 The ComparisonTool CLI lets you run folder and request comparisons from the command line without hosting the web UI.

@@ -27,13 +27,15 @@ Log.Logger = new LoggerConfiguration()
 // Use Serilog for logging
 builder.Host.UseSerilog();
 
+RequestComparisonAlternateContractBuiltInRegistration.RegisterSharedComparisonModels(builder.Services);
+
 // Add services to the container with proper configuration
 builder.Services
     .AddUnifiedComparisonServices(builder.Configuration, options =>
     {
         // Register SoapEnvelope with custom root element name
         options.RegisterDomainModelWithRootElement<SoapEnvelope>("SoapEnvelope", "Envelope");
-        RequestComparisonAlternateContractSampleRegistration.RegisterComparisonModels(options);
+        RequestComparisonAlternateContractBuiltInRegistration.RegisterXmlComparisonModels(options);
     })
     .AddRazorComponents()
     .AddInteractiveServerComponents(options =>
@@ -42,9 +44,7 @@ builder.Services
         options.DisconnectedCircuitMaxRetained = 100;
     });
 
-// Sample alternate-contract wiring using repo-local test models for discoverability only.
-builder.Services.AddRequestComparisonAlternateContractProfiles(
-    RequestComparisonAlternateContractSampleRegistration.RegisterProfiles);
+builder.Services.AddBuiltInRequestComparisonAlternateContracts(builder.Configuration);
 
 // Add MudBlazor services
 builder.Services.AddMudServices();

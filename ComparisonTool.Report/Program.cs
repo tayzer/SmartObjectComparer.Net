@@ -2,6 +2,7 @@ using Blazored.LocalStorage;
 using ComparisonTool.Core.Abstractions;
 using ComparisonTool.Core.DI;
 using ComparisonTool.Core.Models;
+using ComparisonTool.Core.RequestComparison.AlternateContracts;
 using ComparisonTool.Core.RequestComparison.Services;
 using ComparisonTool.Report.Services;
 using Microsoft.AspNetCore.Components.Web;
@@ -12,10 +13,13 @@ var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<ComparisonTool.Report.App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
+RequestComparisonAlternateContractBuiltInRegistration.RegisterSharedComparisonModels(builder.Services);
+
 // Register core comparison services (for model deserialization and analysis types)
 builder.Services.AddUnifiedComparisonServices(builder.Configuration, options =>
 {
     options.RegisterDomainModelWithRootElement<SoapEnvelope>("SoapEnvelope", "Envelope");
+    RequestComparisonAlternateContractBuiltInRegistration.RegisterXmlComparisonModels(options);
 });
 
 // MudBlazor + local storage

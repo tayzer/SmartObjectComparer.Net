@@ -43,6 +43,8 @@ public partial class App : System.Windows.Application
 
         var services = new ServiceCollection();
 
+        RequestComparisonAlternateContractBuiltInRegistration.RegisterSharedComparisonModels(services);
+
         // Logging
         services.AddLogging(builder =>
         {
@@ -57,12 +59,10 @@ public partial class App : System.Windows.Application
         services.AddUnifiedComparisonServices(configuration, options =>
         {
             options.RegisterDomainModelWithRootElement<SoapEnvelope>("SoapEnvelope", "Envelope");
-            RequestComparisonAlternateContractSampleRegistration.RegisterComparisonModels(options);
+            RequestComparisonAlternateContractBuiltInRegistration.RegisterXmlComparisonModels(options);
         });
 
-        // Sample alternate-contract wiring using repo-local test models for discoverability only.
-        services.AddRequestComparisonAlternateContractProfiles(
-            RequestComparisonAlternateContractSampleRegistration.RegisterProfiles);
+        services.AddBuiltInRequestComparisonAlternateContracts(configuration);
 
         // MudBlazor
         services.AddMudServices();
