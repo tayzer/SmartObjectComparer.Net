@@ -10,6 +10,8 @@ Use this guide when:
 
 If you want the API reference for each registration method, read [RequestComparisonSetup.md](RequestComparisonSetup.md) as the companion reference. This guide is the task-oriented version.
 
+If you want the exact runbook for the built-in SOAP-to-JSON customer-lookup flow with token lookup, use [RequestComparisonExpectedJsonCustomerLookupClientRunbook.md](RequestComparisonExpectedJsonCustomerLookupClientRunbook.md).
+
 ---
 
 ## What you are building
