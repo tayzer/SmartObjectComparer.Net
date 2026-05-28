@@ -145,6 +145,10 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
             ModelName = AdvancedExpectedModelName,
             UseAlternateContractForEndpointB = true,
             AlternateContractProfileId = AdvancedProfileId,
+            HeadersB = new Dictionary<string, string>
+            {
+                ["X-Client-Header"] = "client-value",
+            },
             IgnoreXmlNamespaces = true,
             MaxConcurrency = 2,
             TimeoutMs = 10000,
@@ -166,8 +170,17 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
 
         var endpointBRequests = handler.GetCapturedRequests("endpoint-b.test");
         endpointBRequests.Count.ShouldBe(2);
-        endpointBRequests.Any(request => request.Body.Contains("\"authorizationToken\":\"AUTHZ-1001\"", StringComparison.Ordinal)).ShouldBeTrue();
-        endpointBRequests.All(request => !request.Body.Contains("BACKUP-", StringComparison.Ordinal)).ShouldBeTrue();
+        endpointBRequests.Any(request => request.Body.Contains("\"lookupId\":\"1001\"", StringComparison.Ordinal)).ShouldBeTrue();
+        endpointBRequests.All(request => !request.Body.Contains("authorizationToken", StringComparison.Ordinal)).ShouldBeTrue();
+        endpointBRequests.Any(request =>
+            request.Headers.TryGetValue("AuthorizationToken", out var headerValue) &&
+            string.Equals(headerValue, "AUTHZ-1001", StringComparison.Ordinal)).ShouldBeTrue();
+        endpointBRequests.All(request =>
+            !request.Headers.TryGetValue("AuthorizationToken", out var headerValue) ||
+            !headerValue.Contains("BACKUP-", StringComparison.Ordinal)).ShouldBeTrue();
+        endpointBRequests.All(request =>
+            request.Headers.TryGetValue("X-Client-Header", out var headerValue) &&
+            string.Equals(headerValue, "client-value", StringComparison.Ordinal)).ShouldBeTrue();
 
         var successPair = result.FilePairResults.Single(pair =>
             string.Equals(pair.RequestRelativePath, "success-request.xml", StringComparison.Ordinal));
@@ -350,12 +363,14 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
                 ? string.Empty
                 : await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             var contentType = request.Content?.Headers.ContentType?.MediaType ?? string.Empty;
+            var headers = CaptureHeaders(request);
 
             capturedRequests.Add(new CapturedRequest(
                 request.RequestUri.Host,
                 request.RequestUri.AbsolutePath,
                 contentType,
-                body));
+                body,
+                headers));
 
             return request.RequestUri.Host switch
             {
@@ -440,18 +455,20 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
                 ? string.Empty
                 : await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             var contentType = request.Content?.Headers.ContentType?.MediaType ?? string.Empty;
+            var headers = CaptureHeaders(request);
 
             capturedRequests.Add(new CapturedRequest(
                 request.RequestUri.Host,
                 request.RequestUri.AbsolutePath,
                 contentType,
-                body));
+                body,
+                headers));
 
             return request.RequestUri.Host switch
             {
                 "auth.test" => CreateAuthResponse(body),
                 "endpoint-a.test" => CreateSoapResponse(body),
-                "endpoint-b.test" => CreateJsonResponse(body),
+                "endpoint-b.test" => CreateJsonResponse(request, body),
                 _ => throw new InvalidOperationException($"Unhandled endpoint host '{request.RequestUri.Host}'."),
             };
         }
@@ -506,11 +523,22 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
             };
         }
 
-        private static HttpResponseMessage CreateJsonResponse(string requestBody)
+        private static HttpResponseMessage CreateJsonResponse(HttpRequestMessage requestMessage, string requestBody)
         {
-            var request = JsonSerializer.Deserialize<ExpectedJsonCustomerLookupAlternateRequest>(requestBody)
+            var payload = JsonSerializer.Deserialize<ExpectedJsonCustomerLookupAlternateRequest>(requestBody)
                 ?? throw new InvalidOperationException("Alternate JSON request could not be deserialized.");
-            var isSuccess = string.Equals(request.LookupId, "1001", StringComparison.Ordinal);
+            var authorizationToken = requestMessage.Headers.TryGetValues("AuthorizationToken", out var values)
+                ? values.SingleOrDefault()
+                : null;
+            var isSuccess = string.Equals(payload.LookupId, "1001", StringComparison.Ordinal);
+
+            if (string.IsNullOrWhiteSpace(authorizationToken))
+            {
+                return new HttpResponseMessage(HttpStatusCode.BadRequest)
+                {
+                    Content = new StringContent("{\"error\":\"missing auth header\"}", Encoding.UTF8, "application/json"),
+                };
+            }
 
             if (!isSuccess)
             {
@@ -547,7 +575,28 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
         string Host,
         string Path,
         string ContentType,
-        string Body);
+        string Body,
+        IReadOnlyDictionary<string, string> Headers);
+
+    private static IReadOnlyDictionary<string, string> CaptureHeaders(HttpRequestMessage request)
+    {
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var header in request.Headers)
+        {
+            headers[header.Key] = string.Join(",", header.Value);
+        }
+
+        if (request.Content != null)
+        {
+            foreach (var header in request.Content.Headers)
+            {
+                headers[header.Key] = string.Join(",", header.Value);
+            }
+        }
+
+        return headers;
+    }
 
     private sealed class TestHttpClientFactory : IHttpClientFactory
     {

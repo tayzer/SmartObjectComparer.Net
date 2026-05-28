@@ -169,6 +169,7 @@ Use these hooks for cases like:
 
 - Fetching a token before calling endpoint B.
 - Serializing a custom JSON body instead of using the simple mapper output.
+- Injecting dynamic endpoint B headers, such as a token header returned by a token service.
 - Converting endpoint A's SOAP response into a normalized JSON comparison artifact.
 - Ignoring fields such as `SourceSystem` that only exist because of normalization.
 
@@ -285,6 +286,8 @@ Usually one of these is wrong:
 ### Endpoint B needs a token or extra request data
 
 Do not try to squeeze that into a simple synchronous mapper. Use `UseAlternateRequestPreparation(...)` and resolve the dependency from DI.
+
+If the token must be sent as a header instead of inside the JSON body, return it through `PreparedAlternateContractRequest` headers rather than adding it to the alternate request model.
 
 ### The comparison result is using the wrong artifact format
 

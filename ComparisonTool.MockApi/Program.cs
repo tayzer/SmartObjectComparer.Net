@@ -80,7 +80,9 @@ app.MapPost("/api/mock/customer-lookup/soap", async (HttpRequest request) =>
 app.MapPost("/api/mock/customer-lookup/json", async (HttpRequest request) =>
 {
     var payload = await request.ReadFromJsonAsync<RequestComparisonDomain.ExpectedJsonCustomerLookupAlternateRequest>();
-    if (payload == null)
+    var authorizationToken = request.Headers["AuthorizationToken"].ToString();
+
+    if (payload == null || string.IsNullOrWhiteSpace(authorizationToken))
     {
         return Results.BadRequest(new { error = "Invalid lookup request" });
     }

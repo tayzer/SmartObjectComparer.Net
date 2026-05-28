@@ -117,6 +117,12 @@ public class RequestExecutionService : IDisposable
 
                 endpointBRequestBody = alternateRequest.Body;
                 contentTypeB = alternateRequest.ContentType;
+
+                if (alternateRequest.Headers is { Count: > 0 })
+                {
+                    // Profile-generated headers override job-level and per-request endpoint B headers.
+                    headersB = MergeHeaders(headersB, alternateRequest.Headers);
+                }
             }
 
             var (responseA, responseB) = await ExecuteBothEndpointsAsync(
@@ -223,7 +229,10 @@ public class RequestExecutionService : IDisposable
 
         foreach (var header in headers)
         {
-            request.Headers.TryAddWithoutValidation(header.Key, header.Value);
+            if (!request.Headers.TryAddWithoutValidation(header.Key, header.Value))
+            {
+                request.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);
+            }
         }
 
         using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken).ConfigureAwait(false);

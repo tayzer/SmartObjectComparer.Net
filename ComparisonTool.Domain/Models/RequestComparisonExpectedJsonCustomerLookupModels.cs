@@ -63,9 +63,6 @@ public class ExpectedJsonCustomerLookupAlternateRequest
 {
     [JsonPropertyName("lookupId")]
     public string LookupId { get; set; } = string.Empty;
-
-    [JsonPropertyName("authorizationToken")]
-    public string AuthorizationToken { get; set; } = string.Empty;
 }
 
 public class ExpectedJsonCustomerLookupAlternateResponse

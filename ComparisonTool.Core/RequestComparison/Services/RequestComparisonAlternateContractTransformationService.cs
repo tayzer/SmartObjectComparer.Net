@@ -363,7 +363,8 @@ public sealed record PreparedAlternateContractRequest(
     byte[] Body,
     string ContentType,
     SerializationFormat Format,
-    string ProfileId);
+    string ProfileId,
+    IReadOnlyDictionary<string, string>? Headers = null);
 
 /// <summary>
 /// Represents a normalized canonical response payload.

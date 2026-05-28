@@ -87,14 +87,17 @@ public static class RequestComparisonExpectedJsonCustomerLookupRegistration
                     var outboundRequest = new ExpectedJsonCustomerLookupAlternateRequest
                     {
                         LookupId = context.CanonicalRequest.Body.CustomerLookupRequest.CustomerId,
-                        AuthorizationToken = tokens.AuthorizationToken,
                     };
 
                     return new PreparedAlternateContractRequest(
                         JsonSerializer.SerializeToUtf8Bytes(outboundRequest, DefaultSerializerOptions),
                         "application/json",
                         SerializationFormat.Json,
-                        ProfileId);
+                        ProfileId,
+                        new Dictionary<string, string>
+                        {
+                            ["AuthorizationToken"] = tokens.AuthorizationToken,
+                        });
                 })
                 .UseEndpointAResponseNormalizer(async (context, cancellationToken) =>
                 {
