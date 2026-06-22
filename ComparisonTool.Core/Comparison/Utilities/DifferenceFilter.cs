@@ -58,8 +58,6 @@ public static class DifferenceFilter
                 return bestMatch;
             }).ToList();
 
-            uniqueDiffs = SuppressParentObjectDifferences(uniqueDiffs, logger);
-
             result.Differences.Clear();
             result.Differences.AddRange(uniqueDiffs);
             logger?.LogDebug("Duplicate filtering complete. Original: {OriginalCount}, Filtered: {FilteredCount}, Removed: {RemovedCount}", originalCount, result.Differences.Count, originalCount - result.Differences.Count);
@@ -134,44 +132,6 @@ public static class DifferenceFilter
         };
     }
 
-    private static List<Difference> SuppressParentObjectDifferences(List<Difference> differences, ILogger? logger)
-    {
-        var normalizedDifferences = differences
-            .Select(diff => new NormalizedDifference(diff, PropertyPathNormalizer.NormalizePropertyPath(diff.PropertyName)))
-            .ToList();
-
-        var filtered = normalizedDifferences
-            .Where(candidate => !normalizedDifferences.Any(other =>
-                !ReferenceEquals(candidate, other) &&
-                IsDeeperChildPath(candidate.NormalizedPath, other.NormalizedPath)))
-            .Select(entry => entry.Difference)
-            .ToList();
-
-        var removedCount = differences.Count - filtered.Count;
-        if (removedCount > 0)
-        {
-            logger?.LogDebug("Suppressed {RemovedCount} parent/object-level differences that were explained by more specific child paths.", removedCount);
-        }
-
-        return filtered;
-    }
-
-    private static bool IsDeeperChildPath(string parentPath, string candidatePath)
-    {
-        if (string.IsNullOrEmpty(parentPath) || string.IsNullOrEmpty(candidatePath))
-        {
-            return false;
-        }
-
-        if (!candidatePath.StartsWith(parentPath, StringComparison.Ordinal) || candidatePath.Length <= parentPath.Length)
-        {
-            return false;
-        }
-
-        var nextCharacter = candidatePath[parentPath.Length];
-        return nextCharacter == '.' || nextCharacter == '[';
-    }
-
     private static string ToInvariantString(object? value)
     {
         if (value is null)
@@ -217,6 +177,4 @@ public static class DifferenceFilter
             StringComparer.Ordinal.GetHashCode(NewValue ?? string.Empty),
             StringComparer.Ordinal.GetHashCode(PropertyPath ?? string.Empty));
     }
-
-    private sealed record NormalizedDifference(Difference Difference, string NormalizedPath);
 }
