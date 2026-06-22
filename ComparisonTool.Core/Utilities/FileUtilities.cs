@@ -198,8 +198,8 @@ public class FileUtilities : IFileUtilities
     {
         sb.AppendLine("## Summary");
         sb.AppendLine();
-        sb.AppendLine("| Expected File | Actual File | Status | Differences |");
-        sb.AppendLine("|---------|---------|--------|------------|");
+        sb.AppendLine("| File | Status | Differences |");
+        sb.AppendLine("|---------|--------|------------|");
 
         foreach (var result in folderResult.FilePairResults)
         {
@@ -208,7 +208,7 @@ public class FileUtilities : IFileUtilities
                 ? "0"
                 : (result.Summary?.TotalDifferenceCount ?? 0).ToString(CultureInfo.InvariantCulture);
 
-            sb.AppendLine($"| {result.File1Name} | {result.File2Name} | {status} | {diffCount} |");
+            sb.AppendLine($"| {result.GetDisplayIdentifier()} | {status} | {diffCount} |");
         }
 
         sb.AppendLine();
@@ -500,7 +500,7 @@ public class FileUtilities : IFileUtilities
 
     private void AppendFolderComparisonPairDetails(StringBuilder sb, int pairNumber, FilePairComparisonResult result)
     {
-        AppendLineInvariant(sb, "## Pair {0}: {1} vs {2}", pairNumber, result.File1Name, result.File2Name);
+        AppendLineInvariant(sb, "## Pair {0}: {1}", pairNumber, result.GetDisplayIdentifier());
         sb.AppendLine();
 
         if (result.RawTextDifferences != null)

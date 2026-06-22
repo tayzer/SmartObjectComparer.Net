@@ -19,6 +19,11 @@ public sealed class ComparisonResultGridItem
     /// <summary>Gets or sets the request relative path when available.</summary>
     public string? RequestRelativePath { get; set; }
 
+    /// <summary>Gets the preferred user-facing identifier for this pair.</summary>
+    public string DisplayIdentifier => string.IsNullOrWhiteSpace(RequestRelativePath)
+        ? $"{File1Name} vs {File2Name}"
+        : RequestRelativePath;
+
     /// <summary>Gets or sets a value indicating whether the pair is equal.</summary>
     public bool AreEqual { get; set; }
 

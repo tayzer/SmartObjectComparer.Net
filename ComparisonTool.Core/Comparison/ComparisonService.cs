@@ -255,7 +255,7 @@ public class ComparisonService : IComparisonService
                         return;
                     }
 
-                    var pairIdentifier = $"{filePair.File1Name} vs {filePair.File2Name}";
+                    var pairIdentifier = filePair.GetDisplayIdentifier();
 
                     // Category counts (guard Summary/result which may be nullable)
                     foreach (var category in filePair.Summary?.DifferencesByChangeType ?? new Dictionary<DifferenceCategory, List<Difference>>())
@@ -456,7 +456,7 @@ public class ComparisonService : IComparisonService
                 continue;
             }
 
-            var pairIdentifier = $"{filePair.File1Name} vs {filePair.File2Name}";
+            var pairIdentifier = filePair.GetDisplayIdentifier();
             var fpDifferences = filePair.Result?.Differences ?? new System.Collections.Generic.List<KellermanSoftware.CompareNetObjects.Difference>();
 
             if (fpDifferences.Count == 0)

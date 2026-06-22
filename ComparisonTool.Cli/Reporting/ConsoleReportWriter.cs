@@ -67,7 +67,7 @@ public static class ConsoleReportWriter
             {
                 var diffCountForPair = pair.Result?.Differences?.Count ?? pair.RawTextDifferences?.Count ?? 0;
                 var outcomeTag = pair.PairOutcome != null ? $" [{pair.PairOutcome}]" : string.Empty;
-                Console.WriteLine($"    {pair.File1Name}{outcomeTag} — {diffCountForPair} difference(s)");
+                Console.WriteLine($"    {pair.GetDisplayIdentifier()}{outcomeTag} — {diffCountForPair} difference(s)");
 
                 // Show up to 3 property paths per pair
                 if (pair.Result?.Differences != null)
@@ -97,7 +97,7 @@ public static class ConsoleReportWriter
 
             foreach (var pair in errorPairs)
             {
-                Console.WriteLine($"    {pair.File1Name}: {pair.ErrorMessage}");
+                Console.WriteLine($"    {pair.GetDisplayIdentifier()}: {pair.ErrorMessage}");
             }
         }
 

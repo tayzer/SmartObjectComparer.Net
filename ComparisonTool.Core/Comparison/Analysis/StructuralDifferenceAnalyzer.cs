@@ -43,7 +43,7 @@ public class StructuralDifferenceAnalyzer
                 continue;
             }
 
-            var pairIdentifier = $"{filePair.File1Name} vs {filePair.File2Name}";
+            var pairIdentifier = filePair.GetDisplayIdentifier();
 
             foreach (var diff in filePair.Result?.Differences ?? new System.Collections.Generic.List<KellermanSoftware.CompareNetObjects.Difference>())
             {

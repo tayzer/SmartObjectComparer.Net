@@ -89,6 +89,7 @@ public static class ComparisonResultProjectionBuilder
         if (!string.IsNullOrWhiteSpace(fileNameSearchFilter))
         {
             filtered = filtered.Where(item =>
+                item.DisplayIdentifier.Contains(fileNameSearchFilter, StringComparison.OrdinalIgnoreCase) ||
                 item.File1Name.Contains(fileNameSearchFilter, StringComparison.OrdinalIgnoreCase) ||
                 item.File2Name.Contains(fileNameSearchFilter, StringComparison.OrdinalIgnoreCase));
         }

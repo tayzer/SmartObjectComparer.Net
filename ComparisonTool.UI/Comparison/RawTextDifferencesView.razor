@@ -285,13 +285,18 @@
         ? "Raw Response Comparison"
         : "Raw File Comparison";
 
-    private string GetSubtitle() => HasHttpStatusMetadata
-        ? SelectedPair.PairOutcome == RequestPairOutcome.StatusCodeMismatch
-            ? $"{SelectedPair.File1Name} - Success vs non-success response comparison"
-            : SelectedPair.PairOutcome == RequestPairOutcome.BothNonSuccess
-                ? $"{SelectedPair.File1Name} - Non-success response comparison"
-                : $"{SelectedPair.File1Name} - Raw response comparison"
-        : $"{SelectedPair.File1Name} vs {SelectedPair.File2Name} - Full raw content comparison";
+    private string GetSubtitle()
+    {
+        var displayIdentifier = SelectedPair.GetDisplayIdentifier();
+
+        return HasHttpStatusMetadata
+            ? SelectedPair.PairOutcome == RequestPairOutcome.StatusCodeMismatch
+                ? $"{displayIdentifier} - Success vs non-success response comparison"
+                : SelectedPair.PairOutcome == RequestPairOutcome.BothNonSuccess
+                    ? $"{displayIdentifier} - Non-success response comparison"
+                    : $"{displayIdentifier} - Raw response comparison"
+            : $"{displayIdentifier} - Full raw content comparison";
+    }
 
     private string GetColumnHeaderA() => HasHttpStatusMetadata ? "Endpoint A" : "File A";
 

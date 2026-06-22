@@ -951,6 +951,7 @@
         }
 
         var differencesByFile = BuildDifferencesIndex();
+        var renderedDifferenceRows = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var pattern in Analysis.AllPatterns)
         {
@@ -979,6 +980,16 @@
                     OccurrenceCount = occurrenceCount,
                 };
                 
+                var rowKey = BuildDifferenceRowKey(
+                    propertyPath,
+                    file,
+                    fileDiff.ExpectedValue,
+                    fileDiff.ActualValue);
+                if (!renderedDifferenceRows.Add(rowKey))
+                {
+                    continue;
+                }
+
                 var gridItem = new DifferenceGridItem
                 {
                     PropertyPath = propertyPath,
@@ -1588,12 +1599,15 @@
     }
 
 
-    private string GetPairIdentifier(FilePairComparisonResult filePairResult)
-    {
-        return string.IsNullOrWhiteSpace(filePairResult.RequestRelativePath)
-            ? $"{filePairResult.File1Name} vs {filePairResult.File2Name}"
-            : filePairResult.RequestRelativePath;
-    }
+    private string GetPairIdentifier(FilePairComparisonResult filePairResult) =>
+        filePairResult.GetDisplayIdentifier();
+
+    private static string BuildDifferenceRowKey(
+        string propertyPath,
+        string fileName,
+        string expectedValue,
+        string actualValue) =>
+        string.Join("|", propertyPath, fileName, expectedValue, actualValue);
 
     private string ExtractPatternPath(string fullPattern, DifferenceCategory category)
     {

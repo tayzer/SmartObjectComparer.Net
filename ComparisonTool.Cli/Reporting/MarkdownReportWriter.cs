@@ -106,12 +106,12 @@ public static class MarkdownReportWriter
         sb.AppendLine("| File | Status | Differences | Outcome |");
         sb.AppendLine("|------|--------|-------------|---------|");
 
-        foreach (var pair in pairs.OrderBy(p => p.File1Name, StringComparer.Ordinal))
+        foreach (var pair in pairs.OrderBy(p => p.GetDisplayIdentifier(), StringComparer.Ordinal))
         {
             var status = pair.HasError ? "Error" : pair.AreEqual ? "Equal" : "Different";
             var diffs = pair.Result?.Differences?.Count ?? pair.RawTextDifferences?.Count ?? 0;
             var outcome = pair.PairOutcome?.ToString() ?? "—";
-            sb.AppendLine($"| `{pair.File1Name}` | {status} | {diffs} | {outcome} |");
+            sb.AppendLine($"| `{pair.GetDisplayIdentifier()}` | {status} | {diffs} | {outcome} |");
         }
 
         sb.AppendLine();
@@ -238,7 +238,7 @@ public static class MarkdownReportWriter
 
             foreach (var pair in errorPairs)
             {
-                sb.AppendLine($"- **{pair.File1Name}**: {EscapeMarkdown(pair.ErrorMessage ?? "Unknown error")}");
+                sb.AppendLine($"- **{pair.GetDisplayIdentifier()}**: {EscapeMarkdown(pair.ErrorMessage ?? "Unknown error")}");
             }
 
             sb.AppendLine();
@@ -255,7 +255,7 @@ public static class MarkdownReportWriter
     private static void AppendPairDetails(StringBuilder sb, FilePairComparisonResult pair, ReportContext context)
     {
         var outcomeTag = pair.PairOutcome != null ? $" ({pair.PairOutcome})" : string.Empty;
-        sb.AppendLine($"### {pair.File1Name}{outcomeTag}");
+        sb.AppendLine($"### {pair.GetDisplayIdentifier()}{outcomeTag}");
         sb.AppendLine();
 
         if (pair.Result?.Differences != null && pair.Result.Differences.Count > 0)

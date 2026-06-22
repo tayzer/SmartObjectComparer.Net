@@ -72,9 +72,7 @@ public class EnhancedStructuralDifferenceAnalyzer
                 continue;
             }
 
-            var pairIdentifier = string.IsNullOrWhiteSpace(filePairResult.RequestRelativePath)
-                ? $"{filePairResult.File1Name} vs {filePairResult.File2Name}"
-                : filePairResult.RequestRelativePath;
+            var pairIdentifier = filePairResult.GetDisplayIdentifier();
 
             foreach (var difference in filePairResult.Result?.Differences ?? new System.Collections.Generic.List<KellermanSoftware.CompareNetObjects.Difference>())
             {
@@ -242,7 +240,7 @@ public class EnhancedStructuralDifferenceAnalyzer
         var allPatternFiles = result.AllPatterns.SelectMany(p => p.AffectedFiles).ToHashSet(StringComparer.Ordinal);
         var filesWithDifferences = folderResults.FilePairResults
             ?.Where(r => r.Summary != null && !r.Summary.AreEqual)
-            .Select(r => $"{r.File1Name} vs {r.File2Name}")
+            .Select(r => r.GetDisplayIdentifier())
             .ToHashSet(StringComparer.Ordinal) ?? new HashSet<string>(StringComparer.Ordinal);
 
         result.UnaccountedFilesWithDifferences = filesWithDifferences.Except(allPatternFiles, StringComparer.Ordinal).ToList();
@@ -1198,7 +1196,7 @@ string.Equals(NormalizePropertyPath(d.Difference.PropertyName), path, StringComp
         // Get all files with differences
         var allFilesWithDifferences = folderResults.FilePairResults
             ?.Where(r => r.Summary != null && !r.Summary.AreEqual)
-            .Select(r => $"{r.File1Name} vs {r.File2Name}")
+            .Select(r => r.GetDisplayIdentifier())
             .ToHashSet(StringComparer.Ordinal) ?? new HashSet<string>(StringComparer.Ordinal);
 
         // Group files by which categories they appear in
@@ -1355,7 +1353,7 @@ string.Equals(NormalizePropertyPath(d.Difference.PropertyName), path, StringComp
 
         foreach (var filePair in filesWithDifferences)
         {
-            var fileName = $"{filePair.File1Name} vs {filePair.File2Name}";
+            var fileName = filePair.GetDisplayIdentifier();
             var primaryCategory = ClassifyFilePrimaryDifferenceType(filePair);
 
             switch (primaryCategory)

@@ -184,8 +184,7 @@
                                 }
                             </CellTemplate>
                         </TemplateColumn>
-                        <PropertyColumn Property="x => x.File1Name" Title="Expected File" Sortable="true" />
-                        <PropertyColumn Property="x => x.File2Name" Title="Actual File" Sortable="true" />
+                        <PropertyColumn Property="x => x.DisplayIdentifier" Title="File" Sortable="true" />
                         @if (HasHttpStatusData)
                         {
                             <TemplateColumn Title="HTTP Status" Sortable="true">

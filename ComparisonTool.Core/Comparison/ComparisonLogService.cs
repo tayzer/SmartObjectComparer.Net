@@ -184,13 +184,13 @@ public class ComparisonLogService : IComparisonLogService, IDisposable
             if (result.HasError)
             {
                 stats.ErrorFilePairs++;
-                stats.FilesWithErrors.Add($"{result.File1Name} vs {result.File2Name}");
+                stats.FilesWithErrors.Add(result.GetDisplayIdentifier());
 
                 var errorType = result.ErrorType ?? "Unknown";
                 stats.ErrorsByType.TryGetValue(errorType, out var currentCount);
                 stats.ErrorsByType[errorType] = currentCount + 1;
 
-                WriteToSession(sessionId, $"[ERROR] {result.File1Name} vs {result.File2Name}");
+                WriteToSession(sessionId, $"[ERROR] {result.GetDisplayIdentifier()}");
                 WriteToSession(sessionId, $"  Error Type: {result.ErrorType}");
                 WriteToSession(sessionId, $"  Message: {result.ErrorMessage}");
                 WriteToSession(sessionId, string.Empty);
@@ -209,7 +209,7 @@ public class ComparisonLogService : IComparisonLogService, IDisposable
                 stats.DifferentFilePairs++;
 
                 var differenceCount = result.Summary?.TotalDifferenceCount ?? result.Result?.Differences?.Count ?? 0;
-                WriteToSession(sessionId, $"[DIFFERENT] {result.File1Name} vs {result.File2Name} - {differenceCount} differences");
+                WriteToSession(sessionId, $"[DIFFERENT] {result.GetDisplayIdentifier()} - {differenceCount} differences");
             }
         }
 

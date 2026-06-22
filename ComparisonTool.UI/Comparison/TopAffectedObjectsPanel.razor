@@ -199,7 +199,7 @@
         {
             foreach (var pair in FolderResult.FilePairResults.Where(p => !p.HasError && !p.AreEqual))
             {
-                var fileName = pair.File1Name;
+                var fileName = pair.GetDisplayIdentifier();
                 var differences = pair.Result?.Differences ?? Enumerable.Empty<Difference>();
                 
                 foreach (var diff in differences)

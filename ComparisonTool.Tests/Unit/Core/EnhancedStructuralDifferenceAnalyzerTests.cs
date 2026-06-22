@@ -288,6 +288,40 @@ public class EnhancedStructuralDifferenceAnalyzerTests
             pattern.OccurenceCount == 2).ShouldBe(1);
     }
 
+    [TestMethod]
+    public void AnalyzeStructuralPatterns_WhenRequestPairsHaveSameArtifactNames_ShouldUseRequestRelativePathAsAffectedFileIdentity()
+    {
+        var analysis = AnalyzePairs(
+            CreatePair(
+                "alpha/lookup.xml",
+                new Difference
+                {
+                    PropertyName = "Response.CustomerName",
+                    Object1Value = "Alpha",
+                    Object2Value = "Beta",
+                }),
+            CreatePair(
+                "beta/lookup.xml",
+                new Difference
+                {
+                    PropertyName = "Response.CustomerName",
+                    Object1Value = "Alpha",
+                    Object2Value = "Beta",
+                }));
+
+        var pattern = analysis.AllPatterns.Single(pattern =>
+            pattern.FullPattern == "Response.CustomerName" &&
+            pattern.Category == DifferenceCategory.TextContentChanged);
+
+        pattern.FileCount.ShouldBe(2);
+        pattern.AffectedFiles.OrderBy(file => file, StringComparer.Ordinal).ToArray()
+            .ShouldBe(new[] { "alpha/lookup.xml", "beta/lookup.xml" });
+        analysis.FileClassification.FilesByCategory["Value"]
+            .OrderBy(file => file, StringComparer.Ordinal)
+            .ToArray()
+            .ShouldBe(new[] { "alpha/lookup.xml", "beta/lookup.xml" });
+    }
+
     private static EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult Analyze(params Difference[] differences)
         => Analyze(false, differences);
 
@@ -317,6 +351,40 @@ public class EnhancedStructuralDifferenceAnalyzerTests
         };
 
         var analyzer = new EnhancedStructuralDifferenceAnalyzer(folderResult, NullLogger.Instance, suppressOrderClassification);
+        return analyzer.AnalyzeStructuralPatterns();
+    }
+
+
+    private static FilePairComparisonResult CreatePair(string requestRelativePath, params Difference[] differences)
+    {
+        var comparisonResult = new ComparisonResult(new ComparisonConfig());
+        comparisonResult.Differences.AddRange(differences);
+
+        return new FilePairComparisonResult
+        {
+            File1Name = "lookup.json",
+            File2Name = "lookup.json",
+            RequestRelativePath = requestRelativePath,
+            Result = comparisonResult,
+            Summary = new DifferenceSummary
+            {
+                AreEqual = false,
+                TotalDifferenceCount = differences.Length,
+            },
+        };
+    }
+
+    private static EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult AnalyzePairs(
+        params FilePairComparisonResult[] pairs)
+    {
+        var folderResult = new MultiFolderComparisonResult
+        {
+            AllEqual = false,
+            TotalPairsCompared = pairs.Length,
+            FilePairResults = pairs.ToList(),
+        };
+
+        var analyzer = new EnhancedStructuralDifferenceAnalyzer(folderResult, NullLogger.Instance);
         return analyzer.AnalyzeStructuralPatterns();
     }
 }

@@ -1296,7 +1296,7 @@
         for (var i = 0; i < pairs.Count; i++)
         {
             var pair = pairs[i];
-            var pairDisplay = $"{pair.File1Name} vs {pair.File2Name}";
+            var pairDisplay = pair.GetDisplayIdentifier();
 
             if (IdentifierEquals(pair.RequestRelativePath, normalizedSelected) ||
                 IdentifierEquals(pair.File1Name, normalizedSelected) ||
@@ -1322,7 +1322,7 @@
         return (value ?? string.Empty).Trim().Replace('\\', '/');
     }
 
-    private static bool IdentifierEquals(string left, string right)
+    private static bool IdentifierEquals(string? left, string right)
     {
         if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
             return false;

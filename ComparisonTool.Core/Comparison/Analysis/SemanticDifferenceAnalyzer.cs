@@ -97,7 +97,7 @@ public class SemanticDifferenceAnalyzer
                 continue;
             }
 
-            var pairIdentifier = $"{filePair.File1Name} vs {filePair.File2Name}";
+            var pairIdentifier = filePair.GetDisplayIdentifier();
             logger?.LogDebug("Analyzing differences for file pair {PairIndex}/{TotalPairs}: {PairIdentifier}", filePairIndex, folderResult.FilePairResults.Count, pairIdentifier);
 
             // 4. Categorize each difference

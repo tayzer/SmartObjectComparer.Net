@@ -309,13 +309,36 @@ else if (FolderComparisonResult != null)
             return;
         }
 
-        var index = FolderComparisonResult.FilePairResults
-            .FindIndex(p => p.File1Name == fileName || p.File2Name == fileName);
+        var normalizedFileName = NormalizeIdentifier(fileName);
+        var selectedFileName = System.IO.Path.GetFileName(normalizedFileName);
+        var index = FolderComparisonResult.FilePairResults.FindIndex(pair =>
+            IdentifierEquals(pair.GetDisplayIdentifier(), normalizedFileName) ||
+            IdentifierEquals(pair.RequestRelativePath, normalizedFileName) ||
+            IdentifierEquals(pair.File1Name, normalizedFileName) ||
+            IdentifierEquals(pair.File2Name, normalizedFileName) ||
+            (!string.IsNullOrWhiteSpace(selectedFileName) &&
+             (IdentifierEquals(System.IO.Path.GetFileName(pair.File1Name), selectedFileName) ||
+              IdentifierEquals(System.IO.Path.GetFileName(pair.File2Name), selectedFileName))));
 
         if (index >= 0)
         {
             _ = SelectPairResult(index);
         }
+    }
+
+    private static string NormalizeIdentifier(string value)
+    {
+        return (value ?? string.Empty).Trim().Replace('\\', '/');
+    }
+
+    private static bool IdentifierEquals(string? left, string right)
+    {
+        if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
+        {
+            return false;
+        }
+
+        return string.Equals(NormalizeIdentifier(left), NormalizeIdentifier(right), StringComparison.OrdinalIgnoreCase);
     }
 
     private void ToggleShowAllDifferences()

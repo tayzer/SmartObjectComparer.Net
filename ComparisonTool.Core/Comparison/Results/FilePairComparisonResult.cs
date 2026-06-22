@@ -27,6 +27,10 @@ public class FilePairComparisonResult
     /// </summary>
     public string? RequestRelativePath { get; set; }
 
+    public string GetDisplayIdentifier() => string.IsNullOrWhiteSpace(RequestRelativePath)
+        ? $"{File1Name} vs {File2Name}"
+        : RequestRelativePath;
+
     public ComparisonResult? Result
     {
         get; set;
