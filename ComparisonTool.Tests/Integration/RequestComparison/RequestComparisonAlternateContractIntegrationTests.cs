@@ -213,6 +213,74 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
         rawPair.ContentTypeB.ShouldContain("json");
     }
 
+    [TestMethod]
+    public async Task ExecuteJobAsync_WithAlternateContractAndDuplicateRequestFileNames_PreservesOriginalRequestRelativePaths()
+    {
+        var handler = new AdvancedAlternateContractTestHttpMessageHandler();
+        using var serviceProvider = CreateAdvancedServiceProvider(handler);
+        var jobService = serviceProvider.GetRequiredService<RequestComparisonJobService>();
+
+        var batchId = Guid.NewGuid().ToString("N");
+        CreateAdvancedDuplicateFileNameRequestBatch(batchId);
+
+        var job = jobService.CreateJob(new CreateRequestComparisonJobRequest
+        {
+            RequestBatchId = batchId,
+            EndpointA = "https://endpoint-a.test/customer-lookup",
+            EndpointB = "https://endpoint-b.test/customer-lookup",
+            ModelName = AdvancedExpectedModelName,
+            UseAlternateContractForEndpointB = true,
+            AlternateContractProfileId = AdvancedProfileId,
+            IgnoreXmlNamespaces = true,
+            MaxConcurrency = 2,
+            TimeoutMs = 10000,
+        });
+
+        createdDirectories.Add(Path.Combine(Path.GetTempPath(), "ComparisonToolJobs", job.JobId));
+
+        await jobService.ExecuteJobAsync(job.JobId);
+
+        var result = jobService.GetResult(job.JobId);
+        result.ShouldNotBeNull();
+        result.TotalPairsCompared.ShouldBe(2);
+
+        var expectedPaths = new[]
+        {
+            Path.Combine("alpha", "lookup.xml"),
+            Path.Combine("beta", "lookup.xml"),
+        };
+        var actualPaths = result.FilePairResults
+            .Select(pair => pair.RequestRelativePath ?? string.Empty)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToArray();
+
+        actualPaths.ShouldBe(expectedPaths);
+        actualPaths.Distinct(StringComparer.Ordinal).Count().ShouldBe(2);
+
+        foreach (var pair in result.FilePairResults)
+        {
+            pair.PairOutcome.ShouldBe(RequestPairOutcome.BothSuccess);
+            pair.HttpStatusCodeA.ShouldBe(200);
+            pair.HttpStatusCodeB.ShouldBe(200);
+            pair.ContentTypeA.ShouldBe("application/json");
+            pair.ContentTypeB.ShouldBe("application/json");
+            pair.File1Path.ShouldNotBeNull();
+            pair.File2Path.ShouldNotBeNull();
+            Path.GetExtension(pair.File1Path!).ShouldBe(".json");
+            Path.GetExtension(pair.File2Path!).ShouldBe(".json");
+        }
+
+        var alphaPair = result.FilePairResults.Single(pair =>
+            string.Equals(pair.RequestRelativePath, Path.Combine("alpha", "lookup.xml"), StringComparison.Ordinal));
+        alphaPair.File1Path.ShouldContain(Path.Combine("comparisonA", "alpha", "lookup.json"), Case.Insensitive);
+        alphaPair.File2Path.ShouldContain(Path.Combine("comparisonB", "alpha", "lookup.json"), Case.Insensitive);
+
+        var betaPair = result.FilePairResults.Single(pair =>
+            string.Equals(pair.RequestRelativePath, Path.Combine("beta", "lookup.xml"), StringComparison.Ordinal));
+        betaPair.File1Path.ShouldContain(Path.Combine("comparisonA", "beta", "lookup.json"), Case.Insensitive);
+        betaPair.File2Path.ShouldContain(Path.Combine("comparisonB", "beta", "lookup.json"), Case.Insensitive);
+    }
+
     private static ServiceProvider CreateServiceProvider(AlternateContractTestHttpMessageHandler handler)
     {
         var services = new ServiceCollection();
@@ -330,6 +398,32 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
 
         File.WriteAllText(Path.Combine(batchPath, "success-request.xml"), SerializeXml(successRequest));
         File.WriteAllText(Path.Combine(batchPath, "error-request.xml"), SerializeXml(errorRequest));
+    }
+
+    private void CreateAdvancedDuplicateFileNameRequestBatch(string batchId)
+    {
+        var batchPath = Path.Combine(Path.GetTempPath(), "ComparisonToolRequests", batchId);
+        var alphaPath = Path.Combine(batchPath, "alpha");
+        var betaPath = Path.Combine(batchPath, "beta");
+
+        Directory.CreateDirectory(alphaPath);
+        Directory.CreateDirectory(betaPath);
+        createdDirectories.Add(batchPath);
+
+        var request = new ExpectedJsonCustomerLookupSoapRequestEnvelope
+        {
+            Body = new ExpectedJsonCustomerLookupSoapRequestBody
+            {
+                CustomerLookupRequest = new ExpectedJsonCustomerLookupSoapRequest
+                {
+                    CustomerId = "1001",
+                    AuthenticationToken = "AUTH-1001",
+                },
+            },
+        };
+
+        File.WriteAllText(Path.Combine(alphaPath, "lookup.xml"), SerializeXml(request));
+        File.WriteAllText(Path.Combine(betaPath, "lookup.xml"), SerializeXml(request));
     }
 
     private static string SerializeXml<T>(T value)

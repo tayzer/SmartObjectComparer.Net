@@ -409,23 +409,23 @@ public class RequestComparisonJobService
                             pairResult.RequestRelativePath,
                             StringComparison.OrdinalIgnoreCase));
 
-                    if (execResult == null)
-                    {
-                        execResult = successPairs.FirstOrDefault(c =>
-                            string.Equals(
-                                Path.GetFileName(c.Execution.Request.RelativePath),
-                                pairResult.File1Name,
-                                StringComparison.OrdinalIgnoreCase));
-                    }
+                    execResult ??= ResolveSuccessPairByComparisonArtifactPath(
+                        job,
+                        successPairs,
+                        pairResult,
+                        alternateContractProfile?.CanonicalResponseFormat);
 
-                    if (execResult == null)
-                    {
-                        execResult = successPairs.FirstOrDefault(c =>
-                            string.Equals(
-                                Path.GetFileNameWithoutExtension(c.Execution.Request.RelativePath),
-                                Path.GetFileNameWithoutExtension(pairResult.File1Name),
-                                StringComparison.OrdinalIgnoreCase));
-                    }
+                    execResult ??= successPairs.FirstOrDefault(c =>
+                        string.Equals(
+                            Path.GetFileName(c.Execution.Request.RelativePath),
+                            pairResult.File1Name,
+                            StringComparison.OrdinalIgnoreCase));
+
+                    execResult ??= successPairs.FirstOrDefault(c =>
+                        string.Equals(
+                            Path.GetFileNameWithoutExtension(c.Execution.Request.RelativePath),
+                            Path.GetFileNameWithoutExtension(pairResult.File1Name),
+                            StringComparison.OrdinalIgnoreCase));
 
                     if (execResult != null)
                     {
@@ -672,6 +672,66 @@ public class RequestComparisonJobService
         .Replace('/', Path.DirectorySeparatorChar)
         .Replace('\\', Path.DirectorySeparatorChar)
         .TrimStart(Path.DirectorySeparatorChar);
+
+    private static ClassifiedExecutionResult? ResolveSuccessPairByComparisonArtifactPath(
+        RequestComparisonJob job,
+        IReadOnlyList<ClassifiedExecutionResult> successPairs,
+        FilePairComparisonResult pairResult,
+        SerializationFormat? canonicalResponseFormat)
+    {
+        if (!canonicalResponseFormat.HasValue || string.IsNullOrWhiteSpace(pairResult.File1Path))
+        {
+            return null;
+        }
+
+        var comparisonDirectoryA = Path.Combine(
+            Path.GetTempPath(),
+            "ComparisonToolJobs",
+            job.JobId,
+            "comparisonA");
+
+        if (!TryGetRelativePathUnderRoot(comparisonDirectoryA, pairResult.File1Path, out var artifactRelativePath))
+        {
+            return null;
+        }
+
+        var normalizedArtifactPath = NormalizeRelativePathForComparison(artifactRelativePath);
+
+        return successPairs.FirstOrDefault(successPair =>
+            string.Equals(
+                NormalizeRelativePathForComparison(BuildCanonicalRelativePath(
+                    successPair.Execution.Request.RelativePath,
+                    canonicalResponseFormat.Value)),
+                normalizedArtifactPath,
+                StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool TryGetRelativePathUnderRoot(string rootDirectory, string filePath, out string relativePath)
+    {
+        relativePath = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(rootDirectory) || string.IsNullOrWhiteSpace(filePath))
+        {
+            return false;
+        }
+
+        var candidate = Path.GetRelativePath(rootDirectory, filePath);
+        if (string.IsNullOrWhiteSpace(candidate) ||
+            candidate == "." ||
+            candidate.StartsWith("..", StringComparison.Ordinal) ||
+            Path.IsPathRooted(candidate))
+        {
+            return false;
+        }
+
+        relativePath = candidate;
+        return true;
+    }
+
+    private static string NormalizeRelativePathForComparison(string relativePath) =>
+        relativePath
+            .Replace('\\', '/')
+            .TrimStart('/');
 
     private static async Task CopyFileAsync(string sourcePath, string destinationPath, CancellationToken cancellationToken)
     {
