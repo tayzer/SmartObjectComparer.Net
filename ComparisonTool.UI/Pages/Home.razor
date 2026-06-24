@@ -30,6 +30,7 @@
 @inject ComparisonResultCacheService CacheService
 @inject RawTextComparisonService RawTextComparisonService
 @inject IConfiguration Configuration
+@inject NavigationManager NavigationManager
 
 <MudStack Spacing="4">
     <!-- Header Section -->
@@ -601,11 +602,57 @@
                 .ToList();
 
             RequestSelectedModelName = SelectedModelName;
+            ApplyRequestComparisonQueryPrefill();
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error initializing component");
         }
+    }
+
+    private void ApplyRequestComparisonQueryPrefill()
+    {
+        var queryValues = ParseQueryString(new Uri(NavigationManager.Uri).Query);
+        if (!queryValues.ContainsKey("requestBatchId"))
+        {
+            return;
+        }
+
+        activeTabIndex = 1;
+        if (queryValues.TryGetValue("requestModelName", out var stagedModelName)
+            && DeserializationService.GetRegisteredModelNames().Contains(stagedModelName, StringComparer.Ordinal))
+        {
+            RequestSelectedModelName = stagedModelName;
+        }
+    }
+
+    private static Dictionary<string, string> ParseQueryString(string query)
+    {
+        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return values;
+        }
+
+        var normalized = query.TrimStart('?');
+        foreach (var pair in normalized.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = pair.Split('=', 2);
+            var key = DecodeQueryValue(parts[0]);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                continue;
+            }
+
+            values[key] = parts.Length == 2 ? DecodeQueryValue(parts[1]) : string.Empty;
+        }
+
+        return values;
+    }
+
+    private static string DecodeQueryValue(string value)
+    {
+        return Uri.UnescapeDataString(value.Replace('+', ' '));
     }
 
     public void Dispose()

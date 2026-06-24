@@ -41,6 +41,8 @@ public partial class App : System.Windows.Application
             .WriteTo.Console()
             .CreateLogger();
 
+        RegisterGlobalExceptionHandlers();
+
         var services = new ServiceCollection();
 
         RequestComparisonAlternateContractBuiltInRegistration.RegisterSharedComparisonModels(services);
@@ -55,7 +57,8 @@ public partial class App : System.Windows.Application
         // Configuration
         services.AddSingleton<IConfiguration>(configuration);
 
-        services.Configure<ComparisonTool.Core.RequestComparison.Models.RequestComparisonEndpointOption>(configuration.GetSection("RequestComparison:EndpointOptions"));
+        services.Configure<ComparisonTool.Core.RequestComparison.Models.RequestComparisonEndpointOptions>(
+            configuration.GetSection("RequestComparison:EndpointOptions"));
 
         // Core comparison services (same registration as Web and CLI)
         services.AddUnifiedComparisonServices(configuration, options =>
@@ -95,6 +98,7 @@ public partial class App : System.Windows.Application
 
         // Desktop platform service implementations
         services.AddSingleton<IFileExportService, DesktopFileExportService>();
+        services.AddSingleton<IFilePickerService, DesktopFilePickerService>();
         services.AddSingleton<IFolderPickerService, DesktopFolderPickerService>();
         services.AddSingleton<INotificationService, DesktopNotificationService>();
         services.AddScoped<IScrollService, BlazorScrollService>(); // Scoped: depends on IJSRuntime
@@ -110,5 +114,26 @@ public partial class App : System.Windows.Application
     {
         Log.CloseAndFlush();
         base.OnExit(e);
+    }
+
+    private static void RegisterGlobalExceptionHandlers()
+    {
+        Current.DispatcherUnhandledException += (_, args) =>
+        {
+            Log.Fatal(args.Exception, "Unhandled WPF dispatcher exception");
+            Log.CloseAndFlush();
+        };
+
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            Log.Fatal(args.ExceptionObject as Exception, "Unhandled AppDomain exception. IsTerminating={IsTerminating}", args.IsTerminating);
+            Log.CloseAndFlush();
+        };
+
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            Log.Error(args.Exception, "Unobserved task exception");
+            Log.CloseAndFlush();
+        };
     }
 }

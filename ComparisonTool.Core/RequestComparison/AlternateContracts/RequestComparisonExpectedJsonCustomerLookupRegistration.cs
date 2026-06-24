@@ -71,6 +71,7 @@ public static class RequestComparisonExpectedJsonCustomerLookupRegistration
             configure: builder => builder
                 .SupportSourceRequestFormats(SerializationFormat.Xml)
                 .UseAlternateRequestFormat(SerializationFormat.Json, "application/json")
+                .SuggestEndpointA("customer-lookup/soap", "customer-lookup/json")
                 .UseAlternateResponseFormat(SerializationFormat.Json)
                 .UseCanonicalResponseFormat(SerializationFormat.Json, "application/json")
                 .UseAlternateRequestPreparation(async (context, cancellationToken) =>
@@ -105,10 +106,21 @@ public static class RequestComparisonExpectedJsonCustomerLookupRegistration
 
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    await using var stream = File.OpenRead(context.ExecutionResult.ResponsePathA);
-                    var serializer = new XmlSerializer(typeof(ExpectedJsonCustomerLookupSoapResponseEnvelope));
-                    var soapResponse = (ExpectedJsonCustomerLookupSoapResponseEnvelope?)serializer.Deserialize(stream)
-                        ?? throw new InvalidOperationException("Endpoint A SOAP response could not be deserialized.");
+                    ExpectedJsonCustomerLookupSoapResponseEnvelope soapResponse;
+                    try
+                    {
+                        await using var stream = File.OpenRead(context.ExecutionResult.ResponsePathA);
+                        var serializer = new XmlSerializer(typeof(ExpectedJsonCustomerLookupSoapResponseEnvelope));
+                        soapResponse = (ExpectedJsonCustomerLookupSoapResponseEnvelope?)serializer.Deserialize(stream)
+                            ?? throw new InvalidOperationException("Endpoint A SOAP response could not be deserialized.");
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        throw new InvalidOperationException(
+                            "Endpoint A returned a response that is not the expected Customer Lookup SOAP contract. " +
+                            "Use endpoint A 'Local Mock Customer Lookup SOAP' and endpoint B 'Local Mock Customer Lookup JSON' for the ExpectedJsonCustomerLookupResponse alternate contract profile.",
+                            ex);
+                    }
 
                     var normalized = new ExpectedJsonCustomerLookupResponse
                     {

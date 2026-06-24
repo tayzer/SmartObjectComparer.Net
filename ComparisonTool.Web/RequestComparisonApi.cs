@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using ComparisonTool.Core.RequestComparison.Models;
 using ComparisonTool.Core.RequestComparison.Services;
+using ComparisonTool.Core.Serialization.BlazorReport;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ComparisonTool.Web;
@@ -286,7 +287,7 @@ public static class RequestComparisonApi
             return Results.NotFound("Result not available");
         }
 
-        return Results.Ok(result);
+        return Results.Json(result, BlazorReportSerializerOptions.Default);
     }
 
     private static IResult CancelJob(string jobId)

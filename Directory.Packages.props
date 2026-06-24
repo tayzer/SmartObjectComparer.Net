@@ -34,6 +34,7 @@
     <PackageVersion Include="DiffPlex" Version="1.7.2" />
     <!-- Testing -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
+    <PackageVersion Include="Microsoft.Playwright.MSTest" Version="1.60.0" />
     <PackageVersion Include="MSTest.TestFramework" Version="4.1.0" />
     <PackageVersion Include="MSTest.TestAdapter" Version="4.1.0" />
     <PackageVersion Include="coverlet.collector" Version="8.0.0" />

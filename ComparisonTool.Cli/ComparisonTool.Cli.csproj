@@ -45,7 +45,7 @@
         <ItemGroup>
             <BlazorReportAssetsFiles Include="$(BlazorReportAssetsSourceDir)**\*" />
         </ItemGroup>
-        <Message Text="Copying $(BlazorReportAssetsSourceDir) -> $(OutputPath)BlazorReportAssets\" Importance="High" />
+        <Message Text="Copying $(BlazorReportAssetsSourceDir) -&gt; $(OutputPath)BlazorReportAssets\" Importance="High" />
         <Copy SourceFiles="@(BlazorReportAssetsFiles)" DestinationFiles="@(BlazorReportAssetsFiles->'$(OutputPath)BlazorReportAssets\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
         <Message Text="Finished copying Blazor report assets." Importance="High" />
     </Target>
@@ -54,7 +54,7 @@
         <ItemGroup>
             <BlazorReportAssetsFiles Include="$(BlazorReportAssetsSourceDir)**\*" />
         </ItemGroup>
-        <Message Text="Copying $(BlazorReportAssetsSourceDir) -> $(PublishDir)BlazorReportAssets\" Importance="High" />
+        <Message Text="Copying $(BlazorReportAssetsSourceDir) -&gt; $(PublishDir)BlazorReportAssets\" Importance="High" />
         <Copy SourceFiles="@(BlazorReportAssetsFiles)" DestinationFiles="@(BlazorReportAssetsFiles->'$(PublishDir)BlazorReportAssets\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
         <Message Text="Finished copying Blazor report assets." Importance="High" />
     </Target>

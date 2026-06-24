@@ -54,9 +54,9 @@ app.MapPost("/api/mock/customer-lookup/soap", async (HttpRequest request) =>
     var body = await new StreamReader(request.Body).ReadToEndAsync();
     var lookupRequest = DeserializeXml<RequestComparisonDomain.ExpectedJsonCustomerLookupSoapRequestEnvelope>(body);
     var customerId = lookupRequest.Body.CustomerLookupRequest.CustomerId;
-    var isSuccess = string.Equals(customerId, "1001", StringComparison.Ordinal);
+    var responseCase = ResolveEndpointACustomerLookup(customerId);
 
-    if (!isSuccess)
+    if (responseCase == null)
     {
         return Results.Text("<error><message>Invalid request</message></error>", "application/xml", statusCode: StatusCodes.Status400BadRequest);
     }
@@ -69,8 +69,8 @@ app.MapPost("/api/mock/customer-lookup/soap", async (HttpRequest request) =>
                 CustomerLookupResponse = new RequestComparisonDomain.ExpectedJsonCustomerLookupSoapResponse
                 {
                     StatusCode = "00",
-                    CustomerName = "Alpha",
-                    TraceId = "trace-1001",
+                    CustomerName = responseCase.Value.CustomerName,
+                    TraceId = responseCase.Value.TraceId,
                 },
             },
         }),
@@ -87,22 +87,38 @@ app.MapPost("/api/mock/customer-lookup/json", async (HttpRequest request) =>
         return Results.BadRequest(new { error = "Invalid lookup request" });
     }
 
-    var isSuccess = string.Equals(payload.LookupId, "1001", StringComparison.Ordinal);
-    if (!isSuccess)
+    var responseCase = ResolveEndpointBCustomerLookup(payload.LookupId);
+    if (responseCase == null)
     {
-        return Results.BadRequest(new { error = "invalid request" });
+        return Results.BadRequest(new { error = "invalid request", lookupId = payload.LookupId });
     }
 
     return Results.Json(new RequestComparisonDomain.ExpectedJsonCustomerLookupAlternateResponse
     {
         ResultCode = "00",
-        CustomerName = "Alpha",
-        TraceId = "trace-1001",
+        CustomerName = responseCase.Value.CustomerName,
+        TraceId = responseCase.Value.TraceId,
         SourceSystem = "endpoint-b",
     });
 });
 
 app.Run();
+
+static (string CustomerName, string TraceId)? ResolveEndpointACustomerLookup(string customerId) =>
+    customerId switch
+    {
+        "1001" => ("Alpha", "trace-1001"),
+        "1002" => ("Beta", "trace-1002"),
+        _ => null,
+    };
+
+static (string CustomerName, string TraceId)? ResolveEndpointBCustomerLookup(string lookupId) =>
+    lookupId switch
+    {
+        "1001" => ("Alpha", "trace-1001"),
+        "1002" => ("Beta Renamed", "trace-1002"),
+        _ => null,
+    };
 
 static IResult BuildResponse(string source, string body, string contentType, bool includeDiff)
 {

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Envelope>
+  <Body>
+    <CustomerLookupRequest>
+      <CustomerId>4000</CustomerId>
+      <AuthenticationToken>AUTH-4000</AuthenticationToken>
+    </CustomerLookupRequest>
+  </Body>
+</Envelope>

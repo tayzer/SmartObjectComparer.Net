@@ -329,7 +329,7 @@
                     <div class="details-panel" id="@ValueDetailsPanelId">
                         @if (!string.IsNullOrEmpty(SelectedValueProperty) && _valuePropertyGroups.ContainsKey(SelectedValueProperty))
                         {
-                            var files = _valuePropertyGroups[SelectedValueProperty];
+                            var files = GetUniqueFileDifferences(_valuePropertyGroups[SelectedValueProperty]);
                             var pager = GetInspectorPage(ValueInspectorPagerKey, files);
                             <MudStack Spacing="3">
                                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
@@ -498,7 +498,7 @@
                     <div class="details-panel" id="@OrderDetailsPanelId">
                         @if (!string.IsNullOrEmpty(SelectedOrderProperty) && _orderPropertyGroups.ContainsKey(SelectedOrderProperty))
                         {
-                            var files = _orderPropertyGroups[SelectedOrderProperty];
+                            var files = GetUniqueFileDifferences(_orderPropertyGroups[SelectedOrderProperty]);
                             var pager = GetInspectorPage(OrderInspectorPagerKey, files);
                             <MudStack Spacing="3">
                                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
@@ -631,7 +631,7 @@
                     <div class="details-panel" id="@CriticalDetailsPanelId">
                         @if (!string.IsNullOrEmpty(SelectedCriticalProperty) && _criticalPropertyGroups.ContainsKey(SelectedCriticalProperty))
                         {
-                            var files = _criticalPropertyGroups[SelectedCriticalProperty];
+                            var files = GetUniqueFileDifferences(_criticalPropertyGroups[SelectedCriticalProperty]);
                             var pager = GetInspectorPage(CriticalInspectorPagerKey, files);
                             <MudStack Spacing="3">
                                 <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="mb-2">
@@ -909,7 +909,7 @@
         BuildPropertyGroups();
     }
     
-    private Dictionary<string, FilePairComparisonResult> _filePairLookup = null;
+    private Dictionary<string, FilePairComparisonResult> _filePairLookup = new(StringComparer.OrdinalIgnoreCase);
 
     private void BuildPropertyGroups()
     {
@@ -934,24 +934,17 @@
         }
 
         // Build O(1) lookup dictionary for performance
-        _filePairLookup = new Dictionary<string, FilePairComparisonResult>(StringComparer.Ordinal);
+        _filePairLookup = new Dictionary<string, FilePairComparisonResult>(StringComparer.OrdinalIgnoreCase);
         if (FolderComparisonResult?.FilePairResults != null)
         {
             foreach (var r in FolderComparisonResult.FilePairResults)
             {
-                if (!r.HasError)
-                {
-                    var id = GetPairIdentifier(r);
-                    if (!_filePairLookup.ContainsKey(id))
-                    {
-                        _filePairLookup[id] = r;
-                    }
-                }
+                AddFilePairLookupAliases(r);
             }
         }
 
         var differencesByFile = BuildDifferencesIndex();
-        var renderedDifferenceRows = new HashSet<string>(StringComparer.Ordinal);
+        var renderedDifferenceRows = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var pattern in Analysis.AllPatterns)
         {
@@ -959,13 +952,16 @@
             var isOrder = IsOrderingDifference(pattern.Category);
             var isCritical = pattern.IsCriticalProperty;
             var propertyPath = ExtractBasePropertyPath(pattern.FullPattern);
+            var rowPropertyKey = NormalizeDifferenceRowPropertyKey(propertyPath);
             var patternPath = ExtractPatternPath(pattern.FullPattern, pattern.Category);
             
             foreach (var file in pattern.AffectedFiles.Distinct())
             {
-                var allFileDiffs = differencesByFile.TryGetValue(file, out var diffs)
-                    ? diffs
-                    : Enumerable.Empty<Difference>();
+                var fileReference = ResolveFileReference(file);
+                var allFileDiffs = fileReference.Pair?.Result?.Differences
+                    ?? (differencesByFile.TryGetValue(fileReference.Key, out var diffs)
+                        ? diffs
+                        : Enumerable.Empty<Difference>());
                 var fileDifferences = allFileDiffs
                     .Where(d => DifferenceMatchesPattern(d, patternPath, pattern.Category))
                     .ToList();
@@ -973,18 +969,18 @@
                 var occurrenceCount = fileDifferences.Count > 0 ? fileDifferences.Count : 1;
                 var fileDiff = new FileDifference
                 {
-                    FileName = file,
+                    FileName = fileReference.DisplayName,
                     ExpectedValue = FormatValueWithCount(example?.Object1Value, occurrenceCount),
                     ActualValue = FormatValueWithCount(example?.Object2Value, occurrenceCount),
                     Category = pattern.Category.ToString(),
                     OccurrenceCount = occurrenceCount,
                 };
                 
+                var groupKey = isCritical ? "critical" : isOrder ? "order" : "value";
                 var rowKey = BuildDifferenceRowKey(
-                    propertyPath,
-                    file,
-                    fileDiff.ExpectedValue,
-                    fileDiff.ActualValue);
+                    groupKey,
+                    rowPropertyKey,
+                    fileReference.Key);
                 if (!renderedDifferenceRows.Add(rowKey))
                 {
                     continue;
@@ -993,7 +989,7 @@
                 var gridItem = new DifferenceGridItem
                 {
                     PropertyPath = propertyPath,
-                    FileName = file,
+                    FileName = fileReference.DisplayName,
                     ExpectedValue = fileDiff.ExpectedValue,
                     ActualValue = fileDiff.ActualValue,
                     Category = pattern.Category.ToString(),
@@ -1024,6 +1020,10 @@
             }
         }
 
+        DedupePropertyGroupFiles(_valuePropertyGroups);
+        DedupePropertyGroupFiles(_orderPropertyGroups);
+        DedupePropertyGroupFiles(_criticalPropertyGroups);
+
         SelectedValueProperty = SyncSelectedProperty(_valuePropertyGroups, SelectedValueProperty, ValueInspectorPagerKey);
         SelectedOrderProperty = SyncSelectedProperty(_orderPropertyGroups, SelectedOrderProperty, OrderInspectorPagerKey);
         SelectedCriticalProperty = SyncSelectedProperty(_criticalPropertyGroups, SelectedCriticalProperty, CriticalInspectorPagerKey);
@@ -1035,6 +1035,41 @@
         _orderLeafCount = _orderPropertyGroups.Count;
     }
     
+    private static IReadOnlyList<FileDifference> GetUniqueFileDifferences(IEnumerable<FileDifference> fileDifferences) =>
+        fileDifferences
+            .GroupBy(difference => NormalizeFileIdentifier(difference.FileName), StringComparer.OrdinalIgnoreCase)
+            .Select(MergeFileDifferences)
+            .ToList();
+
+    private static void DedupePropertyGroupFiles(Dictionary<string, List<FileDifference>> propertyGroups)
+    {
+        foreach (var propertyPath in propertyGroups.Keys.ToList())
+        {
+            propertyGroups[propertyPath] = propertyGroups[propertyPath]
+                .GroupBy(difference => NormalizeFileIdentifier(difference.FileName), StringComparer.OrdinalIgnoreCase)
+                .Select(MergeFileDifferences)
+                .ToList();
+        }
+    }
+
+    private static FileDifference MergeFileDifferences(IEnumerable<FileDifference> differences)
+    {
+        var orderedDifferences = differences
+            .OrderByDescending(difference => difference.OccurrenceCount)
+            .ThenBy(difference => difference.FileName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var primary = orderedDifferences.First();
+
+        return new FileDifference
+        {
+            FileName = primary.FileName,
+            ExpectedValue = primary.ExpectedValue,
+            ActualValue = primary.ActualValue,
+            Category = primary.Category,
+            OccurrenceCount = primary.OccurrenceCount,
+        };
+    }
+
     private List<TreeItemData<string>> BuildPropertyTree(Dictionary<string, List<FileDifference>> propertyGroups)
     {
         var rootNodes = new List<PropertyTreeNode>();
@@ -1583,31 +1618,146 @@
 
     private Dictionary<string, List<Difference>> BuildDifferencesIndex()
     {
-        if (_filePairLookup == null)
+        var index = new Dictionary<string, List<Difference>>(StringComparer.OrdinalIgnoreCase);
+
+        if (FolderComparisonResult?.FilePairResults == null)
         {
-            return new Dictionary<string, List<Difference>>(StringComparer.Ordinal);
+            return index;
         }
 
-        var index = new Dictionary<string, List<Difference>>(_filePairLookup.Count, StringComparer.Ordinal);
-
-        foreach (var entry in _filePairLookup)
+        foreach (var filePairResult in FolderComparisonResult.FilePairResults)
         {
-            index[entry.Key] = entry.Value.Result?.Differences?.ToList() ?? new List<Difference>();
+            var differences = filePairResult.Result?.Differences?.ToList() ?? new List<Difference>();
+            AddDifferencesIndexAlias(index, GetPairIdentifier(filePairResult), differences);
+            AddDifferencesIndexAlias(index, filePairResult.RequestRelativePath, differences);
+            AddDifferencesIndexAlias(index, filePairResult.File1Name, differences);
+            AddDifferencesIndexAlias(index, filePairResult.File2Name, differences);
+            AddDifferencesIndexAlias(index, GetFileNameAlias(filePairResult.RequestRelativePath), differences);
         }
 
         return index;
     }
 
+    private void AddFilePairLookupAliases(FilePairComparisonResult filePairResult)
+    {
+        AddFilePairLookupAlias(GetPairIdentifier(filePairResult), filePairResult);
+        AddFilePairLookupAlias(filePairResult.RequestRelativePath, filePairResult);
+        AddFilePairLookupAlias(filePairResult.File1Name, filePairResult);
+        AddFilePairLookupAlias(filePairResult.File2Name, filePairResult);
+        AddFilePairLookupAlias(GetFileNameAlias(filePairResult.RequestRelativePath), filePairResult);
+    }
+
+    private void AddFilePairLookupAlias(string? alias, FilePairComparisonResult filePairResult)
+    {
+        var key = NormalizeFileIdentifier(alias);
+        if (string.IsNullOrEmpty(key) || _filePairLookup.ContainsKey(key))
+        {
+            return;
+        }
+
+        _filePairLookup[key] = filePairResult;
+    }
+
+    private static void AddDifferencesIndexAlias(
+        Dictionary<string, List<Difference>> index,
+        string? alias,
+        List<Difference> differences)
+    {
+        var key = NormalizeFileIdentifier(alias);
+        if (string.IsNullOrEmpty(key) || index.ContainsKey(key))
+        {
+            return;
+        }
+
+        index[key] = differences;
+    }
+
+    private ResolvedFileReference ResolveFileReference(string fileName)
+    {
+        var fallbackKey = NormalizeFileIdentifier(fileName);
+        if (!string.IsNullOrEmpty(fallbackKey) && _filePairLookup.TryGetValue(fallbackKey, out var filePairResult))
+        {
+            var displayName = NormalizeFileIdentifier(GetPairIdentifier(filePairResult));
+            var canonicalKey = NormalizeFileIdentifier(filePairResult.RequestRelativePath);
+
+            if (string.IsNullOrEmpty(canonicalKey))
+            {
+                canonicalKey = displayName;
+            }
+
+            if (string.IsNullOrEmpty(displayName))
+            {
+                displayName = canonicalKey;
+            }
+
+            return new ResolvedFileReference
+            {
+                Key = string.IsNullOrEmpty(canonicalKey) ? fallbackKey : canonicalKey,
+                DisplayName = string.IsNullOrEmpty(displayName) ? fallbackKey : displayName,
+                Pair = filePairResult,
+            };
+        }
+
+        return new ResolvedFileReference
+        {
+            Key = fallbackKey,
+            DisplayName = fallbackKey,
+        };
+    }
 
     private string GetPairIdentifier(FilePairComparisonResult filePairResult) =>
-        filePairResult.GetDisplayIdentifier();
+        NormalizeFileIdentifier(filePairResult.GetDisplayIdentifier());
 
     private static string BuildDifferenceRowKey(
+        string groupKey,
         string propertyPath,
-        string fileName,
-        string expectedValue,
-        string actualValue) =>
-        string.Join("|", propertyPath, fileName, expectedValue, actualValue);
+        string fileName) =>
+        string.Join("|",
+            groupKey.Trim(),
+            NormalizeDifferenceRowPropertyKey(propertyPath),
+            NormalizeFileIdentifier(fileName));
+
+    private static string NormalizeDifferenceRowPropertyKey(string propertyPath) =>
+        PropertyPathNormalizer.NormalizePropertyPath(propertyPath ?? string.Empty).Trim();
+
+    private static string NormalizeFileIdentifier(string? fileIdentifier)
+    {
+        if (string.IsNullOrWhiteSpace(fileIdentifier))
+        {
+            return string.Empty;
+        }
+
+        var normalized = new string(fileIdentifier
+            .Trim()
+            .Where(character => !char.IsControl(character) &&
+                System.Globalization.CharUnicodeInfo.GetUnicodeCategory(character) != System.Globalization.UnicodeCategory.Format)
+            .ToArray())
+            .Replace('\\', '/');
+        normalized = System.Text.RegularExpressions.Regex.Replace(normalized, "/+", "/");
+
+        while (normalized.StartsWith("./", StringComparison.Ordinal))
+        {
+            normalized = normalized.Substring(2);
+        }
+
+        return normalized;
+    }
+
+    private static string GetFileNameAlias(string? fileIdentifier)
+    {
+        var normalized = NormalizeFileIdentifier(fileIdentifier);
+        var slashIndex = normalized.LastIndexOf('/');
+        return slashIndex >= 0 ? normalized.Substring(slashIndex + 1) : normalized;
+    }
+
+    private sealed class ResolvedFileReference
+    {
+        public string Key { get; init; } = string.Empty;
+
+        public string DisplayName { get; init; } = string.Empty;
+
+        public FilePairComparisonResult? Pair { get; init; }
+    }
 
     private string ExtractPatternPath(string fullPattern, DifferenceCategory category)
     {

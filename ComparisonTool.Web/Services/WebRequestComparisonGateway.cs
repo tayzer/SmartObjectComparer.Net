@@ -1,9 +1,11 @@
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text.Json;
 using System.Collections.Generic;
 using ComparisonTool.Core.Abstractions;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.RequestComparison.Models;
+using ComparisonTool.Core.Serialization.BlazorReport;
 using Microsoft.AspNetCore.Components;
 
 namespace ComparisonTool.Web.Services
@@ -75,7 +77,13 @@ namespace ComparisonTool.Web.Services
         public async Task<MultiFolderComparisonResult?> GetJobResultAsync(string jobId)
         {
             using var httpClient = CreateHttpClient();
-            return await httpClient.GetFromJsonAsync<MultiFolderComparisonResult?>($"api/requests/compare/{jobId}/result");
+            using var response = await httpClient.GetAsync($"api/requests/compare/{jobId}/result");
+            response.EnsureSuccessStatusCode();
+
+            await using var stream = await response.Content.ReadAsStreamAsync();
+            return await JsonSerializer.DeserializeAsync<MultiFolderComparisonResult?>(
+                stream,
+                BlazorReportSerializerOptions.Default);
         }
 
         public async Task CancelJobAsync(string jobId)

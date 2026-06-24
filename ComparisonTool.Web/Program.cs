@@ -70,6 +70,7 @@ builder.Services.AddScoped<ComparisonProgressService>();
 builder.Services.AddScoped<RawContentService>();
 
 builder.Services.AddScoped<IFileExportService, WebFileExportService>();
+builder.Services.AddScoped<IFilePickerService, WebFilePickerService>();
 builder.Services.AddScoped<IFolderPickerService, WebFolderPickerService>();
 builder.Services.AddScoped<INotificationService, WebNotificationService>();
 builder.Services.AddScoped<IScrollService, WebScrollService>();
@@ -119,6 +120,12 @@ app.MapRazorComponents<App>()
 app.MapHub<ComparisonProgressHub>("/hubs/comparison-progress");
 
 app.MapFileBatchUploadApi();
+
+if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("RequestComparison:TestFixtures:Enabled"))
+{
+    app.MapRequestComparisonTestFixtureApi();
+}
+
 app.MapRequestComparisonApi();
 
 app.Run();

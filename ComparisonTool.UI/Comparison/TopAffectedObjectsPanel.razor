@@ -128,7 +128,11 @@
     // Cached computation results
     private List<AffectedObjectItem>? cachedLeafItems;
     private List<AffectedObjectItem>? cachedParentItems;
-    private string? lastResultHash;
+    private MultiFolderComparisonResult? lastFolderResult;
+    private EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult? lastAnalysis;
+    private int? lastFilePairCount;
+    private int? lastPatternCount;
+    private int? lastTotalDifferences;
     
     public class AffectedObjectItem
     {
@@ -153,11 +157,26 @@
     
     private void EnsureCacheValid()
     {
-        var hash = $"{FolderResult?.FilePairResults?.Count}_{Analysis?.TotalDifferencesFound}";
-        if (hash == lastResultHash && cachedLeafItems != null && cachedParentItems != null)
+        var filePairCount = FolderResult?.FilePairResults?.Count;
+        var patternCount = Analysis?.AllPatterns?.Count;
+        var totalDifferences = Analysis?.TotalDifferencesFound;
+
+        if (ReferenceEquals(FolderResult, lastFolderResult) &&
+            ReferenceEquals(Analysis, lastAnalysis) &&
+            filePairCount == lastFilePairCount &&
+            patternCount == lastPatternCount &&
+            totalDifferences == lastTotalDifferences &&
+            cachedLeafItems != null &&
+            cachedParentItems != null)
+        {
             return;
-        
-        lastResultHash = hash;
+        }
+
+        lastFolderResult = FolderResult;
+        lastAnalysis = Analysis;
+        lastFilePairCount = filePairCount;
+        lastPatternCount = patternCount;
+        lastTotalDifferences = totalDifferences;
         ComputeAffectedObjects();
     }
     

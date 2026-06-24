@@ -16,7 +16,7 @@ public class InProcessRequestComparisonGateway : IRequestComparisonGateway
 {
     private readonly RequestComparisonJobService _jobService;
     private readonly ILogger<InProcessRequestComparisonGateway> _logger;
-    private readonly ConcurrentDictionary<string, CancellationTokenSource> _jobCancellationTokens = new();
+    private readonly ConcurrentDictionary<string, CancellationTokenSource> _jobCancellationTokens = new ConcurrentDictionary<string, CancellationTokenSource>();
 
     public InProcessRequestComparisonGateway(
         RequestComparisonJobService jobService,
@@ -33,17 +33,24 @@ public class InProcessRequestComparisonGateway : IRequestComparisonGateway
         Directory.CreateDirectory(batchPath);
 
         var copiedCount = 0;
+        var stagedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var file in files)
         {
-            var destPath = Path.Combine(batchPath, file.FileName);
+            var destPath = GetSafeUniqueDestinationPath(batchPath, file.FileName, stagedPaths);
             var destDir = Path.GetDirectoryName(destPath);
             if (destDir != null && Directory.Exists(destDir) == false)
             {
                 Directory.CreateDirectory(destDir);
             }
 
-            await using var fileStream = new FileStream(destPath, FileMode.Create, FileAccess.Write);
-            await file.Content.CopyToAsync(fileStream);                                                 
+            await using var fileStream = new FileStream(
+                destPath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 81920,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
+            await file.Content.CopyToAsync(fileStream);
             copiedCount++;
         }
 
@@ -52,7 +59,7 @@ public class InProcessRequestComparisonGateway : IRequestComparisonGateway
         return new RequestBatchResult(batchId, copiedCount, CacheHit: false);
     }
 
-    /// <inheritdoc/>                                                                                                       
+    /// <inheritdoc/>
     public Task<RequestBatchResult> StageRequestFilesAsync(
         IReadOnlyList<string> filePaths,
         string? cacheKey = null)
@@ -64,6 +71,7 @@ public class InProcessRequestComparisonGateway : IRequestComparisonGateway
         Directory.CreateDirectory(batchPath);
 
         var copiedCount = 0;
+        var stagedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var filePath in filePaths)
         {
             if (!File.Exists(filePath))
@@ -72,9 +80,8 @@ public class InProcessRequestComparisonGateway : IRequestComparisonGateway
                 continue;
             }
 
-            var relativePath = Path.GetFileName(filePath);
-            var destPath = Path.Combine(batchPath, relativePath);
-            File.Copy(filePath, destPath, overwrite: true);
+            var destPath = GetSafeUniqueDestinationPath(batchPath, Path.GetFileName(filePath), stagedPaths);
+            File.Copy(filePath, destPath, overwrite: false);
             copiedCount++;
         }
 
@@ -149,5 +156,83 @@ public class InProcessRequestComparisonGateway : IRequestComparisonGateway
         }
 
         return Task.CompletedTask;
+    }
+
+    private static string GetSafeUniqueDestinationPath(string batchPath, string fileName, ISet<string> stagedPaths)
+    {
+        var relativePath = NormalizeRelativeRequestPath(fileName);
+        var batchRoot = Path.GetFullPath(batchPath);
+        var destinationPath = Path.GetFullPath(Path.Combine(batchRoot, relativePath));
+
+        if (!IsPathInsideDirectory(destinationPath, batchRoot))
+        {
+            throw new InvalidOperationException($"Request file name '{fileName}' resolves outside the staging folder.");
+        }
+
+        return GetUniqueDestinationPath(destinationPath, stagedPaths);
+    }
+
+    private static string NormalizeRelativeRequestPath(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            throw new InvalidOperationException("A selected request file did not include a file name.");
+        }
+
+        var normalized = fileName.Replace('\\', '/').Trim();
+        if (Path.IsPathRooted(normalized) || !string.IsNullOrWhiteSpace(Path.GetPathRoot(normalized)))
+        {
+            normalized = Path.GetFileName(normalized);
+        }
+
+        var parts = normalized
+            .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(part => part != ".")
+            .ToArray();
+
+        if (parts.Length == 0)
+        {
+            throw new InvalidOperationException("A selected request file did not include a valid file name.");
+        }
+
+        foreach (var part in parts)
+        {
+            if (part == "..")
+            {
+                throw new InvalidOperationException($"Request file name '{fileName}' contains an unsupported parent-directory segment.");
+            }
+
+            if (part.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            {
+                throw new InvalidOperationException($"Request file name '{fileName}' contains unsupported characters.");
+            }
+        }
+
+        return Path.Combine(parts);
+    }
+
+    private static bool IsPathInsideDirectory(string path, string directory)
+    {
+        var directoryRoot = directory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        return path.StartsWith(directoryRoot, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetUniqueDestinationPath(string destinationPath, ISet<string> stagedPaths)
+    {
+        var candidate = destinationPath;
+        var directory = Path.GetDirectoryName(destinationPath) ?? string.Empty;
+        var nameWithoutExtension = Path.GetFileNameWithoutExtension(destinationPath);
+        var extension = Path.GetExtension(destinationPath);
+        var suffix = 2;
+
+        while (stagedPaths.Contains(candidate) || File.Exists(candidate))
+        {
+            candidate = Path.Combine(directory, $"{nameWithoutExtension} ({suffix}){extension}");
+            suffix++;
+        }
+
+        stagedPaths.Add(candidate);
+        return candidate;
     }
 }

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Envelope>
+  <Body>
+    <CustomerLookupRequest>
+      <CustomerId>1001</CustomerId>
+      <AuthenticationToken>AUTH-1001</AuthenticationToken>
+    </CustomerLookupRequest>
+  </Body>
+</Envelope>

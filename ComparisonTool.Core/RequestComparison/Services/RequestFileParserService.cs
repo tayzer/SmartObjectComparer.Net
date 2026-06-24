@@ -77,7 +77,7 @@ public class RequestFileParserService
         string filePath,
         CancellationToken cancellationToken)
     {
-        var relativePath = Path.GetRelativePath(batchPath, filePath);
+        var relativePath = NormalizeRelativePath(Path.GetRelativePath(batchPath, filePath));
         var fileInfo = new FileInfo(filePath);
         var extension = fileInfo.Extension.ToLowerInvariant();
         var contentType = GetContentType(extension);
@@ -144,6 +144,10 @@ public class RequestFileParserService
             ? contentType
             : "text/plain";
     }
+
+    private static string NormalizeRelativePath(string relativePath) => relativePath
+        .Replace('\\', '/')
+        .TrimStart('/');
 
     private static ComparisonTool.Core.Serialization.SerializationFormat? TryDetectStructuredFormat(string filePath)
     {

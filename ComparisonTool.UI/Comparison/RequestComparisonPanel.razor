@@ -22,6 +22,7 @@
 @inject RequestComparisonJobService JobService
 @inject IProgressSubscriber ProgressService
 @inject IRequestComparisonGateway RequestComparisonGateway
+@inject IFilePickerService FilePickerService
 @implements IAsyncDisposable
 
 <MudPaper Elevation="2" Class="pa-4">
@@ -35,16 +36,28 @@
         <MudPaper Elevation="1" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
             <MudStack Spacing="2">
                 <MudText Typo="Typo.subtitle1">Step 1: Upload Request Files</MudText>
-                <InputFile OnChange="HandleFileSelection" multiple accept="*/*" />
-                @if (selectedFiles != null && selectedFiles.Count > 0)
+                @if (FilePickerService.IsAvailable)
                 {
-                    <MudText Typo="Typo.caption">@selectedFiles.Count files selected</MudText>
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.AttachFile"
+                               OnClick="HandleNativeFileSelection">
+                        Add Request Files
+                    </MudButton>
+                }
+                else
+                {
+                    <InputFile OnChange="HandleFileSelection" multiple accept="*/*" />
+                }
+                @if (SelectedRequestFileCount > 0)
+                {
+                    <MudText Typo="Typo.caption">@SelectedRequestFileCount files selected</MudText>
                 }
                 <MudButton Variant="Variant.Filled" 
                            Color="Color.Primary" 
                            StartIcon="@Icons.Material.Filled.CloudUpload"
                            OnClick="UploadFiles"
-                           Disabled="@(selectedFiles == null || selectedFiles.Count == 0 || isUploading || cacheHit)">
+                           Disabled="@(SelectedRequestFileCount == 0 || isUploading || cacheHit)">
                     @if (isUploading)
                     {
                         <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
@@ -420,6 +433,7 @@
     private const string CustomEndpointValue = "__custom__";
 
     private List<IBrowserFile>? selectedFiles;
+    private List<string>? selectedFilePaths;
     private bool isUploading = false;
     private string? batchId;
     private int uploadedCount = 0;
@@ -481,6 +495,7 @@
     private bool CanResolveAlternateContractProfile =>
         availableAlternateContractProfiles.Count == 1 ||
         !string.IsNullOrWhiteSpace(selectedAlternateContractProfileId);
+    private int SelectedRequestFileCount => selectedFilePaths?.Count ?? selectedFiles?.Count ?? 0;
 
     private string importStatusMessage = string.Empty;
     private bool importStatusIsError = false;
@@ -514,6 +529,8 @@
 
         timeoutMs = Configuration.GetValue("RequestComparison:DefaultTimeoutMs", 30000);
         maxConcurrency = Configuration.GetValue("RequestComparison:MaxConcurrency", 64);
+
+        ApplyRequestBatchQueryPrefill();
     }
 
     protected override void OnParametersSet()
@@ -524,6 +541,76 @@
             selectedModelName = SharedSelectedModelName;
             RefreshAlternateContractProfiles();
         }
+    }
+
+    private void ApplyRequestBatchQueryPrefill()
+    {
+        var queryValues = ParseQueryString(new Uri(NavigationManager.Uri).Query);
+        if (!queryValues.TryGetValue("requestBatchId", out var stagedBatchId) || string.IsNullOrWhiteSpace(stagedBatchId))
+        {
+            return;
+        }
+
+        batchId = stagedBatchId.Trim();
+        selectedFiles = null;
+        selectedFilePaths = null;
+        cacheHit = false;
+        cacheKey = null;
+        errorMessage = null;
+        uploadedCount = queryValues.TryGetValue("requestBatchCount", out var stagedCount)
+            && int.TryParse(stagedCount, out var parsedCount)
+            ? parsedCount
+            : 0;
+
+        if (queryValues.TryGetValue("requestModelName", out var stagedModelName)
+            && availableModels.Contains(stagedModelName, StringComparer.Ordinal))
+        {
+            selectedModelName = stagedModelName;
+            RefreshAlternateContractProfiles();
+        }
+
+        if (queryValues.TryGetValue("requestUseAlternateContract", out var stagedUseAlternateContract)
+            && bool.TryParse(stagedUseAlternateContract, out var useAlternateContract)
+            && useAlternateContract)
+        {
+            endpointBUsesAlternateContract = true;
+            RefreshAlternateContractProfiles();
+
+            if (queryValues.TryGetValue("requestAlternateContractProfileId", out var stagedProfileId)
+                && availableAlternateContractProfiles.Contains(stagedProfileId, StringComparer.Ordinal))
+            {
+                selectedAlternateContractProfileId = stagedProfileId;
+            }
+        }
+    }
+
+    private static Dictionary<string, string> ParseQueryString(string query)
+    {
+        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return values;
+        }
+
+        var normalized = query.TrimStart('?');
+        foreach (var pair in normalized.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = pair.Split('=', 2);
+            var key = DecodeQueryValue(parts[0]);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                continue;
+            }
+
+            values[key] = parts.Length == 2 ? DecodeQueryValue(parts[1]) : string.Empty;
+        }
+
+        return values;
+    }
+
+    private static string DecodeQueryValue(string value)
+    {
+        return Uri.UnescapeDataString(value.Replace('+', ' '));
     }
 
     private async Task HandleSelectedModelChanged(string value)
@@ -547,34 +634,16 @@
 
         if (!string.IsNullOrWhiteSpace(value) && !string.IsNullOrWhiteSpace(selectedModelName))
         {
-            if(AlternateContractProfileRegistry.TryResolve(selectedModelName, value, out var profile, out _))
+            if (AlternateContractProfileRegistry.TryResolve(selectedModelName, value, out var profile, out _))
             {
-                if(!string.IsNullOrWhiteSpace(profile.SuggestEndpointA))
+                if (TryFindSuggestedEndpoint(profile.SuggestEndpointA, out var matchA))
                 {
-                    var matchA = availableEndpoints
-                        .FirstOrDefault(e => e
-                            .Name
-                            .Contains(profile.SuggestEndpointA, StringComparison.OrdinalIgnoreCase) ||
-                                             e.Url.Contains(profile.SuggestEndpointA, StringComparison.OrdinalIgnoreCase));
-
-                    if(matchA != null)
-                    {
-                        OnEndpointAChanged(matchA.Url);
-                    }
+                    OnEndpointAChanged(matchA.Url);
                 }
 
-                if (!string.IsNullOrWhiteSpace(profile.SuggestEndpointB))
+                if (TryFindSuggestedEndpoint(profile.SuggestEndpointB, out var matchB))
                 {
-                    var matchB = availableEndpoints
-                        .FirstOrDefault(e => e
-                            .Name
-                            .Contains(profile.SuggestEndpointB, StringComparison.OrdinalIgnoreCase) ||
-                                             e.Url.Contains(profile.SuggestEndpointB, StringComparison.OrdinalIgnoreCase));
-
-                    if(matchB != null)
-                    {
-                        OnEndpointBChanged(matchB.Url);
-                    }
+                    OnEndpointBChanged(matchB.Url);
                 }
             }
         }
@@ -584,24 +653,96 @@
         return Task.CompletedTask;
     }
 
+    private bool TryFindSuggestedEndpoint(
+        string? suggestion,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out RequestComparisonEndpointOption? endpoint)
+    {
+        endpoint = null;
+        if (string.IsNullOrWhiteSpace(suggestion))
+        {
+            return false;
+        }
+
+        endpoint = availableEndpoints.FirstOrDefault(e => string.Equals(e.Url, suggestion, StringComparison.OrdinalIgnoreCase))
+            ?? availableEndpoints.FirstOrDefault(e => string.Equals(e.Name, suggestion, StringComparison.OrdinalIgnoreCase))
+            ?? availableEndpoints.FirstOrDefault(e => e.Url.Contains(suggestion, StringComparison.OrdinalIgnoreCase))
+            ?? availableEndpoints.FirstOrDefault(e => e.Name.Contains(suggestion, StringComparison.OrdinalIgnoreCase));
+
+        return endpoint != null;
+    }
+
     private async Task HandleFileSelection(InputFileChangeEventArgs e)
     {
-        selectedFiles = e.GetMultipleFiles(10000).ToList();
-        errorMessage = null;
-        cacheHit = false;
-        batchId = null;
-        uploadedCount = 0;
-
-        if (selectedFiles.Count > 0)
+        try
         {
-            cacheKey = ComputeCacheKey(selectedFiles);
-            await TryResolveCachedBatchAsync();
+            selectedFiles = e.GetMultipleFiles(10000).ToList();
+            selectedFilePaths = null;
+            errorMessage = null;
+            cacheHit = false;
+            batchId = null;
+            uploadedCount = 0;
+
+            if (selectedFiles.Count > 0)
+            {
+                cacheKey = ComputeCacheKey(selectedFiles);
+                await TryResolveCachedBatchAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            selectedFiles = null;
+            selectedFilePaths = null;
+            cacheKey = null;
+            cacheHit = false;
+            batchId = null;
+            uploadedCount = 0;
+            errorMessage = $"Could not add request files: {ex.Message}";
+            Logger.LogError(ex, "Failed to add request files");
+        }
+    }
+
+    private async Task HandleNativeFileSelection()
+    {
+        try
+        {
+            var filePaths = await FilePickerService.PickFilesAsync(
+                "Select request files",
+                "Request files (*.xml;*.json;*.txt)|*.xml;*.json;*.txt|All files (*.*)|*.*");
+
+            selectedFiles = null;
+            selectedFilePaths = filePaths.ToList();
+            errorMessage = null;
+            cacheHit = false;
+            batchId = null;
+            uploadedCount = 0;
+
+            if (selectedFilePaths.Count > 0)
+            {
+                cacheKey = ComputeFilePathCacheKey(selectedFilePaths);
+                await TryResolveCachedBatchAsync();
+            }
+            else
+            {
+                selectedFilePaths = null;
+                cacheKey = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            selectedFiles = null;
+            selectedFilePaths = null;
+            cacheKey = null;
+            cacheHit = false;
+            batchId = null;
+            uploadedCount = 0;
+            errorMessage = $"Could not add request files: {ex.Message}";
+            Logger.LogError(ex, "Failed to add request files through native picker");
         }
     }
 
     private async Task UploadFiles()
     {
-        if (selectedFiles == null || selectedFiles.Count == 0) return;
+        if (SelectedRequestFileCount == 0) return;
         if (cacheHit && !string.IsNullOrEmpty(batchId)) return;
 
         isUploading = true;
@@ -609,18 +750,42 @@
         
         try
         {
-            var streams = new List<(string FileName, Stream Content)>();
-
-            foreach (var file in selectedFiles)
+            if (selectedFilePaths is { Count: > 0 })
             {
-                var stream = file.OpenReadStream(10 * 1024 * 1024); // 10 MB limit per file
-                streams.Add((file.Name, stream));
+                var result = await RequestComparisonGateway.StageRequestFilesAsync(selectedFilePaths, cacheKey);
+                batchId = result.BatchId;
+                uploadedCount = result.FileCount;
+                cacheHit = result.CacheHit;
+                return;
             }
 
-            var result = await RequestComparisonGateway.StateRequestStreamsAsync(streams, cacheKey);
-            batchId = result.BatchId;
-            uploadedCount = result.FileCount;
-            cacheHit = result.CacheHit;
+            if (selectedFiles == null || selectedFiles.Count == 0)
+            {
+                return;
+            }
+
+            var streams = new List<(string FileName, Stream Content)>();
+
+            try
+            {
+                foreach (var file in selectedFiles)
+                {
+                    var stream = file.OpenReadStream(10 * 1024 * 1024); // 10 MB limit per file
+                    streams.Add((file.Name, stream));
+                }
+
+                var result = await RequestComparisonGateway.StateRequestStreamsAsync(streams, cacheKey);
+                batchId = result.BatchId;
+                uploadedCount = result.FileCount;
+                cacheHit = result.CacheHit;
+            }
+            finally
+            {
+                foreach (var (_, stream) in streams)
+                {
+                    await stream.DisposeAsync();
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -782,7 +947,7 @@
 
                 headersA.Clear();
 
-                foreach (var header in option.DefaultHeaders)
+                foreach (var header in option.DefaultHeaders ?? Enumerable.Empty<KeyValuePair<string, string>>())
                 {
                     headersA.Add(new HeaderPair { Key = header.Key, Value = header.Value });
                 }
@@ -795,6 +960,8 @@
         selectedEndpointB = value;
         if (value != CustomEndpointValue)
         {
+            endpointB = value;
+
             var option = availableEndpoints.FirstOrDefault(e => e.Url == value);
             if (option != null)
             {
@@ -805,7 +972,7 @@
 
                 headersB.Clear();
 
-                foreach (var header in option.DefaultHeaders)
+                foreach (var header in option.DefaultHeaders ?? Enumerable.Empty<KeyValuePair<string, string>>())
                 {
                     headersB.Add(new HeaderPair { Key = header.Key, Value = header.Value });
                 }
@@ -830,6 +997,26 @@
                 .Append(file.Size)
                 .Append('|')
                 .Append(file.LastModified.ToUnixTimeMilliseconds())
+                .Append(';');
+        }
+
+        var bytes = System.Text.Encoding.UTF8.GetBytes(builder.ToString());
+        var hash = System.Security.Cryptography.SHA256.HashData(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    private static string ComputeFilePathCacheKey(IEnumerable<string> filePaths)
+    {
+        var ordered = filePaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase);
+        var builder = new System.Text.StringBuilder();
+        foreach (var path in ordered)
+        {
+            var info = new FileInfo(path);
+            builder.Append(info.FullName)
+                .Append('|')
+                .Append(info.Exists ? info.Length : 0)
+                .Append('|')
+                .Append(info.Exists ? info.LastWriteTimeUtc.Ticks : 0)
                 .Append(';');
         }
 
