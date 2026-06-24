@@ -1,3 +1,4 @@
+using System.Collections;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.RequestComparison.Models;
 
@@ -10,6 +11,8 @@ namespace ComparisonTool.Core.Abstractions;
 /// </summary>
 public interface IRequestComparisonGateway
 {
+    Task<RequestBatchResult> StateRequestStreamsAsync(IEnumerable<(string FileName, Stream Content)> files, string? cacheKey = null);
+
     /// <summary>
     /// Stages request files for comparison and returns a batch identifier.
     /// </summary>

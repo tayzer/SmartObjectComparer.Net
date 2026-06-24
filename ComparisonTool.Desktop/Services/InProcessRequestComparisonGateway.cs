@@ -26,7 +26,33 @@ public class InProcessRequestComparisonGateway : IRequestComparisonGateway
         _logger = logger;
     }
 
-    /// <inheritdoc/>
+    public async Task<RequestBatchResult> StateRequestStreamsAsync(IEnumerable<(string FileName, Stream Content)> files, string? cacheKey = null)
+    {
+        var batchId = Guid.NewGuid().ToString("N")[..8];
+        var batchPath = Path.Combine(Path.GetTempPath(), "ComparisonToolRequests", batchId);
+        Directory.CreateDirectory(batchPath);
+
+        var copiedCount = 0;
+        foreach (var file in files)
+        {
+            var destPath = Path.Combine(batchPath, file.FileName);
+            var destDir = Path.GetDirectoryName(destPath);
+            if (destDir != null && Directory.Exists(destDir) == false)
+            {
+                Directory.CreateDirectory(destDir);
+            }
+
+            await using var fileStream = new FileStream(destPath, FileMode.Create, FileAccess.Write);
+            await file.Content.CopyToAsync(fileStream);                                                 
+            copiedCount++;
+        }
+
+        _logger.LogInformation("Staged {Count} request streams in batch {BatchId}", copiedCount, batchId);
+
+        return new RequestBatchResult(batchId, copiedCount, CacheHit: false);
+    }
+
+    /// <inheritdoc/>                                                                                                       
     public Task<RequestBatchResult> StageRequestFilesAsync(
         IReadOnlyList<string> filePaths,
         string? cacheKey = null)

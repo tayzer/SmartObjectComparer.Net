@@ -22,4 +22,8 @@ public class RequestComparisonEndpointOption
 
     /// <summary>Gets or sets the endpoint URL.</summary>
     public string Url { get; set; } = string.Empty;
+
+    public string? ContentType { get; set; }
+
+    public Dictionary<string, string>? DefaultHeaders { get; set; }
 }

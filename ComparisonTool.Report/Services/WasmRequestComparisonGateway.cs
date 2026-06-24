@@ -9,6 +9,8 @@ namespace ComparisonTool.Report.Services;
 /// </summary>
 public sealed class WasmRequestComparisonGateway : IRequestComparisonGateway
 {
+    public Task<RequestBatchResult> StateRequestStreamsAsync(IEnumerable<(string FileName, Stream Content)> files, string? cacheKey = null) => Task.FromResult(new RequestBatchResult(string.Empty, 0, false));
+
     public Task<RequestBatchResult> StageRequestFilesAsync(IReadOnlyList<string> filePaths, string? cacheKey = null)
         => Task.FromResult(new RequestBatchResult(string.Empty, 0, false));
 

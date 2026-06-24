@@ -52,6 +52,10 @@ public sealed class RequestComparisonAlternateContractProfile
     /// </summary>
     public string CanonicalResponseContentType { get; init; } = GetDefaultContentType(SerializationFormat.Xml);
 
+    public string? SuggestEndpointA { get; set; }
+
+    public string? SuggestEndpointB { get; set; }
+
     /// <summary>
     /// Gets profile-owned ignore rules applied ahead of runtime request-comparison ignore rules.
     /// These rules are expressed against the canonical comparison model used downstream.
@@ -207,6 +211,8 @@ public sealed class RequestComparisonAlternateContractProfileBuilder<TCanonicalR
     private SerializationFormat alternateResponseFormat = SerializationFormat.Json;
     private SerializationFormat canonicalResponseFormat = SerializationFormat.Xml;
     private string canonicalResponseContentType = RequestComparisonAlternateContractProfile.GetDefaultContentType(SerializationFormat.Xml);
+    private string? suggestEndpointA;
+    private string? suggestEndpointB;
     private readonly Dictionary<string, string> canonicalToAlternateResponseMaskPathMap = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<IgnoreRuleDto> defaultIgnoreRules = new();
     private Func<Stream, SerializationFormat, TCanonicalRequest>? deserializeCanonicalRequestOverride;
@@ -227,6 +233,13 @@ public sealed class RequestComparisonAlternateContractProfileBuilder<TCanonicalR
             supportedSourceRequestFormats.Add(format);
         }
 
+        return this;
+    }
+
+    public RequestComparisonAlternateContractProfileBuilder<TCanonicalRequest, TAlternateRequest, TCanonicalResponse, TAlternateResponse> SuggestEndpointA(string endpointA, string endpointB)
+    {
+        suggestEndpointA = endpointA;
+        suggestEndpointB = endpointB;
         return this;
     }
 
@@ -398,6 +411,8 @@ public sealed class RequestComparisonAlternateContractProfileBuilder<TCanonicalR
             AlternateResponseFormat = alternateResponseFormat,
             CanonicalResponseFormat = canonicalResponseFormat,
             CanonicalResponseContentType = canonicalResponseContentType,
+            SuggestEndpointA = suggestEndpointA,
+            SuggestEndpointB = suggestEndpointB,
             DefaultIgnoreRules = defaultIgnoreRules.ToArray(),
             CanonicalToAlternateResponseMaskPathMap = new Dictionary<string, string>(canonicalToAlternateResponseMaskPathMap, StringComparer.OrdinalIgnoreCase),
             MapCanonicalRequestToAlternate = request => requestMapper((TCanonicalRequest)request),

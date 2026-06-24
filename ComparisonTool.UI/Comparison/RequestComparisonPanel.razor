@@ -10,6 +10,7 @@
 @using Microsoft.Extensions.Options
 @using Microsoft.AspNetCore.Components.Forms
 @using MudBlazor
+@using System.Text.Json
 @inject IHttpClientFactory HttpClientFactory
 @inject ILogger<RequestComparisonPanel> Logger
 @inject NavigationManager NavigationManager
@@ -20,6 +21,7 @@
 @inject IComparisonConfigurationService ConfigService
 @inject RequestComparisonJobService JobService
 @inject IProgressSubscriber ProgressService
+@inject IRequestComparisonGateway RequestComparisonGateway
 @implements IAsyncDisposable
 
 <MudPaper Elevation="2" Class="pa-4">
@@ -480,6 +482,9 @@
         availableAlternateContractProfiles.Count == 1 ||
         !string.IsNullOrWhiteSpace(selectedAlternateContractProfileId);
 
+    private string importStatusMessage = string.Empty;
+    private bool importStatusIsError = false;
+
     protected override void OnInitialized()
     {
         // Subscribe to progress updates
@@ -501,13 +506,10 @@
 
         if (availableEndpoints.Count > 0)
         {
-            selectedEndpointA = availableEndpoints[0].Url;
-            endpointA = availableEndpoints[0].Url;
+            OnEndpointAChanged(availableEndpoints[0].Url);
 
-            selectedEndpointB = availableEndpoints.Count > 1
-                ? availableEndpoints[1].Url
-                : availableEndpoints[0].Url;
-            endpointB = selectedEndpointB;
+            var bUrl = availableEndpoints.Count > 1 ? availableEndpoints[1].Url : availableEndpoints[0].Url;
+            OnEndpointBChanged(bUrl);
         }
 
         timeoutMs = Configuration.GetValue("RequestComparison:DefaultTimeoutMs", 30000);
@@ -535,12 +537,50 @@
     {
         endpointBUsesAlternateContract = value;
         RefreshAlternateContractProfiles();
+        StateHasChanged();
         return Task.CompletedTask;
     }
 
     private Task HandleAlternateContractProfileChanged(string value)
     {
         selectedAlternateContractProfileId = value;
+
+        if (!string.IsNullOrWhiteSpace(value) && !string.IsNullOrWhiteSpace(selectedModelName))
+        {
+            if(AlternateContractProfileRegistry.TryResolve(selectedModelName, value, out var profile, out _))
+            {
+                if(!string.IsNullOrWhiteSpace(profile.SuggestEndpointA))
+                {
+                    var matchA = availableEndpoints
+                        .FirstOrDefault(e => e
+                            .Name
+                            .Contains(profile.SuggestEndpointA, StringComparison.OrdinalIgnoreCase) ||
+                                             e.Url.Contains(profile.SuggestEndpointA, StringComparison.OrdinalIgnoreCase));
+
+                    if(matchA != null)
+                    {
+                        OnEndpointAChanged(matchA.Url);
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(profile.SuggestEndpointB))
+                {
+                    var matchB = availableEndpoints
+                        .FirstOrDefault(e => e
+                            .Name
+                            .Contains(profile.SuggestEndpointB, StringComparison.OrdinalIgnoreCase) ||
+                                             e.Url.Contains(profile.SuggestEndpointB, StringComparison.OrdinalIgnoreCase));
+
+                    if(matchB != null)
+                    {
+                        OnEndpointBChanged(matchB.Url);
+                    }
+                }
+            }
+        }
+
+        StateHasChanged();
+
         return Task.CompletedTask;
     }
 
@@ -569,27 +609,18 @@
         
         try
         {
-            using var http = HttpClientFactory.CreateClient();
-            http.BaseAddress = new Uri(NavigationManager.BaseUri);
-            
-            using var content = new MultipartFormDataContent();
-            if (!string.IsNullOrWhiteSpace(cacheKey))
-            {
-                content.Add(new StringContent(cacheKey), "cacheKey");
-            }
+            var streams = new List<(string FileName, Stream Content)>();
+
             foreach (var file in selectedFiles)
             {
-                var stream = file.OpenReadStream(maxAllowedSize: 100 * 1024 * 1024);
-                content.Add(new StreamContent(stream), "files", file.Name);
+                var stream = file.OpenReadStream(10 * 1024 * 1024); // 10 MB limit per file
+                streams.Add((file.Name, stream));
             }
 
-            var response = await http.PostAsync("/api/requests/batch", content);
-            response.EnsureSuccessStatusCode();
-            
-            var result = await response.Content.ReadFromJsonAsync<RequestBatchUploadResponse>();
-            batchId = result?.BatchId;
-            uploadedCount = result?.Uploaded ?? 0;
-            cacheHit = result?.CacheHit ?? false;
+            var result = await RequestComparisonGateway.StateRequestStreamsAsync(streams, cacheKey);
+            batchId = result.BatchId;
+            uploadedCount = result.FileCount;
+            cacheHit = result.CacheHit;
         }
         catch (Exception ex)
         {
@@ -662,18 +693,7 @@
                 SmartIgnoreRules = new List<SmartIgnoreRuleDto>()
             };
 
-            var createResponse = await http.PostAsJsonAsync("/api/requests/compare", request);
-            if (!createResponse.IsSuccessStatusCode)
-            {
-                var apiError = await createResponse.Content.ReadAsStringAsync();
-                errorMessage = string.IsNullOrWhiteSpace(apiError)
-                    ? $"Comparison failed: {createResponse.ReasonPhrase}"
-                    : apiError;
-                return;
-            }
-            
-            var createResult = await createResponse.Content.ReadFromJsonAsync<CreateJobResponse>();
-            currentJobId = createResult?.JobId;
+            currentJobId = await RequestComparisonGateway.StartComparisonAsync(request, cts.Token);
 
             // Subscribe to SignalR progress updates
             if (!string.IsNullOrEmpty(currentJobId))
@@ -686,14 +706,13 @@
             {
                 await Task.Delay(2000, cts.Token);
                 
-                var statusResponse = await http.GetFromJsonAsync<JobStatusResponse>(
-                    $"/api/requests/compare/{currentJobId}/status");
+                var statusResponse = await RequestComparisonGateway.GetJobStatusAsync(currentJobId!);
                 
                 if (statusResponse == null) continue;
 
                 if (statusResponse.Status == "Completed")
                 {
-                    var result = JobService.GetResult(currentJobId!);
+                    var result = await RequestComparisonGateway.GetJobResultAsync(currentJobId!);
                     if (result != null)
                     {
                         await OnComparisonComplete.InvokeAsync(result);
@@ -738,9 +757,7 @@
         
         try
         {
-            using var http = HttpClientFactory.CreateClient();
-            http.BaseAddress = new Uri(NavigationManager.BaseUri);
-            await http.PostAsync($"/api/requests/compare/{currentJobId}/cancel", null);
+            await RequestComparisonGateway.CancelJobAsync(currentJobId);
         }
         catch (Exception ex)
         {
@@ -754,6 +771,22 @@
         if (value != CustomEndpointValue)
         {
             endpointA = value;
+
+            var option = availableEndpoints.FirstOrDefault(e => e.Url == value);
+            if (option != null)
+            {
+                if (!string.IsNullOrEmpty(option.ContentType))
+                {
+                    contentTypeOverride = option.ContentType;
+                }
+
+                headersA.Clear();
+
+                foreach (var header in option.DefaultHeaders)
+                {
+                    headersA.Add(new HeaderPair { Key = header.Key, Value = header.Value });
+                }
+            }
         }
     }
 
@@ -762,37 +795,28 @@
         selectedEndpointB = value;
         if (value != CustomEndpointValue)
         {
-            endpointB = value;
+            var option = availableEndpoints.FirstOrDefault(e => e.Url == value);
+            if (option != null)
+            {
+                if (!string.IsNullOrEmpty(option.ContentType))
+                {
+                    contentTypeOverride = option.ContentType;
+                }
+
+                headersB.Clear();
+
+                foreach (var header in option.DefaultHeaders)
+                {
+                    headersB.Add(new HeaderPair { Key = header.Key, Value = header.Value });
+                }
+            }
         }
     }
 
     private async Task TryResolveCachedBatchAsync()
     {
-        if (string.IsNullOrWhiteSpace(cacheKey)) return;
-
-        try
-        {
-            using var http = HttpClientFactory.CreateClient();
-            http.BaseAddress = new Uri(NavigationManager.BaseUri);
-
-            var response = await http.GetAsync($"/api/requests/batch/cache/{cacheKey}");
-            if (!response.IsSuccessStatusCode)
-            {
-                return;
-            }
-
-            var cacheResponse = await response.Content.ReadFromJsonAsync<RequestBatchCacheLookupResponse>();
-            if (cacheResponse?.Found == true && !string.IsNullOrEmpty(cacheResponse.BatchId))
-            {
-                batchId = cacheResponse.BatchId;
-                uploadedCount = cacheResponse.Uploaded;
-                cacheHit = true;
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(ex, "Failed to resolve cached request batch");
-        }
+        // TODO: Maybe revisit caching via gateway
+        await Task.CompletedTask;
     }
 
     private static string ComputeCacheKey(IEnumerable<IBrowserFile> files)
@@ -840,13 +864,14 @@
 
         if (availableAlternateContractProfiles.Count == 1)
         {
-            selectedAlternateContractProfileId = availableAlternateContractProfiles[0];
+            HandleAlternateContractProfileChanged(availableAlternateContractProfiles[0]);
             return;
         }
 
         if (!string.IsNullOrWhiteSpace(selectedAlternateContractProfileId) &&
             availableAlternateContractProfiles.Contains(selectedAlternateContractProfileId, StringComparer.Ordinal))
         {
+            HandleAlternateContractProfileChanged(selectedAlternateContractProfileId);
             return;
         }
 
@@ -907,6 +932,41 @@
         {
             return null;
         }
+    }
+
+    private async Task HandleImportIgnoreRul(InputFileChangeEventArgs e)
+    {
+        importStatusMessage = string.Empty;
+        importStatusIsError = false;
+        var file = e.File;
+
+        if (file == null) return;
+
+        try
+        {
+            await using var stream = file.OpenReadStream(10 * 1024 * 1024); // 10 MB limit
+            var importedRules = await JsonSerializer.DeserializeAsync<List<IgnoreRule>>(stream, new JsonSerializerOptions(){PropertyNameCaseInsensitive = true});
+
+            if (importedRules != null && importedRules.Any())
+            {
+                AddIgnoreRulesBatch(importedRules);
+                importStatusMessage = $"Successfully imported {importedRules.Count} ignore rules.";
+                importStatusIsError = false;
+            }
+            else
+            {
+                importStatusMessage = "No ignore rules found in the file.";
+                importStatusIsError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            importStatusMessage = $"Failed to import ignore rules: {ex.Message}";
+            importStatusIsError = true;
+            Logger.LogError(ex, "Failed to import ignore rules from file");
+        }
+
+        StateHasChanged();
     }
 
     private void HandleProgressUpdate(ComparisonProgressUpdate update)

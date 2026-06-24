@@ -55,6 +55,8 @@ public partial class App : System.Windows.Application
         // Configuration
         services.AddSingleton<IConfiguration>(configuration);
 
+        services.Configure<ComparisonTool.Core.RequestComparison.Models.RequestComparisonEndpointOption>(configuration.GetSection("RequestComparison:EndpointOptions"));
+
         // Core comparison services (same registration as Web and CLI)
         services.AddUnifiedComparisonServices(configuration, options =>
         {
