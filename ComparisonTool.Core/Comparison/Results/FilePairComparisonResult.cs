@@ -106,6 +106,36 @@ public class FilePairComparisonResult
     public string? BundledRawContentPath { get; set; }
 
     /// <summary>
+    /// Gets or sets the full path to focused raw content for file 1.
+    /// Focused content is presentation-only content with ignore-complete fields removed.
+    /// </summary>
+    public string? FocusedFile1Path { get; set; }
+
+    /// <summary>
+    /// Gets or sets the full path to focused raw content for file 2.
+    /// </summary>
+    public string? FocusedFile2Path { get; set; }
+
+    /// <summary>
+    /// Gets or sets the relative path to report-bundled focused raw content for this pair.
+    /// </summary>
+    public string? FocusedBundledRawContentPath { get; set; }
+
+    /// <summary>
+    /// Gets or sets the number of ignore-complete rules used to build focused content.
+    /// </summary>
+    public int FocusedRawContentRuleCount { get; set; }
+
+    /// <summary>
+    /// Gets a value indicating whether focused raw content is available for this pair.
+    /// </summary>
+    public bool HasFocusedRawContent =>
+        FocusedRawContentRuleCount > 0 &&
+        (!string.IsNullOrWhiteSpace(FocusedFile1Path) ||
+         !string.IsNullOrWhiteSpace(FocusedFile2Path) ||
+         !string.IsNullOrWhiteSpace(FocusedBundledRawContentPath));
+
+    /// <summary>
     /// Gets or sets error information if the comparison failed.
     /// When HasError is true, the files could not be compared (e.g., FileNotFound, deserialization errors).
     /// </summary>

@@ -1,10 +1,10 @@
+using System.Text;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.RequestComparison.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Moq;
 using Shouldly;
-using System.Text;
 
 namespace ComparisonTool.Tests.Unit.RequestComparison;
 
@@ -116,7 +116,7 @@ public sealed class RawContentServiceTests
     }
 
     [TestMethod]
-    public async Task LoadRawContentAsync_LoadsNormalizedJsonArtifactsFromDisk()
+    public async Task LoadRawContentAsync_FormatsJsonArtifactsFromDisk()
     {
         var pathA = Path.Combine(tempDir, "comparison-a.json");
         var pathB = Path.Combine(tempDir, "comparison-b.json");
@@ -138,8 +138,43 @@ public sealed class RawContentServiceTests
 
         result.IsLoaded.ShouldBeTrue();
         result.ErrorMessage.ShouldBeNull();
-        result.ContentA.ShouldBe(bodyA);
-        result.ContentB.ShouldBe(bodyB);
+        result.ContentA.ShouldContain("\n  \"resultCode\": \"00\"");
+        result.ContentA.ShouldContain("\n  \"sourceSystem\": \"endpoint-a\"");
+        result.ContentB.ShouldContain("\n  \"sourceSystem\": \"endpoint-b\"");
+    }
+
+    [TestMethod]
+    public async Task LoadRawContentAsync_LoadsFocusedVariantWithoutChangingFullDefault()
+    {
+        var fullA = Path.Combine(tempDir, "full-a.json");
+        var fullB = Path.Combine(tempDir, "full-b.json");
+        var focusedA = Path.Combine(tempDir, "focused-a.json");
+        var focusedB = Path.Combine(tempDir, "focused-b.json");
+
+        await File.WriteAllTextAsync(fullA, "{\"ResultCode\":\"00\",\"TraceId\":\"full-a\"}", Encoding.UTF8);
+        await File.WriteAllTextAsync(fullB, "{\"ResultCode\":\"00\",\"TraceId\":\"full-b\"}", Encoding.UTF8);
+        await File.WriteAllTextAsync(focusedA, "{\"ResultCode\":\"00\"}", Encoding.UTF8);
+        await File.WriteAllTextAsync(focusedB, "{\"ResultCode\":\"00\"}", Encoding.UTF8);
+
+        var pair = new FilePairComparisonResult
+        {
+            File1Path = fullA,
+            File2Path = fullB,
+            FocusedFile1Path = focusedA,
+            FocusedFile2Path = focusedB,
+            FocusedRawContentRuleCount = 1,
+            ContentTypeA = "application/json",
+            ContentTypeB = "application/json",
+        };
+
+        var full = await service.LoadRawContentAsync(pair);
+        var focused = await service.LoadRawContentAsync(pair, RawContentVariant.Focused);
+
+        full.ContentA.ShouldContain("full-a");
+        full.ContentB.ShouldContain("full-b");
+        focused.ContentA.ShouldNotContain("TraceId");
+        focused.ContentB.ShouldNotContain("TraceId");
+        focused.ContentA.ShouldContain("ResultCode");
     }
 
     private sealed class StubBundledRawContentAccessor : IBundledRawContentAccessor
@@ -153,7 +188,7 @@ public sealed class RawContentServiceTests
 
         public int InvocationCount { get; private set; }
 
-        public Task<RawContentResult?> TryLoadAsync(FilePairComparisonResult pair)
+        public Task<RawContentResult?> TryLoadAsync(FilePairComparisonResult pair, RawContentVariant variant = RawContentVariant.Full)
         {
             InvocationCount++;
             return Task.FromResult<RawContentResult?>(result);

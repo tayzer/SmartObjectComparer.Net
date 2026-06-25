@@ -1,7 +1,8 @@
-using ComparisonTool.Core.Comparison.Results;
-using Microsoft.Extensions.Logging;
 using System.Net.Http.Headers;
 using System.Text;
+using ComparisonTool.Core.Comparison.Results;
+using ComparisonTool.Core.Utilities;
+using Microsoft.Extensions.Logging;
 
 namespace ComparisonTool.Core.RequestComparison.Services;
 
@@ -37,14 +38,14 @@ public class RawContentService
     /// </summary>
     /// <param name="pair">The file pair with paths to both files.</param>
     /// <returns>A tuple of (contentA, contentB, isTruncatedA, isTruncatedB).</returns>
-    public async Task<RawContentResult> LoadRawContentAsync(FilePairComparisonResult pair)
+    public async Task<RawContentResult> LoadRawContentAsync(FilePairComparisonResult pair, RawContentVariant variant = RawContentVariant.Full)
     {
         var result = new RawContentResult();
 
-        if (pair.HasEmbeddedRawContent)
+        if (variant == RawContentVariant.Full && pair.HasEmbeddedRawContent)
         {
-            result.ContentA = pair.EmbeddedRawContentA ?? string.Empty;
-            result.ContentB = pair.EmbeddedRawContentB ?? string.Empty;
+            result.ContentA = StructuredTextDisplayFormatter.FormatForDisplay(pair.EmbeddedRawContentA, pair.ContentTypeA, pair.File1Name);
+            result.ContentB = StructuredTextDisplayFormatter.FormatForDisplay(pair.EmbeddedRawContentB, pair.ContentTypeB, pair.File2Name);
             result.IsTruncatedA = pair.EmbeddedRawContentTruncatedA;
             result.IsTruncatedB = pair.EmbeddedRawContentTruncatedB;
             result.IsLoaded = true;
@@ -53,7 +54,7 @@ public class RawContentService
 
         if (this.bundledRawContentAccessor != null)
         {
-            var bundledResult = await this.bundledRawContentAccessor.TryLoadAsync(pair).ConfigureAwait(false);
+            var bundledResult = await this.bundledRawContentAccessor.TryLoadAsync(pair, variant).ConfigureAwait(false);
             if (bundledResult != null)
             {
                 return bundledResult;
@@ -66,7 +67,10 @@ public class RawContentService
             return result;
         }
 
-        if (string.IsNullOrEmpty(pair.File1Path) || string.IsNullOrEmpty(pair.File2Path))
+        var file1Path = variant == RawContentVariant.Focused ? pair.FocusedFile1Path : pair.File1Path;
+        var file2Path = variant == RawContentVariant.Focused ? pair.FocusedFile2Path : pair.File2Path;
+
+        if (string.IsNullOrEmpty(file1Path) || string.IsNullOrEmpty(file2Path))
         {
             logger.LogWarning("Cannot load raw content: file paths are not available on the comparison result.");
             result.ErrorMessage = "File paths are not available for this comparison pair. "
@@ -76,8 +80,8 @@ public class RawContentService
 
         try
         {
-            var taskA = ReadFileContentAsync(pair.File1Path, pair.ContentTypeA);
-            var taskB = ReadFileContentAsync(pair.File2Path, pair.ContentTypeB);
+            var taskA = ReadFileContentAsync(file1Path, pair.ContentTypeA, pair.File1Name);
+            var taskB = ReadFileContentAsync(file2Path, pair.ContentTypeB, pair.File2Name);
 
             await Task.WhenAll(taskA, taskB);
 
@@ -104,7 +108,7 @@ public class RawContentService
         return result;
     }
 
-    private async Task<(string content, bool isTruncated)> ReadFileContentAsync(string filePath, string? contentType)
+    private async Task<(string content, bool isTruncated)> ReadFileContentAsync(string filePath, string? contentType, string? fileName)
     {
         if (!File.Exists(filePath))
         {
@@ -135,7 +139,8 @@ public class RawContentService
             FileOptions.Asynchronous | FileOptions.SequentialScan);
 
         var bytesRead = await ReadToBufferAsync(stream, buffer).ConfigureAwait(false);
-        return (DecodeText(buffer, bytesRead, contentType), isTruncated);
+        var decodedText = DecodeText(buffer, bytesRead, contentType);
+        return (StructuredTextDisplayFormatter.FormatForDisplay(decodedText, contentType, fileName ?? filePath), isTruncated);
     }
 
     private static async Task<int> ReadToBufferAsync(FileStream stream, byte[] buffer)
@@ -198,6 +203,12 @@ public class RawContentService
 
         return Encoding.UTF8;
     }
+}
+
+public enum RawContentVariant
+{
+    Full,
+    Focused,
 }
 
 /// <summary>

@@ -266,6 +266,11 @@ public class ComparisonService : IComparisonService
                     var differences = filePair.Result?.Differences ?? new List<Difference>();
                     foreach (var diff in differences)
                     {
+                        if (string.IsNullOrWhiteSpace(diff.PropertyName))
+                        {
+                            continue;
+                        }
+
                         var normalizedPath = NormalizePropertyPath(diff.PropertyName);
 
                         // Path pattern aggregation

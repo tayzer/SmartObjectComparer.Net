@@ -13,5 +13,5 @@ public interface IBundledRawContentAccessor
     /// </summary>
     /// <param name="pair">The comparison pair whose bundled raw content should be resolved.</param>
     /// <returns>The loaded raw content result, or <c>null</c> when no bundled content applies.</returns>
-    Task<RawContentResult?> TryLoadAsync(FilePairComparisonResult pair);
+    Task<RawContentResult?> TryLoadAsync(FilePairComparisonResult pair, RawContentVariant variant = RawContentVariant.Full);
 }

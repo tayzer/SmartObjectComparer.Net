@@ -29,6 +29,7 @@
 @inject SystemResourceMonitor ResourceMonitor
 @inject ComparisonResultCacheService CacheService
 @inject RawTextComparisonService RawTextComparisonService
+@inject FocusedRawContentArtifactService FocusedRawContentArtifactService
 @inject IConfiguration Configuration
 @inject NavigationManager NavigationManager
 
@@ -1023,6 +1024,16 @@
 
     private async Task FinalizeFolderComparisonAsync(MultiFolderComparisonResult comparisonResult)
     {
+        var focusedArtifactRoot = Path.Combine(
+            Path.GetTempPath(),
+            "ComparisonToolFocusedRawContent",
+            Guid.NewGuid().ToString("N"));
+        await FocusedRawContentArtifactService.PopulateFocusedRawContentAsync(
+            comparisonResult,
+            IgnoreRules,
+            focusedArtifactRoot,
+            _cancellationTokenSource.Token);
+
         FolderComparisonResult = comparisonResult;
 
         if (FolderComparisonResult.Metadata.TryGetValue("SemanticAnalysis", out var semanticAnalysisObj))

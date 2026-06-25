@@ -21,16 +21,20 @@ public sealed class HttpBundledRawContentAccessor : IBundledRawContentAccessor
     }
 
     /// <inheritdoc />
-    public async Task<RawContentResult?> TryLoadAsync(FilePairComparisonResult pair)
+    public async Task<RawContentResult?> TryLoadAsync(FilePairComparisonResult pair, RawContentVariant variant = RawContentVariant.Full)
     {
-        if (string.IsNullOrWhiteSpace(pair.BundledRawContentPath))
+        var bundledPath = variant == RawContentVariant.Focused
+            ? pair.FocusedBundledRawContentPath
+            : pair.BundledRawContentPath;
+
+        if (string.IsNullOrWhiteSpace(bundledPath))
         {
             return null;
         }
 
         try
         {
-            await using var stream = await this.httpClient.GetStreamAsync(pair.BundledRawContentPath).ConfigureAwait(false);
+            await using var stream = await this.httpClient.GetStreamAsync(bundledPath).ConfigureAwait(false);
             var data = await JsonSerializer.DeserializeAsync<BundledRawContentData>(stream, BlazorReportSerializerOptions.Default).ConfigureAwait(false)
                 ?? throw new InvalidOperationException("Failed to deserialize bundled raw content.");
 
@@ -53,7 +57,7 @@ public sealed class HttpBundledRawContentAccessor : IBundledRawContentAccessor
         }
         catch (Exception ex)
         {
-            this.logger.LogWarning(ex, "Failed to load bundled raw content from {BundledRawContentPath}.", pair.BundledRawContentPath);
+            this.logger.LogWarning(ex, "Failed to load bundled raw content from {BundledRawContentPath}.", bundledPath);
 
             return new RawContentResult
             {

@@ -1,10 +1,12 @@
 using System.CommandLine;
 using System.Diagnostics;
+using System.Text.Json;
 using ComparisonTool.Cli.Infrastructure;
 using ComparisonTool.Cli.Reporting;
 using ComparisonTool.Core.Comparison;
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Configuration;
+using ComparisonTool.Core.RequestComparison.Models;
 using ComparisonTool.Core.Serialization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -76,6 +78,11 @@ public static class FolderCompareCommand
             DefaultValueFactory = _ => false,
         };
 
+        var ignoreRulesFileOption = new Option<FileInfo?>("--ignore-rules")
+        {
+            Description = "Path to JSON file containing IgnoreRuleDto definitions",
+        };
+
         var outputOption = new Option<DirectoryInfo?>("--output", "-o")
         {
             Description = "Directory for report output files (JSON/Markdown/Html). Defaults to current directory",
@@ -122,6 +129,7 @@ public static class FolderCompareCommand
             ignoreCollectionOrderOption,
             ignoreCaseOption,
             ignoreTrailingWhitespaceOption,
+            ignoreRulesFileOption,
             outputOption,
             formatOption,
             pageSizeOption,
@@ -140,6 +148,7 @@ public static class FolderCompareCommand
             var ignoreCollectionOrder = parseResult.GetValue(ignoreCollectionOrderOption);
             var ignoreCase = parseResult.GetValue(ignoreCaseOption);
             var ignoreTrailingWhitespaceAtEnd = parseResult.GetValue(ignoreTrailingWhitespaceOption);
+            var ignoreRulesFile = parseResult.GetValue(ignoreRulesFileOption);
             var outputDir = parseResult.GetValue(outputOption);
             var formats = parseResult.GetValue(formatOption) ?? new[] { OutputFormat.Console };
             var pageSize = parseResult.GetValue(pageSizeOption);
@@ -156,6 +165,7 @@ public static class FolderCompareCommand
                 ignoreCollectionOrder,
                 ignoreCase,
                 ignoreTrailingWhitespaceAtEnd,
+                ignoreRulesFile,
                 outputDir,
                 formats,
                 pageSize,
@@ -177,6 +187,7 @@ public static class FolderCompareCommand
         bool ignoreCollectionOrder,
         bool ignoreCase,
         bool ignoreTrailingWhitespaceAtEnd,
+        FileInfo? ignoreRulesFile,
         DirectoryInfo? outputDir,
         OutputFormat[] formats,
         int markdownPageSize,
@@ -222,9 +233,22 @@ public static class FolderCompareCommand
         var configService = scope.ServiceProvider.GetRequiredService<IComparisonConfigurationService>();
         var comparisonService = scope.ServiceProvider.GetRequiredService<DirectoryComparisonService>();
 
+        var ignoreRulesResult = await LoadIgnoreRulesAsync(ignoreRulesFile, cancellationToken).ConfigureAwait(false);
+        if (!ignoreRulesResult.IsSuccess)
+        {
+            Console.Error.WriteLine(ignoreRulesResult.ErrorMessage);
+            return 1;
+        }
+
         configService.SetIgnoreCollectionOrder(ignoreCollectionOrder);
         configService.SetIgnoreStringCase(ignoreCase);
         configService.SetIgnoreTrailingWhitespaceAtEnd(ignoreTrailingWhitespaceAtEnd);
+        configService.AddIgnoreRulesBatch(ignoreRulesResult.IgnoreRules.Select(rule => new IgnoreRule
+        {
+            PropertyPath = rule.PropertyPath,
+            IgnoreCompletely = rule.IgnoreCompletely,
+            IgnoreCollectionOrder = rule.IgnoreCollectionOrder,
+        }));
 
         var progress = new Progress<ComparisonProgress>(p =>
         {
@@ -304,6 +328,71 @@ public static class FolderCompareCommand
         }
 
         return result.AllEqual ? 0 : 2;
+    }
+
+    private static async Task<IgnoreRulesLoadResult> LoadIgnoreRulesAsync(FileInfo? fileInfo, CancellationToken cancellationToken)
+    {
+        if (fileInfo == null)
+        {
+            return IgnoreRulesLoadResult.Success(new List<IgnoreRuleDto>());
+        }
+
+        if (!fileInfo.Exists)
+        {
+            return IgnoreRulesLoadResult.Failure($"Ignore rules file not found: {fileInfo.FullName}");
+        }
+
+        try
+        {
+            await using var stream = fileInfo.OpenRead();
+            var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+            var json = document.RootElement.GetRawText();
+
+            if (document.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                var rules = JsonSerializer.Deserialize<List<IgnoreRuleDto>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                    ?? new List<IgnoreRuleDto>();
+                return IgnoreRulesLoadResult.Success(rules);
+            }
+
+            var container = JsonSerializer.Deserialize<IgnoreRulesContainer>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                ?? new IgnoreRulesContainer();
+            return IgnoreRulesLoadResult.Success(container.IgnoreRules ?? new List<IgnoreRuleDto>());
+        }
+        catch (JsonException ex)
+        {
+            return IgnoreRulesLoadResult.Failure($"Invalid ignore rules JSON: {ex.Message}");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return IgnoreRulesLoadResult.Failure($"Failed to read ignore rules file: {ex.Message}");
+        }
+    }
+
+    private sealed class IgnoreRulesContainer
+    {
+        public List<IgnoreRuleDto>? IgnoreRules { get; init; }
+    }
+
+    private sealed class IgnoreRulesLoadResult
+    {
+        public bool IsSuccess { get; init; }
+
+        public string? ErrorMessage { get; init; }
+
+        public List<IgnoreRuleDto> IgnoreRules { get; init; } = new();
+
+        public static IgnoreRulesLoadResult Success(List<IgnoreRuleDto> ignoreRules) => new()
+        {
+            IsSuccess = true,
+            IgnoreRules = ignoreRules,
+        };
+
+        public static IgnoreRulesLoadResult Failure(string message) => new()
+        {
+            IsSuccess = false,
+            ErrorMessage = message,
+        };
     }
 
     private static string BuildProgressBar(int percent)

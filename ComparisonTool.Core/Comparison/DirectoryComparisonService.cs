@@ -24,6 +24,7 @@ public class DirectoryComparisonService
     private readonly SystemResourceMonitor resourceMonitor;
     private readonly IComparisonLogService comparisonLogService;
     private readonly HighPerformanceComparisonPipeline highPerformanceComparisonPipeline;
+    private readonly FocusedRawContentArtifactService focusedRawContentArtifactService;
 
     public DirectoryComparisonService(
         ILogger<DirectoryComparisonService> logger,
@@ -34,7 +35,8 @@ public class DirectoryComparisonService
         PerformanceTracker performanceTracker,
         SystemResourceMonitor resourceMonitor,
         IComparisonLogService comparisonLogService,
-        HighPerformanceComparisonPipeline highPerformanceComparisonPipeline)
+        HighPerformanceComparisonPipeline highPerformanceComparisonPipeline,
+        FocusedRawContentArtifactService focusedRawContentArtifactService)
     {
         this.logger = logger;
         this.comparisonService = comparisonService;
@@ -45,6 +47,7 @@ public class DirectoryComparisonService
         this.resourceMonitor = resourceMonitor;
         this.comparisonLogService = comparisonLogService;
         this.highPerformanceComparisonPipeline = highPerformanceComparisonPipeline;
+        this.focusedRawContentArtifactService = focusedRawContentArtifactService;
     }
 
     /// <summary>
@@ -295,6 +298,8 @@ public class DirectoryComparisonService
                             filePairs.Count,
                             "Comparison completed"));
                     }
+
+                    await PopulateFocusedRawContentAsync(result, cancellationToken).ConfigureAwait(false);
 
                     await AnalyzeComparisonResultAsync(
                         result,
@@ -567,6 +572,8 @@ public class DirectoryComparisonService
                 }).ConfigureAwait(false);
             }
 
+            await PopulateFocusedRawContentAsync(result, cancellationToken).ConfigureAwait(false);
+
             await AnalyzeComparisonResultAsync(
                 result,
                 enablePatternAnalysis,
@@ -639,6 +646,29 @@ public class DirectoryComparisonService
         return pipelineResult;
     }
 
+    private async Task PopulateFocusedRawContentAsync(
+        MultiFolderComparisonResult result,
+        CancellationToken cancellationToken)
+    {
+        var ignoreRules = configService.GetIgnoreRules();
+        if (!ignoreRules.Any(rule => rule.IgnoreCompletely))
+        {
+            result.Metadata[FocusedRawContentArtifactService.MetadataIgnoreCompleteRulesKey] = Array.Empty<string>();
+            result.Metadata[FocusedRawContentArtifactService.MetadataFocusedPairCountKey] = 0;
+            return;
+        }
+
+        var artifactRoot = Path.Combine(
+            Path.GetTempPath(),
+            "ComparisonToolFocusedRawContent",
+            Guid.NewGuid().ToString("N"));
+
+        await focusedRawContentArtifactService.PopulateFocusedRawContentAsync(
+            result,
+            ignoreRules,
+            artifactRoot,
+            cancellationToken).ConfigureAwait(false);
+    }
     private async Task AnalyzeComparisonResultAsync(
         MultiFolderComparisonResult result,
         bool enablePatternAnalysis,

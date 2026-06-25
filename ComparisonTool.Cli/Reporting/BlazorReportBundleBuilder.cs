@@ -65,15 +65,26 @@ internal static class BlazorReportBundleBuilder
     public static string BuildBundledRawContentPath(FilePairComparisonResult pair, int index) =>
         $"{BundledRawContentDirectoryName}/{ComparisonReportIdentity.BuildPairId(pair, index)}.json";
 
+    public static string BuildFocusedBundledRawContentPath(FilePairComparisonResult pair, int index) =>
+        $"{BundledRawContentDirectoryName}/focused-{ComparisonReportIdentity.BuildPairId(pair, index)}.json";
+
     public static bool ShouldWriteBundledRawContentSidecar(FilePairComparisonResult pair) =>
         !pair.HasError
         && !string.IsNullOrWhiteSpace(pair.File1Path)
         && !string.IsNullOrWhiteSpace(pair.File2Path);
 
-    public static async Task<BundledRawContentData> BuildBundledRawContentDataAsync(FilePairComparisonResult pair)
+    public static bool ShouldWriteFocusedBundledRawContentSidecar(FilePairComparisonResult pair) =>
+        pair.HasFocusedRawContent
+        && !string.IsNullOrWhiteSpace(pair.FocusedFile1Path)
+        && !string.IsNullOrWhiteSpace(pair.FocusedFile2Path);
+
+    public static Task<BundledRawContentData> BuildBundledRawContentDataAsync(FilePairComparisonResult pair) =>
+        BuildBundledRawContentDataAsync(pair, RawContentVariant.Full);
+
+    public static async Task<BundledRawContentData> BuildBundledRawContentDataAsync(FilePairComparisonResult pair, RawContentVariant variant)
     {
         var rawContentService = new RawContentService(NullLogger<RawContentService>.Instance);
-        var rawContent = await rawContentService.LoadRawContentAsync(pair).ConfigureAwait(false);
+        var rawContent = await rawContentService.LoadRawContentAsync(pair, variant).ConfigureAwait(false);
 
         if (!rawContent.IsLoaded)
         {
@@ -114,6 +125,11 @@ internal static class BlazorReportBundleBuilder
             else if (ShouldWriteBundledRawContentSidecar(pair))
             {
                 clonedPair.BundledRawContentPath = BuildBundledRawContentPath(pair, index);
+            }
+
+            if (ShouldWriteFocusedBundledRawContentSidecar(pair))
+            {
+                clonedPair.FocusedBundledRawContentPath = BuildFocusedBundledRawContentPath(pair, index);
             }
 
             filePairResults.Add(clonedPair);
@@ -165,6 +181,10 @@ internal static class BlazorReportBundleBuilder
             PairOutcome = pair.PairOutcome,
             RawTextDifferences = pair.RawTextDifferences,
             BundledRawContentPath = pair.BundledRawContentPath,
+            FocusedFile1Path = pair.FocusedFile1Path,
+            FocusedFile2Path = pair.FocusedFile2Path,
+            FocusedBundledRawContentPath = pair.FocusedBundledRawContentPath,
+            FocusedRawContentRuleCount = pair.FocusedRawContentRuleCount,
             ErrorMessage = pair.ErrorMessage,
             ErrorType = pair.ErrorType,
         };

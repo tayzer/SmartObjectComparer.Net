@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Results;
+using ComparisonTool.Core.RequestComparison.Services;
 using ComparisonTool.Core.Serialization.BlazorReport;
 
 namespace ComparisonTool.Cli.Reporting;
@@ -94,35 +95,55 @@ internal static class BlazorReportWriter
         for (var index = 0; index < result.FilePairResults.Count; index++)
         {
             var pair = result.FilePairResults[index];
-            if (!BlazorReportBundleBuilder.ShouldWriteBundledRawContentSidecar(pair))
+            if (BlazorReportBundleBuilder.ShouldWriteBundledRawContentSidecar(pair))
             {
-                continue;
+                await WriteBundledRawContentAssetAsync(
+                    pair,
+                    outputDirectory,
+                    BlazorReportBundleBuilder.BuildBundledRawContentPath(pair, index),
+                    RawContentVariant.Full).ConfigureAwait(false);
+                sidecarCount++;
             }
 
-            var sidecarPath = Path.Combine(outputDirectory, BlazorReportBundleBuilder.BuildBundledRawContentPath(pair, index));
-            var sidecarDirectory = Path.GetDirectoryName(sidecarPath);
-            if (!string.IsNullOrWhiteSpace(sidecarDirectory))
+            if (BlazorReportBundleBuilder.ShouldWriteFocusedBundledRawContentSidecar(pair))
             {
-                Directory.CreateDirectory(sidecarDirectory);
+                await WriteBundledRawContentAssetAsync(
+                    pair,
+                    outputDirectory,
+                    BlazorReportBundleBuilder.BuildFocusedBundledRawContentPath(pair, index),
+                    RawContentVariant.Focused).ConfigureAwait(false);
+                sidecarCount++;
             }
-
-            var bundledContent = await BlazorReportBundleBuilder.BuildBundledRawContentDataAsync(pair).ConfigureAwait(false);
-
-            await using var stream = new FileStream(
-                sidecarPath,
-                FileMode.Create,
-                FileAccess.Write,
-                FileShare.None,
-                4096,
-                FileOptions.Asynchronous | FileOptions.SequentialScan);
-
-            await JsonSerializer.SerializeAsync(stream, bundledContent, BlazorReportSerializerOptions.Default).ConfigureAwait(false);
-            sidecarCount++;
         }
 
         return sidecarCount;
     }
 
+    private static async Task WriteBundledRawContentAssetAsync(
+        FilePairComparisonResult pair,
+        string outputDirectory,
+        string relativeSidecarPath,
+        RawContentVariant variant)
+    {
+        var sidecarPath = Path.Combine(outputDirectory, relativeSidecarPath);
+        var sidecarDirectory = Path.GetDirectoryName(sidecarPath);
+        if (!string.IsNullOrWhiteSpace(sidecarDirectory))
+        {
+            Directory.CreateDirectory(sidecarDirectory);
+        }
+
+        var bundledContent = await BlazorReportBundleBuilder.BuildBundledRawContentDataAsync(pair, variant).ConfigureAwait(false);
+
+        await using var stream = new FileStream(
+            sidecarPath,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.None,
+            4096,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        await JsonSerializer.SerializeAsync(stream, bundledContent, BlazorReportSerializerOptions.Default).ConfigureAwait(false);
+    }
     private static async Task WriteRedirectorHtmlAsync(string redirectPath, string reportFolderName)
     {
         var html = string.Join(

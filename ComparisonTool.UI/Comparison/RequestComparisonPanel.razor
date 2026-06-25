@@ -940,10 +940,9 @@
             var option = availableEndpoints.FirstOrDefault(e => e.Url == value);
             if (option != null)
             {
-                if (!string.IsNullOrEmpty(option.ContentType))
-                {
-                    contentTypeOverride = option.ContentType;
-                }
+                contentTypeOverride = string.IsNullOrWhiteSpace(option.ContentType)
+                    ? null
+                    : option.ContentType;
 
                 headersA.Clear();
 
@@ -965,11 +964,6 @@
             var option = availableEndpoints.FirstOrDefault(e => e.Url == value);
             if (option != null)
             {
-                if (!string.IsNullOrEmpty(option.ContentType))
-                {
-                    contentTypeOverride = option.ContentType;
-                }
-
                 headersB.Clear();
 
                 foreach (var header in option.DefaultHeaders ?? Enumerable.Empty<KeyValuePair<string, string>>())

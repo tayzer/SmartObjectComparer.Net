@@ -259,6 +259,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<PerformanceTracker>();
         services.AddSingleton<SystemResourceMonitor>();
         services.AddSingleton<ComparisonResultCacheService>();
+        services.AddSingleton<StructuredContentPruningService>();
+        services.AddSingleton<FocusedRawContentArtifactService>();
         services.AddSingleton<AcceptedDifferenceFingerprintBuilder>();
         services.AddSingleton<IAcceptedDifferenceService, AcceptedDifferenceService>();
 

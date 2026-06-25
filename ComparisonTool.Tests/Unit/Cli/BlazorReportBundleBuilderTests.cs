@@ -2,6 +2,7 @@ using System.Text.Json;
 using ComparisonTool.Cli.Reporting;
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Results;
+using ComparisonTool.Core.RequestComparison.Services;
 using ComparisonTool.Core.Serialization.BlazorReport;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Shouldly;
@@ -128,6 +129,68 @@ public sealed class BlazorReportBundleBuilderTests : IDisposable
         bundled.IsTruncatedB.ShouldBeFalse();
     }
 
+    [TestMethod]
+    public async Task BuildJsonAsync_WhenFocusedArtifactsExist_WritesSeparateFocusedReference()
+    {
+        var fileA = this.CreateTempFile("response-a.json", "{\"ResultCode\":\"00\",\"TraceId\":\"full-a\"}");
+        var fileB = this.CreateTempFile("response-b.json", "{\"ResultCode\":\"00\",\"TraceId\":\"full-b\"}");
+        var focusedA = this.CreateTempFile("focused-a.json", "{\"ResultCode\":\"00\"}");
+        var focusedB = this.CreateTempFile("focused-b.json", "{\"ResultCode\":\"00\"}");
+        var sourcePair = new FilePairComparisonResult
+        {
+            File1Name = fileA.Name,
+            File2Name = fileB.Name,
+            File1Path = fileA.FullName,
+            File2Path = fileB.FullName,
+            FocusedFile1Path = focusedA.FullName,
+            FocusedFile2Path = focusedB.FullName,
+            FocusedRawContentRuleCount = 1,
+            ContentTypeA = "application/json",
+            ContentTypeB = "application/json",
+        };
+        var context = CreateContext(sourcePair);
+
+        var json = await BlazorReportBundleBuilder.BuildJsonAsync(context).ConfigureAwait(false);
+        var report = JsonSerializer.Deserialize<ReportBootstrapData>(json, BlazorReportSerializerOptions.Default);
+        Assert.IsNotNull(report);
+        Assert.IsNotNull(report.Result);
+        var pair = report.Result!.FilePairResults[0];
+
+        pair.BundledRawContentPath.ShouldBe(BlazorReportBundleBuilder.BuildBundledRawContentPath(sourcePair, 0));
+        pair.FocusedBundledRawContentPath.ShouldBe(BlazorReportBundleBuilder.BuildFocusedBundledRawContentPath(sourcePair, 0));
+        pair.FocusedRawContentRuleCount.ShouldBe(1);
+        pair.HasFocusedRawContent.ShouldBeTrue();
+    }
+
+    [TestMethod]
+    public async Task BuildBundledRawContentDataAsync_WhenFocusedVariantRequested_UsesFocusedArtifacts()
+    {
+        var fileA = this.CreateTempFile("success-a.json", "{\"resultCode\":\"00\",\"traceId\":\"full-a\"}");
+        var fileB = this.CreateTempFile("success-b.json", "{\"resultCode\":\"00\",\"traceId\":\"full-b\"}");
+        var focusedA = this.CreateTempFile("success-a.focused.json", "{\"resultCode\":\"00\"}");
+        var focusedB = this.CreateTempFile("success-b.focused.json", "{\"resultCode\":\"00\"}");
+        var pair = new FilePairComparisonResult
+        {
+            File1Name = fileA.Name,
+            File2Name = fileB.Name,
+            File1Path = fileA.FullName,
+            File2Path = fileB.FullName,
+            FocusedFile1Path = focusedA.FullName,
+            FocusedFile2Path = focusedB.FullName,
+            FocusedRawContentRuleCount = 1,
+            ContentTypeA = "application/json",
+            ContentTypeB = "application/json",
+        };
+
+        var full = await BlazorReportBundleBuilder.BuildBundledRawContentDataAsync(pair).ConfigureAwait(false);
+        var focused = await BlazorReportBundleBuilder.BuildBundledRawContentDataAsync(pair, RawContentVariant.Focused).ConfigureAwait(false);
+
+        full.ContentA.ShouldContain("full-a");
+        full.ContentB.ShouldContain("full-b");
+        focused.ContentA.ShouldNotContain("traceId");
+        focused.ContentB.ShouldNotContain("traceId");
+        focused.ContentA.ShouldContain("resultCode");
+    }
     private static ReportContext CreateContext(FilePairComparisonResult pair)
     {
         return new ReportContext

@@ -22,6 +22,7 @@ public class RequestComparisonJobService
     private readonly RawTextComparisonService _rawTextComparisonService;
     private readonly ResponseMaskingService _responseMaskingService;
     private readonly RequestComparisonAlternateContractTransformationService _alternateContractTransformationService;
+    private readonly FocusedRawContentArtifactService _focusedRawContentArtifactService;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IComparisonProgressPublisher? _progressPublisher;
     private readonly ConcurrentDictionary<string, RequestComparisonJob> _jobs = new();
@@ -36,6 +37,7 @@ public class RequestComparisonJobService
         RawTextComparisonService rawTextComparisonService,
         ResponseMaskingService responseMaskingService,
         RequestComparisonAlternateContractTransformationService alternateContractTransformationService,
+        FocusedRawContentArtifactService focusedRawContentArtifactService,
         IServiceScopeFactory scopeFactory,
         IComparisonProgressPublisher? progressPublisher = null)
     {
@@ -45,6 +47,7 @@ public class RequestComparisonJobService
         _rawTextComparisonService = rawTextComparisonService;
         _responseMaskingService = responseMaskingService;
         _alternateContractTransformationService = alternateContractTransformationService;
+        _focusedRawContentArtifactService = focusedRawContentArtifactService;
         _scopeFactory = scopeFactory;
         _progressPublisher = progressPublisher;
     }
@@ -292,7 +295,7 @@ public class RequestComparisonJobService
                     {
                         job.StatusMessage = p.Status;
                         progress?.Report((p.Completed, p.Total, p.Status));
-                        // Calculate percent: 75% + (20% * completed/total) â€” reserve last 5% for raw text comparison
+                        // Calculate percent: 75% + (20% * completed/total) — reserve last 5% for raw text comparison
                         var percent = 75 + (int)(20.0 * p.Completed / Math.Max(1, p.Total));
                         _ = PublishProgressAsync(jobId, ComparisonPhase.Comparing, Math.Min(percent, 95), p.Status, p.Completed, p.Total);
                     });
@@ -347,7 +350,7 @@ public class RequestComparisonJobService
             }
             else
             {
-                // No success pairs â€” create an empty result container
+                // No success pairs — create an empty result container
                 comparisonResult = new MultiFolderComparisonResult
                 {
                     TotalPairsCompared = 0,
@@ -402,7 +405,7 @@ public class RequestComparisonJobService
             {
                 if (pairResult.PairOutcome == null)
                 {
-                    // This is a domain-model comparison result â€” find its execution result
+                    // This is a domain-model comparison result — find its execution result
                     var execResult = successPairs.FirstOrDefault(c =>
                         string.Equals(
                             c.Execution.Request.RelativePath,
@@ -456,6 +459,8 @@ public class RequestComparisonJobService
 
             comparisonResult.AllEqual = comparisonResult.FilePairResults.Count > 0
                 && comparisonResult.FilePairResults.All(r => r.AreEqual);
+
+            await PopulateFocusedRawContentAsync(job, comparisonResult, cancellationToken).ConfigureAwait(false);
 
             // Store execution metadata in result
             comparisonResult.Metadata["IgnoreCollectionOrder"] = job.IgnoreCollectionOrder;
@@ -539,6 +544,32 @@ public class RequestComparisonJobService
         }
     }
 
+    private async Task PopulateFocusedRawContentAsync(
+        RequestComparisonJob job,
+        MultiFolderComparisonResult comparisonResult,
+        CancellationToken cancellationToken)
+    {
+        var effectiveIgnoreRules = _alternateContractTransformationService.GetEffectiveIgnoreRules(job)
+            .Where(rule => rule.IgnoreCompletely && !string.IsNullOrWhiteSpace(rule.PropertyPath))
+            .Select(rule => new IgnoreRule
+            {
+                PropertyPath = rule.PropertyPath,
+                IgnoreCompletely = true,
+            })
+            .ToList();
+
+        var artifactRoot = Path.Combine(
+            Path.GetTempPath(),
+            "ComparisonToolJobs",
+            job.JobId,
+            "focused");
+
+        await _focusedRawContentArtifactService.PopulateFocusedRawContentAsync(
+            comparisonResult,
+            effectiveIgnoreRules,
+            artifactRoot,
+            cancellationToken).ConfigureAwait(false);
+    }
     /// <summary>
     /// Applies per-job configuration settings to the comparison services.
     /// </summary>
