@@ -86,6 +86,13 @@
                         <MudSelectItem Value="@group">@group</MudSelectItem>
                     }
                 </MudSelect>
+
+                <MudSelect T="int" @bind-Value="CurrentRowsPerPage" Label="Rows" Variant="Variant.Outlined" Margin="Margin.Dense" Style="width: 110px;">
+                    @foreach (var pageSize in RowsPerPageOptions)
+                    {
+                        <MudSelectItem Value="@pageSize">@pageSize</MudSelectItem>
+                    }
+                </MudSelect>
                 
                 <!-- Quick Stats -->
                 <MudStack Row="true" Spacing="2" Class="ml-auto">
@@ -240,15 +247,6 @@
                         <MudDataGridPager T="ComparisonResultGridItem" />
                     </PagerContent>
                 </MudDataGrid>
-                
-                @if (GetTotalFilteredCount() > PreviewCount)
-                {
-                    <MudStack Row="true" Justify="Justify.Center" Class="mt-3">
-                        <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="@(() => ShowAll = !ShowAll)">
-                            @(ShowAll ? $"Show Top {PreviewCount}" : $"Show All ({GetTotalFilteredCount()})")
-                        </MudButton>
-                    </MudStack>
-                }
             }
         </div>
     }
@@ -268,8 +266,8 @@
     public EventCallback OnExportAll { get; set; }
 
     private bool IsCollapsed = false;
-    private bool ShowAll = false;
-    private const int PreviewCount = 20;
+    private static readonly int[] RowsPerPageOptions = { 25, 50, 100, 250 };
+    private int CurrentRowsPerPage { get; set; } = 50;
     private ComparisonResultGridItem? SelectedItem { get; set; }
     private int CurrentPage { get; set; }
     private int? lastSynchronizedSelectedPairIndex;
@@ -293,17 +291,15 @@
 
     private IEnumerable<ComparisonResultGridItem> GetFilteredGridItems()
     {
-        return GetFilteredResults().Take(ShowAll ? int.MaxValue : PreviewCount);
+        return GetFilteredResults();
     }
 
-            private int CurrentRowsPerPage => ShowAll ? 100 : PreviewCount;
-    
-            private int GetEqualCount() => projection.EqualCount;
-            private int GetDifferentCount() => projection.DifferentCount;
-            private int GetErrorCount() => projection.ErrorCount;
-            private int GetStatusCodeMismatchCount() => projection.StatusCodeMismatchCount;
-            private int GetBothNonSuccessCount() => projection.BothNonSuccessCount;
-            private int GetTotalFilteredCount() => GetFilteredResults().Count();
+    private int GetEqualCount() => projection.EqualCount;
+    private int GetDifferentCount() => projection.DifferentCount;
+    private int GetErrorCount() => projection.ErrorCount;
+    private int GetStatusCodeMismatchCount() => projection.StatusCodeMismatchCount;
+    private int GetBothNonSuccessCount() => projection.BothNonSuccessCount;
+    private int GetTotalFilteredCount() => GetFilteredResults().Count();
 
     protected override void OnParametersSet()
     {
@@ -375,15 +371,8 @@
             return;
         }
 
-        var visibleItems = GetFilteredGridItems().ToList();
+        var visibleItems = GetFilteredResults().ToList();
         var visibleIndex = visibleItems.FindIndex(x => x.OriginalIndex == SelectedPairIndex);
-
-        if (visibleIndex < 0 && !ShowAll && GetTotalFilteredCount() > PreviewCount)
-        {
-            ShowAll = true;
-            visibleItems = GetFilteredGridItems().ToList();
-            visibleIndex = visibleItems.FindIndex(x => x.OriginalIndex == SelectedPairIndex);
-        }
 
         if (visibleIndex < 0)
         {

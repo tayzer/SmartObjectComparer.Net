@@ -48,6 +48,8 @@ namespace ComparisonTool.Web.Services
 
         public Task<RequestBatchResult> StageRequestFilesAsync(IReadOnlyList<string> filePaths, string? cacheKey = null) => throw new NotImplementedException();
 
+        public Task<RequestBatchResult> StageRequestDirectoryAsync(string directoryPath, string? cacheKey = null) => throw new NotImplementedException();
+
         public async Task<string> StartComparisonAsync(CreateRequestComparisonJobRequest request, CancellationToken cancellationToken = default)
         {
             using var httpClient = CreateHttpClient();

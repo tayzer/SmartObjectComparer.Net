@@ -90,6 +90,25 @@ public class InProcessRequestComparisonGateway : IRequestComparisonGateway
         return Task.FromResult(new RequestBatchResult(batchId, copiedCount, CacheHit: false));
     }
 
+
+    /// <inheritdoc/>
+    public Task<RequestBatchResult> StageRequestDirectoryAsync(
+        string directoryPath,
+        string? cacheKey = null)
+    {
+        var batchId = Guid.NewGuid().ToString("N")[..8];
+        var batchPath = Path.Combine(Path.GetTempPath(), "ComparisonToolRequests", batchId);
+        var stageResult = RequestBatchDirectoryStager.StageDirectory(directoryPath, batchPath);
+
+        _logger.LogInformation(
+            "Staged {Count} request files and {SidecarCount} header sidecars from directory {Directory} in batch {BatchId}",
+            stageResult.RequestFileCount,
+            stageResult.SidecarFileCount,
+            Path.GetFullPath(directoryPath),
+            batchId);
+
+        return Task.FromResult(new RequestBatchResult(batchId, stageResult.RequestFileCount, CacheHit: false));
+    }
     /// <inheritdoc/>
     public async Task<string> StartComparisonAsync(
         CreateRequestComparisonJobRequest request,
@@ -157,6 +176,7 @@ public class InProcessRequestComparisonGateway : IRequestComparisonGateway
 
         return Task.CompletedTask;
     }
+
 
     private static string GetSafeUniqueDestinationPath(string batchPath, string fileName, ISet<string> stagedPaths)
     {

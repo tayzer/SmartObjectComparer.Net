@@ -16,6 +16,7 @@
 @inject NavigationManager NavigationManager
 @inject IConfiguration Configuration
 @inject IOptions<RequestComparisonEndpointOptions> EndpointOptions
+@inject IOptions<RequestComparisonLargeBatchOptions> LargeBatchOptions
 @inject IDeserializationService DeserializationService
 @inject IRequestComparisonAlternateContractProfileRegistry AlternateContractProfileRegistry
 @inject IComparisonConfigurationService ConfigService
@@ -23,6 +24,7 @@
 @inject IProgressSubscriber ProgressService
 @inject IRequestComparisonGateway RequestComparisonGateway
 @inject IFilePickerService FilePickerService
+@inject IFolderPickerService FolderPickerService
 @implements IAsyncDisposable
 
 <MudPaper Elevation="2" Class="pa-4">
@@ -38,12 +40,20 @@
                 <MudText Typo="Typo.subtitle1">Step 1: Upload Request Files</MudText>
                 @if (FilePickerService.IsAvailable)
                 {
-                    <MudButton Variant="Variant.Outlined"
-                               Color="Color.Primary"
-                               StartIcon="@Icons.Material.Filled.AttachFile"
-                               OnClick="HandleNativeFileSelection">
-                        Add Request Files
-                    </MudButton>
+                    <MudStack Row="true" Spacing="2" Class="flex-wrap">
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.AttachFile"
+                                   OnClick="HandleNativeFileSelection">
+                            Add Request Files
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.FolderOpen"
+                                   OnClick="HandleNativeFolderSelection">
+                            Add Request Folder
+                        </MudButton>
+                    </MudStack>
                 }
                 else
                 {
@@ -51,7 +61,15 @@
                 }
                 @if (SelectedRequestFileCount > 0)
                 {
-                    <MudText Typo="Typo.caption">@SelectedRequestFileCount files selected</MudText>
+                    <MudText Typo="Typo.caption">
+                        @SelectedRequestSelectionDescription
+                    </MudText>
+                }
+                @if (IsLargeBatchSelection)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                        Large run mode will process @SelectedRequestFileCount requests in chunks of up to @EffectiveLargeBatchChunkSize with default concurrency @EffectiveLargeBatchDefaultConcurrency.
+                    </MudAlert>
                 }
                 <MudButton Variant="Variant.Filled" 
                            Color="Color.Primary" 
@@ -160,6 +178,12 @@
                     
                     <MudExpansionPanel Text="Analysis Options">
                         <MudStack Spacing="2">
+                            @if (IsLargeBatchSelection)
+                            {
+                                <MudAlert Severity="@(enableEnhancedStructuralAnalysis ? Severity.Warning : Severity.Info)" Variant="Variant.Outlined" Dense="true">
+                                    Enhanced structural analysis is off by default for large runs because it can add significant time and memory use. You can enable it manually here.
+                                </MudAlert>
+                            }
                             <MudSwitch @bind-Value="enableSemanticAnalysis" 
                                        Label="Enable Semantic Analysis" 
                                        Color="Color.Success" />
@@ -434,6 +458,9 @@
 
     private List<IBrowserFile>? selectedFiles;
     private List<string>? selectedFilePaths;
+    private string? selectedDirectoryPath;
+    private int selectedDirectoryRequestCount;
+    private bool largeBatchDefaultsApplied;
     private bool isUploading = false;
     private string? batchId;
     private int uploadedCount = 0;
@@ -495,7 +522,17 @@
     private bool CanResolveAlternateContractProfile =>
         availableAlternateContractProfiles.Count == 1 ||
         !string.IsNullOrWhiteSpace(selectedAlternateContractProfileId);
-    private int SelectedRequestFileCount => selectedFilePaths?.Count ?? selectedFiles?.Count ?? 0;
+    private RequestComparisonLargeBatchOptions LargeBatchSettings => LargeBatchOptions.Value;
+    private int EffectiveLargeBatchThreshold => Math.Max(1, LargeBatchSettings.LargeBatchThreshold);
+    private int EffectiveLargeBatchChunkSize => Math.Max(1, LargeBatchSettings.LargeBatchChunkSize);
+    private int EffectiveLargeBatchDefaultConcurrency => Math.Max(1, LargeBatchSettings.LargeBatchDefaultConcurrency);
+    private int SelectedRequestFileCount => !string.IsNullOrWhiteSpace(selectedDirectoryPath)
+        ? selectedDirectoryRequestCount
+        : selectedFilePaths?.Count ?? selectedFiles?.Count ?? uploadedCount;
+    private bool IsLargeBatchSelection => SelectedRequestFileCount >= EffectiveLargeBatchThreshold;
+    private string SelectedRequestSelectionDescription => !string.IsNullOrWhiteSpace(selectedDirectoryPath)
+        ? $"{SelectedRequestFileCount} files selected from {selectedDirectoryPath}"
+        : $"{SelectedRequestFileCount} files selected";
 
     private string importStatusMessage = string.Empty;
     private bool importStatusIsError = false;
@@ -554,6 +591,9 @@
         batchId = stagedBatchId.Trim();
         selectedFiles = null;
         selectedFilePaths = null;
+        selectedDirectoryPath = null;
+        selectedDirectoryRequestCount = 0;
+        largeBatchDefaultsApplied = false;
         cacheHit = false;
         cacheKey = null;
         errorMessage = null;
@@ -561,6 +601,13 @@
             && int.TryParse(stagedCount, out var parsedCount)
             ? parsedCount
             : 0;
+
+        if (uploadedCount >= EffectiveLargeBatchThreshold)
+        {
+            maxConcurrency = EffectiveLargeBatchDefaultConcurrency;
+            enableEnhancedStructuralAnalysis = false;
+            largeBatchDefaultsApplied = true;
+        }
 
         if (queryValues.TryGetValue("requestModelName", out var stagedModelName)
             && availableModels.Contains(stagedModelName, StringComparer.Ordinal))
@@ -677,6 +724,9 @@
         {
             selectedFiles = e.GetMultipleFiles(10000).ToList();
             selectedFilePaths = null;
+            selectedDirectoryPath = null;
+            selectedDirectoryRequestCount = 0;
+            largeBatchDefaultsApplied = false;
             errorMessage = null;
             cacheHit = false;
             batchId = null;
@@ -686,12 +736,16 @@
             {
                 cacheKey = ComputeCacheKey(selectedFiles);
                 await TryResolveCachedBatchAsync();
+                ApplyLargeBatchDefaultsForSelection();
             }
         }
         catch (Exception ex)
         {
             selectedFiles = null;
             selectedFilePaths = null;
+            selectedDirectoryPath = null;
+            selectedDirectoryRequestCount = 0;
+            largeBatchDefaultsApplied = false;
             cacheKey = null;
             cacheHit = false;
             batchId = null;
@@ -711,6 +765,9 @@
 
             selectedFiles = null;
             selectedFilePaths = filePaths.ToList();
+            selectedDirectoryPath = null;
+            selectedDirectoryRequestCount = 0;
+            largeBatchDefaultsApplied = false;
             errorMessage = null;
             cacheHit = false;
             batchId = null;
@@ -720,6 +777,7 @@
             {
                 cacheKey = ComputeFilePathCacheKey(selectedFilePaths);
                 await TryResolveCachedBatchAsync();
+                ApplyLargeBatchDefaultsForSelection();
             }
             else
             {
@@ -731,12 +789,68 @@
         {
             selectedFiles = null;
             selectedFilePaths = null;
+            selectedDirectoryPath = null;
+            selectedDirectoryRequestCount = 0;
+            largeBatchDefaultsApplied = false;
             cacheKey = null;
             cacheHit = false;
             batchId = null;
             uploadedCount = 0;
             errorMessage = $"Could not add request files: {ex.Message}";
             Logger.LogError(ex, "Failed to add request files through native picker");
+        }
+    }
+
+
+    private async Task HandleNativeFolderSelection()
+    {
+        try
+        {
+            var folderPath = await FolderPickerService.PickFolderAsync("Select request folder");
+            if (string.IsNullOrWhiteSpace(folderPath))
+            {
+                return;
+            }
+
+            var normalizedFolderPath = Path.GetFullPath(folderPath);
+            var requestFiles = EnumerateEligibleRequestFiles(normalizedFolderPath);
+
+            selectedFiles = null;
+            selectedFilePaths = null;
+            selectedDirectoryPath = normalizedFolderPath;
+            selectedDirectoryRequestCount = requestFiles.Count;
+            largeBatchDefaultsApplied = false;
+            errorMessage = requestFiles.Count == 0
+                ? "No eligible .xml, .json, or .txt request files were found in the selected folder."
+                : null;
+            cacheHit = false;
+            batchId = null;
+            uploadedCount = 0;
+
+            if (requestFiles.Count > 0)
+            {
+                cacheKey = ComputeDirectoryCacheKey(normalizedFolderPath, requestFiles);
+                await TryResolveCachedBatchAsync();
+                ApplyLargeBatchDefaultsForSelection();
+            }
+            else
+            {
+                cacheKey = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            selectedFiles = null;
+            selectedFilePaths = null;
+            selectedDirectoryPath = null;
+            selectedDirectoryRequestCount = 0;
+            largeBatchDefaultsApplied = false;
+            cacheKey = null;
+            cacheHit = false;
+            batchId = null;
+            uploadedCount = 0;
+            errorMessage = $"Could not add request folder: {ex.Message}";
+            Logger.LogError(ex, "Failed to add request folder through native picker");
         }
     }
 
@@ -750,6 +864,15 @@
         
         try
         {
+            if (!string.IsNullOrWhiteSpace(selectedDirectoryPath))
+            {
+                var result = await RequestComparisonGateway.StageRequestDirectoryAsync(selectedDirectoryPath, cacheKey);
+                batchId = result.BatchId;
+                uploadedCount = result.FileCount;
+                cacheHit = result.CacheHit;
+                return;
+            }
+
             if (selectedFilePaths is { Count: > 0 })
             {
                 var result = await RequestComparisonGateway.StageRequestFilesAsync(selectedFilePaths, cacheKey);
@@ -1017,6 +1140,68 @@
         var bytes = System.Text.Encoding.UTF8.GetBytes(builder.ToString());
         var hash = System.Security.Cryptography.SHA256.HashData(bytes);
         return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+
+    private void ApplyLargeBatchDefaultsForSelection()
+    {
+        if (!IsLargeBatchSelection || largeBatchDefaultsApplied)
+        {
+            return;
+        }
+
+        maxConcurrency = EffectiveLargeBatchDefaultConcurrency;
+        enableEnhancedStructuralAnalysis = false;
+        largeBatchDefaultsApplied = true;
+    }
+
+    private static IReadOnlyList<string> EnumerateEligibleRequestFiles(string directoryPath)
+    {
+        var eligibleExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".xml",
+            ".json",
+            ".txt",
+        };
+
+        return Directory.EnumerateFiles(directoryPath, "*", SearchOption.AllDirectories)
+            .Where(path => !path.EndsWith(".headers.json", StringComparison.OrdinalIgnoreCase))
+            .Where(path => !Path.GetFileName(path).StartsWith("_", StringComparison.Ordinal))
+            .Where(path => eligibleExtensions.Contains(Path.GetExtension(path)))
+            .OrderBy(path => Path.GetRelativePath(directoryPath, path), StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static string ComputeDirectoryCacheKey(string directoryPath, IReadOnlyList<string> requestFiles)
+    {
+        var root = Path.GetFullPath(directoryPath);
+        var builder = new System.Text.StringBuilder();
+
+        foreach (var requestPath in requestFiles)
+        {
+            AppendFileFingerprint(builder, root, requestPath);
+
+            var sidecarPath = requestPath + ".headers.json";
+            if (File.Exists(sidecarPath))
+            {
+                AppendFileFingerprint(builder, root, sidecarPath);
+            }
+        }
+
+        var bytes = System.Text.Encoding.UTF8.GetBytes(builder.ToString());
+        var hash = System.Security.Cryptography.SHA256.HashData(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    private static void AppendFileFingerprint(System.Text.StringBuilder builder, string root, string path)
+    {
+        var info = new FileInfo(path);
+        builder.Append(Path.GetRelativePath(root, info.FullName).Replace('\\', '/'))
+            .Append('|')
+            .Append(info.Exists ? info.Length : 0)
+            .Append('|')
+            .Append(info.Exists ? info.LastWriteTimeUtc.Ticks : 0)
+            .Append(';');
     }
 
     private async Task OpenPropertySelector()

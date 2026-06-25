@@ -4,10 +4,12 @@ using ComparisonTool.Core.Comparison;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.RequestComparison.Models;
+using ComparisonTool.Core.RequestComparison.AlternateContracts;
 using ComparisonTool.Core.Serialization;
 using ComparisonTool.Core.Utilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace ComparisonTool.Core.RequestComparison.Services;
 
@@ -25,6 +27,7 @@ public class RequestComparisonJobService
     private readonly FocusedRawContentArtifactService _focusedRawContentArtifactService;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IComparisonProgressPublisher? _progressPublisher;
+    private readonly RequestComparisonLargeBatchOptions _largeBatchOptions;
     private readonly ConcurrentDictionary<string, RequestComparisonJob> _jobs = new();
     private readonly ConcurrentDictionary<string, MultiFolderComparisonResult> _results = new();
     private readonly ConcurrentDictionary<string, DateTimeOffset> _lastProgressUpdate = new();
@@ -39,6 +42,7 @@ public class RequestComparisonJobService
         RequestComparisonAlternateContractTransformationService alternateContractTransformationService,
         FocusedRawContentArtifactService focusedRawContentArtifactService,
         IServiceScopeFactory scopeFactory,
+        IOptions<RequestComparisonLargeBatchOptions>? largeBatchOptions = null,
         IComparisonProgressPublisher? progressPublisher = null)
     {
         _logger = logger;
@@ -49,6 +53,7 @@ public class RequestComparisonJobService
         _alternateContractTransformationService = alternateContractTransformationService;
         _focusedRawContentArtifactService = focusedRawContentArtifactService;
         _scopeFactory = scopeFactory;
+        _largeBatchOptions = largeBatchOptions?.Value ?? new RequestComparisonLargeBatchOptions();
         _progressPublisher = progressPublisher;
     }
 
@@ -190,282 +195,167 @@ public class RequestComparisonJobService
             _logger.LogInformation("Parsed {Count} request files for job {JobId}", requests.Count, jobId);
             await PublishProgressAsync(jobId, ComparisonPhase.Parsing, 5, $"Parsed {requests.Count} request files", requests.Count, requests.Count, forcePublish: true);
 
-            // Phase 2: Execute requests (5-75%)
-            job.Status = RequestComparisonStatus.Executing;
-            job.StatusMessage = "Executing requests...";
-            await PublishProgressAsync(jobId, ComparisonPhase.Executing, 5, "Starting request execution...", 0, requests.Count, forcePublish: true);
+            var useLargeBatchMode = RequestComparisonLargeBatchPlanner.ShouldUseLargeBatchMode(requests.Count, _largeBatchOptions);
+            var effectiveChunkSize = useLargeBatchMode
+                ? RequestComparisonLargeBatchPlanner.GetEffectiveChunkSize(_largeBatchOptions)
+                : Math.Max(1, requests.Count);
+            var requestChunks = useLargeBatchMode
+                ? RequestComparisonLargeBatchPlanner.Partition(requests, effectiveChunkSize)
+                : requests.Count == 0
+                    ? Array.Empty<IReadOnlyList<RequestFileInfo>>()
+                    : new[] { requests };
 
-            var executionProgress = new Progress<(int Completed, int Total, string Message)>(p =>
+            job.LargeBatchMode = useLargeBatchMode;
+            job.LargeBatchChunkSize = effectiveChunkSize;
+            job.LargeBatchTotalChunks = requestChunks.Count;
+            job.LargeBatchProcessedChunks = 0;
+
+            if (useLargeBatchMode)
             {
-                job.CompletedRequests = p.Completed;
-                job.StatusMessage = p.Message;
-                progress?.Report(p);
-                // Calculate percent: 5% + (70% * completed/total)
-                var percent = 5 + (int)(70.0 * p.Completed / Math.Max(1, p.Total));
-                _ = PublishProgressAsync(jobId, ComparisonPhase.Executing, percent, p.Message, p.Completed, p.Total);
-            });
+                _logger.LogInformation(
+                    "Job {JobId} is using large-batch mode: Requests={RequestCount}, ChunkSize={ChunkSize}, TotalChunks={TotalChunks}, MaxConcurrency={MaxConcurrency}",
+                    jobId,
+                    requests.Count,
+                    effectiveChunkSize,
+                    requestChunks.Count,
+                    job.MaxConcurrency);
+                await PublishProgressAsync(
+                    jobId,
+                    ComparisonPhase.Executing,
+                    5,
+                    $"Large batch mode: {requests.Count} requests in {requestChunks.Count} chunks of up to {effectiveChunkSize}.",
+                    0,
+                    requests.Count,
+                    forcePublish: true);
+            }
 
-            var executionResults = await _executionService.ExecuteRequestsAsync(
-                job,
-                requests,
-                executionProgress,
-                cancellationToken).ConfigureAwait(false);
+            var comparisonResult = new MultiFolderComparisonResult
+            {
+                TotalPairsCompared = 0,
+                AllEqual = false,
+                FilePairResults = new List<FilePairComparisonResult>(),
+                Metadata = new Dictionary<string, object>(StringComparer.Ordinal),
+            };
 
-            var successCount = executionResults.Count(r => r.Success);
-            _logger.LogInformation(
-                "Executed {Success}/{Total} requests successfully for job {JobId}",
-                successCount,
-                executionResults.Count,
-                jobId);
-            await PublishProgressAsync(jobId, ComparisonPhase.Executing, 75, $"Executed {successCount}/{executionResults.Count} requests successfully", executionResults.Count, executionResults.Count, forcePublish: true);
-
-            // Phase 2.5: Classify execution results by HTTP outcome
-            var classified = ExecutionResultClassifier.ClassifyAll(executionResults);
-            var outcomeSummary = ExecutionResultClassifier.Summarize(classified);
-
-            var successPairs = classified.Where(c => c.Outcome == RequestPairOutcome.BothSuccess).ToList();
-            var nonSuccessPairs = classified.Where(c =>
-                c.Outcome == RequestPairOutcome.StatusCodeMismatch ||
-                c.Outcome == RequestPairOutcome.BothNonSuccess).ToList();
-            var failedPairs = classified.Where(c => c.Outcome == RequestPairOutcome.OneOrBothFailed).ToList();
+            var outcomeAccumulator = new ExecutionOutcomeSummaryAccumulator();
+            var failedExecutionRecords = new List<RequestExecutionFailureMetadata>();
             var alternateContractProfile = job.UseAlternateContractForEndpointB
                 ? _alternateContractTransformationService.ResolveProfile(job)
                 : null;
+            var executedCount = 0;
+            var successCount = 0;
+            var chunkCountForProgress = Math.Max(1, requestChunks.Count);
 
+            for (var chunkIndex = 0; chunkIndex < requestChunks.Count; chunkIndex++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var chunkNumber = chunkIndex + 1;
+                var chunk = requestChunks[chunkIndex];
+                var chunkLabel = useLargeBatchMode ? $"Chunk {chunkNumber}/{requestChunks.Count}: " : string.Empty;
+                var chunkPercentBase = 5.0 + (90.0 * chunkIndex / chunkCountForProgress);
+                var chunkExecuteSpan = 70.0 / chunkCountForProgress;
+                var chunkCompareSpan = 20.0 / chunkCountForProgress;
+                var completedBeforeChunk = executedCount;
+
+                // Phase 2: Execute this request chunk.
+                job.Status = RequestComparisonStatus.Executing;
+                job.StatusMessage = $"{chunkLabel}Executing requests...";
+                await PublishProgressAsync(
+                    jobId,
+                    ComparisonPhase.Executing,
+                    (int)Math.Round(chunkPercentBase),
+                    job.StatusMessage,
+                    completedBeforeChunk,
+                    requests.Count,
+                    forcePublish: true);
+
+                var executionProgress = new Progress<(int Completed, int Total, string Message)>(p =>
+                {
+                    var globalCompleted = Math.Min(requests.Count, completedBeforeChunk + p.Completed);
+                    job.CompletedRequests = globalCompleted;
+                    job.StatusMessage = $"{chunkLabel}{p.Message}";
+                    progress?.Report((globalCompleted, requests.Count, job.StatusMessage));
+
+                    var percent = (int)Math.Min(
+                        95,
+                        Math.Round(chunkPercentBase + (chunkExecuteSpan * p.Completed / Math.Max(1, p.Total))));
+                    _ = PublishProgressAsync(
+                        jobId,
+                        ComparisonPhase.Executing,
+                        percent,
+                        job.StatusMessage,
+                        globalCompleted,
+                        requests.Count);
+                });
+
+                var executionResults = await _executionService.ExecuteRequestsAsync(
+                    job,
+                    chunk,
+                    executionProgress,
+                    cancellationToken).ConfigureAwait(false);
+
+                executedCount += executionResults.Count;
+                successCount += executionResults.Count(r => r.Success);
+                job.CompletedRequests = executedCount;
+
+                failedExecutionRecords.AddRange(executionResults
+                    .Where(r => !r.Success)
+                    .Select(r => new RequestExecutionFailureMetadata(r.Request.RelativePath, r.ErrorMessage)));
+
+                var chunkComparisonResult = await CompareExecutionResultsAsync(
+                    job,
+                    executionResults,
+                    alternateContractProfile,
+                    chunkNumber,
+                    requestChunks.Count,
+                    chunkPercentBase + chunkExecuteSpan,
+                    chunkCompareSpan,
+                    chunkLabel,
+                    progress,
+                    cancellationToken).ConfigureAwait(false);
+
+                outcomeAccumulator.Add(chunkComparisonResult.OutcomeSummary);
+                comparisonResult.FilePairResults.AddRange(chunkComparisonResult.Result.FilePairResults);
+                comparisonResult.TotalPairsCompared = comparisonResult.FilePairResults.Count;
+
+                job.LargeBatchProcessedChunks = chunkNumber;
+
+                await PublishProgressAsync(
+                    jobId,
+                    ComparisonPhase.Comparing,
+                    (int)Math.Min(95, Math.Round(5.0 + (90.0 * chunkNumber / chunkCountForProgress))),
+                    useLargeBatchMode ? $"Completed chunk {chunkNumber}/{requestChunks.Count}." : "Compared responses.",
+                    executedCount,
+                    requests.Count,
+                    forcePublish: true);
+            }
+
+            var outcomeSummary = outcomeAccumulator.ToSummary();
             _logger.LogInformation(
-                "Job {JobId} classification: BothSuccess={BothSuccess}, StatusCodeMismatch={StatusCodeMismatch}, BothNonSuccess={BothNonSuccess}, OneOrBothFailed={Failed}",
-                jobId,
-                outcomeSummary.BothSuccess,
-                outcomeSummary.StatusCodeMismatch,
-                outcomeSummary.BothNonSuccess,
-                outcomeSummary.OneOrBothFailed);
+                "Executed {Success}/{Total} requests successfully for job {JobId}",
+                successCount,
+                executedCount,
+                jobId);
 
-            // Phase 3: Compare responses (75-100%)
-            job.Status = RequestComparisonStatus.Comparing;
-            job.StatusMessage = "Comparing responses...";
-            progress?.Report((job.TotalRequests, job.TotalRequests, "Comparing responses..."));
-            await PublishProgressAsync(jobId, ComparisonPhase.Comparing, 75, "Starting response comparison...", forcePublish: true);
-
-            MultiFolderComparisonResult comparisonResult;
-
-            if (successPairs.Count > 0)
-            {
-                // Phase 3a: Domain-model comparison for BothSuccess pairs (existing pipeline)
-                // Create temporary directories with only success response files to avoid
-                // domain-model comparison attempting to deserialize non-success responses
-                var usePersistentComparisonDirectories = alternateContractProfile != null;
-                var tempDirA = usePersistentComparisonDirectories
-                    ? Path.Combine(Path.GetTempPath(), "ComparisonToolJobs", job.JobId, "comparisonA")
-                    : Path.Combine(Path.GetTempPath(), $"success_responses_a_{jobId}");
-                var tempDirB = usePersistentComparisonDirectories
-                    ? Path.Combine(Path.GetTempPath(), "ComparisonToolJobs", job.JobId, "comparisonB")
-                    : Path.Combine(Path.GetTempPath(), $"success_responses_b_{jobId}");
-
-                try
-                {
-                    if (Directory.Exists(tempDirA))
-                    {
-                        Directory.Delete(tempDirA, recursive: true);
-                    }
-
-                    if (Directory.Exists(tempDirB))
-                    {
-                        Directory.Delete(tempDirB, recursive: true);
-                    }
-
-                    Directory.CreateDirectory(tempDirA);
-                    Directory.CreateDirectory(tempDirB);
-
-                    // Materialize success response files to temp directories in parallel.
-                    // Alternate-contract jobs normalize endpoint B into canonical XML first.
-                    var copyTasks = successPairs.Select(async successPair =>
-                    {
-                        var exec = successPair.Execution;
-                        if (exec.ResponsePathA != null && exec.ResponsePathB != null &&
-                            File.Exists(exec.ResponsePathA) && File.Exists(exec.ResponsePathB))
-                        {
-                            await MaterializeSuccessPairForComparisonAsync(job, exec, tempDirA, tempDirB, cancellationToken)
-                                .ConfigureAwait(false);
-                        }
-                    }).ToList();
-
-                    await Task.WhenAll(copyTasks).ConfigureAwait(false);
-
-                    var comparisonProgress = new Progress<ComparisonProgress>(p =>
-                    {
-                        job.StatusMessage = p.Status;
-                        progress?.Report((p.Completed, p.Total, p.Status));
-                        // Calculate percent: 75% + (20% * completed/total) — reserve last 5% for raw text comparison
-                        var percent = 75 + (int)(20.0 * p.Completed / Math.Max(1, p.Total));
-                        _ = PublishProgressAsync(jobId, ComparisonPhase.Comparing, Math.Min(percent, 95), p.Status, p.Completed, p.Total);
-                    });
-
-                    using var scope = _scopeFactory.CreateScope();
-
-                    // Apply per-job configuration settings
-                    var configService = scope.ServiceProvider.GetRequiredService<IComparisonConfigurationService>();
-                    var xmlDeserializationService = scope.ServiceProvider.GetRequiredService<IXmlDeserializationService>();
-
-                    ApplyJobConfiguration(job, configService, xmlDeserializationService);
-
-                    var comparisonService = scope.ServiceProvider.GetRequiredService<DirectoryComparisonService>();
-                    var comparisonModelName = alternateContractProfile?.CanonicalModelName ?? job.ModelName;
-
-                    comparisonResult = await comparisonService.CompareDirectoriesAsync(
-                        tempDirA,
-                        tempDirB,
-                        comparisonModelName,
-                        includeAllFiles: true,
-                        enablePatternAnalysis: true,
-                        enableSemanticAnalysis: job.EnableSemanticAnalysis,
-                        progress: comparisonProgress,
-                        cancellationToken: cancellationToken).ConfigureAwait(false);
-                }
-                finally
-                {
-                    // Keep alternate-contract comparison artifacts for raw side-by-side view and report bundling.
-                    if (!usePersistentComparisonDirectories)
-                    {
-                        try
-                        {
-                            if (Directory.Exists(tempDirA))
-                                Directory.Delete(tempDirA, recursive: true);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogWarning(ex, "Failed to delete temporary directory {TempDir}", tempDirA);
-                        }
-
-                        try
-                        {
-                            if (Directory.Exists(tempDirB))
-                                Directory.Delete(tempDirB, recursive: true);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogWarning(ex, "Failed to delete temporary directory {TempDir}", tempDirB);
-                        }
-                    }
-                }
-            }
-            else
-            {
-                // No success pairs — create an empty result container
-                comparisonResult = new MultiFolderComparisonResult
-                {
-                    TotalPairsCompared = 0,
-                    AllEqual = false,
-                    FilePairResults = new List<FilePairComparisonResult>(),
-                    Metadata = new Dictionary<string, object>(StringComparer.Ordinal),
-                };
-            }
-
-            // Phase 3b: Raw text comparison for StatusCodeMismatch + BothNonSuccess pairs
-            if (nonSuccessPairs.Count > 0)
-            {
-                await PublishProgressAsync(jobId, ComparisonPhase.Comparing, 95,
-                    $"Comparing {nonSuccessPairs.Count} non-success response pairs as raw text...", forcePublish: true);
-
-                var rawTextResults = await _rawTextComparisonService.CompareAllRawAsync(
-                    nonSuccessPairs,
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
-
-                comparisonResult.FilePairResults.AddRange(rawTextResults);
-                comparisonResult.TotalPairsCompared += rawTextResults.Count;
-
-                _logger.LogInformation(
-                    "Raw text comparison completed for {Count} non-success pairs in job {JobId}",
-                    rawTextResults.Count,
-                    jobId);
-            }
-
-            // Phase 3c: Add error records for OneOrBothFailed pairs
-            if (failedPairs.Count > 0)
-            {
-                foreach (var failed in failedPairs)
-                {
-                    comparisonResult.FilePairResults.Add(new FilePairComparisonResult
-                    {
-                        File1Name = Path.GetFileName(failed.Execution.Request.RelativePath),
-                        File2Name = Path.GetFileName(failed.Execution.Request.RelativePath),
-                        RequestRelativePath = failed.Execution.Request.RelativePath,
-                        ErrorMessage = failed.Execution.ErrorMessage ?? "Request execution failed",
-                        ErrorType = "HttpRequestException",
-                        PairOutcome = RequestPairOutcome.OneOrBothFailed,
-                    });
-                }
-
-                comparisonResult.AllEqual = false;
-                comparisonResult.TotalPairsCompared += failedPairs.Count;
-            }
-
-            // Stamp BothSuccess pair outcomes onto their FilePairComparisonResults
-            // (non-success pairs already have PairOutcome set by the raw text service)
-            foreach (var pairResult in comparisonResult.FilePairResults)
-            {
-                if (pairResult.PairOutcome == null)
-                {
-                    // This is a domain-model comparison result — find its execution result
-                    var execResult = successPairs.FirstOrDefault(c =>
-                        string.Equals(
-                            c.Execution.Request.RelativePath,
-                            pairResult.RequestRelativePath,
-                            StringComparison.OrdinalIgnoreCase));
-
-                    execResult ??= ResolveSuccessPairByComparisonArtifactPath(
-                        job,
-                        successPairs,
-                        pairResult,
-                        alternateContractProfile?.CanonicalResponseFormat);
-
-                    execResult ??= successPairs.FirstOrDefault(c =>
-                        string.Equals(
-                            Path.GetFileName(c.Execution.Request.RelativePath),
-                            pairResult.File1Name,
-                            StringComparison.OrdinalIgnoreCase));
-
-                    execResult ??= successPairs.FirstOrDefault(c =>
-                        string.Equals(
-                            Path.GetFileNameWithoutExtension(c.Execution.Request.RelativePath),
-                            Path.GetFileNameWithoutExtension(pairResult.File1Name),
-                            StringComparison.OrdinalIgnoreCase));
-
-                    if (execResult != null)
-                    {
-                        pairResult.RequestRelativePath = execResult.Execution.Request.RelativePath;
-                        pairResult.PairOutcome = RequestPairOutcome.BothSuccess;
-                        pairResult.HttpStatusCodeA = execResult.Execution.StatusCodeA;
-                        pairResult.HttpStatusCodeB = execResult.Execution.StatusCodeB;
-                        pairResult.ContentTypeA = alternateContractProfile?.CanonicalResponseContentType ?? execResult.Execution.ContentTypeA;
-                        pairResult.ContentTypeB = alternateContractProfile?.CanonicalResponseContentType ?? execResult.Execution.ContentTypeB;
-
-                        // Non-alternate jobs compare directly against the persisted endpoint responses, so keep
-                        // side-by-side raw content pointed at the original response bodies.
-                        if (alternateContractProfile == null &&
-                            execResult.Execution.ResponsePathA != null &&
-                            execResult.Execution.ResponsePathB != null)
-                        {
-                            pairResult.File1Path = execResult.Execution.ResponsePathA;
-                            pairResult.File2Path = execResult.Execution.ResponsePathB;
-                        }
-                    }
-                }
-            }
-
-            // Sort all results by filename for consistent ordering
             comparisonResult.FilePairResults = comparisonResult.FilePairResults
-                .OrderBy(r => r.File1Name, StringComparer.Ordinal)
+                .OrderBy(r => r.RequestRelativePath ?? r.File1Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(r => r.File1Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
-
+            comparisonResult.TotalPairsCompared = comparisonResult.FilePairResults.Count;
             comparisonResult.AllEqual = comparisonResult.FilePairResults.Count > 0
                 && comparisonResult.FilePairResults.All(r => r.AreEqual);
 
+            await PublishProgressAsync(jobId, ComparisonPhase.Comparing, 95, "Preparing focused raw content artifacts...", executedCount, requests.Count, forcePublish: true);
             await PopulateFocusedRawContentAsync(job, comparisonResult, cancellationToken).ConfigureAwait(false);
 
-            // Store execution metadata in result
             comparisonResult.Metadata["IgnoreCollectionOrder"] = job.IgnoreCollectionOrder;
             comparisonResult.Metadata["RequestComparisonJobId"] = jobId;
             comparisonResult.Metadata["ExecutionOutcomeSummary"] = outcomeSummary;
+            comparisonResult.Metadata["LargeBatchMode"] = job.LargeBatchMode;
+            comparisonResult.Metadata["LargeBatchChunkSize"] = job.LargeBatchChunkSize;
+            comparisonResult.Metadata["LargeBatchTotalChunks"] = job.LargeBatchTotalChunks;
+            comparisonResult.Metadata["LargeBatchProcessedChunks"] = job.LargeBatchProcessedChunks;
             comparisonResult.Metadata["UseAlternateContractForEndpointB"] = job.UseAlternateContractForEndpointB;
             comparisonResult.Metadata["AlternateContractProfileId"] = job.AlternateContractProfileId;
             if (alternateContractProfile != null)
@@ -473,10 +363,8 @@ public class RequestComparisonJobService
                 comparisonResult.Metadata["AlternateContractCanonicalResponseFormat"] = alternateContractProfile.CanonicalResponseFormat.ToString();
                 comparisonResult.Metadata["AlternateContractDefaultIgnoreRuleCount"] = alternateContractProfile.DefaultIgnoreRules.Count;
             }
-            comparisonResult.Metadata["ExecutionResults"] = executionResults
-                .Where(r => !r.Success)
-                .Select(r => new { r.Request.RelativePath, r.ErrorMessage })
-                .ToList();
+
+            comparisonResult.Metadata["ExecutionResults"] = failedExecutionRecords;
 
             _results[jobId] = comparisonResult;
 
@@ -510,6 +398,310 @@ public class RequestComparisonJobService
         }
     }
 
+
+    private async Task<ChunkComparisonResult> CompareExecutionResultsAsync(
+        RequestComparisonJob job,
+        IReadOnlyList<RequestExecutionResult> executionResults,
+        RequestComparisonAlternateContractProfile? alternateContractProfile,
+        int chunkNumber,
+        int totalChunks,
+        double comparePercentBase,
+        double comparePercentSpan,
+        string progressPrefix,
+        IProgress<(int Completed, int Total, string Message)>? progress,
+        CancellationToken cancellationToken)
+    {
+        var classified = ExecutionResultClassifier.ClassifyAll(executionResults);
+        var outcomeSummary = ExecutionResultClassifier.Summarize(classified);
+
+        var successPairs = classified.Where(c => c.Outcome == RequestPairOutcome.BothSuccess).ToList();
+        var nonSuccessPairs = classified.Where(c =>
+            c.Outcome == RequestPairOutcome.StatusCodeMismatch ||
+            c.Outcome == RequestPairOutcome.BothNonSuccess).ToList();
+        var failedPairs = classified.Where(c => c.Outcome == RequestPairOutcome.OneOrBothFailed).ToList();
+
+        _logger.LogInformation(
+            "Job {JobId} chunk {ChunkNumber}/{TotalChunks} classification: BothSuccess={BothSuccess}, StatusCodeMismatch={StatusCodeMismatch}, BothNonSuccess={BothNonSuccess}, OneOrBothFailed={Failed}",
+            job.JobId,
+            chunkNumber,
+            totalChunks,
+            outcomeSummary.BothSuccess,
+            outcomeSummary.StatusCodeMismatch,
+            outcomeSummary.BothNonSuccess,
+            outcomeSummary.OneOrBothFailed);
+
+        job.Status = RequestComparisonStatus.Comparing;
+        job.StatusMessage = $"{progressPrefix}Comparing responses...";
+        progress?.Report((job.CompletedRequests, job.TotalRequests, job.StatusMessage));
+        await PublishProgressAsync(
+            job.JobId,
+            ComparisonPhase.Comparing,
+            (int)Math.Min(95, Math.Round(comparePercentBase)),
+            job.StatusMessage,
+            job.CompletedRequests,
+            job.TotalRequests,
+            forcePublish: true).ConfigureAwait(false);
+
+        MultiFolderComparisonResult comparisonResult;
+        string? comparisonDirectoryA = null;
+
+        if (successPairs.Count > 0)
+        {
+            var usePersistentComparisonDirectories = alternateContractProfile != null;
+            var chunkDirectoryName = totalChunks > 1 ? chunkNumber.ToString("D4") : string.Empty;
+            var tempDirA = usePersistentComparisonDirectories
+                ? totalChunks > 1
+                    ? Path.Combine(Path.GetTempPath(), "ComparisonToolJobs", job.JobId, "comparisonChunks", chunkDirectoryName, "comparisonA")
+                    : Path.Combine(Path.GetTempPath(), "ComparisonToolJobs", job.JobId, "comparisonA")
+                : Path.Combine(Path.GetTempPath(), $"success_responses_a_{job.JobId}_{chunkNumber:D4}");
+            var tempDirB = usePersistentComparisonDirectories
+                ? totalChunks > 1
+                    ? Path.Combine(Path.GetTempPath(), "ComparisonToolJobs", job.JobId, "comparisonChunks", chunkDirectoryName, "comparisonB")
+                    : Path.Combine(Path.GetTempPath(), "ComparisonToolJobs", job.JobId, "comparisonB")
+                : Path.Combine(Path.GetTempPath(), $"success_responses_b_{job.JobId}_{chunkNumber:D4}");
+
+            comparisonDirectoryA = tempDirA;
+
+            try
+            {
+                if (Directory.Exists(tempDirA))
+                {
+                    Directory.Delete(tempDirA, recursive: true);
+                }
+
+                if (Directory.Exists(tempDirB))
+                {
+                    Directory.Delete(tempDirB, recursive: true);
+                }
+
+                Directory.CreateDirectory(tempDirA);
+                Directory.CreateDirectory(tempDirB);
+
+                var copyTasks = successPairs.Select(async successPair =>
+                {
+                    var exec = successPair.Execution;
+                    if (exec.ResponsePathA != null && exec.ResponsePathB != null &&
+                        File.Exists(exec.ResponsePathA) && File.Exists(exec.ResponsePathB))
+                    {
+                        await MaterializeSuccessPairForComparisonAsync(job, exec, tempDirA, tempDirB, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                }).ToList();
+
+                await Task.WhenAll(copyTasks).ConfigureAwait(false);
+
+                var comparisonProgress = new Progress<ComparisonProgress>(p =>
+                {
+                    job.StatusMessage = $"{progressPrefix}{p.Status}";
+                    progress?.Report((job.CompletedRequests, job.TotalRequests, job.StatusMessage));
+                    var percent = (int)Math.Min(
+                        95,
+                        Math.Round(comparePercentBase + (comparePercentSpan * p.Completed / Math.Max(1, p.Total))));
+                    _ = PublishProgressAsync(
+                        job.JobId,
+                        ComparisonPhase.Comparing,
+                        percent,
+                        job.StatusMessage,
+                        p.Completed,
+                        p.Total);
+                });
+
+                using var scope = _scopeFactory.CreateScope();
+
+                var configService = scope.ServiceProvider.GetRequiredService<IComparisonConfigurationService>();
+                var xmlDeserializationService = scope.ServiceProvider.GetRequiredService<IXmlDeserializationService>();
+
+                ApplyJobConfiguration(job, configService, xmlDeserializationService);
+
+                var comparisonService = scope.ServiceProvider.GetRequiredService<DirectoryComparisonService>();
+                var comparisonModelName = alternateContractProfile?.CanonicalModelName ?? job.ModelName;
+
+                comparisonResult = await comparisonService.CompareDirectoriesAsync(
+                    tempDirA,
+                    tempDirB,
+                    comparisonModelName,
+                    includeAllFiles: true,
+                    enablePatternAnalysis: true,
+                    enableSemanticAnalysis: job.EnableSemanticAnalysis,
+                    progress: comparisonProgress,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                if (!usePersistentComparisonDirectories)
+                {
+                    TryDeleteDirectory(tempDirA);
+                    TryDeleteDirectory(tempDirB);
+                }
+            }
+        }
+        else
+        {
+            comparisonResult = new MultiFolderComparisonResult
+            {
+                TotalPairsCompared = 0,
+                AllEqual = false,
+                FilePairResults = new List<FilePairComparisonResult>(),
+                Metadata = new Dictionary<string, object>(StringComparer.Ordinal),
+            };
+        }
+
+        if (nonSuccessPairs.Count > 0)
+        {
+            await PublishProgressAsync(
+                job.JobId,
+                ComparisonPhase.Comparing,
+                (int)Math.Min(95, Math.Round(comparePercentBase + comparePercentSpan)),
+                $"{progressPrefix}Comparing {nonSuccessPairs.Count} non-success response pairs as raw text...",
+                forcePublish: true).ConfigureAwait(false);
+
+            var rawTextResults = await _rawTextComparisonService.CompareAllRawAsync(
+                nonSuccessPairs,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            comparisonResult.FilePairResults.AddRange(rawTextResults);
+
+            _logger.LogInformation(
+                "Raw text comparison completed for {Count} non-success pairs in job {JobId} chunk {ChunkNumber}/{TotalChunks}",
+                rawTextResults.Count,
+                job.JobId,
+                chunkNumber,
+                totalChunks);
+        }
+
+        if (failedPairs.Count > 0)
+        {
+            foreach (var failed in failedPairs)
+            {
+                comparisonResult.FilePairResults.Add(new FilePairComparisonResult
+                {
+                    File1Name = Path.GetFileName(failed.Execution.Request.RelativePath),
+                    File2Name = Path.GetFileName(failed.Execution.Request.RelativePath),
+                    RequestRelativePath = failed.Execution.Request.RelativePath,
+                    ErrorMessage = failed.Execution.ErrorMessage ?? "Request execution failed",
+                    ErrorType = "HttpRequestException",
+                    PairOutcome = RequestPairOutcome.OneOrBothFailed,
+                });
+            }
+        }
+
+        StampSuccessPairOutcomes(job, comparisonResult, successPairs, alternateContractProfile, comparisonDirectoryA);
+        comparisonResult.TotalPairsCompared = comparisonResult.FilePairResults.Count;
+        comparisonResult.AllEqual = comparisonResult.FilePairResults.Count > 0
+            && comparisonResult.FilePairResults.All(r => r.AreEqual);
+
+        return new ChunkComparisonResult(comparisonResult, outcomeSummary);
+    }
+
+    private void StampSuccessPairOutcomes(
+        RequestComparisonJob job,
+        MultiFolderComparisonResult comparisonResult,
+        IReadOnlyList<ClassifiedExecutionResult> successPairs,
+        RequestComparisonAlternateContractProfile? alternateContractProfile,
+        string? comparisonDirectoryA)
+    {
+        foreach (var pairResult in comparisonResult.FilePairResults)
+        {
+            if (pairResult.PairOutcome != null)
+            {
+                continue;
+            }
+
+            var execResult = successPairs.FirstOrDefault(c =>
+                string.Equals(
+                    c.Execution.Request.RelativePath,
+                    pairResult.RequestRelativePath,
+                    StringComparison.OrdinalIgnoreCase));
+
+            execResult ??= ResolveSuccessPairByComparisonArtifactPath(
+                successPairs,
+                pairResult,
+                alternateContractProfile?.CanonicalResponseFormat,
+                comparisonDirectoryA);
+
+            execResult ??= successPairs.FirstOrDefault(c =>
+                string.Equals(
+                    Path.GetFileName(c.Execution.Request.RelativePath),
+                    pairResult.File1Name,
+                    StringComparison.OrdinalIgnoreCase));
+
+            execResult ??= successPairs.FirstOrDefault(c =>
+                string.Equals(
+                    Path.GetFileNameWithoutExtension(c.Execution.Request.RelativePath),
+                    Path.GetFileNameWithoutExtension(pairResult.File1Name),
+                    StringComparison.OrdinalIgnoreCase));
+
+            if (execResult == null)
+            {
+                continue;
+            }
+
+            pairResult.RequestRelativePath = execResult.Execution.Request.RelativePath;
+            pairResult.PairOutcome = RequestPairOutcome.BothSuccess;
+            pairResult.HttpStatusCodeA = execResult.Execution.StatusCodeA;
+            pairResult.HttpStatusCodeB = execResult.Execution.StatusCodeB;
+            pairResult.ContentTypeA = alternateContractProfile?.CanonicalResponseContentType ?? execResult.Execution.ContentTypeA;
+            pairResult.ContentTypeB = alternateContractProfile?.CanonicalResponseContentType ?? execResult.Execution.ContentTypeB;
+
+            if (alternateContractProfile == null &&
+                execResult.Execution.ResponsePathA != null &&
+                execResult.Execution.ResponsePathB != null)
+            {
+                pairResult.File1Path = execResult.Execution.ResponsePathA;
+                pairResult.File2Path = execResult.Execution.ResponsePathB;
+            }
+        }
+    }
+
+    private void TryDeleteDirectory(string directoryPath)
+    {
+        try
+        {
+            if (Directory.Exists(directoryPath))
+            {
+                Directory.Delete(directoryPath, recursive: true);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to delete temporary directory {TempDir}", directoryPath);
+        }
+    }
+
+    private sealed record ChunkComparisonResult(
+        MultiFolderComparisonResult Result,
+        ExecutionOutcomeSummary OutcomeSummary);
+
+    private sealed record RequestExecutionFailureMetadata(
+        string RelativePath,
+        string? ErrorMessage);
+
+    private sealed class ExecutionOutcomeSummaryAccumulator
+    {
+        private int totalRequests;
+        private int bothSuccess;
+        private int statusCodeMismatch;
+        private int bothNonSuccess;
+        private int oneOrBothFailed;
+
+        public void Add(ExecutionOutcomeSummary summary)
+        {
+            totalRequests += summary.TotalRequests;
+            bothSuccess += summary.BothSuccess;
+            statusCodeMismatch += summary.StatusCodeMismatch;
+            bothNonSuccess += summary.BothNonSuccess;
+            oneOrBothFailed += summary.OneOrBothFailed;
+        }
+
+        public ExecutionOutcomeSummary ToSummary() => new()
+        {
+            TotalRequests = totalRequests,
+            BothSuccess = bothSuccess,
+            StatusCodeMismatch = statusCodeMismatch,
+            BothNonSuccess = bothNonSuccess,
+            OneOrBothFailed = oneOrBothFailed,
+        };
+    }
     /// <summary>
     /// Cleans up job resources older than the specified age.
     /// </summary>
@@ -705,21 +897,16 @@ public class RequestComparisonJobService
         .TrimStart(Path.DirectorySeparatorChar);
 
     private static ClassifiedExecutionResult? ResolveSuccessPairByComparisonArtifactPath(
-        RequestComparisonJob job,
         IReadOnlyList<ClassifiedExecutionResult> successPairs,
         FilePairComparisonResult pairResult,
-        SerializationFormat? canonicalResponseFormat)
+        SerializationFormat? canonicalResponseFormat,
+        string? comparisonDirectoryA)
     {
-        if (!canonicalResponseFormat.HasValue || string.IsNullOrWhiteSpace(pairResult.File1Path))
+        if (string.IsNullOrWhiteSpace(pairResult.File1Path) ||
+            string.IsNullOrWhiteSpace(comparisonDirectoryA))
         {
             return null;
         }
-
-        var comparisonDirectoryA = Path.Combine(
-            Path.GetTempPath(),
-            "ComparisonToolJobs",
-            job.JobId,
-            "comparisonA");
 
         if (!TryGetRelativePathUnderRoot(comparisonDirectoryA, pairResult.File1Path, out var artifactRelativePath))
         {
@@ -729,14 +916,17 @@ public class RequestComparisonJobService
         var normalizedArtifactPath = NormalizeRelativePathForComparison(artifactRelativePath);
 
         return successPairs.FirstOrDefault(successPair =>
-            string.Equals(
-                NormalizeRelativePathForComparison(BuildCanonicalRelativePath(
-                    successPair.Execution.Request.RelativePath,
-                    canonicalResponseFormat.Value)),
-                normalizedArtifactPath,
-                StringComparison.OrdinalIgnoreCase));
-    }
+        {
+            var expectedArtifactPath = canonicalResponseFormat.HasValue
+                ? BuildCanonicalRelativePath(successPair.Execution.Request.RelativePath, canonicalResponseFormat.Value)
+                : SanitizeRelativePath(successPair.Execution.Request.RelativePath);
 
+            return string.Equals(
+                NormalizeRelativePathForComparison(expectedArtifactPath),
+                normalizedArtifactPath,
+                StringComparison.OrdinalIgnoreCase);
+        });
+    }
     private static bool TryGetRelativePathUnderRoot(string rootDirectory, string filePath, out string relativePath)
     {
         relativePath = string.Empty;

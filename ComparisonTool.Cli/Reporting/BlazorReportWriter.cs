@@ -53,12 +53,19 @@ internal static class BlazorReportWriter
 
         Directory.CreateDirectory(outputDirectory);
 
+        if (context.Result.FilePairResults.Count >= 1000)
+        {
+            Console.WriteLine($"Large HTML report warning: writing {context.Result.FilePairResults.Count} result rows. The output may be large and slower to open.");
+        }
+
         // Copy all Blazor WASM assets to the output directory.
         var copiedCount = CopyDirectory(blazorAssetsDir, outputDirectory);
         Console.WriteLine($"Copied {copiedCount} Blazor asset files to report output directory.");
 
+        Console.WriteLine("Building report bootstrap data...");
         var bootstrapData = await BlazorReportBundleBuilder.BuildBootstrapDataAsync(context, enhancedAnalysis).ConfigureAwait(false);
         await WriteBootstrapDataAsync(outputDirectory, bootstrapData).ConfigureAwait(false);
+        Console.WriteLine("Writing lazy raw-content sidecars...");
         var sidecarCount = await WriteBundledRawContentAssetsAsync(context.Result, outputDirectory).ConfigureAwait(false);
         Console.WriteLine($"Wrote {sidecarCount} raw content sidecar files.");
 
@@ -94,6 +101,11 @@ internal static class BlazorReportWriter
 
         for (var index = 0; index < result.FilePairResults.Count; index++)
         {
+            if (result.FilePairResults.Count >= 1000 && index > 0 && index % 500 == 0)
+            {
+                Console.WriteLine($"  Sidecars: processed {index}/{result.FilePairResults.Count} result rows...");
+            }
+
             var pair = result.FilePairResults[index];
             if (BlazorReportBundleBuilder.ShouldWriteBundledRawContentSidecar(pair))
             {

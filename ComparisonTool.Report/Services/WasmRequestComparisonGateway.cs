@@ -14,6 +14,9 @@ public sealed class WasmRequestComparisonGateway : IRequestComparisonGateway
     public Task<RequestBatchResult> StageRequestFilesAsync(IReadOnlyList<string> filePaths, string? cacheKey = null)
         => Task.FromResult(new RequestBatchResult(string.Empty, 0, false));
 
+    public Task<RequestBatchResult> StageRequestDirectoryAsync(string directoryPath, string? cacheKey = null)
+        => Task.FromResult(new RequestBatchResult(string.Empty, 0, false));
+
     public Task<string> StartComparisonAsync(CreateRequestComparisonJobRequest request, CancellationToken cancellationToken = default)
         => Task.FromResult(string.Empty);
 

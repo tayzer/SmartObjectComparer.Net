@@ -1,4 +1,4 @@
-﻿namespace ComparisonTool.Core.RequestComparison.Models;
+namespace ComparisonTool.Core.RequestComparison.Models;
 
 /// <summary>
 /// Represents the status of a request comparison job.
@@ -123,4 +123,16 @@ public record RequestComparisonJob
 
     /// <summary>Gets or sets a value indicating whether enhanced structural analysis is enabled.</summary>
     public bool EnableEnhancedStructuralAnalysis { get; set; } = true;
+
+    /// <summary>Gets or sets a value indicating whether this job is using internal large-batch chunking.</summary>
+    public bool LargeBatchMode { get; set; }
+
+    /// <summary>Gets or sets the effective large-batch chunk size.</summary>
+    public int LargeBatchChunkSize { get; set; }
+
+    /// <summary>Gets or sets the total number of chunks in large-batch mode.</summary>
+    public int LargeBatchTotalChunks { get; set; }
+
+    /// <summary>Gets or sets the number of large-batch chunks processed so far.</summary>
+    public int LargeBatchProcessedChunks { get; set; }
 }

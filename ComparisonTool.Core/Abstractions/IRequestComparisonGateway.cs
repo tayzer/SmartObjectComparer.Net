@@ -24,6 +24,16 @@ public interface IRequestComparisonGateway
         string? cacheKey = null);
 
     /// <summary>
+    /// Stages every eligible request file in a directory while preserving relative paths.
+    /// </summary>
+    /// <param name="directoryPath">Absolute path to a request directory on disk.</param>
+    /// <param name="cacheKey">Optional cache key for deduplication.</param>
+    /// <returns>Upload result with batch ID and request-file count.</returns>
+    Task<RequestBatchResult> StageRequestDirectoryAsync(
+        string directoryPath,
+        string? cacheKey = null);
+
+    /// <summary>
     /// Creates and starts a comparison job.
     /// </summary>
     /// <param name="request">Job creation request.</param>

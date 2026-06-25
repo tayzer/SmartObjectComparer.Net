@@ -240,6 +240,8 @@ public static class ServiceCollectionExtensions
         {
             services.Configure<ComparisonConfigurationOptions>(configuration.GetSection("ComparisonSettings"));
             services.Configure<AcceptedDifferencesOptions>(configuration.GetSection("AcceptedDifferences"));
+            services.Configure<ComparisonTool.Core.RequestComparison.Models.RequestComparisonLargeBatchOptions>(
+                configuration.GetSection("RequestComparison"));
         }
     }
 
