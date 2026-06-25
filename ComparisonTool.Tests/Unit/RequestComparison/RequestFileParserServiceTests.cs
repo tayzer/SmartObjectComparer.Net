@@ -99,7 +99,12 @@ public class RequestFileParserServiceTests : IDisposable
         var headerFile = Path.Combine(batchPath, "request.json.headers.json");
 
         await File.WriteAllTextAsync(requestFile, "{\"test\": 123}");
-        var headers = new { headers = new Dictionary<string, string> { ["X-Custom"] = "value123" } };
+        var headers = new
+        {
+            headers = new Dictionary<string, string> { ["X-Custom"] = "value123" },
+            headersA = new Dictionary<string, string> { ["X-A"] = "a-value" },
+            headersB = new Dictionary<string, string> { ["X-B"] = "b-value" },
+        };
         await File.WriteAllTextAsync(headerFile, JsonSerializer.Serialize(headers));
 
         // Act
@@ -111,6 +116,8 @@ public class RequestFileParserServiceTests : IDisposable
         request.RelativePath.ShouldBe("request.json");
         request.Headers.ContainsKey("X-Custom").ShouldBeTrue();
         request.Headers["X-Custom"].ShouldBe("value123");
+        request.HeadersA["X-A"].ShouldBe("a-value");
+        request.HeadersB["X-B"].ShouldBe("b-value");
     }
 
     [TestMethod]
@@ -157,6 +164,6 @@ public class RequestFileParserServiceTests : IDisposable
 
         // Assert
         result.Count.ShouldBe(1);
-        result[0].RelativePath.ShouldBe(Path.Combine("subdir", "nested.json"));
+        result[0].RelativePath.ShouldBe("subdir/nested.json");
     }
 }

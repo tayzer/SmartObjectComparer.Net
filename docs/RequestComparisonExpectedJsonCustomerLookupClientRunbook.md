@@ -1,4 +1,4 @@
-# Client Runbook: SOAP To JSON Customer Lookup Comparison
+﻿# Client Runbook: SOAP To JSON Customer Lookup Comparison
 
 This guide is for the exact request-comparison flow that is already built into this repository.
 
@@ -758,6 +758,60 @@ If the profile is missing but the model is present, make sure alternate contract
 You do not need to create the predefined ignore rule for `sourceSystem` in the UI. The profile applies it automatically.
 
 You also do not need to manually type the `AuthorizationToken` header in the UI for this built-in flow. The profile generates it per request from the token-service response.
+
+---
+
+## Step 7A: Run the comparison from the CLI
+
+The CLI uses the same model/profile identifiers as the UI. First confirm the deployed CLI can see the built-in pieces:
+
+```powershell
+comparisontool request-models
+comparisontool request-profiles --model ExpectedJsonCustomerLookupResponse
+comparisontool request-endpoints
+```
+
+If the endpoint options include the expected customer lookup endpoints, this is the shortest command:
+
+```powershell
+comparisontool request C:\client\requests `
+  --model ExpectedJsonCustomerLookupResponse `
+  --alternate-contract-profile expected-json-customer-lookup `
+  --use-profile-endpoints `
+  --header-b "X-Client-Correlation: customer-lookup-smoke" `
+  --format Json Markdown `
+  --output C:\client\reports
+```
+
+You can also pass endpoint names directly. Name matching is exact and case-insensitive:
+
+```powershell
+comparisontool request C:\client\requests `
+  --model ExpectedJsonCustomerLookupResponse `
+  --endpoint-a "Client Customer Lookup SOAP" `
+  --endpoint-b "Client Customer Lookup JSON" `
+  --alternate-contract-profile expected-json-customer-lookup `
+  --format Json Markdown `
+  --output C:\client\reports
+```
+
+Endpoint defaults from `RequestComparison:EndpointOptions` are applied automatically unless `--no-endpoint-defaults` is supplied. The profile still owns endpoint B's alternate JSON request content type and still generates the per-request `AuthorizationToken` header from the token-service response.
+
+Per-request sidecars can add common and endpoint-specific headers without changing the request body:
+
+```json
+{
+  "headers": {
+    "X-Request-Id": "1001"
+  },
+  "headersA": {
+    "X-Endpoint": "soap"
+  },
+  "headersB": {
+    "X-Endpoint": "json"
+  }
+}
+```
 
 ---
 

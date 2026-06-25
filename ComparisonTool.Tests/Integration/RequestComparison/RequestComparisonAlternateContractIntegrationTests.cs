@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -246,8 +246,8 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
 
         var expectedPaths = new[]
         {
-            Path.Combine("alpha", "lookup.xml"),
-            Path.Combine("beta", "lookup.xml"),
+            "alpha/lookup.xml",
+            "beta/lookup.xml",
         };
         var actualPaths = result.FilePairResults
             .Select(pair => pair.RequestRelativePath ?? string.Empty)
@@ -271,12 +271,12 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
         }
 
         var alphaPair = result.FilePairResults.Single(pair =>
-            string.Equals(pair.RequestRelativePath, Path.Combine("alpha", "lookup.xml"), StringComparison.Ordinal));
+            string.Equals(pair.RequestRelativePath, "alpha/lookup.xml", StringComparison.Ordinal));
         alphaPair.File1Path.ShouldContain(Path.Combine("comparisonA", "alpha", "lookup.json"), Case.Insensitive);
         alphaPair.File2Path.ShouldContain(Path.Combine("comparisonB", "alpha", "lookup.json"), Case.Insensitive);
 
         var betaPair = result.FilePairResults.Single(pair =>
-            string.Equals(pair.RequestRelativePath, Path.Combine("beta", "lookup.xml"), StringComparison.Ordinal));
+            string.Equals(pair.RequestRelativePath, "beta/lookup.xml", StringComparison.Ordinal));
         betaPair.File1Path.ShouldContain(Path.Combine("comparisonA", "beta", "lookup.json"), Case.Insensitive);
         betaPair.File2Path.ShouldContain(Path.Combine("comparisonB", "beta", "lookup.json"), Case.Insensitive);
     }

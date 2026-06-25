@@ -1,4 +1,4 @@
-using ComparisonTool.Core.Comparison.Results;
+﻿using ComparisonTool.Core.Comparison.Results;
 
 namespace ComparisonTool.Cli.Reporting;
 
@@ -58,10 +58,4 @@ public class ReportContext
     /// Gets or sets a value indicating whether to disable truncation of long strings in reports.
     /// </summary>
     public bool DisableTruncation { get; set; }
-
-    public HtmlReportMode HtmlReportMode { get; set; } = HtmlReportMode.StaticSite;
-
-    public int HtmlDefaultPageSize { get; set; } = 100;
-
-    public int HtmlDetailChunkSize { get; set; } = 250;
 }

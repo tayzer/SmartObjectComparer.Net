@@ -1,11 +1,12 @@
-# .\scripts\Run-RequestComparison.ps1 `
+﻿# .\scripts\Run-RequestComparison.ps1 `
 #   -RequestFolder "C:\path\to\requests" `
-#   -EndpointA "https://host-a/api/endpoint" `
-#   -EndpointB "https://host-b/api/endpoint" `
-#   -DomainModel "ComplexOrderResponse" `
-#   -ContentType "application/json" `
+#   -EndpointA "Local Mock Customer Lookup SOAP" `
+#   -EndpointB "Local Mock Customer Lookup JSON" `
+#   -DomainModel "ExpectedJsonCustomerLookupResponse" `
+#   -AlternateContractProfile "expected-json-customer-lookup" `
+#   -ContentType "application/xml" `
 #   -OutputDirectory "C:\path\to\reports" `
-#   -OutputType Console,Json
+#   -OutputType Console,Json,Markdown
 
 [CmdletBinding()]
 param(
@@ -13,12 +14,10 @@ param(
     [ValidateNotNullOrEmpty()]
     [string]$RequestFolder,
 
-    [Parameter(Mandatory = $true)]
-    [ValidateNotNullOrEmpty()]
+    [Parameter(Mandatory = $false)]
     [string]$EndpointA,
 
-    [Parameter(Mandatory = $true)]
-    [ValidateNotNullOrEmpty()]
+    [Parameter(Mandatory = $false)]
     [string]$EndpointB,
 
     [Parameter(Mandatory = $true)]
@@ -34,7 +33,37 @@ param(
 
     [Parameter(Mandatory = $true)]
     [ValidateSet("Console", "Json", "Markdown")]
-    [string[]]$OutputType
+    [string[]]$OutputType,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$AlternateContract,
+
+    [Parameter(Mandatory = $false)]
+    [string]$AlternateContractProfile,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$UseProfileEndpoints,
+
+    [Parameter(Mandatory = $false)]
+    [string[]]$Header = @(),
+
+    [Parameter(Mandatory = $false)]
+    [string[]]$HeaderA = @(),
+
+    [Parameter(Mandatory = $false)]
+    [string[]]$HeaderB = @(),
+
+    [Parameter(Mandatory = $false)]
+    [string]$HeadersFile,
+
+    [Parameter(Mandatory = $false)]
+    [string]$HeadersAFile,
+
+    [Parameter(Mandatory = $false)]
+    [string]$HeadersBFile,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$NoEndpointDefaults
 )
 
 $ErrorActionPreference = "Stop"
@@ -66,16 +95,74 @@ $null = New-Item -ItemType Directory -Force -Path $OutputDirectory
 $arguments = @(
     "request",
     $RequestFolder,
-    "-a", $EndpointA,
-    "-b", $EndpointB,
     "-m", $DomainModel,
     "-o", $OutputDirectory,
     "-f"
 ) + $OutputType
 
+if (-not [string]::IsNullOrWhiteSpace($EndpointA))
+{
+    $arguments += @("-a", $EndpointA)
+}
+
+if (-not [string]::IsNullOrWhiteSpace($EndpointB))
+{
+    $arguments += @("-b", $EndpointB)
+}
+
 if (-not [string]::IsNullOrWhiteSpace($ContentType))
 {
     $arguments += @("--content-type", $ContentType)
+}
+
+if ($AlternateContract)
+{
+    $arguments += "--alternate-contract"
+}
+
+if (-not [string]::IsNullOrWhiteSpace($AlternateContractProfile))
+{
+    $arguments += @("--alternate-contract-profile", $AlternateContractProfile)
+}
+
+if ($UseProfileEndpoints)
+{
+    $arguments += "--use-profile-endpoints"
+}
+
+foreach ($value in $Header)
+{
+    $arguments += @("--header", $value)
+}
+
+foreach ($value in $HeaderA)
+{
+    $arguments += @("--header-a", $value)
+}
+
+foreach ($value in $HeaderB)
+{
+    $arguments += @("--header-b", $value)
+}
+
+if (-not [string]::IsNullOrWhiteSpace($HeadersFile))
+{
+    $arguments += @("--headers-file", $HeadersFile)
+}
+
+if (-not [string]::IsNullOrWhiteSpace($HeadersAFile))
+{
+    $arguments += @("--headers-a-file", $HeadersAFile)
+}
+
+if (-not [string]::IsNullOrWhiteSpace($HeadersBFile))
+{
+    $arguments += @("--headers-b-file", $HeadersBFile)
+}
+
+if ($NoEndpointDefaults)
+{
+    $arguments += "--no-endpoint-defaults"
 }
 
 Write-Host "Running request comparison..."

@@ -1,4 +1,4 @@
-using System.CommandLine;
+﻿using System.CommandLine;
 using ComparisonTool.Cli.Commands;
 using ComparisonTool.Cli.Infrastructure;
 using Microsoft.Extensions.Configuration;
@@ -50,10 +50,13 @@ public static class Program
     /// </summary>
     internal static RootCommand BuildRootCommand(IConfiguration configuration)
     {
-        var rootCommand = new RootCommand("ComparisonTool CLI — compare XML/JSON files, folders, and HTTP endpoint responses")
+        var rootCommand = new RootCommand("ComparisonTool CLI - compare XML/JSON files, folders, and HTTP endpoint responses")
         {
             FolderCompareCommand.Create(configuration),
             RequestCompareCommand.Create(configuration),
+            RequestCompareCommand.CreateModelsCommand(configuration),
+            RequestCompareCommand.CreateProfilesCommand(configuration),
+            RequestCompareCommand.CreateEndpointsCommand(configuration),
         };
 
         return rootCommand;

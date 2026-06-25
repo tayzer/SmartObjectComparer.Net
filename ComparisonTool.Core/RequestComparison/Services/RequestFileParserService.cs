@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using ComparisonTool.Core.RequestComparison.Models;
 using ComparisonTool.Core.Utilities;
 using Microsoft.Extensions.Logging;
@@ -93,7 +93,9 @@ public class RequestFileParserService
             FilePath = filePath,
             ContentType = contentType,
             DetectedFormat = detectedFormat,
-            Headers = headers,
+            Headers = headers.Headers,
+            HeadersA = headers.HeadersA,
+            HeadersB = headers.HeadersB,
             FileSize = fileInfo.Length
         };
     }
@@ -101,7 +103,7 @@ public class RequestFileParserService
     /// <summary>
     /// Loads per-request headers from a sidecar file if it exists.
     /// </summary>
-    private async Task<IReadOnlyDictionary<string, string>> LoadSidecarHeadersAsync(
+    private async Task<RequestHeadersSidecar> LoadSidecarHeadersAsync(
         string requestFilePath,
         CancellationToken cancellationToken)
     {
@@ -109,7 +111,7 @@ public class RequestFileParserService
 
         if (!File.Exists(sidecarPath))
         {
-            return new Dictionary<string, string>();
+            return new RequestHeadersSidecar();
         }
 
         try
@@ -117,8 +119,7 @@ public class RequestFileParserService
             var json = await File.ReadAllTextAsync(sidecarPath, cancellationToken)
                 .ConfigureAwait(false);
 
-            var sidecar = JsonSerializer.Deserialize<RequestHeadersSidecar>(json, JsonOptions);
-            return sidecar?.Headers ?? new Dictionary<string, string>();
+            return JsonSerializer.Deserialize<RequestHeadersSidecar>(json, JsonOptions) ?? new RequestHeadersSidecar();
         }
         catch (Exception ex)
         {
@@ -126,7 +127,7 @@ public class RequestFileParserService
                 ex,
                 "Failed to parse sidecar headers from {Path}, using empty headers",
                 sidecarPath);
-            return new Dictionary<string, string>();
+            return new RequestHeadersSidecar();
         }
     }
 

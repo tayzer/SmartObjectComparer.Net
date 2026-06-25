@@ -1,5 +1,5 @@
-# Run with hardcoded parameters (edit values below as needed)
-# .\scripts\Run-RequestComparison.ps1
+﻿# Run with hardcoded parameters (edit values below as needed)
+# .\scripts\Run-RequestComparison-PreDefined.ps1
 
 $ErrorActionPreference = "Stop"
 
@@ -18,6 +18,16 @@ $EndpointB = "http://localhost:5055/api/mock/b"
 $DomainModel = "ComplexOrderResponse"
 $ContentType = "application/xml"
 $IgnoreRulesPath = ""
+$AlternateContract = $false
+$AlternateContractProfile = ""
+$UseProfileEndpoints = $false
+$Header = @()
+$HeaderA = @()
+$HeaderB = @()
+$HeadersFile = ""
+$HeadersAFile = ""
+$HeadersBFile = ""
+$NoEndpointDefaults = $false
 $OutputDirectory = "C:\Dev\GitMain\ComparisonTool\reports"
 $OutputType = @("Console", "Markdown", "Html")
 # Html output generates a Jenkins-style redirector .html file plus a companion folder
@@ -70,12 +80,20 @@ $runStartedAt = Get-Date
 $arguments = @(
     "request",
     $RequestFolder,
-    "-a", $EndpointA,
-    "-b", $EndpointB,
     "-m", $DomainModel,
     "-o", $OutputDirectory,
     "-f"
 ) + $OutputType
+
+if (-not [string]::IsNullOrWhiteSpace($EndpointA))
+{
+    $arguments += @("-a", $EndpointA)
+}
+
+if (-not [string]::IsNullOrWhiteSpace($EndpointB))
+{
+    $arguments += @("-b", $EndpointB)
+}
 
 if (-not [string]::IsNullOrWhiteSpace($ContentType))
 {
@@ -85,6 +103,56 @@ if (-not [string]::IsNullOrWhiteSpace($ContentType))
 if (-not [string]::IsNullOrWhiteSpace($IgnoreRulesPath))
 {
     $arguments += @("--ignore-rules", $IgnoreRulesPath)
+}
+
+if ($AlternateContract)
+{
+    $arguments += "--alternate-contract"
+}
+
+if (-not [string]::IsNullOrWhiteSpace($AlternateContractProfile))
+{
+    $arguments += @("--alternate-contract-profile", $AlternateContractProfile)
+}
+
+if ($UseProfileEndpoints)
+{
+    $arguments += "--use-profile-endpoints"
+}
+
+foreach ($value in $Header)
+{
+    $arguments += @("--header", $value)
+}
+
+foreach ($value in $HeaderA)
+{
+    $arguments += @("--header-a", $value)
+}
+
+foreach ($value in $HeaderB)
+{
+    $arguments += @("--header-b", $value)
+}
+
+if (-not [string]::IsNullOrWhiteSpace($HeadersFile))
+{
+    $arguments += @("--headers-file", $HeadersFile)
+}
+
+if (-not [string]::IsNullOrWhiteSpace($HeadersAFile))
+{
+    $arguments += @("--headers-a-file", $HeadersAFile)
+}
+
+if (-not [string]::IsNullOrWhiteSpace($HeadersBFile))
+{
+    $arguments += @("--headers-b-file", $HeadersBFile)
+}
+
+if ($NoEndpointDefaults)
+{
+    $arguments += "--no-endpoint-defaults"
 }
 
 Write-Host "Running request comparison..."

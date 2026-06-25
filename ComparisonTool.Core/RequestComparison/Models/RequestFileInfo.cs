@@ -1,4 +1,4 @@
-﻿namespace ComparisonTool.Core.RequestComparison.Models;
+namespace ComparisonTool.Core.RequestComparison.Models;
 
 using ComparisonTool.Core.Serialization;
 
@@ -22,6 +22,12 @@ public record RequestFileInfo
     /// <summary>Gets the per-request headers from sidecar file.</summary>
     public IReadOnlyDictionary<string, string> Headers { get; init; } = new Dictionary<string, string>();
 
+    /// <summary>Gets the endpoint A-specific headers from sidecar file.</summary>
+    public IReadOnlyDictionary<string, string> HeadersA { get; init; } = new Dictionary<string, string>();
+
+    /// <summary>Gets the endpoint B-specific headers from sidecar file.</summary>
+    public IReadOnlyDictionary<string, string> HeadersB { get; init; } = new Dictionary<string, string>();
+
     /// <summary>Gets the file size in bytes.</summary>
     public long FileSize { get; init; }
 }
@@ -31,8 +37,14 @@ public record RequestFileInfo
 /// </summary>
 public record RequestHeadersSidecar
 {
-    /// <summary>Gets the headers dictionary.</summary>
+    /// <summary>Gets the headers dictionary applied to both endpoints.</summary>
     public Dictionary<string, string> Headers { get; init; } = new();
+
+    /// <summary>Gets the headers dictionary applied only to endpoint A.</summary>
+    public Dictionary<string, string> HeadersA { get; init; } = new();
+
+    /// <summary>Gets the headers dictionary applied only to endpoint B.</summary>
+    public Dictionary<string, string> HeadersB { get; init; } = new();
 }
 
 /// <summary>

@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net.Http.Headers;
@@ -46,7 +46,7 @@ public class RequestExecutionService : IDisposable
         var jobPath = Path.Combine(Path.GetTempPath(), "ComparisonToolJobs", job.JobId);
         job.ResponsePathA = Path.Combine(jobPath, "endpointA");
         job.ResponsePathB = Path.Combine(jobPath, "endpointB");
-        
+
         Directory.CreateDirectory(job.ResponsePathA);
         Directory.CreateDirectory(job.ResponsePathB);
 
@@ -82,7 +82,7 @@ public class RequestExecutionService : IDisposable
         CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
-        
+
         try
         {
             // Read request body
@@ -94,9 +94,9 @@ public class RequestExecutionService : IDisposable
                 BufferSize,
                 FileOptions.Asynchronous | FileOptions.SequentialScan);
 
-            // Merge headers (global + per-request, per-request takes precedence)
-            var headersA = MergeHeaders(job.HeadersA, request.Headers);
-            var headersB = MergeHeaders(job.HeadersB, request.Headers);
+            // Merge headers from broadest to most specific.
+            var headersA = MergeHeaders(job.HeadersA, request.Headers, request.HeadersA);
+            var headersB = MergeHeaders(job.HeadersB, request.Headers, request.HeadersB);
 
             var sourceRequestBody = await ReadRequestBodyAsync(requestBodyStream, cancellationToken).ConfigureAwait(false);
 
@@ -263,20 +263,16 @@ public class RequestExecutionService : IDisposable
     }
 
     private static Dictionary<string, string> MergeHeaders(
-        IReadOnlyDictionary<string, string> globalHeaders,
-        IReadOnlyDictionary<string, string> requestHeaders)
+        params IReadOnlyDictionary<string, string>[] headerSets)
     {
         var merged = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var header in globalHeaders)
+        foreach (var headerSet in headerSets)
         {
-            merged[header.Key] = header.Value;
-        }
-
-        // Per-request headers override global headers
-        foreach (var header in requestHeaders)
-        {
-            merged[header.Key] = header.Value;
+            foreach (var header in headerSet)
+            {
+                merged[header.Key] = header.Value;
+            }
         }
 
         return merged;

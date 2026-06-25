@@ -1,10 +1,11 @@
-using System.CommandLine;
+﻿using System.CommandLine;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using ComparisonTool.Cli.Infrastructure;
 using ComparisonTool.Cli.Reporting;
+using ComparisonTool.Core.RequestComparison.AlternateContracts;
 using ComparisonTool.Core.RequestComparison.Models;
 using ComparisonTool.Core.RequestComparison.Services;
 using ComparisonTool.Core.Serialization;
@@ -32,16 +33,14 @@ public static partial class RequestCompareCommand
             Description = "Path to a directory containing request body files (XML/JSON/TXT)",
         };
 
-        var endpointAOption = new Option<string>("--endpoint-a", "-a")
+        var endpointAOption = new Option<string?>("--endpoint-a", "-a")
         {
-            Description = "URL of the first endpoint",
-            Required = true,
+            Description = "URL or configured endpoint name for endpoint A",
         };
 
-        var endpointBOption = new Option<string>("--endpoint-b", "-b")
+        var endpointBOption = new Option<string?>("--endpoint-b", "-b")
         {
-            Description = "URL of the second endpoint",
-            Required = true,
+            Description = "URL or configured endpoint name for endpoint B",
         };
 
         var modelOption = new Option<string>("--model", "-m")
@@ -119,12 +118,57 @@ public static partial class RequestCompareCommand
 
         var contentTypeOption = new Option<string?>("--content-type")
         {
-            Description = "Override Content-Type header for all request bodies",
+            Description = "Override Content-Type header for endpoint A request bodies; endpoint B uses profile content type in alternate-contract mode",
         };
 
         var soapActionOption = new Option<string?>("--soap-action")
         {
             Description = "Optional SOAPAction header value to send with every request",
+        };
+
+        var alternateContractOption = new Option<bool>("--alternate-contract")
+        {
+            Description = "Enable alternate request/response contract processing for endpoint B",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => false,
+        };
+
+        var alternateContractProfileOption = new Option<string?>("--alternate-contract-profile")
+        {
+            Description = "Alternate contract profile id. Implies --alternate-contract.",
+        };
+
+        var useProfileEndpointsOption = new Option<bool>("--use-profile-endpoints")
+        {
+            Description = "Use the selected alternate contract profile's suggested configured endpoints when endpoint A/B are omitted",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => false,
+        };
+
+        var headerOption = CreateHeaderOption("--header", "Header applied to both endpoints. Repeatable. Format: 'Name: Value'.");
+        var headerAOption = CreateHeaderOption("--header-a", "Header applied only to endpoint A. Repeatable. Format: 'Name: Value'.");
+        var headerBOption = CreateHeaderOption("--header-b", "Header applied only to endpoint B. Repeatable. Format: 'Name: Value'.");
+
+        var headersFileOption = new Option<FileInfo?>("--headers-file")
+        {
+            Description = "JSON header map applied to both endpoints",
+        };
+
+        var headersAFileOption = new Option<FileInfo?>("--headers-a-file")
+        {
+            Description = "JSON header map applied only to endpoint A",
+        };
+
+        var headersBFileOption = new Option<FileInfo?>("--headers-b-file")
+        {
+            Description = "JSON header map applied only to endpoint B",
+        };
+
+        var noEndpointDefaultsOption = new Option<bool>("--no-endpoint-defaults")
+        {
+            Description = "Do not apply ContentType or DefaultHeaders from configured endpoint options",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => false,
         };
 
         var rangeOption = new Option<string?>("--range")
@@ -184,6 +228,16 @@ public static partial class RequestCompareCommand
             maskRulesFileOption,
             contentTypeOption,
             soapActionOption,
+            alternateContractOption,
+            alternateContractProfileOption,
+            useProfileEndpointsOption,
+            headerOption,
+            headerAOption,
+            headerBOption,
+            headersFileOption,
+            headersAFileOption,
+            headersBFileOption,
+            noEndpointDefaultsOption,
             rangeOption,
             outputOption,
             formatOption,
@@ -193,53 +247,156 @@ public static partial class RequestCompareCommand
 
         command.SetAction(async (parseResult, cancellationToken) =>
         {
-            var requestDir = parseResult.GetValue(requestDirArg);
-            var endpointA = parseResult.GetValue(endpointAOption)
-                ?? throw new InvalidOperationException("Missing required option --endpoint-a.");
-            var endpointB = parseResult.GetValue(endpointBOption)
-                ?? throw new InvalidOperationException("Missing required option --endpoint-b.");
+            var requestDir = parseResult.GetValue(requestDirArg)
+                ?? throw new InvalidOperationException("Missing required argument request-directory.");
             var model = parseResult.GetValue(modelOption)
                 ?? throw new InvalidOperationException("Missing required option --model.");
-            var concurrency = parseResult.GetValue(concurrencyOption);
-            var timeout = parseResult.GetValue(timeoutOption);
-            var ignoreCollectionOrder = parseResult.GetValue(ignoreCollectionOrderOption);
-            var ignoreCase = parseResult.GetValue(ignoreCaseOption);
-            var ignoreTrailingWhitespaceAtEnd = parseResult.GetValue(ignoreTrailingWhitespaceOption);
-            var ignoreNamespaces = parseResult.GetValue(ignoreNamespacesOption);
-            var semanticAnalysis = parseResult.GetValue(semanticAnalysisOption);
-            var ignoreRulesFile = parseResult.GetValue(ignoreRulesFileOption);
-            var maskRulesFile = parseResult.GetValue(maskRulesFileOption);
-            var contentTypeOverride = parseResult.GetValue(contentTypeOption);
-            var soapAction = parseResult.GetValue(soapActionOption);
-            var requestRange = parseResult.GetValue(rangeOption);
-            var outputDir = parseResult.GetValue(outputOption);
-            var formats = parseResult.GetValue(formatOption) ?? new[] { OutputFormat.Console };
-            var pageSize = parseResult.GetValue(pageSizeOption);
-            var disableTruncation = parseResult.GetValue(disableTruncationOption);
 
-            return await ExecuteAsync(
-                configuration,
-                requestDir!,
-                endpointA,
-                endpointB,
-                model,
-                concurrency,
-                timeout,
-                ignoreCollectionOrder,
-                ignoreCase,
-                ignoreTrailingWhitespaceAtEnd,
-                ignoreNamespaces,
-                semanticAnalysis,
-                ignoreRulesFile,
-                maskRulesFile,
-                contentTypeOverride,
-                soapAction,
-                requestRange,
-                outputDir,
-                formats,
-                pageSize,
-                disableTruncation,
-                cancellationToken);
+            var options = new RequestCompareCliOptions
+            {
+                RequestDirectory = requestDir,
+                EndpointA = parseResult.GetValue(endpointAOption),
+                EndpointB = parseResult.GetValue(endpointBOption),
+                ModelName = model,
+                MaxConcurrency = parseResult.GetValue(concurrencyOption),
+                TimeoutMs = parseResult.GetValue(timeoutOption),
+                IgnoreCollectionOrder = parseResult.GetValue(ignoreCollectionOrderOption),
+                IgnoreStringCase = parseResult.GetValue(ignoreCaseOption),
+                IgnoreTrailingWhitespaceAtEnd = parseResult.GetValue(ignoreTrailingWhitespaceOption),
+                IgnoreXmlNamespaces = parseResult.GetValue(ignoreNamespacesOption),
+                EnableSemanticAnalysis = parseResult.GetValue(semanticAnalysisOption),
+                IgnoreRulesFile = parseResult.GetValue(ignoreRulesFileOption),
+                MaskRulesFile = parseResult.GetValue(maskRulesFileOption),
+                ContentTypeOverride = parseResult.GetValue(contentTypeOption),
+                SoapAction = parseResult.GetValue(soapActionOption),
+                UseAlternateContract = parseResult.GetValue(alternateContractOption),
+                AlternateContractProfileId = parseResult.GetValue(alternateContractProfileOption),
+                UseProfileEndpoints = parseResult.GetValue(useProfileEndpointsOption),
+                Headers = parseResult.GetValue(headerOption) ?? Array.Empty<string>(),
+                HeadersA = parseResult.GetValue(headerAOption) ?? Array.Empty<string>(),
+                HeadersB = parseResult.GetValue(headerBOption) ?? Array.Empty<string>(),
+                HeadersFile = parseResult.GetValue(headersFileOption),
+                HeadersAFile = parseResult.GetValue(headersAFileOption),
+                HeadersBFile = parseResult.GetValue(headersBFileOption),
+                NoEndpointDefaults = parseResult.GetValue(noEndpointDefaultsOption),
+                RequestRange = parseResult.GetValue(rangeOption),
+                OutputDirectory = parseResult.GetValue(outputOption),
+                Formats = parseResult.GetValue(formatOption) ?? new[] { OutputFormat.Console },
+                MarkdownPageSize = parseResult.GetValue(pageSizeOption),
+                DisableTruncation = parseResult.GetValue(disableTruncationOption),
+            };
+
+            return await ExecuteAsync(configuration, options, cancellationToken).ConfigureAwait(false);
+        });
+
+        return command;
+    }
+
+    /// <summary>
+    /// Creates the root-level model discovery command.
+    /// </summary>
+    public static Command CreateModelsCommand(IConfiguration configuration)
+    {
+        var command = new Command("request-models", "List request comparison model names registered in the CLI host");
+        command.SetAction(_ =>
+        {
+            using var serviceProvider = ServiceProviderFactory.CreateServiceProvider(configuration);
+            var deserializationService = serviceProvider.GetRequiredService<IDeserializationService>();
+            var models = deserializationService.GetRegisteredModelNames()
+                .OrderBy(model => model, StringComparer.Ordinal)
+                .ToList();
+
+            foreach (var model in models)
+            {
+                Console.WriteLine(model);
+            }
+
+            return models.Count == 0 ? 1 : 0;
+        });
+
+        return command;
+    }
+
+    /// <summary>
+    /// Creates the root-level alternate-contract profile discovery command.
+    /// </summary>
+    public static Command CreateProfilesCommand(IConfiguration configuration)
+    {
+        var modelOption = new Option<string?>("--model", "-m")
+        {
+            Description = "Filter profiles to a model name",
+        };
+
+        var command = new Command("request-profiles", "List alternate contract profiles registered in the CLI host")
+        {
+            modelOption,
+        };
+
+        command.SetAction(parseResult =>
+        {
+            using var serviceProvider = ServiceProviderFactory.CreateServiceProvider(configuration);
+            var registry = serviceProvider.GetRequiredService<IRequestComparisonAlternateContractProfileRegistry>();
+            var deserializationService = serviceProvider.GetRequiredService<IDeserializationService>();
+            var modelFilter = parseResult.GetValue(modelOption);
+
+            var models = string.IsNullOrWhiteSpace(modelFilter)
+                ? deserializationService.GetRegisteredModelNames().OrderBy(model => model, StringComparer.Ordinal).ToList()
+                : new List<string> { modelFilter };
+
+            var printed = 0;
+            foreach (var model in models)
+            {
+                var profileIds = registry.GetProfileIds(model);
+                foreach (var profileId in profileIds)
+                {
+                    Console.WriteLine($"{model}: {profileId}");
+                    printed++;
+                }
+            }
+
+            if (printed == 0)
+            {
+                Console.WriteLine(string.IsNullOrWhiteSpace(modelFilter)
+                    ? "No alternate contract profiles are registered."
+                    : $"No alternate contract profiles are registered for {modelFilter}.");
+            }
+
+            return 0;
+        });
+
+        return command;
+    }
+
+    /// <summary>
+    /// Creates the root-level endpoint discovery command.
+    /// </summary>
+    public static Command CreateEndpointsCommand(IConfiguration configuration)
+    {
+        var command = new Command("request-endpoints", "List configured request comparison endpoints");
+        command.SetAction(_ =>
+        {
+            var endpointOptions = LoadEndpointOptions(configuration);
+            if (endpointOptions.Endpoints.Count == 0)
+            {
+                Console.WriteLine("No request comparison endpoints are configured.");
+                return 0;
+            }
+
+            foreach (var endpoint in endpointOptions.Endpoints)
+            {
+                Console.WriteLine($"{endpoint.Name}: {endpoint.Url}");
+                if (!string.IsNullOrWhiteSpace(endpoint.ContentType))
+                {
+                    Console.WriteLine($"  Content-Type: {endpoint.ContentType}");
+                }
+
+                if (endpoint.DefaultHeaders is { Count: > 0 })
+                {
+                    Console.WriteLine($"  Default headers: {string.Join(", ", endpoint.DefaultHeaders.Keys.OrderBy(key => key, StringComparer.OrdinalIgnoreCase))}");
+                }
+            }
+
+            return 0;
         });
 
         return command;
@@ -266,6 +423,7 @@ public static partial class RequestCompareCommand
             .ToList();
 
         return new RequestBatchSelection(
+            requestDir,
             eligibleFiles.Count,
             selectedFiles,
             requestedRange,
@@ -324,40 +482,287 @@ public static partial class RequestCompareCommand
         return filesToStage;
     }
 
-    private static async Task<int> ExecuteAsync(
-        IConfiguration configuration,
-        DirectoryInfo requestDir,
-        string endpointA,
-        string endpointB,
-        string modelName,
-        int maxConcurrency,
-        int timeoutMs,
-        bool ignoreCollectionOrder,
-        bool ignoreCase,
-        bool ignoreTrailingWhitespaceAtEnd,
-        bool ignoreNamespaces,
-        bool semanticAnalysis,
-        FileInfo? ignoreRulesFile,
-        FileInfo? maskRulesFile,
-        string? contentTypeOverride,
-        string? soapAction,
-        string? requestRange,
-        DirectoryInfo? outputDir,
-        OutputFormat[] formats,
-        int markdownPageSize,
-        bool disableTruncation,
+    internal static bool TryParseHeader(string headerText, out KeyValuePair<string, string> header, out string? errorMessage)
+    {
+        header = default;
+        errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(headerText))
+        {
+            errorMessage = "Header value cannot be empty.";
+            return false;
+        }
+
+        var separatorIndex = headerText.IndexOf(':', StringComparison.Ordinal);
+        if (separatorIndex <= 0)
+        {
+            errorMessage = $"Invalid header '{headerText}'. Expected format 'Name: Value'.";
+            return false;
+        }
+
+        var name = headerText[..separatorIndex].Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            errorMessage = $"Invalid header '{headerText}'. Header name cannot be empty.";
+            return false;
+        }
+
+        header = new KeyValuePair<string, string>(name, headerText[(separatorIndex + 1)..].Trim());
+        return true;
+    }
+
+    internal static RequestComparisonEndpointOptions LoadEndpointOptions(IConfiguration configuration)
+    {
+        var options = new RequestComparisonEndpointOptions();
+        configuration.GetSection("RequestComparison:EndpointOptions").Bind(options);
+        options.Endpoints ??= new List<RequestComparisonEndpointOption>();
+        return options;
+    }
+
+    internal static EndpointResolutionResult ResolveEndpointReference(
+        string? reference,
+        IReadOnlyList<RequestComparisonEndpointOption> configuredEndpoints,
+        string optionName)
+    {
+        if (string.IsNullOrWhiteSpace(reference))
+        {
+            return EndpointResolutionResult.Failure($"{optionName} is required unless --use-profile-endpoints can resolve it from the selected profile.");
+        }
+
+        var trimmed = reference.Trim();
+        var configuredMatch = configuredEndpoints.FirstOrDefault(endpoint =>
+            string.Equals(endpoint.Name, trimmed, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(endpoint.Url, trimmed, StringComparison.OrdinalIgnoreCase));
+
+        if (configuredMatch != null)
+        {
+            return EndpointResolutionResult.Success(configuredMatch.Url, configuredMatch);
+        }
+
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out _))
+        {
+            return EndpointResolutionResult.Success(trimmed, null);
+        }
+
+        return EndpointResolutionResult.Failure(
+            $"{optionName} value '{reference}' is not an absolute URL or configured endpoint name.");
+    }
+
+    internal static bool ShouldUseAlternateContract(RequestCompareCliOptions options)
+    {
+        return options.UseAlternateContract || !string.IsNullOrWhiteSpace(options.AlternateContractProfileId);
+    }
+
+    internal static AlternateContractProfileResolutionResult ResolveAlternateContractProfile(
+        RequestCompareCliOptions options,
+        IRequestComparisonAlternateContractProfileRegistry registry)
+    {
+        if (!ShouldUseAlternateContract(options))
+        {
+            return AlternateContractProfileResolutionResult.Success(null);
+        }
+
+        if (registry.TryResolve(options.ModelName, options.AlternateContractProfileId, out var profile, out var errorMessage))
+        {
+            return AlternateContractProfileResolutionResult.Success(profile);
+        }
+
+        return AlternateContractProfileResolutionResult.Failure(
+            errorMessage ?? "Alternate contract profile could not be resolved.",
+            registry.GetProfileIds(options.ModelName));
+    }
+    internal static async Task<HeaderBuildResult> BuildHeadersAsync(
+        RequestCompareCliOptions options,
+        RequestComparisonEndpointOption? endpointA,
+        RequestComparisonEndpointOption? endpointB,
         CancellationToken cancellationToken)
     {
-        if (!requestDir.Exists)
+        var headersA = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var headersB = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        if (!options.NoEndpointDefaults)
         {
-            Console.Error.WriteLine($"Request directory not found: {requestDir.FullName}");
+            ApplyHeaders(headersA, endpointA?.DefaultHeaders);
+            ApplyHeaders(headersB, endpointB?.DefaultHeaders);
+        }
+
+        var commonFileHeaders = await LoadHeaderFileAsync(options.HeadersFile, cancellationToken).ConfigureAwait(false);
+        if (!commonFileHeaders.IsSuccess)
+        {
+            return HeaderBuildResult.Failure(commonFileHeaders.ErrorMessage!);
+        }
+
+        ApplyHeaders(headersA, commonFileHeaders.Headers);
+        ApplyHeaders(headersB, commonFileHeaders.Headers);
+
+        var commonInlineHeaders = ParseHeaderArguments(options.Headers);
+        if (!commonInlineHeaders.IsSuccess)
+        {
+            return HeaderBuildResult.Failure(commonInlineHeaders.ErrorMessage!);
+        }
+
+        ApplyHeaders(headersA, commonInlineHeaders.Headers);
+        ApplyHeaders(headersB, commonInlineHeaders.Headers);
+
+        if (!string.IsNullOrWhiteSpace(options.SoapAction))
+        {
+            headersA["SOAPAction"] = options.SoapAction;
+            headersB["SOAPAction"] = options.SoapAction;
+        }
+
+        var endpointAFileHeaders = await LoadHeaderFileAsync(options.HeadersAFile, cancellationToken).ConfigureAwait(false);
+        if (!endpointAFileHeaders.IsSuccess)
+        {
+            return HeaderBuildResult.Failure(endpointAFileHeaders.ErrorMessage!);
+        }
+
+        ApplyHeaders(headersA, endpointAFileHeaders.Headers);
+
+        var endpointBFileHeaders = await LoadHeaderFileAsync(options.HeadersBFile, cancellationToken).ConfigureAwait(false);
+        if (!endpointBFileHeaders.IsSuccess)
+        {
+            return HeaderBuildResult.Failure(endpointBFileHeaders.ErrorMessage!);
+        }
+
+        ApplyHeaders(headersB, endpointBFileHeaders.Headers);
+
+        var endpointAInlineHeaders = ParseHeaderArguments(options.HeadersA);
+        if (!endpointAInlineHeaders.IsSuccess)
+        {
+            return HeaderBuildResult.Failure(endpointAInlineHeaders.ErrorMessage!);
+        }
+
+        ApplyHeaders(headersA, endpointAInlineHeaders.Headers);
+
+        var endpointBInlineHeaders = ParseHeaderArguments(options.HeadersB);
+        if (!endpointBInlineHeaders.IsSuccess)
+        {
+            return HeaderBuildResult.Failure(endpointBInlineHeaders.ErrorMessage!);
+        }
+
+        ApplyHeaders(headersB, endpointBInlineHeaders.Headers);
+
+        return HeaderBuildResult.Success(headersA, headersB);
+    }
+
+    private static Option<string[]> CreateHeaderOption(string name, string description) => new(name)
+    {
+        Description = description,
+        Arity = ArgumentArity.ZeroOrMore,
+        AllowMultipleArgumentsPerToken = false,
+        DefaultValueFactory = _ => Array.Empty<string>(),
+    };
+
+    private static async Task<int> ExecuteAsync(
+        IConfiguration configuration,
+        RequestCompareCliOptions options,
+        CancellationToken cancellationToken)
+    {
+        if (!options.RequestDirectory.Exists)
+        {
+            Console.Error.WriteLine($"Request directory not found: {options.RequestDirectory.FullName}");
+            return 1;
+        }
+
+        await using var serviceProvider = ServiceProviderFactory.CreateServiceProvider(configuration);
+        var deserializationService = serviceProvider.GetRequiredService<IDeserializationService>();
+        var availableModels = deserializationService.GetRegisteredModelNames()
+            .OrderBy(m => m, StringComparer.Ordinal)
+            .ToList();
+
+        if (!availableModels.Contains(options.ModelName, StringComparer.Ordinal))
+        {
+            Console.Error.WriteLine($"Error: Unknown model name '{options.ModelName}'.");
+            Console.Error.WriteLine($"Available models: {string.Join(", ", availableModels)}");
+            Console.Error.WriteLine($"Use -m with one of the listed names. If '{options.ModelName}' is a new model, it must be registered in ServiceProviderFactory.");
+            return 1;
+        }
+
+        var endpointOptions = LoadEndpointOptions(configuration);
+        var useAlternateContract = ShouldUseAlternateContract(options);
+        RequestComparisonAlternateContractProfile? alternateProfile = null;
+
+        if (options.UseProfileEndpoints && !useAlternateContract)
+        {
+            Console.Error.WriteLine("Error: --use-profile-endpoints requires --alternate-contract or --alternate-contract-profile.");
+            return 1;
+        }
+
+        if (useAlternateContract)
+        {
+            var registry = serviceProvider.GetRequiredService<IRequestComparisonAlternateContractProfileRegistry>();
+            var profileResult = ResolveAlternateContractProfile(options, registry);
+            if (!profileResult.IsSuccess)
+            {
+                Console.Error.WriteLine($"Error: {profileResult.ErrorMessage}");
+                if (profileResult.AvailableProfileIds.Count > 0)
+                {
+                    Console.Error.WriteLine($"Available profiles for {options.ModelName}: {string.Join(", ", profileResult.AvailableProfileIds)}");
+                }
+
+                return 1;
+            }
+
+            alternateProfile = profileResult.Profile;
+        }
+
+        var endpointAReference = options.EndpointA;
+        var endpointBReference = options.EndpointB;
+        if (options.UseProfileEndpoints)
+        {
+            endpointAReference ??= ResolveSuggestedEndpointReference(alternateProfile!.SuggestEndpointA, endpointOptions.Endpoints);
+            endpointBReference ??= ResolveSuggestedEndpointReference(alternateProfile!.SuggestEndpointB, endpointOptions.Endpoints);
+        }
+
+        var endpointAResult = ResolveEndpointReference(endpointAReference, endpointOptions.Endpoints, "Endpoint A");
+        if (!endpointAResult.IsSuccess)
+        {
+            Console.Error.WriteLine($"Error: {endpointAResult.ErrorMessage}");
+            return 1;
+        }
+
+        var endpointBResult = ResolveEndpointReference(endpointBReference, endpointOptions.Endpoints, "Endpoint B");
+        if (!endpointBResult.IsSuccess)
+        {
+            Console.Error.WriteLine($"Error: {endpointBResult.ErrorMessage}");
+            return 1;
+        }
+
+        var contentTypeOverride = !string.IsNullOrWhiteSpace(options.ContentTypeOverride)
+            ? options.ContentTypeOverride
+            : !options.NoEndpointDefaults && !string.IsNullOrWhiteSpace(endpointAResult.EndpointOption?.ContentType)
+                ? endpointAResult.EndpointOption.ContentType
+                : null;
+
+        var headersResult = await BuildHeadersAsync(
+            options,
+            endpointAResult.EndpointOption,
+            endpointBResult.EndpointOption,
+            cancellationToken).ConfigureAwait(false);
+        if (!headersResult.IsSuccess)
+        {
+            Console.Error.WriteLine($"Error: {headersResult.ErrorMessage}");
+            return 1;
+        }
+
+        var ignoreRulesResult = await LoadIgnoreRulesAsync(options.IgnoreRulesFile, cancellationToken).ConfigureAwait(false);
+        if (!ignoreRulesResult.IsSuccess)
+        {
+            Console.Error.WriteLine(ignoreRulesResult.ErrorMessage);
+            return 1;
+        }
+
+        var maskRulesResult = await LoadMaskRulesAsync(options.MaskRulesFile, cancellationToken).ConfigureAwait(false);
+        if (!maskRulesResult.IsSuccess)
+        {
+            Console.Error.WriteLine(maskRulesResult.ErrorMessage);
             return 1;
         }
 
         RequestBatchSelection stagingSelection;
         try
         {
-            stagingSelection = CreateRequestBatchSelection(requestDir, requestRange);
+            stagingSelection = CreateRequestBatchSelection(options.RequestDirectory, options.RequestRange);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
@@ -366,11 +771,11 @@ public static partial class RequestCompareCommand
         }
 
         Console.WriteLine("Request comparison:");
-        Console.WriteLine($"  Requests:    {requestDir.FullName}");
-        Console.WriteLine($"  Endpoint A:  {endpointA}");
-        Console.WriteLine($"  Endpoint B:  {endpointB}");
-        Console.WriteLine($"  Model:       {modelName}");
-        Console.WriteLine($"  Concurrency: {maxConcurrency}");
+        Console.WriteLine($"  Requests:    {options.RequestDirectory.FullName}");
+        Console.WriteLine($"  Endpoint A:  {endpointAResult.Url}{FormatEndpointName(endpointAResult.EndpointOption)}");
+        Console.WriteLine($"  Endpoint B:  {endpointBResult.Url}{FormatEndpointName(endpointBResult.EndpointOption)}");
+        Console.WriteLine($"  Model:       {options.ModelName}");
+        Console.WriteLine($"  Concurrency: {options.MaxConcurrency}");
         Console.WriteLine($"  Range:       {stagingSelection.AppliedRangeDisplay}");
         Console.WriteLine($"  Selected:    {stagingSelection.SelectedFileCount}/{stagingSelection.TotalEligibleFileCount} file(s)");
         if (!string.IsNullOrWhiteSpace(contentTypeOverride))
@@ -378,88 +783,63 @@ public static partial class RequestCompareCommand
             Console.WriteLine($"  Content-Type: {contentTypeOverride}");
         }
 
-        if (!string.IsNullOrWhiteSpace(soapAction))
+        if (useAlternateContract && alternateProfile != null)
         {
-            Console.WriteLine($"  SOAPAction: {soapAction}");
+            Console.WriteLine($"  Alternate contract: {alternateProfile.ProfileId}");
+            Console.WriteLine($"  Endpoint B request Content-Type: {alternateProfile.AlternateRequestContentType}");
         }
 
+        PrintHeaderSummary("Headers A", headersResult.HeadersA);
+        PrintHeaderSummary("Headers B", headersResult.HeadersB);
         Console.WriteLine();
 
-        // Validate model name up-front — fail fast before staging any temp files
-        await using var serviceProvider = ServiceProviderFactory.CreateServiceProvider(configuration);
-
-        var xmlDeserializationService = serviceProvider.GetRequiredService<IXmlDeserializationService>();
-        var availableModels = xmlDeserializationService.GetRegisteredModelNames()
-            .OrderBy(m => m, StringComparer.Ordinal)
-            .ToList();
-
-        if (!availableModels.Contains(modelName, StringComparer.Ordinal))
-        {
-            Console.Error.WriteLine($"Error: Unknown model name '{modelName}'.");
-            Console.Error.WriteLine($"Available models: {string.Join(", ", availableModels)}");
-            Console.Error.WriteLine($"Use -m with one of the listed names. If '{modelName}' is a new model, it must be registered in ServiceProviderFactory.");
-            return 1;
-        }
-
-        // Stage the request files into the temp batch directory that RequestFileParserService expects
-        var batchId = await StageRequestBatchAsync(stagingSelection, cancellationToken);
-
+        var batchId = await StageRequestBatchAsync(stagingSelection, cancellationToken).ConfigureAwait(false);
         var jobService = serviceProvider.GetRequiredService<RequestComparisonJobService>();
-
-        var ignoreRulesResult = await LoadIgnoreRulesAsync(ignoreRulesFile, cancellationToken);
-        if (!ignoreRulesResult.IsSuccess)
-        {
-            Console.Error.WriteLine(ignoreRulesResult.ErrorMessage);
-            return 1;
-        }
-
-        var maskRulesResult = await LoadMaskRulesAsync(maskRulesFile, cancellationToken);
-        if (!maskRulesResult.IsSuccess)
-        {
-            Console.Error.WriteLine(maskRulesResult.ErrorMessage);
-            return 1;
-        }
-
-        var soapHeaders = string.IsNullOrWhiteSpace(soapAction)
-            ? null
-            : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["SOAPAction"] = soapAction,
-            };
 
         var createRequest = new CreateRequestComparisonJobRequest
         {
             RequestBatchId = batchId,
-            EndpointA = endpointA,
-            EndpointB = endpointB,
-            TimeoutMs = timeoutMs,
-            MaxConcurrency = maxConcurrency,
-            ModelName = modelName,
-            IgnoreCollectionOrder = ignoreCollectionOrder,
-            IgnoreStringCase = ignoreCase,
-            IgnoreTrailingWhitespaceAtEnd = ignoreTrailingWhitespaceAtEnd,
-            IgnoreXmlNamespaces = ignoreNamespaces,
-            EnableSemanticAnalysis = semanticAnalysis,
+            EndpointA = endpointAResult.Url,
+            EndpointB = endpointBResult.Url,
+            TimeoutMs = options.TimeoutMs,
+            MaxConcurrency = options.MaxConcurrency,
+            ModelName = options.ModelName,
+            UseAlternateContractForEndpointB = useAlternateContract,
+            AlternateContractProfileId = alternateProfile?.ProfileId ?? options.AlternateContractProfileId,
+            IgnoreCollectionOrder = options.IgnoreCollectionOrder,
+            IgnoreStringCase = options.IgnoreStringCase,
+            IgnoreTrailingWhitespaceAtEnd = options.IgnoreTrailingWhitespaceAtEnd,
+            IgnoreXmlNamespaces = options.IgnoreXmlNamespaces,
+            EnableSemanticAnalysis = options.EnableSemanticAnalysis,
             IgnoreRules = ignoreRulesResult.IgnoreRules,
             SmartIgnoreRules = ignoreRulesResult.SmartIgnoreRules,
             MaskRules = maskRulesResult.MaskRules,
             ContentTypeOverride = contentTypeOverride,
-            HeadersA = soapHeaders,
-            HeadersB = soapHeaders,
+            HeadersA = headersResult.HeadersA,
+            HeadersB = headersResult.HeadersB,
         };
 
-        var job = jobService.CreateJob(createRequest);
+        RequestComparisonJob job;
+        try
+        {
+            job = jobService.CreateJob(createRequest);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Console.Error.WriteLine($"Error: {ex.Message}");
+            return 1;
+        }
 
         var progress = new Progress<(int Completed, int Total, string Message)>(p =>
         {
-            // Progress updates are handled by ConsoleProgressPublisher via IComparisonProgressPublisher
+            // Progress updates are handled by ConsoleProgressPublisher via IComparisonProgressPublisher.
         });
 
         var stopwatch = Stopwatch.StartNew();
 
         try
         {
-            await jobService.ExecuteJobAsync(job.JobId, progress, cancellationToken);
+            await jobService.ExecuteJobAsync(job.JobId, progress, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -490,20 +870,20 @@ public static partial class RequestCompareCommand
             GeneratedAtUtc = DateTime.UtcNow,
             Elapsed = stopwatch.Elapsed,
             CommandName = "request",
-            EndpointA = endpointA,
-            EndpointB = endpointB,
-            ModelName = modelName,
+            EndpointA = endpointAResult.Url,
+            EndpointB = endpointBResult.Url,
+            ModelName = options.ModelName,
             JobId = job.JobId,
             MostAffectedFields = MostAffectedFieldsAggregator.Build(result),
-            MarkdownPageSize = markdownPageSize,
-            DisableTruncation = disableTruncation,
+            MarkdownPageSize = options.MarkdownPageSize,
+            DisableTruncation = options.DisableTruncation,
         };
 
-        var resolvedOutputDir = outputDir?.FullName ?? Directory.GetCurrentDirectory();
+        var resolvedOutputDir = options.OutputDirectory?.FullName ?? Directory.GetCurrentDirectory();
         var outputTimestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
         Directory.CreateDirectory(resolvedOutputDir);
 
-        foreach (var format in formats.Distinct())
+        foreach (var format in options.Formats.Distinct())
         {
             switch (format)
             {
@@ -512,18 +892,18 @@ public static partial class RequestCompareCommand
                     break;
                 case OutputFormat.Json:
                     var jsonPath = Path.Combine(resolvedOutputDir, $"request-comparison-{outputTimestamp}.json");
-                    await JsonReportWriter.WriteAsync(reportContext, jsonPath);
+                    await JsonReportWriter.WriteAsync(reportContext, jsonPath).ConfigureAwait(false);
                     Console.WriteLine($"  JSON report: {jsonPath}");
                     break;
                 case OutputFormat.Html:
                     var blazorDir = Path.Combine(resolvedOutputDir, $"request-comparison-{outputTimestamp}");
-                    var htmlPath = await BlazorReportWriter.WriteAsync(reportContext, blazorDir);
+                    var htmlPath = await BlazorReportWriter.WriteAsync(reportContext, blazorDir).ConfigureAwait(false);
                     Console.WriteLine($"  HTML report: {htmlPath}");
                     Console.WriteLine($"  Local view:  run {Path.Combine(blazorDir, "serve.cmd")}");
                     break;
                 case OutputFormat.Markdown:
                     var mdPath = Path.Combine(resolvedOutputDir, $"request-comparison-{outputTimestamp}.md");
-                    var pageCount = await MarkdownReportWriter.WriteAsync(reportContext, mdPath);
+                    var pageCount = await MarkdownReportWriter.WriteAsync(reportContext, mdPath).ConfigureAwait(false);
                     var pageSuffix = pageCount > 0 ? $" (+{pageCount} detail pages)" : string.Empty;
                     Console.WriteLine($"  Markdown report: {mdPath}{pageSuffix}");
                     break;
@@ -550,8 +930,10 @@ public static partial class RequestCompareCommand
         foreach (var file in GetFilesToStage(selection))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var destPath = Path.Combine(batchPath, file.Name);
-            await CopyFileAsync(file.FullName, destPath, cancellationToken);
+            var relativePath = NormalizeRelativePath(Path.GetRelativePath(selection.RequestDirectory.FullName, file.FullName));
+            var destPath = Path.Combine(batchPath, relativePath.Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(destPath) ?? batchPath);
+            await CopyFileAsync(file.FullName, destPath, cancellationToken).ConfigureAwait(false);
         }
 
         return batchId;
@@ -580,15 +962,16 @@ public static partial class RequestCompareCommand
 
     private static List<FileInfo> GetEligibleRequestFiles(DirectoryInfo requestDir)
     {
-        return requestDir.GetFiles("*.*", SearchOption.TopDirectoryOnly)
+        return requestDir.GetFiles("*.*", SearchOption.AllDirectories)
             .Where(IsEligibleRequestFile)
-            .OrderBy(file => file.Name, StringComparer.Ordinal)
+            .OrderBy(file => NormalizeRelativePath(Path.GetRelativePath(requestDir.FullName, file.FullName)), StringComparer.Ordinal)
             .ToList();
     }
 
     private static bool IsEligibleRequestFile(FileInfo file)
     {
-        if (file.Name.EndsWith(".headers.json", StringComparison.OrdinalIgnoreCase))
+        if (file.Name.EndsWith(".headers.json", StringComparison.OrdinalIgnoreCase)
+            || file.Name.StartsWith("_", StringComparison.Ordinal))
         {
             return false;
         }
@@ -603,7 +986,7 @@ public static partial class RequestCompareCommand
         const int bufferSize = 81920;
         await using var sourceStream = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, useAsync: true);
         await using var destStream = new FileStream(destination, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize, useAsync: true);
-        await sourceStream.CopyToAsync(destStream, bufferSize, cancellationToken);
+        await sourceStream.CopyToAsync(destStream, bufferSize, cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task<IgnoreRulesLoadResult> LoadIgnoreRulesAsync(
@@ -622,7 +1005,7 @@ public static partial class RequestCompareCommand
 
         try
         {
-            var json = await File.ReadAllTextAsync(fileInfo.FullName, cancellationToken);
+            var json = await File.ReadAllTextAsync(fileInfo.FullName, cancellationToken).ConfigureAwait(false);
 
             if (string.IsNullOrWhiteSpace(json))
             {
@@ -666,7 +1049,7 @@ public static partial class RequestCompareCommand
 
         try
         {
-            var json = await File.ReadAllTextAsync(fileInfo.FullName, cancellationToken);
+            var json = await File.ReadAllTextAsync(fileInfo.FullName, cancellationToken).ConfigureAwait(false);
 
             if (string.IsNullOrWhiteSpace(json))
             {
@@ -713,6 +1096,112 @@ public static partial class RequestCompareCommand
         }
     }
 
+    private static HeaderFileLoadResult ParseHeaderArguments(IEnumerable<string> headerTexts)
+    {
+        var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var headerText in headerTexts)
+        {
+            if (!TryParseHeader(headerText, out var header, out var errorMessage))
+            {
+                return HeaderFileLoadResult.Failure(errorMessage!);
+            }
+
+            headers[header.Key] = header.Value;
+        }
+
+        return HeaderFileLoadResult.Success(headers);
+    }
+
+    private static async Task<HeaderFileLoadResult> LoadHeaderFileAsync(
+        FileInfo? fileInfo,
+        CancellationToken cancellationToken)
+    {
+        if (fileInfo == null)
+        {
+            return HeaderFileLoadResult.Success(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+        }
+
+        if (!fileInfo.Exists)
+        {
+            return HeaderFileLoadResult.Failure($"Header file not found: {fileInfo.FullName}");
+        }
+
+        try
+        {
+            await using var stream = File.OpenRead(fileInfo.FullName);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return HeaderFileLoadResult.Failure($"Invalid header file JSON '{fileInfo.FullName}': root value must be an object.");
+            }
+
+            var headerElement = root.TryGetProperty("headers", out var nestedHeaders)
+                ? nestedHeaders
+                : root;
+
+            if (headerElement.ValueKind != JsonValueKind.Object)
+            {
+                return HeaderFileLoadResult.Failure($"Invalid header file JSON '{fileInfo.FullName}': headers value must be an object.");
+            }
+
+            var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var property in headerElement.EnumerateObject())
+            {
+                if (string.IsNullOrWhiteSpace(property.Name))
+                {
+                    return HeaderFileLoadResult.Failure($"Invalid header file JSON '{fileInfo.FullName}': header names cannot be empty.");
+                }
+
+                headers[property.Name] = property.Value.ValueKind == JsonValueKind.String
+                    ? property.Value.GetString() ?? string.Empty
+                    : property.Value.GetRawText();
+            }
+
+            return HeaderFileLoadResult.Success(headers);
+        }
+        catch (JsonException ex)
+        {
+            return HeaderFileLoadResult.Failure($"Invalid header file JSON: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            return HeaderFileLoadResult.Failure($"Failed to read header file: {ex.Message}");
+        }
+    }
+
+    private static void ApplyHeaders(
+        IDictionary<string, string> target,
+        IReadOnlyDictionary<string, string>? source)
+    {
+        if (source == null)
+        {
+            return;
+        }
+
+        foreach (var header in source)
+        {
+            target[header.Key] = header.Value;
+        }
+    }
+
+    private static string? ResolveSuggestedEndpointReference(
+        string? suggestion,
+        IReadOnlyList<RequestComparisonEndpointOption> configuredEndpoints)
+    {
+        if (string.IsNullOrWhiteSpace(suggestion))
+        {
+            return null;
+        }
+
+        var match = configuredEndpoints.FirstOrDefault(endpoint => string.Equals(endpoint.Url, suggestion, StringComparison.OrdinalIgnoreCase))
+            ?? configuredEndpoints.FirstOrDefault(endpoint => string.Equals(endpoint.Name, suggestion, StringComparison.OrdinalIgnoreCase))
+            ?? configuredEndpoints.FirstOrDefault(endpoint => endpoint.Url.Contains(suggestion, StringComparison.OrdinalIgnoreCase))
+            ?? configuredEndpoints.FirstOrDefault(endpoint => endpoint.Name.Contains(suggestion, StringComparison.OrdinalIgnoreCase));
+
+        return match?.Url ?? suggestion;
+    }
+
     private static string? ValidateMaskRules(IEnumerable<MaskRuleDto> rules)
     {
         foreach (var rule in rules)
@@ -741,6 +1230,24 @@ public static partial class RequestCompareCommand
         return null;
     }
 
+    private static void PrintHeaderSummary(string label, IReadOnlyDictionary<string, string> headers)
+    {
+        if (headers.Count == 0)
+        {
+            return;
+        }
+
+        Console.WriteLine($"  {label}: {headers.Count} ({string.Join(", ", headers.Keys.OrderBy(key => key, StringComparer.OrdinalIgnoreCase))})");
+    }
+
+    private static string FormatEndpointName(RequestComparisonEndpointOption? endpointOption) => endpointOption == null
+        ? string.Empty
+        : $" ({endpointOption.Name})";
+
+    private static string NormalizeRelativePath(string relativePath) => relativePath
+        .Replace('\\', '/')
+        .TrimStart('/');
+
     private sealed class IgnoreRulesContainer
     {
         public List<IgnoreRuleDto>? IgnoreRules { get; init; }
@@ -761,6 +1268,165 @@ public static partial class RequestCompareCommand
     [JsonSerializable(typeof(MaskRulesContainer))]
     private sealed partial class IgnoreRulesJsonContext : JsonSerializerContext
     {
+    }
+
+    internal sealed record RequestCompareCliOptions
+    {
+        public required DirectoryInfo RequestDirectory { get; init; }
+
+        public string? EndpointA { get; init; }
+
+        public string? EndpointB { get; init; }
+
+        public required string ModelName { get; init; }
+
+        public int MaxConcurrency { get; init; }
+
+        public int TimeoutMs { get; init; }
+
+        public bool IgnoreCollectionOrder { get; init; }
+
+        public bool IgnoreStringCase { get; init; }
+
+        public bool IgnoreTrailingWhitespaceAtEnd { get; init; }
+
+        public bool IgnoreXmlNamespaces { get; init; }
+
+        public bool EnableSemanticAnalysis { get; init; }
+
+        public FileInfo? IgnoreRulesFile { get; init; }
+
+        public FileInfo? MaskRulesFile { get; init; }
+
+        public string? ContentTypeOverride { get; init; }
+
+        public string? SoapAction { get; init; }
+
+        public bool UseAlternateContract { get; init; }
+
+        public string? AlternateContractProfileId { get; init; }
+
+        public bool UseProfileEndpoints { get; init; }
+
+        public IReadOnlyList<string> Headers { get; init; } = Array.Empty<string>();
+
+        public IReadOnlyList<string> HeadersA { get; init; } = Array.Empty<string>();
+
+        public IReadOnlyList<string> HeadersB { get; init; } = Array.Empty<string>();
+
+        public FileInfo? HeadersFile { get; init; }
+
+        public FileInfo? HeadersAFile { get; init; }
+
+        public FileInfo? HeadersBFile { get; init; }
+
+        public bool NoEndpointDefaults { get; init; }
+
+        public string? RequestRange { get; init; }
+
+        public DirectoryInfo? OutputDirectory { get; init; }
+
+        public OutputFormat[] Formats { get; init; } = Array.Empty<OutputFormat>();
+
+        public int MarkdownPageSize { get; init; }
+
+        public bool DisableTruncation { get; init; }
+    }
+
+    internal sealed record EndpointResolutionResult
+    {
+        public bool IsSuccess { get; init; }
+
+        public string Url { get; init; } = string.Empty;
+
+        public RequestComparisonEndpointOption? EndpointOption { get; init; }
+
+        public string? ErrorMessage { get; init; }
+
+        public static EndpointResolutionResult Success(string url, RequestComparisonEndpointOption? endpointOption) => new()
+        {
+            IsSuccess = true,
+            Url = url,
+            EndpointOption = endpointOption,
+        };
+
+        public static EndpointResolutionResult Failure(string errorMessage) => new()
+        {
+            IsSuccess = false,
+            ErrorMessage = errorMessage,
+        };
+    }
+
+    private sealed record HeaderFileLoadResult
+    {
+        public bool IsSuccess { get; init; }
+
+        public string? ErrorMessage { get; init; }
+
+        public Dictionary<string, string> Headers { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public static HeaderFileLoadResult Success(Dictionary<string, string> headers) => new()
+        {
+            IsSuccess = true,
+            Headers = headers,
+        };
+
+        public static HeaderFileLoadResult Failure(string message) => new()
+        {
+            IsSuccess = false,
+            ErrorMessage = message,
+        };
+    }
+
+    internal sealed record AlternateContractProfileResolutionResult
+    {
+        public bool IsSuccess { get; init; }
+
+        public RequestComparisonAlternateContractProfile? Profile { get; init; }
+
+        public string? ErrorMessage { get; init; }
+
+        public IReadOnlyList<string> AvailableProfileIds { get; init; } = Array.Empty<string>();
+
+        public static AlternateContractProfileResolutionResult Success(RequestComparisonAlternateContractProfile? profile) => new()
+        {
+            IsSuccess = true,
+            Profile = profile,
+        };
+
+        public static AlternateContractProfileResolutionResult Failure(
+            string message,
+            IReadOnlyList<string> availableProfileIds) => new()
+        {
+            IsSuccess = false,
+            ErrorMessage = message,
+            AvailableProfileIds = availableProfileIds,
+        };
+    }
+    internal sealed record HeaderBuildResult
+    {
+        public bool IsSuccess { get; init; }
+
+        public string? ErrorMessage { get; init; }
+
+        public Dictionary<string, string> HeadersA { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public Dictionary<string, string> HeadersB { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public static HeaderBuildResult Success(
+            Dictionary<string, string> headersA,
+            Dictionary<string, string> headersB) => new()
+        {
+            IsSuccess = true,
+            HeadersA = headersA,
+            HeadersB = headersB,
+        };
+
+        public static HeaderBuildResult Failure(string message) => new()
+        {
+            IsSuccess = false,
+            ErrorMessage = message,
+        };
     }
 
     private sealed record IgnoreRulesLoadResult
@@ -838,16 +1504,20 @@ public static partial class RequestCompareCommand
     internal sealed class RequestBatchSelection
     {
         public RequestBatchSelection(
+            DirectoryInfo requestDirectory,
             int totalEligibleFileCount,
             IReadOnlyList<FileInfo> selectedFiles,
             RequestOrdinalRange? requestedRange,
             RequestOrdinalRange appliedRange)
         {
+            RequestDirectory = requestDirectory;
             TotalEligibleFileCount = totalEligibleFileCount;
             SelectedFiles = selectedFiles;
             RequestedRange = requestedRange;
             AppliedRange = appliedRange;
         }
+
+        public DirectoryInfo RequestDirectory { get; }
 
         public int TotalEligibleFileCount { get; }
 

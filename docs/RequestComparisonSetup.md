@@ -1,4 +1,4 @@
-# Request Comparison Setup Guide
+﻿# Request Comparison Setup Guide
 
 How to integrate your own SOAP/REST domain models into the ComparisonTool request comparison feature.
 
@@ -8,24 +8,24 @@ If you want a task-oriented recipe instead of the API reference, start with [Req
 
 ## 1. Overview
 
-The request comparison feature sends the same logical request to **endpoint A** and **endpoint B**, then diffs their responses. Endpoint A always receives the **canonical** request — typically a SOAP/XML payload. Endpoint B can optionally use an **alternate contract**: a different model and serialization format (e.g. a JSON REST API) that the tool translates to/from transparently.
+The request comparison feature sends the same logical request to **endpoint A** and **endpoint B**, then diffs their responses. Endpoint A always receives the **canonical** request â€” typically a SOAP/XML payload. Endpoint B can optionally use an **alternate contract**: a different model and serialization format (e.g. a JSON REST API) that the tool translates to/from transparently.
 
 ```
 Uploaded XML file
-       │
-       ▼
-Deserialize → Canonical Request model
-       │                │
-       │         Map to Alternate Request model
-       │                │
-       ▼                ▼
+       â”‚
+       â–¼
+Deserialize â†’ Canonical Request model
+       â”‚                â”‚
+       â”‚         Map to Alternate Request model
+       â”‚                â”‚
+       â–¼                â–¼
   Endpoint A       Endpoint B (JSON)
-       │                │
+       â”‚                â”‚
 Canonical Response  Alternate Response
-       │                │
-       │         Map back to Canonical Response model
-       │                │
-       ▼                ▼
+       â”‚                â”‚
+       â”‚         Map back to Canonical Response model
+       â”‚                â”‚
+       â–¼                â–¼
           Diff / comparison output
 ```
 
@@ -41,7 +41,7 @@ Add a reference to `ComparisonTool.Core` from any project that contains your reg
 <ProjectReference Include="..\ComparisonTool.Core\ComparisonTool.Core.csproj" />
 ```
 
-Your domain model classes can live anywhere — a dedicated class library is recommended. They do not need to reference `ComparisonTool.Core` directly unless they use framework types.
+Your domain model classes can live anywhere â€” a dedicated class library is recommended. They do not need to reference `ComparisonTool.Core` directly unless they use framework types.
 
 If you want to study the built-in sample, the sample model classes are in `ComparisonTool.Domain` under `ComparisonTool.Domain.Models`.
 
@@ -175,12 +175,12 @@ options.RegisterDomainModelWithSerializer<MyRequestEnvelope>(
 `IgnoreXmlNamespaces` defaults to `true`. In this mode the framework uses a namespace-agnostic deserializer, so uploaded XML files deserialize correctly regardless of whether namespaces are present, absent, or differ from what the model declares. Set it to `false` only if you need strict namespace enforcement:
 
 ```csharp
-options.IgnoreXmlNamespaces = false; // strict — namespaces must match exactly
+options.IgnoreXmlNamespaces = false; // strict â€” namespaces must match exactly
 ```
 
 ### The `modelName` string
 
-The value you pass as `modelName` is the key the tool uses everywhere: it appears in the comparison panel's model dropdown and it **must exactly match** the `canonicalModelName` you specify in step 4. Choose a stable, descriptive string — it is user-visible.
+The value you pass as `modelName` is the key the tool uses everywhere: it appears in the comparison panel's model dropdown and it **must exactly match** the `canonicalModelName` you specify in step 4. Choose a stable, descriptive string â€” it is user-visible.
 
 ### When the downstream comparison model is JSON
 
@@ -255,7 +255,7 @@ public sealed class MyOrderServiceMapper
 }
 ```
 
-The mapper is a plain C# class. You can use any mapping library internally — Mapster, AutoMapper, or manual projection. The interface only constrains the method signatures.
+The mapper is a plain C# class. You can use any mapping library internally â€” Mapster, AutoMapper, or manual projection. The interface only constrains the method signatures.
 
 ---
 
@@ -263,7 +263,7 @@ The mapper is a plain C# class. You can use any mapping library internally — M
 
 This call is **separate** from `AddUnifiedComparisonServices`. It registers the profile with the DI container as a singleton that the comparison pipeline picks up at runtime.
 
-### Form 1 — Type-parameter (mapper activated via `new()`)
+### Form 1 â€” Type-parameter (mapper activated via `new()`)
 
 Use this when your mapper has a public parameterless constructor:
 
@@ -283,7 +283,7 @@ services.AddRequestComparisonAlternateContractProfiles(options =>
             .UseAlternateResponseFormat(SerializationFormat.Json)));
 ```
 
-### Form 2 — Instance (mapper needs constructor arguments)
+### Form 2 â€” Instance (mapper needs constructor arguments)
 
 ```csharp
 services.AddRequestComparisonAlternateContractProfiles(options =>
@@ -301,7 +301,7 @@ services.AddRequestComparisonAlternateContractProfiles(options =>
             .UseAlternateResponseFormat(SerializationFormat.Json)));
 ```
 
-### Form 3 — Raw delegates (quick one-offs or tests)
+### Form 3 â€” Raw delegates (quick one-offs or tests)
 
 ```csharp
 services.AddRequestComparisonAlternateContractProfiles(options =>
@@ -329,7 +329,7 @@ services.AddRequestComparisonAlternateContractProfiles(options =>
 | `SupportSourceRequestFormats(params formats)` | Formats the tool accepts for uploaded request files | `Xml` |
 | `UseAlternateRequestFormat(format, contentType?)` | Format and `Content-Type` used when POSTing to endpoint B | `Json` / `application/json` |
 | `UseAlternateResponseFormat(format)` | Format expected in endpoint B's response body | `Json` |
-| `MapCanonicalResponsePropertyPath(canonicalPath, alternatePath)` | When a field is masked, maps the canonical dot-path to the raw path in endpoint B's response. Call once per masked field. | — |
+| `MapCanonicalResponsePropertyPath(canonicalPath, alternatePath)` | When a field is masked, maps the canonical dot-path to the raw path in endpoint B's response. Call once per masked field. | â€” |
 | `UseCanonicalRequestDeserializer(Func<Stream, SerializationFormat, T>)` | Override how the uploaded source request is deserialized into `TCanonicalRequest` | Built-in XML deserializer |
 | `UseAlternateRequestSerializer(Func<T, byte[]>, contentType?)` | Override how `TAlternateRequest` is serialized for the endpoint B HTTP body | Built-in JSON serializer |
 | `UseAlternateResponseDeserializer(Func<Stream, string?, T>)` | Override how endpoint B's response body is deserialized into `TAlternateResponse` | Built-in JSON deserializer |
@@ -346,7 +346,7 @@ services.AddRequestComparisonAlternateContractProfiles(options =>
 ```
 Step 2                              Step 4
 RegisterDomainModelWithRootElement  RegisterAlternateContract
-  modelName: "MyOrderService"  ──►  canonicalModelName: "MyOrderService"
+  modelName: "MyOrderService"  â”€â”€â–º  canonicalModelName: "MyOrderService"
 ```
 
 The `canonicalModelName` string is the only link between the two registrations. If the strings do not match exactly (case-sensitive), the tool will not find the alternate contract profile when that model is selected.
@@ -356,7 +356,7 @@ The `canonicalModelName` string is the only link between the two registrations. 
 - **Step 2 must be inside** the `AddUnifiedComparisonServices` (or `AddXmlComparisonServices`) delegate. Calling it after the method returns has no effect.
 - **JSON comparison models are different:** register them with `services.RegisterDomainModel<T>(...)` on the service collection, not only inside `XmlComparisonOptions`.
 - **Step 4 must be a separate** `AddRequestComparisonAlternateContractProfiles` call. It does not go inside `AddUnifiedComparisonServices`.
-- The two calls can appear in any order relative to each other — they both register singletons that are resolved at request time.
+- The two calls can appear in any order relative to each other â€” they both register singletons that are resolved at request time.
 
 ### Built-in host wiring pattern
 
@@ -406,7 +406,103 @@ The tool deserializes the uploaded file into `TCanonicalRequest`, maps it to `TA
 
 ---
 
-## 9. Complete end-to-end example
+## 9. Using alternate contracts from the CLI
+
+The CLI supports the same alternate-contract request comparison flow as the UI. Use discovery first when you are not sure which names are available:
+
+```powershell
+comparisontool request-models
+comparisontool request-profiles --model ExpectedJsonCustomerLookupResponse
+comparisontool request-endpoints
+```
+
+Run the built-in SOAP-to-JSON customer lookup profile with profile-suggested endpoints:
+
+```powershell
+comparisontool request C:\requests\customer-lookup `
+  --model ExpectedJsonCustomerLookupResponse `
+  --alternate-contract-profile expected-json-customer-lookup `
+  --use-profile-endpoints `
+  --header-b "X-Client-Correlation: cli-smoke" `
+  --format Json Markdown `
+  --output C:\reports
+```
+
+The same run can use configured endpoint names explicitly. Endpoint name matching is exact and case-insensitive:
+
+```powershell
+comparisontool request C:\requests\customer-lookup `
+  --model ExpectedJsonCustomerLookupResponse `
+  --endpoint-a "Local Mock Customer Lookup SOAP" `
+  --endpoint-b "Local Mock Customer Lookup JSON" `
+  --alternate-contract-profile expected-json-customer-lookup `
+  --format Json Markdown `
+  --output C:\reports
+```
+
+Configured endpoint defaults are applied automatically when `--endpoint-a` or `--endpoint-b` matches a configured endpoint name or URL. `ContentType` from endpoint A becomes the endpoint A request content type unless `--content-type` is provided. Endpoint B request content type is still owned by the selected alternate-contract profile in alternate mode. Use `--no-endpoint-defaults` to disable configured endpoint `ContentType` and `DefaultHeaders`.
+
+Headers can be supplied globally, per endpoint, and from JSON files:
+
+```powershell
+comparisontool request C:\requests\customer-lookup `
+  -m ExpectedJsonCustomerLookupResponse `
+  -a "Local Mock Customer Lookup SOAP" `
+  -b "Local Mock Customer Lookup JSON" `
+  --alternate-contract-profile expected-json-customer-lookup `
+  --header "X-Trace: batch-42" `
+  --header-a "X-Source: soap" `
+  --header-b "X-Source: json" `
+  --headers-file C:\requests\common-headers.json `
+  --headers-b-file C:\requests\json-endpoint-headers.json
+```
+
+Header JSON files may be either a plain map or a container with `headers`:
+
+```json
+{
+  "headers": {
+    "X-Trace": "batch-42"
+  }
+}
+```
+
+Per-request sidecars are copied recursively beside staged request files. A request at `region-a\001.xml` may have `region-a\001.xml.headers.json` with this schema:
+
+```json
+{
+  "headers": {
+    "X-Request-Id": "001"
+  },
+  "headersA": {
+    "X-Endpoint": "soap"
+  },
+  "headersB": {
+    "X-Endpoint": "json"
+  }
+}
+```
+
+Header precedence is broadest-to-most-specific: endpoint defaults, global CLI headers and `--soap-action`, endpoint-specific CLI headers, sidecar `headers`, sidecar `headersA`/`headersB`, then profile-generated endpoint B headers such as the `AuthorizationToken` produced by `expected-json-customer-lookup`. CLI output reports header names and counts only; it does not print header values.
+
+The built-in customer lookup profile reads its token-service dependency from configuration:
+
+```json
+{
+  "RequestComparison": {
+    "AlternateContracts": {
+      "ExpectedJsonCustomerLookup": {
+        "AuthorizationTokenUrl": "http://localhost:5055/api/mock/authorisation-token",
+        "HttpClientName": "RequestComparison"
+      }
+    }
+  }
+}
+```
+
+---
+
+## 10. Complete end-to-end example
 
 Everything in one place, ready to copy and adapt.
 
@@ -532,7 +628,7 @@ using ComparisonTool.Core.DI;
 using ComparisonTool.Core.RequestComparison.AlternateContracts;
 using ComparisonTool.Core.Serialization;
 
-// Step 2 — inside AddUnifiedComparisonServices:
+// Step 2 â€” inside AddUnifiedComparisonServices:
 services.AddUnifiedComparisonServices(configuration, options =>
 {
     // Existing registrations ...
@@ -541,7 +637,7 @@ services.AddUnifiedComparisonServices(configuration, options =>
         rootElementName: "Envelope");
 });
 
-// Step 4 — separate call:
+// Step 4 â€” separate call:
 services.AddRequestComparisonAlternateContractProfiles(options =>
     options.RegisterAlternateContract<
         MyRequestEnvelope,
@@ -561,7 +657,7 @@ services.AddRequestComparisonAlternateContractProfiles(options =>
                 "auth_token")));
 ```
 
-For Web, this goes in `ComparisonTool.Web/Program.cs`. For Desktop, in `ComparisonTool.Desktop/App.xaml.cs`. For CLI, in `ComparisonTool.Cli/Infrastructure/ServiceProviderFactory.cs`. All three follow the same pattern — add alongside the existing registrations.
+For Web, this goes in `ComparisonTool.Web/Program.cs`. For Desktop, in `ComparisonTool.Desktop/App.xaml.cs`. For CLI, in `ComparisonTool.Cli/Infrastructure/ServiceProviderFactory.cs`. All three follow the same pattern â€” add alongside the existing registrations.
 
 ---
 
@@ -606,7 +702,7 @@ configure: builder => builder
         contentType: "application/json; charset=utf-8")
 ```
 
-Override only what you need — any method you do not call leaves the built-in default in place.
+Override only what you need â€” any method you do not call leaves the built-in default in place.
 
 ---
 
@@ -618,3 +714,4 @@ The repo ships a working reference implementation in:
 - **Registration**: `ComparisonTool.Core/RequestComparison/AlternateContracts/RequestComparisonAlternateContractSampleRegistration.cs`
 
 The sample is already wired into all three hosts and can serve as a live end-to-end reference.
+
