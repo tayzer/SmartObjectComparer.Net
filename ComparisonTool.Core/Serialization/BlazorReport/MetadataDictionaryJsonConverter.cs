@@ -22,6 +22,7 @@ public sealed class MetadataDictionaryJsonConverter : JsonConverter<Dictionary<s
         ["ComparisonPhaseTimings"] = typeof(ComparisonPhaseTimings),
         ["SemanticDifferenceAnalysis"] = typeof(SemanticDifferenceAnalysis),
         ["ExecutionOutcomeSummary"] = typeof(ExecutionOutcomeSummary),
+        ["RequestComparisonRunTimings"] = typeof(RequestComparisonRunTimings),
     };
 
     private static readonly Dictionary<Type, string> KnownTypeNames =

@@ -312,7 +312,54 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
         job.TreatNullAndEmptyCollectionsAsEqual.ShouldBeTrue();
         job.IgnoreRules.Single().TreatNullAndEmptyCollectionsAsEqual.ShouldBeTrue();
     }
-    private static ServiceProvider CreateServiceProvider(AlternateContractTestHttpMessageHandler handler)
+
+    [TestMethod]
+    public async Task ExecuteJobAsync_RecordsRequestTimingMetadataAndPublishesFinalizingProgress()
+    {
+        var handler = new AlternateContractTestHttpMessageHandler();
+        var progressPublisher = new RecordingComparisonProgressPublisher();
+        using var serviceProvider = CreateServiceProvider(handler, progressPublisher);
+        var jobService = serviceProvider.GetRequiredService<RequestComparisonJobService>();
+
+        var batchId = Guid.NewGuid().ToString("N");
+        CreateRequestBatch(batchId);
+
+        var job = jobService.CreateJob(new CreateRequestComparisonJobRequest
+        {
+            RequestBatchId = batchId,
+            EndpointA = "https://endpoint-a.test/customer-lookup",
+            EndpointB = "https://endpoint-b.test/customer-lookup",
+            ModelName = RequestComparisonAlternateContractSampleRegistration.SampleModelName,
+            UseAlternateContractForEndpointB = true,
+            AlternateContractProfileId = RequestComparisonAlternateContractSampleRegistration.SampleProfileId,
+            IgnoreXmlNamespaces = true,
+            MaxConcurrency = 2,
+            TimeoutMs = 10000,
+        });
+
+        createdDirectories.Add(Path.Combine(Path.GetTempPath(), "ComparisonToolJobs", job.JobId));
+
+        await jobService.ExecuteJobAsync(job.JobId);
+
+        var result = jobService.GetResult(job.JobId);
+        result.ShouldNotBeNull();
+        result.Metadata.ContainsKey(RequestComparisonRunTimings.MetadataKey).ShouldBeTrue();
+
+        var timings = result.Metadata[RequestComparisonRunTimings.MetadataKey].ShouldBeOfType<RequestComparisonRunTimings>();
+        timings.TotalRequests.ShouldBe(2);
+        timings.SuccessfulRequests.ShouldBe(2);
+        timings.TotalPairsCompared.ShouldBe(2);
+        timings.TotalElapsedMs.ShouldBeGreaterThanOrEqualTo(0);
+        timings.ParsingMs.ShouldBeGreaterThanOrEqualTo(0);
+        timings.RequestExecutionMs.ShouldBeGreaterThanOrEqualTo(0);
+        timings.ResponseComparisonMs.ShouldBeGreaterThanOrEqualTo(0);
+        timings.FocusedRawContentMs.ShouldBeGreaterThanOrEqualTo(0);
+        timings.FinalizationMs.ShouldBeGreaterThanOrEqualTo(0);
+
+        progressPublisher.Updates.Any(update => update.Phase == ComparisonPhase.Finalizing).ShouldBeTrue();
+        progressPublisher.Updates.Last().Phase.ShouldBe(ComparisonPhase.Completed);
+    }
+    private static ServiceProvider CreateServiceProvider(AlternateContractTestHttpMessageHandler handler, IComparisonProgressPublisher? progressPublisher = null)
     {
         var services = new ServiceCollection();
 
@@ -328,13 +375,13 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
         services.AddSingleton<ResponseMaskingService>();
         services.AddSingleton<RequestExecutionService>();
         services.AddSingleton<RawTextComparisonService>();
-        services.AddSingleton<IComparisonProgressPublisher, NoOpComparisonProgressPublisher>();
+        services.AddSingleton<IComparisonProgressPublisher>(progressPublisher ?? new NoOpComparisonProgressPublisher());
         services.AddSingleton<RequestComparisonJobService>();
 
         return services.BuildServiceProvider();
     }
 
-    private static ServiceProvider CreateAdvancedServiceProvider(AdvancedAlternateContractTestHttpMessageHandler handler)
+    private static ServiceProvider CreateAdvancedServiceProvider(AdvancedAlternateContractTestHttpMessageHandler handler, IComparisonProgressPublisher? progressPublisher = null)
     {
         var services = new ServiceCollection();
         var configuration = new ConfigurationBuilder()
@@ -357,7 +404,7 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
         services.AddSingleton<ResponseMaskingService>();
         services.AddSingleton<RequestExecutionService>();
         services.AddSingleton<RawTextComparisonService>();
-        services.AddSingleton<IComparisonProgressPublisher, NoOpComparisonProgressPublisher>();
+        services.AddSingleton<IComparisonProgressPublisher>(progressPublisher ?? new NoOpComparisonProgressPublisher());
         services.AddSingleton<RequestComparisonJobService>();
 
         return services.BuildServiceProvider();
@@ -735,7 +782,19 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
         public HttpClient CreateClient(string name) => new(handler, disposeHandler: false);
     }
 
-    private sealed class NoOpComparisonProgressPublisher : IComparisonProgressPublisher
+
+    private sealed class RecordingComparisonProgressPublisher : IComparisonProgressPublisher
+    {
+        private readonly List<ComparisonProgressUpdate> updates = new();
+
+        public IReadOnlyList<ComparisonProgressUpdate> Updates => updates;
+
+        public Task PublishAsync(ComparisonProgressUpdate update, CancellationToken cancellationToken = default)
+        {
+            updates.Add(update);
+            return Task.CompletedTask;
+        }
+    }    private sealed class NoOpComparisonProgressPublisher : IComparisonProgressPublisher
     {
         public Task PublishAsync(ComparisonProgressUpdate update, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;

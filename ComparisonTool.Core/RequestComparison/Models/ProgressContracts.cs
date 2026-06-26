@@ -1,4 +1,4 @@
-﻿namespace ComparisonTool.Core.RequestComparison.Models;
+namespace ComparisonTool.Core.RequestComparison.Models;
 
 /// <summary>
 /// Represents a comparison phase for progress tracking.
@@ -16,6 +16,12 @@ public enum ComparisonPhase
 
     /// <summary>Comparing responses.</summary>
     Comparing,
+
+    /// <summary>Analyzing comparison results.</summary>
+    Analyzing,
+
+    /// <summary>Finalizing result artifacts and metadata.</summary>
+    Finalizing,
 
     /// <summary>Job completed successfully.</summary>
     Completed,

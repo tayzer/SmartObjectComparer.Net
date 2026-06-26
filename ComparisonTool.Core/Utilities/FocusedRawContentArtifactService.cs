@@ -1,4 +1,5 @@
 using System.Text;
+using ComparisonTool.Core.Comparison;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
 using Microsoft.Extensions.Logging;
@@ -30,7 +31,8 @@ public sealed class FocusedRawContentArtifactService
         MultiFolderComparisonResult result,
         IEnumerable<IgnoreRule> ignoreRules,
         string artifactRootDirectory,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IProgress<ComparisonProgress>? progress = null)
     {
         ArgumentNullException.ThrowIfNull(result);
         ArgumentNullException.ThrowIfNull(ignoreRules);
@@ -44,22 +46,29 @@ public sealed class FocusedRawContentArtifactService
         result.Metadata ??= new Dictionary<string, object>(StringComparer.Ordinal);
         result.Metadata[MetadataIgnoreCompleteRulesKey] = ignoreCompletePaths;
 
-        if (ignoreCompletePaths.Count == 0 || result.FilePairResults.Count == 0)
+        var totalPairs = result.FilePairResults.Count;
+        if (ignoreCompletePaths.Count == 0 || totalPairs == 0)
         {
             result.Metadata[MetadataFocusedPairCountKey] = 0;
             return;
         }
 
+        progress?.Report(new ComparisonProgress(0, totalPairs, $"Preparing focused raw content 0 of {totalPairs}"));
+
         Directory.CreateDirectory(artifactRootDirectory);
 
         var focusedCount = 0;
-        for (var index = 0; index < result.FilePairResults.Count; index++)
+        for (var index = 0; index < totalPairs; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             var pair = result.FilePairResults[index];
             if (pair.HasError || string.IsNullOrWhiteSpace(pair.File1Path) || string.IsNullOrWhiteSpace(pair.File2Path))
             {
+                progress?.Report(new ComparisonProgress(
+                    index + 1,
+                    totalPairs,
+                    $"Preparing focused raw content {index + 1} of {totalPairs}"));
                 continue;
             }
 
@@ -74,6 +83,11 @@ public sealed class FocusedRawContentArtifactService
             {
                 logger.LogWarning(ex, "Failed to build focused raw content for {Pair}.", pair.GetDisplayIdentifier());
             }
+
+            progress?.Report(new ComparisonProgress(
+                index + 1,
+                totalPairs,
+                $"Preparing focused raw content {index + 1} of {totalPairs}"));
         }
 
         result.Metadata[MetadataFocusedPairCountKey] = focusedCount;
@@ -83,7 +97,8 @@ public sealed class FocusedRawContentArtifactService
         MultiFolderComparisonResult result,
         IEnumerable<string> ignoreCompletePaths,
         string artifactRootDirectory,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IProgress<ComparisonProgress>? progress = null)
     {
         var rules = ignoreCompletePaths.Select(path => new IgnoreRule
         {
@@ -91,7 +106,7 @@ public sealed class FocusedRawContentArtifactService
             IgnoreCompletely = true,
         });
 
-        await PopulateFocusedRawContentAsync(result, rules, artifactRootDirectory, cancellationToken).ConfigureAwait(false);
+        await PopulateFocusedRawContentAsync(result, rules, artifactRootDirectory, cancellationToken, progress).ConfigureAwait(false);
     }
 
     private async Task<bool> TryPopulatePairAsync(

@@ -74,6 +74,7 @@ else if (FolderComparisonResult != null)
         <!-- Comparison Timings -->
         @{
             var phaseTimings = GetPhaseTimings(FolderComparisonResult);
+            var requestTimings = GetRequestTimings(FolderComparisonResult);
         }
         @if (phaseTimings != null)
         {
@@ -93,6 +94,25 @@ else if (FolderComparisonResult != null)
             </MudPaper>
         }
 
+        @if (requestTimings != null)
+        {
+            <MudPaper Elevation="2" Class="pa-4">
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.h6">Request Comparison Timings</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Default">
+                        @requestTimings.TotalRequests requests, @requestTimings.TotalPairsCompared response pairs.
+                    </MudText>
+                    <MudStack Row="true" Spacing="2" Class="flex-wrap">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary">Total: @FormatElapsedTime(requestTimings.TotalElapsedMs)</MudChip>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info">Parsing: @FormatElapsedTime(requestTimings.ParsingMs)</MudChip>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info">Execution: @FormatElapsedTime(requestTimings.RequestExecutionMs)</MudChip>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info">Comparison: @FormatElapsedTime(requestTimings.ResponseComparisonMs)</MudChip>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info">Focused Artifacts: @FormatElapsedTime(requestTimings.FocusedRawContentMs)</MudChip>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info">Finalization: @FormatElapsedTime(requestTimings.FinalizationMs)</MudChip>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        }
         @if (EnhancedStructuralAnalysis != null)
         {
             <ComparisonRunDetails Analysis="@EnhancedStructuralAnalysis"
@@ -372,6 +392,17 @@ else if (FolderComparisonResult != null)
             : null;
     }
 
+    private static RequestComparisonRunTimings? GetRequestTimings(MultiFolderComparisonResult? result)
+    {
+        if (result?.Metadata == null)
+        {
+            return null;
+        }
+
+        return result.Metadata.TryGetValue(RequestComparisonRunTimings.MetadataKey, out var timingsObj)
+            ? timingsObj as RequestComparisonRunTimings
+            : null;
+    }
     private static string FormatElapsedTime(long milliseconds)
     {
         if (milliseconds >= 60000)

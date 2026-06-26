@@ -1,3 +1,4 @@
+using ComparisonTool.Core.Comparison;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.Utilities;
@@ -113,6 +114,74 @@ public sealed class StructuredContentPruningServiceTests
     }
 
     [TestMethod]
+    public async Task PopulateFocusedRawContentAsync_ReportsProgressForEachPair()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "FocusedRawContentTests_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+
+        try
+        {
+            var fileA1 = Path.Combine(directory, "a1.json");
+            var fileB1 = Path.Combine(directory, "b1.json");
+            var fileA2 = Path.Combine(directory, "a2.json");
+            var fileB2 = Path.Combine(directory, "b2.json");
+            await File.WriteAllTextAsync(fileA1, """{"ResultCode":"00","TraceId":"a1"}""");
+            await File.WriteAllTextAsync(fileB1, """{"ResultCode":"00","TraceId":"b1"}""");
+            await File.WriteAllTextAsync(fileA2, """{"ResultCode":"00","TraceId":"a2"}""");
+            await File.WriteAllTextAsync(fileB2, """{"ResultCode":"00","TraceId":"b2"}""");
+
+            var result = new MultiFolderComparisonResult
+            {
+                FilePairResults =
+                [
+                    new FilePairComparisonResult
+                    {
+                        File1Path = fileA1,
+                        File2Path = fileB1,
+                        File1Name = "a1.json",
+                        File2Name = "b1.json",
+                        ContentTypeA = "application/json",
+                        ContentTypeB = "application/json",
+                    },
+                    new FilePairComparisonResult
+                    {
+                        File1Path = fileA2,
+                        File2Path = fileB2,
+                        File1Name = "a2.json",
+                        File2Name = "b2.json",
+                        ContentTypeA = "application/json",
+                        ContentTypeB = "application/json",
+                    },
+                ],
+            };
+            var updates = new List<ComparisonProgress>();
+            var progress = new CapturingProgress<ComparisonProgress>(updates.Add);
+            var artifactService = new FocusedRawContentArtifactService(
+                service,
+                NullLogger<FocusedRawContentArtifactService>.Instance);
+
+            await artifactService.PopulateFocusedRawContentAsync(
+                result,
+                [new IgnoreRule { PropertyPath = "TraceId", IgnoreCompletely = true }],
+                Path.Combine(directory, "focused"),
+                progress: progress);
+
+            updates.Count.ShouldBeGreaterThanOrEqualTo(3);
+            updates.First().Completed.ShouldBe(0);
+            updates.First().Total.ShouldBe(2);
+            updates.Last().Completed.ShouldBe(2);
+            updates.Last().Total.ShouldBe(2);
+            updates.Last().Status.ShouldBe("Preparing focused raw content 2 of 2");
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, true);
+            }
+        }
+    }
+    [TestMethod]
     public async Task PopulateFocusedRawContentAsync_DoesNotCreateArtifactsForOrderOnlyRules()
     {
         var directory = Path.Combine(Path.GetTempPath(), "FocusedRawContentTests_" + Guid.NewGuid().ToString("N"));
@@ -159,5 +228,16 @@ public sealed class StructuredContentPruningServiceTests
                 Directory.Delete(directory, true);
             }
         }
+    }
+    private sealed class CapturingProgress<T> : IProgress<T>
+    {
+        private readonly Action<T> handler;
+
+        public CapturingProgress(Action<T> handler)
+        {
+            this.handler = handler;
+        }
+
+        public void Report(T value) => handler(value);
     }
 }

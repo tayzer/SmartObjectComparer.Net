@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Text.Json;
 using ComparisonTool.Core.Comparison;
 using ComparisonTool.Core.Comparison.Configuration;
@@ -182,6 +183,13 @@ public class RequestComparisonJobService
             throw new InvalidOperationException($"Job {jobId} not found");
         }
 
+        var totalStopwatch = Stopwatch.StartNew();
+        long parsingMs = 0;
+        long requestExecutionMs = 0;
+        long responseComparisonMs = 0;
+        long focusedRawContentMs = 0;
+        long finalizationMs = 0;
+
         try
         {
             // Phase 1: Parse request files (0-5%)
@@ -190,9 +198,11 @@ public class RequestComparisonJobService
             progress?.Report((0, 0, "Parsing request files..."));
             await PublishProgressAsync(jobId, ComparisonPhase.Parsing, 0, "Parsing request files...", forcePublish: true);
 
+            var parsingStart = Stopwatch.GetTimestamp();
             var requests = await _parserService.ParseRequestBatchAsync(
                 job.RequestBatchId,
                 cancellationToken).ConfigureAwait(false);
+            parsingMs = ToMilliseconds(Stopwatch.GetElapsedTime(parsingStart));
 
             job.TotalRequests = requests.Count;
             _logger.LogInformation("Parsed {Count} request files for job {JobId}", requests.Count, jobId);
@@ -292,11 +302,13 @@ public class RequestComparisonJobService
                         requests.Count);
                 });
 
+                var executionStart = Stopwatch.GetTimestamp();
                 var executionResults = await _executionService.ExecuteRequestsAsync(
                     job,
                     chunk,
                     executionProgress,
                     cancellationToken).ConfigureAwait(false);
+                requestExecutionMs += ToMilliseconds(Stopwatch.GetElapsedTime(executionStart));
 
                 executedCount += executionResults.Count;
                 successCount += executionResults.Count(r => r.Success);
@@ -306,6 +318,7 @@ public class RequestComparisonJobService
                     .Where(r => !r.Success)
                     .Select(r => new RequestExecutionFailureMetadata(r.Request.RelativePath, r.ErrorMessage)));
 
+                var comparisonStart = Stopwatch.GetTimestamp();
                 var chunkComparisonResult = await CompareExecutionResultsAsync(
                     job,
                     executionResults,
@@ -317,6 +330,7 @@ public class RequestComparisonJobService
                     chunkLabel,
                     progress,
                     cancellationToken).ConfigureAwait(false);
+                responseComparisonMs += ToMilliseconds(Stopwatch.GetElapsedTime(comparisonStart));
 
                 outcomeAccumulator.Add(chunkComparisonResult.OutcomeSummary);
                 comparisonResult.FilePairResults.AddRange(chunkComparisonResult.Result.FilePairResults);
@@ -349,8 +363,27 @@ public class RequestComparisonJobService
             comparisonResult.AllEqual = comparisonResult.FilePairResults.Count > 0
                 && comparisonResult.FilePairResults.All(r => r.AreEqual);
 
-            await PublishProgressAsync(jobId, ComparisonPhase.Comparing, 95, "Preparing focused raw content artifacts...", executedCount, requests.Count, forcePublish: true);
-            await PopulateFocusedRawContentAsync(job, comparisonResult, cancellationToken).ConfigureAwait(false);
+            await PublishProgressAsync(jobId, ComparisonPhase.Finalizing, 95, "Preparing focused raw content artifacts...", executedCount, requests.Count, forcePublish: true);
+            var focusedProgress = new Progress<ComparisonProgress>(p =>
+            {
+                job.StatusMessage = p.Status;
+                progress?.Report((p.Completed, p.Total, p.Status));
+
+                var percent = (int)Math.Min(99, Math.Round(95.0 + (4.0 * p.Completed / Math.Max(1, p.Total))));
+                _ = PublishProgressAsync(
+                    jobId,
+                    ComparisonPhase.Finalizing,
+                    percent,
+                    p.Status,
+                    p.Completed,
+                    p.Total);
+            });
+            var focusedRawContentStart = Stopwatch.GetTimestamp();
+            await PopulateFocusedRawContentAsync(job, comparisonResult, focusedProgress, cancellationToken).ConfigureAwait(false);
+            focusedRawContentMs = ToMilliseconds(Stopwatch.GetElapsedTime(focusedRawContentStart));
+
+            await PublishProgressAsync(jobId, ComparisonPhase.Finalizing, 99, "Finalizing comparison result metadata...", executedCount, requests.Count, forcePublish: true);
+            var finalizationStart = Stopwatch.GetTimestamp();
 
             comparisonResult.Metadata["IgnoreCollectionOrder"] = job.IgnoreCollectionOrder;
             comparisonResult.Metadata["TreatNullAndEmptyCollectionsAsEqual"] = job.TreatNullAndEmptyCollectionsAsEqual;
@@ -373,6 +406,23 @@ public class RequestComparisonJobService
             }
 
             comparisonResult.Metadata["ExecutionResults"] = failedExecutionRecords;
+
+            finalizationMs = ToMilliseconds(Stopwatch.GetElapsedTime(finalizationStart));
+            totalStopwatch.Stop();
+            comparisonResult.Metadata[RequestComparisonRunTimings.MetadataKey] = new RequestComparisonRunTimings
+            {
+                TotalRequests = requests.Count,
+                SuccessfulRequests = successCount,
+                TotalPairsCompared = comparisonResult.TotalPairsCompared,
+                LargeBatchMode = job.LargeBatchMode,
+                LargeBatchTotalChunks = job.LargeBatchTotalChunks,
+                ParsingMs = parsingMs,
+                RequestExecutionMs = requestExecutionMs,
+                ResponseComparisonMs = responseComparisonMs,
+                FocusedRawContentMs = focusedRawContentMs,
+                FinalizationMs = finalizationMs,
+                TotalElapsedMs = totalStopwatch.ElapsedMilliseconds,
+            };
 
             _results[jobId] = comparisonResult;
 
@@ -710,6 +760,7 @@ public class RequestComparisonJobService
             OneOrBothFailed = oneOrBothFailed,
         };
     }
+
     /// <summary>
     /// Cleans up job resources older than the specified age.
     /// </summary>
@@ -747,6 +798,7 @@ public class RequestComparisonJobService
     private async Task PopulateFocusedRawContentAsync(
         RequestComparisonJob job,
         MultiFolderComparisonResult comparisonResult,
+        IProgress<ComparisonProgress>? progress,
         CancellationToken cancellationToken)
     {
         var effectiveIgnoreRules = _alternateContractTransformationService.GetEffectiveIgnoreRules(job)
@@ -768,8 +820,10 @@ public class RequestComparisonJobService
             comparisonResult,
             effectiveIgnoreRules,
             artifactRoot,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            progress).ConfigureAwait(false);
     }
+
     /// <summary>
     /// Applies per-job configuration settings to the comparison services.
     /// </summary>
@@ -886,6 +940,7 @@ public class RequestComparisonJobService
         string.IsNullOrWhiteSpace(label)
             ? endpoint.ToString()
             : label.Trim();
+
     private static string BuildComparisonTargetPath(string rootDirectory, string requestRelativePath)
     {
         var sanitizedPath = SanitizeRelativePath(requestRelativePath);
@@ -935,6 +990,7 @@ public class RequestComparisonJobService
                 StringComparison.OrdinalIgnoreCase);
         });
     }
+
     private static bool TryGetRelativePathUnderRoot(string rootDirectory, string filePath, out string relativePath)
     {
         relativePath = string.Empty;
@@ -961,6 +1017,9 @@ public class RequestComparisonJobService
         relativePath
             .Replace('\\', '/')
             .TrimStart('/');
+
+    private static long ToMilliseconds(TimeSpan elapsed) =>
+        (long)Math.Round(elapsed.TotalMilliseconds, MidpointRounding.AwayFromZero);
 
     private static async Task CopyFileAsync(string sourcePath, string destinationPath, CancellationToken cancellationToken)
     {
