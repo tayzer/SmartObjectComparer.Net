@@ -3,6 +3,8 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Xml.Serialization;
+using ComparisonTool.Core.Comparison;
+using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.DI;
@@ -10,6 +12,7 @@ using ComparisonTool.Core.RequestComparison.AlternateContracts;
 using ComparisonTool.Core.RequestComparison.Models;
 using ComparisonTool.Core.RequestComparison.Services;
 using ComparisonTool.Core.Serialization;
+using ComparisonTool.Core.Utilities;
 using ComparisonTool.Domain.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -359,6 +362,229 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
         progressPublisher.Updates.Any(update => update.Phase == ComparisonPhase.Finalizing).ShouldBeTrue();
         progressPublisher.Updates.Last().Phase.ShouldBe(ComparisonPhase.Completed);
     }
+
+    [TestMethod]
+    [Timeout(180000)]
+    [TestCategory("Performance")]
+    public async Task ExecuteJobAsync_With5000SyntheticAlternateContractRequests_MeetsPerformanceFitnessFunctions()
+    {
+        var handler = new FastExpectedJsonCustomerLookupHandler();
+        using var serviceProvider = CreateAdvancedServiceProvider(
+            handler,
+            extraConfiguration: LargeBatchFitnessConfiguration());
+        var jobService = serviceProvider.GetRequiredService<RequestComparisonJobService>();
+
+        var batchId = Guid.NewGuid().ToString("N");
+        CreateAdvancedPerformanceRequestBatch(batchId, 5000);
+
+        var job = jobService.CreateJob(new CreateRequestComparisonJobRequest
+        {
+            RequestBatchId = batchId,
+            EndpointA = "https://endpoint-a.test/customer-lookup",
+            EndpointB = "https://endpoint-b.test/customer-lookup",
+            ModelName = AdvancedExpectedModelName,
+            UseAlternateContractForEndpointB = true,
+            AlternateContractProfileId = AdvancedProfileId,
+            IgnoreXmlNamespaces = true,
+            MaxConcurrency = 32,
+            TimeoutMs = 10000,
+            EnableSemanticAnalysis = true,
+            EnableEnhancedStructuralAnalysis = false,
+        });
+
+        createdDirectories.Add(Path.Combine(Path.GetTempPath(), "ComparisonToolJobs", job.JobId));
+
+        await jobService.ExecuteJobAsync(job.JobId);
+
+        var result = jobService.GetResult(job.JobId);
+        result.ShouldNotBeNull();
+        result.TotalPairsCompared.ShouldBe(5000);
+        result.FilePairResults.Count.ShouldBe(5000);
+
+        var timings = result.Metadata[RequestComparisonRunTimings.MetadataKey].ShouldBeOfType<RequestComparisonRunTimings>();
+        timings.TotalRequests.ShouldBe(5000);
+        timings.SuccessfulRequests.ShouldBe(5000);
+        timings.TotalPairsCompared.ShouldBe(5000);
+        timings.LargeBatchMode.ShouldBeTrue();
+        timings.LargeBatchTotalChunks.ShouldBe(10);
+        timings.TotalElapsedMs.ShouldBeLessThanOrEqualTo(120000);
+        timings.ParsingMs.ShouldBeLessThanOrEqualTo(5000);
+        timings.RequestExecutionMs.ShouldBeLessThanOrEqualTo(60000);
+        timings.ResponseComparisonMs.ShouldBeLessThanOrEqualTo(45000);
+        timings.FocusedRawContentMs.ShouldBeLessThanOrEqualTo(5000);
+        timings.FinalizationMs.ShouldBeLessThanOrEqualTo(3000);
+    }
+
+    [TestMethod]
+    public async Task ExecuteJobAsync_WithLargeBatchChunks_DoesNotRunDiscardedChunkAnalysisOrFocusedArtifacts()
+    {
+        var handler = new FastExpectedJsonCustomerLookupHandler();
+        var spyState = new SpyComparisonServiceState();
+        using var serviceProvider = CreateAdvancedServiceProvider(
+            handler,
+            extraConfiguration: LargeBatchFitnessConfiguration(threshold: 2, chunkSize: 1),
+            configureServices: services =>
+            {
+                services.AddSingleton(spyState);
+                services.Replace(ServiceDescriptor.Scoped<IComparisonService>(provider =>
+                    new SpyComparisonService(CreateInnerComparisonService(provider), provider.GetRequiredService<SpyComparisonServiceState>())));
+            });
+        var jobService = serviceProvider.GetRequiredService<RequestComparisonJobService>();
+
+        var batchId = Guid.NewGuid().ToString("N");
+        CreateAdvancedPerformanceRequestBatch(batchId, 2);
+
+        var job = jobService.CreateJob(new CreateRequestComparisonJobRequest
+        {
+            RequestBatchId = batchId,
+            EndpointA = "https://endpoint-a.test/customer-lookup",
+            EndpointB = "https://endpoint-b.test/customer-lookup",
+            ModelName = AdvancedExpectedModelName,
+            UseAlternateContractForEndpointB = true,
+            AlternateContractProfileId = AdvancedProfileId,
+            IgnoreXmlNamespaces = true,
+            MaxConcurrency = 2,
+            TimeoutMs = 10000,
+            EnableSemanticAnalysis = true,
+        });
+
+        var jobDirectory = Path.Combine(Path.GetTempPath(), "ComparisonToolJobs", job.JobId);
+        createdDirectories.Add(jobDirectory);
+
+        await jobService.ExecuteJobAsync(job.JobId);
+
+        var result = jobService.GetResult(job.JobId);
+        result.ShouldNotBeNull();
+        result.FilePairResults.Count.ShouldBe(2);
+        result.Metadata.ContainsKey("PatternAnalysis").ShouldBeFalse();
+        result.Metadata.ContainsKey("SemanticAnalysis").ShouldBeFalse();
+        spyState.PatternAnalysisCalls.ShouldBe(0);
+        spyState.SemanticAnalysisCalls.ShouldBe(0);
+        result.Metadata[FocusedRawContentArtifactService.MetadataFocusedPairCountKey].ShouldBe(2);
+
+        var focusedDirectories = Directory.GetDirectories(jobDirectory, "focused", SearchOption.AllDirectories);
+        focusedDirectories.ShouldBe(new[] { Path.Combine(jobDirectory, "focused") }, ignoreOrder: true);
+    }
+
+    [TestMethod]
+    public async Task ExecuteJobAsync_WithAlternateContractMaterialization_RespectsConfiguredConcurrencyBound()
+    {
+        var handler = new FastExpectedJsonCustomerLookupHandler();
+        var tracker = new MaterializationConcurrencyTracker();
+        const string boundedProfileId = "bounded-materialization";
+        using var serviceProvider = CreateAdvancedServiceProvider(
+            handler,
+            extraConfiguration: LargeBatchFitnessConfiguration(threshold: 2, chunkSize: 20, materializationConcurrency: 3),
+            configureServices: services =>
+            {
+                services.AddSingleton(tracker);
+                services.AddRequestComparisonAlternateContractProfiles(options =>
+                {
+                    options.RegisterProfile<
+                        ExpectedJsonCustomerLookupSoapRequestEnvelope,
+                        ExpectedJsonCustomerLookupAlternateRequest,
+                        ExpectedJsonCustomerLookupResponse,
+                        ExpectedJsonCustomerLookupAlternateResponse>(
+                        canonicalModelName: AdvancedExpectedModelName,
+                        profileId: boundedProfileId,
+                        requestMapper: request => new ExpectedJsonCustomerLookupAlternateRequest
+                        {
+                            LookupId = request.Body.CustomerLookupRequest.CustomerId,
+                        },
+                        responseMapper: response => new ExpectedJsonCustomerLookupResponse
+                        {
+                            ResultCode = response.ResultCode,
+                            CustomerName = response.CustomerName,
+                            TraceId = response.TraceId,
+                            SourceSystem = response.SourceSystem,
+                        },
+                        configure: builder => builder
+                            .SupportSourceRequestFormats(SerializationFormat.Xml)
+                            .UseAlternateRequestFormat(SerializationFormat.Json, "application/json")
+                            .UseAlternateResponseFormat(SerializationFormat.Json)
+                            .UseCanonicalResponseFormat(SerializationFormat.Json, "application/json")
+                            .UseEndpointAResponseNormalizer(async (context, cancellationToken) =>
+                            {
+                                var concurrencyTracker = context.Services.GetRequiredService<MaterializationConcurrencyTracker>();
+                                concurrencyTracker.Enter();
+                                try
+                                {
+                                    await Task.Delay(25, cancellationToken).ConfigureAwait(false);
+                                    var normalized = new ExpectedJsonCustomerLookupResponse
+                                    {
+                                        ResultCode = "00",
+                                        CustomerName = "Alpha",
+                                        TraceId = "trace-1001",
+                                        SourceSystem = "endpoint-a",
+                                    };
+
+                                    return new NormalizedAlternateContractResponse(
+                                        JsonSerializer.SerializeToUtf8Bytes(normalized),
+                                        SerializationFormat.Json,
+                                        "application/json",
+                                        null);
+                                }
+                                finally
+                                {
+                                    concurrencyTracker.Exit();
+                                }
+                            })
+                            .AddDefaultIgnoreRule(new IgnoreRule
+                            {
+                                PropertyPath = $"{AdvancedExpectedModelName}.SourceSystem",
+                                IgnoreCompletely = true,
+                            }));
+                });
+            });
+        var jobService = serviceProvider.GetRequiredService<RequestComparisonJobService>();
+
+        var batchId = Guid.NewGuid().ToString("N");
+        CreateAdvancedPerformanceRequestBatch(batchId, 20);
+
+        var job = jobService.CreateJob(new CreateRequestComparisonJobRequest
+        {
+            RequestBatchId = batchId,
+            EndpointA = "https://endpoint-a.test/customer-lookup",
+            EndpointB = "https://endpoint-b.test/customer-lookup",
+            ModelName = AdvancedExpectedModelName,
+            UseAlternateContractForEndpointB = true,
+            AlternateContractProfileId = boundedProfileId,
+            IgnoreXmlNamespaces = true,
+            MaxConcurrency = 20,
+            TimeoutMs = 10000,
+        });
+
+        createdDirectories.Add(Path.Combine(Path.GetTempPath(), "ComparisonToolJobs", job.JobId));
+
+        await jobService.ExecuteJobAsync(job.JobId);
+
+        tracker.MaxObserved.ShouldBeLessThanOrEqualTo(3);
+        tracker.MaxObserved.ShouldBeGreaterThan(1);
+    }
+
+    private static IReadOnlyDictionary<string, string?> LargeBatchFitnessConfiguration(
+        int threshold = 1000,
+        int chunkSize = 500,
+        int materializationConcurrency = 32) => new Dictionary<string, string?>
+    {
+        ["RequestComparison:LargeBatchThreshold"] = threshold.ToString(),
+        ["RequestComparison:LargeBatchChunkSize"] = chunkSize.ToString(),
+        ["RequestComparison:LargeBatchDefaultConcurrency"] = "32",
+        ["RequestComparison:ResponseMaterializationMaxConcurrency"] = materializationConcurrency.ToString(),
+    };
+
+    private static ComparisonService CreateInnerComparisonService(IServiceProvider provider) => new(
+        provider.GetRequiredService<ILogger<ComparisonService>>(),
+        provider.GetRequiredService<IXmlDeserializationService>(),
+        provider.GetRequiredService<IComparisonConfigurationService>(),
+        provider.GetRequiredService<IFileSystemService>(),
+        provider.GetRequiredService<PerformanceTracker>(),
+        provider.GetRequiredService<SystemResourceMonitor>(),
+        provider.GetRequiredService<ComparisonResultCacheService>(),
+        provider.GetRequiredService<IComparisonEngine>(),
+        provider.GetRequiredService<IComparisonOrchestrator>(),
+        provider.GetService<DeserializationServiceFactory>());
+
     private static ServiceProvider CreateServiceProvider(AlternateContractTestHttpMessageHandler handler, IComparisonProgressPublisher? progressPublisher = null)
     {
         var services = new ServiceCollection();
@@ -381,14 +607,28 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
         return services.BuildServiceProvider();
     }
 
-    private static ServiceProvider CreateAdvancedServiceProvider(AdvancedAlternateContractTestHttpMessageHandler handler, IComparisonProgressPublisher? progressPublisher = null)
+    private static ServiceProvider CreateAdvancedServiceProvider(
+        HttpMessageHandler handler,
+        IComparisonProgressPublisher? progressPublisher = null,
+        IEnumerable<KeyValuePair<string, string?>>? extraConfiguration = null,
+        Action<IServiceCollection>? configureServices = null)
     {
         var services = new ServiceCollection();
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
+        var configurationValues = new Dictionary<string, string?>
+        {
+            [$"{ExpectedJsonCustomerLookupAlternateContractOptions.ConfigurationSectionName}:AuthorizationTokenUrl"] = "https://auth.test/authorisation-token",
+        };
+
+        if (extraConfiguration != null)
+        {
+            foreach (var item in extraConfiguration)
             {
-                [$"{ExpectedJsonCustomerLookupAlternateContractOptions.ConfigurationSectionName}:AuthorizationTokenUrl"] = "https://auth.test/authorisation-token",
-            })
+                configurationValues[item.Key] = item.Value;
+            }
+        }
+
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(configurationValues)
             .Build();
 
         services.AddLogging(builder => builder.AddDebug().SetMinimumLevel(LogLevel.Warning));
@@ -406,6 +646,8 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
         services.AddSingleton<RawTextComparisonService>();
         services.AddSingleton<IComparisonProgressPublisher>(progressPublisher ?? new NoOpComparisonProgressPublisher());
         services.AddSingleton<RequestComparisonJobService>();
+
+        configureServices?.Invoke(services);
 
         return services.BuildServiceProvider();
     }
@@ -502,6 +744,31 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
 
         File.WriteAllText(Path.Combine(alphaPath, "lookup.xml"), SerializeXml(request));
         File.WriteAllText(Path.Combine(betaPath, "lookup.xml"), SerializeXml(request));
+    }
+
+    private void CreateAdvancedPerformanceRequestBatch(string batchId, int count)
+    {
+        var batchPath = Path.Combine(Path.GetTempPath(), "ComparisonToolRequests", batchId);
+        Directory.CreateDirectory(batchPath);
+        createdDirectories.Add(batchPath);
+
+        var request = new ExpectedJsonCustomerLookupSoapRequestEnvelope
+        {
+            Body = new ExpectedJsonCustomerLookupSoapRequestBody
+            {
+                CustomerLookupRequest = new ExpectedJsonCustomerLookupSoapRequest
+                {
+                    CustomerId = "1001",
+                    AuthenticationToken = "AUTH-1001",
+                },
+            },
+        };
+        var requestXml = SerializeXml(request);
+
+        for (var index = 0; index < count; index++)
+        {
+            File.WriteAllText(Path.Combine(batchPath, $"request-{index:D5}.xml"), requestXml);
+        }
     }
 
     private static string SerializeXml<T>(T value)
@@ -741,6 +1008,184 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
             return (T)(serializer.Deserialize(reader) ?? throw new InvalidOperationException(
                 $"Deserialization for '{typeof(T).Name}' returned null."));
         }
+    }
+
+    private sealed class FastExpectedJsonCustomerLookupHandler : HttpMessageHandler
+    {
+        private static readonly string AuthResponse = JsonSerializer.Serialize(new ExpectedJsonCustomerLookupAuthorizationTokenResponse
+        {
+            AuthorizationToken = "AUTHZ-1001",
+            BackupAuthorizationToken = "BACKUP-1001",
+        });
+
+        private static readonly string EndpointASuccessResponse = SerializeXml(new ExpectedJsonCustomerLookupSoapResponseEnvelope
+        {
+            Body = new ExpectedJsonCustomerLookupSoapResponseBody
+            {
+                CustomerLookupResponse = new ExpectedJsonCustomerLookupSoapResponse
+                {
+                    StatusCode = "00",
+                    CustomerName = "Alpha",
+                    TraceId = "trace-1001",
+                },
+            },
+        });
+
+        private static readonly string EndpointBSuccessResponse = JsonSerializer.Serialize(new ExpectedJsonCustomerLookupAlternateResponse
+        {
+            ResultCode = "00",
+            CustomerName = "Alpha",
+            TraceId = "trace-1001",
+            SourceSystem = "endpoint-b",
+        });
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(request.RequestUri);
+
+            var (statusCode, body, contentType) = request.RequestUri.Host switch
+            {
+                "auth.test" => (HttpStatusCode.OK, AuthResponse, "application/json"),
+                "endpoint-a.test" => (HttpStatusCode.OK, EndpointASuccessResponse, "application/xml"),
+                "endpoint-b.test" => (HttpStatusCode.OK, EndpointBSuccessResponse, "application/json"),
+                _ => throw new InvalidOperationException($"Unhandled endpoint host '{request.RequestUri.Host}'."),
+            };
+
+            return Task.FromResult(new HttpResponseMessage(statusCode)
+            {
+                Content = new StringContent(body, Encoding.UTF8, contentType),
+            });
+        }
+    }
+
+    private sealed class SpyComparisonServiceState
+    {
+        private int patternAnalysisCalls;
+        private int semanticAnalysisCalls;
+
+        public int PatternAnalysisCalls => patternAnalysisCalls;
+        public int SemanticAnalysisCalls => semanticAnalysisCalls;
+
+        public void RecordPatternAnalysis() => Interlocked.Increment(ref patternAnalysisCalls);
+        public void RecordSemanticAnalysis() => Interlocked.Increment(ref semanticAnalysisCalls);
+    }
+
+    private sealed class SpyComparisonService : IComparisonService
+    {
+        private readonly IComparisonService inner;
+        private readonly SpyComparisonServiceState state;
+
+        public SpyComparisonService(IComparisonService inner, SpyComparisonServiceState state)
+        {
+            this.inner = inner;
+            this.state = state;
+        }
+
+        public Task<KellermanSoftware.CompareNetObjects.ComparisonResult> CompareXmlFilesAsync(
+            Stream oldXmlStream,
+            Stream newXmlStream,
+            string modelName,
+            CancellationToken cancellationToken = default) =>
+            inner.CompareXmlFilesAsync(oldXmlStream, newXmlStream, modelName, cancellationToken);
+
+        public Task<KellermanSoftware.CompareNetObjects.ComparisonResult> CompareXmlFilesWithCachingAsync(
+            Stream oldXmlStream,
+            Stream newXmlStream,
+            string modelName,
+            string oldFilePath = null!,
+            string newFilePath = null!,
+            CancellationToken cancellationToken = default) =>
+            inner.CompareXmlFilesWithCachingAsync(oldXmlStream, newXmlStream, modelName, oldFilePath, newFilePath, cancellationToken);
+
+        public Task<KellermanSoftware.CompareNetObjects.ComparisonResult> CompareFilesAsync(
+            Stream oldFileStream,
+            Stream newFileStream,
+            string modelName,
+            string oldFilePath,
+            string newFilePath,
+            CancellationToken cancellationToken = default) =>
+            inner.CompareFilesAsync(oldFileStream, newFileStream, modelName, oldFilePath, newFilePath, cancellationToken);
+
+        public Task<KellermanSoftware.CompareNetObjects.ComparisonResult> CompareFilesWithCachingAsync(
+            Stream oldFileStream,
+            Stream newFileStream,
+            string modelName,
+            string oldFilePath,
+            string newFilePath,
+            CancellationToken cancellationToken = default) =>
+            inner.CompareFilesWithCachingAsync(oldFileStream, newFileStream, modelName, oldFilePath, newFilePath, cancellationToken);
+
+        public Task<FilePairComparisonResult> CompareFilesWithCachingAsPairResultAsync(
+            Stream oldFileStream,
+            Stream newFileStream,
+            string modelName,
+            string oldFilePath,
+            string newFilePath,
+            CancellationToken cancellationToken = default) =>
+            inner.CompareFilesWithCachingAsPairResultAsync(oldFileStream, newFileStream, modelName, oldFilePath, newFilePath, cancellationToken);
+
+        public Task<MultiFolderComparisonResult> CompareFoldersAsync(
+            List<string> folder1Files,
+            List<string> folder2Files,
+            string modelName,
+            CancellationToken cancellationToken = default) =>
+            inner.CompareFoldersAsync(folder1Files, folder2Files, modelName, cancellationToken);
+
+        public Task<MultiFolderComparisonResult> CompareFoldersInBatchesAsync(
+            List<string> folder1Files,
+            List<string> folder2Files,
+            string modelName,
+            int batchSize = 50,
+            IProgress<(int Completed, int Total)>? progress = null,
+            CancellationToken cancellationToken = default) =>
+            inner.CompareFoldersInBatchesAsync(folder1Files, folder2Files, modelName, batchSize, progress, cancellationToken);
+
+        public Task<ComparisonPatternAnalysis> AnalyzePatternsAsync(
+            MultiFolderComparisonResult folderResult,
+            CancellationToken cancellationToken = default)
+        {
+            state.RecordPatternAnalysis();
+            return inner.AnalyzePatternsAsync(folderResult, cancellationToken);
+        }
+
+        public Task<SemanticDifferenceAnalysis> AnalyzeSemanticDifferencesAsync(
+            MultiFolderComparisonResult folderResult,
+            ComparisonPatternAnalysis patternAnalysis,
+            CancellationToken cancellationToken = default)
+        {
+            state.RecordSemanticAnalysis();
+            return inner.AnalyzeSemanticDifferencesAsync(folderResult, patternAnalysis, cancellationToken);
+        }
+
+        public Task<EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult> AnalyzeStructualPatternsAsync(
+            MultiFolderComparisonResult folderResult,
+            CancellationToken cancellationToken = default) =>
+            inner.AnalyzeStructualPatternsAsync(folderResult, cancellationToken);
+    }
+
+    private sealed class MaterializationConcurrencyTracker
+    {
+        private int current;
+        private int maxObserved;
+
+        public int MaxObserved => maxObserved;
+
+        public void Enter()
+        {
+            var observed = Interlocked.Increment(ref current);
+            int snapshot;
+            do
+            {
+                snapshot = maxObserved;
+                if (observed <= snapshot)
+                {
+                    return;
+                }
+            }
+            while (Interlocked.CompareExchange(ref maxObserved, observed, snapshot) != snapshot);
+        }
+
+        public void Exit() => Interlocked.Decrement(ref current);
     }
 
     private sealed record CapturedRequest(

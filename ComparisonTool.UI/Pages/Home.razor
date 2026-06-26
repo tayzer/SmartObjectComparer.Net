@@ -561,6 +561,7 @@
     private DifferenceSummary DifferenceSummary { get; set; }
     private bool ShowAllDifferences { get; set; } = false;
     private const int LargePairShowAllResetThreshold = 5000;
+    private const int RequestAutoSelectPairThreshold = 1000;
     private MultiFolderComparisonResult FolderComparisonResult { get; set; }
     private int SelectedPairIndex { get; set; } = -1;
     private List<RawTextDifference>? FolderRawFileDifferences { get; set; }
@@ -1197,8 +1198,8 @@
 
         RequestComparisonResult = result;
         
-        // Select first result if there are differences
-        if (!result.AllEqual && result.FilePairResults.Count > 0)
+        // Select first result for small runs only; large request runs should render the grid first.
+        if (!result.AllEqual && result.FilePairResults.Count > 0 && result.FilePairResults.Count < RequestAutoSelectPairThreshold)
         {
             await SelectRequestPairResult(0);
         }

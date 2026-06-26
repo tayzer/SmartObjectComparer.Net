@@ -58,37 +58,44 @@ public sealed class FocusedRawContentArtifactService
         Directory.CreateDirectory(artifactRootDirectory);
 
         var focusedCount = 0;
-        for (var index = 0; index < totalPairs; index++)
+        var completedCount = 0;
+        var progressInterval = Math.Max(1, totalPairs / 100);
+        var parallelOptions = new ParallelOptions
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            MaxDegreeOfParallelism = Math.Max(1, Math.Min(Environment.ProcessorCount, 16)),
+            CancellationToken = cancellationToken,
+        };
 
-            var pair = result.FilePairResults[index];
-            if (pair.HasError || string.IsNullOrWhiteSpace(pair.File1Path) || string.IsNullOrWhiteSpace(pair.File2Path))
+        await Parallel.ForEachAsync(
+            Enumerable.Range(0, totalPairs),
+            parallelOptions,
+            async (index, ct) =>
             {
-                progress?.Report(new ComparisonProgress(
-                    index + 1,
-                    totalPairs,
-                    $"Preparing focused raw content {index + 1} of {totalPairs}"));
-                continue;
-            }
-
-            try
-            {
-                if (await TryPopulatePairAsync(pair, index, ignoreCompletePaths, artifactRootDirectory, cancellationToken).ConfigureAwait(false))
+                var pair = result.FilePairResults[index];
+                if (!pair.HasError && !string.IsNullOrWhiteSpace(pair.File1Path) && !string.IsNullOrWhiteSpace(pair.File2Path))
                 {
-                    focusedCount++;
+                    try
+                    {
+                        if (await TryPopulatePairAsync(pair, index, ignoreCompletePaths, artifactRootDirectory, ct).ConfigureAwait(false))
+                        {
+                            Interlocked.Increment(ref focusedCount);
+                        }
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+                    {
+                        logger.LogWarning(ex, "Failed to build focused raw content for {Pair}.", pair.GetDisplayIdentifier());
+                    }
                 }
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
-            {
-                logger.LogWarning(ex, "Failed to build focused raw content for {Pair}.", pair.GetDisplayIdentifier());
-            }
 
-            progress?.Report(new ComparisonProgress(
-                index + 1,
-                totalPairs,
-                $"Preparing focused raw content {index + 1} of {totalPairs}"));
-        }
+                var completed = Interlocked.Increment(ref completedCount);
+                if (completed % progressInterval == 0 || completed == totalPairs)
+                {
+                    progress?.Report(new ComparisonProgress(
+                        completed,
+                        totalPairs,
+                        $"Preparing focused raw content {completed} of {totalPairs}"));
+                }
+            }).ConfigureAwait(false);
 
         result.Metadata[MetadataFocusedPairCountKey] = focusedCount;
     }

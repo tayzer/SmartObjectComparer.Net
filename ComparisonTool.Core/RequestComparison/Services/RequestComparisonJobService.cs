@@ -535,18 +535,22 @@ public class RequestComparisonJobService
                 Directory.CreateDirectory(tempDirA);
                 Directory.CreateDirectory(tempDirB);
 
-                var copyTasks = successPairs.Select(async successPair =>
+                var materializationOptions = new ParallelOptions
+                {
+                    MaxDegreeOfParallelism = GetResponseMaterializationMaxConcurrency(job),
+                    CancellationToken = cancellationToken,
+                };
+
+                await Parallel.ForEachAsync(successPairs, materializationOptions, async (successPair, ct) =>
                 {
                     var exec = successPair.Execution;
                     if (exec.ResponsePathA != null && exec.ResponsePathB != null &&
                         File.Exists(exec.ResponsePathA) && File.Exists(exec.ResponsePathB))
                     {
-                        await MaterializeSuccessPairForComparisonAsync(job, exec, tempDirA, tempDirB, cancellationToken)
+                        await MaterializeSuccessPairForComparisonAsync(job, exec, tempDirA, tempDirB, ct)
                             .ConfigureAwait(false);
                     }
-                }).ToList();
-
-                await Task.WhenAll(copyTasks).ConfigureAwait(false);
+                }).ConfigureAwait(false);
 
                 var comparisonProgress = new Progress<ComparisonProgress>(p =>
                 {
@@ -579,8 +583,9 @@ public class RequestComparisonJobService
                     tempDirB,
                     comparisonModelName,
                     includeAllFiles: true,
-                    enablePatternAnalysis: true,
-                    enableSemanticAnalysis: job.EnableSemanticAnalysis,
+                    enablePatternAnalysis: false,
+                    enableSemanticAnalysis: false,
+                    populateFocusedRawContent: false,
                     progress: comparisonProgress,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
             }
@@ -709,6 +714,12 @@ public class RequestComparisonJobService
                 pairResult.File2Path = execResult.Execution.ResponsePathB;
             }
         }
+    }
+
+    private int GetResponseMaterializationMaxConcurrency(RequestComparisonJob job)
+    {
+        var configuredLimit = Math.Max(1, _largeBatchOptions.ResponseMaterializationMaxConcurrency);
+        return Math.Max(1, Math.Min(configuredLimit, Math.Max(1, job.MaxConcurrency)));
     }
 
     private void TryDeleteDirectory(string directoryPath)

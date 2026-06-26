@@ -13,4 +13,7 @@ public sealed class RequestComparisonLargeBatchOptions
 
     /// <summary>Default concurrency applied by desktop UI when a large batch is selected.</summary>
     public int LargeBatchDefaultConcurrency { get; set; } = 32;
+
+    /// <summary>Maximum concurrent success-response materialization operations per chunk.</summary>
+    public int ResponseMaterializationMaxConcurrency { get; set; } = 32;
 }

@@ -62,7 +62,8 @@ public class DirectoryComparisonService
         bool enablePatternAnalysis = true,
         bool enableSemanticAnalysis = true,
         IProgress<ComparisonProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool populateFocusedRawContent = true)
     {
         if (string.IsNullOrEmpty(modelName))
         {
@@ -299,7 +300,10 @@ public class DirectoryComparisonService
                             "Comparison completed"));
                     }
 
-                    await PopulateFocusedRawContentAsync(result, cancellationToken).ConfigureAwait(false);
+                    if (populateFocusedRawContent)
+                    {
+                        await PopulateFocusedRawContentAsync(result, cancellationToken).ConfigureAwait(false);
+                    }
 
                     await AnalyzeComparisonResultAsync(
                         result,
