@@ -1,4 +1,4 @@
-﻿using ComparisonTool.Cli.Commands;
+using ComparisonTool.Cli.Commands;
 using ComparisonTool.Core.RequestComparison.AlternateContracts;
 using ComparisonTool.Core.RequestComparison.Models;
 using Microsoft.VisualStudio.TestTools.UnitTesting;

@@ -71,8 +71,8 @@
                         Large run mode will process @SelectedRequestFileCount requests in chunks of up to @EffectiveLargeBatchChunkSize with default concurrency @EffectiveLargeBatchDefaultConcurrency.
                     </MudAlert>
                 }
-                <MudButton Variant="Variant.Filled" 
-                           Color="Color.Primary" 
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
                            StartIcon="@Icons.Material.Filled.CloudUpload"
                            OnClick="UploadFiles"
                            Disabled="@(SelectedRequestFileCount == 0 || isUploading || cacheHit)">
@@ -105,9 +105,9 @@
         <MudPaper Elevation="1" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
             <MudStack Spacing="2">
                 <MudText Typo="Typo.subtitle1">Step 2: Model & Configuration</MudText>
-                
-                <MudSelect T="string" 
-                           Label="Select Domain Model" 
+
+                <MudSelect T="string"
+                           Label="Select Domain Model"
                            Value="selectedModelName"
                            ValueChanged="HandleSelectedModelChanged"
                            Variant="Variant.Outlined"
@@ -161,21 +161,24 @@
                 <MudExpansionPanels>
                     <MudExpansionPanel Text="Comparison Options">
                         <MudStack Spacing="2">
-                            <MudSwitch @bind-Value="ignoreCollectionOrder" 
-                                       Label="Ignore Collection Order" 
+                            <MudSwitch @bind-Value="ignoreCollectionOrder"
+                                       Label="Ignore Collection Order"
                                        Color="Color.Primary" />
-                            <MudSwitch @bind-Value="ignoreStringCase" 
-                                       Label="Ignore String Case" 
+                            <MudSwitch @bind-Value="ignoreStringCase"
+                                       Label="Ignore String Case"
                                        Color="Color.Primary" />
-                            <MudSwitch @bind-Value="ignoreTrailingWhitespaceAtEnd" 
-                                       Label="Ignore Trailing Spaces/Tabs at End of Strings" 
+                            <MudSwitch @bind-Value="ignoreTrailingWhitespaceAtEnd"
+                                       Label="Ignore Trailing Spaces/Tabs at End of Strings"
                                        Color="Color.Primary" />
-                            <MudSwitch @bind-Value="ignoreXmlNamespaces" 
-                                       Label="Ignore XML Namespaces" 
+                            <MudSwitch @bind-Value="treatNullAndEmptyCollectionsAsEqual"
+                                       Label="Treat null and empty collections as equal"
+                                       Color="Color.Primary" />
+                            <MudSwitch @bind-Value="ignoreXmlNamespaces"
+                                       Label="Ignore XML Namespaces"
                                        Color="Color.Primary" />
                         </MudStack>
                     </MudExpansionPanel>
-                    
+
                     <MudExpansionPanel Text="Analysis Options">
                         <MudStack Spacing="2">
                             @if (IsLargeBatchSelection)
@@ -184,31 +187,31 @@
                                     Enhanced structural analysis is off by default for large runs because it can add significant time and memory use. You can enable it manually here.
                                 </MudAlert>
                             }
-                            <MudSwitch @bind-Value="enableSemanticAnalysis" 
-                                       Label="Enable Semantic Analysis" 
+                            <MudSwitch @bind-Value="enableSemanticAnalysis"
+                                       Label="Enable Semantic Analysis"
                                        Color="Color.Success" />
-                            <MudSwitch @bind-Value="enableEnhancedStructuralAnalysis" 
-                                       Label="Enable Enhanced Structural Analysis" 
+                            <MudSwitch @bind-Value="enableEnhancedStructuralAnalysis"
+                                       Label="Enable Enhanced Structural Analysis"
                                        Color="Color.Success" />
                         </MudStack>
                     </MudExpansionPanel>
-                    
+
                     <MudExpansionPanel Text="@IgnoreRulesLabel">
                         <MudStack Spacing="2">
                             <MudText Typo="Typo.subtitle2">Tree Navigator (Visual Property Selection)</MudText>
                             <MudStack Row="true" Spacing="2">
-                                <MudButton Variant="Variant.Outlined" 
+                                <MudButton Variant="Variant.Outlined"
                                            Size="Size.Small"
                                            StartIcon="@Icons.Material.Filled.List"
-                                           OnClick="OpenPropertySelector" 
+                                           OnClick="OpenPropertySelector"
                                            Disabled="@(!IsModelSelected)">
                                     Simple Property Selector
                                 </MudButton>
-                                <MudButton Variant="Variant.Outlined" 
+                                <MudButton Variant="Variant.Outlined"
                                            Size="Size.Small"
                                            Color="Color.Success"
                                            StartIcon="@Icons.Material.Filled.AccountTree"
-                                           OnClick="OpenTreePropertySelector" 
+                                           OnClick="OpenTreePropertySelector"
                                            Disabled="@(!IsModelSelected)">
                                     Tree Navigator ?
                                 </MudButton>
@@ -219,9 +222,9 @@
                                     Select a model first to browse and ignore properties.
                                 </MudText>
                             }
-                            
+
                             <MudDivider Class="my-2" />
-                            
+
                             @if (IgnoreRules.Any())
                             {
                                 <MudPaper Outlined="true" Style="max-height: 200px; overflow-y: auto;">
@@ -244,6 +247,12 @@
                                                         Order
                                                     </MudChip>
                                                 }
+                                                @if (rule.TreatNullAndEmptyCollectionsAsEqual)
+                                                {
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.DataArray">
+                                                        Null/Empty
+                                                    </MudChip>
+                                                }
                                                 <MudIconButton Icon="@Icons.Material.Filled.Close"
                                                                Size="Size.Small"
                                                                Color="Color.Error"
@@ -253,7 +262,7 @@
                                         <MudDivider />
                                     }
                                 </MudPaper>
-                                <MudButton Variant="Variant.Text" 
+                                <MudButton Variant="Variant.Text"
                                            Size="Size.Small"
                                            Color="Color.Error"
                                            StartIcon="@Icons.Material.Filled.DeleteSweep"
@@ -298,8 +307,8 @@
                 </MudSelect>
                 @if (allowCustom && selectedEndpointA == CustomEndpointValue)
                 {
-                    <MudTextField @bind-Value="endpointA" 
-                                  Label="Endpoint A URL" 
+                    <MudTextField @bind-Value="endpointA"
+                                  Label="Endpoint A URL"
                                   Placeholder="https://api-a.example.com/endpoint"
                                   Variant="Variant.Outlined" />
                 }
@@ -316,12 +325,12 @@
                 </MudSelect>
                 @if (allowCustom && selectedEndpointB == CustomEndpointValue)
                 {
-                    <MudTextField @bind-Value="endpointB" 
-                                  Label="Endpoint B URL" 
+                    <MudTextField @bind-Value="endpointB"
+                                  Label="Endpoint B URL"
                                   Placeholder="https://api-b.example.com/endpoint"
                                   Variant="Variant.Outlined" />
                 }
-                
+
                 <MudExpansionPanels>
                     <MudExpansionPanel Text="Custom Headers (Optional)">
                         <MudStack Spacing="2">
@@ -337,7 +346,7 @@
                             <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => headersA.Add(new HeaderPair()))">
                                 Add Header
                             </MudButton>
-                            
+
                             <MudText Typo="Typo.subtitle2">Headers for Endpoint B</MudText>
                             @foreach (var header in headersB)
                             {
@@ -361,13 +370,13 @@
                             <MudText Typo="Typo.caption" Color="Color.Default">
                                 Optional. Overrides the request content type inferred from file extension.
                             </MudText>
-                            <MudNumericField @bind-Value="timeoutMs" 
-                                             Label="Request Timeout (ms)" 
-                                             Min="1000" Max="300000" 
+                            <MudNumericField @bind-Value="timeoutMs"
+                                             Label="Request Timeout (ms)"
+                                             Min="1000" Max="300000"
                                              Variant="Variant.Outlined" />
-                            <MudNumericField @bind-Value="maxConcurrency" 
-                                             Label="Max Concurrency" 
-                                             Min="1" Max="256" 
+                            <MudNumericField @bind-Value="maxConcurrency"
+                                             Label="Max Concurrency"
+                                             Min="1" Max="256"
                                              Variant="Variant.Outlined" />
                         </MudStack>
                     </MudExpansionPanel>
@@ -379,14 +388,14 @@
         <MudPaper Elevation="1" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
             <MudStack Spacing="2">
                 <MudText Typo="Typo.subtitle1">Step 4: Run Comparison</MudText>
-                <MudButton Variant="Variant.Filled" 
-                           Color="Color.Success" 
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Success"
                            StartIcon="@Icons.Material.Filled.PlayArrow"
                            OnClick="StartComparison"
                            Disabled="@(!CanStartComparison)">
                     Start Comparison
                 </MudButton>
-                
+
                 @if (isRunning)
                 {
                     <MudStack Spacing="2">
@@ -394,16 +403,16 @@
                             <MudIcon Icon="@GetPhaseIcon()" Color="@GetPhaseColor()" />
                             <MudText Typo="Typo.subtitle2" Color="@GetPhaseColor()">@currentPhase</MudText>
                         </MudStack>
-                        
-                        <MudProgressLinear Color="@GetPhaseColor()" 
-                                           Value="@progressPercent" 
+
+                        <MudProgressLinear Color="@GetPhaseColor()"
+                                           Value="@progressPercent"
                                            Striped="true"
                                            Size="Size.Large">
                             <MudText Typo="Typo.caption">@progressPercent%</MudText>
                         </MudProgressLinear>
-                        
+
                         <MudText Typo="Typo.body2">@statusMessage</MudText>
-                        
+
                         @if (progressLog.Count > 0)
                         {
                             <MudExpansionPanels>
@@ -427,16 +436,16 @@
                                 </MudExpansionPanel>
                             </MudExpansionPanels>
                         }
-                        
-                        <MudButton Variant="Variant.Outlined" 
-                                   Color="Color.Warning" 
+
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Warning"
                                    StartIcon="@Icons.Material.Filled.Cancel"
                                    OnClick="CancelJob">
                             Cancel
                         </MudButton>
                     </MudStack>
                 }
-                
+
                 @if (!string.IsNullOrEmpty(errorMessage))
                 {
                     <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
@@ -464,13 +473,14 @@
     private bool isUploading = false;
     private string? batchId;
     private int uploadedCount = 0;
-    
+
     // Model & Configuration
     private List<string> availableModels = new();
     private string selectedModelName = "";
     private bool ignoreCollectionOrder = false;
     private bool ignoreStringCase = false;
     private bool ignoreTrailingWhitespaceAtEnd = false;
+    private bool treatNullAndEmptyCollectionsAsEqual = false;
     private bool ignoreXmlNamespaces = true;
     private bool enableSemanticAnalysis = true;
     private bool enableEnhancedStructuralAnalysis = true;
@@ -478,11 +488,11 @@
     private List<string> availableAlternateContractProfiles = new();
     private string? selectedAlternateContractProfileId;
     public List<IgnoreRule> IgnoreRules { get; set; } = new();
-    
+
     // Event callbacks for property selectors
     [Parameter] public EventCallback OnPropertySelectorOpened { get; set; }
     [Parameter] public EventCallback OnTreePropertySelectorOpened { get; set; }
-    
+
     // Endpoints
     private string endpointA = "";
     private string endpointB = "";
@@ -495,7 +505,7 @@
     private string? contentTypeOverride;
     private int timeoutMs = 30000;
     private int maxConcurrency = 64;
-    
+
     private bool isRunning = false;
     private string? currentJobId;
     private int progressPercent = 0;
@@ -504,19 +514,19 @@
     private CancellationTokenSource? cts;
     private string? cacheKey;
     private bool cacheHit = false;
-    
+
     // Progress tracking
     private string currentPhase = "Initializing";
     private List<(DateTimeOffset Timestamp, string Phase, string Message)> progressLog = new();
 
-    private bool CanStartComparison => 
-        !string.IsNullOrEmpty(batchId) && 
-        !string.IsNullOrWhiteSpace(endpointA) && 
-        !string.IsNullOrWhiteSpace(endpointB) && 
+    private bool CanStartComparison =>
+        !string.IsNullOrEmpty(batchId) &&
+        !string.IsNullOrWhiteSpace(endpointA) &&
+        !string.IsNullOrWhiteSpace(endpointB) &&
         !string.IsNullOrWhiteSpace(selectedModelName) &&
         (!endpointBUsesAlternateContract || CanResolveAlternateContractProfile) &&
         !isRunning;
-    
+
     private bool IsModelSelected => !string.IsNullOrEmpty(selectedModelName);
     private string IgnoreRulesLabel => $"Ignore Rules ({IgnoreRules.Count} rules)";
     private bool CanResolveAlternateContractProfile =>
@@ -541,7 +551,7 @@
     {
         // Subscribe to progress updates
         ProgressService.OnProgressUpdate += HandleProgressUpdate;
-        
+
         // Load available models
         availableModels = DeserializationService.GetRegisteredModelNames().ToList();
         if (availableModels.Count > 0)
@@ -551,7 +561,7 @@
                 : availableModels[0];
             RefreshAlternateContractProfiles();
         }
-        
+
         var options = EndpointOptions.Value;
         allowCustom = options.AllowCustom;
         availableEndpoints = options.Endpoints ?? new List<RequestComparisonEndpointOption>();
@@ -861,7 +871,7 @@
 
         isUploading = true;
         errorMessage = null;
-        
+
         try
         {
             if (!string.IsNullOrWhiteSpace(selectedDirectoryPath))
@@ -942,7 +952,9 @@
             {
                 RequestBatchId = batchId!,
                 EndpointA = endpointA,
+                EndpointALabel = GetEndpointDisplayLabel(selectedEndpointA, endpointA),
                 EndpointB = endpointB,
+                EndpointBLabel = GetEndpointDisplayLabel(selectedEndpointB, endpointB),
                 HeadersA = headersA.Where(h => !string.IsNullOrEmpty(h.Key))
                     .ToDictionary(h => h.Key, h => h.Value ?? ""),
                 HeadersB = headersB.Where(h => !string.IsNullOrEmpty(h.Key))
@@ -961,15 +973,17 @@
                 IgnoreCollectionOrder = ignoreCollectionOrder,
                 IgnoreStringCase = ignoreStringCase,
                 IgnoreTrailingWhitespaceAtEnd = ignoreTrailingWhitespaceAtEnd,
+                TreatNullAndEmptyCollectionsAsEqual = treatNullAndEmptyCollectionsAsEqual,
                 IgnoreXmlNamespaces = ignoreXmlNamespaces,
                 EnableSemanticAnalysis = enableSemanticAnalysis,
                 EnableEnhancedStructuralAnalysis = enableEnhancedStructuralAnalysis,
                 IgnoreRules = IgnoreRules.Where(r => !string.IsNullOrWhiteSpace(r.PropertyPath))
-                    .Select(r => new IgnoreRuleDto 
-                    { 
-                        PropertyPath = r.PropertyPath, 
-                        IgnoreCompletely = r.IgnoreCompletely, 
-                        IgnoreCollectionOrder = r.IgnoreCollectionOrder 
+                    .Select(r => new IgnoreRuleDto
+                    {
+                        PropertyPath = r.PropertyPath,
+                        IgnoreCompletely = r.IgnoreCompletely,
+                        IgnoreCollectionOrder = r.IgnoreCollectionOrder,
+                        TreatNullAndEmptyCollectionsAsEqual = r.TreatNullAndEmptyCollectionsAsEqual
                     }).ToList(),
                 MaskRules = MaskRules.Where(r => !string.IsNullOrWhiteSpace(r.PropertyPath))
                     .Select(r => new MaskRuleDto
@@ -993,9 +1007,9 @@
             while (!cts.Token.IsCancellationRequested)
             {
                 await Task.Delay(2000, cts.Token);
-                
+
                 var statusResponse = await RequestComparisonGateway.GetJobStatusAsync(currentJobId!);
-                
+
                 if (statusResponse == null) continue;
 
                 if (statusResponse.Status == "Completed")
@@ -1037,12 +1051,26 @@
         }
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                await ProgressService.StartAsync();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Failed to start request comparison progress subscriber");
+            }
+        }
+    }
     private async Task CancelJob()
     {
         if (string.IsNullOrEmpty(currentJobId)) return;
-        
+
         cts?.Cancel();
-        
+
         try
         {
             await RequestComparisonGateway.CancelJobAsync(currentJobId);
@@ -1053,6 +1081,32 @@
         }
     }
 
+    private string GetEndpointDisplayLabel(string selectedEndpointValue, string endpointUrl)
+    {
+        if (!string.Equals(selectedEndpointValue, CustomEndpointValue, StringComparison.Ordinal))
+        {
+            var option = availableEndpoints.FirstOrDefault(e => string.Equals(e.Url, selectedEndpointValue, StringComparison.Ordinal));
+            if (!string.IsNullOrWhiteSpace(option?.Name))
+            {
+                return option.Name;
+            }
+        }
+
+        return BuildEndpointFallbackLabel(endpointUrl);
+    }
+
+    private static string BuildEndpointFallbackLabel(string endpointUrl)
+    {
+        if (Uri.TryCreate(endpointUrl, UriKind.Absolute, out var uri))
+        {
+            var path = uri.AbsolutePath.Trim('/');
+            return string.IsNullOrWhiteSpace(path)
+                ? uri.Host
+                : $"{uri.Host}/{path}";
+        }
+
+        return endpointUrl;
+    }
     private void OnEndpointAChanged(string value)
     {
         selectedEndpointA = value;
@@ -1351,16 +1405,16 @@
                 currentPhase = update.Phase.ToString();
                 progressPercent = update.PercentComplete;
                 statusMessage = update.Message;
-                
+
                 // Add to log
                 progressLog.Add((update.Timestamp, update.Phase.ToString(), update.Message));
-                
+
                 // Keep only last 50 entries
                 if (progressLog.Count > 50)
                 {
                     progressLog = progressLog.Skip(progressLog.Count - 50).ToList();
                 }
-                
+
                 StateHasChanged();
             }
         });

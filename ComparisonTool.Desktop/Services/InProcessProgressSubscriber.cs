@@ -13,6 +13,8 @@ public class InProcessProgressSubscriber : IProgressSubscriber
     private readonly InProcessProgressPublisher _publisher;
     private readonly ILogger<InProcessProgressSubscriber> _logger;
     private string? _currentJobId;
+    private readonly Dictionary<string, ComparisonProgressUpdate> _latestUpdatesByJob = new(StringComparer.Ordinal);
+    private bool _started;
     private bool _disposed;
 
     /// <inheritdoc/>
@@ -32,6 +34,12 @@ public class InProcessProgressSubscriber : IProgressSubscriber
     /// <inheritdoc/>
     public Task StartAsync()
     {
+        if (_started)
+        {
+            return Task.CompletedTask;
+        }
+
+        _started = true;
         _publisher.OnProgressPublished += HandleProgressPublished;
         _logger.LogDebug("In-process progress subscriber started");
         return Task.CompletedTask;
@@ -42,6 +50,12 @@ public class InProcessProgressSubscriber : IProgressSubscriber
     {
         _currentJobId = jobId;
         _logger.LogDebug("Subscribed to job {JobId}", jobId);
+
+        if (_latestUpdatesByJob.TryGetValue(jobId, out var latestUpdate))
+        {
+            OnProgressUpdate?.Invoke(latestUpdate);
+        }
+
         return Task.CompletedTask;
     }
 
@@ -55,6 +69,8 @@ public class InProcessProgressSubscriber : IProgressSubscriber
 
     private void HandleProgressPublished(ComparisonProgressUpdate update)
     {
+        _latestUpdatesByJob[update.JobId] = update;
+
         // Only forward updates for the subscribed job.
         if (_currentJobId != null && update.JobId == _currentJobId)
         {
@@ -68,6 +84,7 @@ public class InProcessProgressSubscriber : IProgressSubscriber
         if (!_disposed)
         {
             _disposed = true;
+            _started = false;
             _publisher.OnProgressPublished -= HandleProgressPublished;
         }
 

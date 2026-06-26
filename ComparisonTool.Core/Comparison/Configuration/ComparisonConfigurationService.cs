@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -24,6 +25,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     private readonly List<IgnoreRule> xmlIgnoreRules = new List<IgnoreRule>();
     private readonly object configurationLock = new object();
     private bool ignoreTrailingWhitespaceAtEnd;
+    private bool treatNullAndEmptyCollectionsAsEqual;
 
     private ComparisonResultCacheService? cacheService;
 
@@ -42,6 +44,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
 
         var configOptions = options?.Value ?? new ComparisonConfigurationOptions();
         ignoreTrailingWhitespaceAtEnd = configOptions.DefaultIgnoreTrailingWhitespaceAtEnd;
+        treatNullAndEmptyCollectionsAsEqual = configOptions.DefaultTreatNullAndEmptyCollectionsAsEqual;
 
         compareLogic = new CompareLogic
         {
@@ -288,6 +291,28 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     public bool GetIgnoreTrailingWhitespaceAtEnd() => ignoreTrailingWhitespaceAtEnd;
 
     /// <summary>
+    /// Configure whether null and empty collections are treated as equivalent.
+    /// </summary>
+    public void SetTreatNullAndEmptyCollectionsAsEqual(bool treatAsEqual)
+    {
+        treatNullAndEmptyCollectionsAsEqual = treatAsEqual;
+        MarkConfigurationDirty();
+        logger.LogDebug("Set TreatNullAndEmptyCollectionsAsEqual to {Value}", treatAsEqual);
+
+        if (cacheService != null)
+        {
+            var newFingerprint = cacheService.GenerateConfigurationFingerprint(this);
+            cacheService.InvalidateConfigurationChanges(newFingerprint);
+        }
+    }
+
+    /// <summary>
+    /// Get whether null and empty collections are treated as equivalent.
+    /// </summary>
+    /// <returns></returns>
+    public bool GetTreatNullAndEmptyCollectionsAsEqual() => treatNullAndEmptyCollectionsAsEqual;
+
+    /// <summary>
     /// Configure the comparer to ignore specific properties.
     /// </summary>
     public void IgnoreProperty(string propertyPath)
@@ -361,7 +386,8 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             "Adding rule for {PropertyPath} with settings: IgnoreCompletely={IgnoreCompletely}, IgnoreCollectionOrder={IgnoreOrder}",
             rule.PropertyPath,
             rule.IgnoreCompletely,
-            rule.IgnoreCollectionOrder);
+            rule.IgnoreCollectionOrder,
+            rule.TreatNullAndEmptyCollectionsAsEqual);
 
         RemoveIgnoredProperty(rule.PropertyPath);
 
@@ -371,6 +397,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             PropertyPath = rule.PropertyPath,
             IgnoreCompletely = rule.IgnoreCompletely,
             IgnoreCollectionOrder = rule.IgnoreCollectionOrder,
+            TreatNullAndEmptyCollectionsAsEqual = rule.TreatNullAndEmptyCollectionsAsEqual,
         };
 
         lock (configurationLock)
@@ -424,6 +451,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
                     PropertyPath = rule.PropertyPath,
                     IgnoreCompletely = rule.IgnoreCompletely,
                     IgnoreCollectionOrder = rule.IgnoreCollectionOrder,
+                    TreatNullAndEmptyCollectionsAsEqual = rule.TreatNullAndEmptyCollectionsAsEqual,
                 };
 
                 ignoreRules.Add(newRule);
@@ -553,7 +581,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
 
         if (!propertiesToIgnoreCompletely.Any() && !shouldFilterTrailingWhitespace)
         {
-            return result;
+            return FilterNullAndEmptyCollectionDifferences(result);
         }
 
         // Use the direct matcher for large ignore sets, but keep the recursive compare-time
@@ -562,11 +590,11 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
 
         if (useDirectFiltering)
         {
-            return FilterDifferencesDirectly(result, ignoreFilterState, shouldFilterTrailingWhitespace);
+            return FilterNullAndEmptyCollectionDifferences(FilterDifferencesDirectly(result, ignoreFilterState, shouldFilterTrailingWhitespace));
         }
         else
         {
-            return FilterDifferencesWithPatternMatching(result, propertiesToIgnoreCompletely, shouldFilterTrailingWhitespace);
+            return FilterNullAndEmptyCollectionDifferences(FilterDifferencesWithPatternMatching(result, propertiesToIgnoreCompletely, shouldFilterTrailingWhitespace));
         }
     }
 
@@ -657,11 +685,179 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
     /// </summary>
     /// <returns></returns>
     public ComparisonResult FilterSmartIgnoredDifferences(ComparisonResult result, Type? modelType = null)
-        => smartIgnoreProcessor.FilterResult(result, GetSmartIgnoreRulesSnapshot(), modelType);
+    {
+        var filteredResult = smartIgnoreProcessor.FilterResult(result, GetSmartIgnoreRulesSnapshot(), modelType);
+        return FilterNullAndEmptyCollectionDifferences(filteredResult);
+    }
 
-    /// <summary>
-    /// Normalize values of specified properties throughout an object graph.
-    /// </summary>
+    private ComparisonResult FilterNullAndEmptyCollectionDifferences(ComparisonResult result)
+    {
+        if (result == null)
+        {
+            throw new ArgumentNullException(nameof(result));
+        }
+
+        if (!result.Differences.Any())
+        {
+            return result;
+        }
+
+        var scopedRules = GetAllIgnoreRulesSnapshot()
+            .Where(rule => rule.TreatNullAndEmptyCollectionsAsEqual && !string.IsNullOrWhiteSpace(rule.PropertyPath))
+            .ToList();
+
+        if (!treatNullAndEmptyCollectionsAsEqual && scopedRules.Count == 0)
+        {
+            return result;
+        }
+
+        var filteredDifferences = new List<Difference>(result.Differences.Count);
+        var removedCount = 0;
+
+        foreach (var difference in result.Differences)
+        {
+            if (IsNullAndEmptyCollectionDifference(difference) && ShouldApplyNullEmptyCollectionRule(difference.PropertyName, scopedRules))
+            {
+                removedCount++;
+                logger.LogDebug("Filtered null/empty collection difference for property: {PropertyName}", difference.PropertyName);
+                continue;
+            }
+
+            filteredDifferences.Add(difference);
+        }
+
+        if (removedCount == 0)
+        {
+            return result;
+        }
+
+        result.Differences.Clear();
+        result.Differences.AddRange(filteredDifferences);
+        logger.LogInformation(
+            "Null/empty collection filtering removed {RemovedCount} differences from {OriginalCount} total",
+            removedCount,
+            removedCount + filteredDifferences.Count);
+
+        return result;
+    }
+
+    private bool ShouldApplyNullEmptyCollectionRule(string? propertyPath, IReadOnlyCollection<IgnoreRule> scopedRules)
+    {
+        if (treatNullAndEmptyCollectionsAsEqual)
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(propertyPath))
+        {
+            return false;
+        }
+
+        var collectionPath = GetCollectionPathForNullEmptyComparison(propertyPath);
+        return scopedRules.Any(rule => IsPathMatch(collectionPath, rule.PropertyPath));
+    }
+
+    private static bool IsNullAndEmptyCollectionDifference(Difference difference)
+    {
+        if (difference == null)
+        {
+            return false;
+        }
+
+        if (IsCollectionCountPath(difference.PropertyName))
+        {
+            return (IsMissingOrNullValue(difference.Object1Value) && IsZeroValue(difference.Object2Value)) ||
+                   (IsMissingOrNullValue(difference.Object2Value) && IsZeroValue(difference.Object1Value));
+        }
+
+        return (IsMissingOrNullValue(difference.Object1Value) && IsEmptyCollectionValue(difference.Object2Value)) ||
+               (IsMissingOrNullValue(difference.Object2Value) && IsEmptyCollectionValue(difference.Object1Value));
+    }
+
+    private static bool IsCollectionCountPath(string? propertyPath) =>
+        !string.IsNullOrWhiteSpace(propertyPath) &&
+        (propertyPath.EndsWith(".Count", StringComparison.OrdinalIgnoreCase) ||
+         propertyPath.EndsWith(".Length", StringComparison.OrdinalIgnoreCase) ||
+         propertyPath.EndsWith(".LongLength", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsMissingOrNullValue(object? value) =>
+        value == null ||
+        value is string text &&
+        (text.Length == 0 ||
+         string.Equals(text, "null", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(text, "(null)", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(text, "<null>", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsZeroValue(object? value) => value switch
+    {
+        byte number => number == 0,
+        sbyte number => number == 0,
+        short number => number == 0,
+        ushort number => number == 0,
+        int number => number == 0,
+        uint number => number == 0,
+        long number => number == 0,
+        ulong number => number == 0,
+        string text => string.Equals(text, "0", StringComparison.Ordinal),
+        _ => false,
+    };
+
+    private static bool IsEmptyCollectionValue(object? value)
+    {
+        if (value == null || value is string)
+        {
+            return false;
+        }
+
+        if (value is ICollection collection)
+        {
+            return collection.Count == 0;
+        }
+
+        if (value is IEnumerable enumerable)
+        {
+            var enumerator = enumerable.GetEnumerator();
+            try
+            {
+                return !enumerator.MoveNext();
+            }
+            finally
+            {
+                (enumerator as IDisposable)?.Dispose();
+            }
+        }
+
+        return false;
+    }
+
+    private static string GetCollectionPathForNullEmptyComparison(string propertyPath)
+    {
+        foreach (var suffix in new[] { ".Count", ".Length", ".LongLength" })
+        {
+            if (propertyPath.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                return propertyPath[..^suffix.Length];
+            }
+        }
+
+        return propertyPath;
+    }
+
+    private static bool IsPathMatch(string propertyPath, string rulePath)
+    {
+        if (string.IsNullOrWhiteSpace(propertyPath) || string.IsNullOrWhiteSpace(rulePath))
+        {
+            return false;
+        }
+
+        if (string.Equals(propertyPath, rulePath, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return propertyPath.StartsWith(rulePath + ".", StringComparison.OrdinalIgnoreCase) ||
+               propertyPath.StartsWith(rulePath + "[", StringComparison.OrdinalIgnoreCase);
+    }
     public void NormalizePropertyValues(object obj, List<string> propertyNames)
     {
         if (obj == null || propertyNames == null || !propertyNames.Any())
@@ -743,6 +939,11 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             settings.Add("IgnoreCollectionOrder");
         }
 
+        if (rule.TreatNullAndEmptyCollectionsAsEqual)
+        {
+            settings.Add("TreatNullAndEmptyCollectionsAsEqual");
+        }
+
         return string.Join(", ", settings);
     }
 
@@ -758,9 +959,10 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             GlobalIgnoreCollectionOrder = compareLogic.Config.IgnoreCollectionOrder,
             GlobalIgnoreStringCase = !compareLogic.Config.CaseSensitive,
             GlobalIgnoreTrailingWhitespaceAtEnd = ignoreTrailingWhitespaceAtEnd,
+            GlobalTreatNullAndEmptyCollectionsAsEqual = treatNullAndEmptyCollectionsAsEqual,
             IgnoreRules = ignoreRulesSnapshot
                 .OrderBy(r => r.PropertyPath, System.StringComparer.Ordinal)
-                .Select(r => new { r.PropertyPath, r.IgnoreCompletely, r.IgnoreCollectionOrder })
+                .Select(r => new { r.PropertyPath, r.IgnoreCompletely, r.IgnoreCollectionOrder, r.TreatNullAndEmptyCollectionsAsEqual })
                 .ToList(),
             SmartIgnoreRules = smartIgnoreRulesSnapshot
                 .Where(r => r.IsEnabled)
@@ -784,6 +986,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         compareLogic.Config.IgnoreCollectionOrder = cachedConfig.IgnoreCollectionOrder;
         compareLogic.Config.CaseSensitive = cachedConfig.CaseSensitive;
         ignoreTrailingWhitespaceAtEnd = cachedConfig.IgnoreTrailingWhitespaceAtEnd;
+        treatNullAndEmptyCollectionsAsEqual = cachedConfig.TreatNullAndEmptyCollectionsAsEqual;
 
         // Clear and rebuild MembersToIgnore
         compareLogic.Config.MembersToIgnore.Clear();
@@ -891,6 +1094,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
                     IgnoreCollectionOrder = compareLogic.Config.IgnoreCollectionOrder,
                     CaseSensitive = compareLogic.Config.CaseSensitive,
                     IgnoreTrailingWhitespaceAtEnd = ignoreTrailingWhitespaceAtEnd,
+                    TreatNullAndEmptyCollectionsAsEqual = treatNullAndEmptyCollectionsAsEqual,
                     MembersToIgnore = new List<string>(compareLogic.Config.MembersToIgnore),
                     CustomComparers = new List<BaseTypeComparer>(compareLogic.Config.CustomComparers),
                 };
@@ -1089,6 +1293,7 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
             IgnoreCollectionOrder = compareLogic.Config.IgnoreCollectionOrder,
             CaseSensitive = compareLogic.Config.CaseSensitive,
             IgnoreTrailingWhitespaceAtEnd = ignoreTrailingWhitespaceAtEnd,
+            TreatNullAndEmptyCollectionsAsEqual = treatNullAndEmptyCollectionsAsEqual,
             MembersToIgnore = new List<string>(compareLogic.Config.MembersToIgnore),
             CustomComparers = new List<BaseTypeComparer>(compareLogic.Config.CustomComparers),
         };
@@ -1762,6 +1967,11 @@ public class ComparisonConfigurationService : IComparisonConfigurationService
         }
 
         public bool IgnoreTrailingWhitespaceAtEnd
+        {
+            get; set;
+        }
+
+        public bool TreatNullAndEmptyCollectionsAsEqual
         {
             get; set;
         }

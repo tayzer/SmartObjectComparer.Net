@@ -171,9 +171,10 @@ public class ComparisonEngine : IComparisonEngine, IDisposable
             GlobalIgnoreCollectionOrder = configService.GetIgnoreCollectionOrder(),
             GlobalIgnoreStringCase = configService.GetIgnoreStringCase(),
             GlobalIgnoreTrailingWhitespaceAtEnd = configService.GetIgnoreTrailingWhitespaceAtEnd(),
+            GlobalTreatNullAndEmptyCollectionsAsEqual = configService.GetTreatNullAndEmptyCollectionsAsEqual(),
             IgnoreRules = configService.GetIgnoreRules()
                 .OrderBy(rule => rule.PropertyPath, System.StringComparer.Ordinal)
-                .Select(rule => new { rule.PropertyPath, rule.IgnoreCompletely, rule.IgnoreCollectionOrder })
+                .Select(rule => new { rule.PropertyPath, rule.IgnoreCompletely, rule.IgnoreCollectionOrder, rule.TreatNullAndEmptyCollectionsAsEqual })
                 .ToList(),
             SmartIgnoreRules = configService.GetSmartIgnoreRules()
                 .Where(rule => rule.IsEnabled)

@@ -1,4 +1,4 @@
-﻿using System.CommandLine;
+using System.CommandLine;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -81,6 +81,13 @@ public static partial class RequestCompareCommand
         var ignoreCaseOption = new Option<bool>("--ignore-case")
         {
             Description = "Ignore string case during comparison",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => false,
+        };
+
+        var treatNullEmptyCollectionsOption = new Option<bool>("--treat-null-empty-collections-equal")
+        {
+            Description = "Treat null and empty collections as equivalent during comparison",
             Arity = ArgumentArity.ZeroOrOne,
             DefaultValueFactory = _ => false,
         };
@@ -222,6 +229,7 @@ public static partial class RequestCompareCommand
             ignoreCollectionOrderOption,
             ignoreCaseOption,
             ignoreTrailingWhitespaceOption,
+            treatNullEmptyCollectionsOption,
             ignoreNamespacesOption,
             semanticAnalysisOption,
             ignoreRulesFileOption,
@@ -263,6 +271,7 @@ public static partial class RequestCompareCommand
                 IgnoreCollectionOrder = parseResult.GetValue(ignoreCollectionOrderOption),
                 IgnoreStringCase = parseResult.GetValue(ignoreCaseOption),
                 IgnoreTrailingWhitespaceAtEnd = parseResult.GetValue(ignoreTrailingWhitespaceOption),
+                TreatNullAndEmptyCollectionsAsEqual = parseResult.GetValue(treatNullEmptyCollectionsOption),
                 IgnoreXmlNamespaces = parseResult.GetValue(ignoreNamespacesOption),
                 EnableSemanticAnalysis = parseResult.GetValue(semanticAnalysisOption),
                 IgnoreRulesFile = parseResult.GetValue(ignoreRulesFileOption),
@@ -800,7 +809,9 @@ public static partial class RequestCompareCommand
         {
             RequestBatchId = batchId,
             EndpointA = endpointAResult.Url,
+            EndpointALabel = endpointAResult.Label,
             EndpointB = endpointBResult.Url,
+            EndpointBLabel = endpointBResult.Label,
             TimeoutMs = options.TimeoutMs,
             MaxConcurrency = options.MaxConcurrency,
             ModelName = options.ModelName,
@@ -809,6 +820,7 @@ public static partial class RequestCompareCommand
             IgnoreCollectionOrder = options.IgnoreCollectionOrder,
             IgnoreStringCase = options.IgnoreStringCase,
             IgnoreTrailingWhitespaceAtEnd = options.IgnoreTrailingWhitespaceAtEnd,
+            TreatNullAndEmptyCollectionsAsEqual = options.TreatNullAndEmptyCollectionsAsEqual,
             IgnoreXmlNamespaces = options.IgnoreXmlNamespaces,
             EnableSemanticAnalysis = options.EnableSemanticAnalysis,
             IgnoreRules = ignoreRulesResult.IgnoreRules,
@@ -871,7 +883,9 @@ public static partial class RequestCompareCommand
             Elapsed = stopwatch.Elapsed,
             CommandName = "request",
             EndpointA = endpointAResult.Url,
+            EndpointALabel = endpointAResult.Label,
             EndpointB = endpointBResult.Url,
+            EndpointBLabel = endpointBResult.Label,
             ModelName = options.ModelName,
             JobId = job.JobId,
             MostAffectedFields = MostAffectedFieldsAggregator.Build(result),
@@ -1240,6 +1254,19 @@ public static partial class RequestCompareCommand
         Console.WriteLine($"  {label}: {headers.Count} ({string.Join(", ", headers.Keys.OrderBy(key => key, StringComparer.OrdinalIgnoreCase))})");
     }
 
+    private static string BuildEndpointLabel(string url)
+    {
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            var path = uri.AbsolutePath.Trim('/');
+            return string.IsNullOrWhiteSpace(path)
+                ? uri.Host
+                : $"{uri.Host}/{path}";
+        }
+
+        return url;
+    }
+
     private static string FormatEndpointName(RequestComparisonEndpointOption? endpointOption) => endpointOption == null
         ? string.Empty
         : $" ({endpointOption.Name})";
@@ -1289,6 +1316,8 @@ public static partial class RequestCompareCommand
         public bool IgnoreStringCase { get; init; }
 
         public bool IgnoreTrailingWhitespaceAtEnd { get; init; }
+
+        public bool TreatNullAndEmptyCollectionsAsEqual { get; init; }
 
         public bool IgnoreXmlNamespaces { get; init; }
 
@@ -1341,6 +1370,8 @@ public static partial class RequestCompareCommand
 
         public RequestComparisonEndpointOption? EndpointOption { get; init; }
 
+        public string Label { get; init; } = string.Empty;
+
         public string? ErrorMessage { get; init; }
 
         public static EndpointResolutionResult Success(string url, RequestComparisonEndpointOption? endpointOption) => new()
@@ -1348,6 +1379,7 @@ public static partial class RequestCompareCommand
             IsSuccess = true,
             Url = url,
             EndpointOption = endpointOption,
+            Label = endpointOption?.Name ?? BuildEndpointLabel(url),
         };
 
         public static EndpointResolutionResult Failure(string errorMessage) => new()

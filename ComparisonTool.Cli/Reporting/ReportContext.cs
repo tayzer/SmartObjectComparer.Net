@@ -1,4 +1,4 @@
-﻿using ComparisonTool.Core.Comparison.Results;
+using ComparisonTool.Core.Comparison.Results;
 
 namespace ComparisonTool.Cli.Reporting;
 
@@ -32,8 +32,14 @@ public class ReportContext
     /// <summary>Gets or sets endpoint A URL (request compare).</summary>
     public string? EndpointA { get; set; }
 
+    /// <summary>Gets or sets endpoint A display label (request compare).</summary>
+    public string? EndpointALabel { get; set; }
+
     /// <summary>Gets or sets endpoint B URL (request compare).</summary>
     public string? EndpointB { get; set; }
+
+    /// <summary>Gets or sets endpoint B display label (request compare).</summary>
+    public string? EndpointBLabel { get; set; }
 
     /// <summary>Gets or sets the job ID (request compare).</summary>
     public string? JobId { get; set; }

@@ -12,4 +12,6 @@ public class ComparisonConfigurationOptions
     public bool DefaultIgnoreStringCase { get; set; } = false;
 
     public bool DefaultIgnoreTrailingWhitespaceAtEnd { get; set; } = false;
+
+    public bool DefaultTreatNullAndEmptyCollectionsAsEqual { get; set; } = false;
 }

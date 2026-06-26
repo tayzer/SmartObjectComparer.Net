@@ -59,11 +59,11 @@
                                               OnClearButtonClick="ClearSearch"
                                               Style="flex-grow: 1;"
                                               aria-label="Search properties" />
-                                <MudMenu Icon="@Icons.Material.Filled.FilterList" 
-                                         Variant="Variant.Outlined" 
+                                <MudMenu Icon="@Icons.Material.Filled.FilterList"
+                                         Variant="Variant.Outlined"
                                          Color="@(currentSearchFilter != FilterAll ? Color.Primary : Color.Default)"
                                          aria-label="Filter properties">
-                                    <MudMenuItem OnClick="@(() => SetSearchFilter(FilterAll))" 
+                                    <MudMenuItem OnClick="@(() => SetSearchFilter(FilterAll))"
                                                  Icon="@(currentSearchFilter == FilterAll ? Icons.Material.Filled.Check : null)">
                                         All Properties
                                     </MudMenuItem>
@@ -98,7 +98,7 @@
                                     </MudMenuItem>
                                 </MudMenu>
                             </MudStack>
-                            
+
                             <!-- Active Filter Indicator -->
                             @if (currentSearchFilter != FilterAll || !string.IsNullOrEmpty(searchTerm))
                             {
@@ -118,7 +118,7 @@
                                     }
                                 </MudStack>
                             }
-                            
+
                             <!-- Search Suggestions -->
                             @if (searchSuggestions.Any() && !string.IsNullOrEmpty(searchTerm))
                             {
@@ -127,8 +127,8 @@
                                     <MudStack Row="true" Spacing="1" Style="flex-wrap: wrap;">
                                         @foreach (var suggestion in searchSuggestions.Take(8))
                                         {
-                                            <MudChip T="string" Size="Size.Small" 
-                                                     Color="Color.Default" 
+                                            <MudChip T="string" Size="Size.Small"
+                                                     Color="Color.Default"
                                                      Variant="Variant.Text"
                                                      OnClick="@(() => ApplySuggestion(suggestion))"
                                                      Style="cursor: pointer;">
@@ -176,7 +176,7 @@
                                 </MudTooltip>
                             </MudStack>
                         </MudStack>
-                        
+
                         @if (IsLoading)
                         {
                             <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="py-6">
@@ -191,7 +191,7 @@
                             </div>
                         }
                     </MudPaper>
-                    
+
                     <!-- Bulk Selection Actions -->
                     @if (selectedProperties.Any())
                     {
@@ -202,15 +202,15 @@
                                     <MudText Typo="Typo.body2"><strong>@selectedProperties.Count</strong> properties selected</MudText>
                                 </MudStack>
                                 <MudStack Row="true" Spacing="1">
-                                    <MudButton Variant="Variant.Filled" 
-                                               Color="Color.Success" 
+                                    <MudButton Variant="Variant.Filled"
+                                               Color="Color.Success"
                                                Size="Size.Small"
                                                StartIcon="@Icons.Material.Filled.VisibilityOff"
                                                OnClick="ShowBulkIgnoreConfirmation">
                                         Ignore All
                                     </MudButton>
-                                    <MudButton Variant="Variant.Outlined" 
-                                               Color="Color.Default" 
+                                    <MudButton Variant="Variant.Outlined"
+                                               Color="Color.Default"
                                                Size="Size.Small"
                                                StartIcon="@Icons.Material.Filled.Clear"
                                                OnClick="ClearAllSelections">
@@ -223,7 +223,7 @@
 
                     <!-- Quick Actions Bar -->
                     <MudStack Row="true" Spacing="2" Justify="Justify.FlexStart">
-                        <MudButton Variant="Variant.Text" 
+                        <MudButton Variant="Variant.Text"
                                    Size="Size.Small"
                                    StartIcon="@Icons.Material.Filled.SelectAll"
                                    OnClick="ToggleSelectAllVisible">
@@ -241,7 +241,7 @@
                             <MudIcon Icon="@Icons.Material.Filled.Settings" Size="Size.Small" />
                             <MudText Typo="Typo.subtitle2">Property Configuration</MudText>
                         </MudStack>
-                        
+
                         @if (!string.IsNullOrEmpty(selectedProperty))
                         {
                             <!-- Selected Property Info -->
@@ -249,8 +249,8 @@
                                 <MudStack Spacing="1">
                                     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
                                         <MudText Typo="Typo.caption" Color="Color.Default">Selected Property</MudText>
-                                        <MudIconButton Icon="@Icons.Material.Filled.Close" 
-                                                       Size="Size.Small" 
+                                        <MudIconButton Icon="@Icons.Material.Filled.Close"
+                                                       Size="Size.Small"
                                                        OnClick="ClearSelection" />
                                     </MudStack>
                                     <MudText Typo="Typo.body2" Class="property-code">@selectedProperty</MudText>
@@ -287,7 +287,7 @@
                             <!-- Ignore Rules Configuration -->
                             <MudStack Spacing="2">
                                 <MudText Typo="Typo.caption" Color="Color.Default">Ignore Options</MudText>
-                                
+
                                 <MudCheckBox T="bool" @bind-Value="IgnoreProperty" Color="Color.Error"
                                              Label="Ignore this property completely"
                                              aria-label="Ignore property completely" />
@@ -297,7 +297,7 @@
 
                                 @if (IsCollectionProperty(selectedProperty))
                                 {
-                                    <MudCheckBox T="bool" @bind-Value="IgnoreCollectionOrder" 
+                                    <MudCheckBox T="bool" @bind-Value="IgnoreCollectionOrder"
                                                  Color="Color.Warning"
                                                  Disabled="@IgnoreProperty"
                                                  Label="Ignore collection ordering"
@@ -305,15 +305,19 @@
                                     <MudText Typo="Typo.caption" Color="Color.Default" Style="margin-left: 32px; margin-top: -8px;">
                                         Items can appear in any order
                                     </MudText>
+                                    <MudCheckBox T="bool" @bind-Value="TreatNullAndEmptyCollectionsAsEqual"
+                                                 Color="Color.Info"
+                                                 Label="Treat null and empty collections as equal"
+                                                 aria-label="Treat null and empty collections as equal" />
                                 }
                             </MudStack>
 
-                            <MudButton Variant="Variant.Filled" 
-                                       Color="Color.Success" 
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Success"
                                        FullWidth="true"
                                        StartIcon="@Icons.Material.Filled.Add"
                                        OnClick="AddCurrentProperty"
-                                       Disabled="@(!IgnoreProperty && !IgnoreCollectionOrder)">
+                                       Disabled="@(!IgnoreProperty && !IgnoreCollectionOrder && !TreatNullAndEmptyCollectionsAsEqual)">
                                 Add Ignore Rule
                             </MudButton>
                         }
@@ -328,16 +332,16 @@
                                     </MudText>
                                 </MudStack>
                             </MudAlert>
-                            
+
                             <MudDivider />
-                            
+
                             <!-- Quick Add Common Properties -->
                             <MudStack Spacing="2">
                                 <MudText Typo="Typo.caption" Color="Color.Default">Quick Add Common Ignores</MudText>
                                 <MudStack Spacing="1">
                                     @foreach (var common in GetCommonIgnoreProperties())
                                     {
-                                        <MudButton Variant="Variant.Text" 
+                                        <MudButton Variant="Variant.Text"
                                                    Size="Size.Small"
                                                    FullWidth="true"
                                                    StartIcon="@Icons.Material.Filled.FlashOn"
@@ -363,7 +367,7 @@
                     <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">@IgnoredProperties.Count</MudChip>
                 </MudStack>
             </MudStack>
-            
+
             @if (IgnoredProperties.Any())
             {
                 <MudSimpleTable Dense="true" Hover="true" Style="max-height: 250px; overflow-y: auto;">
@@ -413,14 +417,14 @@
                                 <td>
                                     <MudStack Row="true" Spacing="0">
                                         <MudTooltip Text="Edit rule">
-                                            <MudIconButton Icon="@Icons.Material.Filled.Edit" 
-                                                           Size="Size.Small" 
+                                            <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                                           Size="Size.Small"
                                                            Color="Color.Primary"
                                                            OnClick="@(() => EditIgnoredProperty(rule.PropertyPath))" />
                                         </MudTooltip>
                                         <MudTooltip Text="Remove rule">
-                                            <MudIconButton Icon="@Icons.Material.Filled.Delete" 
-                                                           Size="Size.Small" 
+                                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                           Size="Size.Small"
                                                            Color="Color.Error"
                                                            OnClick="@(() => RemoveIgnoredProperty(rule.PropertyPath))" />
                                         </MudTooltip>
@@ -441,8 +445,8 @@
     </DialogContent>
     <DialogActions>
         <MudStack Row="true" Justify="Justify.SpaceBetween" Style="width: 100%;">
-            <MudButton Variant="Variant.Text" 
-                       Color="Color.Info" 
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Info"
                        StartIcon="@Icons.Material.Filled.Help"
                        OnClick="ShowHelpModal">
                 Help
@@ -481,7 +485,7 @@
                         </MudListItem>
                     </MudList>
                 </MudExpansionPanel>
-                
+
                 <MudExpansionPanel Text="Search Examples">
                     <MudSimpleTable Dense="true">
                         <tbody>
@@ -504,7 +508,7 @@
                         </tbody>
                     </MudSimpleTable>
                 </MudExpansionPanel>
-                
+
                 <MudExpansionPanel Text="Ignore Rule Types">
                     <MudList T="string" Dense="true">
                         <MudListItem Icon="@Icons.Material.Filled.VisibilityOff">
@@ -534,7 +538,7 @@
     <DialogContent>
         <MudStack Spacing="3">
             <MudText>You are about to add ignore rules for <strong>@selectedProperties.Count properties</strong>.</MudText>
-            
+
             @if (isProcessingBulkIgnore)
             {
                 <MudStack Spacing="2">
@@ -550,13 +554,16 @@
             {
                 <MudStack Spacing="2">
                     <MudText Typo="Typo.subtitle2">Ignore Options</MudText>
-                    <MudCheckBox T="bool" @bind-Value="bulkIgnoreCompletely" 
+                    <MudCheckBox T="bool" @bind-Value="bulkIgnoreCompletely"
                                  Color="Color.Error"
                                  Label="Ignore completely" />
-                    <MudCheckBox T="bool" @bind-Value="bulkIgnoreCollectionOrder" 
+                    <MudCheckBox T="bool" @bind-Value="bulkIgnoreCollectionOrder"
                                  Color="Color.Warning"
                                  Disabled="@bulkIgnoreCompletely"
                                  Label="Ignore collection ordering (for collection properties)" />
+                    <MudCheckBox T="bool" @bind-Value="bulkTreatNullAndEmptyCollectionsAsEqual"
+                                 Color="Color.Info"
+                                 Label="Treat null and empty collections as equal (for collection properties)" />
                 </MudStack>
             }
 
@@ -567,7 +574,7 @@
                     <MudStack Spacing="0">
                         @foreach (var prop in selectedProperties.Take(10))
                         {
-                            <MudText Typo="Typo.caption" Class="property-code">• @prop</MudText>
+                            <MudText Typo="Typo.caption" Class="property-code">â€¢ @prop</MudText>
                         }
                         <MudText Typo="Typo.caption" Color="Color.Default" Class="mt-1">
                             <em>... and @(selectedProperties.Count - 10) more properties</em>
@@ -579,7 +586,7 @@
                     <MudStack Spacing="0">
                         @foreach (var prop in selectedProperties)
                         {
-                            <MudText Typo="Typo.caption" Class="property-code">• @prop</MudText>
+                            <MudText Typo="Typo.caption" Class="property-code">â€¢ @prop</MudText>
                         }
                     </MudStack>
                 }
@@ -623,40 +630,42 @@
     private bool showPropertyModal = false;
     private bool showHelpModal = false;
     private bool showBulkIgnoreModal = false;
-    
+
     // Dialog options
-    private DialogOptions dialogOptionsExtraLarge = new DialogOptions 
-    { 
-        MaxWidth = MaxWidth.ExtraLarge, 
+    private DialogOptions dialogOptionsExtraLarge = new DialogOptions
+    {
+        MaxWidth = MaxWidth.ExtraLarge,
         FullWidth = true,
-        CloseOnEscapeKey = true 
+        CloseOnEscapeKey = true
     };
-    private DialogOptions dialogOptionsLarge = new DialogOptions 
-    { 
-        MaxWidth = MaxWidth.Large, 
+    private DialogOptions dialogOptionsLarge = new DialogOptions
+    {
+        MaxWidth = MaxWidth.Large,
         FullWidth = true,
-        CloseOnEscapeKey = true 
+        CloseOnEscapeKey = true
     };
-    private DialogOptions dialogOptionsRegular = new DialogOptions 
-    { 
-        MaxWidth = MaxWidth.Small, 
+    private DialogOptions dialogOptionsRegular = new DialogOptions
+    {
+        MaxWidth = MaxWidth.Small,
         FullWidth = true,
-        CloseOnEscapeKey = true 
+        CloseOnEscapeKey = true
     };
-    
+
     private string selectedProperty;
     private List<string> selectedPropertyPath = new List<string>();
     private string searchTerm = "";
     private string currentSearchFilter = "all";
     private bool IgnoreProperty { get; set; }
     private bool IgnoreCollectionOrder { get; set; }
+    private bool TreatNullAndEmptyCollectionsAsEqual { get; set; }
     private bool IsLoading { get; set; } = false;
-    
+
     // Bulk selection fields
     private List<string> selectedProperties = new List<string>();
     private bool selectAllVisible = false;
     private bool bulkIgnoreCompletely { get; set; } = true;
     private bool bulkIgnoreCollectionOrder { get; set; } = false;
+    private bool bulkTreatNullAndEmptyCollectionsAsEqual { get; set; } = false;
     private bool isProcessingBulkIgnore { get; set; } = false;
     private int bulkIgnoreProgress { get; set; } = 0;
     private string bulkIgnoreStatus { get; set; } = "";
@@ -683,11 +692,11 @@
         {
             IsLoading = true;
             StateHasChanged();
-            
+
             await Task.Delay(50); // Allow UI to update
             BuildPropertyTree();
             UpdateSearchSuggestions();
-            
+
             IsLoading = false;
         }
 
@@ -699,9 +708,9 @@
     {
         propertyTree.Clear();
         expandedNodes.Clear();
-        
+
         var allPaths = GetAllPropertyPaths(ModelType);
-        
+
         foreach (var kvp in allPaths)
         {
             AddToTree(kvp.Key, kvp.Value);
@@ -713,13 +722,13 @@
          var segments = SplitPropertyPath(path);
          var currentLevel = propertyTree;
          var currentPath = "";
- 
+
          for (int i = 0; i < segments.Count; i++)
          {
              var segment = segments[i];
-             currentPath = string.IsNullOrEmpty(currentPath) ? segment : 
+             currentPath = string.IsNullOrEmpty(currentPath) ? segment :
                           segment == "[*]" ? $"{currentPath}[*]" : $"{currentPath}.{segment}";
-             
+
              if (!currentLevel.ContainsKey(segment))
              {
                  var isLastSegment = i == segments.Count - 1;
@@ -732,7 +741,7 @@
                      IsPrimitive = isLastSegment && IsPrimitiveType(type)
                  };
              }
-             
+
              currentLevel = currentLevel[segment].Children;
          }
      }
@@ -741,7 +750,7 @@
      {
          var segments = new List<string>();
          var parts = path.Split('.');
-         
+
          foreach (var part in parts)
          {
              if (part.Contains("[*]"))
@@ -752,7 +761,7 @@
                      segments.Add(beforeBracket);
                  }
                  segments.Add("[*]");
-                 
+
                  var afterBracket = part.Substring(part.IndexOf("[*]") + 3);
                  if (!string.IsNullOrEmpty(afterBracket))
                  {
@@ -764,7 +773,7 @@
                  segments.Add(part);
              }
          }
-         
+
          return segments;
      }
 
@@ -780,24 +789,24 @@
                 var isSelected = selectedProperty == node.FullPath;
                 var isChecked = selectedProperties.Contains(node.FullPath);
 
-                <div class="tree-node-row @(isSelected ? "tree-node-selected" : "") @(isChecked ? "tree-node-checked" : "")" 
+                <div class="tree-node-row @(isSelected ? "tree-node-selected" : "") @(isChecked ? "tree-node-checked" : "")"
                      style="padding: 4px 8px; margin-left: @(indentLevel * 20)px;"
                      @onclick="() => SelectPropertyFromTree(node.FullPath)">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                         <!-- Selection checkbox -->
-                        <MudCheckBox T="bool" 
+                        <MudCheckBox T="bool"
                                      Value="@isChecked"
                                      ValueChanged="@((bool val) => TogglePropertySelectionDirect(node.FullPath, val))"
                                      Size="Size.Small"
                                      Color="Color.Primary"
                                      StopClickPropagation="true"
                                      aria-label="Select property" />
-                        
+
                         @if (hasChildren)
                         {
                             <span @onclick="() => ToggleNode(node.FullPath)" @onclick:stopPropagation="true">
-                                <MudIcon Icon="@(isExpanded ? Icons.Material.Filled.FolderOpen : Icons.Material.Filled.Folder)" 
-                                         Size="Size.Small" 
+                                <MudIcon Icon="@(isExpanded ? Icons.Material.Filled.FolderOpen : Icons.Material.Filled.Folder)"
+                                         Size="Size.Small"
                                          Color="@(node.Name == "[*]" ? Color.Primary : Color.Warning)"
                                          Style="cursor: pointer;"
                                          Class="mr-1" />
@@ -835,7 +844,7 @@
                         {
                             <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">P</MudChip>
                         }
-                        
+
                         <!-- Ignore status indicator -->
                         @if (IsPropertyIgnored(node.FullPath))
                         {
@@ -864,7 +873,7 @@
         {
             selectedProperties.Remove(propertyPath);
         }
-        
+
         UpdateSelectAllVisibleState();
         StateHasChanged();
     }
@@ -875,14 +884,14 @@
         {
             new BreadcrumbItem("Root", href: null, icon: Icons.Material.Filled.Home)
         };
-        
+
         for (int i = 0; i < selectedPropertyPath.Count; i++)
         {
             var segment = selectedPropertyPath[i];
             var displayText = segment == "[*]" ? "Items" : segment;
             items.Add(new BreadcrumbItem(displayText, href: null));
         }
-        
+
         return items;
     }
 
@@ -929,7 +938,7 @@
     private Dictionary<string, PropertyTreeNode> GetCurrentLevelNodes()
     {
         var currentLevel = propertyTree;
-        
+
         foreach (var segment in selectedPropertyPath)
         {
             if (currentLevel.ContainsKey(segment))
@@ -941,7 +950,7 @@
                 return new Dictionary<string, PropertyTreeNode>();
             }
         }
-        
+
         return currentLevel;
     }
 
@@ -962,7 +971,7 @@
             {
                 matches = node.FullPath.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
                          node.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase);
-                
+
                 // Support wildcard and regex patterns
                 if (!matches && searchTerm.Contains("*"))
                 {
@@ -1011,21 +1020,23 @@
     private void SelectPropertyFromTree(string path)
     {
         selectedProperty = path;
-        
+
         // Update property path for breadcrumbs - handle [*] notation
         selectedPropertyPath = SplitPropertyPath(path);
-        
+
         // Load existing rule if it exists
         var existingRule = IgnoredProperties.FirstOrDefault(p => p.PropertyPath == path);
         if (existingRule != null)
         {
             IgnoreProperty = existingRule.IgnoreCompletely;
             IgnoreCollectionOrder = existingRule.IgnoreCollectionOrder;
+            TreatNullAndEmptyCollectionsAsEqual = existingRule.TreatNullAndEmptyCollectionsAsEqual;
         }
         else
         {
             IgnoreProperty = false;
             IgnoreCollectionOrder = false;
+            TreatNullAndEmptyCollectionsAsEqual = false;
         }
 
         StateHasChanged();
@@ -1034,34 +1045,36 @@
     private void NavigateToBreadcrumb(List<string> path)
     {
         selectedPropertyPath = path.ToList();
-        
+
         // Reconstruct the full property path
         var fullPath = ReconstructPropertyPath(path);
         if (!string.IsNullOrEmpty(fullPath))
         {
             selectedProperty = fullPath;
-            
+
             // Load existing rule if it exists
             var existingRule = IgnoredProperties.FirstOrDefault(p => p.PropertyPath == fullPath);
             if (existingRule != null)
             {
                 IgnoreProperty = existingRule.IgnoreCompletely;
                 IgnoreCollectionOrder = existingRule.IgnoreCollectionOrder;
+                TreatNullAndEmptyCollectionsAsEqual = existingRule.TreatNullAndEmptyCollectionsAsEqual;
             }
             else
             {
                 IgnoreProperty = false;
                 IgnoreCollectionOrder = false;
+                TreatNullAndEmptyCollectionsAsEqual = false;
             }
         }
-        
+
         StateHasChanged();
     }
 
     private string ReconstructPropertyPath(List<string> segments)
     {
         if (!segments.Any()) return "";
-        
+
         var result = "";
         for (int i = 0; i < segments.Count; i++)
         {
@@ -1079,14 +1092,14 @@
                 result += segment;
             }
         }
-        
+
         return result;
     }
 
     private void UpdateSearchSuggestions()
     {
         searchSuggestions.Clear();
-        
+
         if (string.IsNullOrEmpty(searchTerm) || searchTerm.Length < 2)
             return;
 
@@ -1151,6 +1164,7 @@
         selectedProperty = propertyPath;
         IgnoreProperty = true;
         IgnoreCollectionOrder = false;
+        TreatNullAndEmptyCollectionsAsEqual = false;
         AddCurrentProperty();
     }
 
@@ -1168,7 +1182,7 @@
     {
         return new List<string>
         {
-            "Id", "Timestamp", "CreatedDate", "ModifiedDate", 
+            "Id", "Timestamp", "CreatedDate", "ModifiedDate",
             "Version", "RequestId", "SessionId"
         };
     }
@@ -1184,7 +1198,7 @@
     }
 
     // ... (Include all the existing methods from HierarchicalPropertySelector like GetAllPropertyPaths, etc.)
-    
+
     private Dictionary<string, Type> GetAllPropertyPaths(Type type, string basePath = "", int depth = 0)
     {
         var result = new Dictionary<string, Type>();
@@ -1205,7 +1219,7 @@
                 {
                     string collectionItemPath = $"{path}[*]";
                     result[collectionItemPath] = itemType;
-                    
+
                     // Recursively explore collection item properties
                     var itemPaths = GetAllPropertyPaths(itemType, collectionItemPath, depth + 1);
                     foreach (var itemPath in itemPaths)
@@ -1234,7 +1248,7 @@
         {
             return collectionType.GetElementType();
         }
-        
+
         if (collectionType.IsGenericType)
         {
             var genericArgs = collectionType.GetGenericArguments();
@@ -1243,20 +1257,20 @@
                 return genericArgs[0];
             }
         }
-        
+
         return null;
     }
 
     private bool IsPrimitiveType(Type type)
     {
-        return type.IsPrimitive || type == typeof(string) || type == typeof(DateTime) || 
-               type == typeof(decimal) || type == typeof(Guid) || 
+        return type.IsPrimitive || type == typeof(string) || type == typeof(DateTime) ||
+               type == typeof(decimal) || type == typeof(Guid) ||
                (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>));
     }
 
     private bool IsCollectionType(Type type)
     {
-        return type.IsArray || 
+        return type.IsArray ||
                (type.IsGenericType && (
                    type.GetGenericTypeDefinition() == typeof(List<>) ||
                    type.GetGenericTypeDefinition() == typeof(IList<>) ||
@@ -1316,6 +1330,7 @@
         selectedProperty = null;
         IgnoreProperty = false;
         IgnoreCollectionOrder = false;
+        TreatNullAndEmptyCollectionsAsEqual = false;
     }
 
     private async Task AddCurrentProperty()
@@ -1327,7 +1342,8 @@
         {
             PropertyPath = selectedProperty,
             IgnoreCompletely = IgnoreProperty,
-            IgnoreCollectionOrder = IgnoreCollectionOrder
+            IgnoreCollectionOrder = IgnoreCollectionOrder,
+            TreatNullAndEmptyCollectionsAsEqual = TreatNullAndEmptyCollectionsAsEqual
         };
 
         var existingRule = IgnoredProperties.FirstOrDefault(p => p.PropertyPath == selectedProperty);
@@ -1363,7 +1379,7 @@
     private void ToggleSelectAllVisible()
     {
         selectAllVisible = !selectAllVisible;
-        
+
         if (selectAllVisible)
         {
             // Select all visible properties in current tree level
@@ -1385,7 +1401,7 @@
                 selectedProperties.Remove(path);
             }
         }
-        
+
         StateHasChanged();
     }
 
@@ -1404,7 +1420,7 @@
             {
                 paths.Add(node.FullPath);
             }
-            
+
             if (IsNodeExpanded(node.FullPath))
             {
                 CollectVisiblePaths(node.Children, paths);
@@ -1433,7 +1449,8 @@
         // Reset bulk ignore settings to defaults
         bulkIgnoreCompletely = true;
         bulkIgnoreCollectionOrder = false;
-        
+        bulkTreatNullAndEmptyCollectionsAsEqual = false;
+
         showBulkIgnoreModal = true;
     }
 
@@ -1450,7 +1467,7 @@
             var propertiesCount = selectedProperties.Count;
             bulkIgnoreStatus = $"Starting bulk ignore for {propertiesCount} properties...";
             StateHasChanged();
-            
+
             Console.WriteLine($"Starting bulk ignore for {propertiesCount} properties...");
 
             // Process in batches to avoid UI freezing
@@ -1470,14 +1487,15 @@
                 Console.WriteLine(bulkIgnoreStatus);
 
                 var batchRules = new List<IgnoreRule>();
-                
+
                 foreach (var propertyPath in batch)
                 {
                     var rule = new IgnoreRule
                     {
                         PropertyPath = propertyPath,
                         IgnoreCompletely = bulkIgnoreCompletely,
-                        IgnoreCollectionOrder = !bulkIgnoreCompletely && bulkIgnoreCollectionOrder && IsCollectionProperty(propertyPath)
+                        IgnoreCollectionOrder = !bulkIgnoreCompletely && bulkIgnoreCollectionOrder && IsCollectionProperty(propertyPath),
+                        TreatNullAndEmptyCollectionsAsEqual = bulkTreatNullAndEmptyCollectionsAsEqual && IsCollectionProperty(propertyPath)
                     };
 
                     // Remove existing rule for this property if it exists
@@ -1489,7 +1507,7 @@
 
                     IgnoredProperties.Add(rule);
                     batchRules.Add(rule);
-                    
+
                     processedCount++;
                     bulkIgnoreProgress = (int)((double)processedCount / propertiesCount * 100);
                 }

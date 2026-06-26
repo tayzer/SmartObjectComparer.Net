@@ -84,7 +84,7 @@
                     <MudChip T="string" Size="Size.Medium"
                              Color="@GetStatusCodeColor(statusCodeA)"
                              Variant="Variant.Filled">
-                        Endpoint A: @statusCodeA
+                        @LabelA: @statusCodeA
                     </MudChip>
                     @if (statusCodeA != statusCodeB)
                     {
@@ -97,7 +97,7 @@
                     <MudChip T="string" Size="Size.Medium"
                              Color="@GetStatusCodeColor(statusCodeB)"
                              Variant="Variant.Filled">
-                        Endpoint B: @statusCodeB
+                        @LabelB: @statusCodeB
                     </MudChip>
                 </MudStack>
             </MudAlert>
@@ -227,6 +227,12 @@
     [Parameter]
     public string SectionId { get; set; } = "raw-text-differences-section";
 
+    [Parameter]
+    public string LabelA { get; set; } = "Endpoint A";
+
+    [Parameter]
+    public string LabelB { get; set; } = "Endpoint B";
+
     private bool HasHttpStatusMetadata => SelectedPair.HttpStatusCodeA.HasValue && SelectedPair.HttpStatusCodeB.HasValue;
     private string CurrentRawPairKey => string.Join("|",
         SelectedPair?.RequestRelativePath,
@@ -338,9 +344,9 @@
             : $"{displayIdentifier} - Full raw content comparison";
     }
 
-    private string GetColumnHeaderA() => HasHttpStatusMetadata ? "Endpoint A" : "File A";
+    private string GetColumnHeaderA() => HasHttpStatusMetadata ? LabelA : "File A";
 
-    private string GetColumnHeaderB() => HasHttpStatusMetadata ? "Endpoint B" : "File B";
+    private string GetColumnHeaderB() => HasHttpStatusMetadata ? LabelB : "File B";
 
     private string GetEmptyStateMessage() => HasHttpStatusMetadata
         ? SelectedPair.HttpStatusCodeA != SelectedPair.HttpStatusCodeB

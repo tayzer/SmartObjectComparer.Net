@@ -116,7 +116,9 @@ public class RequestComparisonJobService
             JobId = Guid.NewGuid().ToString("N")[..12],
             RequestBatchId = request.RequestBatchId,
             EndpointA = new Uri(request.EndpointA),
+            EndpointALabel = request.EndpointALabel,
             EndpointB = new Uri(request.EndpointB),
+            EndpointBLabel = request.EndpointBLabel,
             HeadersA = request.HeadersA ?? new Dictionary<string, string>(),
             HeadersB = request.HeadersB ?? new Dictionary<string, string>(),
             ContentTypeOverride = request.ContentTypeOverride,
@@ -129,6 +131,7 @@ public class RequestComparisonJobService
             IgnoreCollectionOrder = request.IgnoreCollectionOrder,
             IgnoreStringCase = request.IgnoreStringCase,
             IgnoreTrailingWhitespaceAtEnd = request.IgnoreTrailingWhitespaceAtEnd,
+            TreatNullAndEmptyCollectionsAsEqual = request.TreatNullAndEmptyCollectionsAsEqual,
             IgnoreXmlNamespaces = request.IgnoreXmlNamespaces,
             IgnoreRules = request.IgnoreRules?.ToList() ?? new List<IgnoreRuleDto>(),
             SmartIgnoreRules = request.SmartIgnoreRules?.ToList() ?? new List<SmartIgnoreRuleDto>(),
@@ -350,6 +353,11 @@ public class RequestComparisonJobService
             await PopulateFocusedRawContentAsync(job, comparisonResult, cancellationToken).ConfigureAwait(false);
 
             comparisonResult.Metadata["IgnoreCollectionOrder"] = job.IgnoreCollectionOrder;
+            comparisonResult.Metadata["TreatNullAndEmptyCollectionsAsEqual"] = job.TreatNullAndEmptyCollectionsAsEqual;
+            comparisonResult.Metadata["EndpointA"] = job.EndpointA.ToString();
+            comparisonResult.Metadata["EndpointB"] = job.EndpointB.ToString();
+            comparisonResult.Metadata["EndpointALabel"] = GetEndpointLabel(job.EndpointALabel, job.EndpointA);
+            comparisonResult.Metadata["EndpointBLabel"] = GetEndpointLabel(job.EndpointBLabel, job.EndpointB);
             comparisonResult.Metadata["RequestComparisonJobId"] = jobId;
             comparisonResult.Metadata["ExecutionOutcomeSummary"] = outcomeSummary;
             comparisonResult.Metadata["LargeBatchMode"] = job.LargeBatchMode;
@@ -773,11 +781,12 @@ public class RequestComparisonJobService
         var effectiveIgnoreRules = _alternateContractTransformationService.GetEffectiveIgnoreRules(job);
 
         _logger.LogInformation(
-            "Applying job configuration for {JobId}: IgnoreCollectionOrder={IgnoreCollectionOrder}, IgnoreStringCase={IgnoreStringCase}, IgnoreTrailingWhitespaceAtEnd={IgnoreTrailingWhitespaceAtEnd}, IgnoreXmlNamespaces={IgnoreXmlNamespaces}, IgnoreRules={IgnoreRuleCount}, EffectiveIgnoreRules={EffectiveIgnoreRuleCount}, SmartIgnoreRules={SmartIgnoreRuleCount}",
+            "Applying job configuration for {JobId}: IgnoreCollectionOrder={IgnoreCollectionOrder}, IgnoreStringCase={IgnoreStringCase}, IgnoreTrailingWhitespaceAtEnd={IgnoreTrailingWhitespaceAtEnd}, TreatNullAndEmptyCollectionsAsEqual={TreatNullAndEmptyCollectionsAsEqual}, IgnoreXmlNamespaces={IgnoreXmlNamespaces}, IgnoreRules={IgnoreRuleCount}, EffectiveIgnoreRules={EffectiveIgnoreRuleCount}, SmartIgnoreRules={SmartIgnoreRuleCount}",
             job.JobId,
             job.IgnoreCollectionOrder,
             job.IgnoreStringCase,
             job.IgnoreTrailingWhitespaceAtEnd,
+            job.TreatNullAndEmptyCollectionsAsEqual,
             job.IgnoreXmlNamespaces,
             job.IgnoreRules.Count,
             effectiveIgnoreRules.Count,
@@ -791,6 +800,7 @@ public class RequestComparisonJobService
         configService.SetIgnoreCollectionOrder(job.IgnoreCollectionOrder);
         configService.SetIgnoreStringCase(job.IgnoreStringCase);
         configService.SetIgnoreTrailingWhitespaceAtEnd(job.IgnoreTrailingWhitespaceAtEnd);
+        configService.SetTreatNullAndEmptyCollectionsAsEqual(job.TreatNullAndEmptyCollectionsAsEqual);
         xmlDeserializationService.IgnoreXmlNamespaces = job.IgnoreXmlNamespaces;
 
         // Apply ignore rules
@@ -800,7 +810,8 @@ public class RequestComparisonJobService
             {
                 PropertyPath = ruleDto.PropertyPath,
                 IgnoreCompletely = ruleDto.IgnoreCompletely,
-                IgnoreCollectionOrder = ruleDto.IgnoreCollectionOrder
+                IgnoreCollectionOrder = ruleDto.IgnoreCollectionOrder,
+                TreatNullAndEmptyCollectionsAsEqual = ruleDto.TreatNullAndEmptyCollectionsAsEqual
             };
             configService.AddIgnoreRule(rule);
         }
@@ -878,6 +889,10 @@ public class RequestComparisonJobService
             WriteFileAsync(targetCanonicalPathB, contentB, cancellationToken)).ConfigureAwait(false);
     }
 
+    private static string GetEndpointLabel(string? label, Uri endpoint) =>
+        string.IsNullOrWhiteSpace(label)
+            ? endpoint.ToString()
+            : label.Trim();
     private static string BuildComparisonTargetPath(string rootDirectory, string requestRelativePath)
     {
         var sanitizedPath = SanitizeRelativePath(requestRelativePath);

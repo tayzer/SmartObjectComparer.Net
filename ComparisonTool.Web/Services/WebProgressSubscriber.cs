@@ -1,16 +1,36 @@
 using ComparisonTool.Core.Abstractions;
 using ComparisonTool.Core.RequestComparison.Models;
-using System;
-using System.Threading.Tasks;
 
-namespace ComparisonTool.Web.Services
+namespace ComparisonTool.Web.Services;
+
+/// <summary>
+/// Adapter that exposes the SignalR progress service through the shared UI abstraction.
+/// </summary>
+public sealed class WebProgressSubscriber : IProgressSubscriber
 {
-    public class WebProgressSubscriber : IProgressSubscriber {
-        public event Action<ComparisonProgressUpdate>? OnProgressUpdate;
-        public bool IsConnected => true;
-        public Task StartAsync() => Task.CompletedTask;
-        public Task SubscribeToJobAsync(string jobId) => Task.CompletedTask;
-        public Task UnsubscribeAsync() => Task.CompletedTask;
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    private readonly ComparisonProgressService progressService;
+
+    public WebProgressSubscriber(ComparisonProgressService progressService)
+    {
+        this.progressService = progressService;
+        this.progressService.OnProgressUpdate += HandleProgressUpdate;
     }
+
+    public event Action<ComparisonProgressUpdate>? OnProgressUpdate;
+
+    public bool IsConnected => progressService.IsConnected;
+
+    public Task StartAsync() => progressService.StartAsync();
+
+    public Task SubscribeToJobAsync(string jobId) => progressService.SubscribeToJobAsync(jobId);
+
+    public Task UnsubscribeAsync() => progressService.UnsubscribeAsync();
+
+    public async ValueTask DisposeAsync()
+    {
+        progressService.OnProgressUpdate -= HandleProgressUpdate;
+        await progressService.DisposeAsync();
+    }
+
+    private void HandleProgressUpdate(ComparisonProgressUpdate update) => OnProgressUpdate?.Invoke(update);
 }

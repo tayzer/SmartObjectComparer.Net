@@ -42,7 +42,9 @@ public sealed class ReportMetadata
     public string? Directory1 { get; set; }
     public string? Directory2 { get; set; }
     public string? EndpointA { get; set; }
+    public string? EndpointALabel { get; set; }
     public string? EndpointB { get; set; }
+    public string? EndpointBLabel { get; set; }
     public string? JobId { get; set; }
     public double ElapsedSeconds { get; set; }
 }

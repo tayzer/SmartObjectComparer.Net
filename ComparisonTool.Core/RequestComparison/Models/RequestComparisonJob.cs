@@ -44,8 +44,14 @@ public record RequestComparisonJob
     /// <summary>Gets the first endpoint URL.</summary>
     public required Uri EndpointA { get; init; }
 
+    /// <summary>Gets the display label for endpoint A.</summary>
+    public string? EndpointALabel { get; init; }
+
     /// <summary>Gets the second endpoint URL.</summary>
     public required Uri EndpointB { get; init; }
+
+    /// <summary>Gets the display label for endpoint B.</summary>
+    public string? EndpointBLabel { get; init; }
 
     /// <summary>Gets the headers for endpoint A.</summary>
     public IReadOnlyDictionary<string, string> HeadersA { get; init; } = new Dictionary<string, string>();
@@ -105,6 +111,9 @@ public record RequestComparisonJob
 
     /// <summary>Gets or sets a value indicating whether to ignore trailing spaces and tabs at the end of strings.</summary>
     public bool IgnoreTrailingWhitespaceAtEnd { get; set; } = false;
+
+    /// <summary>Gets or sets a value indicating whether null and empty collections are treated as equivalent.</summary>
+    public bool TreatNullAndEmptyCollectionsAsEqual { get; set; } = false;
 
     /// <summary>Gets or sets a value indicating whether to ignore XML namespaces.</summary>
     public bool IgnoreXmlNamespaces { get; set; } = true;

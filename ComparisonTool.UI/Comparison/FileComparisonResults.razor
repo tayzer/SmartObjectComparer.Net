@@ -8,7 +8,7 @@
     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pa-3" Style="background: var(--mud-palette-surface);">
         <MudText Typo="Typo.h6">
             <MudIcon Icon="@Icons.Material.Filled.CompareArrows" Class="mr-2" />
-            Expected vs Actual Comparison Results
+            @ComparisonTitle
         </MudText>
         <MudStack Row="true" Spacing="2">
             <MudButton Variant="Variant.Outlined" 
@@ -200,10 +200,10 @@
                                     {
                                         <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
                                             <MudChip T="string" Size="Size.Small" Color="@GetStatusCodeColor(context.Item.HttpStatusCodeA.Value)" Variant="Variant.Outlined">
-                                                A: @context.Item.HttpStatusCodeA
+                                                @LabelA: @context.Item.HttpStatusCodeA
                                             </MudChip>
                                             <MudChip T="string" Size="Size.Small" Color="@GetStatusCodeColor(context.Item.HttpStatusCodeB.Value)" Variant="Variant.Outlined">
-                                                B: @context.Item.HttpStatusCodeB
+                                                @LabelB: @context.Item.HttpStatusCodeB
                                             </MudChip>
                                         </MudStack>
                                     }
@@ -265,6 +265,11 @@
     [Parameter]
     public EventCallback OnExportAll { get; set; }
 
+    private string LabelA => GetMetadataString("EndpointALabel") ?? "Expected";
+    private string LabelB => GetMetadataString("EndpointBLabel") ?? "Actual";
+    private string ComparisonTitle => HasHttpStatusData || GetMetadataString("EndpointALabel") != null
+        ? $"{LabelA} vs {LabelB} Comparison Results"
+        : "Expected vs Actual Comparison Results";
     private bool IsCollapsed = false;
     private static readonly int[] RowsPerPageOptions = { 25, 50, 100, 250 };
     private int CurrentRowsPerPage { get; set; } = 50;
@@ -320,6 +325,15 @@
     /// </summary>
     private bool HasHttpStatusData => projection.HasHttpStatusData;
 
+    private string? GetMetadataString(string key)
+    {
+        if (Result?.Metadata == null || !Result.Metadata.TryGetValue(key, out var value))
+        {
+            return null;
+        }
+
+        return value?.ToString();
+    }
     private bool HasRawComparisonPairs => Result?.FilePairResults?.Any(pair => pair.RawTextDifferences != null) == true;
 
     /// <summary>

@@ -87,8 +87,8 @@
                                         <tr>
                                             <th style="width: 80px;">Line</th>
                                             <th style="width: 70px;">Type</th>
-                                            <th>Expected (A)</th>
-                                            <th>Actual (B)</th>
+                                            <th>@LabelA</th>
+                                            <th>@LabelB</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -146,6 +146,12 @@
 
     [Parameter]
     public List<RawTextDifference>? RawFileDifferences { get; set; }
+
+    [Parameter]
+    public string LabelA { get; set; } = "Expected (A)";
+
+    [Parameter]
+    public string LabelB { get; set; } = "Actual (B)";
 
     private bool showRawPreview;
 

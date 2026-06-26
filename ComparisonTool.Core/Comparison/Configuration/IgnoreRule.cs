@@ -49,6 +49,11 @@ public class IgnoreRule
     public bool IgnoreCollectionOrder { get; set; } = false;
 
     /// <summary>
+    /// Gets or sets a value indicating whether null and empty collections at this path are treated as equivalent.
+    /// </summary>
+    public bool TreatNullAndEmptyCollectionsAsEqual { get; set; } = false;
+
+    /// <summary>
     /// Applies this rule to the comparison configuration
     /// PERFORMANCE CRITICAL: Smart minimal pattern generation.
     /// </summary>

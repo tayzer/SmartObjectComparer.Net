@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -281,6 +281,36 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
         betaPair.File2Path.ShouldContain(Path.Combine("comparisonB", "beta", "lookup.json"), Case.Insensitive);
     }
 
+    [TestMethod]
+    public void CreateJob_WithEndpointLabelsAndNullEmptyOptions_ShouldPersistRequestSettings()
+    {
+        using var serviceProvider = CreateServiceProvider(new AlternateContractTestHttpMessageHandler());
+        var jobService = serviceProvider.GetRequiredService<RequestComparisonJobService>();
+
+        var job = jobService.CreateJob(new CreateRequestComparisonJobRequest
+        {
+            RequestBatchId = Guid.NewGuid().ToString("N"),
+            EndpointA = "https://endpoint-a.test/customer-lookup",
+            EndpointALabel = "Primary SOAP",
+            EndpointB = "https://endpoint-b.test/customer-lookup",
+            EndpointBLabel = "Canary JSON",
+            ModelName = RequestComparisonAlternateContractSampleRegistration.SampleModelName,
+            TreatNullAndEmptyCollectionsAsEqual = true,
+            IgnoreRules = new List<IgnoreRuleDto>
+            {
+                new()
+                {
+                    PropertyPath = "Order.Items",
+                    TreatNullAndEmptyCollectionsAsEqual = true,
+                },
+            },
+        });
+
+        job.EndpointALabel.ShouldBe("Primary SOAP");
+        job.EndpointBLabel.ShouldBe("Canary JSON");
+        job.TreatNullAndEmptyCollectionsAsEqual.ShouldBeTrue();
+        job.IgnoreRules.Single().TreatNullAndEmptyCollectionsAsEqual.ShouldBeTrue();
+    }
     private static ServiceProvider CreateServiceProvider(AlternateContractTestHttpMessageHandler handler)
     {
         var services = new ServiceCollection();

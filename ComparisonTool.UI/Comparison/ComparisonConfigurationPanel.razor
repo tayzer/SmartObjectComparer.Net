@@ -37,6 +37,12 @@
                        Label="Ignore Trailing Spaces/Tabs at End of Strings"
                        aria-label="Ignore trailing spaces/tabs at end of strings" />
             <MudSwitch T="bool"
+                       Value="TreatNullAndEmptyCollectionsAsEqual"
+                       ValueChanged="@((bool val) => { TreatNullAndEmptyCollectionsAsEqual = val; OnTreatNullAndEmptyCollectionsAsEqualChanged.InvokeAsync(val); })"
+                       Color="Color.Primary"
+                       Label="Treat Null and Empty Collections as Equal"
+                       aria-label="Treat null and empty collections as equal" />
+            <MudSwitch T="bool"
                        Value="IgnoreXmlNamespaces"
                        ValueChanged="@((bool val) => { IgnoreXmlNamespaces = val; OnIgnoreXmlNamespacesChanged.InvokeAsync(val); })"
                        Color="Color.Primary"
@@ -181,6 +187,12 @@
                                             Order
                                         </MudChip>
                                     }
+                                    @if (rule.TreatNullAndEmptyCollectionsAsEqual)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.DataArray">
+                                            Null/Empty
+                                        </MudChip>
+                                    }
                                     <MudIconButton Icon="@Icons.Material.Filled.Close"
                                                    Size="Size.Small"
                                                    Color="Color.Error"
@@ -261,6 +273,8 @@
     [Parameter] public EventCallback<bool> OnIgnoreStringCaseChanged { get; set; }
     [Parameter] public bool IgnoreTrailingWhitespaceAtEnd { get; set; }
     [Parameter] public EventCallback<bool> OnIgnoreTrailingWhitespaceAtEndChanged { get; set; }
+    [Parameter] public bool TreatNullAndEmptyCollectionsAsEqual { get; set; }
+    [Parameter] public EventCallback<bool> OnTreatNullAndEmptyCollectionsAsEqualChanged { get; set; }
     [Parameter] public bool IgnoreXmlNamespaces { get; set; }
     [Parameter] public EventCallback<bool> OnIgnoreXmlNamespacesChanged { get; set; }
     [Parameter] public bool EnableSemanticAnalysis { get; set; }
@@ -512,7 +526,8 @@
                 {
                     PropertyPath = rule.PropertyPath,
                     IgnoreCompletely = rule.IgnoreCompletely,
-                    IgnoreCollectionOrder = rule.IgnoreCollectionOrder
+                    IgnoreCollectionOrder = rule.IgnoreCollectionOrder,
+                    TreatNullAndEmptyCollectionsAsEqual = rule.TreatNullAndEmptyCollectionsAsEqual
                 });
             }
 

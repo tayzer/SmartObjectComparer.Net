@@ -61,11 +61,11 @@ else if (FolderComparisonResult != null)
                     }
                     @if (!string.IsNullOrEmpty(metadata.EndpointA))
                     {
-                        <MudText Typo="Typo.body2"><strong>Endpoint A:</strong> @metadata.EndpointA</MudText>
+                        <MudText Typo="Typo.body2"><strong>@GetEndpointLabel(metadata.EndpointALabel, "Endpoint A"):</strong> @metadata.EndpointA</MudText>
                     }
                     @if (!string.IsNullOrEmpty(metadata.EndpointB))
                     {
-                        <MudText Typo="Typo.body2"><strong>Endpoint B:</strong> @metadata.EndpointB</MudText>
+                        <MudText Typo="Typo.body2"><strong>@GetEndpointLabel(metadata.EndpointBLabel, "Endpoint B"):</strong> @metadata.EndpointB</MudText>
                     }
                 </MudStack>
             }
@@ -154,6 +154,9 @@ else if (FolderComparisonResult != null)
 }
 
 @code {
+    private static string GetEndpointLabel(string? label, string fallback) =>
+        string.IsNullOrWhiteSpace(label) ? fallback : label;
+
     private bool isLoaded;
     private string? errorMessage;
     private string? analysisErrorMessage;

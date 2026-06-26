@@ -60,6 +60,17 @@ public interface IComparisonConfigurationService
     bool GetIgnoreTrailingWhitespaceAtEnd();
 
     /// <summary>
+    /// Configure whether null and empty collections are treated as equivalent.
+    /// </summary>
+    void SetTreatNullAndEmptyCollectionsAsEqual(bool treatAsEqual);
+
+    /// <summary>
+    /// Get whether null and empty collections are treated as equivalent.
+    /// </summary>
+    /// <returns></returns>
+    bool GetTreatNullAndEmptyCollectionsAsEqual();
+
+    /// <summary>
     /// Configure the comparer to ignore specific properties.
     /// </summary>
     void IgnoreProperty(string propertyPath);

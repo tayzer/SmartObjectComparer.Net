@@ -163,6 +163,8 @@
                                                       OnIgnoreStringCaseChanged="@(value => IgnoreStringCase = value)"
                                                       IgnoreTrailingWhitespaceAtEnd="@IgnoreTrailingWhitespaceAtEnd"
                                                       OnIgnoreTrailingWhitespaceAtEndChanged="@(value => IgnoreTrailingWhitespaceAtEnd = value)"
+                                                      TreatNullAndEmptyCollectionsAsEqual="@TreatNullAndEmptyCollectionsAsEqual"
+                                                      OnTreatNullAndEmptyCollectionsAsEqualChanged="@(value => TreatNullAndEmptyCollectionsAsEqual = value)"
                                                       IgnoreXmlNamespaces="@IgnoreXmlNamespaces"
                                                       OnIgnoreXmlNamespacesChanged="@(value => { IgnoreXmlNamespaces = value; XmlDeserializationService.IgnoreXmlNamespaces = value; })"
                                                       EnableSemanticAnalysis="@EnableSemanticAnalysis"
@@ -202,6 +204,8 @@
                                                       OnIgnoreStringCaseChanged="@(value => IgnoreStringCase = value)"
                                                       IgnoreTrailingWhitespaceAtEnd="@IgnoreTrailingWhitespaceAtEnd"
                                                       OnIgnoreTrailingWhitespaceAtEndChanged="@(value => IgnoreTrailingWhitespaceAtEnd = value)"
+                                                      TreatNullAndEmptyCollectionsAsEqual="@TreatNullAndEmptyCollectionsAsEqual"
+                                                      OnTreatNullAndEmptyCollectionsAsEqualChanged="@(value => TreatNullAndEmptyCollectionsAsEqual = value)"
                                                       IgnoreXmlNamespaces="@IgnoreXmlNamespaces"
                                                       OnIgnoreXmlNamespacesChanged="@(value => { IgnoreXmlNamespaces = value; XmlDeserializationService.IgnoreXmlNamespaces = value; })"
                                                       EnableSemanticAnalysis="@EnableSemanticAnalysis"
@@ -463,17 +467,23 @@
                         @if (selectedRequestPair.HasError)
                         {
                             <ErrorDetailView SelectedPair="@selectedRequestPair"
+                                             LabelA="@RequestEndpointLabelA"
+                                             LabelB="@RequestEndpointLabelB"
                                              RawFileDifferences="@RequestRawFileDifferences" />
                         }
                         else if (ShouldRenderRawRequestDetail(selectedRequestPair))
                         {
                             <RawTextDifferencesView SelectedPair="@selectedRequestPair"
+                                                    LabelA="@RequestEndpointLabelA"
+                                                    LabelB="@RequestEndpointLabelB"
                                                     OnExportResults="@ExportRequestSelectedPairResults"
                                                     SectionId="request-detailed-differences-section" />
                         }
                         else if (DifferenceSummary != null)
                         {
                             <DetailedDifferencesView SelectedPair="@selectedRequestPair"
+                                                     LabelA="@RequestEndpointLabelA"
+                                                     LabelB="@RequestEndpointLabelB"
                                                      DifferenceSummary="@DifferenceSummary"
                                                      ComparisonResult="@ComparisonResult"
                                                      ShowAllDifferences="@ShowAllDifferences"
@@ -517,7 +527,10 @@
     private string SelectedModelName { get; set; }
     private bool IgnoreCollectionOrder { get; set; } = false;
     private bool IgnoreStringCase { get; set; } = false;
+    private string RequestEndpointLabelA => GetRequestMetadataString("EndpointALabel") ?? "Endpoint A";
+    private string RequestEndpointLabelB => GetRequestMetadataString("EndpointBLabel") ?? "Endpoint B";
     private bool IgnoreTrailingWhitespaceAtEnd { get; set; } = false;
+    private bool TreatNullAndEmptyCollectionsAsEqual { get; set; } = false;
     private bool IgnoreXmlNamespaces { get; set; } = true;
     private List<IgnoreRule> IgnoreRules { get; set; } = new List<IgnoreRule>();
     private bool EnableSemanticAnalysis { get; set; } = true;
@@ -591,6 +604,7 @@
             IgnoreCollectionOrder = ConfigService.GetIgnoreCollectionOrder();
             IgnoreStringCase = ConfigService.GetIgnoreStringCase();
             IgnoreTrailingWhitespaceAtEnd = ConfigService.GetIgnoreTrailingWhitespaceAtEnd();
+            TreatNullAndEmptyCollectionsAsEqual = ConfigService.GetTreatNullAndEmptyCollectionsAsEqual();
             IgnoreXmlNamespaces = XmlDeserializationService.IgnoreXmlNamespaces;
 
             IgnoreRules = ConfigService.GetUserIgnoreRules()
@@ -887,6 +901,7 @@
             ConfigService.SetIgnoreCollectionOrder(IgnoreCollectionOrder);
             ConfigService.SetIgnoreStringCase(IgnoreStringCase);
             ConfigService.SetIgnoreTrailingWhitespaceAtEnd(IgnoreTrailingWhitespaceAtEnd);
+            ConfigService.SetTreatNullAndEmptyCollectionsAsEqual(TreatNullAndEmptyCollectionsAsEqual);
             XmlDeserializationService.IgnoreXmlNamespaces = IgnoreXmlNamespaces;
 
             ConfigService.AddIgnoreRulesBatch(IgnoreRules);
@@ -949,6 +964,7 @@
             ConfigService.SetIgnoreCollectionOrder(IgnoreCollectionOrder);
             ConfigService.SetIgnoreStringCase(IgnoreStringCase);
             ConfigService.SetIgnoreTrailingWhitespaceAtEnd(IgnoreTrailingWhitespaceAtEnd);
+            ConfigService.SetTreatNullAndEmptyCollectionsAsEqual(TreatNullAndEmptyCollectionsAsEqual);
             XmlDeserializationService.IgnoreXmlNamespaces = IgnoreXmlNamespaces;
 
             ConfigService.AddIgnoreRulesBatch(IgnoreRules);
@@ -1388,6 +1404,15 @@
         return string.Equals(NormalizeIdentifier(left), NormalizeIdentifier(right), StringComparison.OrdinalIgnoreCase);
     }
 
+    private string? GetRequestMetadataString(string key)
+    {
+        if (RequestComparisonResult?.Metadata == null || !RequestComparisonResult.Metadata.TryGetValue(key, out var value))
+        {
+            return null;
+        }
+
+        return value?.ToString();
+    }
     private static bool ShouldRenderRawTextDetail(FilePairComparisonResult selectedPair)
     {
         return selectedPair.RawTextDifferences != null ||

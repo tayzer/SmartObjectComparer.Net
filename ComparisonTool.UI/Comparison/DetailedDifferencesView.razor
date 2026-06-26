@@ -87,6 +87,8 @@
                             ContentB="@rawContentB"
                             FileNameA="@SelectedPair.File1Name"
                             FileNameB="@SelectedPair.File2Name"
+                            LabelA="@LabelA"
+                            LabelB="@LabelB"
                             IsTruncatedA="@rawContentTruncatedA"
                             IsTruncatedB="@rawContentTruncatedB"
                             IsLoading="@isLoadingRawContent"
@@ -207,12 +209,12 @@ else if (!DifferenceSummary.AreEqual)
                                         <code style="font-size: 0.85rem;">@context.Item.DisplayPropertyName</code>
                                     </CellTemplate>
                                 </PropertyColumn>
-                                <TemplateColumn Title="Expected (A)" CellClass="diff-expected-cell">
+                                <TemplateColumn Title="@LabelA" CellClass="diff-expected-cell">
                                     <CellTemplate>
                                         <span class="diff-value-expected">@context.Item.ExpectedValue</span>
                                     </CellTemplate>
                                 </TemplateColumn>
-                                <TemplateColumn Title="Actual (B)" CellClass="diff-actual-cell">
+                                <TemplateColumn Title="@LabelB" CellClass="diff-actual-cell">
                                     <CellTemplate>
                                         <span class="diff-value-actual">@context.Item.ActualValue</span>
                                     </CellTemplate>
@@ -278,8 +280,8 @@ else if (!DifferenceSummary.AreEqual)
                 </MudAlert>
                 <MudText Typo="Typo.body2"><strong>Property:</strong> @editingDifferenceItem.SourceDifference.PropertyName</MudText>
                 <MudText Typo="Typo.body2"><strong>Fingerprint Path:</strong> @editingDifferenceItem.GroupKey</MudText>
-                <MudText Typo="Typo.body2"><strong>Expected:</strong> @editingDifferenceItem.ExpectedValue</MudText>
-                <MudText Typo="Typo.body2"><strong>Actual:</strong> @editingDifferenceItem.ActualValue</MudText>
+                <MudText Typo="Typo.body2"><strong>@LabelA:</strong> @editingDifferenceItem.ExpectedValue</MudText>
+                <MudText Typo="Typo.body2"><strong>@LabelB:</strong> @editingDifferenceItem.ActualValue</MudText>
 
                 <MudSelect T="AcceptedDifferenceStatus"
                            @bind-Value="editorStatus"
@@ -354,6 +356,12 @@ else if (!DifferenceSummary.AreEqual)
 
     [Parameter]
     public MultiFolderComparisonResult FolderResult { get; set; }
+
+    [Parameter]
+    public string LabelA { get; set; } = "Expected (A)";
+
+    [Parameter]
+    public string LabelB { get; set; } = "Actual (B)";
 
     private static readonly DialogOptions profileDialogOptions = new()
     {

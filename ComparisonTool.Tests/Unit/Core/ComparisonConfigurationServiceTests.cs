@@ -393,6 +393,142 @@ public class ComparisonConfigurationServiceTests
     }
 
     [TestMethod]
+    public void SetTreatNullAndEmptyCollectionsAsEqual_ShouldUpdateConfiguration()
+    {
+        this.service.GetTreatNullAndEmptyCollectionsAsEqual().ShouldBeFalse();
+
+        this.service.SetTreatNullAndEmptyCollectionsAsEqual(true);
+
+        this.service.GetTreatNullAndEmptyCollectionsAsEqual().ShouldBeTrue();
+    }
+
+    [TestMethod]
+    public void FilterIgnoredDifferences_WithNullAndEmptyCollectionByDefault_ShouldKeepDifference()
+    {
+        var result = this.CreateComparisonResult(new Difference
+        {
+            PropertyName = "Items.Count",
+            Object1Value = null,
+            Object2Value = "0",
+        });
+
+        var filteredResult = this.service.FilterIgnoredDifferences(result);
+
+        filteredResult.Differences.Count.ShouldBe(1);
+    }
+
+    [TestMethod]
+    public void FilterIgnoredDifferences_WithGlobalNullEmptyCollectionOption_ShouldFilterDifference()
+    {
+        var result = this.CreateComparisonResult(new Difference
+        {
+            PropertyName = "Items.Count",
+            Object1Value = null,
+            Object2Value = "0",
+        });
+        this.service.SetTreatNullAndEmptyCollectionsAsEqual(true);
+
+        var filteredResult = this.service.FilterIgnoredDifferences(result);
+
+        filteredResult.Differences.ShouldBeEmpty();
+    }
+
+    [TestMethod]
+    public void FilterIgnoredDifferences_WithScopedNullEmptyCollectionRule_ShouldFilterOnlyMatchingPath()
+    {
+        var result = this.CreateComparisonResult(
+            new Difference
+            {
+                PropertyName = "Order.Items.Count",
+                Object1Value = null,
+                Object2Value = "0",
+            },
+            new Difference
+            {
+                PropertyName = "Order.Tags.Count",
+                Object1Value = null,
+                Object2Value = "0",
+            });
+        this.service.AddIgnoreRule(new IgnoreRule
+        {
+            PropertyPath = "Order.Items",
+            TreatNullAndEmptyCollectionsAsEqual = true,
+        });
+
+        var filteredResult = this.service.FilterIgnoredDifferences(result);
+
+        filteredResult.Differences.Single().PropertyName.ShouldBe("Order.Tags.Count");
+    }
+
+    [TestMethod]
+    public void FilterIgnoredDifferences_WithScopedNullEmptyCollectionRule_ShouldFilterCountDifference()
+    {
+        var result = this.CreateComparisonResult(new Difference
+        {
+            PropertyName = "Order.Items.Count",
+            Object1Value = null,
+            Object2Value = "0",
+        });
+        this.service.AddIgnoreRule(new IgnoreRule
+        {
+            PropertyPath = "Order.Items",
+            TreatNullAndEmptyCollectionsAsEqual = true,
+        });
+
+        var filteredResult = this.service.FilterIgnoredDifferences(result);
+
+        filteredResult.Differences.ShouldBeEmpty();
+    }
+
+    [TestMethod]
+    public void FilterIgnoredDifferences_WithNullAndPopulatedCollection_ShouldKeepDifference()
+    {
+        var result = this.CreateComparisonResult(new Difference
+        {
+            PropertyName = "Items.Count",
+            Object1Value = null,
+            Object2Value = "1",
+        });
+        this.service.SetTreatNullAndEmptyCollectionsAsEqual(true);
+
+        var filteredResult = this.service.FilterIgnoredDifferences(result);
+
+        filteredResult.Differences.Count.ShouldBe(1);
+    }
+
+    [TestMethod]
+    public void FilterIgnoredDifferences_WithNullAndEmptyString_ShouldKeepDifference()
+    {
+        var result = this.CreateComparisonResult(new Difference
+        {
+            PropertyName = "Name",
+            Object1Value = null,
+            Object2Value = string.Empty,
+        });
+        this.service.SetTreatNullAndEmptyCollectionsAsEqual(true);
+
+        var filteredResult = this.service.FilterIgnoredDifferences(result);
+
+        filteredResult.Differences.Count.ShouldBe(1);
+    }
+
+    [TestMethod]
+    public void IgnoreRuleJsonRoundTrip_ShouldPreserveNullEmptyCollectionFlag()
+    {
+        var rule = new IgnoreRule
+        {
+            PropertyPath = "Order.Items",
+            TreatNullAndEmptyCollectionsAsEqual = true,
+        };
+
+        var json = JsonSerializer.Serialize(rule);
+        var deserialized = JsonSerializer.Deserialize<IgnoreRule>(json);
+
+        deserialized.ShouldNotBeNull();
+        deserialized.TreatNullAndEmptyCollectionsAsEqual.ShouldBeTrue();
+    }
+
+    [TestMethod]
     public void AddSmartIgnoreRule_WithValidRule_ShouldAddToSmartRules()
     {
         // Arrange
@@ -519,6 +655,13 @@ public class ComparisonConfigurationServiceTests
         ignoredProperties.Contains("IgnoredProperty").ShouldBeTrue();
     }
 
+    private ComparisonResult CreateComparisonResult(params Difference[] differences)
+    {
+        return new ComparisonResult(this.service.GetCurrentConfig())
+        {
+            Differences = differences.ToList(),
+        };
+    }
     // Test helper classes
     private class TestClass
     {

@@ -262,6 +262,13 @@
                                             Ignore collection ordering
                                         </label>
                                     </div>
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" id="treatNullEmptyCollections"
+                                               @bind="TreatNullAndEmptyCollectionsAsEqual">
+                                        <label class="form-check-label" for="treatNullEmptyCollections">
+                                            Treat null and empty collections as equal
+                                        </label>
+                                    </div>
                                 }
 
                                 <button class="btn btn-success mt-3" @onclick="AddCurrentProperty">
@@ -375,9 +382,11 @@
             <div class="mb-3">
                 <MudText Class="mb-2">Ignore Settings for All Selected Properties:</MudText>
                 <MudCheckBox T="bool" @bind-Value="bulkIgnoreCompletely" Label="Ignore completely" />
-                <MudCheckBox T="bool" @bind-Value="bulkIgnoreCollectionOrder" 
+                <MudCheckBox T="bool" @bind-Value="bulkIgnoreCollectionOrder"
                              Label="Ignore collection ordering (for collection properties)"
                              Disabled="@bulkIgnoreCompletely" />
+                <MudCheckBox T="bool" @bind-Value="bulkTreatNullAndEmptyCollectionsAsEqual"
+                             Label="Treat null and empty collections as equal (for collection properties)" />
             </div>
         }
 
@@ -443,27 +452,29 @@
     // MudDialog visibility state
     private bool showPropertyModal = false;
     private bool showBulkIgnoreModal = false;
-    
+
     // Dialog options
-    private DialogOptions dialogOptionsLarge = new DialogOptions 
-    { 
-        MaxWidth = MaxWidth.Large, 
+    private DialogOptions dialogOptionsLarge = new DialogOptions
+    {
+        MaxWidth = MaxWidth.Large,
         FullWidth = true,
-        CloseOnEscapeKey = true 
+        CloseOnEscapeKey = true
     };
-    private DialogOptions dialogOptionsRegular = new DialogOptions 
-    { 
-        MaxWidth = MaxWidth.Small, 
+    private DialogOptions dialogOptionsRegular = new DialogOptions
+    {
+        MaxWidth = MaxWidth.Small,
         FullWidth = true,
-        CloseOnEscapeKey = true 
+        CloseOnEscapeKey = true
     };
-    
+
     private string selectedProperty;
     private string searchTerm = "";
     private bool IgnoreProperty { get; set; }
     private bool IgnoreCollectionOrder { get; set; }
+    private bool TreatNullAndEmptyCollectionsAsEqual { get; set; }
     private bool bulkIgnoreCompletely { get; set; } = true;
     private bool bulkIgnoreCollectionOrder { get; set; } = false;
+    private bool bulkTreatNullAndEmptyCollectionsAsEqual { get; set; } = false;
     private bool isProcessingBulkIgnore { get; set; } = false;
     private int bulkIgnoreProgress { get; set; } = 0;
     private string bulkIgnoreStatus { get; set; } = "";
@@ -628,12 +639,14 @@
         {
             IgnoreProperty = existingRule.IgnoreCompletely;
             IgnoreCollectionOrder = existingRule.IgnoreCollectionOrder;
+            TreatNullAndEmptyCollectionsAsEqual = existingRule.TreatNullAndEmptyCollectionsAsEqual;
         }
         else
         {
             // Default values when selecting a new property
             IgnoreProperty = false; // Default to NOT ignore completely
             IgnoreCollectionOrder = false;
+            TreatNullAndEmptyCollectionsAsEqual = false;
         }
 
         StateHasChanged();
@@ -644,6 +657,7 @@
         selectedProperty = null;
         IgnoreProperty = false;
         IgnoreCollectionOrder = false;
+        TreatNullAndEmptyCollectionsAsEqual = false;
         selectedProperties.Clear();
         selectAll = false;
     }
@@ -671,7 +685,8 @@
             {
                 PropertyPath = selectedProperty,
                 IgnoreCompletely = IgnoreProperty,
-                IgnoreCollectionOrder = IgnoreCollectionOrder
+                IgnoreCollectionOrder = IgnoreCollectionOrder,
+                TreatNullAndEmptyCollectionsAsEqual = TreatNullAndEmptyCollectionsAsEqual
             };
 
         // Remove existing rule for this property if it exists
@@ -845,6 +860,7 @@
         // Reset bulk ignore settings to defaults
         bulkIgnoreCompletely = true;
         bulkIgnoreCollectionOrder = false;
+        bulkTreatNullAndEmptyCollectionsAsEqual = false;
 
         showBulkIgnoreModal = true;
     }
@@ -882,14 +898,15 @@
                 Console.WriteLine(bulkIgnoreStatus);
 
                                 var batchRules = new List<IgnoreRule>();
-                
+
                 foreach (var propertyPath in batch)
                 {
                     var rule = new IgnoreRule
                         {
                             PropertyPath = propertyPath,
                             IgnoreCompletely = bulkIgnoreCompletely,
-                            IgnoreCollectionOrder = !bulkIgnoreCompletely && bulkIgnoreCollectionOrder && IsCollectionProperty(propertyPath)
+                            IgnoreCollectionOrder = !bulkIgnoreCompletely && bulkIgnoreCollectionOrder && IsCollectionProperty(propertyPath),
+                            TreatNullAndEmptyCollectionsAsEqual = bulkTreatNullAndEmptyCollectionsAsEqual && IsCollectionProperty(propertyPath)
                         };
 
                     // Remove existing rule for this property if it exists
@@ -901,7 +918,7 @@
 
                     IgnoredProperties.Add(rule);
                     batchRules.Add(rule);
-                    
+
                     processedCount++;
                     bulkIgnoreProgress = (int)((double)processedCount / propertiesCount * 100);
                 }

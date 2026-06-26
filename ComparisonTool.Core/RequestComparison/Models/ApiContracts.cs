@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace ComparisonTool.Core.RequestComparison.Models;
 
@@ -16,10 +16,16 @@ public record CreateRequestComparisonJobRequest
     [Url]
     public required string EndpointA { get; init; }
 
+    /// <summary>Gets the display label for endpoint A.</summary>
+    public string? EndpointALabel { get; init; }
+
     /// <summary>Gets the second endpoint URL.</summary>
     [Required]
     [Url]
     public required string EndpointB { get; init; }
+
+    /// <summary>Gets the display label for endpoint B.</summary>
+    public string? EndpointBLabel { get; init; }
 
     /// <summary>Gets the headers for endpoint A.</summary>
     public Dictionary<string, string>? HeadersA { get; init; }
@@ -58,6 +64,9 @@ public record CreateRequestComparisonJobRequest
     /// <summary>Gets a value indicating whether to ignore trailing spaces and tabs at the end of strings.</summary>
     public bool IgnoreTrailingWhitespaceAtEnd { get; init; } = false;
 
+    /// <summary>Gets a value indicating whether null and empty collections are treated as equivalent.</summary>
+    public bool TreatNullAndEmptyCollectionsAsEqual { get; init; } = false;
+
     /// <summary>Gets a value indicating whether to ignore XML namespaces during deserialization.</summary>
     public bool IgnoreXmlNamespaces { get; init; } = true;
 
@@ -90,6 +99,9 @@ public record IgnoreRuleDto
 
     /// <summary>Gets a value indicating whether to ignore collection order for this property.</summary>
     public bool IgnoreCollectionOrder { get; init; } = false;
+
+    /// <summary>Gets a value indicating whether null and empty collections at this path are treated as equivalent.</summary>
+    public bool TreatNullAndEmptyCollectionsAsEqual { get; init; } = false;
 }
 
 /// <summary>
