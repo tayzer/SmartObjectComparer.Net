@@ -153,7 +153,78 @@ public class RequestComparisonAlternateContractTransformationServiceTests : IDis
         effectiveRules.Any(rule => string.Equals(rule.PropertyPath, "CanonicalResponse.SecretToken", StringComparison.Ordinal)).ShouldBeTrue();
     }
 
-    private static ServiceProvider CreateServiceProvider()
+    [TestMethod]
+    public void AddDefaultIgnoreRulesFromJson_WithExportedConfigurationBundle_LoadsRules()
+    {
+        var json = """
+            {
+              "schemaVersion": 1,
+              "globalSettings": {
+                "ignoreCollectionOrder": true,
+                "ignoreStringCase": false,
+                "ignoreTrailingWhitespaceAtEnd": false,
+                "treatNullAndEmptyCollectionsAsEqual": true,
+                "ignoreXmlNamespaces": true
+              },
+              "ignoreRules": [
+                {
+                  "propertyPath": "CanonicalResponse.SecretToken",
+                  "ignoreCompletely": true
+                },
+                {
+                  "propertyPath": "CanonicalResponse.Payloads",
+                  "treatNullAndEmptyCollectionsAsEqual": true
+                }
+              ]
+            }
+            """;
+
+        using var serviceProvider = CreateServiceProvider(builder => builder.AddDefaultIgnoreRulesFromJson(json));
+        var registry = serviceProvider.GetRequiredService<IRequestComparisonAlternateContractProfileRegistry>();
+
+        var profile = registry.Resolve("CanonicalResponse");
+
+        profile.DefaultIgnoreRules.Count.ShouldBe(3);
+        profile.DefaultIgnoreRules.Any(rule =>
+            string.Equals(rule.PropertyPath, "CanonicalResponse.SecretToken", StringComparison.Ordinal) &&
+            rule.IgnoreCompletely).ShouldBeTrue();
+        profile.DefaultIgnoreRules.Any(rule =>
+            string.Equals(rule.PropertyPath, "CanonicalResponse.Payloads", StringComparison.Ordinal) &&
+            rule.TreatNullAndEmptyCollectionsAsEqual).ShouldBeTrue();
+    }
+
+    [TestMethod]
+    public async Task AddDefaultIgnoreRulesFromFile_WithExportedConfigurationBundle_LoadsRules()
+    {
+        var filePath = Path.Combine(Path.GetTempPath(), $"ignore-rules-{Guid.NewGuid():N}.json");
+        createdPaths.Add(filePath);
+        await File.WriteAllTextAsync(filePath, """
+            {
+              "schemaVersion": 1,
+              "globalSettings": {
+                "ignoreCollectionOrder": true
+              },
+              "ignoreRules": [
+                {
+                  "propertyPath": "CanonicalResponse.SecretToken",
+                  "ignoreCollectionOrder": true
+                }
+              ]
+            }
+            """);
+
+        using var serviceProvider = CreateServiceProvider(builder => builder.AddDefaultIgnoreRulesFromFile(filePath));
+        var registry = serviceProvider.GetRequiredService<IRequestComparisonAlternateContractProfileRegistry>();
+
+        var profile = registry.Resolve("CanonicalResponse");
+
+        profile.DefaultIgnoreRules.Count.ShouldBe(2);
+        profile.DefaultIgnoreRules.Any(rule =>
+            string.Equals(rule.PropertyPath, "CanonicalResponse.SecretToken", StringComparison.Ordinal) &&
+            rule.IgnoreCollectionOrder).ShouldBeTrue();
+    }
+
+    private static ServiceProvider CreateServiceProvider(Action<RequestComparisonAlternateContractProfileBuilder<CanonicalRequest, AlternateRequest, CanonicalResponse, AlternateResponse>>? configureProfile = null)
     {
         var services = new ServiceCollection();
         services.AddLogging(builder => builder.AddDebug().SetMinimumLevel(LogLevel.Debug));
@@ -177,16 +248,21 @@ public class RequestComparisonAlternateContractTransformationServiceTests : IDis
                     Name = response.CustomerName,
                     SecretToken = response.Payload.RawToken,
                 },
-                configure: builder => builder
-                    .SupportSourceRequestFormats(SerializationFormat.Xml)
-                    .UseAlternateRequestFormat(SerializationFormat.Json, "application/json")
-                    .UseAlternateResponseFormat(SerializationFormat.Json)
-                    .AddDefaultIgnoreRule(new IgnoreRuleDto
-                    {
-                        PropertyPath = "CanonicalResponse.Name",
-                        IgnoreCompletely = true,
-                    })
-                    .MapCanonicalResponsePropertyPath("CanonicalResponse.SecretToken", "Payload.RawToken"));
+                configure: builder =>
+                {
+                    builder
+                        .SupportSourceRequestFormats(SerializationFormat.Xml)
+                        .UseAlternateRequestFormat(SerializationFormat.Json, "application/json")
+                        .UseAlternateResponseFormat(SerializationFormat.Json)
+                        .AddDefaultIgnoreRule(new IgnoreRuleDto
+                        {
+                            PropertyPath = "CanonicalResponse.Name",
+                            IgnoreCompletely = true,
+                        })
+                        .MapCanonicalResponsePropertyPath("CanonicalResponse.SecretToken", "Payload.RawToken");
+
+                    configureProfile?.Invoke(builder);
+                });
         });
 
         return services.BuildServiceProvider();

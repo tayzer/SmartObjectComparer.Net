@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Xml;
+using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.RequestComparison.AlternateContracts;
 using ComparisonTool.Core.RequestComparison.Models;
 using ComparisonTool.Core.Serialization;
@@ -87,25 +88,33 @@ public sealed class RequestComparisonAlternateContractTransformationService
     /// Gets the effective ignore rules for downstream structured comparison.
     /// Profile-owned defaults are applied before runtime job rules.
     /// </summary>
-    public IReadOnlyList<IgnoreRuleDto> GetEffectiveIgnoreRules(RequestComparisonJob job)
+    public IReadOnlyList<IgnoreRule> GetEffectiveIgnoreRules(RequestComparisonJob job)
     {
         ArgumentNullException.ThrowIfNull(job);
 
         if (!job.UseAlternateContractForEndpointB)
         {
-            return job.IgnoreRules;
+            return job.IgnoreRules.Select(ToIgnoreRule).ToArray();
         }
 
         var profile = ResolveProfile(job);
         if (profile.DefaultIgnoreRules.Count == 0)
         {
-            return job.IgnoreRules;
+            return job.IgnoreRules.Select(ToIgnoreRule).ToArray();
         }
 
         return profile.DefaultIgnoreRules
-            .Concat(job.IgnoreRules)
+            .Concat(job.IgnoreRules.Select(ToIgnoreRule))
             .ToArray();
     }
+
+    private static IgnoreRule ToIgnoreRule(IgnoreRuleDto ignoreRule) => new()
+    {
+        PropertyPath = ignoreRule.PropertyPath,
+        IgnoreCompletely = ignoreRule.IgnoreCompletely,
+        IgnoreCollectionOrder = ignoreRule.IgnoreCollectionOrder,
+        TreatNullAndEmptyCollectionsAsEqual = ignoreRule.TreatNullAndEmptyCollectionsAsEqual,
+    };
 
     /// <summary>
     /// Transforms the uploaded canonical request into the endpoint B request payload.

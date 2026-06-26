@@ -1,6 +1,8 @@
-using ComparisonTool.Core.Serialization;
+using System.Text.Json;
+using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.RequestComparison.Models;
 using ComparisonTool.Core.RequestComparison.Services;
+using ComparisonTool.Core.Serialization;
 using ComparisonTool.Core.Utilities;
 
 namespace ComparisonTool.Core.RequestComparison.AlternateContracts;
@@ -60,7 +62,7 @@ public sealed class RequestComparisonAlternateContractProfile
     /// Gets profile-owned ignore rules applied ahead of runtime request-comparison ignore rules.
     /// These rules are expressed against the canonical comparison model used downstream.
     /// </summary>
-    public IReadOnlyList<IgnoreRuleDto> DefaultIgnoreRules { get; init; } = Array.Empty<IgnoreRuleDto>();
+    public IReadOnlyList<IgnoreRule> DefaultIgnoreRules { get; init; } = Array.Empty<IgnoreRule>();
 
     /// <summary>
     /// Gets the canonical-to-alternate raw response property path translations used for endpoint B masking.
@@ -205,6 +207,11 @@ public sealed class RequestComparisonAlternateContractProfileBuilder<TCanonicalR
     where TCanonicalResponse : class
     where TAlternateResponse : class
 {
+    private static readonly JsonSerializerOptions DefaultIgnoreRulesJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+    };
+
     private readonly HashSet<SerializationFormat> supportedSourceRequestFormats = new() { SerializationFormat.Xml };
     private SerializationFormat alternateRequestFormat = SerializationFormat.Json;
     private string alternateRequestContentType = RequestComparisonAlternateContractProfile.GetDefaultContentType(SerializationFormat.Json);
@@ -214,7 +221,7 @@ public sealed class RequestComparisonAlternateContractProfileBuilder<TCanonicalR
     private string? suggestEndpointA;
     private string? suggestEndpointB;
     private readonly Dictionary<string, string> canonicalToAlternateResponseMaskPathMap = new(StringComparer.OrdinalIgnoreCase);
-    private readonly List<IgnoreRuleDto> defaultIgnoreRules = new();
+    private readonly List<IgnoreRule> defaultIgnoreRules = new();
     private Func<Stream, SerializationFormat, TCanonicalRequest>? deserializeCanonicalRequestOverride;
     private Func<TAlternateRequest, byte[]>? serializeAlternateRequestOverride;
     private Func<Stream, string?, TAlternateResponse>? deserializeAlternateResponseOverride;
@@ -374,7 +381,7 @@ public sealed class RequestComparisonAlternateContractProfileBuilder<TCanonicalR
     /// <summary>
     /// Adds a profile-owned default ignore rule expressed against the canonical comparison model.
     /// </summary>
-    public RequestComparisonAlternateContractProfileBuilder<TCanonicalRequest, TAlternateRequest, TCanonicalResponse, TAlternateResponse> AddDefaultIgnoreRule(IgnoreRuleDto ignoreRule)
+    public RequestComparisonAlternateContractProfileBuilder<TCanonicalRequest, TAlternateRequest, TCanonicalResponse, TAlternateResponse> AddDefaultIgnoreRule(IgnoreRule ignoreRule)
     {
         ArgumentNullException.ThrowIfNull(ignoreRule);
         defaultIgnoreRules.Add(ignoreRule);
@@ -382,13 +389,132 @@ public sealed class RequestComparisonAlternateContractProfileBuilder<TCanonicalR
     }
 
     /// <summary>
+    /// Adds a profile-owned default ignore rule expressed as a request API DTO.
+    /// </summary>
+    public RequestComparisonAlternateContractProfileBuilder<TCanonicalRequest, TAlternateRequest, TCanonicalResponse, TAlternateResponse> AddDefaultIgnoreRule(IgnoreRuleDto ignoreRule)
+    {
+        ArgumentNullException.ThrowIfNull(ignoreRule);
+        return AddDefaultIgnoreRule(ToIgnoreRule(ignoreRule));
+    }
+
+    /// <summary>
     /// Adds multiple profile-owned default ignore rules expressed against the canonical comparison model.
     /// </summary>
-    public RequestComparisonAlternateContractProfileBuilder<TCanonicalRequest, TAlternateRequest, TCanonicalResponse, TAlternateResponse> AddDefaultIgnoreRules(IEnumerable<IgnoreRuleDto> ignoreRules)
+    public RequestComparisonAlternateContractProfileBuilder<TCanonicalRequest, TAlternateRequest, TCanonicalResponse, TAlternateResponse> AddDefaultIgnoreRules(IEnumerable<IgnoreRule> ignoreRules)
     {
         ArgumentNullException.ThrowIfNull(ignoreRules);
         defaultIgnoreRules.AddRange(ignoreRules);
         return this;
+    }
+
+    /// <summary>
+    /// Adds multiple profile-owned default ignore rules expressed as request API DTOs.
+    /// </summary>
+    public RequestComparisonAlternateContractProfileBuilder<TCanonicalRequest, TAlternateRequest, TCanonicalResponse, TAlternateResponse> AddDefaultIgnoreRuleDtos(IEnumerable<IgnoreRuleDto> ignoreRules)
+    {
+        ArgumentNullException.ThrowIfNull(ignoreRules);
+        defaultIgnoreRules.AddRange(ignoreRules.Select(ToIgnoreRule));
+        return this;
+    }
+
+    /// <summary>
+    /// Adds profile-owned default ignore rules from JSON. Supports a rule array, a single rule object, or an exported configuration bundle.
+    /// </summary>
+    public RequestComparisonAlternateContractProfileBuilder<TCanonicalRequest, TAlternateRequest, TCanonicalResponse, TAlternateResponse> AddDefaultIgnoreRulesFromJson(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            throw new ArgumentException("Ignore rules JSON cannot be empty.", nameof(json));
+        }
+
+        defaultIgnoreRules.AddRange(ParseDefaultIgnoreRules(json));
+        return this;
+    }
+
+    /// <summary>
+    /// Adds profile-owned default ignore rules from a JSON file. Supports a rule array, a single rule object, or an exported configuration bundle.
+    /// </summary>
+    public RequestComparisonAlternateContractProfileBuilder<TCanonicalRequest, TAlternateRequest, TCanonicalResponse, TAlternateResponse> AddDefaultIgnoreRulesFromFile(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+        {
+            throw new ArgumentException("Ignore rules file path cannot be empty.", nameof(filePath));
+        }
+
+        return AddDefaultIgnoreRulesFromJson(File.ReadAllText(filePath));
+    }
+
+    private static List<IgnoreRule> ParseDefaultIgnoreRules(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+
+        return root.ValueKind switch
+        {
+            JsonValueKind.Array => DeserializeIgnoreRules(root),
+            JsonValueKind.Object => DeserializeIgnoreRulesObject(root),
+            _ => throw new JsonException("Ignore rules JSON must be an array, rule object, or configuration bundle.")
+        };
+    }
+
+    private static List<IgnoreRule> DeserializeIgnoreRulesObject(JsonElement root)
+    {
+        if (TryGetProperty(root, "ignoreRules", out var ignoreRulesElement))
+        {
+            if (ignoreRulesElement.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                return new List<IgnoreRule>();
+            }
+
+            if (ignoreRulesElement.ValueKind != JsonValueKind.Array)
+            {
+                throw new JsonException("The ignoreRules property must be an array.");
+            }
+
+            return DeserializeIgnoreRules(ignoreRulesElement);
+        }
+
+        if (TryGetProperty(root, "propertyPath", out _))
+        {
+            var rule = JsonSerializer.Deserialize<IgnoreRule>(root.GetRawText(), DefaultIgnoreRulesJsonOptions);
+            return rule == null ? new List<IgnoreRule>() : new List<IgnoreRule> { rule };
+        }
+
+        if (TryGetProperty(root, "globalSettings", out _))
+        {
+            return new List<IgnoreRule>();
+        }
+
+        throw new JsonException("Ignore rules object must contain ignoreRules or propertyPath.");
+    }
+
+    private static List<IgnoreRule> DeserializeIgnoreRules(JsonElement element)
+    {
+        return JsonSerializer.Deserialize<List<IgnoreRule>>(element.GetRawText(), DefaultIgnoreRulesJsonOptions)
+            ?? new List<IgnoreRule>();
+    }
+
+    private static IgnoreRule ToIgnoreRule(IgnoreRuleDto ignoreRule) => new()
+    {
+        PropertyPath = ignoreRule.PropertyPath,
+        IgnoreCompletely = ignoreRule.IgnoreCompletely,
+        IgnoreCollectionOrder = ignoreRule.IgnoreCollectionOrder,
+        TreatNullAndEmptyCollectionsAsEqual = ignoreRule.TreatNullAndEmptyCollectionsAsEqual,
+    };
+
+    private static bool TryGetProperty(JsonElement element, string propertyName, out JsonElement property)
+    {
+        foreach (var candidate in element.EnumerateObject())
+        {
+            if (string.Equals(candidate.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                property = candidate.Value;
+                return true;
+            }
+        }
+
+        property = default;
+        return false;
     }
 
     internal RequestComparisonAlternateContractProfile Build(

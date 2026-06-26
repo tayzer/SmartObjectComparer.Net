@@ -804,18 +804,10 @@ public class RequestComparisonJobService
         xmlDeserializationService.IgnoreXmlNamespaces = job.IgnoreXmlNamespaces;
 
         // Apply ignore rules
-        foreach (var ruleDto in effectiveIgnoreRules)
+        foreach (var rule in effectiveIgnoreRules)
         {
-            var rule = new IgnoreRule
-            {
-                PropertyPath = ruleDto.PropertyPath,
-                IgnoreCompletely = ruleDto.IgnoreCompletely,
-                IgnoreCollectionOrder = ruleDto.IgnoreCollectionOrder,
-                TreatNullAndEmptyCollectionsAsEqual = ruleDto.TreatNullAndEmptyCollectionsAsEqual
-            };
             configService.AddIgnoreRule(rule);
         }
-
         // Apply smart ignore rules
         foreach (var ruleDto in job.SmartIgnoreRules)
         {
