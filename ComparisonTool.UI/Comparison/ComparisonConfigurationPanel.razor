@@ -134,6 +134,32 @@
             }
         </MudStack>
 
+        <!-- Active Global Ignore Settings -->
+        <MudStack Spacing="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.Tune" Size="Size.Small" />
+                <MudText Typo="Typo.subtitle2">Global Ignore Settings</MudText>
+            </MudStack>
+
+            @{
+                var activeGlobalSettings = GetActiveGlobalSettings();
+            }
+            @if (activeGlobalSettings.Any())
+            {
+                <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                    @foreach (var setting in activeGlobalSettings)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="@setting.Color" Icon="@setting.Icon">
+                            @setting.Label
+                        </MudChip>
+                    }
+                </MudStack>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Color="Color.Default">No global ignore settings enabled</MudText>
+            }
+        </MudStack>
         <!-- Ignore Rules List -->
         @if (IgnoreRules.Any())
         {
@@ -240,7 +266,6 @@
                        Size="Size.Small"
                        StartIcon="@Icons.Material.Filled.Download"
                        OnClick="ExportConfiguration" 
-                       Disabled="@(!IgnoreRules.Any())"
                        aria-label="Export configuration">
                 Export Config
             </MudButton>
@@ -436,22 +461,58 @@
         return groups;
     }
 
+    private List<GlobalSettingChip> GetActiveGlobalSettings()
+    {
+        var settings = new List<GlobalSettingChip>();
+        if (IgnoreCollectionOrder)
+        {
+            settings.Add(new GlobalSettingChip("Collection order", Icons.Material.Filled.SwapVert, Color.Warning));
+        }
+
+        if (IgnoreStringCase)
+        {
+            settings.Add(new GlobalSettingChip("String case", Icons.Material.Filled.TextFields, Color.Info));
+        }
+
+        if (IgnoreTrailingWhitespaceAtEnd)
+        {
+            settings.Add(new GlobalSettingChip("Trailing spaces", Icons.Material.Filled.FormatAlignLeft, Color.Info));
+        }
+
+        if (TreatNullAndEmptyCollectionsAsEqual)
+        {
+            settings.Add(new GlobalSettingChip("Null/empty collections", Icons.Material.Filled.DataArray, Color.Info));
+        }
+
+        if (IgnoreXmlNamespaces)
+        {
+            settings.Add(new GlobalSettingChip("XML namespaces", Icons.Material.Filled.Code, Color.Secondary));
+        }
+
+        return settings;
+    }
     // --- Export Logic ---
     private async Task ExportConfiguration()
     {
         importStatusMessage = string.Empty; // Clear any previous import status
-        if (!IgnoreRules.Any())
-        {
-            importStatusMessage = "No rules to export.";
-            importStatusIsError = true;
-            return;
-        }
 
         try
         {
-            // Use a local list from the parameter to ensure we export what's shown
-            var rulesToExport = IgnoreRules;
-            var json = JsonSerializer.Serialize(rulesToExport, new JsonSerializerOptions { WriteIndented = true });
+            var export = new ComparisonConfigurationExport
+            {
+                SchemaVersion = 1,
+                GlobalSettings = new ComparisonGlobalSettingsExport
+                {
+                    IgnoreCollectionOrder = IgnoreCollectionOrder,
+                    IgnoreStringCase = IgnoreStringCase,
+                    IgnoreTrailingWhitespaceAtEnd = IgnoreTrailingWhitespaceAtEnd,
+                    TreatNullAndEmptyCollectionsAsEqual = TreatNullAndEmptyCollectionsAsEqual,
+                    IgnoreXmlNamespaces = IgnoreXmlNamespaces
+                },
+                IgnoreRules = IgnoreRules.ToList()
+            };
+
+            var json = JsonSerializer.Serialize(export, JsonOptions);
             var fileName = $"comparison_config_{DateTime.Now:yyyyMMdd_HHmmss}.json";
 
             await JS.InvokeVoidAsync("saveAsFile", fileName, "application/json", json);
@@ -460,10 +521,8 @@
         {
             importStatusMessage = $"Export failed: {ex.Message}";
             importStatusIsError = true;
-            // Optionally log the full exception
         }
     }
-
     // --- Import Logic ---
     private async Task HandleImportFileSelected(InputFileChangeEventArgs e)
     {
@@ -488,41 +547,42 @@
         try
         {
             // Limit file size (e.g., 1MB)
-            long maxFileSize = 1 * 1024 * 1024; 
+            long maxFileSize = 1 * 1024 * 1024;
             if (file.Size > maxFileSize)
             {
-                 importStatusMessage = $"File size exceeds the limit of {maxFileSize / 1024 / 1024} MB.";
-                 importStatusIsError = true;
-                 return;
+                importStatusMessage = $"File size exceeds the limit of {maxFileSize / 1024 / 1024} MB.";
+                importStatusIsError = true;
+                return;
             }
 
-            // Read and deserialize
-            List<IgnoreRule> importedRules;
             await using var stream = file.OpenReadStream(maxFileSize);
             using var reader = new StreamReader(stream);
             var json = await reader.ReadToEndAsync();
-            
-            importedRules = JsonSerializer.Deserialize<List<IgnoreRule>>(json);
+            var importedConfiguration = ParseImportedConfiguration(json);
 
-            if (importedRules == null || !importedRules.Any())
+            if (importedConfiguration == null)
             {
-                importStatusMessage = "File does not contain valid rules or is empty.";
+                importStatusMessage = "File does not contain a valid comparison configuration.";
                 importStatusIsError = true;
                 return;
+            }
+
+            if (importedConfiguration.GlobalSettings != null)
+            {
+                await ApplyImportedGlobalSettings(importedConfiguration.GlobalSettings);
             }
 
             // Clear existing rules (using the remove callback for each)
             var currentRules = IgnoreRules.ToList(); // Copy to avoid modification issues
             foreach (var rule in currentRules)
             {
-                await OnIgnoreRuleRemoved.InvokeAsync(rule); 
+                await OnIgnoreRuleRemoved.InvokeAsync(rule);
             }
-            
+
             // Add imported rules (using the add callback)
-            foreach (var rule in importedRules)
+            foreach (var rule in importedConfiguration.IgnoreRules)
             {
-                 // Re-create the rule without IgnoreCase
-                await OnIgnoreRuleAdded.InvokeAsync(new IgnoreRule 
+                await OnIgnoreRuleAdded.InvokeAsync(new IgnoreRule
                 {
                     PropertyPath = rule.PropertyPath,
                     IgnoreCompletely = rule.IgnoreCompletely,
@@ -531,7 +591,8 @@
                 });
             }
 
-            importStatusMessage = $"Successfully imported {importedRules.Count} rules.";
+            var globalsMessage = importedConfiguration.GlobalSettings != null ? " and global settings" : string.Empty;
+            importStatusMessage = $"Successfully imported {importedConfiguration.IgnoreRules.Count} rules{globalsMessage}.";
             importStatusIsError = false;
         }
         catch (JsonException jsonEx)
@@ -544,11 +605,57 @@
             importStatusMessage = $"Import failed: {ex.Message}";
             importStatusIsError = true;
         }
-        
+
         // Trigger UI update
         StateHasChanged();
     }
 
+    private async Task ApplyImportedGlobalSettings(ComparisonGlobalSettingsExport globalSettings)
+    {
+        IgnoreCollectionOrder = globalSettings.IgnoreCollectionOrder;
+        await OnIgnoreCollectionOrderChanged.InvokeAsync(globalSettings.IgnoreCollectionOrder);
+
+        IgnoreStringCase = globalSettings.IgnoreStringCase;
+        await OnIgnoreStringCaseChanged.InvokeAsync(globalSettings.IgnoreStringCase);
+
+        IgnoreTrailingWhitespaceAtEnd = globalSettings.IgnoreTrailingWhitespaceAtEnd;
+        await OnIgnoreTrailingWhitespaceAtEndChanged.InvokeAsync(globalSettings.IgnoreTrailingWhitespaceAtEnd);
+
+        TreatNullAndEmptyCollectionsAsEqual = globalSettings.TreatNullAndEmptyCollectionsAsEqual;
+        await OnTreatNullAndEmptyCollectionsAsEqualChanged.InvokeAsync(globalSettings.TreatNullAndEmptyCollectionsAsEqual);
+
+        IgnoreXmlNamespaces = globalSettings.IgnoreXmlNamespaces;
+        await OnIgnoreXmlNamespacesChanged.InvokeAsync(globalSettings.IgnoreXmlNamespaces);
+    }
+
+    private static ImportedComparisonConfiguration? ParseImportedConfiguration(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        return document.RootElement.ValueKind switch
+        {
+            JsonValueKind.Array => new ImportedComparisonConfiguration
+            {
+                IgnoreRules = JsonSerializer.Deserialize<List<IgnoreRule>>(json, JsonOptions) ?? new List<IgnoreRule>()
+            },
+            JsonValueKind.Object => ParseConfigurationBundle(json),
+            _ => null
+        };
+    }
+
+    private static ImportedComparisonConfiguration? ParseConfigurationBundle(string json)
+    {
+        var bundle = JsonSerializer.Deserialize<ComparisonConfigurationExport>(json, JsonOptions);
+        if (bundle == null)
+        {
+            return null;
+        }
+
+        return new ImportedComparisonConfiguration
+        {
+            GlobalSettings = bundle.GlobalSettings,
+            IgnoreRules = bundle.IgnoreRules ?? new List<IgnoreRule>()
+        };
+    }
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -586,5 +693,57 @@
         }
 
         await OnRunComparison.InvokeAsync();
+    }
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true
+    };
+
+    private sealed class GlobalSettingChip
+    {
+        public GlobalSettingChip(string label, string icon, Color color)
+        {
+            Label = label;
+            Icon = icon;
+            Color = color;
+        }
+
+        public string Label { get; }
+
+        public string Icon { get; }
+
+        public Color Color { get; }
+    }
+
+    private sealed class ImportedComparisonConfiguration
+    {
+        public ComparisonGlobalSettingsExport? GlobalSettings { get; set; }
+
+        public List<IgnoreRule> IgnoreRules { get; set; } = new();
+    }
+
+    private sealed class ComparisonConfigurationExport
+    {
+        public int SchemaVersion { get; set; } = 1;
+
+        public ComparisonGlobalSettingsExport? GlobalSettings { get; set; }
+
+        public List<IgnoreRule>? IgnoreRules { get; set; }
+    }
+
+    private sealed class ComparisonGlobalSettingsExport
+    {
+        public bool IgnoreCollectionOrder { get; set; }
+
+        public bool IgnoreStringCase { get; set; }
+
+        public bool IgnoreTrailingWhitespaceAtEnd { get; set; }
+
+        public bool TreatNullAndEmptyCollectionsAsEqual { get; set; }
+
+        public bool IgnoreXmlNamespaces { get; set; }
     }
 }
