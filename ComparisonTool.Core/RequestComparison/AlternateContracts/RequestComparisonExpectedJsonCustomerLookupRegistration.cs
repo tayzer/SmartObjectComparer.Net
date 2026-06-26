@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Xml.Serialization;
+using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.DI;
 using ComparisonTool.Core.RequestComparison.Models;
 using ComparisonTool.Core.RequestComparison.Services;
@@ -136,7 +137,7 @@ public static class RequestComparisonExpectedJsonCustomerLookupRegistration
                         "application/json",
                         null);
                 })
-                .AddDefaultIgnoreRule(new IgnoreRuleDto
+                .AddDefaultIgnoreRule(new IgnoreRule
                 {
                     PropertyPath = $"{ExpectedModelName}.SourceSystem",
                     IgnoreCompletely = true,

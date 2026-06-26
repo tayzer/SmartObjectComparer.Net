@@ -1,3 +1,5 @@
+using ComparisonTool.Core.Comparison.Configuration;
+
 namespace ComparisonTool.Core.RequestComparison.Models;
 
 /// <summary>
@@ -119,7 +121,7 @@ public record RequestComparisonJob
     public bool IgnoreXmlNamespaces { get; set; } = true;
 
     /// <summary>Gets or sets the ignore rules for this job.</summary>
-    public List<IgnoreRuleDto> IgnoreRules { get; set; } = new();
+    public List<IgnoreRule> IgnoreRules { get; set; } = new();
 
     /// <summary>Gets or sets the smart ignore rules for this job.</summary>
     public List<SmartIgnoreRuleDto> SmartIgnoreRules { get; set; } = new();

@@ -94,27 +94,19 @@ public sealed class RequestComparisonAlternateContractTransformationService
 
         if (!job.UseAlternateContractForEndpointB)
         {
-            return job.IgnoreRules.Select(ToIgnoreRule).ToArray();
+            return job.IgnoreRules;
         }
 
         var profile = ResolveProfile(job);
         if (profile.DefaultIgnoreRules.Count == 0)
         {
-            return job.IgnoreRules.Select(ToIgnoreRule).ToArray();
+            return job.IgnoreRules;
         }
 
         return profile.DefaultIgnoreRules
-            .Concat(job.IgnoreRules.Select(ToIgnoreRule))
+            .Concat(job.IgnoreRules)
             .ToArray();
     }
-
-    private static IgnoreRule ToIgnoreRule(IgnoreRuleDto ignoreRule) => new()
-    {
-        PropertyPath = ignoreRule.PropertyPath,
-        IgnoreCompletely = ignoreRule.IgnoreCompletely,
-        IgnoreCollectionOrder = ignoreRule.IgnoreCollectionOrder,
-        TreatNullAndEmptyCollectionsAsEqual = ignoreRule.TreatNullAndEmptyCollectionsAsEqual,
-    };
 
     /// <summary>
     /// Transforms the uploaded canonical request into the endpoint B request payload.

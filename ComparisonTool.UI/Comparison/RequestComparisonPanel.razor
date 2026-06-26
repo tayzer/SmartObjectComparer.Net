@@ -977,14 +977,7 @@
                 IgnoreXmlNamespaces = ignoreXmlNamespaces,
                 EnableSemanticAnalysis = enableSemanticAnalysis,
                 EnableEnhancedStructuralAnalysis = enableEnhancedStructuralAnalysis,
-                IgnoreRules = IgnoreRules.Where(r => !string.IsNullOrWhiteSpace(r.PropertyPath))
-                    .Select(r => new IgnoreRuleDto
-                    {
-                        PropertyPath = r.PropertyPath,
-                        IgnoreCompletely = r.IgnoreCompletely,
-                        IgnoreCollectionOrder = r.IgnoreCollectionOrder,
-                        TreatNullAndEmptyCollectionsAsEqual = r.TreatNullAndEmptyCollectionsAsEqual
-                    }).ToList(),
+                IgnoreRules = IgnoreRules.Where(r => !string.IsNullOrWhiteSpace(r.PropertyPath)).ToList(),
                 MaskRules = MaskRules.Where(r => !string.IsNullOrWhiteSpace(r.PropertyPath))
                     .Select(r => new MaskRuleDto
                     {

@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using ComparisonTool.Cli.Infrastructure;
 using ComparisonTool.Cli.Reporting;
+using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.RequestComparison.AlternateContracts;
 using ComparisonTool.Core.RequestComparison.Models;
 using ComparisonTool.Core.RequestComparison.Services;
@@ -115,7 +116,7 @@ public static partial class RequestCompareCommand
 
         var ignoreRulesFileOption = new Option<FileInfo?>("--ignore-rules")
         {
-            Description = "Path to JSON file containing IgnoreRuleDto definitions",
+            Description = "Path to JSON file containing IgnoreRule definitions",
         };
 
         var maskRulesFileOption = new Option<FileInfo?>("--mask-rules")
@@ -1023,18 +1024,18 @@ public static partial class RequestCompareCommand
 
             if (string.IsNullOrWhiteSpace(json))
             {
-                return IgnoreRulesLoadResult.Success(new List<IgnoreRuleDto>(), new List<SmartIgnoreRuleDto>());
+                return IgnoreRulesLoadResult.Success(new List<IgnoreRule>(), new List<SmartIgnoreRuleDto>());
             }
 
             if (json.TrimStart().StartsWith("[", StringComparison.Ordinal))
             {
-                var rules = JsonSerializer.Deserialize(json, IgnoreRulesJsonContext.Default.ListIgnoreRuleDto) ?? new List<IgnoreRuleDto>();
+                var rules = JsonSerializer.Deserialize(json, IgnoreRulesJsonContext.Default.ListIgnoreRule) ?? new List<IgnoreRule>();
                 return IgnoreRulesLoadResult.Success(rules, new List<SmartIgnoreRuleDto>());
             }
 
             var container = JsonSerializer.Deserialize(json, IgnoreRulesJsonContext.Default.IgnoreRulesContainer) ?? new IgnoreRulesContainer();
             return IgnoreRulesLoadResult.Success(
-                container.IgnoreRules ?? new List<IgnoreRuleDto>(),
+                container.IgnoreRules ?? new List<IgnoreRule>(),
                 container.SmartIgnoreRules ?? new List<SmartIgnoreRuleDto>());
         }
         catch (JsonException ex)
@@ -1277,7 +1278,7 @@ public static partial class RequestCompareCommand
 
     private sealed class IgnoreRulesContainer
     {
-        public List<IgnoreRuleDto>? IgnoreRules { get; init; }
+        public List<IgnoreRule>? IgnoreRules { get; init; }
 
         public List<SmartIgnoreRuleDto>? SmartIgnoreRules { get; init; }
     }
@@ -1288,7 +1289,7 @@ public static partial class RequestCompareCommand
     }
 
     [JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
-    [JsonSerializable(typeof(List<IgnoreRuleDto>))]
+    [JsonSerializable(typeof(List<IgnoreRule>))]
     [JsonSerializable(typeof(List<SmartIgnoreRuleDto>))]
     [JsonSerializable(typeof(List<MaskRuleDto>))]
     [JsonSerializable(typeof(IgnoreRulesContainer))]
@@ -1467,12 +1468,12 @@ public static partial class RequestCompareCommand
 
         public string? ErrorMessage { get; init; }
 
-        public List<IgnoreRuleDto>? IgnoreRules { get; init; }
+        public List<IgnoreRule>? IgnoreRules { get; init; }
 
         public List<SmartIgnoreRuleDto>? SmartIgnoreRules { get; init; }
 
         public static IgnoreRulesLoadResult Success(
-            List<IgnoreRuleDto>? ignoreRules,
+            List<IgnoreRule>? ignoreRules,
             List<SmartIgnoreRuleDto>? smartIgnoreRules)
             => new IgnoreRulesLoadResult
             {

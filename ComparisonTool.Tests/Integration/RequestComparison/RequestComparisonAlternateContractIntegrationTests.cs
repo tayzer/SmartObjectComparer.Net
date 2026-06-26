@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Xml.Serialization;
 using ComparisonTool.Core.Comparison.Results;
+using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.DI;
 using ComparisonTool.Core.RequestComparison.AlternateContracts;
 using ComparisonTool.Core.RequestComparison.Models;
@@ -296,7 +297,7 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
             EndpointBLabel = "Canary JSON",
             ModelName = RequestComparisonAlternateContractSampleRegistration.SampleModelName,
             TreatNullAndEmptyCollectionsAsEqual = true,
-            IgnoreRules = new List<IgnoreRuleDto>
+            IgnoreRules = new List<IgnoreRule>
             {
                 new()
                 {

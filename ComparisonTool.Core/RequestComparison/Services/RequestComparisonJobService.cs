@@ -133,7 +133,7 @@ public class RequestComparisonJobService
             IgnoreTrailingWhitespaceAtEnd = request.IgnoreTrailingWhitespaceAtEnd,
             TreatNullAndEmptyCollectionsAsEqual = request.TreatNullAndEmptyCollectionsAsEqual,
             IgnoreXmlNamespaces = request.IgnoreXmlNamespaces,
-            IgnoreRules = request.IgnoreRules?.ToList() ?? new List<IgnoreRuleDto>(),
+            IgnoreRules = request.IgnoreRules?.ToList() ?? new List<IgnoreRule>(),
             SmartIgnoreRules = request.SmartIgnoreRules?.ToList() ?? new List<SmartIgnoreRuleDto>(),
             MaskRules = request.MaskRules?.ToList() ?? new List<MaskRuleDto>(),
             EnableSemanticAnalysis = request.EnableSemanticAnalysis,
@@ -808,6 +808,7 @@ public class RequestComparisonJobService
         {
             configService.AddIgnoreRule(rule);
         }
+
         // Apply smart ignore rules
         foreach (var ruleDto in job.SmartIgnoreRules)
         {

@@ -80,7 +80,7 @@ public static class FolderCompareCommand
 
         var ignoreRulesFileOption = new Option<FileInfo?>("--ignore-rules")
         {
-            Description = "Path to JSON file containing IgnoreRuleDto definitions",
+            Description = "Path to JSON file containing IgnoreRule definitions",
         };
 
         var outputOption = new Option<DirectoryInfo?>("--output", "-o")
@@ -243,12 +243,7 @@ public static class FolderCompareCommand
         configService.SetIgnoreCollectionOrder(ignoreCollectionOrder);
         configService.SetIgnoreStringCase(ignoreCase);
         configService.SetIgnoreTrailingWhitespaceAtEnd(ignoreTrailingWhitespaceAtEnd);
-        configService.AddIgnoreRulesBatch(ignoreRulesResult.IgnoreRules.Select(rule => new IgnoreRule
-        {
-            PropertyPath = rule.PropertyPath,
-            IgnoreCompletely = rule.IgnoreCompletely,
-            IgnoreCollectionOrder = rule.IgnoreCollectionOrder,
-        }));
+        configService.AddIgnoreRulesBatch(ignoreRulesResult.IgnoreRules);
 
         var progress = new Progress<ComparisonProgress>(p =>
         {
@@ -334,7 +329,7 @@ public static class FolderCompareCommand
     {
         if (fileInfo == null)
         {
-            return IgnoreRulesLoadResult.Success(new List<IgnoreRuleDto>());
+            return IgnoreRulesLoadResult.Success(new List<IgnoreRule>());
         }
 
         if (!fileInfo.Exists)
@@ -350,14 +345,14 @@ public static class FolderCompareCommand
 
             if (document.RootElement.ValueKind == JsonValueKind.Array)
             {
-                var rules = JsonSerializer.Deserialize<List<IgnoreRuleDto>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
-                    ?? new List<IgnoreRuleDto>();
+                var rules = JsonSerializer.Deserialize<List<IgnoreRule>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                    ?? new List<IgnoreRule>();
                 return IgnoreRulesLoadResult.Success(rules);
             }
 
             var container = JsonSerializer.Deserialize<IgnoreRulesContainer>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                 ?? new IgnoreRulesContainer();
-            return IgnoreRulesLoadResult.Success(container.IgnoreRules ?? new List<IgnoreRuleDto>());
+            return IgnoreRulesLoadResult.Success(container.IgnoreRules ?? new List<IgnoreRule>());
         }
         catch (JsonException ex)
         {
@@ -371,7 +366,7 @@ public static class FolderCompareCommand
 
     private sealed class IgnoreRulesContainer
     {
-        public List<IgnoreRuleDto>? IgnoreRules { get; init; }
+        public List<IgnoreRule>? IgnoreRules { get; init; }
     }
 
     private sealed class IgnoreRulesLoadResult
@@ -380,9 +375,9 @@ public static class FolderCompareCommand
 
         public string? ErrorMessage { get; init; }
 
-        public List<IgnoreRuleDto> IgnoreRules { get; init; } = new();
+        public List<IgnoreRule> IgnoreRules { get; init; } = new();
 
-        public static IgnoreRulesLoadResult Success(List<IgnoreRuleDto> ignoreRules) => new()
+        public static IgnoreRulesLoadResult Success(List<IgnoreRule> ignoreRules) => new()
         {
             IsSuccess = true,
             IgnoreRules = ignoreRules,

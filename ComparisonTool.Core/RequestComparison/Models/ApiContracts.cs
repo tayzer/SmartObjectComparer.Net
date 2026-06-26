@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using ComparisonTool.Core.Comparison.Configuration;
 
 namespace ComparisonTool.Core.RequestComparison.Models;
 
@@ -71,7 +72,7 @@ public record CreateRequestComparisonJobRequest
     public bool IgnoreXmlNamespaces { get; init; } = true;
 
     /// <summary>Gets the ignore rules to apply during comparison.</summary>
-    public List<IgnoreRuleDto>? IgnoreRules { get; init; }
+    public List<IgnoreRule>? IgnoreRules { get; init; }
 
     /// <summary>Gets the smart ignore rules to apply during comparison.</summary>
     public List<SmartIgnoreRuleDto>? SmartIgnoreRules { get; init; }
@@ -84,24 +85,6 @@ public record CreateRequestComparisonJobRequest
 
     /// <summary>Gets a value indicating whether to enable enhanced structural analysis.</summary>
     public bool EnableEnhancedStructuralAnalysis { get; init; } = true;
-}
-
-/// <summary>
-/// DTO for ignore rules in API requests.
-/// </summary>
-public record IgnoreRuleDto
-{
-    /// <summary>Gets the property path to ignore.</summary>
-    public string PropertyPath { get; init; } = string.Empty;
-
-    /// <summary>Gets a value indicating whether to ignore the property completely.</summary>
-    public bool IgnoreCompletely { get; init; } = false;
-
-    /// <summary>Gets a value indicating whether to ignore collection order for this property.</summary>
-    public bool IgnoreCollectionOrder { get; init; } = false;
-
-    /// <summary>Gets a value indicating whether null and empty collections at this path are treated as equivalent.</summary>
-    public bool TreatNullAndEmptyCollectionsAsEqual { get; init; } = false;
 }
 
 /// <summary>

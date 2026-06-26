@@ -1,5 +1,6 @@
 using System.Text;
 using System.Xml.Serialization;
+using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.DI;
 using ComparisonTool.Core.RequestComparison.AlternateContracts;
 using ComparisonTool.Core.RequestComparison.Models;
@@ -140,7 +141,7 @@ public class RequestComparisonAlternateContractTransformationServiceTests : IDis
         using var serviceProvider = CreateServiceProvider();
         var transformationService = serviceProvider.GetRequiredService<RequestComparisonAlternateContractTransformationService>();
         var job = CreateJob();
-        job.IgnoreRules.Add(new IgnoreRuleDto
+        job.IgnoreRules.Add(new IgnoreRule
         {
             PropertyPath = "CanonicalResponse.SecretToken",
             IgnoreCompletely = true,
@@ -254,7 +255,7 @@ public class RequestComparisonAlternateContractTransformationServiceTests : IDis
                         .SupportSourceRequestFormats(SerializationFormat.Xml)
                         .UseAlternateRequestFormat(SerializationFormat.Json, "application/json")
                         .UseAlternateResponseFormat(SerializationFormat.Json)
-                        .AddDefaultIgnoreRule(new IgnoreRuleDto
+                        .AddDefaultIgnoreRule(new IgnoreRule
                         {
                             PropertyPath = "CanonicalResponse.Name",
                             IgnoreCompletely = true,

@@ -389,31 +389,12 @@ public sealed class RequestComparisonAlternateContractProfileBuilder<TCanonicalR
     }
 
     /// <summary>
-    /// Adds a profile-owned default ignore rule expressed as a request API DTO.
-    /// </summary>
-    public RequestComparisonAlternateContractProfileBuilder<TCanonicalRequest, TAlternateRequest, TCanonicalResponse, TAlternateResponse> AddDefaultIgnoreRule(IgnoreRuleDto ignoreRule)
-    {
-        ArgumentNullException.ThrowIfNull(ignoreRule);
-        return AddDefaultIgnoreRule(ToIgnoreRule(ignoreRule));
-    }
-
-    /// <summary>
     /// Adds multiple profile-owned default ignore rules expressed against the canonical comparison model.
     /// </summary>
     public RequestComparisonAlternateContractProfileBuilder<TCanonicalRequest, TAlternateRequest, TCanonicalResponse, TAlternateResponse> AddDefaultIgnoreRules(IEnumerable<IgnoreRule> ignoreRules)
     {
         ArgumentNullException.ThrowIfNull(ignoreRules);
         defaultIgnoreRules.AddRange(ignoreRules);
-        return this;
-    }
-
-    /// <summary>
-    /// Adds multiple profile-owned default ignore rules expressed as request API DTOs.
-    /// </summary>
-    public RequestComparisonAlternateContractProfileBuilder<TCanonicalRequest, TAlternateRequest, TCanonicalResponse, TAlternateResponse> AddDefaultIgnoreRuleDtos(IEnumerable<IgnoreRuleDto> ignoreRules)
-    {
-        ArgumentNullException.ThrowIfNull(ignoreRules);
-        defaultIgnoreRules.AddRange(ignoreRules.Select(ToIgnoreRule));
         return this;
     }
 
@@ -493,14 +474,6 @@ public sealed class RequestComparisonAlternateContractProfileBuilder<TCanonicalR
         return JsonSerializer.Deserialize<List<IgnoreRule>>(element.GetRawText(), DefaultIgnoreRulesJsonOptions)
             ?? new List<IgnoreRule>();
     }
-
-    private static IgnoreRule ToIgnoreRule(IgnoreRuleDto ignoreRule) => new()
-    {
-        PropertyPath = ignoreRule.PropertyPath,
-        IgnoreCompletely = ignoreRule.IgnoreCompletely,
-        IgnoreCollectionOrder = ignoreRule.IgnoreCollectionOrder,
-        TreatNullAndEmptyCollectionsAsEqual = ignoreRule.TreatNullAndEmptyCollectionsAsEqual,
-    };
 
     private static bool TryGetProperty(JsonElement element, string propertyName, out JsonElement property)
     {
