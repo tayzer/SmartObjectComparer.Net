@@ -38,8 +38,18 @@
     </ItemGroup>
 
     <PropertyGroup>
+        <BlazorReportProject Condition="'$(BlazorReportProject)' == ''">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\ComparisonTool.Report\ComparisonTool.Report.csproj'))</BlazorReportProject>
+        <BlazorReportPublishDir Condition="'$(BlazorReportPublishDir)' == ''">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\ComparisonTool.Report\bin\publish\'))</BlazorReportPublishDir>
         <BlazorReportAssetsSourceDir Condition="'$(BlazorReportAssetsSourceDir)' == ''">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\ComparisonTool.Report\bin\publish\wwwroot\'))</BlazorReportAssetsSourceDir>
     </PropertyGroup>
+
+    <Target Name="PublishBlazorReportAssets" BeforeTargets="CopyBlazorReportAssetsToBuildOutput;CopyBlazorReportAssetsToPublishOutput" Condition="'$(SkipBlazorReportPublish)' != 'true' AND Exists('$(BlazorReportProject)')">
+        <Message Text="Publishing Blazor report assets from $(BlazorReportProject) -&gt; $(BlazorReportPublishDir)" Importance="High" />
+        <MSBuild Projects="$(BlazorReportProject)"
+                 Targets="Publish"
+                 Properties="Configuration=$(Configuration);PublishDir=$(BlazorReportPublishDir)"
+                 RemoveProperties="RuntimeIdentifier;SelfContained;PublishSingleFile;PublishReadyToRun;IncludeAllContentForSelfExtract" />
+    </Target>
 
     <Target Name="CopyBlazorReportAssetsToBuildOutput" AfterTargets="Build" Condition="Exists('$(BlazorReportAssetsSourceDir)')">
         <ItemGroup>
