@@ -7,6 +7,7 @@ using ComparisonTool.Cli.Infrastructure;
 using ComparisonTool.Cli.Reporting;
 using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Configuration;
+using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.RequestComparison.AlternateContracts;
 using ComparisonTool.Core.RequestComparison.Models;
 using ComparisonTool.Core.RequestComparison.Services;
@@ -627,7 +628,10 @@ public static partial class RequestCompareCommand
         if (!string.IsNullOrWhiteSpace(options.SoapAction))
         {
             headersA["SOAPAction"] = options.SoapAction;
-            headersB["SOAPAction"] = options.SoapAction;
+            if (!ShouldUseAlternateContract(options))
+            {
+                headersB["SOAPAction"] = options.SoapAction;
+            }
         }
 
         var endpointAFileHeaders = await LoadHeaderFileAsync(options.HeadersAFile, cancellationToken).ConfigureAwait(false);
@@ -809,6 +813,7 @@ public static partial class RequestCompareCommand
             Console.WriteLine($"  Endpoint B request Content-Type: {alternateProfile.AlternateRequestContentType}");
         }
 
+        PrintRulesSummary(ignoreRulesResult, maskRulesResult, alternateProfile);
         PrintHeaderSummary("Headers A", headersResult.HeadersA);
         PrintHeaderSummary("Headers B", headersResult.HeadersB);
         Console.WriteLine();
@@ -888,6 +893,8 @@ public static partial class RequestCompareCommand
             return 1;
         }
 
+        PrintExecutionOutcomeSummary(result);
+
         var reportContext = new ReportContext
         {
             Result = result,
@@ -941,6 +948,22 @@ public static partial class RequestCompareCommand
         }
 
         return result.AllEqual ? 0 : 2;
+    }
+
+    private static void PrintExecutionOutcomeSummary(MultiFolderComparisonResult result)
+    {
+        if (!result.Metadata.TryGetValue("ExecutionOutcomeSummary", out var summaryObject) ||
+            summaryObject is not ExecutionOutcomeSummary summary)
+        {
+            return;
+        }
+
+        Console.WriteLine("Request outcome summary:");
+        Console.WriteLine($"  Both 2xx structured pairs:     {summary.BothSuccess}");
+        Console.WriteLine($"  Status-code mismatch raw pairs: {summary.StatusCodeMismatch}");
+        Console.WriteLine($"  Both non-2xx raw pairs:         {summary.BothNonSuccess}");
+        Console.WriteLine($"  Failed pairs:                   {summary.OneOrBothFailed}");
+        Console.WriteLine();
     }
 
     /// <summary>
@@ -1268,6 +1291,21 @@ public static partial class RequestCompareCommand
         }
 
         Console.WriteLine($"  {label}: {headers.Count} ({string.Join(", ", headers.Keys.OrderBy(key => key, StringComparer.OrdinalIgnoreCase))})");
+    }
+
+    private static void PrintRulesSummary(
+        IgnoreRulesLoadResult ignoreRulesResult,
+        MaskRulesLoadResult maskRulesResult,
+        RequestComparisonAlternateContractProfile? alternateProfile)
+    {
+        var ignoreRuleCount = ignoreRulesResult.IgnoreRules?.Count ?? 0;
+        var profileIgnoreRuleCount = alternateProfile?.DefaultIgnoreRules.Count ?? 0;
+        var smartIgnoreRuleCount = ignoreRulesResult.SmartIgnoreRules?.Count ?? 0;
+        var maskRuleCount = maskRulesResult.MaskRules?.Count ?? 0;
+
+        Console.WriteLine($"  Ignore rules: {ignoreRuleCount} runtime + {profileIgnoreRuleCount} profile default");
+        Console.WriteLine($"  Smart ignore rules: {smartIgnoreRuleCount}");
+        Console.WriteLine($"  Mask rules: {maskRuleCount}");
     }
 
     private static string BuildEndpointLabel(string url)

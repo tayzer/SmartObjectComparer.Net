@@ -178,6 +178,7 @@ public sealed class RequestCompareCommandTests : IDisposable
         result.ErrorMessage!.ShouldContain("missing-profile");
         result.AvailableProfileIds.ShouldBe(new[] { "profile-a", "profile-b" });
     }
+
     [TestMethod]
     public async Task BuildHeadersAsync_AppliesEndpointDefaultsAndCliPrecedence()
     {
@@ -258,6 +259,28 @@ public sealed class RequestCompareCommandTests : IDisposable
         result.HeadersB["SOAPAction"].ShouldBe("urn:test");
         result.HeadersA["X-A-Only"].ShouldBe("from-file");
         result.HeadersB["X-B-Only"].ShouldBe("from-file");
+    }
+
+    [TestMethod]
+    public async Task BuildHeadersAsync_DoesNotApplySoapActionToEndpointBInAlternateContractMode()
+    {
+        var options = new RequestCompareCommand.RequestCompareCliOptions
+        {
+            RequestDirectory = new DirectoryInfo(Path.GetTempPath()),
+            ModelName = "Model",
+            AlternateContractProfileId = "profile-a",
+            SoapAction = "urn:test",
+        };
+
+        var result = await RequestCompareCommand.BuildHeadersAsync(
+            options,
+            endpointA: null,
+            endpointB: null,
+            CancellationToken.None);
+
+        result.IsSuccess.ShouldBeTrue();
+        result.HeadersA["SOAPAction"].ShouldBe("urn:test");
+        result.HeadersB.ContainsKey("SOAPAction").ShouldBeFalse();
     }
 
     [TestMethod]
