@@ -218,6 +218,54 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
     }
 
     [TestMethod]
+    public async Task ExecuteJobAsync_WithRequestAnalysisEnabled_PopulatesFinalReportAnalysisMetadata()
+    {
+        var handler = new AdvancedAlternateContractTestHttpMessageHandler();
+        var spyState = new SpyComparisonServiceState();
+        using var serviceProvider = CreateAdvancedServiceProvider(
+            handler,
+            configureServices: services =>
+            {
+                services.AddSingleton(spyState);
+                services.Replace(ServiceDescriptor.Scoped<IComparisonService>(provider =>
+                    new SpyComparisonService(CreateInnerComparisonService(provider), provider.GetRequiredService<SpyComparisonServiceState>())));
+            });
+        var jobService = serviceProvider.GetRequiredService<RequestComparisonJobService>();
+
+        var batchId = Guid.NewGuid().ToString("N");
+        CreateAdvancedRequestBatch(batchId);
+
+        var job = jobService.CreateJob(new CreateRequestComparisonJobRequest
+        {
+            RequestBatchId = batchId,
+            EndpointA = "https://endpoint-a.test/customer-lookup",
+            EndpointB = "https://endpoint-b.test/customer-lookup",
+            ModelName = AdvancedExpectedModelName,
+            UseAlternateContractForEndpointB = true,
+            AlternateContractProfileId = AdvancedProfileId,
+            IgnoreXmlNamespaces = true,
+            MaxConcurrency = 2,
+            TimeoutMs = 10000,
+            EnableSemanticAnalysis = true,
+            EnableEnhancedStructuralAnalysis = true,
+        });
+
+        createdDirectories.Add(Path.Combine(Path.GetTempPath(), "ComparisonToolJobs", job.JobId));
+
+        await jobService.ExecuteJobAsync(job.JobId);
+
+        var result = jobService.GetResult(job.JobId);
+        result.ShouldNotBeNull();
+        result.AllEqual.ShouldBeFalse();
+        result.Metadata.ContainsKey("PatternAnalysis").ShouldBeTrue();
+        result.Metadata.ContainsKey("SemanticAnalysis").ShouldBeTrue();
+        result.Metadata.ContainsKey("EnhancedStructuralAnalysis").ShouldBeTrue();
+        spyState.PatternAnalysisCalls.ShouldBe(1);
+        spyState.SemanticAnalysisCalls.ShouldBe(1);
+        spyState.EnhancedStructuralAnalysisCalls.ShouldBe(1);
+    }
+
+    [TestMethod]
     public async Task ExecuteJobAsync_WithAlternateContractAndDuplicateRequestFileNames_PreservesOriginalRequestRelativePaths()
     {
         var handler = new AdvancedAlternateContractTestHttpMessageHandler();
@@ -1062,12 +1110,15 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
     {
         private int patternAnalysisCalls;
         private int semanticAnalysisCalls;
+        private int enhancedStructuralAnalysisCalls;
 
         public int PatternAnalysisCalls => patternAnalysisCalls;
         public int SemanticAnalysisCalls => semanticAnalysisCalls;
+        public int EnhancedStructuralAnalysisCalls => enhancedStructuralAnalysisCalls;
 
         public void RecordPatternAnalysis() => Interlocked.Increment(ref patternAnalysisCalls);
         public void RecordSemanticAnalysis() => Interlocked.Increment(ref semanticAnalysisCalls);
+        public void RecordEnhancedStructuralAnalysis() => Interlocked.Increment(ref enhancedStructuralAnalysisCalls);
     }
 
     private sealed class SpyComparisonService : IComparisonService
@@ -1159,8 +1210,11 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
 
         public Task<EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult> AnalyzeStructualPatternsAsync(
             MultiFolderComparisonResult folderResult,
-            CancellationToken cancellationToken = default) =>
-            inner.AnalyzeStructualPatternsAsync(folderResult, cancellationToken);
+            CancellationToken cancellationToken = default)
+        {
+            state.RecordEnhancedStructuralAnalysis();
+            return inner.AnalyzeStructualPatternsAsync(folderResult, cancellationToken);
+        }
     }
 
     private sealed class MaterializationConcurrencyTracker

@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using ComparisonTool.Cli.Infrastructure;
 using ComparisonTool.Cli.Reporting;
+using ComparisonTool.Core.Comparison.Analysis;
 using ComparisonTool.Core.Comparison.Configuration;
 using ComparisonTool.Core.RequestComparison.AlternateContracts;
 using ComparisonTool.Core.RequestComparison.Models;
@@ -110,6 +111,13 @@ public static partial class RequestCompareCommand
         var semanticAnalysisOption = new Option<bool>("--semantic-analysis")
         {
             Description = "Enable semantic difference analysis",
+            Arity = ArgumentArity.ZeroOrOne,
+            DefaultValueFactory = _ => true,
+        };
+
+        var enhancedStructuralAnalysisOption = new Option<bool>("--enhanced-structural-analysis")
+        {
+            Description = "Enable enhanced structural analysis in reports",
             Arity = ArgumentArity.ZeroOrOne,
             DefaultValueFactory = _ => true,
         };
@@ -233,6 +241,7 @@ public static partial class RequestCompareCommand
             treatNullEmptyCollectionsOption,
             ignoreNamespacesOption,
             semanticAnalysisOption,
+            enhancedStructuralAnalysisOption,
             ignoreRulesFileOption,
             maskRulesFileOption,
             contentTypeOption,
@@ -275,6 +284,7 @@ public static partial class RequestCompareCommand
                 TreatNullAndEmptyCollectionsAsEqual = parseResult.GetValue(treatNullEmptyCollectionsOption),
                 IgnoreXmlNamespaces = parseResult.GetValue(ignoreNamespacesOption),
                 EnableSemanticAnalysis = parseResult.GetValue(semanticAnalysisOption),
+                EnableEnhancedStructuralAnalysis = parseResult.GetValue(enhancedStructuralAnalysisOption),
                 IgnoreRulesFile = parseResult.GetValue(ignoreRulesFileOption),
                 MaskRulesFile = parseResult.GetValue(maskRulesFileOption),
                 ContentTypeOverride = parseResult.GetValue(contentTypeOption),
@@ -824,6 +834,7 @@ public static partial class RequestCompareCommand
             TreatNullAndEmptyCollectionsAsEqual = options.TreatNullAndEmptyCollectionsAsEqual,
             IgnoreXmlNamespaces = options.IgnoreXmlNamespaces,
             EnableSemanticAnalysis = options.EnableSemanticAnalysis,
+            EnableEnhancedStructuralAnalysis = options.EnableEnhancedStructuralAnalysis,
             IgnoreRules = ignoreRulesResult.IgnoreRules,
             SmartIgnoreRules = ignoreRulesResult.SmartIgnoreRules,
             MaskRules = maskRulesResult.MaskRules,
@@ -894,6 +905,10 @@ public static partial class RequestCompareCommand
             DisableTruncation = options.DisableTruncation,
         };
 
+        var enhancedAnalysis = result.Metadata.TryGetValue("EnhancedStructuralAnalysis", out var enhancedAnalysisObj)
+            ? enhancedAnalysisObj as EnhancedStructuralDifferenceAnalyzer.EnhancedStructuralAnalysisResult
+            : null;
+
         var resolvedOutputDir = options.OutputDirectory?.FullName ?? Directory.GetCurrentDirectory();
         var outputTimestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
         Directory.CreateDirectory(resolvedOutputDir);
@@ -912,7 +927,7 @@ public static partial class RequestCompareCommand
                     break;
                 case OutputFormat.Html:
                     var blazorDir = Path.Combine(resolvedOutputDir, $"request-comparison-{outputTimestamp}");
-                    var htmlPath = await BlazorReportWriter.WriteAsync(reportContext, blazorDir).ConfigureAwait(false);
+                    var htmlPath = await BlazorReportWriter.WriteAsync(reportContext, blazorDir, enhancedAnalysis).ConfigureAwait(false);
                     Console.WriteLine($"  HTML report: {htmlPath}");
                     Console.WriteLine($"  Local view:  run {Path.Combine(blazorDir, "serve.cmd")}");
                     break;
@@ -1323,6 +1338,8 @@ public static partial class RequestCompareCommand
         public bool IgnoreXmlNamespaces { get; init; }
 
         public bool EnableSemanticAnalysis { get; init; }
+
+        public bool EnableEnhancedStructuralAnalysis { get; init; }
 
         public FileInfo? IgnoreRulesFile { get; init; }
 

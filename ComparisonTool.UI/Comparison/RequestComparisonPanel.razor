@@ -187,10 +187,14 @@
                                     Enhanced structural analysis is off by default for large runs because it can add significant time and memory use. You can enable it manually here.
                                 </MudAlert>
                             }
-                            <MudSwitch @bind-Value="enableSemanticAnalysis"
+                            <MudSwitch T="bool"
+                                       Value="enableSemanticAnalysis"
+                                       ValueChanged="@((bool value) => HandleSemanticAnalysisChanged(value))"
                                        Label="Enable Semantic Analysis"
                                        Color="Color.Success" />
-                            <MudSwitch @bind-Value="enableEnhancedStructuralAnalysis"
+                            <MudSwitch T="bool"
+                                       Value="enableEnhancedStructuralAnalysis"
+                                       ValueChanged="@((bool value) => HandleEnhancedStructuralAnalysisChanged(value))"
                                        Label="Enable Enhanced Structural Analysis"
                                        Color="Color.Success" />
                         </MudStack>
@@ -463,6 +467,10 @@
     [Parameter] public EventCallback<string> SharedSelectedModelNameChanged { get; set; }
     [Parameter] public List<MaskRuleDto> MaskRules { get; set; } = new();
     [Parameter] public EventCallback OnAcceptedDifferenceProfilesChanged { get; set; }
+    [Parameter] public bool EnableSemanticAnalysis { get; set; } = true;
+    [Parameter] public EventCallback<bool> OnEnableSemanticAnalysisChanged { get; set; }
+    [Parameter] public bool EnableEnhancedStructuralAnalysis { get; set; } = true;
+    [Parameter] public EventCallback<bool> OnEnableEnhancedStructuralAnalysisChanged { get; set; }
     private const string CustomEndpointValue = "__custom__";
 
     private List<IBrowserFile>? selectedFiles;
@@ -582,12 +590,40 @@
 
     protected override void OnParametersSet()
     {
+        if (enableSemanticAnalysis != EnableSemanticAnalysis)
+        {
+            enableSemanticAnalysis = EnableSemanticAnalysis;
+        }
+
+        if (enableEnhancedStructuralAnalysis != EnableEnhancedStructuralAnalysis)
+        {
+            enableEnhancedStructuralAnalysis = EnableEnhancedStructuralAnalysis;
+        }
+
         if (!string.IsNullOrWhiteSpace(SharedSelectedModelName)
             && !string.Equals(selectedModelName, SharedSelectedModelName, StringComparison.Ordinal))
         {
             selectedModelName = SharedSelectedModelName;
             RefreshAlternateContractProfiles();
         }
+    }
+
+    private Task HandleSemanticAnalysisChanged(bool value)
+    {
+        enableSemanticAnalysis = value;
+        return OnEnableSemanticAnalysisChanged.InvokeAsync(value);
+    }
+
+    private Task HandleEnhancedStructuralAnalysisChanged(bool value)
+    {
+        enableEnhancedStructuralAnalysis = value;
+        return OnEnableEnhancedStructuralAnalysisChanged.InvokeAsync(value);
+    }
+
+    private void SetEnableEnhancedStructuralAnalysis(bool value)
+    {
+        enableEnhancedStructuralAnalysis = value;
+        _ = OnEnableEnhancedStructuralAnalysisChanged.InvokeAsync(value);
     }
 
     private void ApplyRequestBatchQueryPrefill()
@@ -615,7 +651,7 @@
         if (uploadedCount >= EffectiveLargeBatchThreshold)
         {
             maxConcurrency = EffectiveLargeBatchDefaultConcurrency;
-            enableEnhancedStructuralAnalysis = false;
+            SetEnableEnhancedStructuralAnalysis(false);
             largeBatchDefaultsApplied = true;
         }
 
@@ -1100,47 +1136,58 @@
 
         return endpointUrl;
     }
+
     private void OnEndpointAChanged(string value)
     {
         selectedEndpointA = value;
-        if (value != CustomEndpointValue)
+        if (string.Equals(value, CustomEndpointValue, StringComparison.Ordinal))
         {
-            endpointA = value;
+            contentTypeOverride = null;
+            headersA.Clear();
+            return;
+        }
 
-            var option = availableEndpoints.FirstOrDefault(e => e.Url == value);
-            if (option != null)
-            {
-                contentTypeOverride = string.IsNullOrWhiteSpace(option.ContentType)
-                    ? null
-                    : option.ContentType;
+        endpointA = value;
+        contentTypeOverride = null;
+        headersA.Clear();
 
-                headersA.Clear();
+        var option = availableEndpoints.FirstOrDefault(e => string.Equals(e.Url, value, StringComparison.OrdinalIgnoreCase));
+        if (option == null)
+        {
+            return;
+        }
 
-                foreach (var header in option.DefaultHeaders ?? Enumerable.Empty<KeyValuePair<string, string>>())
-                {
-                    headersA.Add(new HeaderPair { Key = header.Key, Value = header.Value });
-                }
-            }
+        contentTypeOverride = string.IsNullOrWhiteSpace(option.ContentType)
+            ? null
+            : option.ContentType;
+
+        foreach (var header in option.DefaultHeaders ?? Enumerable.Empty<KeyValuePair<string, string>>())
+        {
+            headersA.Add(new HeaderPair { Key = header.Key, Value = header.Value });
         }
     }
 
     private void OnEndpointBChanged(string value)
     {
         selectedEndpointB = value;
-        if (value != CustomEndpointValue)
+        if (string.Equals(value, CustomEndpointValue, StringComparison.Ordinal))
         {
-            endpointB = value;
+            headersB.Clear();
+            return;
+        }
 
-            var option = availableEndpoints.FirstOrDefault(e => e.Url == value);
-            if (option != null)
-            {
-                headersB.Clear();
+        endpointB = value;
+        headersB.Clear();
 
-                foreach (var header in option.DefaultHeaders ?? Enumerable.Empty<KeyValuePair<string, string>>())
-                {
-                    headersB.Add(new HeaderPair { Key = header.Key, Value = header.Value });
-                }
-            }
+        var option = availableEndpoints.FirstOrDefault(e => string.Equals(e.Url, value, StringComparison.OrdinalIgnoreCase));
+        if (option == null)
+        {
+            return;
+        }
+
+        foreach (var header in option.DefaultHeaders ?? Enumerable.Empty<KeyValuePair<string, string>>())
+        {
+            headersB.Add(new HeaderPair { Key = header.Key, Value = header.Value });
         }
     }
 
@@ -1198,7 +1245,7 @@
         }
 
         maxConcurrency = EffectiveLargeBatchDefaultConcurrency;
-        enableEnhancedStructuralAnalysis = false;
+        SetEnableEnhancedStructuralAnalysis(false);
         largeBatchDefaultsApplied = true;
     }
 

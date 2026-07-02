@@ -382,32 +382,22 @@ public class RequestComparisonJobService
             await PopulateFocusedRawContentAsync(job, comparisonResult, focusedProgress, cancellationToken).ConfigureAwait(false);
             focusedRawContentMs = ToMilliseconds(Stopwatch.GetElapsedTime(focusedRawContentStart));
 
-            await PublishProgressAsync(jobId, ComparisonPhase.Finalizing, 99, "Finalizing comparison result metadata...", executedCount, requests.Count, forcePublish: true);
             var finalizationStart = Stopwatch.GetTimestamp();
 
-            comparisonResult.Metadata["IgnoreCollectionOrder"] = job.IgnoreCollectionOrder;
-            comparisonResult.Metadata["TreatNullAndEmptyCollectionsAsEqual"] = job.TreatNullAndEmptyCollectionsAsEqual;
-            comparisonResult.Metadata["EndpointA"] = job.EndpointA.ToString();
-            comparisonResult.Metadata["EndpointB"] = job.EndpointB.ToString();
-            comparisonResult.Metadata["EndpointALabel"] = GetEndpointLabel(job.EndpointALabel, job.EndpointA);
-            comparisonResult.Metadata["EndpointBLabel"] = GetEndpointLabel(job.EndpointBLabel, job.EndpointB);
-            comparisonResult.Metadata["RequestComparisonJobId"] = jobId;
-            comparisonResult.Metadata["ExecutionOutcomeSummary"] = outcomeSummary;
-            comparisonResult.Metadata["LargeBatchMode"] = job.LargeBatchMode;
-            comparisonResult.Metadata["LargeBatchChunkSize"] = job.LargeBatchChunkSize;
-            comparisonResult.Metadata["LargeBatchTotalChunks"] = job.LargeBatchTotalChunks;
-            comparisonResult.Metadata["LargeBatchProcessedChunks"] = job.LargeBatchProcessedChunks;
-            comparisonResult.Metadata["UseAlternateContractForEndpointB"] = job.UseAlternateContractForEndpointB;
-            comparisonResult.Metadata["AlternateContractProfileId"] = job.AlternateContractProfileId;
-            if (alternateContractProfile != null)
-            {
-                comparisonResult.Metadata["AlternateContractCanonicalResponseFormat"] = alternateContractProfile.CanonicalResponseFormat.ToString();
-                comparisonResult.Metadata["AlternateContractDefaultIgnoreRuleCount"] = alternateContractProfile.DefaultIgnoreRules.Count;
-            }
-
-            comparisonResult.Metadata["ExecutionResults"] = failedExecutionRecords;
+            PopulateRequestResultMetadata(
+                comparisonResult,
+                job,
+                jobId,
+                outcomeSummary,
+                alternateContractProfile,
+                failedExecutionRecords);
 
             finalizationMs = ToMilliseconds(Stopwatch.GetElapsedTime(finalizationStart));
+
+            await GenerateRequestAnalysisAsync(job, comparisonResult, executedCount, requests.Count, cancellationToken)
+                .ConfigureAwait(false);
+
+            await PublishProgressAsync(jobId, ComparisonPhase.Finalizing, 99, "Finalizing comparison result metadata...", executedCount, requests.Count, forcePublish: true);
             totalStopwatch.Stop();
             comparisonResult.Metadata[RequestComparisonRunTimings.MetadataKey] = new RequestComparisonRunTimings
             {
@@ -456,6 +446,102 @@ public class RequestComparisonJobService
         }
     }
 
+    private static void PopulateRequestResultMetadata(
+        MultiFolderComparisonResult comparisonResult,
+        RequestComparisonJob job,
+        string jobId,
+        ExecutionOutcomeSummary outcomeSummary,
+        RequestComparisonAlternateContractProfile? alternateContractProfile,
+        IReadOnlyList<RequestExecutionFailureMetadata> failedExecutionRecords)
+    {
+        comparisonResult.Metadata["IgnoreCollectionOrder"] = job.IgnoreCollectionOrder;
+        comparisonResult.Metadata["TreatNullAndEmptyCollectionsAsEqual"] = job.TreatNullAndEmptyCollectionsAsEqual;
+        comparisonResult.Metadata["EndpointA"] = job.EndpointA.ToString();
+        comparisonResult.Metadata["EndpointB"] = job.EndpointB.ToString();
+        comparisonResult.Metadata["EndpointALabel"] = GetEndpointLabel(job.EndpointALabel, job.EndpointA);
+        comparisonResult.Metadata["EndpointBLabel"] = GetEndpointLabel(job.EndpointBLabel, job.EndpointB);
+        comparisonResult.Metadata["RequestComparisonJobId"] = jobId;
+        comparisonResult.Metadata["ExecutionOutcomeSummary"] = outcomeSummary;
+        comparisonResult.Metadata["LargeBatchMode"] = job.LargeBatchMode;
+        comparisonResult.Metadata["LargeBatchChunkSize"] = job.LargeBatchChunkSize;
+        comparisonResult.Metadata["LargeBatchTotalChunks"] = job.LargeBatchTotalChunks;
+        comparisonResult.Metadata["LargeBatchProcessedChunks"] = job.LargeBatchProcessedChunks;
+        comparisonResult.Metadata["UseAlternateContractForEndpointB"] = job.UseAlternateContractForEndpointB;
+        comparisonResult.Metadata["AlternateContractProfileId"] = job.AlternateContractProfileId!;
+        if (alternateContractProfile != null)
+        {
+            comparisonResult.Metadata["AlternateContractCanonicalResponseFormat"] = alternateContractProfile.CanonicalResponseFormat.ToString();
+            comparisonResult.Metadata["AlternateContractDefaultIgnoreRuleCount"] = alternateContractProfile.DefaultIgnoreRules.Count;
+        }
+
+        comparisonResult.Metadata["ExecutionResults"] = failedExecutionRecords;
+    }
+
+    private async Task GenerateRequestAnalysisAsync(
+        RequestComparisonJob job,
+        MultiFolderComparisonResult comparisonResult,
+        int completedRequests,
+        int totalRequests,
+        CancellationToken cancellationToken)
+    {
+        if (comparisonResult.AllEqual ||
+            (!job.EnableSemanticAnalysis && !job.EnableEnhancedStructuralAnalysis))
+        {
+            return;
+        }
+
+        job.Status = RequestComparisonStatus.Analyzing;
+        job.StatusMessage = "Analyzing response differences...";
+        await PublishProgressAsync(
+            job.JobId,
+            ComparisonPhase.Analyzing,
+            99,
+            job.StatusMessage,
+            completedRequests,
+            totalRequests,
+            forcePublish: true).ConfigureAwait(false);
+
+        using var scope = _scopeFactory.CreateScope();
+        var comparisonService = scope.ServiceProvider.GetRequiredService<IComparisonService>();
+
+        if (job.EnableSemanticAnalysis && comparisonResult.FilePairResults.Count > 1)
+        {
+            try
+            {
+                var patternAnalysis = await comparisonService.AnalyzePatternsAsync(
+                    comparisonResult,
+                    cancellationToken).ConfigureAwait(false);
+                comparisonResult.Metadata["PatternAnalysis"] = patternAnalysis;
+
+                var semanticAnalysis = await comparisonService.AnalyzeSemanticDifferencesAsync(
+                    comparisonResult,
+                    patternAnalysis,
+                    cancellationToken).ConfigureAwait(false);
+                comparisonResult.Metadata["SemanticAnalysis"] = semanticAnalysis;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                comparisonResult.Metadata["SemanticAnalysisError"] = ex.Message;
+                _logger.LogWarning(ex, "Semantic request comparison analysis failed for job {JobId}", job.JobId);
+            }
+        }
+
+        if (job.EnableEnhancedStructuralAnalysis)
+        {
+            try
+            {
+                var enhancedAnalysis = await comparisonService.AnalyzeStructualPatternsAsync(
+                    comparisonResult,
+                    cancellationToken).ConfigureAwait(false);
+                comparisonResult.Metadata["EnhancedStructuralAnalysis"] = enhancedAnalysis;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                comparisonResult.Metadata["EnhancedStructuralAnalysisError"] = ex.Message;
+                _logger.LogWarning(ex, "Enhanced structural request comparison analysis failed for job {JobId}", job.JobId);
+            }
+        }
+    }
 
     private async Task<ChunkComparisonResult> CompareExecutionResultsAsync(
         RequestComparisonJob job,

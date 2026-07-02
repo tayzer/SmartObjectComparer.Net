@@ -385,6 +385,10 @@
                                         SharedSelectedModelName="@RequestSelectedModelName"
                                         SharedSelectedModelNameChanged="@(value => RequestSelectedModelName = value)"
                                         MaskRules="@RequestMaskRules"
+                                        EnableSemanticAnalysis="@EnableSemanticAnalysis"
+                                        OnEnableSemanticAnalysisChanged="@(value => EnableSemanticAnalysis = value)"
+                                        EnableEnhancedStructuralAnalysis="@EnableEnhancedStructuralAnalysis"
+                                        OnEnableEnhancedStructuralAnalysisChanged="@(value => EnableEnhancedStructuralAnalysis = value)"
                                         OnAcceptedDifferenceProfilesChanged="@RefreshSelectedRequestPairProfiles"
                                         OnPropertySelectorOpened="OpenRequestPropertySelector"
                                         OnTreePropertySelectorOpened="OpenRequestTreePropertySelector" />
