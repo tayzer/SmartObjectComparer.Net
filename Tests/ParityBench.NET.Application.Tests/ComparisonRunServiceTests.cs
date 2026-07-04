@@ -1,0 +1,288 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+using ParityBench.NET.Application.Runs;
+using ParityBench.NET.Domain.Runs;
+
+namespace ParityBench.NET.Application.Tests;
+
+[TestClass]
+public sealed class ComparisonRunServiceTests
+{
+    [TestMethod]
+    public async Task CreateRun_WhenOptionsAreValid_PersistsCreatedRun()
+    {
+        FakeRunStore store = new FakeRunStore();
+        ComparisonRunService service = CreateService(store);
+
+        ComparisonRun run = await service.CreateRunAsync(CreateOptions());
+
+        ComparisonRun? storedRun = await store.LoadAsync(run.Id);
+        Assert.IsNotNull(storedRun);
+        Assert.AreEqual(RunStatus.Created, storedRun.Status);
+        Assert.AreEqual(run.Id, storedRun.Id);
+    }
+
+    [TestMethod]
+    public async Task StartRun_WhenExecutorCompletes_MarksRunCompletedAndPublishesEvents()
+    {
+        FakeRunStore store = new FakeRunStore();
+        FakeRunEventPublisher eventPublisher = new FakeRunEventPublisher();
+        RunResultSummary expectedSummary = CreateSummary();
+        FakeComparisonRunExecutor executor = new FakeComparisonRunExecutor
+        {
+            ExecuteAsyncCore = (_, _, _) => Task.FromResult(expectedSummary),
+        };
+        ComparisonRunService service = CreateService(store, executor, eventPublisher);
+        ComparisonRun run = ComparisonRun.Create(new RunId("run-1"), CreateOptions());
+        await store.SaveAsync(run);
+
+        ComparisonRun completedRun = await service.StartRunAsync(run.Id);
+
+        Assert.AreEqual(RunStatus.Completed, completedRun.Status);
+        Assert.AreEqual(expectedSummary, completedRun.Summary);
+        CollectionAssert.Contains(store.SavedStatuses, RunStatus.Executing);
+        CollectionAssert.Contains(store.SavedStatuses, RunStatus.Completed);
+        CollectionAssert.Contains(eventPublisher.PublishedStatuses, RunStatus.Executing);
+        CollectionAssert.Contains(eventPublisher.PublishedStatuses, RunStatus.Completed);
+    }
+
+    [TestMethod]
+    public async Task StartRun_WhenExecutorReportsProgress_PersistsLatestProgress()
+    {
+        FakeRunStore store = new FakeRunStore();
+        FakeComparisonRunExecutor executor = new FakeComparisonRunExecutor
+        {
+            ExecuteAsyncCore = async (_, progressReporter, cancellationToken) =>
+            {
+                await progressReporter
+                    .ReportAsync(RunStatus.Parsing, new RunProgress(10, "Parsing requests.", 1, 10), cancellationToken)
+                    .ConfigureAwait(false);
+                await progressReporter
+                    .ReportAsync(RunStatus.Comparing, new RunProgress(75, "Comparing responses.", 7, 10), cancellationToken)
+                    .ConfigureAwait(false);
+
+                return CreateSummary();
+            },
+        };
+        ComparisonRunService service = CreateService(store, executor);
+        ComparisonRun run = ComparisonRun.Create(new RunId("run-1"), CreateOptions());
+        await store.SaveAsync(run);
+
+        await service.StartRunAsync(run.Id);
+
+        ComparisonRun? comparingSnapshot = store.SavedRuns.SingleOrDefault(savedRun =>
+            savedRun.Status == RunStatus.Comparing);
+        Assert.IsNotNull(comparingSnapshot);
+        Assert.AreEqual(75, comparingSnapshot.Progress.PercentComplete);
+        Assert.AreEqual("Comparing responses.", comparingSnapshot.Progress.Message);
+    }
+
+    [TestMethod]
+    public async Task StartRun_WhenExecutorThrows_MarksRunFailed()
+    {
+        FakeRunStore store = new FakeRunStore();
+        FakeRunEventPublisher eventPublisher = new FakeRunEventPublisher();
+        FakeComparisonRunExecutor executor = new FakeComparisonRunExecutor
+        {
+            ExecuteAsyncCore = (_, _, _) => throw new InvalidOperationException("Execution failed."),
+        };
+        ComparisonRunService service = CreateService(store, executor, eventPublisher);
+        ComparisonRun run = ComparisonRun.Create(new RunId("run-1"), CreateOptions());
+        await store.SaveAsync(run);
+
+        ComparisonRun failedRun = await service.StartRunAsync(run.Id);
+
+        Assert.AreEqual(RunStatus.Failed, failedRun.Status);
+        Assert.AreEqual("Execution failed.", failedRun.ErrorMessage);
+        CollectionAssert.Contains(eventPublisher.PublishedStatuses, RunStatus.Failed);
+    }
+
+    [TestMethod]
+    public async Task StartRun_WhenExecutorIsCancelled_MarksRunCancelled()
+    {
+        FakeRunStore store = new FakeRunStore();
+        FakeRunEventPublisher eventPublisher = new FakeRunEventPublisher();
+        FakeComparisonRunExecutor executor = new FakeComparisonRunExecutor
+        {
+            ExecuteAsyncCore = (_, _, _) => throw new OperationCanceledException(),
+        };
+        ComparisonRunService service = CreateService(store, executor, eventPublisher);
+        ComparisonRun run = ComparisonRun.Create(new RunId("run-1"), CreateOptions());
+        await store.SaveAsync(run);
+
+        ComparisonRun cancelledRun = await service.StartRunAsync(run.Id);
+
+        Assert.AreEqual(RunStatus.Cancelled, cancelledRun.Status);
+        CollectionAssert.Contains(eventPublisher.PublishedStatuses, RunStatus.Cancelled);
+    }
+
+    [TestMethod]
+    public async Task StartRun_WhenRunDoesNotExist_ThrowsRunNotFoundException()
+    {
+        ComparisonRunService service = CreateService(new FakeRunStore());
+
+        await AssertThrowsAsync<RunNotFoundException>(() =>
+            service.StartRunAsync(new RunId("missing-run")));
+    }
+
+    [TestMethod]
+    public async Task CancelRun_WhenRunIsActive_MarksRunCancelled()
+    {
+        FakeRunStore store = new FakeRunStore();
+        ComparisonRunService service = CreateService(store);
+        ComparisonRun run = ComparisonRun.Create(new RunId("run-1"), CreateOptions()).Start();
+        await store.SaveAsync(run);
+
+        ComparisonRun cancelledRun = await service.CancelRunAsync(run.Id);
+
+        Assert.AreEqual(RunStatus.Cancelled, cancelledRun.Status);
+        CollectionAssert.Contains(store.SavedStatuses, RunStatus.Cancelled);
+    }
+
+    [TestMethod]
+    public async Task CancelRun_WhenRunIsCompleted_ThrowsInvalidRunStateException()
+    {
+        FakeRunStore store = new FakeRunStore();
+        ComparisonRunService service = CreateService(store);
+        ComparisonRun run = ComparisonRun
+            .Create(new RunId("run-1"), CreateOptions())
+            .Start()
+            .Complete(CreateSummary());
+        await store.SaveAsync(run);
+
+        await AssertThrowsAsync<InvalidRunStateException>(() => service.CancelRunAsync(run.Id));
+    }
+
+    [TestMethod]
+    public async Task ListRuns_WhenStoreHasRuns_ReturnsRunSummaries()
+    {
+        FakeRunStore store = new FakeRunStore();
+        ComparisonRunService service = CreateService(store);
+        await store.SaveAsync(ComparisonRun.Create(new RunId("run-1"), CreateOptions()));
+        await store.SaveAsync(ComparisonRun.Create(new RunId("run-2"), CreateOptions()).Start());
+
+        IReadOnlyList<RunListItem> runs = await service.ListRunsAsync();
+
+        Assert.AreEqual(2, runs.Count);
+        CollectionAssert.AreEquivalent(
+            new[] { RunStatus.Created, RunStatus.Executing },
+            runs.Select(run => run.Status).ToArray());
+    }
+
+    private static async Task AssertThrowsAsync<TException>(Func<Task> action)
+        where TException : Exception
+    {
+        try
+        {
+            await action().ConfigureAwait(false);
+        }
+        catch (TException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            Assert.Fail($"Expected {typeof(TException).Name}, but got {ex.GetType().Name}.");
+        }
+
+        Assert.Fail($"Expected {typeof(TException).Name}, but no exception was thrown.");
+    }
+
+    private static ComparisonRunService CreateService(
+        FakeRunStore store,
+        FakeComparisonRunExecutor? executor = null,
+        FakeRunEventPublisher? eventPublisher = null,
+        FakeRunIdGenerator? runIdGenerator = null) =>
+        new ComparisonRunService(
+            store,
+            executor ?? new FakeComparisonRunExecutor(),
+            eventPublisher ?? new FakeRunEventPublisher(),
+            runIdGenerator ?? new FakeRunIdGenerator(new RunId("generated-run")));
+
+    private static RunOptions CreateOptions() =>
+        new RunOptions(
+            new RequestBatchReference("batch-1"),
+            new EndpointDefinition(new Uri("https://service-a.example.test")),
+            new EndpointDefinition(new Uri("https://service-b.example.test")),
+            TimeSpan.FromSeconds(30),
+            8);
+
+    private static RunResultSummary CreateSummary() =>
+        new RunResultSummary(totalPairs: 2, equalPairs: 1, differentPairs: 1, errorPairs: 0);
+
+    private sealed class FakeRunStore : IRunStore
+    {
+        private readonly Dictionary<RunId, ComparisonRun> runs = new Dictionary<RunId, ComparisonRun>();
+
+        public List<ComparisonRun> SavedRuns { get; } = new List<ComparisonRun>();
+
+        public List<RunStatus> SavedStatuses => SavedRuns.Select(run => run.Status).ToList();
+
+        public Task SaveAsync(ComparisonRun run, CancellationToken cancellationToken = default)
+        {
+            runs[run.Id] = run;
+            SavedRuns.Add(run);
+            return Task.CompletedTask;
+        }
+
+        public Task<ComparisonRun?> LoadAsync(RunId runId, CancellationToken cancellationToken = default)
+        {
+            runs.TryGetValue(runId, out ComparisonRun? run);
+            return Task.FromResult(run);
+        }
+
+        public Task<IReadOnlyList<RunListItem>> ListAsync(CancellationToken cancellationToken = default)
+        {
+            IReadOnlyList<RunListItem> listItems = runs
+                .Values
+                .Select(RunListItem.FromRun)
+                .OrderBy(run => run.Id.Value, StringComparer.Ordinal)
+                .ToList();
+
+            return Task.FromResult(listItems);
+        }
+
+        public Task<RunResultSummary?> LoadSummaryAsync(RunId runId, CancellationToken cancellationToken = default)
+        {
+            runs.TryGetValue(runId, out ComparisonRun? run);
+            return Task.FromResult(run?.Summary);
+        }
+    }
+
+    private sealed class FakeComparisonRunExecutor : IComparisonRunExecutor
+    {
+        public Func<ComparisonRun, IRunProgressReporter, CancellationToken, Task<RunResultSummary>> ExecuteAsyncCore { get; init; } =
+            (_, _, _) => Task.FromResult(CreateSummary());
+
+        public Task<RunResultSummary> ExecuteAsync(
+            ComparisonRun run,
+            IRunProgressReporter progressReporter,
+            CancellationToken cancellationToken = default) =>
+            ExecuteAsyncCore(run, progressReporter, cancellationToken);
+    }
+
+    private sealed class FakeRunEventPublisher : IRunEventPublisher
+    {
+        public List<RunEvent> PublishedEvents { get; } = new List<RunEvent>();
+
+        public List<RunStatus> PublishedStatuses => PublishedEvents.Select(runEvent => runEvent.Status).ToList();
+
+        public Task PublishAsync(RunEvent runEvent, CancellationToken cancellationToken = default)
+        {
+            PublishedEvents.Add(runEvent);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeRunIdGenerator : IRunIdGenerator
+    {
+        private readonly RunId runId;
+
+        public FakeRunIdGenerator(RunId runId)
+        {
+            this.runId = runId;
+        }
+
+        public RunId CreateId() => runId;
+    }
+}
