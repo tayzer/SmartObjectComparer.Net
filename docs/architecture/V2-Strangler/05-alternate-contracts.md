@@ -32,7 +32,7 @@ V2 should match existing alternate-contract scenarios:
 - Endpoint A response normalization.
 - Endpoint B response normalization.
 - Canonical response format.
-- Profile default ignore rules.
+- Profile default ignore rules, including equivalent application through the V2 comparer adapter.
 - Error messages for unsupported or invalid profiles.
 
 ## Performance Considerations
@@ -45,7 +45,7 @@ Profile behavior should remain per-run and deterministic under concurrent execut
 
 - Current alternate-contract profiles have V2 equivalents or explicit temporary legacy adapters.
 - V2 produces equivalent pair outcomes and differences for current alternate-contract tests.
-- Profile default ignore rules are applied through immutable run configuration.
+- Profile default ignore rules are applied through immutable run configuration and preserve current `CompareNETObjects` comparison behavior after canonical normalization.
 - Temporary V1 profile dependencies are isolated to Infrastructure adapters.
 
 ## Non-Goals

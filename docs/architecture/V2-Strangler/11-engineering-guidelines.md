@@ -61,6 +61,14 @@ private readonly IRunStore _runStore;
 - Avoid service locator patterns outside host composition roots.
 - Keep public behavior easy to test without requiring Web, Desktop, or CLI hosts.
 
+## Third-Party Comparison Dependency
+
+`CompareNETObjects` is the current V1 object comparison engine and should be treated as a Slice 3 parity dependency, not as a Domain or Application contract.
+
+- V2 may use `CompareNETObjects` inside Engine adapters to preserve current difference detection, ignore-rule, smart-ignore, collection-order, string-option, and null/empty collection behavior.
+- Domain and Application contracts must use V2-owned comparison option, rule-set, and difference models rather than exposing Kellerman `CompareLogic`, `ComparisonConfig`, `ComparisonResult`, or `Difference` types.
+- A future comparer replacement is allowed only after parity tests prove equivalent user-visible behavior for existing comparison options and reports.
+
 ## Comments And Documentation
 
 - Comment public interfaces and externally consumed contracts where the caller needs semantic guidance.

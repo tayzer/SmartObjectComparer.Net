@@ -16,6 +16,7 @@ The expected behavior should match V1 for headers, labels, content types, ignore
 
 - Immutable run options.
 - Rule-set modeling.
+- Engine-owned comparer adapter.
 - Host and shared UI input mapping.
 - Comparison option application.
 - Masking policy.
@@ -29,6 +30,7 @@ V2 should match V1 behavior for:
 - Common and endpoint-specific headers.
 - Content-type override.
 - SOAPAction behavior.
+- Current `CompareNETObjects` object comparison and difference semantics.
 - Ignore rules.
 - Smart ignores.
 - String comparison options.
@@ -41,11 +43,14 @@ V2 should match V1 behavior for:
 
 Options must be per-run and immutable. V2 should not reintroduce shared mutable comparison configuration.
 
+Initial V2 parity should preserve the current `CompareNETObjects`/Kellerman comparison behavior behind an Engine-owned adapter. Domain and Application should model comparison options, rule sets, and differences using V2-owned contracts rather than exposing Kellerman types directly.
+
 Masking should operate on artifacts or streams where practical rather than forcing large bodies into memory.
 
 ## Completion Criteria
 
 - V2 can express all core V1 request-comparison options.
+- V2 preserves current `CompareNETObjects` behavior for object comparison, difference output, ignore rules, smart ignores, collection-order handling, string options, and null/empty collection handling.
 - Concurrent V2 runs with different options remain isolated.
 - Parity tests cover representative combinations of options.
 - No host-specific or UI-specific option rules leak into Domain or Engine.

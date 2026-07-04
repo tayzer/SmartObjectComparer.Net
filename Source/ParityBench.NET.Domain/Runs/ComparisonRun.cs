@@ -66,6 +66,34 @@ public sealed record ComparisonRun
             null);
     }
 
+    public static ComparisonRun Rehydrate(
+        RunId id,
+        RunOptions options,
+        RunStatus status,
+        RunProgress progress,
+        DateTimeOffset createdAt,
+        DateTimeOffset updatedAt,
+        DateTimeOffset? startedAt,
+        DateTimeOffset? completedAt,
+        RunResultSummary? summary,
+        string? errorMessage)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(progress);
+
+        return new ComparisonRun(
+            id,
+            options,
+            status,
+            progress,
+            createdAt,
+            updatedAt,
+            startedAt,
+            completedAt,
+            summary,
+            string.IsNullOrWhiteSpace(errorMessage) ? null : errorMessage);
+    }
+
     public ComparisonRun Start(DateTimeOffset? startedAt = null)
     {
         EnsureNotTerminal();
