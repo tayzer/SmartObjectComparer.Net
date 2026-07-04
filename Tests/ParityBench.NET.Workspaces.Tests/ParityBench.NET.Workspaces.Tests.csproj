@@ -1,0 +1,7 @@
+<Project Sdk="MSTest.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\ParityBench.NET.Workspaces\ParityBench.NET.Workspaces.csproj" />
+  </ItemGroup>
+
+</Project>
