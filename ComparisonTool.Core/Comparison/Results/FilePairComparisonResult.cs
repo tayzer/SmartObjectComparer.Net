@@ -127,13 +127,19 @@ public class FilePairComparisonResult
     public int FocusedRawContentRuleCount { get; set; }
 
     /// <summary>
+    /// Gets or sets the ignore-complete paths used to build focused raw content on demand.
+    /// </summary>
+    public List<string> FocusedRawContentIgnorePaths { get; set; } = new();
+
+    /// <summary>
     /// Gets a value indicating whether focused raw content is available for this pair.
     /// </summary>
     public bool HasFocusedRawContent =>
         FocusedRawContentRuleCount > 0 &&
         (!string.IsNullOrWhiteSpace(FocusedFile1Path) ||
          !string.IsNullOrWhiteSpace(FocusedFile2Path) ||
-         !string.IsNullOrWhiteSpace(FocusedBundledRawContentPath));
+         !string.IsNullOrWhiteSpace(FocusedBundledRawContentPath) ||
+         FocusedRawContentIgnorePaths.Count > 0);
 
     /// <summary>
     /// Gets or sets error information if the comparison failed.

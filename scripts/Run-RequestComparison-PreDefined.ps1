@@ -18,6 +18,7 @@ $EndpointB = "http://localhost:5055/api/mock/b"
 $DomainModel = "ComplexOrderResponse"
 $ContentType = "application/xml"
 $IgnoreRulesPath = ""
+$TreatNullAndEmptyCollectionsAsEqual = $false
 $AlternateContract = $false
 $AlternateContractProfile = ""
 $UseProfileEndpoints = $false
@@ -103,6 +104,11 @@ if (-not [string]::IsNullOrWhiteSpace($ContentType))
 if (-not [string]::IsNullOrWhiteSpace($IgnoreRulesPath))
 {
     $arguments += @("--ignore-rules", $IgnoreRulesPath)
+}
+
+if ($TreatNullAndEmptyCollectionsAsEqual)
+{
+    $arguments += "--treat-null-empty-collections-equal"
 }
 
 if ($AlternateContract)

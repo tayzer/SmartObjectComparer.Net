@@ -240,6 +240,7 @@
         SelectedPair?.File2Path,
         SelectedPair?.FocusedFile1Path,
         SelectedPair?.FocusedFile2Path,
+        string.Join(",", SelectedPair?.FocusedRawContentIgnorePaths ?? Enumerable.Empty<string>()),
         SelectedPair?.ContentTypeA,
         SelectedPair?.ContentTypeB,
         selectedViewMode);
@@ -266,7 +267,8 @@
             SelectedPair?.File1Path,
             SelectedPair?.File2Path,
             SelectedPair?.FocusedFile1Path,
-            SelectedPair?.FocusedFile2Path);
+            SelectedPair?.FocusedFile2Path,
+            string.Join(",", SelectedPair?.FocusedRawContentIgnorePaths ?? Enumerable.Empty<string>()));
 
         if (!string.Equals(selectedPairIdentity, lastSelectedPairIdentity, StringComparison.Ordinal))
         {

@@ -162,6 +162,38 @@ public sealed class BlazorReportBundleBuilderTests : IDisposable
         pair.HasFocusedRawContent.ShouldBeTrue();
     }
 
+
+    [TestMethod]
+    public async Task BuildJsonAsync_WhenLazyFocusedMetadataExists_PreservesFocusedRulesWithoutSeparateFocusedReference()
+    {
+        var fileA = this.CreateTempFile("response-a.json", "{\"ResultCode\":\"00\",\"TraceId\":\"full-a\"}");
+        var fileB = this.CreateTempFile("response-b.json", "{\"ResultCode\":\"00\",\"TraceId\":\"full-b\"}");
+        var sourcePair = new FilePairComparisonResult
+        {
+            File1Name = fileA.Name,
+            File2Name = fileB.Name,
+            File1Path = fileA.FullName,
+            File2Path = fileB.FullName,
+            FocusedRawContentRuleCount = 1,
+            FocusedRawContentIgnorePaths = new List<string> { "TraceId" },
+            ContentTypeA = "application/json",
+            ContentTypeB = "application/json",
+        };
+        var context = CreateContext(sourcePair);
+
+        var json = await BlazorReportBundleBuilder.BuildJsonAsync(context).ConfigureAwait(false);
+        var report = JsonSerializer.Deserialize<ReportBootstrapData>(json, BlazorReportSerializerOptions.Default);
+        Assert.IsNotNull(report);
+        Assert.IsNotNull(report.Result);
+        var pair = report.Result!.FilePairResults[0];
+
+        pair.BundledRawContentPath.ShouldBe(BlazorReportBundleBuilder.BuildBundledRawContentPath(sourcePair, 0));
+        pair.FocusedBundledRawContentPath.ShouldBeNull();
+        pair.FocusedRawContentRuleCount.ShouldBe(1);
+        pair.FocusedRawContentIgnorePaths.ShouldBe(new[] { "TraceId" });
+        pair.HasFocusedRawContent.ShouldBeTrue();
+    }
+
     [TestMethod]
     public async Task BuildBundledRawContentDataAsync_WhenFocusedVariantRequested_UsesFocusedArtifacts()
     {

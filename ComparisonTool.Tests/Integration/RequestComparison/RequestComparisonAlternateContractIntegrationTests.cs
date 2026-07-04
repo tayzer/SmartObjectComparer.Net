@@ -509,9 +509,27 @@ public sealed class RequestComparisonAlternateContractIntegrationTests : IDispos
         spyState.PatternAnalysisCalls.ShouldBe(0);
         spyState.SemanticAnalysisCalls.ShouldBe(0);
         result.Metadata[FocusedRawContentArtifactService.MetadataFocusedPairCountKey].ShouldBe(2);
+        foreach (var pair in result.FilePairResults)
+        {
+            pair.HasFocusedRawContent.ShouldBeTrue();
+            pair.FocusedFile1Path.ShouldBeNull();
+            pair.FocusedFile2Path.ShouldBeNull();
+            pair.FocusedRawContentIgnorePaths.ShouldContain($"{AdvancedExpectedModelName}.SourceSystem");
+        }
 
-        var focusedDirectories = Directory.GetDirectories(jobDirectory, "focused", SearchOption.AllDirectories);
-        focusedDirectories.ShouldBe(new[] { Path.Combine(jobDirectory, "focused") }, ignoreOrder: true);
+        var rawContentService = new RawContentService(
+            serviceProvider.GetRequiredService<ILogger<RawContentService>>(),
+            focusedPruningService: serviceProvider.GetRequiredService<StructuredContentPruningService>());
+        var focusedContent = await rawContentService.LoadRawContentAsync(result.FilePairResults[0], RawContentVariant.Focused);
+        focusedContent.IsLoaded.ShouldBeTrue();
+        focusedContent.ContentA.ShouldContain("ResultCode");
+        focusedContent.ContentA.ShouldNotContain("SourceSystem");
+        focusedContent.ContentB.ShouldNotContain("SourceSystem");
+
+        var focusedDirectories = Directory.Exists(jobDirectory)
+            ? Directory.GetDirectories(jobDirectory, "focused", SearchOption.AllDirectories)
+            : Array.Empty<string>();
+        focusedDirectories.ShouldBeEmpty();
     }
 
     [TestMethod]

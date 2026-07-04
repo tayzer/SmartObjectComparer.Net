@@ -6,7 +6,7 @@
 #   -AlternateContractProfile "expected-json-customer-lookup" `
 #   -ContentType "application/xml" `
 #   -OutputDirectory "C:\path\to\reports" `
-#   -OutputType Console,Json,Markdown
+#   -OutputType Console,Json,Markdown,Html
 
 [CmdletBinding()]
 param(
@@ -27,12 +27,15 @@ param(
     [Parameter(Mandatory = $false)]
     [string]$ContentType,
 
+    [Parameter(Mandatory = $false)]
+    [switch]$TreatNullAndEmptyCollectionsAsEqual,
+
     [Parameter(Mandatory = $true)]
     [ValidateNotNullOrEmpty()]
     [string]$OutputDirectory,
 
     [Parameter(Mandatory = $true)]
-    [ValidateSet("Console", "Json", "Markdown")]
+    [ValidateSet("Console", "Json", "Markdown", "Html")]
     [string[]]$OutputType,
 
     [Parameter(Mandatory = $false)]
@@ -113,6 +116,11 @@ if (-not [string]::IsNullOrWhiteSpace($EndpointB))
 if (-not [string]::IsNullOrWhiteSpace($ContentType))
 {
     $arguments += @("--content-type", $ContentType)
+}
+
+if ($TreatNullAndEmptyCollectionsAsEqual)
+{
+    $arguments += "--treat-null-empty-collections-equal"
 }
 
 if ($AlternateContract)

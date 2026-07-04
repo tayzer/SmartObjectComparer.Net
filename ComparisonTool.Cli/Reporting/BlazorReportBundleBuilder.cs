@@ -187,6 +187,7 @@ internal static class BlazorReportBundleBuilder
             FocusedFile2Path = pair.FocusedFile2Path,
             FocusedBundledRawContentPath = pair.FocusedBundledRawContentPath,
             FocusedRawContentRuleCount = pair.FocusedRawContentRuleCount,
+            FocusedRawContentIgnorePaths = pair.FocusedRawContentIgnorePaths.ToList(),
             ErrorMessage = pair.ErrorMessage,
             ErrorType = pair.ErrorType,
         };

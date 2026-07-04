@@ -363,25 +363,10 @@ public class RequestComparisonJobService
             comparisonResult.AllEqual = comparisonResult.FilePairResults.Count > 0
                 && comparisonResult.FilePairResults.All(r => r.AreEqual);
 
-            await PublishProgressAsync(jobId, ComparisonPhase.Finalizing, 95, "Preparing focused raw content artifacts...", executedCount, requests.Count, forcePublish: true);
-            var focusedProgress = new Progress<ComparisonProgress>(p =>
-            {
-                job.StatusMessage = p.Status;
-                progress?.Report((p.Completed, p.Total, p.Status));
-
-                var percent = (int)Math.Min(99, Math.Round(95.0 + (4.0 * p.Completed / Math.Max(1, p.Total))));
-                _ = PublishProgressAsync(
-                    jobId,
-                    ComparisonPhase.Finalizing,
-                    percent,
-                    p.Status,
-                    p.Completed,
-                    p.Total);
-            });
+            await PublishProgressAsync(jobId, ComparisonPhase.Finalizing, 95, "Preparing focused raw content metadata...", executedCount, requests.Count, forcePublish: true);
             var focusedRawContentStart = Stopwatch.GetTimestamp();
-            await PopulateFocusedRawContentAsync(job, comparisonResult, focusedProgress, cancellationToken).ConfigureAwait(false);
+            PrepareFocusedRawContent(job, comparisonResult);
             focusedRawContentMs = ToMilliseconds(Stopwatch.GetElapsedTime(focusedRawContentStart));
-
             var finalizationStart = Stopwatch.GetTimestamp();
 
             PopulateRequestResultMetadata(
@@ -892,11 +877,9 @@ public class RequestComparisonJobService
         }
     }
 
-    private async Task PopulateFocusedRawContentAsync(
+    private void PrepareFocusedRawContent(
         RequestComparisonJob job,
-        MultiFolderComparisonResult comparisonResult,
-        IProgress<ComparisonProgress>? progress,
-        CancellationToken cancellationToken)
+        MultiFolderComparisonResult comparisonResult)
     {
         var effectiveIgnoreRules = _alternateContractTransformationService.GetEffectiveIgnoreRules(job)
             .Where(rule => rule.IgnoreCompletely && !string.IsNullOrWhiteSpace(rule.PropertyPath))
@@ -907,18 +890,9 @@ public class RequestComparisonJobService
             })
             .ToList();
 
-        var artifactRoot = Path.Combine(
-            Path.GetTempPath(),
-            "ComparisonToolJobs",
-            job.JobId,
-            "focused");
-
-        await _focusedRawContentArtifactService.PopulateFocusedRawContentAsync(
+        _focusedRawContentArtifactService.MarkFocusedRawContentAvailable(
             comparisonResult,
-            effectiveIgnoreRules,
-            artifactRoot,
-            cancellationToken,
-            progress).ConfigureAwait(false);
+            effectiveIgnoreRules);
     }
 
     /// <summary>

@@ -424,6 +424,7 @@ else if (!DifferenceSummary.AreEqual)
         SelectedPair?.File2Path,
         SelectedPair?.FocusedFile1Path,
         SelectedPair?.FocusedFile2Path,
+        string.Join(",", SelectedPair?.FocusedRawContentIgnorePaths ?? Enumerable.Empty<string>()),
         selectedViewMode);
 
     private async Task OnViewModeChanged(DetailViewMode mode)
@@ -493,7 +494,7 @@ else if (!DifferenceSummary.AreEqual)
         }
         
         // Reset full file view when pair changes
-        var selectedPairIdentity = $"{SelectedPair?.File1Path}|{SelectedPair?.File2Path}|{SelectedPair?.FocusedFile1Path}|{SelectedPair?.FocusedFile2Path}|{SelectedPair?.RequestRelativePath}";
+        var selectedPairIdentity = $"{SelectedPair?.File1Path}|{SelectedPair?.File2Path}|{SelectedPair?.FocusedFile1Path}|{SelectedPair?.FocusedFile2Path}|{SelectedPair?.RequestRelativePath}|{string.Join(",", SelectedPair?.FocusedRawContentIgnorePaths ?? Enumerable.Empty<string>())}";
         if (!string.Equals(selectedPairIdentity, lastSelectedPairIdentity, StringComparison.Ordinal))
         {
             selectedViewMode = DetailViewMode.Structured;

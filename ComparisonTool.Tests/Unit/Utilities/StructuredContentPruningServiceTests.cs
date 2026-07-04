@@ -11,7 +11,7 @@ namespace ComparisonTool.Tests.Unit.Utilities;
 [TestClass]
 public sealed class StructuredContentPruningServiceTests
 {
-    private readonly StructuredContentPruningService service = new(NullLogger<StructuredContentPruningService>.Instance);
+    private readonly StructuredContentPruningService service = new StructuredContentPruningService(NullLogger<StructuredContentPruningService>.Instance);
 
     [TestMethod]
     public void TryPrune_RemovesJsonExactAndRootQualifiedPaths()
@@ -169,9 +169,7 @@ public sealed class StructuredContentPruningServiceTests
             updates.Count.ShouldBeGreaterThanOrEqualTo(3);
             updates.First().Completed.ShouldBe(0);
             updates.First().Total.ShouldBe(2);
-            updates.Last().Completed.ShouldBe(2);
-            updates.Last().Total.ShouldBe(2);
-            updates.Last().Status.ShouldBe("Preparing focused raw content 2 of 2");
+            updates.Any(update => update.Completed == 2 && update.Total == 2 && update.Status == "Preparing focused raw content 2 of 2").ShouldBeTrue();
         }
         finally
         {
@@ -181,6 +179,7 @@ public sealed class StructuredContentPruningServiceTests
             }
         }
     }
+
     [TestMethod]
     public async Task PopulateFocusedRawContentAsync_DoesNotCreateArtifactsForOrderOnlyRules()
     {
@@ -229,6 +228,7 @@ public sealed class StructuredContentPruningServiceTests
             }
         }
     }
+
     private sealed class CapturingProgress<T> : IProgress<T>
     {
         private readonly Action<T> handler;

@@ -1,8 +1,10 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using System.Text;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.Utilities;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace ComparisonTool.Core.RequestComparison.Services;
 
@@ -13,23 +15,26 @@ namespace ComparisonTool.Core.RequestComparison.Services;
 /// </summary>
 public class RawContentService
 {
-    private readonly ILogger<RawContentService> logger;
-    private readonly IBundledRawContentAccessor? bundledRawContentAccessor;
-
     /// <summary>
     /// Maximum number of bytes to read per file. Files larger than this are truncated.
     /// </summary>
     private const int MaxFileSizeBytes = 512 * 1024; // 512 KB
 
-    public RawContentService(ILogger<RawContentService> logger)
-        : this(logger, bundledRawContentAccessor: null)
-    {
-    }
+    private readonly ILogger<RawContentService> logger;
+    private readonly IBundledRawContentAccessor? bundledRawContentAccessor;
+    private readonly StructuredContentPruningService focusedPruningService;
+    private readonly ConcurrentDictionary<string, RawContentResult> focusedContentCache =
+        new ConcurrentDictionary<string, RawContentResult>(StringComparer.Ordinal);
 
-    public RawContentService(ILogger<RawContentService> logger, IBundledRawContentAccessor? bundledRawContentAccessor)
+    public RawContentService(
+        ILogger<RawContentService> logger,
+        IBundledRawContentAccessor? bundledRawContentAccessor = null,
+        StructuredContentPruningService? focusedPruningService = null)
     {
         this.logger = logger;
         this.bundledRawContentAccessor = bundledRawContentAccessor;
+        this.focusedPruningService = focusedPruningService
+            ?? new StructuredContentPruningService(NullLogger<StructuredContentPruningService>.Instance);
     }
 
     /// <summary>
@@ -40,9 +45,18 @@ public class RawContentService
     /// <returns>A tuple of (contentA, contentB, isTruncatedA, isTruncatedB).</returns>
     public async Task<RawContentResult> LoadRawContentAsync(FilePairComparisonResult pair, RawContentVariant variant = RawContentVariant.Full)
     {
+        ArgumentNullException.ThrowIfNull(pair);
+
+        return variant == RawContentVariant.Focused
+            ? await LoadFocusedRawContentAsync(pair).ConfigureAwait(false)
+            : await LoadFullRawContentAsync(pair).ConfigureAwait(false);
+    }
+
+    private async Task<RawContentResult> LoadFullRawContentAsync(FilePairComparisonResult pair)
+    {
         var result = new RawContentResult();
 
-        if (variant == RawContentVariant.Full && pair.HasEmbeddedRawContent)
+        if (pair.HasEmbeddedRawContent)
         {
             result.ContentA = StructuredTextDisplayFormatter.FormatForDisplay(pair.EmbeddedRawContentA, pair.ContentTypeA, pair.File1Name);
             result.ContentB = StructuredTextDisplayFormatter.FormatForDisplay(pair.EmbeddedRawContentB, pair.ContentTypeB, pair.File2Name);
@@ -54,7 +68,7 @@ public class RawContentService
 
         if (this.bundledRawContentAccessor != null)
         {
-            var bundledResult = await this.bundledRawContentAccessor.TryLoadAsync(pair, variant).ConfigureAwait(false);
+            var bundledResult = await this.bundledRawContentAccessor.TryLoadAsync(pair, RawContentVariant.Full).ConfigureAwait(false);
             if (bundledResult != null)
             {
                 return bundledResult;
@@ -67,8 +81,167 @@ public class RawContentService
             return result;
         }
 
-        var file1Path = variant == RawContentVariant.Focused ? pair.FocusedFile1Path : pair.File1Path;
-        var file2Path = variant == RawContentVariant.Focused ? pair.FocusedFile2Path : pair.File2Path;
+        return await LoadRawContentFromPathsAsync(
+            pair.File1Path,
+            pair.File2Path,
+            pair.ContentTypeA,
+            pair.ContentTypeB,
+            pair.File1Name,
+            pair.File2Name).ConfigureAwait(false);
+    }
+
+    private async Task<RawContentResult> LoadFocusedRawContentAsync(FilePairComparisonResult pair)
+    {
+        if (this.bundledRawContentAccessor != null && !string.IsNullOrWhiteSpace(pair.FocusedBundledRawContentPath))
+        {
+            var bundledResult = await this.bundledRawContentAccessor.TryLoadAsync(pair, RawContentVariant.Focused).ConfigureAwait(false);
+            if (bundledResult != null)
+            {
+                return bundledResult;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(pair.FocusedFile1Path) && !string.IsNullOrWhiteSpace(pair.FocusedFile2Path))
+        {
+            return await LoadRawContentFromPathsAsync(
+                pair.FocusedFile1Path,
+                pair.FocusedFile2Path,
+                pair.ContentTypeA,
+                pair.ContentTypeB,
+                pair.File1Name,
+                pair.File2Name).ConfigureAwait(false);
+        }
+
+        var ignorePaths = GetFocusedIgnorePaths(pair);
+        if (ignorePaths.Count == 0)
+        {
+            return new RawContentResult
+            {
+                ErrorMessage = "Focused raw content is unavailable because no ignore-complete rules were recorded for this pair.",
+            };
+        }
+
+        var cacheKey = BuildFocusedCacheKey(pair, ignorePaths);
+        if (focusedContentCache.TryGetValue(cacheKey, out var cachedResult))
+        {
+            return cachedResult;
+        }
+
+        var generatedResult = !OperatingSystem.IsBrowser()
+            && !string.IsNullOrWhiteSpace(pair.File1Path)
+            && !string.IsNullOrWhiteSpace(pair.File2Path)
+            ? await BuildFocusedRawContentFromSourceFilesAsync(pair, ignorePaths).ConfigureAwait(false)
+            : await BuildFocusedRawContentFromLoadedFullContentAsync(pair, ignorePaths).ConfigureAwait(false);
+
+        if (generatedResult.IsLoaded)
+        {
+            focusedContentCache[cacheKey] = generatedResult;
+        }
+
+        return generatedResult;
+    }
+
+    private async Task<RawContentResult> BuildFocusedRawContentFromSourceFilesAsync(
+        FilePairComparisonResult pair,
+        IReadOnlyCollection<string> ignorePaths)
+    {
+        try
+        {
+            var taskA = File.ReadAllBytesAsync(pair.File1Path!);
+            var taskB = File.ReadAllBytesAsync(pair.File2Path!);
+
+            await Task.WhenAll(taskA, taskB).ConfigureAwait(false);
+
+            var bytesA = taskA.Result;
+            var bytesB = taskB.Result;
+            var prunedA = focusedPruningService.TryPrune(bytesA, pair.ContentTypeA, pair.File1Name, ignorePaths);
+            var prunedB = focusedPruningService.TryPrune(bytesB, pair.ContentTypeB, pair.File2Name, ignorePaths);
+
+            if (!prunedA.IsSupported || !prunedB.IsSupported)
+            {
+                return new RawContentResult
+                {
+                    ErrorMessage = "Focused raw content is only supported for JSON and XML responses.",
+                };
+            }
+
+            var contentA = prunedA.WasPruned
+                ? prunedA.Content
+                : StructuredTextDisplayFormatter.FormatForDisplay(DecodeText(bytesA, bytesA.Length, pair.ContentTypeA), pair.ContentTypeA, pair.File1Name);
+            var contentB = prunedB.WasPruned
+                ? prunedB.Content
+                : StructuredTextDisplayFormatter.FormatForDisplay(DecodeText(bytesB, bytesB.Length, pair.ContentTypeB), pair.ContentTypeB, pair.File2Name);
+
+            var displayA = TruncateDisplayContent(contentA);
+            var displayB = TruncateDisplayContent(contentB);
+
+            return new RawContentResult
+            {
+                ContentA = displayA.content,
+                ContentB = displayB.content,
+                IsTruncatedA = displayA.isTruncated,
+                IsTruncatedB = displayB.isTruncated,
+                IsLoaded = true,
+            };
+        }
+        catch (FileNotFoundException ex)
+        {
+            logger.LogWarning(ex, "File not found when building focused raw content for side-by-side view.");
+            return new RawContentResult
+            {
+                ErrorMessage = $"File not found: {ex.FileName}. The file may have been moved or deleted.",
+            };
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to build focused raw content for side-by-side view.");
+            return new RawContentResult
+            {
+                ErrorMessage = $"Failed to build focused raw content: {ex.Message}",
+            };
+        }
+    }
+
+    private async Task<RawContentResult> BuildFocusedRawContentFromLoadedFullContentAsync(
+        FilePairComparisonResult pair,
+        IReadOnlyCollection<string> ignorePaths)
+    {
+        var fullContent = await LoadFullRawContentAsync(pair).ConfigureAwait(false);
+        if (!fullContent.IsLoaded)
+        {
+            return fullContent;
+        }
+
+        var prunedA = focusedPruningService.TryPrune(fullContent.ContentA, pair.ContentTypeA, pair.File1Name, ignorePaths);
+        var prunedB = focusedPruningService.TryPrune(fullContent.ContentB, pair.ContentTypeB, pair.File2Name, ignorePaths);
+
+        if (!prunedA.IsSupported || !prunedB.IsSupported)
+        {
+            return new RawContentResult
+            {
+                ErrorMessage = "Focused raw content is only supported for JSON and XML responses.",
+            };
+        }
+
+        return new RawContentResult
+        {
+            ContentA = prunedA.WasPruned ? prunedA.Content : fullContent.ContentA,
+            ContentB = prunedB.WasPruned ? prunedB.Content : fullContent.ContentB,
+            IsTruncatedA = fullContent.IsTruncatedA,
+            IsTruncatedB = fullContent.IsTruncatedB,
+            IsLoaded = true,
+        };
+    }
+
+    private async Task<RawContentResult> LoadRawContentFromPathsAsync(
+        string? file1Path,
+        string? file2Path,
+        string? contentTypeA,
+        string? contentTypeB,
+        string fileNameA,
+        string fileNameB)
+    {
+        var result = new RawContentResult();
 
         if (string.IsNullOrEmpty(file1Path) || string.IsNullOrEmpty(file2Path))
         {
@@ -80,10 +253,10 @@ public class RawContentService
 
         try
         {
-            var taskA = ReadFileContentAsync(file1Path, pair.ContentTypeA, pair.File1Name);
-            var taskB = ReadFileContentAsync(file2Path, pair.ContentTypeB, pair.File2Name);
+            var taskA = ReadFileContentAsync(file1Path, contentTypeA, fileNameA);
+            var taskB = ReadFileContentAsync(file2Path, contentTypeB, fileNameB);
 
-            await Task.WhenAll(taskA, taskB);
+            await Task.WhenAll(taskA, taskB).ConfigureAwait(false);
 
             var (contentA, truncatedA) = taskA.Result;
             var (contentB, truncatedB) = taskB.Result;
@@ -141,6 +314,36 @@ public class RawContentService
         var bytesRead = await ReadToBufferAsync(stream, buffer).ConfigureAwait(false);
         var decodedText = DecodeText(buffer, bytesRead, contentType);
         return (StructuredTextDisplayFormatter.FormatForDisplay(decodedText, contentType, fileName ?? filePath), isTruncated);
+    }
+
+    private static IReadOnlyList<string> GetFocusedIgnorePaths(FilePairComparisonResult pair) =>
+        pair.FocusedRawContentIgnorePaths
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => path.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private static string BuildFocusedCacheKey(FilePairComparisonResult pair, IReadOnlyCollection<string> ignorePaths) =>
+        string.Join(
+            '|',
+            pair.RequestRelativePath,
+            pair.File1Path,
+            pair.File2Path,
+            pair.BundledRawContentPath,
+            pair.FocusedBundledRawContentPath,
+            pair.ContentTypeA,
+            pair.ContentTypeB,
+            string.Join('\u001f', ignorePaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase)));
+
+    private static (string content, bool isTruncated) TruncateDisplayContent(string content)
+    {
+        var bytes = Encoding.UTF8.GetBytes(content);
+        if (bytes.Length <= MaxFileSizeBytes)
+        {
+            return (content, false);
+        }
+
+        return (Encoding.UTF8.GetString(bytes, 0, MaxFileSizeBytes), true);
     }
 
     private static async Task<int> ReadToBufferAsync(FileStream stream, byte[] buffer)

@@ -27,6 +27,41 @@ public sealed class FocusedRawContentArtifactService
         this.logger = logger;
     }
 
+    public void MarkFocusedRawContentAvailable(
+        MultiFolderComparisonResult result,
+        IEnumerable<IgnoreRule> ignoreRules)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        ArgumentNullException.ThrowIfNull(ignoreRules);
+
+        var ignoreCompletePaths = BuildIgnoreCompletePaths(ignoreRules);
+
+        result.Metadata ??= new Dictionary<string, object>(StringComparer.Ordinal);
+        result.Metadata[MetadataIgnoreCompleteRulesKey] = ignoreCompletePaths;
+
+        var totalPairs = result.FilePairResults.Count;
+        if (ignoreCompletePaths.Count == 0 || totalPairs == 0)
+        {
+            result.Metadata[MetadataFocusedPairCountKey] = 0;
+            return;
+        }
+
+        var focusedCount = 0;
+        foreach (var pair in result.FilePairResults)
+        {
+            if (!CanBuildFocusedRawContentOnDemand(pair))
+            {
+                continue;
+            }
+
+            pair.FocusedRawContentRuleCount = ignoreCompletePaths.Count;
+            pair.FocusedRawContentIgnorePaths = ignoreCompletePaths.ToList();
+            focusedCount++;
+        }
+
+        result.Metadata[MetadataFocusedPairCountKey] = focusedCount;
+    }
+
     public async Task PopulateFocusedRawContentAsync(
         MultiFolderComparisonResult result,
         IEnumerable<IgnoreRule> ignoreRules,
@@ -37,11 +72,7 @@ public sealed class FocusedRawContentArtifactService
         ArgumentNullException.ThrowIfNull(result);
         ArgumentNullException.ThrowIfNull(ignoreRules);
 
-        var ignoreCompletePaths = ignoreRules
-            .Where(rule => rule.IgnoreCompletely && !string.IsNullOrWhiteSpace(rule.PropertyPath))
-            .Select(rule => rule.PropertyPath.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var ignoreCompletePaths = BuildIgnoreCompletePaths(ignoreRules);
 
         result.Metadata ??= new Dictionary<string, object>(StringComparer.Ordinal);
         result.Metadata[MetadataIgnoreCompleteRulesKey] = ignoreCompletePaths;
@@ -153,8 +184,22 @@ public sealed class FocusedRawContentArtifactService
         pair.FocusedFile1Path = focusedPathA;
         pair.FocusedFile2Path = focusedPathB;
         pair.FocusedRawContentRuleCount = ignoreCompletePaths.Count;
+        pair.FocusedRawContentIgnorePaths = ignoreCompletePaths.ToList();
         return true;
     }
+
+    private static List<string> BuildIgnoreCompletePaths(IEnumerable<IgnoreRule> ignoreRules) =>
+        ignoreRules
+            .Where(rule => rule.IgnoreCompletely && !string.IsNullOrWhiteSpace(rule.PropertyPath))
+            .Select(rule => rule.PropertyPath.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private static bool CanBuildFocusedRawContentOnDemand(FilePairComparisonResult pair) =>
+        !pair.HasError &&
+        ((!string.IsNullOrWhiteSpace(pair.File1Path) && !string.IsNullOrWhiteSpace(pair.File2Path)) ||
+         pair.HasEmbeddedRawContent ||
+         !string.IsNullOrWhiteSpace(pair.BundledRawContentPath));
 
     private static string BuildPairDirectoryName(FilePairComparisonResult pair, int index)
     {

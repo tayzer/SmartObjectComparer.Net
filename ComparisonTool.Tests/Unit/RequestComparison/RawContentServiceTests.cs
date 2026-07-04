@@ -177,6 +177,73 @@ public sealed class RawContentServiceTests
         focused.ContentA.ShouldContain("ResultCode");
     }
 
+    [TestMethod]
+    public async Task LoadRawContentAsync_BuildsFocusedVariantFromFullArtifactsWhenFocusedFilesAreMissing()
+    {
+        var fullA = Path.Combine(tempDir, "lazy-full-a.json");
+        var fullB = Path.Combine(tempDir, "lazy-full-b.json");
+
+        await File.WriteAllTextAsync(fullA, "{\"ResultCode\":\"00\",\"SourceSystem\":\"endpoint-a\"}", Encoding.UTF8);
+        await File.WriteAllTextAsync(fullB, "{\"ResultCode\":\"00\",\"SourceSystem\":\"endpoint-b\"}", Encoding.UTF8);
+
+        var pair = new FilePairComparisonResult
+        {
+            File1Path = fullA,
+            File2Path = fullB,
+            FocusedRawContentRuleCount = 1,
+            FocusedRawContentIgnorePaths = new List<string> { "SourceSystem" },
+            ContentTypeA = "application/json",
+            ContentTypeB = "application/json",
+        };
+
+        var full = await service.LoadRawContentAsync(pair);
+        var focused = await service.LoadRawContentAsync(pair, RawContentVariant.Focused);
+
+        pair.HasFocusedRawContent.ShouldBeTrue();
+        pair.FocusedFile1Path.ShouldBeNull();
+        pair.FocusedFile2Path.ShouldBeNull();
+        full.ContentA.ShouldContain("SourceSystem");
+        focused.ErrorMessage.ShouldBeNull();
+        focused.IsLoaded.ShouldBeTrue();
+        focused.ContentA.ShouldContain("ResultCode");
+        focused.ContentA.ShouldNotContain("SourceSystem");
+        focused.ContentB.ShouldNotContain("endpoint-b");
+    }
+
+    [TestMethod]
+    public async Task LoadRawContentAsync_BuildsFocusedVariantFromBundledFullContentWhenFocusedSidecarIsMissing()
+    {
+        var accessor = new VariantBundledRawContentAccessor(
+            fullResult: new RawContentResult
+            {
+                ContentA = "{\n  \"ResultCode\": \"00\",\n  \"TraceId\": \"bundled-a\"\n}",
+                ContentB = "{\n  \"ResultCode\": \"00\",\n  \"TraceId\": \"bundled-b\"\n}",
+                IsLoaded = true,
+            },
+            focusedResult: null);
+        var logger = new Mock<ILogger<RawContentService>>();
+        service = new RawContentService(logger.Object, accessor);
+
+        var pair = new FilePairComparisonResult
+        {
+            BundledRawContentPath = "raw/pair-1.json",
+            FocusedRawContentRuleCount = 1,
+            FocusedRawContentIgnorePaths = new List<string> { "TraceId" },
+            ContentTypeA = "application/json",
+            ContentTypeB = "application/json",
+        };
+
+        var focused = await service.LoadRawContentAsync(pair, RawContentVariant.Focused);
+
+        focused.ErrorMessage.ShouldBeNull();
+        focused.IsLoaded.ShouldBeTrue();
+        focused.ContentA.ShouldContain("ResultCode");
+        focused.ContentA.ShouldNotContain("TraceId");
+        focused.ContentB.ShouldNotContain("bundled-b");
+        accessor.FocusedInvocationCount.ShouldBe(0);
+        accessor.FullInvocationCount.ShouldBe(1);
+    }
+
     private sealed class StubBundledRawContentAccessor : IBundledRawContentAccessor
     {
         private readonly RawContentResult result;
@@ -192,6 +259,34 @@ public sealed class RawContentServiceTests
         {
             InvocationCount++;
             return Task.FromResult<RawContentResult?>(result);
+        }
+    }
+
+    private sealed class VariantBundledRawContentAccessor : IBundledRawContentAccessor
+    {
+        private readonly RawContentResult? fullResult;
+        private readonly RawContentResult? focusedResult;
+
+        public VariantBundledRawContentAccessor(RawContentResult? fullResult, RawContentResult? focusedResult)
+        {
+            this.fullResult = fullResult;
+            this.focusedResult = focusedResult;
+        }
+
+        public int FullInvocationCount { get; private set; }
+
+        public int FocusedInvocationCount { get; private set; }
+
+        public Task<RawContentResult?> TryLoadAsync(FilePairComparisonResult pair, RawContentVariant variant = RawContentVariant.Full)
+        {
+            if (variant == RawContentVariant.Focused)
+            {
+                FocusedInvocationCount++;
+                return Task.FromResult(focusedResult);
+            }
+
+            FullInvocationCount++;
+            return Task.FromResult(fullResult);
         }
     }
 }

@@ -1,9 +1,9 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
-using ComparisonTool.Core.Comparison.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace ComparisonTool.Core.Utilities;
@@ -13,6 +13,8 @@ namespace ComparisonTool.Core.Utilities;
 /// </summary>
 public sealed class StructuredContentPruningService
 {
+    private static readonly TimeSpan MatchRegexTimeout = TimeSpan.FromSeconds(1);
+
     private readonly ILogger<StructuredContentPruningService> logger;
 
     public StructuredContentPruningService(ILogger<StructuredContentPruningService> logger)
@@ -32,6 +34,11 @@ public sealed class StructuredContentPruningService
         }
 
         var text = Encoding.UTF8.GetString(content);
+        if (text.Length > 0 && text[0] == '\uFEFF')
+        {
+            text = text[1..];
+        }
+
         return TryPrune(text, contentType, fileName, ignoreCompletePaths);
     }
 
@@ -46,16 +53,16 @@ public sealed class StructuredContentPruningService
             return FocusedContentResult.Unchanged();
         }
 
-        var patterns = BuildMatchPatterns(ignoreCompletePaths);
+        var matcher = new IgnorePathMatcher(BuildMatchPatterns(ignoreCompletePaths));
         return DetectDocumentKind(contentType, fileName, content) switch
         {
-            StructuredDocumentKind.Json => TryPruneJson(content, patterns),
-            StructuredDocumentKind.Xml => TryPruneXml(content, patterns),
+            StructuredDocumentKind.Json => TryPruneJson(content, matcher),
+            StructuredDocumentKind.Xml => TryPruneXml(content, matcher),
             _ => FocusedContentResult.Unsupported(),
         };
     }
 
-    private FocusedContentResult TryPruneJson(string content, IReadOnlyCollection<string> ignorePatterns)
+    private FocusedContentResult TryPruneJson(string content, IgnorePathMatcher ignoreMatcher)
     {
         try
         {
@@ -65,7 +72,7 @@ public sealed class StructuredContentPruningService
                 return FocusedContentResult.Unchanged();
             }
 
-            var removedCount = PruneJsonNode(root, string.Empty, ignorePatterns);
+            var removedCount = PruneJsonNode(root, string.Empty, ignoreMatcher);
             if (removedCount == 0)
             {
                 return FocusedContentResult.Unchanged();
@@ -82,7 +89,7 @@ public sealed class StructuredContentPruningService
         }
     }
 
-    private int PruneJsonNode(JsonNode node, string path, IReadOnlyCollection<string> ignorePatterns)
+    private int PruneJsonNode(JsonNode node, string path, IgnorePathMatcher ignoreMatcher)
     {
         var removedCount = 0;
 
@@ -91,7 +98,7 @@ public sealed class StructuredContentPruningService
             foreach (var property in obj.ToList())
             {
                 var propertyPath = AppendPath(path, property.Key);
-                if (ShouldIgnoreAny(BuildPathCandidates(propertyPath), ignorePatterns))
+                if (ShouldIgnorePath(propertyPath, ignoreMatcher))
                 {
                     obj.Remove(property.Key);
                     removedCount++;
@@ -100,7 +107,7 @@ public sealed class StructuredContentPruningService
 
                 if (property.Value != null)
                 {
-                    removedCount += PruneJsonNode(property.Value, propertyPath, ignorePatterns);
+                    removedCount += PruneJsonNode(property.Value, propertyPath, ignoreMatcher);
                 }
             }
         }
@@ -114,14 +121,14 @@ public sealed class StructuredContentPruningService
                     continue;
                 }
 
-                removedCount += PruneJsonNode(item, $"{path}[{index}]", ignorePatterns);
+                removedCount += PruneJsonNode(item, $"{path}[{index}]", ignoreMatcher);
             }
         }
 
         return removedCount;
     }
 
-    private FocusedContentResult TryPruneXml(string content, IReadOnlyCollection<string> ignorePatterns)
+    private FocusedContentResult TryPruneXml(string content, IgnorePathMatcher ignoreMatcher)
     {
         try
         {
@@ -131,7 +138,7 @@ public sealed class StructuredContentPruningService
                 return FocusedContentResult.Unchanged();
             }
 
-            var removedCount = PruneXmlChildren(document.Root, new[] { document.Root.Name.LocalName }, ignorePatterns);
+            var removedCount = PruneXmlChildren(document.Root, new[] { document.Root.Name.LocalName }, ignoreMatcher);
             if (removedCount == 0)
             {
                 return FocusedContentResult.Unchanged();
@@ -161,7 +168,7 @@ public sealed class StructuredContentPruningService
         }
     }
 
-    private int PruneXmlChildren(XElement parent, IReadOnlyCollection<string> parentPaths, IReadOnlyCollection<string> ignorePatterns)
+    private int PruneXmlChildren(XElement parent, IReadOnlyCollection<string> parentPaths, IgnorePathMatcher ignoreMatcher)
     {
         var removedCount = 0;
         var children = parent.Elements().ToList();
@@ -185,15 +192,14 @@ public sealed class StructuredContentPruningService
                 childPaths.AddRange(parentPaths.Select(parentPath => $"{AppendPath(parentPath, name)}[*]"));
             }
 
-            var candidates = childPaths.SelectMany(BuildPathCandidates).ToList();
-            if (ShouldIgnoreAny(candidates, ignorePatterns))
+            if (ShouldIgnoreAny(childPaths, ignoreMatcher))
             {
                 child.Remove();
                 removedCount++;
                 continue;
             }
 
-            removedCount += PruneXmlChildren(child, childPaths, ignorePatterns);
+            removedCount += PruneXmlChildren(child, childPaths, ignoreMatcher);
         }
 
         return removedCount;
@@ -218,19 +224,24 @@ public sealed class StructuredContentPruningService
         return patterns.ToList();
     }
 
-    private static IEnumerable<string> BuildPathCandidates(string path)
+    private static bool ShouldIgnoreAny(IEnumerable<string> paths, IgnorePathMatcher ignoreMatcher) =>
+        paths.Any(path => ShouldIgnorePath(path, ignoreMatcher));
+
+    private static bool ShouldIgnorePath(string path, IgnorePathMatcher ignoreMatcher)
     {
-        yield return path;
+        if (ignoreMatcher.IsMatch(path))
+        {
+            return true;
+        }
 
         var firstDot = path.IndexOf('.', StringComparison.Ordinal);
         if (firstDot > 0 && firstDot < path.Length - 1)
         {
-            yield return path[(firstDot + 1) ..];
+            return ignoreMatcher.IsMatch(path[(firstDot + 1) ..]);
         }
-    }
 
-    private static bool ShouldIgnoreAny(IEnumerable<string> candidates, IReadOnlyCollection<string> ignorePatterns) =>
-        candidates.Any(candidate => PropertyIgnoreHelper.ShouldIgnoreProperty(candidate, ignorePatterns));
+        return false;
+    }
 
     private static string AppendPath(string parent, string child) =>
         string.IsNullOrWhiteSpace(parent) ? child : $"{parent}.{child}";
@@ -280,6 +291,114 @@ public sealed class StructuredContentPruningService
         Unknown,
         Json,
         Xml,
+    }
+
+    private sealed class IgnorePathMatcher
+    {
+        private readonly HashSet<string> exactPaths;
+        private readonly List<string> descendantPrefixes;
+        private readonly List<string> collectionPrefixes;
+        private readonly List<Regex> collectionPatternRegexes;
+        private readonly List<Regex> wildcardPatternRegexes;
+
+        public IgnorePathMatcher(IEnumerable<string> ignorePatterns)
+        {
+            exactPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            descendantPrefixes = new List<string>();
+            collectionPrefixes = new List<string>();
+            collectionPatternRegexes = new List<Regex>();
+            wildcardPatternRegexes = new List<Regex>();
+
+            foreach (var pattern in ignorePatterns
+                .Where(static pattern => !string.IsNullOrWhiteSpace(pattern))
+                .Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                exactPaths.Add(pattern);
+
+                if (pattern.Contains("[*]", StringComparison.Ordinal))
+                {
+                    collectionPatternRegexes.Add(BuildCollectionPatternRegex(pattern));
+                    continue;
+                }
+
+                if (pattern.Contains('*', StringComparison.Ordinal))
+                {
+                    wildcardPatternRegexes.Add(BuildWildcardPatternRegex(pattern));
+                    continue;
+                }
+
+                descendantPrefixes.Add(pattern + ".");
+                collectionPrefixes.Add(pattern + "[");
+            }
+        }
+
+        public bool IsMatch(string? propertyPath)
+        {
+            if (string.IsNullOrWhiteSpace(propertyPath))
+            {
+                return false;
+            }
+
+            if (exactPaths.Contains(propertyPath))
+            {
+                return true;
+            }
+
+            foreach (var prefix in descendantPrefixes)
+            {
+                if (propertyPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            foreach (var prefix in collectionPrefixes)
+            {
+                if (propertyPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            foreach (var regex in collectionPatternRegexes)
+            {
+                if (regex.IsMatch(propertyPath))
+                {
+                    return true;
+                }
+            }
+
+            foreach (var regex in wildcardPatternRegexes)
+            {
+                if (regex.IsMatch(propertyPath))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static Regex BuildCollectionPatternRegex(string pattern)
+        {
+            var tempPattern = pattern.Replace("[*]", "COLLECTION_INDEX_PLACEHOLDER", StringComparison.Ordinal);
+            var regexPattern = Regex.Escape(tempPattern)
+                .Replace("COLLECTION_INDEX_PLACEHOLDER", @"\[\d+\]", StringComparison.Ordinal);
+
+            return new Regex(
+                $"^{regexPattern}$",
+                RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.ExplicitCapture,
+                MatchRegexTimeout);
+        }
+
+        private static Regex BuildWildcardPatternRegex(string pattern)
+        {
+            var regexPattern = "^" + Regex.Escape(pattern).Replace("\\*", ".*", StringComparison.Ordinal) + "($|\\.)";
+            return new Regex(
+                regexPattern,
+                RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.ExplicitCapture,
+                MatchRegexTimeout);
+        }
     }
 }
 
