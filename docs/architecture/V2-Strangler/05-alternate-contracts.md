@@ -1,56 +1,90 @@
-# Slice 4: Alternate Contracts
+﻿# Slice 4: Alternate Contracts And Canonical Comparison Flow
 
 ## Goal
 
-Rebuild alternate-contract behavior in the V2 architecture.
+Rebuild V1 alternate-contract behavior inside the V2 architecture without switching any Web, Desktop, or CLI host to V2.
 
-This slice covers endpoint-B request transformation, endpoint A/B response normalization, canonical comparison models, default ignore rules, profile resolution, and existing alternate-contract scenarios.
+This slice lets a run compare endpoint A and endpoint B when endpoint B uses a different request or response contract. The Engine transforms endpoint B requests, normalizes both responses into the canonical model contract, then uses the existing V2 comparison pipeline so masking, default ignore rules, and per-run comparison options remain deterministic.
 
-## User-Visible Behavior
+## Implemented Project Shape
 
-Users can compare endpoint A and endpoint B even when endpoint B uses a different request or response contract.
+- `ParityBench.NET.Domain`
+  - Adds `AlternateContractOptions` to `RunOptions` so a run can select a profile by logical profile id.
+  - Adds `PayloadFormat` for JSON/XML alternate-contract routing.
+- `ParityBench.NET.Application`
+  - Adds alternate-contract ports and contracts: profile registry, profile interface, payload serializer, request preparation context, prepared endpoint-B request, response normalization context, and normalized response payload.
+- `ParityBench.NET.Engine`
+  - Extends `BasicComparisonRunExecutor` with an optional `IAlternateContractProfileRegistry`.
+  - Executes normal runs through the existing streamed artifact path.
+  - Executes alternate-contract runs through endpoint-B transformation, response normalization, canonical artifact persistence, and the existing response comparer.
+- `ParityBench.NET.Infrastructure`
+  - Adds a JSON/XML contract payload serializer.
+  - Adds an in-memory alternate-contract profile registry with deterministic duplicate, missing, mismatch, and ambiguous-profile errors.
+  - Adds generic profile wiring plus built-in profile definitions for the current representative SOAP-to-JSON scenarios.
+- `ParityBench.NET.Workspaces`
+  - Persists and reloads `AlternateContractOptions` in run snapshots.
 
-Results should appear equivalent to V1: users still see comparable canonical output and expected ignore behavior.
+## Runtime Flow
 
-## Architecture Areas
+1. Application starts a run using immutable `RunOptions`.
+2. Engine resolves the configured alternate-contract profile from `ModelName` and `AlternateContract.ProfileId`.
+3. Profile default ignore rules are prepended to the run comparison rules for this execution only.
+4. Endpoint A receives the original staged request.
+5. Endpoint B request preparation reads the staged source body, detects JSON/XML, calls the profile, removes `SOAPAction`, applies profile-generated headers, and sends the transformed request body/content type.
+6. Both endpoint responses are captured for normalization when the alternate-contract path is active.
+7. Non-success or sender-failure pairs fall back to the existing basic result classification and raw artifact persistence.
+8. Successful pairs are normalized into the canonical response format, masked, persisted as canonical artifacts, and compared by the V2 response comparer.
+9. Detail indexes continue to store lightweight pair metadata and artifact references, not raw bodies.
 
-- Alternate-contract profile model.
-- Request transformation.
-- Response normalization.
-- Canonical model selection.
-- Default ignore rules.
-- Profile lookup and validation.
-- Legacy profile bridge policy.
+## Profile Contract
 
-## V1 Parity Expectations
+An alternate-contract profile owns only contract-shape behavior:
 
-V2 should match existing alternate-contract scenarios:
+- profile id and canonical model name;
+- canonical and alternate request/response CLR types;
+- supported source request formats;
+- endpoint-B request format and content type;
+- alternate response format;
+- canonical response format and content type;
+- optional suggested endpoint ids;
+- default ignore rules;
+- optional canonical-to-alternate mask path map;
+- request preparation and response normalization methods.
 
-- Supported source request formats.
-- Endpoint-B request body generation.
-- Profile-generated headers.
-- Endpoint A response normalization.
-- Endpoint B response normalization.
-- Canonical response format.
-- Profile default ignore rules, including equivalent application through the V2 comparer adapter.
-- Error messages for unsupported or invalid profiles.
+Profiles are resolved per run and must not mutate shared comparer or serializer state. Profile defaults are copied into an execution-specific `RunOptions` instance before comparison.
 
-## Performance Considerations
+## Behavioral Rules
 
-Normalization should avoid unnecessary large-body retention. Where possible, normalization should read from and write to artifacts or streams.
+- Alternate-contract selection is storage-neutral and uses logical profile ids, not file paths or host-specific settings.
+- Unsupported source request formats produce an `ExecutionFailed` pair rather than crashing the whole batch.
+- Missing registries, unknown profiles, duplicate profile ids, and model/profile mismatches are deterministic configuration errors.
+- `SOAPAction` is suppressed only for transformed endpoint-B requests.
+- Profile-generated headers override endpoint headers and request headers for endpoint B.
+- Canonical artifacts are persisted after normalization and masking, so later result loading does not need profile execution.
+- Existing V2 comparison options still apply after canonical normalization.
 
-Profile behavior should remain per-run and deterministic under concurrent execution.
+## Built-In Profile Coverage
 
-## Completion Criteria
+This slice includes V2-owned profile implementations for representative current alternate-contract behavior:
 
-- Current alternate-contract profiles have V2 equivalents or explicit temporary legacy adapters.
-- V2 produces equivalent pair outcomes and differences for current alternate-contract tests.
-- Profile default ignore rules are applied through immutable run configuration and preserve current `CompareNETObjects` comparison behavior after canonical normalization.
-- Temporary V1 profile dependencies are isolated to Infrastructure adapters.
+- `sample-soap-to-json` for a SOAP request/response compared against a JSON endpoint through a canonical SOAP response model.
+- `expected-json-customer-lookup` for a JSON canonical response profile with endpoint-B authorization header generation, source-system default ignore behavior, and suggested endpoint ids.
+
+These profiles are Infrastructure implementations. V2 source projects do not reference V1 projects.
+
+## Tests
+
+Coverage added or extended in this slice:
+
+- Domain option validation and `RunOptions` storage.
+- Infrastructure profile registry resolution, duplicate/missing/mismatch errors, JSON/XML serialization, profile request transformation, profile response normalization, and expected-profile authorization/default metadata.
+- Engine endpoint-B transformation, `SOAPAction` suppression, unsupported request format failure, normalization failure handling, built-in profile canonical comparison, and canonical artifact persistence.
+- Workspaces run snapshot round-trip for alternate-contract options.
 
 ## Non-Goals
 
-- Do not add a plugin system unless required later.
-- Do not broaden profile behavior beyond V1 parity.
-- Do not expose infrastructure serialization details to Application or Domain.
-
+- No host integration yet.
+- No plugin system.
+- No V1 project references from V2 projects.
+- No broad alternate-contract behavior beyond current parity scenarios.
+- No final report or UI flow changes.

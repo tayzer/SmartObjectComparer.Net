@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 
 using ParityBench.NET.Application.Runs;
+using ParityBench.NET.Domain.AlternateContracts;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
@@ -123,6 +124,7 @@ public sealed class FileSystemRunStore : IRunStore
             ModelName = options.ModelName,
             Comparison = ToDto(options.Comparison),
             RequestExecution = ToDto(options.RequestExecution),
+            AlternateContract = options.AlternateContract is null ? null : ToDto(options.AlternateContract),
         };
 
     private EndpointDefinitionDto ToDto(EndpointDefinition endpoint) =>
@@ -151,6 +153,12 @@ public sealed class FileSystemRunStore : IRunStore
         new RequestExecutionOptionsDto
         {
             ContentTypeOverride = options.ContentTypeOverride,
+        };
+
+    private AlternateContractOptionsDto ToDto(AlternateContractOptions options) =>
+        new AlternateContractOptionsDto
+        {
+            ProfileId = options.ProfileId,
         };
 
     private IgnoreRuleDefinitionDto ToDto(IgnoreRuleDefinition rule) =>
@@ -236,7 +244,8 @@ public sealed class FileSystemRunStore : IRunStore
             dto.MaxConcurrency,
             dto.ModelName,
             dto.Comparison is null ? null : FromDto(dto.Comparison),
-            dto.RequestExecution is null ? null : FromDto(dto.RequestExecution));
+            dto.RequestExecution is null ? null : FromDto(dto.RequestExecution),
+            dto.AlternateContract is null ? null : FromDto(dto.AlternateContract));
 
     private EndpointDefinition FromDto(EndpointDefinitionDto dto) =>
         new EndpointDefinition(
@@ -258,6 +267,9 @@ public sealed class FileSystemRunStore : IRunStore
 
     private RequestExecutionOptions FromDto(RequestExecutionOptionsDto dto) =>
         new RequestExecutionOptions(dto.ContentTypeOverride);
+
+    private AlternateContractOptions FromDto(AlternateContractOptionsDto dto) =>
+        new AlternateContractOptions(dto.ProfileId);
 
     private IgnoreRuleDefinition FromDto(IgnoreRuleDefinitionDto dto) =>
         new IgnoreRuleDefinition(
@@ -344,6 +356,8 @@ public sealed class FileSystemRunStore : IRunStore
         public ComparisonOptionsDto? Comparison { get; init; }
 
         public RequestExecutionOptionsDto? RequestExecution { get; init; }
+
+        public AlternateContractOptionsDto? AlternateContract { get; init; }
     }
 
     private sealed class EndpointDefinitionDto
@@ -379,6 +393,11 @@ public sealed class FileSystemRunStore : IRunStore
     private sealed class RequestExecutionOptionsDto
     {
         public string? ContentTypeOverride { get; init; }
+    }
+
+    private sealed class AlternateContractOptionsDto
+    {
+        public string ProfileId { get; init; } = string.Empty;
     }
 
     private sealed class IgnoreRuleDefinitionDto
@@ -454,3 +473,4 @@ public sealed class FileSystemRunStore : IRunStore
         public string? ContentType { get; init; }
     }
 }
+

@@ -3,6 +3,7 @@ using System.Text;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
+using ParityBench.NET.Domain.AlternateContracts;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
@@ -162,7 +163,7 @@ public sealed class FileSystemWorkspaceTests
             ignoreRules: new[] { new IgnoreRuleDefinition("Name") },
             smartIgnoreRules: new[] { new SmartIgnoreRuleDefinition(SmartIgnoreRuleKind.PropertyName, "Id") },
             maskRules: new[] { new MaskRuleDefinition("Token", 4, "#") });
-        RunOptions options = CreateOptions(comparisonOptions, new RequestExecutionOptions("application/xml"));
+        RunOptions options = CreateOptions(comparisonOptions, new RequestExecutionOptions("application/xml"), new AlternateContractOptions("profile-a"));
         ComparisonRun run = ComparisonRun.Create(new RunId("run-1"), options);
 
         await store.SaveAsync(run);
@@ -179,6 +180,7 @@ public sealed class FileSystemWorkspaceTests
         Assert.AreEqual("Id", loadedRun.Options.Comparison.SmartIgnoreRules[0].Value);
         Assert.AreEqual("Token", loadedRun.Options.Comparison.MaskRules[0].PropertyPath);
         Assert.AreEqual("application/xml", loadedRun.Options.RequestExecution.ContentTypeOverride);
+        Assert.AreEqual("profile-a", loadedRun.Options.AlternateContract?.ProfileId);
     }
 
     private static string CreateTempDirectory()
@@ -199,7 +201,8 @@ public sealed class FileSystemWorkspaceTests
 
     private static RunOptions CreateOptions(
         ComparisonOptions? comparisonOptions = null,
-        RequestExecutionOptions? requestExecutionOptions = null) =>
+        RequestExecutionOptions? requestExecutionOptions = null,
+        AlternateContractOptions? alternateContractOptions = null) =>
         new RunOptions(
             new RequestBatchReference("batch-1"),
             new EndpointDefinition(new Uri("https://service-a.example.test")),
@@ -207,8 +210,10 @@ public sealed class FileSystemWorkspaceTests
             TimeSpan.FromSeconds(30),
             2,
             comparisonOptions: comparisonOptions,
-            requestExecutionOptions: requestExecutionOptions);
+            requestExecutionOptions: requestExecutionOptions,
+            alternateContractOptions: alternateContractOptions);
 
     private static string ToSha256(byte[] content) =>
         Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
 }
+

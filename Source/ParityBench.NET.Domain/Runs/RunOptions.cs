@@ -1,3 +1,4 @@
+using ParityBench.NET.Domain.AlternateContracts;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 
@@ -13,7 +14,8 @@ public sealed record RunOptions
         int maxConcurrency,
         string modelName = "Auto",
         ComparisonOptions? comparisonOptions = null,
-        RequestExecutionOptions? requestExecutionOptions = null)
+        RequestExecutionOptions? requestExecutionOptions = null,
+        AlternateContractOptions? alternateContractOptions = null)
     {
         ArgumentNullException.ThrowIfNull(endpointA);
         ArgumentNullException.ThrowIfNull(endpointB);
@@ -36,6 +38,7 @@ public sealed record RunOptions
         ModelName = string.IsNullOrWhiteSpace(modelName) ? "Auto" : modelName;
         Comparison = comparisonOptions ?? new ComparisonOptions();
         RequestExecution = requestExecutionOptions ?? new RequestExecutionOptions();
+        AlternateContract = alternateContractOptions;
     }
 
     public RequestBatchReference RequestBatch { get; }
@@ -53,4 +56,6 @@ public sealed record RunOptions
     public ComparisonOptions Comparison { get; }
 
     public RequestExecutionOptions RequestExecution { get; }
+
+    public AlternateContractOptions? AlternateContract { get; }
 }
