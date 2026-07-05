@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="MudBlazor" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ParityBench.NET.Application\ParityBench.NET.Application.csproj" />
+    <ProjectReference Include="..\ParityBench.NET.Domain\ParityBench.NET.Domain.csproj" />
+    <ProjectReference Include="..\ParityBench.NET.Engine\ParityBench.NET.Engine.csproj" />
+    <ProjectReference Include="..\ParityBench.NET.Infrastructure\ParityBench.NET.Infrastructure.csproj" />
+    <ProjectReference Include="..\ParityBench.NET.UI\ParityBench.NET.UI.csproj" />
+    <ProjectReference Include="..\ParityBench.NET.Workspaces\ParityBench.NET.Workspaces.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,56 +1,64 @@
-# Slice 7: Reports And Historical Results
+# Slice 7: V2 Shared Result Surface And Host Shells
 
 ## Goal
 
-Make V2 results durable and inspectable.
+Create the shared V2 result-viewing surface that Web, Desktop, and the future bundled Blazor report can all use.
 
-This slice separates run summaries from detailed pair artifacts, supports lazy raw and focused content loading, and produces static report bundles from V2 result data.
+This slice replaces the earlier idea of adapting V2 results into the V1 report pipeline. Reports remain a required product feature, but the static report should package the same V2 UI/result contracts used by the interactive hosts instead of depending on V1 projects.
 
 ## User-Visible Behavior
 
-Users can inspect V2 results in the same practical ways they inspect V1 results today, with cleaner storage boundaries and better lazy loading.
+Users can open opt-in V2 Web and Desktop shells that browse historical V2 runs from a workspace.
 
-Reports should remain useful as standalone artifacts.
+The shells are intentionally read-only in this slice. They can list runs, show cheap summary counts, page pair details, inspect differences, and load bounded raw response previews on demand.
 
 ## Architecture Areas
 
-- Run summary storage.
-- Pair detail storage.
-- Workspace-backed historical result browsing.
-- Raw-content artifact reading.
-- Focused-content artifact reading.
-- Report bundle generation.
-- Historical result listing.
-- Result metadata compatibility.
+- Result read contracts.
+- Historical run listing.
+- Lazy pair-detail paging.
+- Bounded artifact preview loading.
+- Shared Blazor result components.
+- Application-backed UI data source.
+- Opt-in V2 Web host shell.
+- Opt-in V2 Desktop host shell.
 
 ## V1 Parity Expectations
 
-V2 should preserve:
+V2 should preserve the report inspection shape users rely on:
 
-- Static report generation.
-- Lazy raw-content sidecars.
-- Focused raw-content availability where applicable.
-- Summary counts and metadata.
+- Historical run summary counts.
+- Pair table navigation.
 - Pair detail inspection.
-- Report navigation expectations.
+- Difference metadata visibility.
+- Raw response inspection without eager full-body loading.
+
+This slice does not reuse V1 report projects or V1 report models.
 
 ## Performance Considerations
 
-Historical result browsing should load summaries first. Detail and raw content should be loaded only on demand.
+Historical browsing loads run snapshots and summary counts first. Pair details are loaded through paged queries. Raw response artifacts are opened only when a selected pair needs a preview, and previews are byte-bounded.
 
-Report generation should avoid embedding every large body in the main bootstrap payload.
+The shared UI must not depend on Engine, Workspaces, Infrastructure, host projects, or V1 projects. Hosts compose concrete V2 implementations through dependency injection.
 
 ## Completion Criteria
 
-- V2 can list historical run summaries without loading all details.
-- V2 can load pair details lazily.
-- Static reports can be generated from V2 results.
-- Large raw content remains sidecar-backed or otherwise lazy.
-- V1 report behavior has parity coverage.
+- V2 Application exposes result browsing use cases.
+- V2 Workspaces can stream and page detail indexes.
+- `ParityBench.NET.UI` contains reusable result-view components.
+- `ParityBench.NET.Web` and `ParityBench.NET.Desktop` exist as opt-in host shells.
+- Host shells render the shared result UI against V2 workspace data.
+- Boundary tests prove V2 UI has no concrete-layer or V1 references.
+
+## Next Slices
+
+- Static bundled Blazor report: package the same `ParityBench.NET.UI` result components with a report-side data source and lazy sidecars.
+- Full host flow integration: route create/run/cancel workflows through V2 in Web, Desktop, and CLI.
+- V1 deprecation: remove or archive V1 only after V2 behavior parity is proven.
 
 ## Non-Goals
 
-- Do not require final workspace UX beyond the storage/read behavior needed for result inspection.
-- Do not redesign the report UI unless needed for V2 data shape.
-- Do not remove V1 report generation until V2 is default.
-
+- Do not switch existing V1 Web or Desktop hosts to V2.
+- Do not add a public V2 CLI command.
+- Do not generate static report bundles yet.
+- Do not reintroduce V1 project references into V2.

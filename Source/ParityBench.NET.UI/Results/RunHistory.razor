@@ -1,0 +1,70 @@
+@inject IRunResultsViewDataSource DataSource
+
+<MudPaper Outlined="true" Class="pa-4">
+    <MudStack Spacing="2">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.h6">Run History</MudText>
+            <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="LoadRunsAsync">Refresh</MudButton>
+        </MudStack>
+
+        @if (errorMessage is not null)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@errorMessage</MudAlert>
+        }
+        else if (runs is null)
+        {
+            <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+        }
+        else if (runs.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary">No runs found</MudText>
+        }
+        else
+        {
+            <MudTable T="RunListItem" Items="runs" Dense="true" Hover="true" Elevation="0">
+                <HeaderContent>
+                    <MudTh>Run</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Updated</MudTh>
+                    <MudTh>Summary</MudTh>
+                    <MudTh></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Run">@context.Id.Value</MudTd>
+                    <MudTd DataLabel="Status">@context.Status</MudTd>
+                    <MudTd DataLabel="Updated">@context.UpdatedAt.LocalDateTime</MudTd>
+                    <MudTd DataLabel="Summary"><RunSummaryCounts Summary="context.Summary" /></MudTd>
+                    <MudTd DataLabel="Open">
+                        <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="@(() => SelectRunAsync(context.Id))">Open</MudButton>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    private IReadOnlyList<RunListItem>? runs;
+    private string? errorMessage;
+
+    [Parameter]
+    public EventCallback<RunId> RunSelected { get; set; }
+
+    protected override Task OnInitializedAsync() => LoadRunsAsync();
+
+    private async Task LoadRunsAsync()
+    {
+        try
+        {
+            errorMessage = null;
+            runs = await DataSource.ListRunsAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            runs = Array.Empty<RunListItem>();
+            errorMessage = ex.Message;
+        }
+    }
+
+    private Task SelectRunAsync(RunId runId) => RunSelected.InvokeAsync(runId);
+}

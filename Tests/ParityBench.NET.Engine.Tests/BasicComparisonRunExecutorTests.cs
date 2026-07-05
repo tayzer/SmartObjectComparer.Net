@@ -7,6 +7,7 @@ using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Runs;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
+using ParityBench.NET.Domain.Results;
 using ParityBench.NET.Domain.Runs;
 using ParityBench.NET.Engine;
 
@@ -546,6 +547,18 @@ public sealed class BasicComparisonRunExecutorTests
             RunDetailReference detailReference,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(SavedResults);
+
+        public Task<RunDetailPage> LoadPageAsync(
+            RunDetailReference detailReference,
+            RunDetailQuery query,
+            CancellationToken cancellationToken = default)
+        {
+            IReadOnlyList<RequestPairResult> pageItems = SavedResults
+                .Skip(query.Offset)
+                .Take(query.Limit)
+                .ToList();
+            return Task.FromResult(new RunDetailPage(pageItems, SavedResults.Count, query.Offset, query.Limit));
+        }
     }
 
     private sealed class CapturingProgressReporter : IRunProgressReporter
@@ -562,5 +575,4 @@ public sealed class BasicComparisonRunExecutorTests
         }
     }
 }
-
 

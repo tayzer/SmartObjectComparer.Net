@@ -1,0 +1,176 @@
+@inject IRunResultsViewDataSource DataSource
+
+<MudPaper Outlined="true" Class="pa-4">
+    @if (RunId is null)
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary">Select a run</MudText>
+    }
+    else if (isLoading)
+    {
+        <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+    }
+    else if (errorMessage is not null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@errorMessage</MudAlert>
+    }
+    else if (run is not null)
+    {
+        <MudStack Spacing="3">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="flex-wrap">
+                <MudStack Spacing="0">
+                    <MudText Typo="Typo.h6">Run @run.Id.Value</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@run.Status · @run.UpdatedAt.LocalDateTime</MudText>
+                </MudStack>
+                <RunSummaryCounts Summary="summary" />
+            </MudStack>
+
+            @if (detailPage is not null)
+            {
+                <MudStack Spacing="2">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.subtitle1">Pairs @detailPage.TotalCount</MudText>
+                        <MudStack Row="true" Spacing="1">
+                            <MudButton Variant="Variant.Outlined" Size="Size.Small" Disabled="@(detailOffset == 0)" OnClick="PreviousPageAsync">Previous</MudButton>
+                            <MudButton Variant="Variant.Outlined" Size="Size.Small" Disabled="@(!detailPage.HasMore)" OnClick="NextPageAsync">Next</MudButton>
+                        </MudStack>
+                    </MudStack>
+
+                    <MudTable T="RequestPairResult" Items="detailPage.Items" Dense="true" Hover="true" Elevation="0">
+                        <HeaderContent>
+                            <MudTh>Request</MudTh>
+                            <MudTh>Outcome</MudTh>
+                            <MudTh>Differences</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Request">
+                                <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="@(() => SelectPairAsync(context))">@context.RelativePath</MudButton>
+                            </MudTd>
+                            <MudTd DataLabel="Outcome">@context.Outcome</MudTd>
+                            <MudTd DataLabel="Differences">@context.DifferenceCount</MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudStack>
+            }
+
+            <PairDetail Pair="selectedPair" PreviewA="previewA" PreviewB="previewB" />
+        </MudStack>
+    }
+</MudPaper>
+
+@code {
+    private const int PageSize = 25;
+
+    private RunId? loadedRunId;
+    private ComparisonRun? run;
+    private RunResultSummary? summary;
+    private RunDetailPage? detailPage;
+    private RequestPairResult? selectedPair;
+    private ArtifactContentPreview? previewA;
+    private ArtifactContentPreview? previewB;
+    private int detailOffset;
+    private bool isLoading;
+    private string? errorMessage;
+
+    [Parameter]
+    public RunId? RunId { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (RunId is null || RunId == loadedRunId)
+        {
+            return;
+        }
+
+        loadedRunId = RunId;
+        detailOffset = 0;
+        await LoadRunAsync().ConfigureAwait(false);
+    }
+
+    private async Task LoadRunAsync()
+    {
+        if (RunId is null)
+        {
+            return;
+        }
+
+        RunId runId = RunId ?? throw new InvalidOperationException("Run id is required.");
+
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            selectedPair = null;
+            previewA = null;
+            previewB = null;
+            run = await DataSource.LoadRunAsync(runId).ConfigureAwait(false);
+            summary = await DataSource.LoadRunSummaryAsync(runId).ConfigureAwait(false);
+            await LoadDetailPageAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            run = null;
+            summary = null;
+            detailPage = null;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadDetailPageAsync()
+    {
+        if (RunId is null)
+        {
+            return;
+        }
+
+        RunId runId = RunId ?? throw new InvalidOperationException("Run id is required.");
+        detailPage = await DataSource
+            .LoadRunDetailsAsync(runId, new RunDetailQuery(detailOffset, PageSize))
+            .ConfigureAwait(false);
+    }
+
+    private async Task PreviousPageAsync()
+    {
+        detailOffset = Math.Max(0, detailOffset - PageSize);
+        await LoadDetailPageAsync().ConfigureAwait(false);
+    }
+
+    private async Task NextPageAsync()
+    {
+        if (detailPage?.HasMore != true)
+        {
+            return;
+        }
+
+        detailOffset += PageSize;
+        await LoadDetailPageAsync().ConfigureAwait(false);
+    }
+
+    private async Task SelectPairAsync(RequestPairResult pair)
+    {
+        selectedPair = pair;
+        previewA = null;
+        previewB = null;
+        errorMessage = null;
+
+        try
+        {
+            if (pair.ResponseA?.Artifact is not null)
+            {
+                previewA = await DataSource.ReadArtifactPreviewAsync(pair.ResponseA.Artifact).ConfigureAwait(false);
+            }
+
+            if (pair.ResponseB?.Artifact is not null)
+            {
+                previewB = await DataSource.ReadArtifactPreviewAsync(pair.ResponseB.Artifact).ConfigureAwait(false);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+}

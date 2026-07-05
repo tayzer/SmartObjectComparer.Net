@@ -8,7 +8,8 @@ public sealed record RunListItem
         DateTimeOffset createdAt,
         DateTimeOffset updatedAt,
         RunProgress progress,
-        string? errorMessage = null)
+        string? errorMessage = null,
+        RunResultSummary? summary = null)
     {
         ArgumentNullException.ThrowIfNull(progress);
 
@@ -18,6 +19,7 @@ public sealed record RunListItem
         UpdatedAt = updatedAt;
         Progress = progress;
         ErrorMessage = string.IsNullOrWhiteSpace(errorMessage) ? null : errorMessage;
+        Summary = summary;
     }
 
     public RunId Id { get; }
@@ -32,10 +34,12 @@ public sealed record RunListItem
 
     public string? ErrorMessage { get; }
 
+    public RunResultSummary? Summary { get; }
+
     public static RunListItem FromRun(ComparisonRun run)
     {
         ArgumentNullException.ThrowIfNull(run);
 
-        return new RunListItem(run.Id, run.Status, run.CreatedAt, run.UpdatedAt, run.Progress, run.ErrorMessage);
+        return new RunListItem(run.Id, run.Status, run.CreatedAt, run.UpdatedAt, run.Progress, run.ErrorMessage, run.Summary);
     }
 }

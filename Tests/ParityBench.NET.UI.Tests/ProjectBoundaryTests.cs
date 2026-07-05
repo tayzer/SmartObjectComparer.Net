@@ -10,10 +10,58 @@ public sealed class ProjectBoundaryTests
     [TestMethod]
     public void ProjectBoundary_WhenProjectIsUi_ReferencesOnlyApplicationAndDomain()
     {
-        string[] expectedReferences = new[] { @"..\ParityBench.NET.Application\ParityBench.NET.Application.csproj", @"..\ParityBench.NET.Domain\ParityBench.NET.Domain.csproj" };
+        string[] expectedReferences = new[]
+        {
+            @"..\ParityBench.NET.Application\ParityBench.NET.Application.csproj",
+            @"..\ParityBench.NET.Domain\ParityBench.NET.Domain.csproj",
+        };
 
         AssertProjectReferences("ParityBench.NET.UI", "ParityBench.NET.UI.csproj", expectedReferences);
     }
+
+    [TestMethod]
+    public void ProjectBoundary_WhenProjectIsWeb_ReferencesOnlyV2Projects()
+    {
+        string[] expectedReferences = ExpectedHostReferences();
+
+        AssertProjectReferences("ParityBench.NET.Web", "ParityBench.NET.Web.csproj", expectedReferences);
+    }
+
+    [TestMethod]
+    public void ProjectBoundary_WhenProjectIsDesktop_ReferencesOnlyV2Projects()
+    {
+        string[] expectedReferences = ExpectedHostReferences();
+
+        AssertProjectReferences("ParityBench.NET.Desktop", "ParityBench.NET.Desktop.csproj", expectedReferences);
+    }
+
+    [TestMethod]
+    public void ProjectBoundary_WhenProjectIsV2_DoesNotReferenceV1Projects()
+    {
+        string sourceRoot = Path.Combine(GetRepositoryRoot(), "Source");
+        string[] projectPaths = Directory.GetFiles(sourceRoot, "ParityBench.NET.*.csproj", SearchOption.AllDirectories);
+
+        foreach (string projectPath in projectPaths)
+        {
+            string[] references = LoadProjectReferences(projectPath);
+            string[] v1References = references
+                .Where(reference => reference.Contains("ComparisonTool.", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+
+            CollectionAssert.AreEqual(Array.Empty<string>(), v1References, $"Project '{projectPath}' should not reference V1 projects.");
+        }
+    }
+
+    private static string[] ExpectedHostReferences() =>
+        new[]
+        {
+            @"..\ParityBench.NET.Application\ParityBench.NET.Application.csproj",
+            @"..\ParityBench.NET.Domain\ParityBench.NET.Domain.csproj",
+            @"..\ParityBench.NET.Engine\ParityBench.NET.Engine.csproj",
+            @"..\ParityBench.NET.Infrastructure\ParityBench.NET.Infrastructure.csproj",
+            @"..\ParityBench.NET.UI\ParityBench.NET.UI.csproj",
+            @"..\ParityBench.NET.Workspaces\ParityBench.NET.Workspaces.csproj",
+        };
 
     private static void AssertProjectReferences(
         string projectFolderName,

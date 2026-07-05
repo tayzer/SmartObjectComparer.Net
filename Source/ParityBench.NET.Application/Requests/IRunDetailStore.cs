@@ -1,4 +1,5 @@
 using ParityBench.NET.Domain.Requests;
+using ParityBench.NET.Domain.Results;
 using ParityBench.NET.Domain.Runs;
 
 namespace ParityBench.NET.Application.Requests;
@@ -21,5 +22,13 @@ public interface IRunDetailStore
     /// </summary>
     Task<IReadOnlyList<RequestPairResult>> LoadDetailsAsync(
         RunDetailReference detailReference,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Loads a filtered page of pair-level result metadata without loading raw response bodies.
+    /// </summary>
+    Task<RunDetailPage> LoadPageAsync(
+        RunDetailReference detailReference,
+        RunDetailQuery query,
         CancellationToken cancellationToken = default);
 }

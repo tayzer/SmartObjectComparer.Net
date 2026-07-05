@@ -1,0 +1,20 @@
+@if (Summary is null)
+{
+    <MudText Typo="Typo.body2" Color="Color.Secondary">No summary available</MudText>
+}
+else
+{
+    <MudStack Row="true" Spacing="1" Class="flex-wrap" AlignItems="AlignItems.Center">
+        <MudChip T="string" Size="Size.Small" Color="Color.Default">Total @Summary.TotalPairs</MudChip>
+        <MudChip T="string" Size="Size.Small" Color="Color.Success">Equal @Summary.EqualPairs</MudChip>
+        <MudChip T="string" Size="Size.Small" Color="Color.Warning">Different @Summary.DifferentPairs</MudChip>
+        <MudChip T="string" Size="Size.Small" Color="Color.Error">Errors @Summary.ErrorPairs</MudChip>
+        <MudChip T="string" Size="Size.Small" Color="Color.Info">Status @Summary.StatusCodeMismatchPairs</MudChip>
+        <MudChip T="string" Size="Size.Small" Color="Color.Secondary">Non-success @Summary.BothNonSuccessPairs</MudChip>
+    </MudStack>
+}
+
+@code {
+    [Parameter]
+    public RunResultSummary? Summary { get; set; }
+}

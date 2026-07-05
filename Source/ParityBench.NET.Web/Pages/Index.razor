@@ -1,0 +1,19 @@
+@page "/"
+
+<MudGrid Spacing="3">
+    <MudItem xs="12" md="4">
+        <RunHistory RunSelected="SelectRun" />
+    </MudItem>
+    <MudItem xs="12" md="8">
+        <RunResult RunId="selectedRunId" />
+    </MudItem>
+</MudGrid>
+
+@code {
+    private RunId? selectedRunId;
+
+    private void SelectRun(RunId runId)
+    {
+        selectedRunId = runId;
+    }
+}

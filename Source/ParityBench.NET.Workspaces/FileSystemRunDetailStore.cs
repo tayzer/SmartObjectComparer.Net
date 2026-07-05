@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
+using ParityBench.NET.Domain.Results;
 using ParityBench.NET.Domain.Runs;
 
 namespace ParityBench.NET.Workspaces;
@@ -52,6 +53,7 @@ public sealed class FileSystemRunDetailStore : IRunDetailStore
 
         return new RunDetailReference(detailId, new ArtifactReference(detailId, "application/json"));
     }
+
     public async Task<IReadOnlyList<RequestPairResult>> LoadDetailsAsync(
         RunDetailReference detailReference,
         CancellationToken cancellationToken = default)
@@ -60,13 +62,65 @@ public sealed class FileSystemRunDetailStore : IRunDetailStore
 
         string detailPath = FileSystemWorkspacePaths.GetSafePath(workspaceRoot, detailReference.DetailId);
         await using FileStream stream = File.OpenRead(detailPath);
-        List<RequestPairResultDto>? dtos = await JsonSerializer
-            .DeserializeAsync<List<RequestPairResultDto>>(stream, jsonOptions, cancellationToken)
-            .ConfigureAwait(false);
+        List<RequestPairResult> results = new List<RequestPairResult>();
 
-        return (dtos ?? new List<RequestPairResultDto>())
-            .Select(FromDto)
-            .ToList();
+        await foreach (RequestPairResultDto? dto in JsonSerializer
+            .DeserializeAsyncEnumerable<RequestPairResultDto>(stream, jsonOptions, cancellationToken)
+            .ConfigureAwait(false))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (dto is not null)
+            {
+                results.Add(FromDto(dto));
+            }
+        }
+
+        return results;
+    }
+
+    public async Task<RunDetailPage> LoadPageAsync(
+        RunDetailReference detailReference,
+        RunDetailQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(detailReference);
+        ArgumentNullException.ThrowIfNull(query);
+
+        string detailPath = FileSystemWorkspacePaths.GetSafePath(workspaceRoot, detailReference.DetailId);
+        await using FileStream stream = File.OpenRead(detailPath);
+        List<RequestPairResult> pageItems = new List<RequestPairResult>();
+        int matchingCount = 0;
+
+        await foreach (RequestPairResultDto? dto in JsonSerializer
+            .DeserializeAsyncEnumerable<RequestPairResultDto>(stream, jsonOptions, cancellationToken)
+            .ConfigureAwait(false))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (dto is null || !Matches(dto, query))
+            {
+                continue;
+            }
+
+            if (matchingCount >= query.Offset && pageItems.Count < query.Limit)
+            {
+                pageItems.Add(FromDto(dto));
+            }
+
+            matchingCount++;
+        }
+
+        return new RunDetailPage(pageItems, matchingCount, query.Offset, query.Limit);
+    }
+
+    private static bool Matches(RequestPairResultDto dto, RunDetailQuery query)
+    {
+        if (query.Outcome is not null && dto.Outcome != query.Outcome.Value)
+        {
+            return false;
+        }
+
+        return query.RelativePathSearch is null
+            || dto.RelativePath.Contains(query.RelativePathSearch, StringComparison.OrdinalIgnoreCase);
     }
 
     private RequestPairResultDto ToDto(RequestPairResult result) =>
@@ -115,7 +169,6 @@ public sealed class FileSystemRunDetailStore : IRunDetailStore
             dto.DifferenceCount,
             dto.Differences.Select(FromDto),
             dto.OutcomeMessage);
-
 
     private ResponseArtifactMetadata FromDto(ResponseArtifactMetadataDto dto) =>
         new ResponseArtifactMetadata(
@@ -182,5 +235,3 @@ public sealed class FileSystemRunDetailStore : IRunDetailStore
         public string? Message { get; init; }
     }
 }
-
-

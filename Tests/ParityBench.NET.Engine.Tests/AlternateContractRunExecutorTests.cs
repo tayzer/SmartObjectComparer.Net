@@ -9,6 +9,7 @@ using ParityBench.NET.Application.Runs;
 using ParityBench.NET.Domain.AlternateContracts;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
+using ParityBench.NET.Domain.Results;
 using ParityBench.NET.Domain.Runs;
 using ParityBench.NET.Engine;
 using ParityBench.NET.Infrastructure;
@@ -398,6 +399,12 @@ public sealed class AlternateContractRunExecutorTests
             RunDetailReference detailReference,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<RequestPairResult>>(Array.Empty<RequestPairResult>());
+
+        public Task<RunDetailPage> LoadPageAsync(
+            RunDetailReference detailReference,
+            RunDetailQuery query,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new RunDetailPage(Array.Empty<RequestPairResult>(), 0, query.Offset, query.Limit));
     }
 
     private sealed class CapturingProgressReporter : IRunProgressReporter
