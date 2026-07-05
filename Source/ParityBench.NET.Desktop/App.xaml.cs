@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Net.Http;
 using System.Windows;
 
@@ -82,6 +82,7 @@ public partial class App : System.Windows.Application
         {
             ResponseModelRegistry registry = new ResponseModelRegistry();
             BuiltInResponseModelRegistration.Register(registry);
+            ConsumerReportFixtureResponseModelRegistration.Register(registry);
             return registry;
         });
         services.AddSingleton<IContractProfileRegistry>(serviceProvider =>

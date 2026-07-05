@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "defaultBaseUrl": "http://localhost:5056",
+  "runs": [
+    {
+      "id": "xml-xml-consumer-report",
+      "name": "XML/XML consumer report",
+      "requestDirectory": "Examples/ParityBench.NET.ManualRuns/xml-xml",
+      "endpointA": "{baseUrl}/consumer-report/soap/a",
+      "endpointB": "{baseUrl}/consumer-report/soap/b",
+      "modelName": "ConsumerReportSoapResponseEnvelope",
+      "contractProfileId": "",
+      "toggles": {
+        "ignoreCollectionOrder": true,
+        "ignoreStringCase": true,
+        "ignoreTrailingWhitespace": true,
+        "treatNullAndEmptyCollectionsEqual": false,
+        "ignoreXmlNamespaces": true
+      },
+      "smartIgnoreRules": "PropertyName=ReportId\nPropertyName=GeneratedAt\nPropertyName=ProviderTraceId\nPropertyName=ProcessingMilliseconds\nPropertyName=SourceSystem",
+      "maskRules": "Body.ConsumerReportResponse.Subject.NationalIdentifier|preserveLast=4",
+      "expectedWithSuggestedRules": {
+        "total": 4,
+        "equal": 3,
+        "different": 1
+      }
+    },
+    {
+      "id": "json-json-consumer-report",
+      "name": "JSON/JSON consumer report",
+      "requestDirectory": "Examples/ParityBench.NET.ManualRuns/json-json",
+      "endpointA": "{baseUrl}/consumer-report/json/a",
+      "endpointB": "{baseUrl}/consumer-report/json/b",
+      "modelName": "ConsumerReportJsonResponse",
+      "contractProfileId": "",
+      "toggles": {
+        "ignoreCollectionOrder": true,
+        "ignoreStringCase": true,
+        "ignoreTrailingWhitespace": true,
+        "treatNullAndEmptyCollectionsEqual": true,
+        "ignoreXmlNamespaces": true
+      },
+      "smartIgnoreRules": "PropertyName=ReportId\nPropertyName=GeneratedAt\nPropertyName=ProviderTraceId\nPropertyName=ProcessingMilliseconds\nPropertyName=SourceSystem",
+      "maskRules": "Subject.NationalIdentifier|preserveLast=4",
+      "expectedWithSuggestedRules": {
+        "total": 5,
+        "equal": 4,
+        "different": 1
+      }
+    },
+    {
+      "id": "xml-json-sample-customer-lookup",
+      "name": "XML/JSON sample customer lookup",
+      "requestDirectory": "Examples/ParityBench.NET.ManualRuns/xml-json",
+      "endpointA": "{baseUrl}/sample/customer-lookup/soap/a",
+      "endpointB": "{baseUrl}/sample/customer-lookup/json/b",
+      "modelName": "SampleSoapCustomerLookupResponseEnvelope",
+      "contractProfileId": "sample-soap-to-json",
+      "toggles": {
+        "ignoreCollectionOrder": false,
+        "ignoreStringCase": false,
+        "ignoreTrailingWhitespace": false,
+        "treatNullAndEmptyCollectionsEqual": false,
+        "ignoreXmlNamespaces": true
+      },
+      "maskRules": "Body.CustomerLookupResponse.SensitiveToken|preserveLast=4",
+      "expectedWithSuggestedRules": {
+        "total": 3,
+        "equal": 2,
+        "different": 1
+      }
+    }
+  ]
+}

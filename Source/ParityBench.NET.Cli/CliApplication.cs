@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection;
 
 using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.Application.Reports;
@@ -65,6 +65,7 @@ public static class CliApplication
         {
             ResponseModelRegistry registry = new ResponseModelRegistry();
             BuiltInResponseModelRegistration.Register(registry);
+            ConsumerReportFixtureResponseModelRegistration.Register(registry);
             return registry;
         });
         services.AddSingleton<IContractProfileRegistry>(serviceProvider =>

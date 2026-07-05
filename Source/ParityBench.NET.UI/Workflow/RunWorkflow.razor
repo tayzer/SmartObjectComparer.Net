@@ -1,4 +1,4 @@
-﻿@using ParityBench.NET.Application.Workflow
+@using ParityBench.NET.Application.Workflow
 @using ParityBench.NET.Domain.Comparison
 @using ParityBench.NET.Domain.ContractProfiles
 @using ParityBench.NET.Domain.Requests
@@ -11,7 +11,7 @@
                 <MudText Typo="Typo.h6">Request Comparison</MudText>
                 @if (currentRun is not null)
                 {
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">@currentRun.Id.Value · @currentRun.Status</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@currentRun.Id.Value � @currentRun.Status</MudText>
                 }
             </MudStack>
             <MudStack Row="true" Spacing="1">
@@ -79,6 +79,19 @@
                     </MudItem>
                 </MudGrid>
             </MudExpansionPanel>
+            <MudExpansionPanel Text="Rules">
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" md="4">
+                        <MudTextField T="string" Label="Ignore Paths" Lines="4" @bind-Value="ignoreRules" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudTextField T="string" Label="Smart Ignores" Lines="4" @bind-Value="smartIgnoreRules" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudTextField T="string" Label="Mask Rules" Lines="4" @bind-Value="maskRules" />
+                    </MudItem>
+                </MudGrid>
+            </MudExpansionPanel>
             <MudExpansionPanel Text="Headers">
                 <MudGrid Spacing="2">
                     <MudItem xs="12" md="4">
@@ -132,6 +145,9 @@
     private string contractProfileId = string.Empty;
     private string contentTypeOverride = string.Empty;
     private string maxDifferences = "100";
+    private string ignoreRules = string.Empty;
+    private string smartIgnoreRules = string.Empty;
+    private string maskRules = string.Empty;
     private string commonHeaders = string.Empty;
     private string endpointAHeaders = string.Empty;
     private string endpointBHeaders = string.Empty;
@@ -285,7 +301,10 @@
             ignoreTrailingWhitespace,
             treatNullAndEmptyCollectionsEqual,
             ignoreXmlNamespaces,
-            maxDifferenceCount);
+            maxDifferenceCount,
+            RunWorkflowRuleParser.ParseIgnoreRules(ignoreRules),
+            RunWorkflowRuleParser.ParseSmartIgnoreRules(smartIgnoreRules),
+            RunWorkflowRuleParser.ParseMaskRules(maskRules));
         RequestExecutionOptions executionOptions = new RequestExecutionOptions(contentTypeOverride);
 
         return new RequestComparisonRunRequest(

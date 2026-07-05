@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection;
 
 using MudBlazor.Services;
 
@@ -70,6 +70,7 @@ static void RegisterV2Services(IServiceCollection services, string workspaceRoot
     {
         ResponseModelRegistry registry = new ResponseModelRegistry();
         BuiltInResponseModelRegistration.Register(registry);
+        ConsumerReportFixtureResponseModelRegistration.Register(registry);
         return registry;
     });
     services.AddSingleton<IContractProfileRegistry>(serviceProvider =>

@@ -1,4 +1,4 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.9.34728.123
@@ -78,6 +78,10 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ParityBench.NET.Cli", "Source\ParityBench.NET.Cli\ParityBench.NET.Cli.csproj", "{3A066204-40DA-4407-BAE0-604A0670DA88}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ParityBench.NET.Cli.Tests", "Tests\ParityBench.NET.Cli.Tests\ParityBench.NET.Cli.Tests.csproj", "{1A8D7B36-318C-4E87-A2E5-158B29231200}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ParityBench.NET.TestEndpoints", "Source\ParityBench.NET.TestEndpoints\ParityBench.NET.TestEndpoints.csproj", "{6077A419-DEA1-4AC5-80ED-F27250D7696D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ParityBench.NET.TestEndpoints.Tests", "Tests\ParityBench.NET.TestEndpoints.Tests\ParityBench.NET.TestEndpoints.Tests.csproj", "{7F4C3E7B-0D0D-4AA0-BA12-0CC3EFEE2B7B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -437,6 +441,30 @@ Global
 		{1A8D7B36-318C-4E87-A2E5-158B29231200}.Release|x64.Build.0 = Release|Any CPU
 		{1A8D7B36-318C-4E87-A2E5-158B29231200}.Release|x86.ActiveCfg = Release|Any CPU
 		{1A8D7B36-318C-4E87-A2E5-158B29231200}.Release|x86.Build.0 = Release|Any CPU
+		{6077A419-DEA1-4AC5-80ED-F27250D7696D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6077A419-DEA1-4AC5-80ED-F27250D7696D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6077A419-DEA1-4AC5-80ED-F27250D7696D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{6077A419-DEA1-4AC5-80ED-F27250D7696D}.Debug|x64.Build.0 = Debug|Any CPU
+		{6077A419-DEA1-4AC5-80ED-F27250D7696D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{6077A419-DEA1-4AC5-80ED-F27250D7696D}.Debug|x86.Build.0 = Debug|Any CPU
+		{6077A419-DEA1-4AC5-80ED-F27250D7696D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6077A419-DEA1-4AC5-80ED-F27250D7696D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6077A419-DEA1-4AC5-80ED-F27250D7696D}.Release|x64.ActiveCfg = Release|Any CPU
+		{6077A419-DEA1-4AC5-80ED-F27250D7696D}.Release|x64.Build.0 = Release|Any CPU
+		{6077A419-DEA1-4AC5-80ED-F27250D7696D}.Release|x86.ActiveCfg = Release|Any CPU
+		{6077A419-DEA1-4AC5-80ED-F27250D7696D}.Release|x86.Build.0 = Release|Any CPU
+		{7F4C3E7B-0D0D-4AA0-BA12-0CC3EFEE2B7B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7F4C3E7B-0D0D-4AA0-BA12-0CC3EFEE2B7B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7F4C3E7B-0D0D-4AA0-BA12-0CC3EFEE2B7B}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{7F4C3E7B-0D0D-4AA0-BA12-0CC3EFEE2B7B}.Debug|x64.Build.0 = Debug|Any CPU
+		{7F4C3E7B-0D0D-4AA0-BA12-0CC3EFEE2B7B}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{7F4C3E7B-0D0D-4AA0-BA12-0CC3EFEE2B7B}.Debug|x86.Build.0 = Debug|Any CPU
+		{7F4C3E7B-0D0D-4AA0-BA12-0CC3EFEE2B7B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7F4C3E7B-0D0D-4AA0-BA12-0CC3EFEE2B7B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7F4C3E7B-0D0D-4AA0-BA12-0CC3EFEE2B7B}.Release|x64.ActiveCfg = Release|Any CPU
+		{7F4C3E7B-0D0D-4AA0-BA12-0CC3EFEE2B7B}.Release|x64.Build.0 = Release|Any CPU
+		{7F4C3E7B-0D0D-4AA0-BA12-0CC3EFEE2B7B}.Release|x86.ActiveCfg = Release|Any CPU
+		{7F4C3E7B-0D0D-4AA0-BA12-0CC3EFEE2B7B}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -472,6 +500,8 @@ Global
 		{96C2EE69-17DE-420C-8586-0D307FDCE2FB} = {1C27213A-37EF-46CC-9983-275BC07EE158}
 		{3A066204-40DA-4407-BAE0-604A0670DA88} = {1C27213A-37EF-46CC-9983-275BC07EE158}
 		{1A8D7B36-318C-4E87-A2E5-158B29231200} = {8E88254D-F281-406C-BC49-73F9496694F1}
+		{6077A419-DEA1-4AC5-80ED-F27250D7696D} = {1C27213A-37EF-46CC-9983-275BC07EE158}
+		{7F4C3E7B-0D0D-4AA0-BA12-0CC3EFEE2B7B} = {8E88254D-F281-406C-BC49-73F9496694F1}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {43E7BDE5-D5F4-4CEB-B1F3-21182FC5B3D8}

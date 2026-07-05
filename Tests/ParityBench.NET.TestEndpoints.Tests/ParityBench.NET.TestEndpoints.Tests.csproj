@@ -1,0 +1,12 @@
+<Project Sdk="MSTest.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\ParityBench.NET.TestEndpoints\ParityBench.NET.TestEndpoints.csproj" />
+  </ItemGroup>
+
+</Project>
