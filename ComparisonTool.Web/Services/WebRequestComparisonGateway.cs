@@ -13,13 +13,13 @@ namespace ComparisonTool.Web.Services
     // todo: breaking solid here and we also have magic strings in the controller. We should probably have a shared constant for this.
     public class WebRequestComparisonGateway : IRequestComparisonGateway
     {
-        private readonly IHttpClientFactory _httpClientFactory;
-        private readonly NavigationManager _navigationManager;
+        private readonly IHttpClientFactory httpClientFactory;
+        private readonly NavigationManager navigationManager;
 
         public WebRequestComparisonGateway(IHttpClientFactory httpClientFactory, NavigationManager navigationManager)
         {
-            _httpClientFactory = httpClientFactory;
-            _navigationManager = navigationManager;
+            this.httpClientFactory = httpClientFactory;
+            this.navigationManager = navigationManager;
         }
 
         public async Task<RequestBatchResult> StateRequestStreamsAsync(IEnumerable<(string FileName, Stream Content)> files, string? cacheKey = null)
@@ -96,8 +96,8 @@ namespace ComparisonTool.Web.Services
 
         private HttpClient CreateHttpClient()
         {
-            var client = _httpClientFactory.CreateClient();
-            client.BaseAddress = new Uri(_navigationManager.BaseUri);
+            var client = httpClientFactory.CreateClient();
+            client.BaseAddress = new Uri(navigationManager.BaseUri);
             return client;
         }
     }

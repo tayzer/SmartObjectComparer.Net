@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Runs;
 using ParityBench.NET.Domain.Requests;
@@ -12,17 +13,34 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
     private readonly IEndpointRequestSender endpointRequestSender;
     private readonly IRunArtifactStore runArtifactStore;
     private readonly IRunDetailStore runDetailStore;
+    private readonly IResponseComparer responseComparer;
 
     public BasicComparisonRunExecutor(
         IRequestBatchStore requestBatchStore,
         IEndpointRequestSender endpointRequestSender,
         IRunArtifactStore runArtifactStore,
         IRunDetailStore runDetailStore)
+        : this(
+            requestBatchStore,
+            endpointRequestSender,
+            runArtifactStore,
+            runDetailStore,
+            new HashOnlyResponseComparer())
+    {
+    }
+
+    public BasicComparisonRunExecutor(
+        IRequestBatchStore requestBatchStore,
+        IEndpointRequestSender endpointRequestSender,
+        IRunArtifactStore runArtifactStore,
+        IRunDetailStore runDetailStore,
+        IResponseComparer responseComparer)
     {
         this.requestBatchStore = requestBatchStore;
         this.endpointRequestSender = endpointRequestSender;
         this.runArtifactStore = runArtifactStore;
         this.runDetailStore = runDetailStore;
+        this.responseComparer = responseComparer;
     }
 
     public async Task<RunResultSummary> ExecuteAsync(
@@ -105,11 +123,15 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         EndpointExecutionResult endpointB = await endpointBTask.ConfigureAwait(false);
         string? errorMessage = BuildErrorMessage(endpointA, endpointB);
 
-        return RequestPairResult.Classify(
-            request,
-            endpointA.Metadata,
-            endpointB.Metadata,
-            errorMessage);
+        return await responseComparer
+            .CompareAsync(
+                request,
+                run.Options,
+                endpointA.Metadata,
+                endpointB.Metadata,
+                errorMessage,
+                cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private async Task<EndpointExecutionResult> ExecuteEndpointAsync(
@@ -133,13 +155,18 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                 endpointDefinition,
                 request,
                 requestBody,
-                request.ContentType,
+                run.Options.RequestExecution.ContentTypeOverride ?? request.ContentType,
                 run.Options.Timeout,
                 MergeHeaders(endpointDefinition.Headers, request.Headers, request.GetHeaders(endpoint)));
 
             await using EndpointResponse response = await endpointRequestSender
                 .SendAsync(endpointRequest, cancellationToken)
                 .ConfigureAwait(false);
+
+            await using Stream? maskedBody = await ResponseMasker
+                .MaskAsync(response.Body, response.ContentType, run.Options.Comparison.MaskRules, cancellationToken)
+                .ConfigureAwait(false);
+            Stream bodyToPersist = maskedBody ?? response.Body;
 
             ResponseArtifactMetadata metadata = await runArtifactStore
                 .SaveResponseAsync(
@@ -148,7 +175,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                     request,
                     response.StatusCode,
                     response.ContentType,
-                    response.Body,
+                    bodyToPersist,
                     cancellationToken)
                 .ConfigureAwait(false);
 

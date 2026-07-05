@@ -19,19 +19,19 @@ namespace ComparisonTool.Core.RequestComparison.Services;
 /// </summary>
 public class RequestComparisonJobService
 {
-    private readonly ILogger<RequestComparisonJobService> _logger;
-    private readonly RequestExecutionService _executionService;
-    private readonly RequestFileParserService _parserService;
-    private readonly RawTextComparisonService _rawTextComparisonService;
-    private readonly ResponseMaskingService _responseMaskingService;
-    private readonly RequestComparisonAlternateContractTransformationService _alternateContractTransformationService;
-    private readonly FocusedRawContentArtifactService _focusedRawContentArtifactService;
-    private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IComparisonProgressPublisher? _progressPublisher;
-    private readonly RequestComparisonLargeBatchOptions _largeBatchOptions;
-    private readonly ConcurrentDictionary<string, RequestComparisonJob> _jobs = new();
-    private readonly ConcurrentDictionary<string, MultiFolderComparisonResult> _results = new();
-    private readonly ConcurrentDictionary<string, DateTimeOffset> _lastProgressUpdate = new();
+    private readonly ILogger<RequestComparisonJobService> logger;
+    private readonly RequestExecutionService executionService;
+    private readonly RequestFileParserService parserService;
+    private readonly RawTextComparisonService rawTextComparisonService;
+    private readonly ResponseMaskingService responseMaskingService;
+    private readonly RequestComparisonAlternateContractTransformationService alternateContractTransformationService;
+    private readonly FocusedRawContentArtifactService focusedRawContentArtifactService;
+    private readonly IServiceScopeFactory scopeFactory;
+    private readonly IComparisonProgressPublisher? progressPublisher;
+    private readonly RequestComparisonLargeBatchOptions largeBatchOptions;
+    private readonly ConcurrentDictionary<string, RequestComparisonJob> jobs = new();
+    private readonly ConcurrentDictionary<string, MultiFolderComparisonResult> results = new();
+    private readonly ConcurrentDictionary<string, DateTimeOffset> lastProgressUpdate = new();
     private static readonly TimeSpan ProgressThrottleInterval = TimeSpan.FromMilliseconds(250);
 
     public RequestComparisonJobService(
@@ -46,16 +46,16 @@ public class RequestComparisonJobService
         IOptions<RequestComparisonLargeBatchOptions>? largeBatchOptions = null,
         IComparisonProgressPublisher? progressPublisher = null)
     {
-        _logger = logger;
-        _executionService = executionService;
-        _parserService = parserService;
-        _rawTextComparisonService = rawTextComparisonService;
-        _responseMaskingService = responseMaskingService;
-        _alternateContractTransformationService = alternateContractTransformationService;
-        _focusedRawContentArtifactService = focusedRawContentArtifactService;
-        _scopeFactory = scopeFactory;
-        _largeBatchOptions = largeBatchOptions?.Value ?? new RequestComparisonLargeBatchOptions();
-        _progressPublisher = progressPublisher;
+        this.logger = logger;
+        this.executionService = executionService;
+        this.parserService = parserService;
+        this.rawTextComparisonService = rawTextComparisonService;
+        this.responseMaskingService = responseMaskingService;
+        this.alternateContractTransformationService = alternateContractTransformationService;
+        this.focusedRawContentArtifactService = focusedRawContentArtifactService;
+        this.scopeFactory = scopeFactory;
+        this.largeBatchOptions = largeBatchOptions?.Value ?? new RequestComparisonLargeBatchOptions();
+        this.progressPublisher = progressPublisher;
     }
 
     /// <summary>
@@ -71,18 +71,18 @@ public class RequestComparisonJobService
         string? error = null,
         bool forcePublish = false)
     {
-        if (_progressPublisher == null) return;
+        if (progressPublisher == null) return;
 
         // Throttle updates during high-frequency phases (Executing)
         if (!forcePublish && phase == ComparisonPhase.Executing)
         {
             var now = DateTimeOffset.UtcNow;
-            if (_lastProgressUpdate.TryGetValue(jobId, out var lastUpdate) &&
+            if (lastProgressUpdate.TryGetValue(jobId, out var lastUpdate) &&
                 now - lastUpdate < ProgressThrottleInterval)
             {
                 return;
             }
-            _lastProgressUpdate[jobId] = now;
+            lastProgressUpdate[jobId] = now;
         }
 
         var update = new ComparisonProgressUpdate
@@ -99,11 +99,11 @@ public class RequestComparisonJobService
 
         try
         {
-            await _progressPublisher.PublishAsync(update);
+            await progressPublisher.PublishAsync(update);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to publish progress update for job {JobId}", jobId);
+            logger.LogWarning(ex, "Failed to publish progress update for job {JobId}", jobId);
         }
     }
 
@@ -143,17 +143,17 @@ public class RequestComparisonJobService
 
         if (job.MaskRules.Count > 0)
         {
-            _responseMaskingService.ValidateRules(job.MaskRules);
+            responseMaskingService.ValidateRules(job.MaskRules);
         }
 
         if (job.UseAlternateContractForEndpointB &&
-            !_alternateContractTransformationService.TryResolveProfile(job, out _, out var profileResolutionError))
+            !alternateContractTransformationService.TryResolveProfile(job, out _, out var profileResolutionError))
         {
             throw new InvalidOperationException(profileResolutionError);
         }
 
-        _jobs[job.JobId] = job;
-        _logger.LogInformation("Created request comparison job {JobId} with model {ModelName}", job.JobId, job.ModelName);
+        jobs[job.JobId] = job;
+        logger.LogInformation("Created request comparison job {JobId} with model {ModelName}", job.JobId, job.ModelName);
 
         return job;
     }
@@ -162,13 +162,13 @@ public class RequestComparisonJobService
     /// Gets a job by ID.
     /// </summary>
     public RequestComparisonJob? GetJob(string jobId) =>
-        _jobs.TryGetValue(jobId, out var job) ? job : null;
+        jobs.TryGetValue(jobId, out var job) ? job : null;
 
     /// <summary>
     /// Gets the comparison result for a completed job.
     /// </summary>
     public MultiFolderComparisonResult? GetResult(string jobId) =>
-        _results.TryGetValue(jobId, out var result) ? result : null;
+        results.TryGetValue(jobId, out var result) ? result : null;
 
     /// <summary>
     /// Executes a request comparison job asynchronously.
@@ -178,7 +178,7 @@ public class RequestComparisonJobService
         IProgress<(int Completed, int Total, string Message)>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        if (!_jobs.TryGetValue(jobId, out var job))
+        if (!jobs.TryGetValue(jobId, out var job))
         {
             throw new InvalidOperationException($"Job {jobId} not found");
         }
@@ -199,18 +199,18 @@ public class RequestComparisonJobService
             await PublishProgressAsync(jobId, ComparisonPhase.Parsing, 0, "Parsing request files...", forcePublish: true);
 
             var parsingStart = Stopwatch.GetTimestamp();
-            var requests = await _parserService.ParseRequestBatchAsync(
+            var requests = await parserService.ParseRequestBatchAsync(
                 job.RequestBatchId,
                 cancellationToken).ConfigureAwait(false);
             parsingMs = ToMilliseconds(Stopwatch.GetElapsedTime(parsingStart));
 
             job.TotalRequests = requests.Count;
-            _logger.LogInformation("Parsed {Count} request files for job {JobId}", requests.Count, jobId);
+            logger.LogInformation("Parsed {Count} request files for job {JobId}", requests.Count, jobId);
             await PublishProgressAsync(jobId, ComparisonPhase.Parsing, 5, $"Parsed {requests.Count} request files", requests.Count, requests.Count, forcePublish: true);
 
-            var useLargeBatchMode = RequestComparisonLargeBatchPlanner.ShouldUseLargeBatchMode(requests.Count, _largeBatchOptions);
+            var useLargeBatchMode = RequestComparisonLargeBatchPlanner.ShouldUseLargeBatchMode(requests.Count, largeBatchOptions);
             var effectiveChunkSize = useLargeBatchMode
-                ? RequestComparisonLargeBatchPlanner.GetEffectiveChunkSize(_largeBatchOptions)
+                ? RequestComparisonLargeBatchPlanner.GetEffectiveChunkSize(largeBatchOptions)
                 : Math.Max(1, requests.Count);
             var requestChunks = useLargeBatchMode
                 ? RequestComparisonLargeBatchPlanner.Partition(requests, effectiveChunkSize)
@@ -225,7 +225,7 @@ public class RequestComparisonJobService
 
             if (useLargeBatchMode)
             {
-                _logger.LogInformation(
+                logger.LogInformation(
                     "Job {JobId} is using large-batch mode: Requests={RequestCount}, ChunkSize={ChunkSize}, TotalChunks={TotalChunks}, MaxConcurrency={MaxConcurrency}",
                     jobId,
                     requests.Count,
@@ -253,7 +253,7 @@ public class RequestComparisonJobService
             var outcomeAccumulator = new ExecutionOutcomeSummaryAccumulator();
             var failedExecutionRecords = new List<RequestExecutionFailureMetadata>();
             var alternateContractProfile = job.UseAlternateContractForEndpointB
-                ? _alternateContractTransformationService.ResolveProfile(job)
+                ? alternateContractTransformationService.ResolveProfile(job)
                 : null;
             var executedCount = 0;
             var successCount = 0;
@@ -303,7 +303,7 @@ public class RequestComparisonJobService
                 });
 
                 var executionStart = Stopwatch.GetTimestamp();
-                var executionResults = await _executionService.ExecuteRequestsAsync(
+                var executionResults = await executionService.ExecuteRequestsAsync(
                     job,
                     chunk,
                     executionProgress,
@@ -349,7 +349,7 @@ public class RequestComparisonJobService
             }
 
             var outcomeSummary = outcomeAccumulator.ToSummary();
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Executed {Success}/{Total} requests successfully for job {JobId}",
                 successCount,
                 executedCount,
@@ -399,7 +399,7 @@ public class RequestComparisonJobService
                 TotalElapsedMs = totalStopwatch.ElapsedMilliseconds,
             };
 
-            _results[jobId] = comparisonResult;
+            results[jobId] = comparisonResult;
 
             // Phase 4: Complete
             job.Status = RequestComparisonStatus.Completed;
@@ -407,16 +407,16 @@ public class RequestComparisonJobService
             progress?.Report((job.TotalRequests, job.TotalRequests, "Comparison completed"));
             await PublishProgressAsync(jobId, ComparisonPhase.Completed, 100, "Comparison completed successfully", job.TotalRequests, job.TotalRequests, forcePublish: true);
 
-            _logger.LogInformation("Completed request comparison job {JobId}", jobId);
-            _lastProgressUpdate.TryRemove(jobId, out _);
+            logger.LogInformation("Completed request comparison job {JobId}", jobId);
+            lastProgressUpdate.TryRemove(jobId, out _);
         }
         catch (OperationCanceledException)
         {
             job.Status = RequestComparisonStatus.Cancelled;
             job.StatusMessage = "Job was cancelled";
             await PublishProgressAsync(jobId, ComparisonPhase.Cancelled, job.CompletedRequests * 100 / Math.Max(1, job.TotalRequests), "Job was cancelled", forcePublish: true);
-            _logger.LogWarning("Request comparison job {JobId} was cancelled", jobId);
-            _lastProgressUpdate.TryRemove(jobId, out _);
+            logger.LogWarning("Request comparison job {JobId} was cancelled", jobId);
+            lastProgressUpdate.TryRemove(jobId, out _);
             throw;
         }
         catch (Exception ex)
@@ -425,8 +425,8 @@ public class RequestComparisonJobService
             job.ErrorMessage = ex.Message;
             job.StatusMessage = $"Failed: {ex.Message}";
             await PublishProgressAsync(jobId, ComparisonPhase.Failed, job.CompletedRequests * 100 / Math.Max(1, job.TotalRequests), $"Failed: {ex.Message}", error: ex.Message, forcePublish: true);
-            _logger.LogError(ex, "Request comparison job {JobId} failed", jobId);
-            _lastProgressUpdate.TryRemove(jobId, out _);
+            logger.LogError(ex, "Request comparison job {JobId} failed", jobId);
+            lastProgressUpdate.TryRemove(jobId, out _);
             throw;
         }
     }
@@ -486,7 +486,7 @@ public class RequestComparisonJobService
             totalRequests,
             forcePublish: true).ConfigureAwait(false);
 
-        using var scope = _scopeFactory.CreateScope();
+        using var scope = scopeFactory.CreateScope();
         var comparisonService = scope.ServiceProvider.GetRequiredService<IComparisonService>();
 
         if (job.EnableSemanticAnalysis && comparisonResult.FilePairResults.Count > 1)
@@ -507,7 +507,7 @@ public class RequestComparisonJobService
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 comparisonResult.Metadata["SemanticAnalysisError"] = ex.Message;
-                _logger.LogWarning(ex, "Semantic request comparison analysis failed for job {JobId}", job.JobId);
+                logger.LogWarning(ex, "Semantic request comparison analysis failed for job {JobId}", job.JobId);
             }
         }
 
@@ -523,7 +523,7 @@ public class RequestComparisonJobService
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 comparisonResult.Metadata["EnhancedStructuralAnalysisError"] = ex.Message;
-                _logger.LogWarning(ex, "Enhanced structural request comparison analysis failed for job {JobId}", job.JobId);
+                logger.LogWarning(ex, "Enhanced structural request comparison analysis failed for job {JobId}", job.JobId);
             }
         }
     }
@@ -549,7 +549,7 @@ public class RequestComparisonJobService
             c.Outcome == RequestPairOutcome.BothNonSuccess).ToList();
         var failedPairs = classified.Where(c => c.Outcome == RequestPairOutcome.OneOrBothFailed).ToList();
 
-        _logger.LogInformation(
+        logger.LogInformation(
             "Job {JobId} chunk {ChunkNumber}/{TotalChunks} classification: BothSuccess={BothSuccess}, StatusCodeMismatch={StatusCodeMismatch}, BothNonSuccess={BothNonSuccess}, OneOrBothFailed={Failed}",
             job.JobId,
             chunkNumber,
@@ -639,7 +639,7 @@ public class RequestComparisonJobService
                         p.Total);
                 });
 
-                using var scope = _scopeFactory.CreateScope();
+                using var scope = scopeFactory.CreateScope();
 
                 var configService = scope.ServiceProvider.GetRequiredService<IComparisonConfigurationService>();
                 var xmlDeserializationService = scope.ServiceProvider.GetRequiredService<IXmlDeserializationService>();
@@ -689,13 +689,13 @@ public class RequestComparisonJobService
                 $"{progressPrefix}Comparing {nonSuccessPairs.Count} non-success response pairs as raw text...",
                 forcePublish: true).ConfigureAwait(false);
 
-            var rawTextResults = await _rawTextComparisonService.CompareAllRawAsync(
+            var rawTextResults = await rawTextComparisonService.CompareAllRawAsync(
                 nonSuccessPairs,
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
             comparisonResult.FilePairResults.AddRange(rawTextResults);
 
-            _logger.LogInformation(
+            logger.LogInformation(
                 "Raw text comparison completed for {Count} non-success pairs in job {JobId} chunk {ChunkNumber}/{TotalChunks}",
                 rawTextResults.Count,
                 job.JobId,
@@ -789,7 +789,7 @@ public class RequestComparisonJobService
 
     private int GetResponseMaterializationMaxConcurrency(RequestComparisonJob job)
     {
-        var configuredLimit = Math.Max(1, _largeBatchOptions.ResponseMaterializationMaxConcurrency);
+        var configuredLimit = Math.Max(1, largeBatchOptions.ResponseMaterializationMaxConcurrency);
         return Math.Max(1, Math.Min(configuredLimit, Math.Max(1, job.MaxConcurrency)));
     }
 
@@ -804,7 +804,7 @@ public class RequestComparisonJobService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to delete temporary directory {TempDir}", directoryPath);
+            logger.LogWarning(ex, "Failed to delete temporary directory {TempDir}", directoryPath);
         }
     }
 
@@ -849,12 +849,12 @@ public class RequestComparisonJobService
     public void CleanupOldJobs(TimeSpan maxAge)
     {
         var cutoff = DateTimeOffset.UtcNow - maxAge;
-        var oldJobs = _jobs.Values.Where(j => j.CreatedAt < cutoff).ToList();
+        var oldJobs = jobs.Values.Where(j => j.CreatedAt < cutoff).ToList();
 
         foreach (var job in oldJobs)
         {
-            _jobs.TryRemove(job.JobId, out _);
-            _results.TryRemove(job.JobId, out _);
+            jobs.TryRemove(job.JobId, out _);
+            results.TryRemove(job.JobId, out _);
 
             // Clean up response directories
             try
@@ -867,13 +867,13 @@ public class RequestComparisonJobService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to clean up job directory for {JobId}", job.JobId);
+                logger.LogWarning(ex, "Failed to clean up job directory for {JobId}", job.JobId);
             }
         }
 
         if (oldJobs.Count > 0)
         {
-            _logger.LogInformation("Cleaned up {Count} old request comparison jobs", oldJobs.Count);
+            logger.LogInformation("Cleaned up {Count} old request comparison jobs", oldJobs.Count);
         }
     }
 
@@ -881,7 +881,7 @@ public class RequestComparisonJobService
         RequestComparisonJob job,
         MultiFolderComparisonResult comparisonResult)
     {
-        var effectiveIgnoreRules = _alternateContractTransformationService.GetEffectiveIgnoreRules(job)
+        var effectiveIgnoreRules = alternateContractTransformationService.GetEffectiveIgnoreRules(job)
             .Where(rule => rule.IgnoreCompletely && !string.IsNullOrWhiteSpace(rule.PropertyPath))
             .Select(rule => new IgnoreRule
             {
@@ -890,7 +890,7 @@ public class RequestComparisonJobService
             })
             .ToList();
 
-        _focusedRawContentArtifactService.MarkFocusedRawContentAvailable(
+        focusedRawContentArtifactService.MarkFocusedRawContentAvailable(
             comparisonResult,
             effectiveIgnoreRules);
     }
@@ -903,9 +903,9 @@ public class RequestComparisonJobService
         IComparisonConfigurationService configService,
         IXmlDeserializationService xmlDeserializationService)
     {
-        var effectiveIgnoreRules = _alternateContractTransformationService.GetEffectiveIgnoreRules(job);
+        var effectiveIgnoreRules = alternateContractTransformationService.GetEffectiveIgnoreRules(job);
 
-        _logger.LogInformation(
+        logger.LogInformation(
             "Applying job configuration for {JobId}: IgnoreCollectionOrder={IgnoreCollectionOrder}, IgnoreStringCase={IgnoreStringCase}, IgnoreTrailingWhitespaceAtEnd={IgnoreTrailingWhitespaceAtEnd}, TreatNullAndEmptyCollectionsAsEqual={TreatNullAndEmptyCollectionsAsEqual}, IgnoreXmlNamespaces={IgnoreXmlNamespaces}, IgnoreRules={IgnoreRuleCount}, EffectiveIgnoreRules={EffectiveIgnoreRuleCount}, SmartIgnoreRules={SmartIgnoreRuleCount}",
             job.JobId,
             job.IgnoreCollectionOrder,
@@ -949,7 +949,7 @@ public class RequestComparisonJobService
             }
             else
             {
-                _logger.LogWarning("Unknown smart ignore rule type: {Type}", ruleDto.Type);
+                logger.LogWarning("Unknown smart ignore rule type: {Type}", ruleDto.Type);
             }
         }
 
@@ -978,7 +978,7 @@ public class RequestComparisonJobService
             return;
         }
 
-        var profile = _alternateContractTransformationService.ResolveProfile(job);
+        var profile = alternateContractTransformationService.ResolveProfile(job);
         var canonicalRelativePath = BuildCanonicalRelativePath(executionResult.Request.RelativePath, profile.CanonicalResponseFormat);
         var targetCanonicalPathA = Path.Combine(tempDirA, canonicalRelativePath);
         var targetCanonicalPathB = Path.Combine(tempDirB, canonicalRelativePath);
@@ -986,20 +986,20 @@ public class RequestComparisonJobService
         Directory.CreateDirectory(Path.GetDirectoryName(targetCanonicalPathA)!);
         Directory.CreateDirectory(Path.GetDirectoryName(targetCanonicalPathB)!);
 
-        var normalizedA = await _alternateContractTransformationService.NormalizeEndpointAResponseAsync(
+        var normalizedA = await alternateContractTransformationService.NormalizeEndpointAResponseAsync(
             job,
             executionResult,
             cancellationToken).ConfigureAwait(false);
-        var normalizedB = await _alternateContractTransformationService.NormalizeEndpointBResponseAsync(
+        var normalizedB = await alternateContractTransformationService.NormalizeEndpointBResponseAsync(
             job,
             executionResult,
             cancellationToken).ConfigureAwait(false);
 
         var contentA = job.MaskRules.Count > 0
-            ? _responseMaskingService.MaskContent(normalizedA.Body, normalizedA.ContentType, targetCanonicalPathA, job.MaskRules)
+            ? responseMaskingService.MaskContent(normalizedA.Body, normalizedA.ContentType, targetCanonicalPathA, job.MaskRules)
             : normalizedA.Body;
         var contentB = job.MaskRules.Count > 0
-            ? _responseMaskingService.MaskContent(normalizedB.Body, normalizedB.ContentType, targetCanonicalPathB, job.MaskRules)
+            ? responseMaskingService.MaskContent(normalizedB.Body, normalizedB.ContentType, targetCanonicalPathB, job.MaskRules)
             : normalizedB.Body;
 
         await Task.WhenAll(

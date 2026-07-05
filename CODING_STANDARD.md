@@ -94,9 +94,9 @@ Current tests use xUnit attributes (`[Fact]`). Migration plan:
 - Resolve static analysis warnings or justify why they are suppressed.
 
 ## Tooling & enforcement
-- `.editorconfig` enforces indentation, brace style, using placement, namespace style, `var` usage, and naming patterns.
+- `.editorconfig` captures formatting defaults, keeps Microsoft/Roslyn style recommendations visible as suggestions, and enforces private-field naming without leading underscores.
 - `dotnet format` (verify in CI) ensures style compliance.
-- StyleCop.Analyzers applied to ALL projects (as PrivateAssets) — warnings should be addressed; suppressions require justification.
+- Built-in Microsoft SDK/Roslyn analyzers provide static analysis; StyleCop.Analyzers is not used for repository-wide style enforcement.
 - Roslyn IDE analyzers enabled by default (implicit in SDK). Consider raising severity for key rules over time.
 - Optional future: pre-commit hook running `dotnet format --verify-no-changes` + `dotnet test` (deferred).
 

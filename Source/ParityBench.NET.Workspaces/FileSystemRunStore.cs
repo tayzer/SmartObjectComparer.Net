@@ -2,6 +2,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 
 using ParityBench.NET.Application.Runs;
+using ParityBench.NET.Domain.Comparison;
+using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
 
 namespace ParityBench.NET.Workspaces;
@@ -119,6 +121,8 @@ public sealed class FileSystemRunStore : IRunStore
             TimeoutMilliseconds = options.Timeout.TotalMilliseconds,
             MaxConcurrency = options.MaxConcurrency,
             ModelName = options.ModelName,
+            Comparison = ToDto(options.Comparison),
+            RequestExecution = ToDto(options.RequestExecution),
         };
 
     private EndpointDefinitionDto ToDto(EndpointDefinition endpoint) =>
@@ -127,6 +131,52 @@ public sealed class FileSystemRunStore : IRunStore
             Uri = endpoint.Uri.ToString(),
             Label = endpoint.Label,
             Headers = endpoint.Headers.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase),
+        };
+
+    private ComparisonOptionsDto ToDto(ComparisonOptions options) =>
+        new ComparisonOptionsDto
+        {
+            IgnoreCollectionOrder = options.IgnoreCollectionOrder,
+            IgnoreStringCase = options.IgnoreStringCase,
+            IgnoreTrailingWhitespaceAtEnd = options.IgnoreTrailingWhitespaceAtEnd,
+            TreatNullAndEmptyCollectionsAsEqual = options.TreatNullAndEmptyCollectionsAsEqual,
+            IgnoreXmlNamespaces = options.IgnoreXmlNamespaces,
+            MaxDifferences = options.MaxDifferences,
+            IgnoreRules = options.IgnoreRules.Select(ToDto).ToList(),
+            SmartIgnoreRules = options.SmartIgnoreRules.Select(ToDto).ToList(),
+            MaskRules = options.MaskRules.Select(ToDto).ToList(),
+        };
+
+    private RequestExecutionOptionsDto ToDto(RequestExecutionOptions options) =>
+        new RequestExecutionOptionsDto
+        {
+            ContentTypeOverride = options.ContentTypeOverride,
+        };
+
+    private IgnoreRuleDefinitionDto ToDto(IgnoreRuleDefinition rule) =>
+        new IgnoreRuleDefinitionDto
+        {
+            PropertyPath = rule.PropertyPath,
+            IgnoreCompletely = rule.IgnoreCompletely,
+            IgnoreCollectionOrder = rule.IgnoreCollectionOrder,
+            TreatNullAndEmptyCollectionsAsEqual = rule.TreatNullAndEmptyCollectionsAsEqual,
+        };
+
+    private SmartIgnoreRuleDefinitionDto ToDto(SmartIgnoreRuleDefinition rule) =>
+        new SmartIgnoreRuleDefinitionDto
+        {
+            Kind = rule.Kind,
+            Value = rule.Value,
+            IsEnabled = rule.IsEnabled,
+            Description = rule.Description,
+        };
+
+    private MaskRuleDefinitionDto ToDto(MaskRuleDefinition rule) =>
+        new MaskRuleDefinitionDto
+        {
+            PropertyPath = rule.PropertyPath,
+            PreserveLastCharacters = rule.PreserveLastCharacters,
+            MaskCharacter = rule.MaskCharacter,
         };
 
     private RunProgressDto ToDto(RunProgress progress) =>
@@ -184,13 +234,50 @@ public sealed class FileSystemRunStore : IRunStore
             FromDto(dto.EndpointB),
             TimeSpan.FromMilliseconds(dto.TimeoutMilliseconds),
             dto.MaxConcurrency,
-            dto.ModelName);
+            dto.ModelName,
+            dto.Comparison is null ? null : FromDto(dto.Comparison),
+            dto.RequestExecution is null ? null : FromDto(dto.RequestExecution));
 
     private EndpointDefinition FromDto(EndpointDefinitionDto dto) =>
         new EndpointDefinition(
             new Uri(dto.Uri, UriKind.Absolute),
             dto.Label,
             dto.Headers);
+
+    private ComparisonOptions FromDto(ComparisonOptionsDto dto) =>
+        new ComparisonOptions(
+            dto.IgnoreCollectionOrder,
+            dto.IgnoreStringCase,
+            dto.IgnoreTrailingWhitespaceAtEnd,
+            dto.TreatNullAndEmptyCollectionsAsEqual,
+            dto.IgnoreXmlNamespaces,
+            dto.MaxDifferences,
+            dto.IgnoreRules.Select(FromDto),
+            dto.SmartIgnoreRules.Select(FromDto),
+            dto.MaskRules.Select(FromDto));
+
+    private RequestExecutionOptions FromDto(RequestExecutionOptionsDto dto) =>
+        new RequestExecutionOptions(dto.ContentTypeOverride);
+
+    private IgnoreRuleDefinition FromDto(IgnoreRuleDefinitionDto dto) =>
+        new IgnoreRuleDefinition(
+            dto.PropertyPath,
+            dto.IgnoreCompletely,
+            dto.IgnoreCollectionOrder,
+            dto.TreatNullAndEmptyCollectionsAsEqual);
+
+    private SmartIgnoreRuleDefinition FromDto(SmartIgnoreRuleDefinitionDto dto) =>
+        new SmartIgnoreRuleDefinition(
+            dto.Kind,
+            dto.Value,
+            dto.IsEnabled,
+            dto.Description);
+
+    private MaskRuleDefinition FromDto(MaskRuleDefinitionDto dto) =>
+        new MaskRuleDefinition(
+            dto.PropertyPath,
+            dto.PreserveLastCharacters,
+            dto.MaskCharacter);
 
     private RunProgress FromDto(RunProgressDto dto) =>
         new RunProgress(
@@ -253,6 +340,10 @@ public sealed class FileSystemRunStore : IRunStore
         public int MaxConcurrency { get; init; }
 
         public string ModelName { get; init; } = "Auto";
+
+        public ComparisonOptionsDto? Comparison { get; init; }
+
+        public RequestExecutionOptionsDto? RequestExecution { get; init; }
     }
 
     private sealed class EndpointDefinitionDto
@@ -262,6 +353,63 @@ public sealed class FileSystemRunStore : IRunStore
         public string? Label { get; init; }
 
         public Dictionary<string, string> Headers { get; init; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private sealed class ComparisonOptionsDto
+    {
+        public bool IgnoreCollectionOrder { get; init; }
+
+        public bool IgnoreStringCase { get; init; }
+
+        public bool IgnoreTrailingWhitespaceAtEnd { get; init; }
+
+        public bool TreatNullAndEmptyCollectionsAsEqual { get; init; }
+
+        public bool IgnoreXmlNamespaces { get; init; } = true;
+
+        public int MaxDifferences { get; init; } = 100;
+
+        public List<IgnoreRuleDefinitionDto> IgnoreRules { get; init; } = new List<IgnoreRuleDefinitionDto>();
+
+        public List<SmartIgnoreRuleDefinitionDto> SmartIgnoreRules { get; init; } = new List<SmartIgnoreRuleDefinitionDto>();
+
+        public List<MaskRuleDefinitionDto> MaskRules { get; init; } = new List<MaskRuleDefinitionDto>();
+    }
+
+    private sealed class RequestExecutionOptionsDto
+    {
+        public string? ContentTypeOverride { get; init; }
+    }
+
+    private sealed class IgnoreRuleDefinitionDto
+    {
+        public string PropertyPath { get; init; } = string.Empty;
+
+        public bool IgnoreCompletely { get; init; } = true;
+
+        public bool IgnoreCollectionOrder { get; init; }
+
+        public bool TreatNullAndEmptyCollectionsAsEqual { get; init; }
+    }
+
+    private sealed class SmartIgnoreRuleDefinitionDto
+    {
+        public SmartIgnoreRuleKind Kind { get; init; }
+
+        public string Value { get; init; } = string.Empty;
+
+        public bool IsEnabled { get; init; } = true;
+
+        public string? Description { get; init; }
+    }
+
+    private sealed class MaskRuleDefinitionDto
+    {
+        public string PropertyPath { get; init; } = string.Empty;
+
+        public int PreserveLastCharacters { get; init; }
+
+        public string MaskCharacter { get; init; } = "*";
     }
 
     private sealed class RunProgressDto

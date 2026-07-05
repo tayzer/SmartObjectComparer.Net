@@ -12,10 +12,10 @@ namespace ComparisonTool.Core.RequestComparison.Services;
 /// </summary>
 public class RequestExecutionService : IDisposable
 {
-    private readonly ILogger<RequestExecutionService> _logger;
-    private readonly HttpClient _httpClient;
-    private readonly ResponseMaskingService _responseMaskingService;
-    private readonly RequestComparisonAlternateContractTransformationService _alternateContractTransformationService;
+    private readonly ILogger<RequestExecutionService> logger;
+    private readonly HttpClient httpClient;
+    private readonly ResponseMaskingService responseMaskingService;
+    private readonly RequestComparisonAlternateContractTransformationService alternateContractTransformationService;
     private const int BufferSize = 81920; // 80KB buffer
 
     public RequestExecutionService(
@@ -24,10 +24,10 @@ public class RequestExecutionService : IDisposable
         ResponseMaskingService responseMaskingService,
         RequestComparisonAlternateContractTransformationService alternateContractTransformationService)
     {
-        _logger = logger;
-        _httpClient = httpClientFactory.CreateClient("RequestComparison");
-        _responseMaskingService = responseMaskingService;
-        _alternateContractTransformationService = alternateContractTransformationService;
+        this.logger = logger;
+        this.httpClient = httpClientFactory.CreateClient("RequestComparison");
+        this.responseMaskingService = responseMaskingService;
+        this.alternateContractTransformationService = alternateContractTransformationService;
     }
 
     /// <summary>
@@ -50,7 +50,7 @@ public class RequestExecutionService : IDisposable
         Directory.CreateDirectory(job.ResponsePathA);
         Directory.CreateDirectory(job.ResponsePathB);
 
-        _logger.LogInformation(
+        logger.LogInformation(
             "Starting execution of {Count} requests with max concurrency {Concurrency}",
             requests.Count,
             job.MaxConcurrency);
@@ -109,7 +109,7 @@ public class RequestExecutionService : IDisposable
             var contentTypeB = contentTypeA;
             if (job.UseAlternateContractForEndpointB)
             {
-                var alternateRequest = await _alternateContractTransformationService.PrepareEndpointBRequestAsync(
+                var alternateRequest = await alternateContractTransformationService.PrepareEndpointBRequestAsync(
                     job,
                     request,
                     sourceRequestBody,
@@ -149,16 +149,16 @@ public class RequestExecutionService : IDisposable
 
             if (job.MaskRules.Count > 0 && job.UseAlternateContractForEndpointB)
             {
-                endpointBMaskRules = _alternateContractTransformationService.GetEndpointBRawResponseMaskRules(job);
+                endpointBMaskRules = alternateContractTransformationService.GetEndpointBRawResponseMaskRules(job);
             }
 
             var shouldMaskResponses = job.MaskRules.Count > 0;
 
             var contentA = shouldMaskResponses
-                ? _responseMaskingService.MaskContent(responseA.content, responseA.contentType, responsePathA, endpointAMaskRules)
+                ? responseMaskingService.MaskContent(responseA.content, responseA.contentType, responsePathA, endpointAMaskRules)
                 : responseA.content;
             var contentB = shouldMaskResponses
-                ? _responseMaskingService.MaskContent(responseB.content, responseB.contentType, responsePathB, endpointBMaskRules)
+                ? responseMaskingService.MaskContent(responseB.content, responseB.contentType, responsePathB, endpointBMaskRules)
                 : responseB.content;
 
             // Stream responses to disk
@@ -183,7 +183,7 @@ public class RequestExecutionService : IDisposable
         catch (Exception ex)
         {
             stopwatch.Stop();
-            _logger.LogWarning(ex, "Failed to execute request {Path}", request.RelativePath);
+            logger.LogWarning(ex, "Failed to execute request {Path}", request.RelativePath);
 
             return new RequestExecutionResult
             {
@@ -235,7 +235,7 @@ public class RequestExecutionService : IDisposable
             }
         }
 
-        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken).ConfigureAwait(false);
+        using var response = await httpClient.SendAsync(request, HttpCompletionOption.ResponseContentRead, cancellationToken).ConfigureAwait(false);
         var content = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
         var responseContentType = response.Content.Headers.ContentType?.ToString();
 
@@ -292,6 +292,6 @@ public class RequestExecutionService : IDisposable
 
     public void Dispose()
     {
-        _httpClient?.Dispose();
+        httpClient?.Dispose();
     }
 }

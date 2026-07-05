@@ -10,7 +10,7 @@ namespace ComparisonTool.Core.RequestComparison.Services;
 /// </summary>
 public class RequestFileParserService
 {
-    private readonly ILogger<RequestFileParserService> _logger;
+    private readonly ILogger<RequestFileParserService> logger;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -30,7 +30,7 @@ public class RequestFileParserService
 
     public RequestFileParserService(ILogger<RequestFileParserService> logger)
     {
-        _logger = logger;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -65,7 +65,7 @@ public class RequestFileParserService
             requests.Add(request);
         }
 
-        _logger.LogInformation("Parsed {Count} request files from batch {BatchId}", requests.Count, batchId);
+        logger.LogInformation("Parsed {Count} request files from batch {BatchId}", requests.Count, batchId);
         return requests;
     }
 
@@ -123,7 +123,7 @@ public class RequestFileParserService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(
+            logger.LogWarning(
                 ex,
                 "Failed to parse sidecar headers from {Path}, using empty headers",
                 sidecarPath);

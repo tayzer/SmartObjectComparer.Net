@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 
 using ParityBench.NET.Application.Requests;
+using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
 
@@ -66,6 +67,9 @@ public sealed class FileSystemRunDetailStore : IRunDetailStore
             ResponseA = result.ResponseA is null ? null : ToDto(result.ResponseA),
             ResponseB = result.ResponseB is null ? null : ToDto(result.ResponseB),
             ErrorMessage = result.ErrorMessage,
+            AreEqual = result.AreEqual,
+            DifferenceCount = result.DifferenceCount,
+            Differences = result.Differences.Select(ToDto).ToList(),
         };
 
     private ResponseArtifactMetadataDto ToDto(ResponseArtifactMetadata metadata) =>
@@ -80,13 +84,25 @@ public sealed class FileSystemRunDetailStore : IRunDetailStore
             Sha256 = metadata.Sha256,
         };
 
+    private ComparisonDifferenceDto ToDto(ComparisonDifference difference) =>
+        new ComparisonDifferenceDto
+        {
+            PropertyPath = difference.PropertyPath,
+            ValueA = difference.ValueA,
+            ValueB = difference.ValueB,
+            Message = difference.Message,
+        };
+
     private RequestPairResult FromDto(RequestPairResultDto dto) =>
         new RequestPairResult(
             dto.RelativePath,
             dto.Outcome,
             dto.ResponseA is null ? null : FromDto(dto.ResponseA),
             dto.ResponseB is null ? null : FromDto(dto.ResponseB),
-            dto.ErrorMessage);
+            dto.ErrorMessage,
+            dto.AreEqual,
+            dto.DifferenceCount,
+            dto.Differences.Select(FromDto));
 
     private ResponseArtifactMetadata FromDto(ResponseArtifactMetadataDto dto) =>
         new ResponseArtifactMetadata(
@@ -96,6 +112,13 @@ public sealed class FileSystemRunDetailStore : IRunDetailStore
             dto.ContentType,
             dto.ContentLength,
             dto.Sha256);
+
+    private ComparisonDifference FromDto(ComparisonDifferenceDto dto) =>
+        new ComparisonDifference(
+            dto.PropertyPath,
+            dto.ValueA,
+            dto.ValueB,
+            dto.Message);
 
     private sealed class RequestPairResultDto
     {
@@ -108,6 +131,12 @@ public sealed class FileSystemRunDetailStore : IRunDetailStore
         public ResponseArtifactMetadataDto? ResponseB { get; init; }
 
         public string? ErrorMessage { get; init; }
+
+        public bool? AreEqual { get; init; }
+
+        public int? DifferenceCount { get; init; }
+
+        public List<ComparisonDifferenceDto> Differences { get; init; } = new List<ComparisonDifferenceDto>();
     }
 
     private sealed class ResponseArtifactMetadataDto
@@ -125,5 +154,16 @@ public sealed class FileSystemRunDetailStore : IRunDetailStore
         public long ContentLength { get; init; }
 
         public string Sha256 { get; init; } = string.Empty;
+    }
+
+    private sealed class ComparisonDifferenceDto
+    {
+        public string PropertyPath { get; init; } = string.Empty;
+
+        public string? ValueA { get; init; }
+
+        public string? ValueB { get; init; }
+
+        public string? Message { get; init; }
     }
 }

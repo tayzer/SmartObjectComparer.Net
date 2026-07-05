@@ -9,11 +9,11 @@ namespace ComparisonTool.Web.Services;
 /// </summary>
 public class ComparisonProgressService : IAsyncDisposable
 {
-    private HubConnection? _hubConnection;
-    private readonly NavigationManager _navigationManager;
-    private readonly ILogger<ComparisonProgressService> _logger;
-    private string? _currentJobId;
-    private bool _disposed;
+    private HubConnection? hubConnection;
+    private readonly NavigationManager navigationManager;
+    private readonly ILogger<ComparisonProgressService> logger;
+    private string? currentJobId;
+    private bool disposed;
 
     /// <summary>
     /// Event raised when a progress update is received.
@@ -23,7 +23,7 @@ public class ComparisonProgressService : IAsyncDisposable
     /// <summary>
     /// Gets a value indicating whether the service is connected.
     /// </summary>
-    public bool IsConnected => _hubConnection?.State == HubConnectionState.Connected;
+    public bool IsConnected => hubConnection?.State == HubConnectionState.Connected;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ComparisonProgressService"/> class.
@@ -32,8 +32,8 @@ public class ComparisonProgressService : IAsyncDisposable
         NavigationManager navigationManager,
         ILogger<ComparisonProgressService> logger)
     {
-        _navigationManager = navigationManager;
-        _logger = logger;
+        this.navigationManager = navigationManager;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -42,67 +42,67 @@ public class ComparisonProgressService : IAsyncDisposable
     public async Task StartAsync()
     {
         // Build the hub connection once, and reuse it across restarts.
-        if (_hubConnection == null)
+        if (hubConnection == null)
         {
-            _hubConnection = new HubConnectionBuilder()
-                .WithUrl(_navigationManager.ToAbsoluteUri("/hubs/comparison-progress"))
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(navigationManager.ToAbsoluteUri("/hubs/comparison-progress"))
                 .WithAutomaticReconnect(new[] { TimeSpan.Zero, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10) })
                 .Build();
 
-            _hubConnection.On<ComparisonProgressUpdate>("ProgressUpdate", update =>
+            hubConnection.On<ComparisonProgressUpdate>("ProgressUpdate", update =>
             {
-                _logger.LogTrace("Received progress update for job {JobId}: {Phase} {Percent}%", 
+                logger.LogTrace("Received progress update for job {JobId}: {Phase} {Percent}%", 
                     update.JobId, update.Phase, update.PercentComplete);
                 OnProgressUpdate?.Invoke(update);
             });
 
-            _hubConnection.Reconnecting += error =>
+            hubConnection.Reconnecting += error =>
             {
-                _logger.LogWarning(error, "SignalR connection lost, attempting to reconnect...");
+                logger.LogWarning(error, "SignalR connection lost, attempting to reconnect...");
                 return Task.CompletedTask;
             };
 
-            _hubConnection.Reconnected += async connectionId =>
+            hubConnection.Reconnected += async connectionId =>
             {
-                _logger.LogInformation("SignalR reconnected with connection ID: {ConnectionId}", connectionId);
-                if (!string.IsNullOrEmpty(_currentJobId))
+                logger.LogInformation("SignalR reconnected with connection ID: {ConnectionId}", connectionId);
+                if (!string.IsNullOrEmpty(currentJobId))
                 {
                     try
                     {
-                        await _hubConnection!.InvokeAsync("SubscribeToJob", _currentJobId);
-                        _logger.LogDebug("Re-subscribed to job {JobId} after reconnection", _currentJobId);
+                        await hubConnection!.InvokeAsync("SubscribeToJob", currentJobId);
+                        logger.LogDebug("Re-subscribed to job {JobId} after reconnection", currentJobId);
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Failed to re-subscribe to job {JobId} after reconnection", _currentJobId);
+                        logger.LogError(ex, "Failed to re-subscribe to job {JobId} after reconnection", currentJobId);
                     }
                 }
             };
         }
 
         // If already connected, nothing to do.
-        if (_hubConnection.State == HubConnectionState.Connected)
+        if (hubConnection.State == HubConnectionState.Connected)
         {
             return;
         }
 
         // Avoid calling StartAsync when the connection is in an intermediate state
         // (Connecting/Reconnecting), which would throw InvalidOperationException.
-        if (_hubConnection.State == HubConnectionState.Connecting ||
-            _hubConnection.State == HubConnectionState.Reconnecting)
+        if (hubConnection.State == HubConnectionState.Connecting ||
+            hubConnection.State == HubConnectionState.Reconnecting)
         {
-            _logger.LogDebug("SignalR connection is currently {State}; skipping StartAsync.", _hubConnection.State);
+            logger.LogDebug("SignalR connection is currently {State}; skipping StartAsync.", hubConnection.State);
             return;
         }
 
         try
         {
-            await _hubConnection.StartAsync();
-            _logger.LogDebug("SignalR connection started");
+            await hubConnection.StartAsync();
+            logger.LogDebug("SignalR connection started");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to start SignalR connection");
+            logger.LogError(ex, "Failed to start SignalR connection");
             throw;
         }
     }
@@ -113,33 +113,33 @@ public class ComparisonProgressService : IAsyncDisposable
     /// <param name="jobId">The job ID to subscribe to.</param>
     public async Task SubscribeToJobAsync(string jobId)
     {
-        if (_hubConnection == null || _hubConnection.State != HubConnectionState.Connected)
+        if (hubConnection == null || hubConnection.State != HubConnectionState.Connected)
         {
             await StartAsync();
         }
 
-        if (!string.IsNullOrEmpty(_currentJobId) && _currentJobId != jobId)
+        if (!string.IsNullOrEmpty(currentJobId) && currentJobId != jobId)
         {
             try
             {
-                await _hubConnection!.InvokeAsync("UnsubscribeFromJob", _currentJobId);
+                await hubConnection!.InvokeAsync("UnsubscribeFromJob", currentJobId);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to unsubscribe from job {JobId}", _currentJobId);
+                logger.LogWarning(ex, "Failed to unsubscribe from job {JobId}", currentJobId);
             }
         }
 
-        _currentJobId = jobId;
+        currentJobId = jobId;
 
         try
         {
-            await _hubConnection!.InvokeAsync("SubscribeToJob", jobId);
-            _logger.LogDebug("Subscribed to job {JobId}", jobId);
+            await hubConnection!.InvokeAsync("SubscribeToJob", jobId);
+            logger.LogDebug("Subscribed to job {JobId}", jobId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to subscribe to job {JobId}", jobId);
+            logger.LogError(ex, "Failed to subscribe to job {JobId}", jobId);
             throw;
         }
     }
@@ -149,20 +149,20 @@ public class ComparisonProgressService : IAsyncDisposable
     /// </summary>
     public async Task UnsubscribeAsync()
     {
-        if (_hubConnection != null && !string.IsNullOrEmpty(_currentJobId))
+        if (hubConnection != null && !string.IsNullOrEmpty(currentJobId))
         {
             try
             {
-                await _hubConnection.InvokeAsync("UnsubscribeFromJob", _currentJobId);
-                _logger.LogDebug("Unsubscribed from job {JobId}", _currentJobId);
+                await hubConnection.InvokeAsync("UnsubscribeFromJob", currentJobId);
+                logger.LogDebug("Unsubscribed from job {JobId}", currentJobId);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to unsubscribe from job {JobId}", _currentJobId);
+                logger.LogWarning(ex, "Failed to unsubscribe from job {JobId}", currentJobId);
             }
             finally
             {
-                _currentJobId = null;
+                currentJobId = null;
             }
         }
     }
@@ -170,22 +170,22 @@ public class ComparisonProgressService : IAsyncDisposable
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
     {
-        if (_disposed)
+        if (disposed)
         {
             return;
         }
 
-        _disposed = true;
+        disposed = true;
 
-        if (_hubConnection != null)
+        if (hubConnection != null)
         {
             try
             {
-                await _hubConnection.DisposeAsync();
+                await hubConnection.DisposeAsync();
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Error disposing SignalR connection");
+                logger.LogWarning(ex, "Error disposing SignalR connection");
             }
         }
     }

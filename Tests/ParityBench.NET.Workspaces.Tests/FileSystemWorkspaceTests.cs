@@ -3,6 +3,7 @@ using System.Text;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
+using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
 using ParityBench.NET.Workspaces;
@@ -70,6 +71,27 @@ public sealed class FileSystemWorkspaceTests
     }
 
     [TestMethod]
+    public async Task OpenReadAsync_WhenArtifactExists_ReturnsSavedContent()
+    {
+        string workspaceRoot = CreateTempDirectory();
+        FileSystemRunArtifactStore store = new FileSystemRunArtifactStore(workspaceRoot);
+        using MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes("hello"));
+        ResponseArtifactMetadata metadata = await store.SaveResponseAsync(
+            new RunId("run-1"),
+            EndpointSlot.A,
+            new RequestItem("one.json", "application/json", 5),
+            200,
+            "application/json",
+            stream);
+
+        await using Stream loadedStream = await store.OpenReadAsync(metadata.Artifact);
+        using StreamReader reader = new StreamReader(loadedStream, Encoding.UTF8);
+        string loadedContent = await reader.ReadToEndAsync();
+
+        Assert.AreEqual("hello", loadedContent);
+    }
+
+    [TestMethod]
     public async Task SaveRunDetails_WhenDetailsAreSaved_CanLoadDetailIndexWithoutRawBodies()
     {
         string workspaceRoot = CreateTempDirectory();
@@ -78,17 +100,24 @@ public sealed class FileSystemWorkspaceTests
         {
             new RequestPairResult(
                 "one.json",
-                RequestPairOutcome.Equal,
+                RequestPairOutcome.Different,
                 CreateResponse(EndpointSlot.A, "runs/run-1/artifacts/A/one.json"),
-                CreateResponse(EndpointSlot.B, "runs/run-1/artifacts/B/one.json")),
+                CreateResponse(EndpointSlot.B, "runs/run-1/artifacts/B/one.json"),
+                areEqual: false,
+                differenceCount: 1,
+                differences: new[] { new ComparisonDifference("Name", "A", "B", "Changed") }),
         };
 
         RunDetailReference reference = await store.SaveDetailsAsync(new RunId("run-1"), details);
         IReadOnlyList<RequestPairResult> loadedDetails = await store.LoadDetailsAsync(reference);
 
         Assert.AreEqual(1, loadedDetails.Count);
-        Assert.AreEqual(RequestPairOutcome.Equal, loadedDetails[0].Outcome);
+        Assert.AreEqual(RequestPairOutcome.Different, loadedDetails[0].Outcome);
         Assert.AreEqual("runs/run-1/artifacts/A/one.json", loadedDetails[0].ResponseA?.Artifact.ArtifactId);
+        Assert.AreEqual(1, loadedDetails[0].DifferenceCount);
+        Assert.AreEqual("Name", loadedDetails[0].Differences[0].PropertyPath);
+        Assert.AreEqual("A", loadedDetails[0].Differences[0].ValueA);
+        Assert.AreEqual("B", loadedDetails[0].Differences[0].ValueB);
     }
 
     [TestMethod]
@@ -118,6 +147,40 @@ public sealed class FileSystemWorkspaceTests
         Assert.AreEqual("runs/run-1/details/index.json", loadedSummary.DetailIndexReference?.DetailId);
     }
 
+    [TestMethod]
+    public async Task SaveRun_WhenRunIncludesOptions_PersistsAndLoadsOptions()
+    {
+        string workspaceRoot = CreateTempDirectory();
+        FileSystemRunStore store = new FileSystemRunStore(workspaceRoot);
+        ComparisonOptions comparisonOptions = new ComparisonOptions(
+            ignoreCollectionOrder: true,
+            ignoreStringCase: true,
+            ignoreTrailingWhitespaceAtEnd: true,
+            treatNullAndEmptyCollectionsAsEqual: true,
+            ignoreXmlNamespaces: false,
+            maxDifferences: 12,
+            ignoreRules: new[] { new IgnoreRuleDefinition("Name") },
+            smartIgnoreRules: new[] { new SmartIgnoreRuleDefinition(SmartIgnoreRuleKind.PropertyName, "Id") },
+            maskRules: new[] { new MaskRuleDefinition("Token", 4, "#") });
+        RunOptions options = CreateOptions(comparisonOptions, new RequestExecutionOptions("application/xml"));
+        ComparisonRun run = ComparisonRun.Create(new RunId("run-1"), options);
+
+        await store.SaveAsync(run);
+        ComparisonRun? loadedRun = await store.LoadAsync(run.Id);
+
+        Assert.IsNotNull(loadedRun);
+        Assert.IsTrue(loadedRun.Options.Comparison.IgnoreCollectionOrder);
+        Assert.IsTrue(loadedRun.Options.Comparison.IgnoreStringCase);
+        Assert.IsTrue(loadedRun.Options.Comparison.IgnoreTrailingWhitespaceAtEnd);
+        Assert.IsTrue(loadedRun.Options.Comparison.TreatNullAndEmptyCollectionsAsEqual);
+        Assert.IsFalse(loadedRun.Options.Comparison.IgnoreXmlNamespaces);
+        Assert.AreEqual(12, loadedRun.Options.Comparison.MaxDifferences);
+        Assert.AreEqual("Name", loadedRun.Options.Comparison.IgnoreRules[0].PropertyPath);
+        Assert.AreEqual("Id", loadedRun.Options.Comparison.SmartIgnoreRules[0].Value);
+        Assert.AreEqual("Token", loadedRun.Options.Comparison.MaskRules[0].PropertyPath);
+        Assert.AreEqual("application/xml", loadedRun.Options.RequestExecution.ContentTypeOverride);
+    }
+
     private static string CreateTempDirectory()
     {
         string path = Path.Combine(Path.GetTempPath(), "ParityBenchNET.Tests", Guid.NewGuid().ToString("N"));
@@ -134,13 +197,17 @@ public sealed class FileSystemWorkspaceTests
             2,
             "abc");
 
-    private static RunOptions CreateOptions() =>
+    private static RunOptions CreateOptions(
+        ComparisonOptions? comparisonOptions = null,
+        RequestExecutionOptions? requestExecutionOptions = null) =>
         new RunOptions(
             new RequestBatchReference("batch-1"),
             new EndpointDefinition(new Uri("https://service-a.example.test")),
             new EndpointDefinition(new Uri("https://service-b.example.test")),
             TimeSpan.FromSeconds(30),
-            2);
+            2,
+            comparisonOptions: comparisonOptions,
+            requestExecutionOptions: requestExecutionOptions);
 
     private static string ToSha256(byte[] content) =>
         Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();

@@ -71,4 +71,22 @@ public sealed class FileSystemRunArtifactStore : IRunArtifactStore
             contentLength,
             sha256);
     }
+
+    public Task<Stream> OpenReadAsync(
+        ArtifactReference artifact,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(artifact);
+
+        string artifactPath = FileSystemWorkspacePaths.GetSafePath(workspaceRoot, artifact.ArtifactId);
+        Stream stream = new FileStream(
+            artifactPath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            81920,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        return Task.FromResult(stream);
+    }
 }

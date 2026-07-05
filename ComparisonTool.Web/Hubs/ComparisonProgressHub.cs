@@ -7,14 +7,14 @@ namespace ComparisonTool.Web.Hubs;
 /// </summary>
 public class ComparisonProgressHub : Hub
 {
-    private readonly ILogger<ComparisonProgressHub> _logger;
+    private readonly ILogger<ComparisonProgressHub> logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ComparisonProgressHub"/> class.
     /// </summary>
     public ComparisonProgressHub(ILogger<ComparisonProgressHub> logger)
     {
-        _logger = logger;
+        this.logger = logger;
     }
 
     /// <summary>
@@ -24,7 +24,7 @@ public class ComparisonProgressHub : Hub
     public async Task SubscribeToJob(string jobId)
     {
         await Groups.AddToGroupAsync(Context.ConnectionId, jobId);
-        _logger.LogDebug("Client {ConnectionId} subscribed to job {JobId}", Context.ConnectionId, jobId);
+        logger.LogDebug("Client {ConnectionId} subscribed to job {JobId}", Context.ConnectionId, jobId);
     }
 
     /// <summary>
@@ -34,13 +34,13 @@ public class ComparisonProgressHub : Hub
     public async Task UnsubscribeFromJob(string jobId)
     {
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, jobId);
-        _logger.LogDebug("Client {ConnectionId} unsubscribed from job {JobId}", Context.ConnectionId, jobId);
+        logger.LogDebug("Client {ConnectionId} unsubscribed from job {JobId}", Context.ConnectionId, jobId);
     }
 
     /// <inheritdoc/>
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        _logger.LogDebug("Client {ConnectionId} disconnected", Context.ConnectionId);
+        logger.LogDebug("Client {ConnectionId} disconnected", Context.ConnectionId);
         await base.OnDisconnectedAsync(exception);
     }
 }

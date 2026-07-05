@@ -19,4 +19,11 @@ public interface IRunArtifactStore
         string? contentType,
         Stream body,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Opens a previously saved artifact body by its logical reference.
+    /// </summary>
+    Task<Stream> OpenReadAsync(
+        ArtifactReference artifact,
+        CancellationToken cancellationToken = default);
 }

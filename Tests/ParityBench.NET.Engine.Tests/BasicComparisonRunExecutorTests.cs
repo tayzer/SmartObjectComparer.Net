@@ -5,6 +5,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Runs;
+using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
 using ParityBench.NET.Engine;
@@ -128,16 +129,57 @@ public sealed class BasicComparisonRunExecutorTests
         Assert.AreEqual("request-a", endpointARequest.Headers["X-A"]);
     }
 
+    [TestMethod]
+    public async Task ExecuteAsync_WhenContentTypeOverrideIsConfigured_SendsOverride()
+    {
+        RequestItem request = new RequestItem("one.txt", "text/plain", 2);
+        FakeEndpointRequestSender sender = FakeEndpointRequestSender.ForBody("same");
+        BasicComparisonRunExecutor executor = CreateExecutor(CreateBatch(new[] { request }), sender);
+        ComparisonRun run = CreateRun(
+            requestExecutionOptions: new RequestExecutionOptions("application/json"));
+
+        await executor.ExecuteAsync(run, new CapturingProgressReporter());
+
+        Assert.IsTrue(sender.SentRequests.All(sentRequest => sentRequest.ContentType == "application/json"));
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_WhenMaskRulesExist_PersistsMaskedArtifacts()
+    {
+        RequestItem request = new RequestItem("one.json", "application/json", 2);
+        FakeEndpointRequestSender sender = FakeEndpointRequestSender.ForBody("{\"token\":\"secret-1234\"}");
+        FakeRunArtifactStore artifactStore = new FakeRunArtifactStore();
+        BasicComparisonRunExecutor executor = CreateExecutor(CreateBatch(new[] { request }), sender, artifactStore);
+        ComparisonRun run = CreateRun(
+            comparisonOptions: new ComparisonOptions(
+                maskRules: new[] { new MaskRuleDefinition("token", preserveLastCharacters: 4) }));
+
+        await executor.ExecuteAsync(run, new CapturingProgressReporter());
+
+        Assert.AreEqual(2, artifactStore.SavedBodies.Count);
+        Assert.IsTrue(artifactStore.SavedBodies.Values.All(body => body.Contains("*******1234", StringComparison.Ordinal)));
+        Assert.IsTrue(artifactStore.SavedBodies.Values.All(body => !body.Contains("secret-1234", StringComparison.Ordinal)));
+    }
+
     private static BasicComparisonRunExecutor CreateExecutor(
         RequestBatchManifest manifest,
-        FakeEndpointRequestSender sender)
+        FakeEndpointRequestSender sender,
+        FakeRunArtifactStore? artifactStore = null,
+        IResponseComparer? responseComparer = null)
     {
         FakeRequestBatchStore requestBatchStore = new FakeRequestBatchStore(manifest);
-        return new BasicComparisonRunExecutor(
-            requestBatchStore,
-            sender,
-            new FakeRunArtifactStore(),
-            new FakeRunDetailStore());
+        return responseComparer is null
+            ? new BasicComparisonRunExecutor(
+                requestBatchStore,
+                sender,
+                artifactStore ?? new FakeRunArtifactStore(),
+                new FakeRunDetailStore())
+            : new BasicComparisonRunExecutor(
+                requestBatchStore,
+                sender,
+                artifactStore ?? new FakeRunArtifactStore(),
+                new FakeRunDetailStore(),
+                responseComparer);
     }
 
     private static RequestBatchManifest CreateBatch(IReadOnlyList<RequestItem> requests) =>
@@ -145,7 +187,9 @@ public sealed class BasicComparisonRunExecutorTests
 
     private static ComparisonRun CreateRun(
         int maxConcurrency = 4,
-        IReadOnlyDictionary<string, string>? endpointAHeaders = null) =>
+        IReadOnlyDictionary<string, string>? endpointAHeaders = null,
+        ComparisonOptions? comparisonOptions = null,
+        RequestExecutionOptions? requestExecutionOptions = null) =>
         ComparisonRun
             .Create(
                 new RunId("run-1"),
@@ -154,7 +198,9 @@ public sealed class BasicComparisonRunExecutorTests
                     new EndpointDefinition(new Uri("https://service-a.example.test"), headers: endpointAHeaders),
                     new EndpointDefinition(new Uri("https://service-b.example.test")),
                     TimeSpan.FromSeconds(30),
-                    maxConcurrency))
+                    maxConcurrency,
+                    comparisonOptions: comparisonOptions,
+                    requestExecutionOptions: requestExecutionOptions))
             .Start();
 
     private static MemoryStream CreateStream(string value) =>
@@ -221,7 +267,11 @@ public sealed class BasicComparisonRunExecutorTests
             EnterRequestPath(request.Request.RelativePath);
             try
             {
-                SentRequests.Add(request);
+                lock (gate)
+                {
+                    SentRequests.Add(request);
+                }
+
                 if (delay > TimeSpan.Zero)
                 {
                     await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
@@ -263,6 +313,11 @@ public sealed class BasicComparisonRunExecutorTests
 
     private sealed class FakeRunArtifactStore : IRunArtifactStore
     {
+        private readonly Dictionary<string, byte[]> savedContent = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+
+        public IReadOnlyDictionary<string, string> SavedBodies => savedContent
+            .ToDictionary(pair => pair.Key, pair => Encoding.UTF8.GetString(pair.Value), StringComparer.OrdinalIgnoreCase);
+
         public async Task<ResponseArtifactMetadata> SaveResponseAsync(
             RunId runId,
             EndpointSlot endpoint,
@@ -275,15 +330,22 @@ public sealed class BasicComparisonRunExecutorTests
             using MemoryStream memoryStream = new MemoryStream();
             await body.CopyToAsync(memoryStream, cancellationToken).ConfigureAwait(false);
             byte[] content = memoryStream.ToArray();
+            string artifactId = $"runs/{runId.Value}/artifacts/{endpoint}/{request.RelativePath}";
+            savedContent[artifactId] = content;
 
             return new ResponseArtifactMetadata(
                 endpoint,
-                new ArtifactReference($"runs/{runId.Value}/artifacts/{endpoint}/{request.RelativePath}", contentType),
+                new ArtifactReference(artifactId, contentType),
                 statusCode,
                 contentType,
                 content.Length,
                 ToSha256(content));
         }
+
+        public Task<Stream> OpenReadAsync(
+            ArtifactReference artifact,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<Stream>(new MemoryStream(savedContent[artifact.ArtifactId]));
     }
 
     private sealed class FakeRunDetailStore : IRunDetailStore

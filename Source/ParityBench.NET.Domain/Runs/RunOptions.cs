@@ -1,3 +1,6 @@
+using ParityBench.NET.Domain.Comparison;
+using ParityBench.NET.Domain.Requests;
+
 namespace ParityBench.NET.Domain.Runs;
 
 public sealed record RunOptions
@@ -8,7 +11,9 @@ public sealed record RunOptions
         EndpointDefinition endpointB,
         TimeSpan timeout,
         int maxConcurrency,
-        string modelName = "Auto")
+        string modelName = "Auto",
+        ComparisonOptions? comparisonOptions = null,
+        RequestExecutionOptions? requestExecutionOptions = null)
     {
         ArgumentNullException.ThrowIfNull(endpointA);
         ArgumentNullException.ThrowIfNull(endpointB);
@@ -29,6 +34,8 @@ public sealed record RunOptions
         Timeout = timeout;
         MaxConcurrency = maxConcurrency;
         ModelName = string.IsNullOrWhiteSpace(modelName) ? "Auto" : modelName;
+        Comparison = comparisonOptions ?? new ComparisonOptions();
+        RequestExecution = requestExecutionOptions ?? new RequestExecutionOptions();
     }
 
     public RequestBatchReference RequestBatch { get; }
@@ -42,4 +49,8 @@ public sealed record RunOptions
     public int MaxConcurrency { get; }
 
     public string ModelName { get; }
+
+    public ComparisonOptions Comparison { get; }
+
+    public RequestExecutionOptions RequestExecution { get; }
 }

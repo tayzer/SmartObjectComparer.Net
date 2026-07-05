@@ -10,8 +10,8 @@ namespace ComparisonTool.Web.Services;
 /// </summary>
 public class SignalRProgressPublisher : IComparisonProgressPublisher
 {
-    private readonly IHubContext<ComparisonProgressHub> _hubContext;
-    private readonly ILogger<SignalRProgressPublisher> _logger;
+    private readonly IHubContext<ComparisonProgressHub> hubContext;
+    private readonly ILogger<SignalRProgressPublisher> logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SignalRProgressPublisher"/> class.
@@ -20,8 +20,8 @@ public class SignalRProgressPublisher : IComparisonProgressPublisher
         IHubContext<ComparisonProgressHub> hubContext,
         ILogger<SignalRProgressPublisher> logger)
     {
-        _hubContext = hubContext;
-        _logger = logger;
+        this.hubContext = hubContext;
+        this.logger = logger;
     }
 
     /// <inheritdoc/>
@@ -29,10 +29,10 @@ public class SignalRProgressPublisher : IComparisonProgressPublisher
     {
         try
         {
-            await _hubContext.Clients.Group(update.JobId)
+            await hubContext.Clients.Group(update.JobId)
                 .SendAsync("ProgressUpdate", update, cancellationToken);
 
-            _logger.LogTrace(
+            logger.LogTrace(
                 "Published progress for job {JobId}: {Phase} {Percent}% - {Message}",
                 update.JobId,
                 update.Phase,
@@ -41,7 +41,7 @@ public class SignalRProgressPublisher : IComparisonProgressPublisher
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to publish progress update for job {JobId}", update.JobId);
+            logger.LogWarning(ex, "Failed to publish progress update for job {JobId}", update.JobId);
         }
     }
 }
