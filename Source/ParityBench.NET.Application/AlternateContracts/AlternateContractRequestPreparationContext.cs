@@ -5,12 +5,12 @@ namespace ParityBench.NET.Application.AlternateContracts;
 
 public sealed record AlternateContractRequestPreparationContext(
     RequestItem Request,
-    byte[] SourceRequestBody,
+    Func<CancellationToken, ValueTask<Stream>> OpenSourceRequestBodyAsync,
     PayloadFormat SourceFormat);
 
 public sealed record AlternateContractRequestPreparationContext<TCanonicalRequest>(
     RequestItem Request,
-    byte[] SourceRequestBody,
+    Func<CancellationToken, ValueTask<Stream>> OpenSourceRequestBodyAsync,
     PayloadFormat SourceFormat,
     TCanonicalRequest CanonicalRequest)
     where TCanonicalRequest : class;

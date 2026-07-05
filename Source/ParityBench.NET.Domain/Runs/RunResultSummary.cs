@@ -9,7 +9,8 @@ public sealed record RunResultSummary
         int errorPairs,
         int statusCodeMismatchPairs = 0,
         int bothNonSuccessPairs = 0,
-        RunDetailReference? detailIndexReference = null)
+        RunDetailReference? detailIndexReference = null,
+        RunExecutionMetrics? executionMetrics = null)
     {
         EnsureNonNegative(totalPairs, nameof(totalPairs));
         EnsureNonNegative(equalPairs, nameof(equalPairs));
@@ -25,6 +26,7 @@ public sealed record RunResultSummary
         StatusCodeMismatchPairs = statusCodeMismatchPairs;
         BothNonSuccessPairs = bothNonSuccessPairs;
         DetailIndexReference = detailIndexReference;
+        ExecutionMetrics = executionMetrics;
     }
 
     public int TotalPairs { get; }
@@ -40,6 +42,8 @@ public sealed record RunResultSummary
     public int BothNonSuccessPairs { get; }
 
     public RunDetailReference? DetailIndexReference { get; }
+
+    public RunExecutionMetrics? ExecutionMetrics { get; }
 
     private static void EnsureNonNegative(int value, string parameterName)
     {

@@ -35,23 +35,30 @@ public sealed class JsonXmlContractPayloadSerializer : IContractPayloadSerialize
         };
     }
 
-    public Task<byte[]> SerializeAsync(
+    public async Task SerializeAsync(
         object value,
         Type valueType,
         PayloadFormat format,
+        Stream destination,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(value);
         ArgumentNullException.ThrowIfNull(valueType);
+        ArgumentNullException.ThrowIfNull(destination);
 
-        byte[] bytes = format switch
+        switch (format)
         {
-            PayloadFormat.Json => JsonSerializer.SerializeToUtf8Bytes(value, valueType, JsonOptions),
-            PayloadFormat.Xml => SerializeXml(value, valueType),
-            _ => throw new NotSupportedException($"Payload format '{format}' is not supported."),
-        };
-
-        return Task.FromResult(bytes);
+            case PayloadFormat.Json:
+                await JsonSerializer
+                    .SerializeAsync(destination, value, valueType, JsonOptions, cancellationToken)
+                    .ConfigureAwait(false);
+                break;
+            case PayloadFormat.Xml:
+                SerializeXml(value, valueType, destination, cancellationToken);
+                break;
+            default:
+                throw new NotSupportedException($"Payload format '{format}' is not supported.");
+        }
     }
 
     private static async Task<object> DeserializeJsonAsync(
@@ -88,21 +95,26 @@ public sealed class JsonXmlContractPayloadSerializer : IContractPayloadSerialize
         return result ?? throw new InvalidOperationException($"XML payload could not be deserialized as '{targetType.Name}'.");
     }
 
-    private static byte[] SerializeXml(object value, Type valueType)
+    private static void SerializeXml(
+        object value,
+        Type valueType,
+        Stream destination,
+        CancellationToken cancellationToken)
     {
-        using MemoryStream stream = new MemoryStream();
-        using XmlWriter writer = XmlWriter.Create(stream, new XmlWriterSettings
+        cancellationToken.ThrowIfCancellationRequested();
+
+        using XmlWriter writer = XmlWriter.Create(destination, new XmlWriterSettings
         {
             Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
             OmitXmlDeclaration = false,
             Indent = false,
             NewLineHandling = NewLineHandling.None,
+            CloseOutput = false,
         });
 
         XmlSerializer serializer = new XmlSerializer(valueType);
         serializer.Serialize(writer, value);
         writer.Flush();
-        return stream.ToArray();
     }
 
     private static XDocument StripNamespaces(XDocument document) =>

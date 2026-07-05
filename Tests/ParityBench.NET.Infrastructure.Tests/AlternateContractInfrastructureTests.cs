@@ -62,7 +62,7 @@ public sealed class AlternateContractInfrastructureTests
     }
 
     [TestMethod]
-    public async Task SerializeAsync_WhenPayloadIsJson_RoundTripsModel()
+    public async Task SerializeAsync_WhenJsonPayloadIsWritten_WritesToDestinationStream()
     {
         JsonXmlContractPayloadSerializer serializer = new JsonXmlContractPayloadSerializer();
         SampleAlternateJsonCustomerLookupRequest request = new SampleAlternateJsonCustomerLookupRequest
@@ -71,8 +71,9 @@ public sealed class AlternateContractInfrastructureTests
             RawToken = "tok",
         };
 
-        byte[] bytes = await serializer.SerializeAsync(request, typeof(SampleAlternateJsonCustomerLookupRequest), PayloadFormat.Json);
-        using MemoryStream stream = new MemoryStream(bytes);
+        using MemoryStream stream = new MemoryStream();
+        await serializer.SerializeAsync(request, typeof(SampleAlternateJsonCustomerLookupRequest), PayloadFormat.Json, stream);
+        stream.Position = 0;
         object result = await serializer.DeserializeAsync(typeof(SampleAlternateJsonCustomerLookupRequest), stream, PayloadFormat.Json);
 
         SampleAlternateJsonCustomerLookupRequest roundTripped = (SampleAlternateJsonCustomerLookupRequest)result;
@@ -81,7 +82,7 @@ public sealed class AlternateContractInfrastructureTests
     }
 
     [TestMethod]
-    public async Task SerializeAsync_WhenPayloadIsXml_RoundTripsModel()
+    public async Task SerializeAsync_WhenXmlPayloadIsWritten_WritesToDestinationStream()
     {
         JsonXmlContractPayloadSerializer serializer = new JsonXmlContractPayloadSerializer();
         SampleSoapCustomerLookupRequestEnvelope request = new SampleSoapCustomerLookupRequestEnvelope
@@ -96,8 +97,9 @@ public sealed class AlternateContractInfrastructureTests
             },
         };
 
-        byte[] bytes = await serializer.SerializeAsync(request, typeof(SampleSoapCustomerLookupRequestEnvelope), PayloadFormat.Xml);
-        using MemoryStream stream = new MemoryStream(bytes);
+        using MemoryStream stream = new MemoryStream();
+        await serializer.SerializeAsync(request, typeof(SampleSoapCustomerLookupRequestEnvelope), PayloadFormat.Xml, stream);
+        stream.Position = 0;
         object result = await serializer.DeserializeAsync(typeof(SampleSoapCustomerLookupRequestEnvelope), stream, PayloadFormat.Xml);
 
         SampleSoapCustomerLookupRequestEnvelope roundTripped = (SampleSoapCustomerLookupRequestEnvelope)result;
@@ -115,10 +117,10 @@ public sealed class AlternateContractInfrastructureTests
         PreparedAlternateContractRequest prepared = await profile.PrepareEndpointBRequestAsync(
             new AlternateContractRequestPreparationContext(
                 new RequestItem("one.xml", "application/xml", requestBody.Length),
-                requestBody,
+                token => OpenBytesAsync(requestBody, token),
                 PayloadFormat.Xml));
 
-        string json = Encoding.UTF8.GetString(prepared.Body);
+        string json = await ReadPayloadAsStringAsync(prepared.Body);
         Assert.AreEqual("application/json", prepared.ContentType);
         Assert.IsTrue(json.Contains("\"lookupId\":\"123\"", StringComparison.Ordinal));
         Assert.IsTrue(json.Contains("\"raw_token\":\"tok\"", StringComparison.Ordinal));
@@ -135,11 +137,11 @@ public sealed class AlternateContractInfrastructureTests
             new AlternateContractResponseNormalizationContext(
                 new RequestItem("one.xml", "application/xml", 1),
                 EndpointSlot.B,
-                responseBody,
+                token => OpenBytesAsync(responseBody, token),
                 "application/json",
                 PayloadFormat.Json));
 
-        string xml = Encoding.UTF8.GetString(normalized.Body);
+        string xml = await ReadPayloadAsStringAsync(normalized.Body);
         Assert.AreEqual("application/xml", normalized.ContentType);
         Assert.IsTrue(xml.Contains("<CustomerName>Ada</CustomerName>", StringComparison.Ordinal));
         Assert.IsTrue(xml.Contains("<SensitiveToken>tok</SensitiveToken>", StringComparison.Ordinal));
@@ -158,13 +160,44 @@ public sealed class AlternateContractInfrastructureTests
         PreparedAlternateContractRequest prepared = await profile.PrepareEndpointBRequestAsync(
             new AlternateContractRequestPreparationContext(
                 new RequestItem("one.xml", "application/xml", requestBody.Length),
-                requestBody,
+                token => OpenBytesAsync(requestBody, token),
                 PayloadFormat.Xml));
 
+        await prepared.Body.DisposeAsync();
         Assert.AreEqual("auth-token", prepared.Headers?["AuthorizationToken"]);
         Assert.AreEqual("SourceSystem", profile.DefaultIgnoreRules[0].PropertyPath);
         Assert.AreEqual("customer-lookup/soap", profile.SuggestedEndpointAId);
         Assert.AreEqual("customer-lookup/json", profile.SuggestedEndpointBId);
+    }
+
+    [TestMethod]
+    public async Task DisposeAsync_WhenPayloadIsFileBacked_RemovesTemporaryFile()
+    {
+        string tempRoot = Path.Combine(Path.GetTempPath(), $"paritybench-test-{Guid.NewGuid():N}");
+        try
+        {
+            FileBackedContractPayloadFactory factory = new FileBackedContractPayloadFactory(tempRoot);
+            ContractPayload payload = await factory.CreateAsync(
+                PayloadFormat.Json,
+                "application/json",
+                async (destination, cancellationToken) =>
+                {
+                    byte[] bytes = Encoding.UTF8.GetBytes("{\"ok\":true}");
+                    await destination.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+                });
+            string payloadPath = Directory.EnumerateFiles(tempRoot).Single();
+
+            await payload.DisposeAsync();
+
+            Assert.IsFalse(File.Exists(payloadPath));
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
     }
 
     private static IAlternateContractProfile CreateSampleProfile() =>
@@ -181,6 +214,22 @@ public sealed class AlternateContractInfrastructureTests
             "SimpleModel",
             _ => new SampleAlternateJsonCustomerLookupRequest(),
             _ => new SampleSoapCustomerLookupResponseEnvelope());
+
+    private static ValueTask<Stream> OpenBytesAsync(byte[] bytes, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult<Stream>(new MemoryStream(bytes, writable: false));
+    }
+
+    private static async Task<string> ReadPayloadAsStringAsync(ContractPayload payload)
+    {
+        await using (payload)
+        await using (Stream stream = await payload.OpenReadAsync().ConfigureAwait(false))
+        using (StreamReader reader = new StreamReader(stream, Encoding.UTF8))
+        {
+            return await reader.ReadToEndAsync().ConfigureAwait(false);
+        }
+    }
 
     private static void AssertThrows<TException>(Action action)
         where TException : Exception

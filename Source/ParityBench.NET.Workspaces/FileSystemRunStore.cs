@@ -206,6 +206,19 @@ public sealed class FileSystemRunStore : IRunStore
             StatusCodeMismatchPairs = summary.StatusCodeMismatchPairs,
             BothNonSuccessPairs = summary.BothNonSuccessPairs,
             DetailIndexReference = summary.DetailIndexReference is null ? null : ToDto(summary.DetailIndexReference),
+            ExecutionMetrics = summary.ExecutionMetrics is null ? null : ToDto(summary.ExecutionMetrics),
+        };
+
+    private RunExecutionMetricsDto ToDto(RunExecutionMetrics metrics) =>
+        new RunExecutionMetricsDto
+        {
+            TotalDurationMilliseconds = metrics.TotalDuration.TotalMilliseconds,
+            RequestExecutionDurationMilliseconds = metrics.RequestExecutionDuration.TotalMilliseconds,
+            ComparisonDurationMilliseconds = metrics.ComparisonDuration.TotalMilliseconds,
+            FinalizationDurationMilliseconds = metrics.FinalizationDuration.TotalMilliseconds,
+            RequestCount = metrics.RequestCount,
+            MaxConcurrency = metrics.MaxConcurrency,
+            ResponseBytesWritten = metrics.ResponseBytesWritten,
         };
 
     private RunDetailReferenceDto ToDto(RunDetailReference reference) =>
@@ -306,7 +319,18 @@ public sealed class FileSystemRunStore : IRunStore
             dto.ErrorPairs,
             dto.StatusCodeMismatchPairs,
             dto.BothNonSuccessPairs,
-            dto.DetailIndexReference is null ? null : FromDto(dto.DetailIndexReference));
+            dto.DetailIndexReference is null ? null : FromDto(dto.DetailIndexReference),
+            dto.ExecutionMetrics is null ? null : FromDto(dto.ExecutionMetrics));
+
+    private RunExecutionMetrics FromDto(RunExecutionMetricsDto dto) =>
+        new RunExecutionMetrics(
+            TimeSpan.FromMilliseconds(dto.TotalDurationMilliseconds),
+            TimeSpan.FromMilliseconds(dto.RequestExecutionDurationMilliseconds),
+            TimeSpan.FromMilliseconds(dto.ComparisonDurationMilliseconds),
+            TimeSpan.FromMilliseconds(dto.FinalizationDurationMilliseconds),
+            dto.RequestCount,
+            dto.MaxConcurrency,
+            dto.ResponseBytesWritten);
 
     private RunDetailReference FromDto(RunDetailReferenceDto dto) =>
         new RunDetailReference(
@@ -457,6 +481,25 @@ public sealed class FileSystemRunStore : IRunStore
         public int BothNonSuccessPairs { get; init; }
 
         public RunDetailReferenceDto? DetailIndexReference { get; init; }
+
+        public RunExecutionMetricsDto? ExecutionMetrics { get; init; }
+    }
+
+    private sealed class RunExecutionMetricsDto
+    {
+        public double TotalDurationMilliseconds { get; init; }
+
+        public double RequestExecutionDurationMilliseconds { get; init; }
+
+        public double ComparisonDurationMilliseconds { get; init; }
+
+        public double FinalizationDurationMilliseconds { get; init; }
+
+        public int RequestCount { get; init; }
+
+        public int MaxConcurrency { get; init; }
+
+        public long ResponseBytesWritten { get; init; }
     }
 
     private sealed class RunDetailReferenceDto

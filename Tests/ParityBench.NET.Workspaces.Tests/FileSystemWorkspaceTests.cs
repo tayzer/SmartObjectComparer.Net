@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -166,6 +166,27 @@ public sealed class FileSystemWorkspaceTests
         Assert.AreEqual("Raw line differs.", loadedDetails[0].Differences[0].Message);
     }
     [TestMethod]
+    public async Task SaveRunDetails_WhenManyDetailsAreSaved_WritesLoadableDetailIndex()
+    {
+        string workspaceRoot = CreateTempDirectory();
+        FileSystemRunDetailStore store = new FileSystemRunDetailStore(workspaceRoot);
+        RequestPairResult[] details = Enumerable
+            .Range(1, 5000)
+            .Select(index => new RequestPairResult(
+                $"request-{index}.json",
+                RequestPairOutcome.Equal,
+                CreateResponse(EndpointSlot.A, $"runs/run-1/artifacts/A/request-{index}.json"),
+                CreateResponse(EndpointSlot.B, $"runs/run-1/artifacts/B/request-{index}.json")))
+            .ToArray();
+
+        RunDetailReference reference = await store.SaveDetailsAsync(new RunId("run-1"), details);
+        IReadOnlyList<RequestPairResult> loadedDetails = await store.LoadDetailsAsync(reference);
+
+        Assert.AreEqual(5000, loadedDetails.Count);
+        Assert.AreEqual("request-1.json", loadedDetails[0].RelativePath);
+        Assert.AreEqual("request-5000.json", loadedDetails[^1].RelativePath);
+    }
+    [TestMethod]
     public async Task SaveRun_WhenRunIsSaved_CanLoadRunAndSummary()
     {
         string workspaceRoot = CreateTempDirectory();
@@ -175,7 +196,15 @@ public sealed class FileSystemWorkspaceTests
             equalPairs: 1,
             differentPairs: 0,
             errorPairs: 0,
-            detailIndexReference: new RunDetailReference("runs/run-1/details/index.json"));
+            detailIndexReference: new RunDetailReference("runs/run-1/details/index.json"),
+            executionMetrics: new RunExecutionMetrics(
+                TimeSpan.FromMilliseconds(10),
+                TimeSpan.FromMilliseconds(5),
+                TimeSpan.FromMilliseconds(2),
+                TimeSpan.FromMilliseconds(3),
+                requestCount: 1,
+                maxConcurrency: 2,
+                responseBytesWritten: 4));
         ComparisonRun run = ComparisonRun
             .Create(new RunId("run-1"), CreateOptions())
             .Start()
@@ -190,6 +219,8 @@ public sealed class FileSystemWorkspaceTests
         Assert.IsNotNull(loadedSummary);
         Assert.AreEqual(1, loadedSummary.EqualPairs);
         Assert.AreEqual("runs/run-1/details/index.json", loadedSummary.DetailIndexReference?.DetailId);
+        Assert.AreEqual(1, loadedSummary.ExecutionMetrics?.RequestCount);
+        Assert.AreEqual(4, loadedSummary.ExecutionMetrics?.ResponseBytesWritten);
     }
 
     [TestMethod]

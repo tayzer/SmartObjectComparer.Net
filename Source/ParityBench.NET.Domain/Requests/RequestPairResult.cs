@@ -1,4 +1,4 @@
-﻿using ParityBench.NET.Domain.Comparison;
+using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Runs;
 
 namespace ParityBench.NET.Domain.Requests;
@@ -156,7 +156,8 @@ public sealed record RequestPairResult
 
     public static RunResultSummary Summarize(
         IEnumerable<RequestPairResult> results,
-        RunDetailReference? detailReference = null)
+        RunDetailReference? detailReference = null,
+        RunExecutionMetrics? executionMetrics = null)
     {
         List<RequestPairResult> materializedResults = results.ToList();
 
@@ -167,7 +168,8 @@ public sealed record RequestPairResult
             materializedResults.Count(result => result.Outcome == RequestPairOutcome.ExecutionFailed),
             materializedResults.Count(result => result.Outcome == RequestPairOutcome.StatusCodeMismatch),
             materializedResults.Count(result => result.Outcome == RequestPairOutcome.BothNonSuccess),
-            detailReference);
+            detailReference,
+            executionMetrics);
     }
 
     private static bool IsSuccessStatusCode(int statusCode) => statusCode is >= 200 and <= 299;

@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
+using System.Diagnostics;
 
 using ParityBench.NET.Application.AlternateContracts;
 using ParityBench.NET.Application.Requests;
@@ -75,6 +76,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         ArgumentNullException.ThrowIfNull(run);
         ArgumentNullException.ThrowIfNull(progressReporter);
 
+        Stopwatch totalStopwatch = Stopwatch.StartNew();
         IAlternateContractProfile? alternateContractProfile = ResolveAlternateContractProfile(run.Options);
         RunOptions comparisonOptions = alternateContractProfile is null
             ? run.Options
@@ -94,6 +96,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             .ConfigureAwait(false);
 
         ConcurrentBag<RequestPairResult> results = new ConcurrentBag<RequestPairResult>();
+        RunExecutionCounters counters = new RunExecutionCounters();
         int completedRequests = 0;
         ParallelOptions parallelOptions = new ParallelOptions
         {
@@ -101,9 +104,10 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             MaxDegreeOfParallelism = run.Options.MaxConcurrency,
         };
 
+        Stopwatch requestExecutionStopwatch = Stopwatch.StartNew();
         await Parallel.ForEachAsync(manifest.Requests, parallelOptions, async (request, token) =>
         {
-            RequestPairResult result = await ExecutePairAsync(run, comparisonOptions, request, alternateContractProfile, token).ConfigureAwait(false);
+            RequestPairResult result = await ExecutePairAsync(run, comparisonOptions, request, alternateContractProfile, counters, token).ConfigureAwait(false);
             results.Add(result);
 
             int completed = Interlocked.Increment(ref completedRequests);
@@ -118,7 +122,9 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                     token)
                 .ConfigureAwait(false);
         }).ConfigureAwait(false);
+        requestExecutionStopwatch.Stop();
 
+        Stopwatch comparisonStopwatch = Stopwatch.StartNew();
         List<RequestPairResult> orderedResults = results
             .OrderBy(result => result.RelativePath, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -126,7 +132,9 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         await progressReporter
             .ReportAsync(RunStatus.Comparing, new RunProgress(90, "Classifying response pairs.", totalRequests, totalRequests), cancellationToken)
             .ConfigureAwait(false);
+        comparisonStopwatch.Stop();
 
+        Stopwatch finalizationStopwatch = Stopwatch.StartNew();
         await progressReporter
             .ReportAsync(RunStatus.Finalizing, new RunProgress(95, "Saving result details.", totalRequests, totalRequests), cancellationToken)
             .ConfigureAwait(false);
@@ -134,19 +142,30 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         RunDetailReference detailReference = await runDetailStore
             .SaveDetailsAsync(run.Id, orderedResults, cancellationToken)
             .ConfigureAwait(false);
+        finalizationStopwatch.Stop();
+        totalStopwatch.Stop();
 
-        return RequestPairResult.Summarize(orderedResults, detailReference);
+        RunExecutionMetrics executionMetrics = new RunExecutionMetrics(
+            totalStopwatch.Elapsed,
+            requestExecutionStopwatch.Elapsed,
+            comparisonStopwatch.Elapsed,
+            finalizationStopwatch.Elapsed,
+            totalRequests,
+            run.Options.MaxConcurrency,
+            counters.ResponseBytesWritten);
+
+        return RequestPairResult.Summarize(orderedResults, detailReference, executionMetrics);
     }
-
     private async Task<RequestPairResult> ExecutePairAsync(
         ComparisonRun run,
         RunOptions comparisonOptions,
         RequestItem request,
         IAlternateContractProfile? alternateContractProfile,
+        RunExecutionCounters counters,
         CancellationToken cancellationToken)
     {
-        Task<EndpointExecutionResult> endpointATask = ExecuteEndpointAsync(run, request, EndpointSlot.A, alternateContractProfile, cancellationToken);
-        Task<EndpointExecutionResult> endpointBTask = ExecuteEndpointAsync(run, request, EndpointSlot.B, alternateContractProfile, cancellationToken);
+        Task<EndpointExecutionResult> endpointATask = ExecuteEndpointAsync(run, request, EndpointSlot.A, alternateContractProfile, counters, cancellationToken);
+        Task<EndpointExecutionResult> endpointBTask = ExecuteEndpointAsync(run, request, EndpointSlot.B, alternateContractProfile, counters, cancellationToken);
 
         await Task.WhenAll(endpointATask, endpointBTask).ConfigureAwait(false);
 
@@ -162,6 +181,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                 alternateContractProfile,
                 endpointA,
                 endpointB,
+                counters,
                 cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -177,12 +197,12 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                 cancellationToken)
             .ConfigureAwait(false);
     }
-
     private async Task<EndpointExecutionResult> ExecuteEndpointAsync(
         ComparisonRun run,
         RequestItem request,
         EndpointSlot endpoint,
         IAlternateContractProfile? alternateContractProfile,
+        RunExecutionCounters counters,
         CancellationToken cancellationToken)
     {
         try
@@ -195,7 +215,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                 ? await PrepareAlternateEndpointBRequestAsync(run, request, endpointDefinition, alternateContractProfile, cancellationToken).ConfigureAwait(false)
                 : await PrepareRegularRequestAsync(run, request, endpoint, endpointDefinition, cancellationToken).ConfigureAwait(false);
 
-            await using (preparedRequest.Body)
+            await using (preparedRequest)
             {
                 EndpointRequest endpointRequest = new EndpointRequest(
                     endpoint,
@@ -210,17 +230,6 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                     .SendAsync(endpointRequest, cancellationToken)
                     .ConfigureAwait(false);
 
-                if (alternateContractProfile is not null)
-                {
-                    using MemoryStream responseBuffer = new MemoryStream();
-                    await response.Body.CopyToAsync(responseBuffer, cancellationToken).ConfigureAwait(false);
-                    return EndpointExecutionResult.RawResponse(
-                        endpoint,
-                        response.StatusCode,
-                        response.ContentType,
-                        responseBuffer.ToArray());
-                }
-
                 ResponseArtifactMetadata metadata = await PersistResponseAsync(
                     run.Id,
                     endpoint,
@@ -229,6 +238,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                     response.ContentType,
                     response.Body,
                     run.Options.Comparison.MaskRules,
+                    counters,
                     cancellationToken)
                     .ConfigureAwait(false);
 
@@ -248,7 +258,6 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             return EndpointExecutionResult.Failure(endpoint, ex.Message);
         }
     }
-
     private async Task<RequestPairResult> CompleteAlternateContractPairAsync(
         ComparisonRun run,
         RunOptions comparisonOptions,
@@ -256,12 +265,12 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         IAlternateContractProfile profile,
         EndpointExecutionResult endpointA,
         EndpointExecutionResult endpointB,
+        RunExecutionCounters counters,
         CancellationToken cancellationToken)
     {
         string? errorMessage = BuildErrorMessage(endpointA, endpointB);
         if (!string.IsNullOrWhiteSpace(errorMessage))
         {
-            await PersistRawFallbackResponsesAsync(run, request, comparisonOptions, endpointA, endpointB, cancellationToken).ConfigureAwait(false);
             return await responseComparer
                 .CompareAsync(request, comparisonOptions, endpointA.Metadata, endpointB.Metadata, errorMessage, cancellationToken)
                 .ConfigureAwait(false);
@@ -269,7 +278,6 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
 
         if (!endpointA.IsSuccessStatusCode || !endpointB.IsSuccessStatusCode)
         {
-            await PersistRawFallbackResponsesAsync(run, request, comparisonOptions, endpointA, endpointB, cancellationToken).ConfigureAwait(false);
             return await responseComparer
                 .CompareAsync(request, comparisonOptions, endpointA.Metadata, endpointB.Metadata, null, cancellationToken)
                 .ConfigureAwait(false);
@@ -283,6 +291,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                 profile,
                 endpointA,
                 comparisonOptions.Comparison.MaskRules,
+                counters,
                 cancellationToken)
                 .ConfigureAwait(false);
             ResponseArtifactMetadata canonicalB = await NormalizeAndPersistResponseAsync(
@@ -291,6 +300,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                 profile,
                 endpointB,
                 comparisonOptions.Comparison.MaskRules,
+                counters,
                 cancellationToken)
                 .ConfigureAwait(false);
 
@@ -310,7 +320,6 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                 errorMessage: ex.Message);
         }
     }
-
     private async Task<PreparedRequest> PrepareRegularRequestAsync(
         ComparisonRun run,
         RequestItem request,
@@ -345,15 +354,14 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                 $"Alternate contract profile '{profile.ProfileId}' does not support source request format '{sourceFormat}' for request '{request.RelativePath}'.");
         }
 
-        await using Stream sourceStream = await requestBatchStore
-            .OpenRequestBodyAsync(run.Options.RequestBatch, request, cancellationToken)
-            .ConfigureAwait(false);
-        using MemoryStream sourceBuffer = new MemoryStream();
-        await sourceStream.CopyToAsync(sourceBuffer, cancellationToken).ConfigureAwait(false);
+        async ValueTask<Stream> OpenSourceRequestBodyAsync(CancellationToken token) =>
+            await requestBatchStore
+                .OpenRequestBodyAsync(run.Options.RequestBatch, request, token)
+                .ConfigureAwait(false);
 
         PreparedAlternateContractRequest prepared = await profile
             .PrepareEndpointBRequestAsync(
-                new AlternateContractRequestPreparationContext(request, sourceBuffer.ToArray(), sourceFormat),
+                new AlternateContractRequestPreparationContext(request, OpenSourceRequestBodyAsync, sourceFormat),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -368,28 +376,40 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
 
         headers.Remove("SOAPAction");
 
+        Stream preparedBody = await prepared.Body.OpenReadAsync(cancellationToken).ConfigureAwait(false);
         return new PreparedRequest(
-            new MemoryStream(prepared.Body, writable: false),
+            preparedBody,
             prepared.ContentType,
-            headers);
+            headers,
+            prepared.Body);
     }
-
     private async Task<ResponseArtifactMetadata> NormalizeAndPersistResponseAsync(
         ComparisonRun run,
         RequestItem request,
         IAlternateContractProfile profile,
         EndpointExecutionResult endpointResult,
         IReadOnlyList<MaskRuleDefinition> maskRules,
+        RunExecutionCounters counters,
         CancellationToken cancellationToken)
     {
+        if (endpointResult.Metadata is null)
+        {
+            throw new InvalidOperationException($"Endpoint {endpointResult.Endpoint} did not produce a response artifact to normalize.");
+        }
+
         PayloadFormat sourceFormat = endpointResult.Endpoint == EndpointSlot.B
             ? profile.AlternateResponseFormat
             : DetectPayloadFormat(endpointResult.ContentType, request.RelativePath) ?? profile.CanonicalResponseFormat;
 
+        async ValueTask<Stream> OpenSourceResponseBodyAsync(CancellationToken token) =>
+            await runArtifactStore
+                .OpenReadAsync(endpointResult.Metadata.Artifact, token)
+                .ConfigureAwait(false);
+
         AlternateContractResponseNormalizationContext context = new AlternateContractResponseNormalizationContext(
             request,
             endpointResult.Endpoint,
-            endpointResult.ResponseBody ?? Array.Empty<byte>(),
+            OpenSourceResponseBodyAsync,
             endpointResult.ContentType,
             sourceFormat);
 
@@ -397,56 +417,20 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             ? await profile.NormalizeEndpointAResponseAsync(context, cancellationToken).ConfigureAwait(false)
             : await profile.NormalizeEndpointBResponseAsync(context, cancellationToken).ConfigureAwait(false);
 
-        using MemoryStream normalizedStream = new MemoryStream(normalized.Body, writable: false);
+        await using ContractPayload normalizedPayload = normalized.Body;
+        await using Stream normalizedStream = await normalizedPayload.OpenReadAsync(cancellationToken).ConfigureAwait(false);
         return await PersistResponseAsync(
             run.Id,
             endpointResult.Endpoint,
             request,
             endpointResult.StatusCode ?? 0,
-            normalized.ContentType,
+            normalizedPayload.ContentType,
             normalizedStream,
             maskRules,
+            counters,
             cancellationToken)
             .ConfigureAwait(false);
     }
-
-    private async Task PersistRawFallbackResponsesAsync(
-        ComparisonRun run,
-        RequestItem request,
-        RunOptions comparisonOptions,
-        EndpointExecutionResult endpointA,
-        EndpointExecutionResult endpointB,
-        CancellationToken cancellationToken)
-    {
-        await PersistRawFallbackResponseAsync(run, request, comparisonOptions, endpointA, cancellationToken).ConfigureAwait(false);
-        await PersistRawFallbackResponseAsync(run, request, comparisonOptions, endpointB, cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task PersistRawFallbackResponseAsync(
-        ComparisonRun run,
-        RequestItem request,
-        RunOptions comparisonOptions,
-        EndpointExecutionResult endpointResult,
-        CancellationToken cancellationToken)
-    {
-        if (endpointResult.Metadata is not null || endpointResult.ResponseBody is null || endpointResult.StatusCode is null)
-        {
-            return;
-        }
-
-        using MemoryStream responseStream = new MemoryStream(endpointResult.ResponseBody, writable: false);
-        endpointResult.Metadata = await PersistResponseAsync(
-            run.Id,
-            endpointResult.Endpoint,
-            request,
-            endpointResult.StatusCode.Value,
-            endpointResult.ContentType,
-            responseStream,
-            comparisonOptions.Comparison.MaskRules,
-            cancellationToken)
-            .ConfigureAwait(false);
-    }
-
     private async Task<ResponseArtifactMetadata> PersistResponseAsync(
         RunId runId,
         EndpointSlot endpoint,
@@ -455,6 +439,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         string? contentType,
         Stream body,
         IReadOnlyList<MaskRuleDefinition> maskRules,
+        RunExecutionCounters counters,
         CancellationToken cancellationToken)
     {
         await using Stream? maskedBody = await ResponseMasker
@@ -462,7 +447,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             .ConfigureAwait(false);
         Stream bodyToPersist = maskedBody ?? body;
 
-        return await runArtifactStore
+        ResponseArtifactMetadata metadata = await runArtifactStore
             .SaveResponseAsync(
                 runId,
                 endpoint,
@@ -472,8 +457,10 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                 bodyToPersist,
                 cancellationToken)
             .ConfigureAwait(false);
-    }
 
+        counters.AddResponseBytes(metadata.ContentLength);
+        return metadata;
+    }
     private IAlternateContractProfile? ResolveAlternateContractProfile(RunOptions options)
     {
         if (options.AlternateContract is null)
@@ -580,55 +567,77 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         return null;
     }
 
-    private sealed record PreparedRequest(
-        Stream Body,
-        string ContentType,
-        IReadOnlyDictionary<string, string> Headers);
+    private sealed class RunExecutionCounters
+    {
+        private long responseBytesWritten;
+
+        public long ResponseBytesWritten => Interlocked.Read(ref responseBytesWritten);
+
+        public void AddResponseBytes(long bytesWritten) =>
+            Interlocked.Add(ref responseBytesWritten, bytesWritten);
+    }
+    private sealed class PreparedRequest : IAsyncDisposable
+    {
+        private readonly IAsyncDisposable? owner;
+
+        public PreparedRequest(
+            Stream body,
+            string contentType,
+            IReadOnlyDictionary<string, string> headers,
+            IAsyncDisposable? owner = null)
+        {
+            Body = body;
+            ContentType = contentType;
+            Headers = headers;
+            this.owner = owner;
+        }
+
+        public Stream Body { get; }
+
+        public string ContentType { get; }
+
+        public IReadOnlyDictionary<string, string> Headers { get; }
+
+        public async ValueTask DisposeAsync()
+        {
+            await Body.DisposeAsync().ConfigureAwait(false);
+
+            if (owner is not null)
+            {
+                await owner.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+    }
 
     private sealed class EndpointExecutionResult
     {
         private EndpointExecutionResult(
             EndpointSlot endpoint,
             ResponseArtifactMetadata? metadata,
-            int? statusCode,
-            string? contentType,
-            byte[]? responseBody,
             string? errorMessage)
         {
             Endpoint = endpoint;
             Metadata = metadata;
-            StatusCode = statusCode;
-            ContentType = contentType;
-            ResponseBody = responseBody;
             ErrorMessage = errorMessage;
         }
 
         public EndpointSlot Endpoint { get; }
 
-        public ResponseArtifactMetadata? Metadata { get; set; }
+        public ResponseArtifactMetadata? Metadata { get; }
 
-        public int? StatusCode { get; }
+        public int? StatusCode => Metadata?.StatusCode;
 
-        public string? ContentType { get; }
-
-        public byte[]? ResponseBody { get; }
+        public string? ContentType => Metadata?.ContentType;
 
         public string? ErrorMessage { get; }
 
         public bool IsSuccessStatusCode => StatusCode is >= 200 and <= 299;
 
         public static EndpointExecutionResult Persisted(EndpointSlot endpoint, ResponseArtifactMetadata metadata) =>
-            new EndpointExecutionResult(endpoint, metadata, metadata.StatusCode, metadata.ContentType, null, null);
-
-        public static EndpointExecutionResult RawResponse(
-            EndpointSlot endpoint,
-            int statusCode,
-            string? contentType,
-            byte[] responseBody) =>
-            new EndpointExecutionResult(endpoint, null, statusCode, contentType, responseBody, null);
+            new EndpointExecutionResult(endpoint, metadata, null);
 
         public static EndpointExecutionResult Failure(EndpointSlot endpoint, string errorMessage) =>
-            new EndpointExecutionResult(endpoint, null, null, null, null, errorMessage);
+            new EndpointExecutionResult(endpoint, null, errorMessage);
     }
 }
 

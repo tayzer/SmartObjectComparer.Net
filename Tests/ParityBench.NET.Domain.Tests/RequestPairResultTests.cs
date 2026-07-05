@@ -1,4 +1,4 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
@@ -118,6 +118,35 @@ public sealed class RequestPairResultTests
         Assert.IsNotNull(summary.DetailIndexReference);
     }
 
+    [TestMethod]
+    public void Create_WhenExecutionMetricsAreProvided_PreservesMetricValues()
+    {
+        RunExecutionMetrics metrics = new RunExecutionMetrics(
+            TimeSpan.FromMilliseconds(10),
+            TimeSpan.FromMilliseconds(6),
+            TimeSpan.FromMilliseconds(2),
+            TimeSpan.FromMilliseconds(2),
+            requestCount: 3,
+            maxConcurrency: 2,
+            responseBytesWritten: 42);
+
+        RunResultSummary summary = RequestPairResult.Summarize(
+            new[] { new RequestPairResult("equal.json", RequestPairOutcome.Equal) },
+            executionMetrics: metrics);
+
+        Assert.AreEqual(metrics, summary.ExecutionMetrics);
+        Assert.AreEqual(3, summary.ExecutionMetrics?.RequestCount);
+        Assert.AreEqual(42, summary.ExecutionMetrics?.ResponseBytesWritten);
+    }
+
+    [TestMethod]
+    public void Create_WhenSummaryOmitsExecutionMetrics_RemainsBackwardCompatible()
+    {
+        RunResultSummary summary = RequestPairResult.Summarize(
+            new[] { new RequestPairResult("equal.json", RequestPairOutcome.Equal) });
+
+        Assert.IsNull(summary.ExecutionMetrics);
+    }
     private static void AssertThrows<TException>(Action action)
         where TException : Exception
     {

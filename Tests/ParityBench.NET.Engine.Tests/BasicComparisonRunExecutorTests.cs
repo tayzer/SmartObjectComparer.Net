@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -27,6 +27,38 @@ public sealed class BasicComparisonRunExecutorTests
         Assert.AreEqual(1, summary.TotalPairs);
         Assert.AreEqual(1, summary.EqualPairs);
         Assert.AreEqual(0, summary.DifferentPairs);
+    }
+    [TestMethod]
+    public async Task ExecuteAsync_WhenRunCompletes_IncludesExecutionMetricsInSummary()
+    {
+        BasicComparisonRunExecutor executor = CreateExecutor(
+            CreateBatch(new[] { new RequestItem("one.json", "application/json", 2) }),
+            FakeEndpointRequestSender.ForBody("same"));
+
+        RunResultSummary summary = await executor.ExecuteAsync(CreateRun(maxConcurrency: 3), new CapturingProgressReporter());
+
+        Assert.IsNotNull(summary.ExecutionMetrics);
+        Assert.AreEqual(1, summary.ExecutionMetrics.RequestCount);
+        Assert.AreEqual(3, summary.ExecutionMetrics.MaxConcurrency);
+        Assert.AreEqual(8, summary.ExecutionMetrics.ResponseBytesWritten);
+        Assert.IsTrue(summary.ExecutionMetrics.TotalDuration >= TimeSpan.Zero);
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_WhenLargeResponsesHaveNoMasks_StreamsResponsesToArtifacts()
+    {
+        FakeRunArtifactStore artifactStore = new FakeRunArtifactStore();
+        FakeEndpointRequestSender sender = new FakeEndpointRequestSender(_ =>
+            new EndpointResponse(200, "application/octet-stream", new TrackingReadStream(1024 * 1024)));
+        BasicComparisonRunExecutor executor = CreateExecutor(
+            CreateBatch(new[] { new RequestItem("large.bin", "application/octet-stream", 1024 * 1024) }),
+            sender,
+            artifactStore);
+
+        await executor.ExecuteAsync(CreateRun(), new CapturingProgressReporter());
+
+        Assert.AreEqual(2, artifactStore.SavedStreamTypes.Count);
+        Assert.IsTrue(artifactStore.SavedStreamTypes.All(type => type == typeof(TrackingReadStream)));
     }
 
     [TestMethod]
@@ -271,6 +303,66 @@ public sealed class BasicComparisonRunExecutorTests
     private static string ToSha256(byte[] content) =>
         Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
 
+    private sealed class TrackingReadStream : Stream
+    {
+        private long remainingBytes;
+
+        public TrackingReadStream(long length)
+        {
+            remainingBytes = length;
+        }
+
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            int bytesRead = (int)Math.Min(count, remainingBytes);
+            if (bytesRead == 0)
+            {
+                return 0;
+            }
+
+            Array.Fill(buffer, (byte)'x', offset, bytesRead);
+            remainingBytes -= bytesRead;
+            return bytesRead;
+        }
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            int bytesRead = (int)Math.Min(buffer.Length, remainingBytes);
+            if (bytesRead == 0)
+            {
+                return ValueTask.FromResult(0);
+            }
+
+            buffer.Span[..bytesRead].Fill((byte)'x');
+            remainingBytes -= bytesRead;
+            return ValueTask.FromResult(bytesRead);
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
     private sealed class FakeRequestBatchStore : IRequestBatchStore
     {
         private readonly RequestBatchManifest manifest;
@@ -375,10 +467,21 @@ public sealed class BasicComparisonRunExecutorTests
 
     private sealed class FakeRunArtifactStore : IRunArtifactStore
     {
+        private readonly object gate = new object();
         private readonly Dictionary<string, byte[]> savedContent = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
 
-        public IReadOnlyDictionary<string, string> SavedBodies => savedContent
-            .ToDictionary(pair => pair.Key, pair => Encoding.UTF8.GetString(pair.Value), StringComparer.OrdinalIgnoreCase);
+        public IReadOnlyDictionary<string, string> SavedBodies
+        {
+            get
+            {
+                lock (gate)
+                {
+                    return savedContent.ToDictionary(pair => pair.Key, pair => Encoding.UTF8.GetString(pair.Value), StringComparer.OrdinalIgnoreCase);
+                }
+            }
+        }
+
+        public List<Type> SavedStreamTypes { get; } = new List<Type>();
 
         public async Task<ResponseArtifactMetadata> SaveResponseAsync(
             RunId runId,
@@ -389,11 +492,19 @@ public sealed class BasicComparisonRunExecutorTests
             Stream body,
             CancellationToken cancellationToken = default)
         {
+            lock (gate)
+            {
+                SavedStreamTypes.Add(body.GetType());
+            }
+
             using MemoryStream memoryStream = new MemoryStream();
             await body.CopyToAsync(memoryStream, cancellationToken).ConfigureAwait(false);
             byte[] content = memoryStream.ToArray();
             string artifactId = $"runs/{runId.Value}/artifacts/{endpoint}/{request.RelativePath}";
-            savedContent[artifactId] = content;
+            lock (gate)
+            {
+                savedContent[artifactId] = content;
+            }
 
             return new ResponseArtifactMetadata(
                 endpoint,
@@ -406,8 +517,13 @@ public sealed class BasicComparisonRunExecutorTests
 
         public Task<Stream> OpenReadAsync(
             ArtifactReference artifact,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<Stream>(new MemoryStream(savedContent[artifact.ArtifactId]));
+            CancellationToken cancellationToken = default)
+        {
+            lock (gate)
+            {
+                return Task.FromResult<Stream>(new MemoryStream(savedContent[artifact.ArtifactId]));
+            }
+        }
     }
 
     private sealed class FakeRunDetailStore : IRunDetailStore

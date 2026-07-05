@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 using System.Xml.Serialization;
 
 using ParityBench.NET.Application.AlternateContracts;
@@ -54,8 +54,11 @@ public static class BuiltInAlternateContractProfiles
 
     public static IAlternateContractProfile CreateExpectedJsonCustomerLookup(
         IContractPayloadSerializer serializer,
-        IExpectedJsonCustomerLookupAuthorizationTokenProvider tokenProvider) =>
-        new AlternateContractProfile<
+        IExpectedJsonCustomerLookupAuthorizationTokenProvider tokenProvider)
+    {
+        FileBackedContractPayloadFactory payloadFactory = new FileBackedContractPayloadFactory();
+
+        return new AlternateContractProfile<
             ExpectedJsonCustomerLookupSoapRequestEnvelope,
             ExpectedJsonCustomerLookupAlternateRequest,
             ExpectedJsonCustomerLookupResponse,
@@ -99,14 +102,21 @@ public static class BuiltInAlternateContractProfiles
                 {
                     LookupId = context.CanonicalRequest.Body.CustomerLookupRequest.CustomerId,
                 };
-                byte[] body = await serializer
-                    .SerializeAsync(alternateRequest, typeof(ExpectedJsonCustomerLookupAlternateRequest), PayloadFormat.Json, cancellationToken)
+                ContractPayload body = await payloadFactory
+                    .CreateAsync(
+                        PayloadFormat.Json,
+                        "application/json",
+                        (destination, token) => serializer.SerializeAsync(
+                            alternateRequest,
+                            typeof(ExpectedJsonCustomerLookupAlternateRequest),
+                            PayloadFormat.Json,
+                            destination,
+                            token),
+                        cancellationToken)
                     .ConfigureAwait(false);
 
                 return new PreparedAlternateContractRequest(
                     body,
-                    "application/json",
-                    PayloadFormat.Json,
                     ExpectedJsonCustomerLookupProfileId,
                     new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                     {
@@ -115,7 +125,9 @@ public static class BuiltInAlternateContractProfiles
             },
             endpointAResponseNormalizer: async (context, cancellationToken) =>
             {
-                using MemoryStream stream = new MemoryStream(context.SourceResponseBody, writable: false);
+                await using Stream stream = await context
+                    .OpenSourceResponseBodyAsync(cancellationToken)
+                    .ConfigureAwait(false);
                 ExpectedJsonCustomerLookupSoapResponseEnvelope soapResponse =
                     (ExpectedJsonCustomerLookupSoapResponseEnvelope)await serializer
                         .DeserializeAsync(
@@ -134,16 +146,25 @@ public static class BuiltInAlternateContractProfiles
                     SourceSystem = "endpoint-a",
                 };
 
-                byte[] body = await serializer
-                    .SerializeAsync(normalized, typeof(ExpectedJsonCustomerLookupResponse), PayloadFormat.Json, cancellationToken)
+                ContractPayload body = await payloadFactory
+                    .CreateAsync(
+                        PayloadFormat.Json,
+                        "application/json",
+                        (destination, token) => serializer.SerializeAsync(
+                            normalized,
+                            typeof(ExpectedJsonCustomerLookupResponse),
+                            PayloadFormat.Json,
+                            destination,
+                            token),
+                        cancellationToken)
                     .ConfigureAwait(false);
 
                 return new NormalizedAlternateContractResponse(
                     body,
-                    PayloadFormat.Json,
-                    "application/json",
                     ExpectedJsonCustomerLookupProfileId);
-            });
+            },
+            payloadFactory: payloadFactory);
+    }
 }
 
 /// <summary>

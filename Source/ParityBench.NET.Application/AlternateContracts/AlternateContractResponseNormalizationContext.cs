@@ -6,6 +6,6 @@ namespace ParityBench.NET.Application.AlternateContracts;
 public sealed record AlternateContractResponseNormalizationContext(
     RequestItem Request,
     EndpointSlot Endpoint,
-    byte[] SourceResponseBody,
+    Func<CancellationToken, ValueTask<Stream>> OpenSourceResponseBodyAsync,
     string? ContentType,
     PayloadFormat SourceFormat);

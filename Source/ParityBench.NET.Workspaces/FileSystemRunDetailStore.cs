@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 using ParityBench.NET.Application.Requests;
@@ -35,13 +35,23 @@ public sealed class FileSystemRunDetailStore : IRunDetailStore
         Directory.CreateDirectory(Path.GetDirectoryName(detailPath) ?? workspaceRoot);
 
         await using FileStream stream = File.Create(detailPath);
-        await JsonSerializer
-            .SerializeAsync(stream, results.Select(ToDto).ToList(), jsonOptions, cancellationToken)
-            .ConfigureAwait(false);
+        await using Utf8JsonWriter writer = new Utf8JsonWriter(stream, new JsonWriterOptions
+        {
+            Indented = true,
+        });
+
+        writer.WriteStartArray();
+        foreach (RequestPairResult result in results)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            JsonSerializer.Serialize(writer, ToDto(result), jsonOptions);
+        }
+
+        writer.WriteEndArray();
+        await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
 
         return new RunDetailReference(detailId, new ArtifactReference(detailId, "application/json"));
     }
-
     public async Task<IReadOnlyList<RequestPairResult>> LoadDetailsAsync(
         RunDetailReference detailReference,
         CancellationToken cancellationToken = default)

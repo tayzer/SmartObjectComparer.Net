@@ -1,7 +1,6 @@
 using ParityBench.NET.Application.AlternateContracts;
 using ParityBench.NET.Domain.AlternateContracts;
 using ParityBench.NET.Domain.Comparison;
-using ParityBench.NET.Domain.Requests;
 
 namespace ParityBench.NET.Infrastructure;
 
@@ -13,6 +12,7 @@ public sealed class AlternateContractProfile<TCanonicalRequest, TAlternateReques
     where TAlternateResponse : class
 {
     private readonly IContractPayloadSerializer serializer;
+    private readonly FileBackedContractPayloadFactory payloadFactory;
     private readonly Func<TCanonicalRequest, TAlternateRequest> requestMapper;
     private readonly Func<TAlternateResponse, TCanonicalResponse> responseMapper;
     private readonly Func<AlternateContractRequestPreparationContext<TCanonicalRequest>, CancellationToken, ValueTask<PreparedAlternateContractRequest>>? requestPreparation;
@@ -35,9 +35,11 @@ public sealed class AlternateContractProfile<TCanonicalRequest, TAlternateReques
         IReadOnlyList<IgnoreRuleDefinition>? defaultIgnoreRules = null,
         IReadOnlyDictionary<string, string>? canonicalToAlternateResponseMaskPathMap = null,
         Func<AlternateContractRequestPreparationContext<TCanonicalRequest>, CancellationToken, ValueTask<PreparedAlternateContractRequest>>? requestPreparation = null,
-        Func<AlternateContractResponseNormalizationContext, CancellationToken, ValueTask<NormalizedAlternateContractResponse>>? endpointAResponseNormalizer = null)
+        Func<AlternateContractResponseNormalizationContext, CancellationToken, ValueTask<NormalizedAlternateContractResponse>>? endpointAResponseNormalizer = null,
+        FileBackedContractPayloadFactory? payloadFactory = null)
     {
         this.serializer = serializer;
+        this.payloadFactory = payloadFactory ?? new FileBackedContractPayloadFactory();
         this.requestMapper = requestMapper;
         this.responseMapper = responseMapper;
         this.requestPreparation = requestPreparation;
@@ -95,33 +97,33 @@ public sealed class AlternateContractProfile<TCanonicalRequest, TAlternateReques
         AlternateContractRequestPreparationContext context,
         CancellationToken cancellationToken = default)
     {
-        TCanonicalRequest canonicalRequest = (TCanonicalRequest)await DeserializeAsync(
-            typeof(TCanonicalRequest),
-            context.SourceRequestBody,
-            context.SourceFormat,
-            cancellationToken).ConfigureAwait(false);
+        await using Stream sourceStream = await context
+            .OpenSourceRequestBodyAsync(cancellationToken)
+            .ConfigureAwait(false);
+        TCanonicalRequest canonicalRequest = (TCanonicalRequest)await serializer
+            .DeserializeAsync(typeof(TCanonicalRequest), sourceStream, context.SourceFormat, ignoreXmlNamespaces: true, cancellationToken)
+            .ConfigureAwait(false);
 
         if (requestPreparation is not null)
         {
             return await requestPreparation(
                 new AlternateContractRequestPreparationContext<TCanonicalRequest>(
                     context.Request,
-                    context.SourceRequestBody,
+                    context.OpenSourceRequestBodyAsync,
                     context.SourceFormat,
                     canonicalRequest),
                 cancellationToken).ConfigureAwait(false);
         }
 
         TAlternateRequest alternateRequest = requestMapper(canonicalRequest);
-        byte[] body = await serializer
-            .SerializeAsync(alternateRequest, typeof(TAlternateRequest), AlternateRequestFormat, cancellationToken)
-            .ConfigureAwait(false);
-
-        return new PreparedAlternateContractRequest(
-            body,
-            AlternateRequestContentType,
+        ContractPayload body = await CreatePayloadAsync(
+            alternateRequest,
+            typeof(TAlternateRequest),
             AlternateRequestFormat,
-            ProfileId);
+            AlternateRequestContentType,
+            cancellationToken).ConfigureAwait(false);
+
+        return new PreparedAlternateContractRequest(body, ProfileId);
     }
 
     public async ValueTask<NormalizedAlternateContractResponse> NormalizeEndpointAResponseAsync(
@@ -134,15 +136,16 @@ public sealed class AlternateContractProfile<TCanonicalRequest, TAlternateReques
                 .ConfigureAwait(false);
 
             return string.IsNullOrWhiteSpace(normalized.ProfileId)
-                ? normalized with { ProfileId = ProfileId }
+                ? new NormalizedAlternateContractResponse(normalized.Body, ProfileId)
                 : normalized;
         }
 
-        TCanonicalResponse canonicalResponse = (TCanonicalResponse)await DeserializeAsync(
-            typeof(TCanonicalResponse),
-            context.SourceResponseBody,
-            context.SourceFormat,
-            cancellationToken).ConfigureAwait(false);
+        await using Stream sourceStream = await context
+            .OpenSourceResponseBodyAsync(cancellationToken)
+            .ConfigureAwait(false);
+        TCanonicalResponse canonicalResponse = (TCanonicalResponse)await serializer
+            .DeserializeAsync(typeof(TCanonicalResponse), sourceStream, context.SourceFormat, ignoreXmlNamespaces: true, cancellationToken)
+            .ConfigureAwait(false);
 
         return await SerializeCanonicalResponseAsync(canonicalResponse, cancellationToken).ConfigureAwait(false);
     }
@@ -151,40 +154,40 @@ public sealed class AlternateContractProfile<TCanonicalRequest, TAlternateReques
         AlternateContractResponseNormalizationContext context,
         CancellationToken cancellationToken = default)
     {
-        TAlternateResponse alternateResponse = (TAlternateResponse)await DeserializeAsync(
-            typeof(TAlternateResponse),
-            context.SourceResponseBody,
-            AlternateResponseFormat,
-            cancellationToken).ConfigureAwait(false);
+        await using Stream sourceStream = await context
+            .OpenSourceResponseBodyAsync(cancellationToken)
+            .ConfigureAwait(false);
+        TAlternateResponse alternateResponse = (TAlternateResponse)await serializer
+            .DeserializeAsync(typeof(TAlternateResponse), sourceStream, AlternateResponseFormat, ignoreXmlNamespaces: true, cancellationToken)
+            .ConfigureAwait(false);
         TCanonicalResponse canonicalResponse = responseMapper(alternateResponse);
 
         return await SerializeCanonicalResponseAsync(canonicalResponse, cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task<object> DeserializeAsync(
-        Type targetType,
-        byte[] source,
-        PayloadFormat format,
-        CancellationToken cancellationToken)
-    {
-        using MemoryStream stream = new MemoryStream(source, writable: false);
-        return await serializer
-            .DeserializeAsync(targetType, stream, format, ignoreXmlNamespaces: true, cancellationToken)
-            .ConfigureAwait(false);
     }
 
     private async ValueTask<NormalizedAlternateContractResponse> SerializeCanonicalResponseAsync(
         TCanonicalResponse canonicalResponse,
         CancellationToken cancellationToken)
     {
-        byte[] body = await serializer
-            .SerializeAsync(canonicalResponse, typeof(TCanonicalResponse), CanonicalResponseFormat, cancellationToken)
-            .ConfigureAwait(false);
-
-        return new NormalizedAlternateContractResponse(
-            body,
+        ContractPayload body = await CreatePayloadAsync(
+            canonicalResponse,
+            typeof(TCanonicalResponse),
             CanonicalResponseFormat,
             CanonicalResponseContentType,
-            ProfileId);
+            cancellationToken).ConfigureAwait(false);
+
+        return new NormalizedAlternateContractResponse(body, ProfileId);
     }
+
+    private Task<ContractPayload> CreatePayloadAsync(
+        object value,
+        Type valueType,
+        PayloadFormat format,
+        string contentType,
+        CancellationToken cancellationToken) =>
+        payloadFactory.CreateAsync(
+            format,
+            contentType,
+            (destination, token) => serializer.SerializeAsync(value, valueType, format, destination, token),
+            cancellationToken);
 }

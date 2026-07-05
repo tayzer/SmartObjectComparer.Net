@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -72,6 +72,32 @@ public sealed class AlternateContractRunExecutorTests
         RunResultSummary summary = await executor.ExecuteAsync(CreateRun(), new CapturingProgressReporter());
 
         Assert.AreEqual(1, summary.ErrorPairs);
+    }
+    [TestMethod]
+    public async Task ExecuteAsync_WhenAlternateContractUsesLargeResponses_PersistsRawArtifactsBeforeNormalization()
+    {
+        RequestItem request = new RequestItem("one.xml", "application/xml", 10);
+        InMemoryArtifactStore artifactStore = new InMemoryArtifactStore();
+        ReadingNormalizationProfile profile = new ReadingNormalizationProfile();
+        CapturingEndpointRequestSender sender = new CapturingEndpointRequestSender(endpointRequest =>
+            endpointRequest.Endpoint == EndpointSlot.A
+                ? new string('a', 128 * 1024)
+                : new string('b', 128 * 1024));
+        BasicComparisonRunExecutor executor = new BasicComparisonRunExecutor(
+            new FakeRequestBatchStore(CreateManifest(request), "<request />"),
+            sender,
+            artifactStore,
+            new FakeRunDetailStore(),
+            new HashOnlyResponseComparer(),
+            CreateRegistry(profile));
+
+        RunResultSummary summary = await executor.ExecuteAsync(CreateRun(), new CapturingProgressReporter());
+
+        Assert.AreEqual(1, summary.EqualPairs);
+        Assert.AreEqual(4, artifactStore.SaveCalls.Count);
+        CollectionAssert.AreEquivalent(
+            new[] { 128 * 1024, 128 * 1024 },
+            profile.SourceResponseLengths.ToArray());
     }
 
     [TestMethod]
@@ -187,9 +213,7 @@ public sealed class AlternateContractRunExecutorTests
             AlternateContractRequestPreparationContext context,
             CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(new PreparedAlternateContractRequest(
-                Encoding.UTF8.GetBytes("alternate-request"),
-                AlternateRequestContentType,
-                PayloadFormat.Json,
+                ContractPayload.FromBytes(Encoding.UTF8.GetBytes("alternate-request"), PayloadFormat.Json, AlternateRequestContentType),
                 ProfileId,
                 new Dictionary<string, string> { ["X-Override"] = "profile", ["SOAPAction"] = "urn:profile" }));
 
@@ -203,11 +227,9 @@ public sealed class AlternateContractRunExecutorTests
             CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(CreateNormalizedResponse());
 
-        private NormalizedAlternateContractResponse CreateNormalizedResponse() =>
+        protected NormalizedAlternateContractResponse CreateNormalizedResponse() =>
             new NormalizedAlternateContractResponse(
-                Encoding.UTF8.GetBytes("{\"id\":1}"),
-                PayloadFormat.Json,
-                "application/json",
+                ContractPayload.FromBytes(Encoding.UTF8.GetBytes("{\"id\":1}"), PayloadFormat.Json, "application/json"),
                 ProfileId);
     }
 
@@ -217,6 +239,31 @@ public sealed class AlternateContractRunExecutorTests
             AlternateContractResponseNormalizationContext context,
             CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("Normalization failed.");
+    }
+    private sealed class ReadingNormalizationProfile : FakeAlternateContractProfile
+    {
+        public List<int> SourceResponseLengths { get; } = new List<int>();
+
+        public override async ValueTask<NormalizedAlternateContractResponse> NormalizeEndpointAResponseAsync(
+            AlternateContractResponseNormalizationContext context,
+            CancellationToken cancellationToken = default) =>
+            await ReadSourceAndCreateNormalizedResponseAsync(context, cancellationToken).ConfigureAwait(false);
+
+        public override async ValueTask<NormalizedAlternateContractResponse> NormalizeEndpointBResponseAsync(
+            AlternateContractResponseNormalizationContext context,
+            CancellationToken cancellationToken = default) =>
+            await ReadSourceAndCreateNormalizedResponseAsync(context, cancellationToken).ConfigureAwait(false);
+
+        private async ValueTask<NormalizedAlternateContractResponse> ReadSourceAndCreateNormalizedResponseAsync(
+            AlternateContractResponseNormalizationContext context,
+            CancellationToken cancellationToken)
+        {
+            await using Stream stream = await context.OpenSourceResponseBodyAsync(cancellationToken).ConfigureAwait(false);
+            using StreamReader reader = new StreamReader(stream, Encoding.UTF8);
+            string source = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+            SourceResponseLengths.Add(source.Length);
+            return CreateNormalizedResponse();
+        }
     }
 
     private sealed class CapturingEndpointRequestSender : IEndpointRequestSender
@@ -284,10 +331,21 @@ public sealed class AlternateContractRunExecutorTests
 
     private sealed class InMemoryArtifactStore : IRunArtifactStore
     {
+        private readonly object gate = new object();
         private readonly Dictionary<string, byte[]> savedContent = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
 
-        public IReadOnlyDictionary<string, string> SavedBodies => savedContent
-            .ToDictionary(pair => pair.Key, pair => Encoding.UTF8.GetString(pair.Value), StringComparer.OrdinalIgnoreCase);
+        public List<string> SaveCalls { get; } = new List<string>();
+
+        public IReadOnlyDictionary<string, string> SavedBodies
+        {
+            get
+            {
+                lock (gate)
+                {
+                    return savedContent.ToDictionary(pair => pair.Key, pair => Encoding.UTF8.GetString(pair.Value), StringComparer.OrdinalIgnoreCase);
+                }
+            }
+        }
 
         public async Task<ResponseArtifactMetadata> SaveResponseAsync(
             RunId runId,
@@ -302,7 +360,11 @@ public sealed class AlternateContractRunExecutorTests
             await body.CopyToAsync(memoryStream, cancellationToken).ConfigureAwait(false);
             byte[] content = memoryStream.ToArray();
             string artifactId = $"runs/{runId.Value}/artifacts/{endpoint}/{request.RelativePath}";
-            savedContent[artifactId] = content;
+            lock (gate)
+            {
+                SaveCalls.Add(artifactId);
+                savedContent[artifactId] = content;
+            }
 
             return new ResponseArtifactMetadata(
                 endpoint,
@@ -315,8 +377,13 @@ public sealed class AlternateContractRunExecutorTests
 
         public Task<Stream> OpenReadAsync(
             ArtifactReference artifact,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<Stream>(new MemoryStream(savedContent[artifact.ArtifactId]));
+            CancellationToken cancellationToken = default)
+        {
+            lock (gate)
+            {
+                return Task.FromResult<Stream>(new MemoryStream(savedContent[artifact.ArtifactId]));
+            }
+        }
     }
 
     private sealed class FakeRunDetailStore : IRunDetailStore

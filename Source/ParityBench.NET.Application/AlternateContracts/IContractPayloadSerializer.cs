@@ -18,11 +18,12 @@ public interface IContractPayloadSerializer
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Serializes a contract instance into the requested payload format.
+    /// Serializes a contract instance into the requested payload format without owning the destination stream.
     /// </summary>
-    Task<byte[]> SerializeAsync(
+    Task SerializeAsync(
         object value,
         Type valueType,
         PayloadFormat format,
+        Stream destination,
         CancellationToken cancellationToken = default);
 }
