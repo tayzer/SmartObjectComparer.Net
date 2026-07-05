@@ -34,6 +34,21 @@ public sealed class ProjectBoundaryTests
 
         AssertProjectReferences("ParityBench.NET.Desktop", "ParityBench.NET.Desktop.csproj", expectedReferences);
     }
+    [TestMethod]
+    public void ProjectBoundary_WhenProjectIsCli_ReferencesOnlyV2Projects()
+    {
+        string[] expectedReferences = new[]
+        {
+            @"..\ParityBench.NET.Application\ParityBench.NET.Application.csproj",
+            @"..\ParityBench.NET.Domain\ParityBench.NET.Domain.csproj",
+            @"..\ParityBench.NET.Engine\ParityBench.NET.Engine.csproj",
+            @"..\ParityBench.NET.Infrastructure\ParityBench.NET.Infrastructure.csproj",
+            @"..\ParityBench.NET.Workspaces\ParityBench.NET.Workspaces.csproj",
+        };
+
+        AssertProjectReferences("ParityBench.NET.Cli", "ParityBench.NET.Cli.csproj", expectedReferences);
+    }
+
 
     [TestMethod]
     public void ProjectBoundary_WhenProjectIsReport_ReferencesOnlyDomainAndUi()

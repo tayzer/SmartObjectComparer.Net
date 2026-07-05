@@ -1,7 +1,11 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="MudBlazor" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
   </ItemGroup>
 
   <ItemGroup>
@@ -9,7 +13,6 @@
     <ProjectReference Include="..\ParityBench.NET.Domain\ParityBench.NET.Domain.csproj" />
     <ProjectReference Include="..\ParityBench.NET.Engine\ParityBench.NET.Engine.csproj" />
     <ProjectReference Include="..\ParityBench.NET.Infrastructure\ParityBench.NET.Infrastructure.csproj" />
-    <ProjectReference Include="..\ParityBench.NET.UI\ParityBench.NET.UI.csproj" />
     <ProjectReference Include="..\ParityBench.NET.Workspaces\ParityBench.NET.Workspaces.csproj" />
   </ItemGroup>
 

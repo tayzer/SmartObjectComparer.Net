@@ -3,6 +3,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
+using ParityBench.NET.Application.Reports;
+
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Results;
 using ParityBench.NET.Domain.Reports;
@@ -12,7 +14,7 @@ using ParityBench.NET.Domain.Runs;
 
 namespace ParityBench.NET.Infrastructure.Reports;
 
-public sealed class StaticReportBundleWriter
+public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
 {
     private const string ManifestFileName = "report.data.json";
     private const string DetailsDirectoryName = "details";
@@ -121,6 +123,30 @@ public sealed class StaticReportBundleWriter
             redirectorPath,
             pageInfos.Count,
             copiedArtifacts.Count);
+    }
+
+    async Task<StaticReportBundleWriteResult> IStaticReportBundleWriter.WriteAsync(
+        RunId runId,
+        string outputDirectory,
+        string reportAssetsDirectory,
+        DateTimeOffset? generatedAt,
+        int detailPageSize,
+        CancellationToken cancellationToken)
+    {
+        StaticReportBundleResult result = await WriteAsync(
+            runId,
+            outputDirectory,
+            reportAssetsDirectory,
+            generatedAt,
+            detailPageSize,
+            cancellationToken).ConfigureAwait(false);
+
+        return new StaticReportBundleWriteResult(
+            result.OutputDirectory,
+            result.ManifestPath,
+            result.RedirectorPath,
+            result.DetailPageCount,
+            result.RawArtifactCount);
     }
 
     private async Task<RequestPairResult> RewriteArtifactsAsync(

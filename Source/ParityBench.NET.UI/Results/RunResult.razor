@@ -1,4 +1,4 @@
-@inject IRunResultsViewDataSource DataSource
+﻿@inject IRunResultsViewDataSource DataSource
 
 <MudPaper Outlined="true" Class="pa-4">
     @if (RunId is null)
@@ -19,7 +19,7 @@
             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="flex-wrap">
                 <MudStack Spacing="0">
                     <MudText Typo="Typo.h6">Run @run.Id.Value</MudText>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">@run.Status � @run.UpdatedAt.LocalDateTime</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@run.Status · @run.UpdatedAt.LocalDateTime</MudText>
                 </MudStack>
                 <RunSummaryCounts Summary="summary" />
             </MudStack>
@@ -61,6 +61,7 @@
     private const int PageSize = 25;
 
     private RunId? loadedRunId;
+    private int loadedRefreshVersion = -1;
     private ComparisonRun? run;
     private RunResultSummary? summary;
     private RunDetailPage? detailPage;
@@ -74,14 +75,23 @@
     [Parameter]
     public RunId? RunId { get; set; }
 
+    [Parameter]
+    public int RefreshVersion { get; set; }
+
     protected override async Task OnParametersSetAsync()
     {
-        if (RunId is null || RunId == loadedRunId)
+        if (RunId is null)
+        {
+            return;
+        }
+
+        if (RunId == loadedRunId && RefreshVersion == loadedRefreshVersion)
         {
             return;
         }
 
         loadedRunId = RunId;
+        loadedRefreshVersion = RefreshVersion;
         detailOffset = 0;
         await LoadRunAsync().ConfigureAwait(false);
     }

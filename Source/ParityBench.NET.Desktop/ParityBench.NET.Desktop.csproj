@@ -24,4 +24,10 @@
     <ProjectReference Include="..\ParityBench.NET.Workspaces\ParityBench.NET.Workspaces.csproj" />
   </ItemGroup>
 
+  <Target Name="PublishParityBenchReportAssets" AfterTargets="Publish" Condition="'$(PublishParityBenchReportAssets)' != 'false'">
+    <MSBuild Projects="..\ParityBench.NET.Report\ParityBench.NET.Report.csproj"
+             Targets="Publish"
+             Properties="Configuration=$(Configuration);PublishDir=$(PublishDir)BlazorReportAssets\;PublishParityBenchReportAssets=false" />
+  </Target>
+
 </Project>

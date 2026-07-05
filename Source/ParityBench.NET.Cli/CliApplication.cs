@@ -1,10 +1,4 @@
-using System.IO;
-using System.Net.Http;
-using System.Windows;
-
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using MudBlazor.Services;
 
 using ParityBench.NET.Application.AlternateContracts;
 using ParityBench.NET.Application.Reports;
@@ -15,55 +9,44 @@ using ParityBench.NET.Application.Workflow;
 using ParityBench.NET.Engine;
 using ParityBench.NET.Infrastructure;
 using ParityBench.NET.Infrastructure.Reports;
-using ParityBench.NET.UI.Results;
-using ParityBench.NET.UI.Workflow;
 using ParityBench.NET.Workspaces;
 
-namespace ParityBench.NET.Desktop;
+namespace ParityBench.NET.Cli;
 
-public partial class App : System.Windows.Application
+public static class CliApplication
 {
-    private IHost? host;
-
-    protected override async void OnStartup(StartupEventArgs e)
+    public static async Task<int> RunAsync(
+        string[] args,
+        TextWriter output,
+        TextWriter error,
+        string? workspaceRoot = null,
+        Action<IServiceCollection>? configureServices = null,
+        CancellationToken cancellationToken = default)
     {
-        base.OnStartup(e);
-
-        host = Host.CreateDefaultBuilder(e.Args)
-            .ConfigureServices((context, services) =>
-            {
-                services.AddWpfBlazorWebView();
-                services.AddMudServices();
-
-                string workspaceRoot = context.Configuration["ParityBench:WorkspaceRoot"]
-                    ?? System.IO.Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                        "ParityBench.NET",
-                        "Workspace");
-
-                RegisterV2Services(services, workspaceRoot);
-            })
-            .Build();
-
-        await host.StartAsync().ConfigureAwait(false);
-
-        MainWindow mainWindow = new MainWindow(host.Services);
-        MainWindow = mainWindow;
-        mainWindow.Show();
-    }
-
-    protected override async void OnExit(ExitEventArgs e)
-    {
-        if (host is not null)
+        RequestCommandParseResult parseResult = RequestCommandParser.Parse(args);
+        if (!parseResult.IsSuccess)
         {
-            await host.StopAsync().ConfigureAwait(false);
-            host.Dispose();
+            foreach (string parseError in parseResult.Errors)
+            {
+                await error.WriteLineAsync(parseError).ConfigureAwait(false);
+            }
+
+            await error.WriteLineAsync(RequestCommandParser.Usage).ConfigureAwait(false);
+            return 2;
         }
 
-        base.OnExit(e);
+        ServiceCollection services = new ServiceCollection();
+        RegisterServices(services, workspaceRoot ?? GetDefaultWorkspaceRoot());
+        configureServices?.Invoke(services);
+
+        await using ServiceProvider serviceProvider = services.BuildServiceProvider();
+        RequestCommandRunner runner = serviceProvider.GetRequiredService<RequestCommandRunner>();
+        return await runner
+            .RunAsync(parseResult.Options!, output, error, cancellationToken)
+            .ConfigureAwait(false);
     }
 
-    private static void RegisterV2Services(IServiceCollection services, string workspaceRoot)
+    public static void RegisterServices(IServiceCollection services, string workspaceRoot)
     {
         Directory.CreateDirectory(workspaceRoot);
         services.AddSingleton(new HttpClient());
@@ -111,8 +94,12 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IReportAssetLocator, ReportAssetLocator>();
         services.AddSingleton<IStaticReportBundleWriter, StaticReportBundleWriter>();
         services.AddSingleton<IRequestComparisonWorkflowUseCases, RequestComparisonWorkflowService>();
-        services.AddSingleton<IComparisonRunJobUseCases, ComparisonRunJobService>();
-        services.AddScoped<IRunResultsViewDataSource, ApplicationRunResultsViewDataSource>();
-        services.AddScoped<IRunWorkflowViewDataSource, ApplicationRunWorkflowViewDataSource>();
+        services.AddSingleton<RequestCommandRunner>();
     }
+
+    private static string GetDefaultWorkspaceRoot() =>
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ParityBench.NET",
+            "Workspace");
 }

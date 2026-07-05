@@ -1,0 +1,332 @@
+﻿@using ParityBench.NET.Application.Workflow
+@using ParityBench.NET.Domain.Comparison
+@using ParityBench.NET.Domain.Requests
+@inject IRunWorkflowViewDataSource DataSource
+
+<MudPaper Outlined="true" Class="pa-4">
+    <MudStack Spacing="3">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="flex-wrap">
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.h6">Request Comparison</MudText>
+                @if (currentRun is not null)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@currentRun.Id.Value · @currentRun.Status</MudText>
+                }
+            </MudStack>
+            <MudStack Row="true" Spacing="1">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@isBusy" OnClick="StartWorkflowAsync">Start</MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Warning" Disabled="@(!CanCancel)" OnClick="CancelRunAsync">Cancel</MudButton>
+            </MudStack>
+        </MudStack>
+
+        @if (errorMessage is not null)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@errorMessage</MudAlert>
+        }
+        @if (successMessage is not null)
+        {
+            <MudAlert Severity="Severity.Success" Variant="Variant.Outlined">@successMessage</MudAlert>
+        }
+
+        <MudGrid Spacing="2">
+            <MudItem xs="12" md="6">
+                <MudTextField T="string" Label="Request Directory" @bind-Value="requestDirectory" Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudTextField T="string" Label="Timeout Seconds" @bind-Value="timeoutSeconds" Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudTextField T="string" Label="Concurrency" @bind-Value="maxConcurrency" Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField T="string" Label="Endpoint A" @bind-Value="endpointA" Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudTextField T="string" Label="Endpoint B" @bind-Value="endpointB" Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudTextField T="string" Label="Model" @bind-Value="modelName" Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudTextField T="string" Label="Content-Type Override" @bind-Value="contentTypeOverride" Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudTextField T="string" Label="Max Differences" @bind-Value="maxDifferences" Immediate="true" />
+            </MudItem>
+        </MudGrid>
+
+        <MudExpansionPanels Elevation="0" Outlined="true" MultiExpansion="true">
+            <MudExpansionPanel Text="Comparison Options">
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" md="4">
+                        <MudCheckBox T="bool" Label="Ignore collection order" @bind-Value="ignoreCollectionOrder" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudCheckBox T="bool" Label="Ignore string case" @bind-Value="ignoreStringCase" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudCheckBox T="bool" Label="Ignore trailing whitespace" @bind-Value="ignoreTrailingWhitespace" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudCheckBox T="bool" Label="Null and empty collections equal" @bind-Value="treatNullAndEmptyCollectionsEqual" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudCheckBox T="bool" Label="Ignore XML namespaces" @bind-Value="ignoreXmlNamespaces" />
+                    </MudItem>
+                </MudGrid>
+            </MudExpansionPanel>
+            <MudExpansionPanel Text="Headers">
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" md="4">
+                        <MudTextField T="string" Label="Common Headers" Lines="4" @bind-Value="commonHeaders" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudTextField T="string" Label="Endpoint A Headers" Lines="4" @bind-Value="endpointAHeaders" />
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudTextField T="string" Label="Endpoint B Headers" Lines="4" @bind-Value="endpointBHeaders" />
+                    </MudItem>
+                </MudGrid>
+            </MudExpansionPanel>
+            <MudExpansionPanel Text="Static Report">
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" md="5">
+                        <MudTextField T="string" Label="Report Output" @bind-Value="reportOutputDirectory" Immediate="true" />
+                    </MudItem>
+                    <MudItem xs="12" md="5">
+                        <MudTextField T="string" Label="Report Assets" @bind-Value="reportAssetsDirectory" Immediate="true" />
+                    </MudItem>
+                    <MudItem xs="12" md="2" Class="d-flex align-end">
+                        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Disabled="@(!CanGenerateReport)" OnClick="GenerateReportAsync">Generate</MudButton>
+                    </MudItem>
+                </MudGrid>
+            </MudExpansionPanel>
+        </MudExpansionPanels>
+
+        @if (currentRun is not null)
+        {
+            <MudStack Spacing="1">
+                <MudProgressLinear Value="currentRun.Progress.PercentComplete" Color="Color.Primary" Rounded="true" />
+                <MudText Typo="Typo.body2">@currentRun.Progress.Message</MudText>
+                @if (currentRun.Progress.CompletedItems is not null && currentRun.Progress.TotalItems is not null)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@currentRun.Progress.CompletedItems of @currentRun.Progress.TotalItems</MudText>
+                }
+            </MudStack>
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    private const int PollDelayMilliseconds = 750;
+    private string requestDirectory = string.Empty;
+    private string endpointA = string.Empty;
+    private string endpointB = string.Empty;
+    private string timeoutSeconds = "30";
+    private string maxConcurrency = "4";
+    private string modelName = "Auto";
+    private string contentTypeOverride = string.Empty;
+    private string maxDifferences = "100";
+    private string commonHeaders = string.Empty;
+    private string endpointAHeaders = string.Empty;
+    private string endpointBHeaders = string.Empty;
+    private string reportOutputDirectory = string.Empty;
+    private string reportAssetsDirectory = string.Empty;
+    private bool ignoreCollectionOrder;
+    private bool ignoreStringCase;
+    private bool ignoreTrailingWhitespace;
+    private bool treatNullAndEmptyCollectionsEqual;
+    private bool ignoreXmlNamespaces = true;
+    private bool isBusy;
+    private bool isRunning;
+    private string? errorMessage;
+    private string? successMessage;
+    private ComparisonRun? currentRun;
+
+    [Parameter]
+    public EventCallback<RunId> RunSelected { get; set; }
+
+    [Parameter]
+    public EventCallback<ComparisonRun> RunChanged { get; set; }
+
+    private bool CanCancel => currentRun is not null && isRunning && !isBusy;
+
+    private bool CanGenerateReport => currentRun?.Status == RunStatus.Completed
+        && !isBusy
+        && !string.IsNullOrWhiteSpace(reportOutputDirectory);
+
+    private async Task StartWorkflowAsync()
+    {
+        try
+        {
+            isBusy = true;
+            errorMessage = null;
+            successMessage = null;
+
+            RequestComparisonRunRequest request = BuildRequest();
+            currentRun = await DataSource.CreateRunFromDirectoryAsync(request).ConfigureAwait(false);
+            await NotifyRunChangedAsync(currentRun).ConfigureAwait(false);
+
+            bool started = await DataSource.StartRunAsync(currentRun.Id).ConfigureAwait(false);
+            if (!started)
+            {
+                errorMessage = "Run is already active.";
+                return;
+            }
+
+            isRunning = true;
+            await PollUntilTerminalAsync(currentRun.Id).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isBusy = false;
+            isRunning = currentRun is not null && DataSource.IsRunning(currentRun.Id);
+        }
+    }
+
+    private async Task CancelRunAsync()
+    {
+        if (currentRun is null)
+        {
+            return;
+        }
+
+        try
+        {
+            errorMessage = null;
+            successMessage = null;
+            currentRun = await DataSource.CancelRunAsync(currentRun.Id).ConfigureAwait(false);
+            isRunning = false;
+            await NotifyRunChangedAsync(currentRun).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private async Task GenerateReportAsync()
+    {
+        if (currentRun is null)
+        {
+            return;
+        }
+
+        try
+        {
+            isBusy = true;
+            errorMessage = null;
+            successMessage = null;
+            StaticReportBundleWriteResult result = await DataSource
+                .GenerateReportAsync(currentRun.Id, reportOutputDirectory, string.IsNullOrWhiteSpace(reportAssetsDirectory) ? null : reportAssetsDirectory)
+                .ConfigureAwait(false);
+            successMessage = $"Report written to {result.OutputDirectory}";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task PollUntilTerminalAsync(RunId runId)
+    {
+        while (true)
+        {
+            await Task.Delay(PollDelayMilliseconds).ConfigureAwait(false);
+            currentRun = await DataSource.LoadRunAsync(runId).ConfigureAwait(false);
+            await NotifyRunChangedAsync(currentRun).ConfigureAwait(false);
+
+            if (currentRun.IsTerminal)
+            {
+                isRunning = false;
+                return;
+            }
+        }
+    }
+
+    private async Task NotifyRunChangedAsync(ComparisonRun run)
+    {
+        await RunSelected.InvokeAsync(run.Id).ConfigureAwait(false);
+        await RunChanged.InvokeAsync(run).ConfigureAwait(false);
+    }
+
+    private RequestComparisonRunRequest BuildRequest()
+    {
+        if (!Uri.TryCreate(endpointA, UriKind.Absolute, out Uri? endpointAUri))
+        {
+            throw new InvalidOperationException("Endpoint A must be an absolute URL.");
+        }
+
+        if (!Uri.TryCreate(endpointB, UriKind.Absolute, out Uri? endpointBUri))
+        {
+            throw new InvalidOperationException("Endpoint B must be an absolute URL.");
+        }
+
+        int timeout = ParsePositiveInt(timeoutSeconds, "Timeout seconds");
+        int concurrency = ParsePositiveInt(maxConcurrency, "Concurrency");
+        int maxDifferenceCount = ParsePositiveInt(maxDifferences, "Max differences");
+
+        ComparisonOptions comparisonOptions = new ComparisonOptions(
+            ignoreCollectionOrder,
+            ignoreStringCase,
+            ignoreTrailingWhitespace,
+            treatNullAndEmptyCollectionsEqual,
+            ignoreXmlNamespaces,
+            maxDifferenceCount);
+        RequestExecutionOptions executionOptions = new RequestExecutionOptions(contentTypeOverride);
+
+        return new RequestComparisonRunRequest(
+            requestDirectory,
+            endpointAUri,
+            endpointBUri,
+            TimeSpan.FromSeconds(timeout),
+            concurrency,
+            modelName,
+            comparisonOptions,
+            executionOptions,
+            commonHeaders: ParseHeaders(commonHeaders),
+            endpointAHeaders: ParseHeaders(endpointAHeaders),
+            endpointBHeaders: ParseHeaders(endpointBHeaders));
+    }
+
+    private static int ParsePositiveInt(string value, string label)
+    {
+        if (!int.TryParse(value, out int parsed) || parsed <= 0)
+        {
+            throw new InvalidOperationException($"{label} must be a positive whole number.");
+        }
+
+        return parsed;
+    }
+
+    private static IReadOnlyDictionary<string, string> ParseHeaders(string text)
+    {
+        Dictionary<string, string> headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string rawLine in text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            string line = rawLine.Trim();
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            int separatorIndex = line.IndexOf(':', StringComparison.Ordinal);
+            if (separatorIndex <= 0)
+            {
+                throw new InvalidOperationException($"Header '{line}' must use Name: Value format.");
+            }
+
+            headers[line[..separatorIndex].Trim()] = line[(separatorIndex + 1)..].Trim();
+        }
+
+        return headers;
+    }
+}
