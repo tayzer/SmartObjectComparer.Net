@@ -1,8 +1,8 @@
-# Slice 9: V1 Deprecation And Archive
+# Slice 10: V1 Deprecation And Archive
 
 ## Goal
 
-Retire the old flow only after V2 proves parity.
+Retire the old flow only after V2 proves report parity, host workflow parity, and full behavior parity.
 
 This slice marks V1 request-comparison paths as deprecated, removes temporary bridge adapters, updates documentation, and archives or removes old projects and components that are no longer needed.
 
@@ -31,8 +31,8 @@ Before V1 is deprecated, V2 must cover all agreed V1 behavior:
 - Non-success and failure behavior.
 - Cancellation.
 - Large-run behavior.
-- Reports.
-- Web, Desktop, and CLI workflows.
+- Static bundled reports.
+- Web, Desktop, and CLI workflows running through V2.
 
 ## Performance Considerations
 

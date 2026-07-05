@@ -1,59 +1,72 @@
-# Slice 8: Static Report Bundle And Host Flow Integration
+# Slice 8: V2 Static Bundled Report
 
 ## Goal
 
-Use the shared V2 result surface from Slice 7 as the foundation for static bundled reports and full host workflows.
+Package completed V2 run results into a standalone Blazor WebAssembly report that renders the same shared `ParityBench.NET.UI` result surface introduced in Slice 7.
 
-This slice comes after the result UI exists, so Web, Desktop, and bundled reports can share the same result components and view contracts instead of maintaining separate report models.
+This slice replaces the earlier idea of adapting the V1 report project. Static reports are a core feature, but they should be another thin V2 host over the shared result components and V2 report-side data contracts.
 
 ## User-Visible Behavior
 
-Users continue to run comparisons from Web, Desktop, and CLI with familiar workflows once V2 is selected.
+Users can receive a static report folder for a completed V2 run. The folder contains the published report host, `report.data.json`, paged detail files, lazy raw sidecars, and simple local server launchers.
 
-Static reports remain standalone artifacts, but they should render the same V2 result surface as the interactive hosts, backed by report-side data files and lazy raw-content sidecars.
+The report is read-only. It opens the shared V2 result surface, loads the run summary first, pages pair details from sidecar JSON files, and reads bounded raw response previews only when a pair is selected.
 
 ## Architecture Areas
 
-- Web gateway or API adapter.
-- Desktop in-process gateway.
-- CLI command adapter.
-- Shared UI input mapping.
-- Static report data source.
-- Static report asset packaging.
-- Progress transport.
-- Cancellation wiring.
-- Feature flag or explicit V2 selection during rollout.
+- `ParityBench.NET.Report` as a Blazor WebAssembly static host.
+- `ParityBench.NET.Domain.Reports` contracts for report manifest, run snapshot, detail page metadata, schema version, and static detail pages.
+- Report-side `IRunResultsViewDataSource` implementation backed by `HttpClient`.
+- Infrastructure-owned `StaticReportBundleWriter` that packages published report assets, manifest data, detail pages, raw sidecars, launcher scripts, and a top-level redirector.
+- Shared `ParityBench.NET.UI` result components reused unchanged.
 
-## V1 Parity Expectations
+## Data Layout
 
-Hosts should preserve:
+```text
+report-output/
+  index.html
+  _framework/
+  _content/
+  report.data.json
+  details/
+    page-000000.json
+    page-000001.json
+  raw/
+    {safeArtifactId}.body
+  serve.cmd
+  serve.sh
+report-output.html
+```
 
-- Existing CLI command names and important flags.
-- Existing Web request-comparison workflow.
-- Existing Desktop in-process workflow.
-- Progress and cancellation behavior.
-- Report output expectations.
-- Result inspection workflow.
+`report.data.json` contains schema version `1`, generated time, a run snapshot, summary counts, default detail page size `100`, and detail page metadata. Raw response bodies are never embedded into the manifest.
+
+Detail page files contain rewritten artifact references that point at `raw/...` sidecars. Sidecar names are safe deterministic identifiers, not workspace paths.
 
 ## Performance Considerations
 
-Hosts should not own execution performance policy. They should call V2 use cases, display progress, and load summaries/details. Shared presentation state and components belong in `ParityBench.NET.UI`.
+The report host loads `report.data.json` once, then lazily loads detail pages from `details/page-{index}.json`. Filtered detail queries scan page files incrementally and materialize only the requested result page. Raw sidecars are fetched only for selected pairs and read as bounded previews using `maxBytes + 1`.
 
-Static report generation should avoid embedding every large body in the bootstrap payload. Raw and focused content should remain lazy sidecar data where possible.
+The bundle writer stream-copies raw artifacts from `IRunArtifactStore.OpenReadAsync` to sidecars. It must not buffer or embed raw bodies into manifest JSON.
 
-Long-running work should be managed by the V2 application/runner model, not host-local fire-and-forget behavior.
+Focused raw sidecars are not introduced yet because V2 does not currently generate focused raw artifacts.
 
 ## Completion Criteria
 
-- Each host can run the V2 flow.
-- Host and shared UI input maps to V2 run options.
-- Progress and cancellation work through V2 contracts.
-- Static bundled reports render the shared V2 result surface.
-- User workflows remain compatible.
-- V2 can be selected safely before becoming default.
+- `ParityBench.NET.Report` renders the shared V2 result surface.
+- The report host references only V2 `Domain` and `UI` projects.
+- Static report DTOs use schema version `1` and default detail page size `100`.
+- `StaticReportBundleWriter` writes published assets, manifest, paged details, raw sidecars, launcher scripts, and redirector HTML.
+- Raw artifact references are rewritten to safe report sidecar paths.
+- Boundary tests prove the report host and Infrastructure do not depend on V1 projects.
+
+## Following Slice
+
+Full host flow integration remains the next slice. Web, Desktop, and CLI create/run/cancel workflows should move to V2 only after the shared result surface and static report path are in place.
 
 ## Non-Goals
 
-- Do not rewrite host UI for its own sake.
-- Do not let hosts or shared UI depend on Engine or Infrastructure internals.
-- Do not remove V1 host paths until V2 parity is complete.
+- Do not switch existing V1 Web, Desktop, or CLI flows to V2.
+- Do not reference `ComparisonTool.Report`, `ComparisonTool.UI`, `ComparisonTool.Core`, or any other V1 project.
+- Do not create a separate report-specific result UI.
+- Do not add focused raw sidecars until V2 produces focused raw artifacts.
+- Do not deprecate V1 until report parity and host workflow parity are proven.

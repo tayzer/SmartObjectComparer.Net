@@ -36,6 +36,18 @@ public sealed class ProjectBoundaryTests
     }
 
     [TestMethod]
+    public void ProjectBoundary_WhenProjectIsReport_ReferencesOnlyDomainAndUi()
+    {
+        string[] expectedReferences = new[]
+        {
+            @"..\ParityBench.NET.Domain\ParityBench.NET.Domain.csproj",
+            @"..\ParityBench.NET.UI\ParityBench.NET.UI.csproj",
+        };
+
+        AssertProjectReferences("ParityBench.NET.Report", "ParityBench.NET.Report.csproj", expectedReferences);
+    }
+
+    [TestMethod]
     public void ProjectBoundary_WhenProjectIsV2_DoesNotReferenceV1Projects()
     {
         string sourceRoot = Path.Combine(GetRepositoryRoot(), "Source");

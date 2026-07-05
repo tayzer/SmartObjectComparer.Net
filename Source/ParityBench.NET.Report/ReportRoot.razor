@@ -1,0 +1,48 @@
+@inject IRunResultsViewDataSource DataSource
+
+<MudThemeProvider />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+    @if (isLoading)
+    {
+        <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+    }
+    else if (errorMessage is not null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@errorMessage</MudAlert>
+    }
+    else
+    {
+        <RunResult RunId="runId" />
+    }
+</MudContainer>
+
+@code {
+    private RunId? runId;
+    private bool isLoading = true;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            IReadOnlyList<RunListItem> runs = await DataSource.ListRunsAsync().ConfigureAwait(false);
+            runId = runs.SingleOrDefault()?.Id;
+            if (runId is null)
+            {
+                errorMessage = "Report data does not contain a run.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

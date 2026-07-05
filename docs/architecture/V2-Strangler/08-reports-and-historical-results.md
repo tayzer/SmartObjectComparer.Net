@@ -52,9 +52,9 @@ The shared UI must not depend on Engine, Workspaces, Infrastructure, host projec
 
 ## Next Slices
 
-- Static bundled Blazor report: package the same `ParityBench.NET.UI` result components with a report-side data source and lazy sidecars.
-- Full host flow integration: route create/run/cancel workflows through V2 in Web, Desktop, and CLI.
-- V1 deprecation: remove or archive V1 only after V2 behavior parity is proven.
+- Slice 8 static bundled report: package the same `ParityBench.NET.UI` result components with a report-side data source and lazy sidecars.
+- Slice 9 full host flow integration: route create/run/cancel workflows through V2 in Web, Desktop, and CLI.
+- V1 deprecation: remove or archive V1 only after V2 report parity and host workflow parity are proven.
 
 ## Non-Goals
 
