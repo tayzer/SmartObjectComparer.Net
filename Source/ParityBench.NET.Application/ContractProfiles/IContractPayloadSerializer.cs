@@ -1,9 +1,9 @@
-using ParityBench.NET.Domain.AlternateContracts;
+using ParityBench.NET.Domain.ContractProfiles;
 
-namespace ParityBench.NET.Application.AlternateContracts;
+namespace ParityBench.NET.Application.ContractProfiles;
 
 /// <summary>
-/// Serializes and deserializes contract payloads used by alternate-contract profiles.
+/// Serializes and deserializes payloads used by contract profiles.
 /// </summary>
 public interface IContractPayloadSerializer
 {

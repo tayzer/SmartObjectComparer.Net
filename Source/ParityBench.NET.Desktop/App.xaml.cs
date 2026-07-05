@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Net.Http;
 using System.Windows;
 
@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using MudBlazor.Services;
 
-using ParityBench.NET.Application.AlternateContracts;
+using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Results;
@@ -84,10 +84,10 @@ public partial class App : System.Windows.Application
             BuiltInResponseModelRegistration.Register(registry);
             return registry;
         });
-        services.AddSingleton<IAlternateContractProfileRegistry>(serviceProvider =>
+        services.AddSingleton<IContractProfileRegistry>(serviceProvider =>
         {
-            AlternateContractProfileRegistry registry = new AlternateContractProfileRegistry();
-            registry.Register(BuiltInAlternateContractProfiles.CreateSampleSoapToJson(serviceProvider.GetRequiredService<IContractPayloadSerializer>()));
+            ContractProfileRegistry registry = new ContractProfileRegistry();
+            registry.Register(BuiltInContractProfiles.CreateSampleSoapToJson(serviceProvider.GetRequiredService<IContractPayloadSerializer>()));
             return registry;
         });
         services.AddSingleton<IComparisonRunExecutor>(serviceProvider =>
@@ -104,7 +104,7 @@ public partial class App : System.Windows.Application
                 artifactStore,
                 serviceProvider.GetRequiredService<IRunDetailStore>(),
                 comparer,
-                serviceProvider.GetRequiredService<IAlternateContractProfileRegistry>());
+                serviceProvider.GetRequiredService<IContractProfileRegistry>());
         });
         services.AddSingleton<IComparisonRunUseCases, ComparisonRunService>();
         services.AddSingleton<IComparisonRunResultUseCases, ComparisonRunResultService>();

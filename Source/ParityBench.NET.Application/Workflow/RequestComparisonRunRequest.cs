@@ -1,4 +1,4 @@
-using ParityBench.NET.Domain.AlternateContracts;
+﻿using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
@@ -16,7 +16,7 @@ public sealed record RequestComparisonRunRequest
         string modelName = "Auto",
         ComparisonOptions? comparisonOptions = null,
         RequestExecutionOptions? requestExecutionOptions = null,
-        AlternateContractOptions? alternateContractOptions = null,
+        ContractProfileSelection? contractProfileSelection = null,
         IReadOnlyDictionary<string, string>? commonHeaders = null,
         IReadOnlyDictionary<string, string>? endpointAHeaders = null,
         IReadOnlyDictionary<string, string>? endpointBHeaders = null,
@@ -49,7 +49,7 @@ public sealed record RequestComparisonRunRequest
         ModelName = string.IsNullOrWhiteSpace(modelName) ? "Auto" : modelName.Trim();
         ComparisonOptions = comparisonOptions ?? new ComparisonOptions();
         RequestExecutionOptions = requestExecutionOptions ?? new RequestExecutionOptions();
-        AlternateContractOptions = alternateContractOptions;
+        ContractProfileSelection = contractProfileSelection;
         CommonHeaders = CopyHeaders(commonHeaders);
         EndpointAHeaders = CopyHeaders(endpointAHeaders);
         EndpointBHeaders = CopyHeaders(endpointBHeaders);
@@ -73,7 +73,7 @@ public sealed record RequestComparisonRunRequest
 
     public RequestExecutionOptions RequestExecutionOptions { get; }
 
-    public AlternateContractOptions? AlternateContractOptions { get; }
+    public ContractProfileSelection? ContractProfileSelection { get; }
 
     public IReadOnlyDictionary<string, string> CommonHeaders { get; }
 
@@ -102,3 +102,4 @@ public sealed record RequestComparisonRunRequest
         return copied;
     }
 }
+

@@ -1,7 +1,7 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
-using ParityBench.NET.Domain.AlternateContracts;
+using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
@@ -23,10 +23,10 @@ internal sealed class StaticReportRunOptionsJsonConverter : JsonConverter<RunOpt
         EndpointDefinition endpointB = ReadRequired<EndpointDefinition>(root, "endpointB", options);
         TimeSpan timeout = ReadRequired<TimeSpan>(root, "timeout", options);
         int maxConcurrency = ReadRequired<int>(root, "maxConcurrency", options);
-        string modelName = ReadOptionalString(root, "modelName") ?? "Auto";
+        string responseModelName = ReadOptionalString(root, "responseModelName") ?? ReadOptionalString(root, "modelName") ?? "Auto";
         ComparisonOptions? comparison = ReadOptional<ComparisonOptions>(root, "comparison", options);
         RequestExecutionOptions? requestExecution = ReadOptional<RequestExecutionOptions>(root, "requestExecution", options);
-        AlternateContractOptions? alternateContract = ReadOptional<AlternateContractOptions>(root, "alternateContract", options);
+        ContractProfileSelection? contractProfile = ReadOptional<ContractProfileSelection>(root, "contractProfile", options) ?? ReadOptional<ContractProfileSelection>(root, "alternateContract", options);
 
         return new RunOptions(
             requestBatch,
@@ -34,10 +34,10 @@ internal sealed class StaticReportRunOptionsJsonConverter : JsonConverter<RunOpt
             endpointB,
             timeout,
             maxConcurrency,
-            modelName,
+            responseModelName,
             comparison,
             requestExecution,
-            alternateContract);
+            contractProfile);
     }
 
     public override void Write(
@@ -55,13 +55,14 @@ internal sealed class StaticReportRunOptionsJsonConverter : JsonConverter<RunOpt
         writer.WritePropertyName("timeout");
         JsonSerializer.Serialize(writer, value.Timeout, options);
         writer.WriteNumber("maxConcurrency", value.MaxConcurrency);
-        writer.WriteString("modelName", value.ModelName);
+        writer.WriteString("responseModelName", value.ResponseModelName);
+        writer.WriteString("modelName", value.ResponseModelName);
         writer.WritePropertyName("comparison");
         JsonSerializer.Serialize(writer, value.Comparison, options);
         writer.WritePropertyName("requestExecution");
         JsonSerializer.Serialize(writer, value.RequestExecution, options);
-        writer.WritePropertyName("alternateContract");
-        JsonSerializer.Serialize(writer, value.AlternateContract, options);
+        writer.WritePropertyName("contractProfile");
+        JsonSerializer.Serialize(writer, value.ContractProfile, options);
         writer.WriteEndObject();
     }
 

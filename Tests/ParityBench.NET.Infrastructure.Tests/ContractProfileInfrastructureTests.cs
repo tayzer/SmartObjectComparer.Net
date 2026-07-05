@@ -1,64 +1,71 @@
-using System.Text;
+﻿using System.Text;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-using ParityBench.NET.Application.AlternateContracts;
-using ParityBench.NET.Domain.AlternateContracts;
+using ParityBench.NET.Application.ContractProfiles;
+using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Infrastructure;
 
 namespace ParityBench.NET.Infrastructure.Tests;
 
 [TestClass]
-public sealed class AlternateContractInfrastructureTests
+public sealed class ContractProfileInfrastructureTests
 {
     [TestMethod]
     public void Resolve_WhenProfileIsRegistered_ReturnsProfile()
     {
-        AlternateContractProfileRegistry registry = new AlternateContractProfileRegistry();
-        IAlternateContractProfile profile = CreateSampleProfile();
+        ContractProfileRegistry registry = new ContractProfileRegistry();
+        IContractProfile profile = CreateSampleProfile();
         registry.Register(profile);
 
-        IAlternateContractProfile resolved = registry.Resolve(BuiltInAlternateContractProfiles.SampleModelName, BuiltInAlternateContractProfiles.SampleProfileId);
+        IContractProfile resolved = registry.Resolve(
+            BuiltInContractProfiles.SampleModelName,
+            new ContractProfileSelection(BuiltInContractProfiles.SampleProfileId));
 
         Assert.AreSame(profile, resolved);
-        CollectionAssert.AreEqual(new[] { BuiltInAlternateContractProfiles.SampleProfileId }, registry.GetProfileIds(BuiltInAlternateContractProfiles.SampleModelName).ToArray());
+        CollectionAssert.AreEqual(
+            new[] { ContractProfileSelection.SameContractProfileId, BuiltInContractProfiles.SampleProfileId },
+            registry.GetProfileIds(BuiltInContractProfiles.SampleModelName).ToArray());
     }
 
     [TestMethod]
     public void Resolve_WhenProfileIsUnknown_ThrowsInvalidOperationException()
     {
-        AlternateContractProfileRegistry registry = new AlternateContractProfileRegistry();
+        ContractProfileRegistry registry = new ContractProfileRegistry();
 
-        AssertThrows<InvalidOperationException>(() => registry.Resolve("Missing", "profile-a"));
+        AssertThrows<InvalidOperationException>(() => registry.Resolve("Missing", new ContractProfileSelection("profile-a")));
     }
 
     [TestMethod]
     public void Resolve_WhenProfileTargetsDifferentModel_ThrowsInvalidOperationException()
     {
-        AlternateContractProfileRegistry registry = new AlternateContractProfileRegistry();
+        ContractProfileRegistry registry = new ContractProfileRegistry();
         registry.Register(CreateSampleProfile());
 
-        AssertThrows<InvalidOperationException>(() => registry.Resolve("DifferentModel", BuiltInAlternateContractProfiles.SampleProfileId));
+        AssertThrows<InvalidOperationException>(() => registry.Resolve("DifferentModel", new ContractProfileSelection(BuiltInContractProfiles.SampleProfileId)));
     }
 
     [TestMethod]
     public void Register_WhenProfileIdAlreadyExists_ThrowsInvalidOperationException()
     {
-        AlternateContractProfileRegistry registry = new AlternateContractProfileRegistry();
+        ContractProfileRegistry registry = new ContractProfileRegistry();
         registry.Register(CreateSampleProfile());
 
         AssertThrows<InvalidOperationException>(() => registry.Register(CreateSampleProfile()));
     }
 
     [TestMethod]
-    public void Resolve_WhenMultipleProfilesExistForModelWithoutExplicitId_ThrowsInvalidOperationException()
+    public void Resolve_WhenProfileSelectionIsOmitted_ReturnsSameContractProfile()
     {
-        AlternateContractProfileRegistry registry = new AlternateContractProfileRegistry();
+        ContractProfileRegistry registry = new ContractProfileRegistry();
         registry.Register(CreateSimpleProfile("profile-a"));
         registry.Register(CreateSimpleProfile("profile-b"));
 
-        AssertThrows<InvalidOperationException>(() => registry.Resolve("SimpleModel"));
+        IContractProfile profile = registry.Resolve("SimpleModel");
+
+        Assert.AreEqual(ContractProfileSelection.SameContractProfileId, profile.ProfileId);
+        Assert.AreEqual("SimpleModel", profile.ResponseModelName);
     }
 
     [TestMethod]
@@ -108,17 +115,19 @@ public sealed class AlternateContractInfrastructureTests
     }
 
     [TestMethod]
-    public async Task PrepareEndpointBRequestAsync_WhenUsingSampleProfile_ProducesAlternateJsonRequest()
+    public async Task PrepareRequestAsync_WhenUsingSampleProfile_ProducesEndpointBJsonRequest()
     {
-        IAlternateContractProfile profile = CreateSampleProfile();
+        IContractProfile profile = CreateSampleProfile();
         byte[] requestBody = Encoding.UTF8.GetBytes(
             "<Envelope><Body><CustomerLookupRequest><CustomerId>123</CustomerId><SensitiveToken>tok</SensitiveToken></CustomerLookupRequest></Body></Envelope>");
 
-        PreparedAlternateContractRequest prepared = await profile.PrepareEndpointBRequestAsync(
-            new AlternateContractRequestPreparationContext(
+        PreparedContractRequest prepared = await profile.PrepareRequestAsync(
+            EndpointSlot.B,
+            new ContractRequestPreparationContext(
                 new RequestItem("one.xml", "application/xml", requestBody.Length),
                 token => OpenBytesAsync(requestBody, token),
-                PayloadFormat.Xml));
+                PayloadFormat.Xml,
+                "application/xml"));
 
         string json = await ReadPayloadAsStringAsync(prepared.Body);
         Assert.AreEqual("application/json", prepared.ContentType);
@@ -127,14 +136,15 @@ public sealed class AlternateContractInfrastructureTests
     }
 
     [TestMethod]
-    public async Task NormalizeEndpointBResponseAsync_WhenUsingSampleProfile_ProducesCanonicalXmlResponse()
+    public async Task NormalizeResponseAsync_WhenUsingSampleProfile_ProducesCanonicalXmlResponse()
     {
-        IAlternateContractProfile profile = CreateSampleProfile();
+        IContractProfile profile = CreateSampleProfile();
         byte[] responseBody = Encoding.UTF8.GetBytes(
             "{\"statusCode\":\"OK\",\"customerName\":\"Ada\",\"payload\":{\"raw_token\":\"tok\"}}");
 
-        NormalizedAlternateContractResponse normalized = await profile.NormalizeEndpointBResponseAsync(
-            new AlternateContractResponseNormalizationContext(
+        NormalizedContractResponse normalized = await profile.NormalizeResponseAsync(
+            EndpointSlot.B,
+            new ContractResponseNormalizationContext(
                 new RequestItem("one.xml", "application/xml", 1),
                 EndpointSlot.B,
                 token => OpenBytesAsync(responseBody, token),
@@ -148,26 +158,28 @@ public sealed class AlternateContractInfrastructureTests
     }
 
     [TestMethod]
-    public async Task PrepareEndpointBRequestAsync_WhenUsingExpectedProfile_AddsAuthorizationHeader()
+    public async Task PrepareRequestAsync_WhenUsingExpectedProfile_AddsAuthorizationHeader()
     {
         JsonXmlContractPayloadSerializer serializer = new JsonXmlContractPayloadSerializer();
-        IAlternateContractProfile profile = BuiltInAlternateContractProfiles.CreateExpectedJsonCustomerLookup(
+        IContractProfile profile = BuiltInContractProfiles.CreateExpectedJsonCustomerLookup(
             serializer,
             new FixedTokenProvider("auth-token"));
         byte[] requestBody = Encoding.UTF8.GetBytes(
             "<Envelope><Body><CustomerLookupRequest><CustomerId>123</CustomerId><AuthenticationToken>seed</AuthenticationToken></CustomerLookupRequest></Body></Envelope>");
 
-        PreparedAlternateContractRequest prepared = await profile.PrepareEndpointBRequestAsync(
-            new AlternateContractRequestPreparationContext(
+        PreparedContractRequest prepared = await profile.PrepareRequestAsync(
+            EndpointSlot.B,
+            new ContractRequestPreparationContext(
                 new RequestItem("one.xml", "application/xml", requestBody.Length),
                 token => OpenBytesAsync(requestBody, token),
-                PayloadFormat.Xml));
+                PayloadFormat.Xml,
+                "application/xml"));
 
         await prepared.Body.DisposeAsync();
         Assert.AreEqual("auth-token", prepared.Headers?["AuthorizationToken"]);
         Assert.AreEqual("SourceSystem", profile.DefaultIgnoreRules[0].PropertyPath);
-        Assert.AreEqual("customer-lookup/soap", profile.SuggestedEndpointAId);
-        Assert.AreEqual("customer-lookup/json", profile.SuggestedEndpointBId);
+        Assert.AreEqual("customer-lookup/soap", profile.EndpointA.SuggestedEndpointId);
+        Assert.AreEqual("customer-lookup/json", profile.EndpointB.SuggestedEndpointId);
     }
 
     [TestMethod]
@@ -176,7 +188,7 @@ public sealed class AlternateContractInfrastructureTests
         string tempRoot = Path.Combine(Path.GetTempPath(), $"paritybench-test-{Guid.NewGuid():N}");
         try
         {
-            FileBackedContractPayloadFactory factory = new FileBackedContractPayloadFactory(tempRoot);
+            ContractPayloadFactory factory = new ContractPayloadFactory(tempRoot);
             ContractPayload payload = await factory.CreateAsync(
                 PayloadFormat.Json,
                 "application/json",
@@ -200,11 +212,11 @@ public sealed class AlternateContractInfrastructureTests
         }
     }
 
-    private static IAlternateContractProfile CreateSampleProfile() =>
-        BuiltInAlternateContractProfiles.CreateSampleSoapToJson(new JsonXmlContractPayloadSerializer());
+    private static IContractProfile CreateSampleProfile() =>
+        BuiltInContractProfiles.CreateSampleSoapToJson(new JsonXmlContractPayloadSerializer());
 
-    private static IAlternateContractProfile CreateSimpleProfile(string profileId) =>
-        new AlternateContractProfile<
+    private static IContractProfile CreateSimpleProfile(string profileId) =>
+        new ContractProfile<
             SampleSoapCustomerLookupRequestEnvelope,
             SampleAlternateJsonCustomerLookupRequest,
             SampleSoapCustomerLookupResponseEnvelope,

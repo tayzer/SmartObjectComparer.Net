@@ -1,10 +1,11 @@
-namespace ParityBench.NET.Cli;
+﻿namespace ParityBench.NET.Cli;
 
 public sealed record RequestCommandOptions(
     string RequestDirectory,
     Uri EndpointA,
     Uri EndpointB,
     string ModelName,
+    string? ContractProfileId,
     int MaxConcurrency,
     TimeSpan Timeout,
     string? ContentTypeOverride,

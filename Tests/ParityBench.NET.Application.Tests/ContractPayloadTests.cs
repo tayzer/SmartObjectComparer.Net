@@ -1,9 +1,9 @@
-using System.Text;
+﻿using System.Text;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-using ParityBench.NET.Application.AlternateContracts;
-using ParityBench.NET.Domain.AlternateContracts;
+using ParityBench.NET.Application.ContractProfiles;
+using ParityBench.NET.Domain.ContractProfiles;
 
 namespace ParityBench.NET.Application.Tests;
 

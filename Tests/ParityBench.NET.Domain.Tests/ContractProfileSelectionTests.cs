@@ -1,22 +1,22 @@
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-using ParityBench.NET.Domain.AlternateContracts;
+using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
 
 namespace ParityBench.NET.Domain.Tests;
 
 [TestClass]
-public sealed class AlternateContractOptionsTests
+public sealed class ContractProfileSelectionTests
 {
     [TestMethod]
     public void Create_WhenProfileIdIsEmpty_ThrowsArgumentException()
     {
-        AssertThrows<ArgumentException>(() => new AlternateContractOptions(" "));
+        AssertThrows<ArgumentException>(() => new ContractProfileSelection(" "));
     }
 
     [TestMethod]
-    public void Create_WhenRunOptionsIncludeAlternateContract_StoresProfileSelection()
+    public void Create_WhenRunOptionsIncludeContractProfile_StoresProfileSelection()
     {
         RunOptions options = new RunOptions(
             new RequestBatchReference("batch-1"),
@@ -24,9 +24,9 @@ public sealed class AlternateContractOptionsTests
             new EndpointDefinition(new Uri("https://service-b.example.test")),
             TimeSpan.FromSeconds(30),
             2,
-            alternateContractOptions: new AlternateContractOptions("profile-a"));
+            contractProfileSelection: new ContractProfileSelection("profile-a"));
 
-        Assert.AreEqual("profile-a", options.AlternateContract?.ProfileId);
+        Assert.AreEqual("profile-a", options.ContractProfile?.ProfileId);
     }
 
     private static void AssertThrows<TException>(Action action)

@@ -1,4 +1,4 @@
-using ParityBench.NET.Application.Requests;
+﻿using ParityBench.NET.Application.Requests;
 
 namespace ParityBench.NET.Infrastructure;
 
@@ -8,7 +8,8 @@ public static class BuiltInResponseModelRegistration
     {
         ArgumentNullException.ThrowIfNull(registry);
 
-        registry.Register<SampleSoapCustomerLookupResponseEnvelope>(BuiltInAlternateContractProfiles.SampleModelName);
-        registry.Register<ExpectedJsonCustomerLookupResponse>(BuiltInAlternateContractProfiles.ExpectedJsonCustomerLookupModelName);
+        registry.Register<SampleSoapCustomerLookupResponseEnvelope>(BuiltInContractProfiles.SampleModelName);
+        registry.Register<ExpectedJsonCustomerLookupResponse>(BuiltInContractProfiles.ExpectedJsonCustomerLookupModelName);
     }
 }
+

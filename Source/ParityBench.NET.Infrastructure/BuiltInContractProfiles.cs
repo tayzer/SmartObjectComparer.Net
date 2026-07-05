@@ -1,22 +1,22 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 using System.Xml.Serialization;
 
-using ParityBench.NET.Application.AlternateContracts;
-using ParityBench.NET.Domain.AlternateContracts;
+using ParityBench.NET.Application.ContractProfiles;
+using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 
 namespace ParityBench.NET.Infrastructure;
 
-public static class BuiltInAlternateContractProfiles
+public static class BuiltInContractProfiles
 {
     public const string SampleModelName = "SampleSoapCustomerLookupResponseEnvelope";
     public const string SampleProfileId = "sample-soap-to-json";
     public const string ExpectedJsonCustomerLookupModelName = "ExpectedJsonCustomerLookupResponse";
     public const string ExpectedJsonCustomerLookupProfileId = "expected-json-customer-lookup";
 
-    public static IAlternateContractProfile CreateSampleSoapToJson(IContractPayloadSerializer serializer) =>
-        new AlternateContractProfile<
+    public static IContractProfile CreateSampleSoapToJson(IContractPayloadSerializer serializer) =>
+        new ContractProfile<
             SampleSoapCustomerLookupRequestEnvelope,
             SampleAlternateJsonCustomerLookupRequest,
             SampleSoapCustomerLookupResponseEnvelope,
@@ -42,23 +42,23 @@ public static class BuiltInAlternateContractProfiles
                 },
             },
             supportedSourceRequestFormats: new[] { PayloadFormat.Xml },
-            alternateRequestFormat: PayloadFormat.Json,
-            alternateRequestContentType: "application/json",
-            alternateResponseFormat: PayloadFormat.Json,
+            endpointBRequestFormat: PayloadFormat.Json,
+            endpointBRequestContentType: "application/json",
+            endpointBResponseFormat: PayloadFormat.Json,
             canonicalResponseFormat: PayloadFormat.Xml,
             canonicalResponseContentType: "application/xml",
-            canonicalToAlternateResponseMaskPathMap: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            canonicalToEndpointResponseMaskPathMap: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["Envelope.Body.CustomerLookupResponse.SensitiveToken"] = "payload.raw_token",
             });
 
-    public static IAlternateContractProfile CreateExpectedJsonCustomerLookup(
+    public static IContractProfile CreateExpectedJsonCustomerLookup(
         IContractPayloadSerializer serializer,
         IExpectedJsonCustomerLookupAuthorizationTokenProvider tokenProvider)
     {
-        FileBackedContractPayloadFactory payloadFactory = new FileBackedContractPayloadFactory();
+        ContractPayloadFactory payloadFactory = new ContractPayloadFactory();
 
-        return new AlternateContractProfile<
+        return new ContractProfile<
             ExpectedJsonCustomerLookupSoapRequestEnvelope,
             ExpectedJsonCustomerLookupAlternateRequest,
             ExpectedJsonCustomerLookupResponse,
@@ -78,9 +78,9 @@ public static class BuiltInAlternateContractProfiles
                 SourceSystem = response.SourceSystem,
             },
             supportedSourceRequestFormats: new[] { PayloadFormat.Xml },
-            alternateRequestFormat: PayloadFormat.Json,
-            alternateRequestContentType: "application/json",
-            alternateResponseFormat: PayloadFormat.Json,
+            endpointBRequestFormat: PayloadFormat.Json,
+            endpointBRequestContentType: "application/json",
+            endpointBResponseFormat: PayloadFormat.Json,
             canonicalResponseFormat: PayloadFormat.Json,
             canonicalResponseContentType: "application/json",
             suggestedEndpointAId: "customer-lookup/soap",
@@ -92,15 +92,15 @@ public static class BuiltInAlternateContractProfiles
                     .GetAuthorizationTokensAsync(
                         new ExpectedJsonCustomerLookupAuthorizationTokenRequest
                         {
-                            CustomerId = context.CanonicalRequest.Body.CustomerLookupRequest.CustomerId,
-                            AuthenticationToken = context.CanonicalRequest.Body.CustomerLookupRequest.AuthenticationToken,
+                            CustomerId = context.SourceRequest.Body.CustomerLookupRequest.CustomerId,
+                            AuthenticationToken = context.SourceRequest.Body.CustomerLookupRequest.AuthenticationToken,
                         },
                         cancellationToken)
                     .ConfigureAwait(false);
 
                 ExpectedJsonCustomerLookupAlternateRequest alternateRequest = new ExpectedJsonCustomerLookupAlternateRequest
                 {
-                    LookupId = context.CanonicalRequest.Body.CustomerLookupRequest.CustomerId,
+                    LookupId = context.SourceRequest.Body.CustomerLookupRequest.CustomerId,
                 };
                 ContractPayload body = await payloadFactory
                     .CreateAsync(
@@ -115,7 +115,7 @@ public static class BuiltInAlternateContractProfiles
                         cancellationToken)
                     .ConfigureAwait(false);
 
-                return new PreparedAlternateContractRequest(
+                return new PreparedContractRequest(
                     body,
                     ExpectedJsonCustomerLookupProfileId,
                     new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -159,7 +159,7 @@ public static class BuiltInAlternateContractProfiles
                         cancellationToken)
                     .ConfigureAwait(false);
 
-                return new NormalizedAlternateContractResponse(
+                return new NormalizedContractResponse(
                     body,
                     ExpectedJsonCustomerLookupProfileId);
             },
@@ -330,4 +330,6 @@ public sealed class ExpectedJsonCustomerLookupSoapResponse
 
     public string TraceId { get; set; } = string.Empty;
 }
+
+
 

@@ -1,4 +1,4 @@
-using ParityBench.NET.Application.Reports;
+﻿using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Runs;
 using ParityBench.NET.Domain.Runs;
@@ -52,7 +52,7 @@ public sealed class RequestComparisonWorkflowService : IRequestComparisonWorkflo
             request.ModelName,
             request.ComparisonOptions,
             request.RequestExecutionOptions,
-            request.AlternateContractOptions);
+            request.ContractProfileSelection);
 
         return await runUseCases
             .CreateRunAsync(runOptions, cancellationToken)
@@ -109,3 +109,4 @@ public sealed class RequestComparisonWorkflowService : IRequestComparisonWorkflo
         return headers;
     }
 }
+

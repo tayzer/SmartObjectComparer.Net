@@ -1,8 +1,8 @@
-using ParityBench.NET.Domain.AlternateContracts;
+using ParityBench.NET.Domain.ContractProfiles;
 
-namespace ParityBench.NET.Application.AlternateContracts;
+namespace ParityBench.NET.Application.ContractProfiles;
 
-public sealed record PreparedAlternateContractRequest(
+public sealed record PreparedContractRequest(
     ContractPayload Body,
     string ProfileId,
     IReadOnlyDictionary<string, string>? Headers = null)

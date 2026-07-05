@@ -1,10 +1,10 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 
-using ParityBench.NET.Application.AlternateContracts;
+using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Runs;
-using ParityBench.NET.Domain.AlternateContracts;
+using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
@@ -18,7 +18,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
     private readonly IRunArtifactStore runArtifactStore;
     private readonly IRunDetailStore runDetailStore;
     private readonly IResponseComparer responseComparer;
-    private readonly IAlternateContractProfileRegistry? alternateContractProfileRegistry;
+    private readonly IContractProfileRegistry? contractProfileRegistry;
 
     public BasicComparisonRunExecutor(
         IRequestBatchStore requestBatchStore,
@@ -56,7 +56,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         IRunArtifactStore runArtifactStore,
         IRunDetailStore runDetailStore,
         IResponseComparer responseComparer,
-        IAlternateContractProfileRegistry? alternateContractProfileRegistry)
+        IContractProfileRegistry? contractProfileRegistry)
     {
         this.requestBatchStore = requestBatchStore;
         this.endpointRequestSender = endpointRequestSender;
@@ -65,7 +65,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         this.responseComparer = responseComparer is RawTextResponseComparer
             ? responseComparer
             : new RawTextResponseComparer(runArtifactStore, responseComparer);
-        this.alternateContractProfileRegistry = alternateContractProfileRegistry;
+        this.contractProfileRegistry = contractProfileRegistry;
     }
 
     public async Task<RunResultSummary> ExecuteAsync(
@@ -77,10 +77,10 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         ArgumentNullException.ThrowIfNull(progressReporter);
 
         Stopwatch totalStopwatch = Stopwatch.StartNew();
-        IAlternateContractProfile? alternateContractProfile = ResolveAlternateContractProfile(run.Options);
-        RunOptions comparisonOptions = alternateContractProfile is null
+        IContractProfile? contractProfile = ResolveContractProfile(run.Options);
+        RunOptions comparisonOptions = contractProfile is null
             ? run.Options
-            : CreateRunOptionsWithProfileDefaults(run.Options, alternateContractProfile);
+            : CreateRunOptionsWithProfileDefaults(run.Options, contractProfile);
 
         await progressReporter
             .ReportAsync(RunStatus.Parsing, new RunProgress(5, "Loading request batch."), cancellationToken)
@@ -107,7 +107,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         Stopwatch requestExecutionStopwatch = Stopwatch.StartNew();
         await Parallel.ForEachAsync(manifest.Requests, parallelOptions, async (request, token) =>
         {
-            RequestPairResult result = await ExecutePairAsync(run, comparisonOptions, request, alternateContractProfile, counters, token).ConfigureAwait(false);
+            RequestPairResult result = await ExecutePairAsync(run, comparisonOptions, request, contractProfile, counters, token).ConfigureAwait(false);
             results.Add(result);
 
             int completed = Interlocked.Increment(ref completedRequests);
@@ -160,25 +160,25 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         ComparisonRun run,
         RunOptions comparisonOptions,
         RequestItem request,
-        IAlternateContractProfile? alternateContractProfile,
+        IContractProfile? contractProfile,
         RunExecutionCounters counters,
         CancellationToken cancellationToken)
     {
-        Task<EndpointExecutionResult> endpointATask = ExecuteEndpointAsync(run, request, EndpointSlot.A, alternateContractProfile, counters, cancellationToken);
-        Task<EndpointExecutionResult> endpointBTask = ExecuteEndpointAsync(run, request, EndpointSlot.B, alternateContractProfile, counters, cancellationToken);
+        Task<EndpointExecutionResult> endpointATask = ExecuteEndpointAsync(run, request, EndpointSlot.A, contractProfile, counters, cancellationToken);
+        Task<EndpointExecutionResult> endpointBTask = ExecuteEndpointAsync(run, request, EndpointSlot.B, contractProfile, counters, cancellationToken);
 
         await Task.WhenAll(endpointATask, endpointBTask).ConfigureAwait(false);
 
         EndpointExecutionResult endpointA = await endpointATask.ConfigureAwait(false);
         EndpointExecutionResult endpointB = await endpointBTask.ConfigureAwait(false);
 
-        if (alternateContractProfile is not null)
+        if (contractProfile is not null)
         {
-            return await CompleteAlternateContractPairAsync(
+            return await CompleteContractProfilePairAsync(
                 run,
                 comparisonOptions,
                 request,
-                alternateContractProfile,
+                contractProfile,
                 endpointA,
                 endpointB,
                 counters,
@@ -201,7 +201,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         ComparisonRun run,
         RequestItem request,
         EndpointSlot endpoint,
-        IAlternateContractProfile? alternateContractProfile,
+        IContractProfile? contractProfile,
         RunExecutionCounters counters,
         CancellationToken cancellationToken)
     {
@@ -211,8 +211,8 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                 ? run.Options.EndpointA
                 : run.Options.EndpointB;
 
-            PreparedRequest preparedRequest = endpoint == EndpointSlot.B && alternateContractProfile is not null
-                ? await PrepareAlternateEndpointBRequestAsync(run, request, endpointDefinition, alternateContractProfile, cancellationToken).ConfigureAwait(false)
+            PreparedRequest preparedRequest = contractProfile is not null
+                ? await PrepareContractRequestAsync(run, request, endpoint, endpointDefinition, contractProfile, cancellationToken).ConfigureAwait(false)
                 : await PrepareRegularRequestAsync(run, request, endpoint, endpointDefinition, cancellationToken).ConfigureAwait(false);
 
             await using (preparedRequest)
@@ -258,11 +258,11 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             return EndpointExecutionResult.Failure(endpoint, ex.Message);
         }
     }
-    private async Task<RequestPairResult> CompleteAlternateContractPairAsync(
+    private async Task<RequestPairResult> CompleteContractProfilePairAsync(
         ComparisonRun run,
         RunOptions comparisonOptions,
         RequestItem request,
-        IAlternateContractProfile profile,
+        IContractProfile profile,
         EndpointExecutionResult endpointA,
         EndpointExecutionResult endpointB,
         RunExecutionCounters counters,
@@ -337,21 +337,22 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             MergeHeaders(endpointDefinition.Headers, request.Headers, request.GetHeaders(endpoint)));
     }
 
-    private async Task<PreparedRequest> PrepareAlternateEndpointBRequestAsync(
+    private async Task<PreparedRequest> PrepareContractRequestAsync(
         ComparisonRun run,
         RequestItem request,
+        EndpointSlot endpoint,
         EndpointDefinition endpointDefinition,
-        IAlternateContractProfile profile,
+        IContractProfile profile,
         CancellationToken cancellationToken)
     {
         PayloadFormat sourceFormat = DetectPayloadFormat(request.ContentType, request.RelativePath)
             ?? throw new InvalidOperationException(
-                $"Request '{request.RelativePath}' does not have a supported serialization format for alternate contract processing.");
+                $"Request '{request.RelativePath}' does not have a supported serialization format for contract profile processing.");
 
-        if (!profile.SupportedSourceRequestFormats.Contains(sourceFormat))
+        if (!profile.EndpointA.SupportedSourceRequestFormats.Contains(sourceFormat))
         {
             throw new InvalidOperationException(
-                $"Alternate contract profile '{profile.ProfileId}' does not support source request format '{sourceFormat}' for request '{request.RelativePath}'.");
+                $"Contract profile '{profile.ProfileId}' does not support source request format '{sourceFormat}' for request '{request.RelativePath}'.");
         }
 
         async ValueTask<Stream> OpenSourceRequestBodyAsync(CancellationToken token) =>
@@ -359,13 +360,15 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                 .OpenRequestBodyAsync(run.Options.RequestBatch, request, token)
                 .ConfigureAwait(false);
 
-        PreparedAlternateContractRequest prepared = await profile
-            .PrepareEndpointBRequestAsync(
-                new AlternateContractRequestPreparationContext(request, OpenSourceRequestBodyAsync, sourceFormat),
+        string sourceContentType = run.Options.RequestExecution.ContentTypeOverride ?? request.ContentType;
+        PreparedContractRequest prepared = await profile
+            .PrepareRequestAsync(
+                endpoint,
+                new ContractRequestPreparationContext(request, OpenSourceRequestBodyAsync, sourceFormat, sourceContentType),
                 cancellationToken)
             .ConfigureAwait(false);
 
-        Dictionary<string, string> headers = MergeHeaders(endpointDefinition.Headers, request.Headers, request.GetHeaders(EndpointSlot.B));
+        Dictionary<string, string> headers = MergeHeaders(endpointDefinition.Headers, request.Headers, request.GetHeaders(endpoint));
         if (prepared.Headers is not null)
         {
             foreach (KeyValuePair<string, string> header in prepared.Headers)
@@ -374,8 +377,6 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             }
         }
 
-        headers.Remove("SOAPAction");
-
         Stream preparedBody = await prepared.Body.OpenReadAsync(cancellationToken).ConfigureAwait(false);
         return new PreparedRequest(
             preparedBody,
@@ -383,10 +384,11 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             headers,
             prepared.Body);
     }
+
     private async Task<ResponseArtifactMetadata> NormalizeAndPersistResponseAsync(
         ComparisonRun run,
         RequestItem request,
-        IAlternateContractProfile profile,
+        IContractProfile profile,
         EndpointExecutionResult endpointResult,
         IReadOnlyList<MaskRuleDefinition> maskRules,
         RunExecutionCounters counters,
@@ -398,7 +400,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         }
 
         PayloadFormat sourceFormat = endpointResult.Endpoint == EndpointSlot.B
-            ? profile.AlternateResponseFormat
+            ? profile.EndpointB.ResponseFormat
             : DetectPayloadFormat(endpointResult.ContentType, request.RelativePath) ?? profile.CanonicalResponseFormat;
 
         async ValueTask<Stream> OpenSourceResponseBodyAsync(CancellationToken token) =>
@@ -406,23 +408,24 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                 .OpenReadAsync(endpointResult.Metadata.Artifact, token)
                 .ConfigureAwait(false);
 
-        AlternateContractResponseNormalizationContext context = new AlternateContractResponseNormalizationContext(
+        ContractResponseNormalizationContext context = new ContractResponseNormalizationContext(
             request,
             endpointResult.Endpoint,
             OpenSourceResponseBodyAsync,
             endpointResult.ContentType,
             sourceFormat);
 
-        NormalizedAlternateContractResponse normalized = endpointResult.Endpoint == EndpointSlot.A
-            ? await profile.NormalizeEndpointAResponseAsync(context, cancellationToken).ConfigureAwait(false)
-            : await profile.NormalizeEndpointBResponseAsync(context, cancellationToken).ConfigureAwait(false);
+        NormalizedContractResponse normalized = await profile
+            .NormalizeResponseAsync(endpointResult.Endpoint, context, cancellationToken)
+            .ConfigureAwait(false);
 
         await using ContractPayload normalizedPayload = normalized.Body;
         await using Stream normalizedStream = await normalizedPayload.OpenReadAsync(cancellationToken).ConfigureAwait(false);
+        RequestItem canonicalArtifactRequest = CreateCanonicalArtifactRequest(request, endpointResult.Endpoint, normalizedPayload.ContentType);
         return await PersistResponseAsync(
             run.Id,
             endpointResult.Endpoint,
-            request,
+            canonicalArtifactRequest,
             endpointResult.StatusCode ?? 0,
             normalizedPayload.ContentType,
             normalizedStream,
@@ -461,24 +464,36 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         counters.AddResponseBytes(metadata.ContentLength);
         return metadata;
     }
-    private IAlternateContractProfile? ResolveAlternateContractProfile(RunOptions options)
+
+    private static RequestItem CreateCanonicalArtifactRequest(
+        RequestItem request,
+        EndpointSlot endpoint,
+        string contentType) =>
+        new RequestItem(
+            $"canonical/{endpoint}/{request.RelativePath}",
+            contentType,
+            request.ContentLength,
+            request.Headers,
+            request.HeadersA,
+            request.HeadersB);
+    private IContractProfile? ResolveContractProfile(RunOptions options)
     {
-        if (options.AlternateContract is null)
+        if (contractProfileRegistry is null)
         {
-            return null;
+            if (options.ContractProfile is null)
+            {
+                return null;
+            }
+
+            throw new InvalidOperationException("A contract profile registry is required when contract profile options are configured.");
         }
 
-        if (alternateContractProfileRegistry is null)
-        {
-            throw new InvalidOperationException("An alternate contract profile registry is required when alternate contract options are configured.");
-        }
-
-        return alternateContractProfileRegistry.Resolve(options.ModelName, options.AlternateContract.ProfileId);
+        return contractProfileRegistry.Resolve(options.ResponseModelName, options.ContractProfile);
     }
 
     private static RunOptions CreateRunOptionsWithProfileDefaults(
         RunOptions options,
-        IAlternateContractProfile profile)
+        IContractProfile profile)
     {
         ComparisonOptions current = options.Comparison;
         ComparisonOptions comparisonOptions = new ComparisonOptions(
@@ -498,10 +513,10 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             options.EndpointB,
             options.Timeout,
             options.MaxConcurrency,
-            options.ModelName,
+            options.ResponseModelName,
             comparisonOptions,
             options.RequestExecution,
-            options.AlternateContract);
+            options.ContractProfile);
     }
 
     private int CalculateExecutionPercent(int completedRequests, int totalRequests)

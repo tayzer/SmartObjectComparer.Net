@@ -1,8 +1,12 @@
-# V2 Contract Profiles Design Specification
+﻿# V2 Contract Profiles Design Specification
 
 ## Status
 
-Proposed replacement design.
+Foundation implemented.
+
+The first contract-profile implementation slice has replaced active V2 alternate-contract run configuration with `ContractProfileSelection`, `RunOptions.ResponseModelName`, `IContractProfile`, and `IContractProfileRegistry`. The current executable implementation includes the built-in `same-contract` fallback profile, ports the existing SOAP-to-JSON examples as built-in contract profiles, persists native raw artifacts separately from canonical artifacts, and wires explicit profile selection through V2 Web, Desktop, CLI, Workspaces, Engine, and shared UI.
+
+The broader design below still describes the target state. Profile JSON loading, declarative mappings, secret/auth stage chaining, external rule-set files, plugin loading, and richer profile selectors remain future slices.
 
 This specification replaces the V2 alternate-contract concept with a general contract-profile pipeline. It is not backwards compatible with `AlternateContractOptions`, `IAlternateContractProfile`, or existing alternate-contract profile registration. Existing V2 alternate-contract examples should be rebuilt as contract profiles rather than adapted through compatibility shims.
 

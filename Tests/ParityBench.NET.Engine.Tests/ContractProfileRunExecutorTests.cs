@@ -1,12 +1,12 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-using ParityBench.NET.Application.AlternateContracts;
+using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Runs;
-using ParityBench.NET.Domain.AlternateContracts;
+using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Results;
@@ -17,10 +17,10 @@ using ParityBench.NET.Infrastructure;
 namespace ParityBench.NET.Engine.Tests;
 
 [TestClass]
-public sealed class AlternateContractRunExecutorTests
+public sealed class ContractProfileRunExecutorTests
 {
     [TestMethod]
-    public async Task ExecuteAsync_WhenAlternateProfileIsConfigured_TransformsEndpointBRequestAndSuppressesSoapAction()
+    public async Task ExecuteAsync_WhenContractProfileIsConfigured_TransformsEndpointBRequestAndAppliesProfileHeaders()
     {
         RequestItem request = new RequestItem(
             "one.xml",
@@ -32,7 +32,7 @@ public sealed class AlternateContractRunExecutorTests
         BasicComparisonRunExecutor executor = CreateExecutor(
             CreateManifest(request),
             sender,
-            new FakeAlternateContractProfile());
+            new FakeContractProfile());
 
         RunResultSummary summary = await executor.ExecuteAsync(CreateRun(), new CapturingProgressReporter());
 
@@ -40,7 +40,7 @@ public sealed class AlternateContractRunExecutorTests
         CapturedRequest endpointBRequest = sender.CapturedRequests.Single(sent => sent.Endpoint == EndpointSlot.B);
         Assert.AreEqual(1, summary.EqualPairs);
         Assert.AreEqual("urn:common", endpointARequest.Headers["SOAPAction"]);
-        Assert.IsFalse(endpointBRequest.Headers.ContainsKey("SOAPAction"));
+        Assert.AreEqual("urn:profile", endpointBRequest.Headers["SOAPAction"]);
         Assert.AreEqual("application/vnd.alt+json", endpointBRequest.ContentType);
         Assert.AreEqual("alternate-request", endpointBRequest.Body);
         Assert.AreEqual("profile", endpointBRequest.Headers["X-Override"]);
@@ -54,7 +54,7 @@ public sealed class AlternateContractRunExecutorTests
         BasicComparisonRunExecutor executor = CreateExecutor(
             CreateManifest(request),
             new CapturingEndpointRequestSender(_ => "<ok />"),
-            new FakeAlternateContractProfile());
+            new FakeContractProfile());
 
         RunResultSummary summary = await executor.ExecuteAsync(CreateRun(), new CapturingProgressReporter());
 
@@ -75,7 +75,7 @@ public sealed class AlternateContractRunExecutorTests
         Assert.AreEqual(1, summary.ErrorPairs);
     }
     [TestMethod]
-    public async Task ExecuteAsync_WhenAlternateContractUsesLargeResponses_PersistsRawArtifactsBeforeNormalization()
+    public async Task ExecuteAsync_WhenContractProfileUsesLargeResponses_PersistsRawArtifactsBeforeNormalization()
     {
         RequestItem request = new RequestItem("one.xml", "application/xml", 10);
         InMemoryArtifactStore artifactStore = new InMemoryArtifactStore();
@@ -107,10 +107,10 @@ public sealed class AlternateContractRunExecutorTests
         RequestItem request = new RequestItem("one.xml", "application/xml", 10);
         InMemoryArtifactStore artifactStore = new InMemoryArtifactStore();
         IContractPayloadSerializer serializer = new JsonXmlContractPayloadSerializer();
-        IAlternateContractProfile sampleProfile = BuiltInAlternateContractProfiles.CreateSampleSoapToJson(serializer);
-        AlternateContractProfileRegistry registry = CreateRegistry(sampleProfile);
+        IContractProfile sampleProfile = BuiltInContractProfiles.CreateSampleSoapToJson(serializer);
+        ContractProfileRegistry registry = CreateRegistry(sampleProfile);
         ResponseModelRegistry modelRegistry = new ResponseModelRegistry();
-        modelRegistry.Register<SampleSoapCustomerLookupResponseEnvelope>(BuiltInAlternateContractProfiles.SampleModelName);
+        modelRegistry.Register<SampleSoapCustomerLookupResponseEnvelope>(BuiltInContractProfiles.SampleModelName);
         CompareNetObjectsResponseComparer comparer = new CompareNetObjectsResponseComparer(
             artifactStore,
             new JsonXmlResponseBodyDeserializer(modelRegistry));
@@ -126,17 +126,19 @@ public sealed class AlternateContractRunExecutorTests
             comparer,
             registry);
 
-        RunResultSummary summary = await executor.ExecuteAsync(CreateRun(BuiltInAlternateContractProfiles.SampleModelName, BuiltInAlternateContractProfiles.SampleProfileId), new CapturingProgressReporter());
+        RunResultSummary summary = await executor.ExecuteAsync(CreateRun(BuiltInContractProfiles.SampleModelName, BuiltInContractProfiles.SampleProfileId), new CapturingProgressReporter());
 
         Assert.AreEqual(1, summary.EqualPairs);
-        Assert.IsTrue(artifactStore.SavedBodies.Values.All(body => body.Contains("<Envelope", StringComparison.Ordinal)));
+        Assert.IsTrue(artifactStore.SavedBodies
+            .Where(pair => pair.Key.Contains("/canonical/", StringComparison.OrdinalIgnoreCase))
+            .All(pair => pair.Value.Contains("<Envelope", StringComparison.Ordinal)));
         Assert.IsTrue(sender.CapturedRequests.Single(sent => sent.Endpoint == EndpointSlot.B).Body.Contains("\"lookupId\":\"123\"", StringComparison.Ordinal));
     }
 
     private static BasicComparisonRunExecutor CreateExecutor(
         RequestBatchManifest manifest,
         CapturingEndpointRequestSender sender,
-        IAlternateContractProfile profile)
+        IContractProfile profile)
     {
         InMemoryArtifactStore artifactStore = new InMemoryArtifactStore();
         return new BasicComparisonRunExecutor(
@@ -148,9 +150,9 @@ public sealed class AlternateContractRunExecutorTests
             CreateRegistry(profile));
     }
 
-    private static AlternateContractProfileRegistry CreateRegistry(IAlternateContractProfile profile)
+    private static ContractProfileRegistry CreateRegistry(IContractProfile profile)
     {
-        AlternateContractProfileRegistry registry = new AlternateContractProfileRegistry();
+        ContractProfileRegistry registry = new ContractProfileRegistry();
         registry.Register(profile);
         return registry;
     }
@@ -170,93 +172,109 @@ public sealed class AlternateContractRunExecutorTests
                 TimeSpan.FromSeconds(30),
                 2,
                 modelName,
-                alternateContractOptions: new AlternateContractOptions(profileId)))
+                contractProfileSelection: new ContractProfileSelection(profileId)))
             .Start();
 
     private static string ToSha256(byte[] content) =>
         Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
 
-    private class FakeAlternateContractProfile : IAlternateContractProfile
+    private class FakeContractProfile : IContractProfile
     {
         public string ProfileId => "profile-a";
 
-        public string CanonicalModelName => "CanonicalModel";
+        public string ResponseModelName => "CanonicalModel";
 
-        public Type CanonicalRequestType => typeof(object);
+        public string? ProfileVersion => "1";
 
-        public Type AlternateRequestType => typeof(object);
+        public Type EndpointARequestType => typeof(object);
+
+        public Type EndpointBRequestType => typeof(object);
 
         public Type CanonicalResponseType => typeof(object);
 
-        public Type AlternateResponseType => typeof(object);
+        public Type EndpointBResponseType => typeof(object);
 
-        public IReadOnlyCollection<PayloadFormat> SupportedSourceRequestFormats => new[] { PayloadFormat.Xml };
+        public ContractEndpointProfile EndpointA => new ContractEndpointProfile(PayloadFormat.Xml, "application/xml", PayloadFormat.Xml, supportedSourceRequestFormats: new[] { PayloadFormat.Xml });
 
-        public PayloadFormat AlternateRequestFormat => PayloadFormat.Json;
-
-        public string AlternateRequestContentType => "application/vnd.alt+json";
-
-        public PayloadFormat AlternateResponseFormat => PayloadFormat.Json;
+        public ContractEndpointProfile EndpointB => new ContractEndpointProfile(PayloadFormat.Json, "application/vnd.alt+json", PayloadFormat.Json);
 
         public PayloadFormat CanonicalResponseFormat => PayloadFormat.Json;
 
         public string CanonicalResponseContentType => "application/json";
 
-        public string? SuggestedEndpointAId => null;
-
-        public string? SuggestedEndpointBId => null;
-
         public IReadOnlyList<IgnoreRuleDefinition> DefaultIgnoreRules => Array.Empty<IgnoreRuleDefinition>();
 
-        public IReadOnlyDictionary<string, string> CanonicalToAlternateResponseMaskPathMap => new Dictionary<string, string>();
+        public IReadOnlyDictionary<string, string> CanonicalToEndpointResponseMaskPathMap => new Dictionary<string, string>();
 
-        public ValueTask<PreparedAlternateContractRequest> PrepareEndpointBRequestAsync(
-            AlternateContractRequestPreparationContext context,
-            CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult(new PreparedAlternateContractRequest(
-                ContractPayload.FromBytes(Encoding.UTF8.GetBytes("alternate-request"), PayloadFormat.Json, AlternateRequestContentType),
+        public ValueTask<PreparedContractRequest> PrepareRequestAsync(
+            EndpointSlot endpoint,
+            ContractRequestPreparationContext context,
+            CancellationToken cancellationToken = default)
+        {
+            if (endpoint == EndpointSlot.A)
+            {
+                ContractPayload sourcePayload = new ContractPayload(
+                    context.SourceFormat,
+                    context.SourceContentType,
+                    context.OpenSourceRequestBodyAsync,
+                    context.Request.ContentLength);
+                return ValueTask.FromResult(new PreparedContractRequest(sourcePayload, ProfileId));
+            }
+
+            return ValueTask.FromResult(new PreparedContractRequest(
+                ContractPayload.FromBytes(Encoding.UTF8.GetBytes("alternate-request"), PayloadFormat.Json, EndpointB.RequestContentType),
                 ProfileId,
                 new Dictionary<string, string> { ["X-Override"] = "profile", ["SOAPAction"] = "urn:profile" }));
+        }
 
-        public virtual ValueTask<NormalizedAlternateContractResponse> NormalizeEndpointAResponseAsync(
-            AlternateContractResponseNormalizationContext context,
+        public ValueTask<NormalizedContractResponse> NormalizeResponseAsync(
+            EndpointSlot endpoint,
+            ContractResponseNormalizationContext context,
+            CancellationToken cancellationToken = default) =>
+            endpoint == EndpointSlot.A
+                ? NormalizeEndpointAResponseAsync(context, cancellationToken)
+                : NormalizeEndpointBResponseAsync(context, cancellationToken);
+
+        protected virtual ValueTask<NormalizedContractResponse> NormalizeEndpointAResponseAsync(
+            ContractResponseNormalizationContext context,
             CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(CreateNormalizedResponse());
 
-        public virtual ValueTask<NormalizedAlternateContractResponse> NormalizeEndpointBResponseAsync(
-            AlternateContractResponseNormalizationContext context,
+        protected virtual ValueTask<NormalizedContractResponse> NormalizeEndpointBResponseAsync(
+            ContractResponseNormalizationContext context,
             CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(CreateNormalizedResponse());
 
-        protected NormalizedAlternateContractResponse CreateNormalizedResponse() =>
-            new NormalizedAlternateContractResponse(
+        protected NormalizedContractResponse CreateNormalizedResponse() =>
+            new NormalizedContractResponse(
                 ContractPayload.FromBytes(Encoding.UTF8.GetBytes("{\"id\":1}"), PayloadFormat.Json, "application/json"),
                 ProfileId);
     }
 
-    private sealed class ThrowingNormalizationProfile : FakeAlternateContractProfile
+    private sealed class ThrowingNormalizationProfile : FakeContractProfile
     {
-        public override ValueTask<NormalizedAlternateContractResponse> NormalizeEndpointAResponseAsync(
-            AlternateContractResponseNormalizationContext context,
+        protected override ValueTask<NormalizedContractResponse> NormalizeEndpointAResponseAsync(
+            ContractResponseNormalizationContext context,
             CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("Normalization failed.");
     }
-    private sealed class ReadingNormalizationProfile : FakeAlternateContractProfile
+
+    private sealed class ReadingNormalizationProfile : FakeContractProfile
     {
         public List<int> SourceResponseLengths { get; } = new List<int>();
 
-        public override async ValueTask<NormalizedAlternateContractResponse> NormalizeEndpointAResponseAsync(
-            AlternateContractResponseNormalizationContext context,
+        protected override async ValueTask<NormalizedContractResponse> NormalizeEndpointAResponseAsync(
+            ContractResponseNormalizationContext context,
             CancellationToken cancellationToken = default) =>
             await ReadSourceAndCreateNormalizedResponseAsync(context, cancellationToken).ConfigureAwait(false);
 
-        public override async ValueTask<NormalizedAlternateContractResponse> NormalizeEndpointBResponseAsync(
-            AlternateContractResponseNormalizationContext context,
+        protected override async ValueTask<NormalizedContractResponse> NormalizeEndpointBResponseAsync(
+            ContractResponseNormalizationContext context,
             CancellationToken cancellationToken = default) =>
             await ReadSourceAndCreateNormalizedResponseAsync(context, cancellationToken).ConfigureAwait(false);
 
-        private async ValueTask<NormalizedAlternateContractResponse> ReadSourceAndCreateNormalizedResponseAsync(
-            AlternateContractResponseNormalizationContext context,
+        private async ValueTask<NormalizedContractResponse> ReadSourceAndCreateNormalizedResponseAsync(
+            ContractResponseNormalizationContext context,
             CancellationToken cancellationToken)
         {
             await using Stream stream = await context.OpenSourceResponseBodyAsync(cancellationToken).ConfigureAwait(false);

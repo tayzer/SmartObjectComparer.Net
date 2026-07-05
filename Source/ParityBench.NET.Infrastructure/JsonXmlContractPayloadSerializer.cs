@@ -1,11 +1,11 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 using System.Xml;
 using System.Xml.Linq;
 using System.Xml.Serialization;
 
-using ParityBench.NET.Application.AlternateContracts;
-using ParityBench.NET.Domain.AlternateContracts;
+using ParityBench.NET.Application.ContractProfiles;
+using ParityBench.NET.Domain.ContractProfiles;
 
 namespace ParityBench.NET.Infrastructure;
 

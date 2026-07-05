@@ -1,13 +1,13 @@
-using ParityBench.NET.Application.AlternateContracts;
-using ParityBench.NET.Domain.AlternateContracts;
+using ParityBench.NET.Application.ContractProfiles;
+using ParityBench.NET.Domain.ContractProfiles;
 
 namespace ParityBench.NET.Infrastructure;
 
-public sealed class FileBackedContractPayloadFactory
+public sealed class ContractPayloadFactory
 {
     private readonly string tempRoot;
 
-    public FileBackedContractPayloadFactory(string? tempRoot = null)
+    public ContractPayloadFactory(string? tempRoot = null)
     {
         this.tempRoot = string.IsNullOrWhiteSpace(tempRoot)
             ? Path.Combine(Path.GetTempPath(), "ParityBenchNET", "contract-payloads")

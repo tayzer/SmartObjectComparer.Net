@@ -1,4 +1,4 @@
-using ParityBench.NET.Application.Requests;
+﻿using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
 
@@ -31,13 +31,14 @@ public sealed class SelectableResponseComparer : IResponseComparer
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        if (string.IsNullOrWhiteSpace(options.ModelName)
-            || string.Equals(options.ModelName, AutoModelName, StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(options.ResponseModelName)
+            || string.Equals(options.ResponseModelName, AutoModelName, StringComparison.OrdinalIgnoreCase))
         {
             return autoComparer.CompareAsync(request, options, responseA, responseB, errorMessage, cancellationToken);
         }
 
-        modelRegistry.Resolve(options.ModelName);
+        modelRegistry.Resolve(options.ResponseModelName);
         return modelComparer.CompareAsync(request, options, responseA, responseB, errorMessage, cancellationToken);
     }
 }
+

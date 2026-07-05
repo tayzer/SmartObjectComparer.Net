@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Text.RegularExpressions;
 
 using KellermanSoftware.CompareNetObjects;
@@ -51,10 +51,10 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
                 .ConfigureAwait(false);
 
             object modelA = await deserializer
-                .DeserializeAsync(options.ModelName, bodyA, responseA.ContentType, options.Comparison, cancellationToken)
+                .DeserializeAsync(options.ResponseModelName, bodyA, responseA.ContentType, options.Comparison, cancellationToken)
                 .ConfigureAwait(false);
             object modelB = await deserializer
-                .DeserializeAsync(options.ModelName, bodyB, responseB.ContentType, options.Comparison, cancellationToken)
+                .DeserializeAsync(options.ResponseModelName, bodyB, responseB.ContentType, options.Comparison, cancellationToken)
                 .ConfigureAwait(false);
 
             CompareLogic compareLogic = CreateCompareLogic(options.Comparison);
@@ -331,5 +331,6 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
 
     private static bool IsSuccessStatusCode(int statusCode) => statusCode is >= 200 and <= 299;
 }
+
 
 

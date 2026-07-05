@@ -1,3 +1,4 @@
+﻿using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Workflow;
 using ParityBench.NET.Domain.Comparison;
@@ -42,6 +43,7 @@ public sealed class RequestCommandRunner
                 options.ModelName,
                 new ComparisonOptions(),
                 new RequestExecutionOptions(options.ContentTypeOverride),
+                string.IsNullOrWhiteSpace(options.ContractProfileId) ? null : new ContractProfileSelection(options.ContractProfileId),
                 commonHeaders: ParseHeaders(options.CommonHeaders),
                 endpointAHeaders: ParseHeaders(options.EndpointAHeaders),
                 endpointBHeaders: ParseHeaders(options.EndpointBHeaders));

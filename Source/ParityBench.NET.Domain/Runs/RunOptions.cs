@@ -1,5 +1,5 @@
-using ParityBench.NET.Domain.AlternateContracts;
-using ParityBench.NET.Domain.Comparison;
+﻿using ParityBench.NET.Domain.Comparison;
+using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Requests;
 
 namespace ParityBench.NET.Domain.Runs;
@@ -12,10 +12,10 @@ public sealed record RunOptions
         EndpointDefinition endpointB,
         TimeSpan timeout,
         int maxConcurrency,
-        string modelName = "Auto",
+        string responseModelName = "Auto",
         ComparisonOptions? comparisonOptions = null,
         RequestExecutionOptions? requestExecutionOptions = null,
-        AlternateContractOptions? alternateContractOptions = null)
+        ContractProfileSelection? contractProfileSelection = null)
     {
         ArgumentNullException.ThrowIfNull(endpointA);
         ArgumentNullException.ThrowIfNull(endpointB);
@@ -35,10 +35,10 @@ public sealed record RunOptions
         EndpointB = endpointB;
         Timeout = timeout;
         MaxConcurrency = maxConcurrency;
-        ModelName = string.IsNullOrWhiteSpace(modelName) ? "Auto" : modelName;
+        ResponseModelName = string.IsNullOrWhiteSpace(responseModelName) ? "Auto" : responseModelName.Trim();
         Comparison = comparisonOptions ?? new ComparisonOptions();
         RequestExecution = requestExecutionOptions ?? new RequestExecutionOptions();
-        AlternateContract = alternateContractOptions;
+        ContractProfile = contractProfileSelection;
     }
 
     public RequestBatchReference RequestBatch { get; }
@@ -51,11 +51,13 @@ public sealed record RunOptions
 
     public int MaxConcurrency { get; }
 
-    public string ModelName { get; }
+    public string ResponseModelName { get; }
+
+    public string ModelName => ResponseModelName;
 
     public ComparisonOptions Comparison { get; }
 
     public RequestExecutionOptions RequestExecution { get; }
 
-    public AlternateContractOptions? AlternateContract { get; }
+    public ContractProfileSelection? ContractProfile { get; }
 }

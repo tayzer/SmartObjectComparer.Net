@@ -1,6 +1,6 @@
-using ParityBench.NET.Domain.AlternateContracts;
+using ParityBench.NET.Domain.ContractProfiles;
 
-namespace ParityBench.NET.Application.AlternateContracts;
+namespace ParityBench.NET.Application.ContractProfiles;
 
 public sealed class ContractPayload : IAsyncDisposable
 {

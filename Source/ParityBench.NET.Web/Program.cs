@@ -1,8 +1,8 @@
-using Microsoft.AspNetCore.DataProtection;
+﻿using Microsoft.AspNetCore.DataProtection;
 
 using MudBlazor.Services;
 
-using ParityBench.NET.Application.AlternateContracts;
+using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Results;
@@ -72,10 +72,10 @@ static void RegisterV2Services(IServiceCollection services, string workspaceRoot
         BuiltInResponseModelRegistration.Register(registry);
         return registry;
     });
-    services.AddSingleton<IAlternateContractProfileRegistry>(serviceProvider =>
+    services.AddSingleton<IContractProfileRegistry>(serviceProvider =>
     {
-        AlternateContractProfileRegistry registry = new AlternateContractProfileRegistry();
-        registry.Register(BuiltInAlternateContractProfiles.CreateSampleSoapToJson(serviceProvider.GetRequiredService<IContractPayloadSerializer>()));
+        ContractProfileRegistry registry = new ContractProfileRegistry();
+        registry.Register(BuiltInContractProfiles.CreateSampleSoapToJson(serviceProvider.GetRequiredService<IContractPayloadSerializer>()));
         return registry;
     });
     services.AddSingleton<IComparisonRunExecutor>(serviceProvider =>
@@ -92,7 +92,7 @@ static void RegisterV2Services(IServiceCollection services, string workspaceRoot
             artifactStore,
             serviceProvider.GetRequiredService<IRunDetailStore>(),
             comparer,
-            serviceProvider.GetRequiredService<IAlternateContractProfileRegistry>());
+            serviceProvider.GetRequiredService<IContractProfileRegistry>());
     });
     services.AddSingleton<IComparisonRunUseCases, ComparisonRunService>();
     services.AddSingleton<IComparisonRunResultUseCases, ComparisonRunResultService>();

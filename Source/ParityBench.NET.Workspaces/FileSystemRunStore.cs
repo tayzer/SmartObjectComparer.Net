@@ -1,8 +1,8 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
 using ParityBench.NET.Application.Runs;
-using ParityBench.NET.Domain.AlternateContracts;
+using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
@@ -121,10 +121,11 @@ public sealed class FileSystemRunStore : IRunStore
             EndpointB = ToDto(options.EndpointB),
             TimeoutMilliseconds = options.Timeout.TotalMilliseconds,
             MaxConcurrency = options.MaxConcurrency,
-            ModelName = options.ModelName,
+            ResponseModelName = options.ResponseModelName,
+            ModelName = options.ResponseModelName,
             Comparison = ToDto(options.Comparison),
             RequestExecution = ToDto(options.RequestExecution),
-            AlternateContract = options.AlternateContract is null ? null : ToDto(options.AlternateContract),
+            ContractProfile = options.ContractProfile is null ? null : ToDto(options.ContractProfile),
         };
 
     private EndpointDefinitionDto ToDto(EndpointDefinition endpoint) =>
@@ -155,10 +156,12 @@ public sealed class FileSystemRunStore : IRunStore
             ContentTypeOverride = options.ContentTypeOverride,
         };
 
-    private AlternateContractOptionsDto ToDto(AlternateContractOptions options) =>
-        new AlternateContractOptionsDto
+    private ContractProfileSelectionDto ToDto(ContractProfileSelection selection) =>
+        new ContractProfileSelectionDto
         {
-            ProfileId = options.ProfileId,
+            ProfileId = selection.ProfileId,
+            ProfileVersion = selection.ProfileVersion,
+            Options = selection.Options.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal),
         };
 
     private IgnoreRuleDefinitionDto ToDto(IgnoreRuleDefinition rule) =>
@@ -248,17 +251,24 @@ public sealed class FileSystemRunStore : IRunStore
             dto.Summary is null ? null : FromDto(dto.Summary),
             dto.ErrorMessage);
 
-    private RunOptions FromDto(RunOptionsDto dto) =>
-        new RunOptions(
+    private RunOptions FromDto(RunOptionsDto dto)
+    {
+        string responseModelName = string.IsNullOrWhiteSpace(dto.ResponseModelName) ? dto.ModelName : dto.ResponseModelName;
+        ContractProfileSelection? contractProfile = dto.ContractProfile is not null
+            ? FromDto(dto.ContractProfile)
+            : dto.AlternateContract is null ? null : FromLegacyDto(dto.AlternateContract);
+
+        return new RunOptions(
             new RequestBatchReference(dto.RequestBatch),
             FromDto(dto.EndpointA),
             FromDto(dto.EndpointB),
             TimeSpan.FromMilliseconds(dto.TimeoutMilliseconds),
             dto.MaxConcurrency,
-            dto.ModelName,
+            responseModelName,
             dto.Comparison is null ? null : FromDto(dto.Comparison),
             dto.RequestExecution is null ? null : FromDto(dto.RequestExecution),
-            dto.AlternateContract is null ? null : FromDto(dto.AlternateContract));
+            contractProfile);
+    }
 
     private EndpointDefinition FromDto(EndpointDefinitionDto dto) =>
         new EndpointDefinition(
@@ -281,8 +291,11 @@ public sealed class FileSystemRunStore : IRunStore
     private RequestExecutionOptions FromDto(RequestExecutionOptionsDto dto) =>
         new RequestExecutionOptions(dto.ContentTypeOverride);
 
-    private AlternateContractOptions FromDto(AlternateContractOptionsDto dto) =>
-        new AlternateContractOptions(dto.ProfileId);
+    private ContractProfileSelection FromDto(ContractProfileSelectionDto dto) =>
+        new ContractProfileSelection(dto.ProfileId, dto.ProfileVersion, dto.Options);
+
+    private ContractProfileSelection FromLegacyDto(AlternateContractOptionsDto dto) =>
+        new ContractProfileSelection(dto.ProfileId);
 
     private IgnoreRuleDefinition FromDto(IgnoreRuleDefinitionDto dto) =>
         new IgnoreRuleDefinition(
@@ -375,11 +388,15 @@ public sealed class FileSystemRunStore : IRunStore
 
         public int MaxConcurrency { get; init; }
 
+        public string ResponseModelName { get; init; } = string.Empty;
+
         public string ModelName { get; init; } = "Auto";
 
         public ComparisonOptionsDto? Comparison { get; init; }
 
         public RequestExecutionOptionsDto? RequestExecution { get; init; }
+
+        public ContractProfileSelectionDto? ContractProfile { get; init; }
 
         public AlternateContractOptionsDto? AlternateContract { get; init; }
     }
@@ -417,6 +434,15 @@ public sealed class FileSystemRunStore : IRunStore
     private sealed class RequestExecutionOptionsDto
     {
         public string? ContentTypeOverride { get; init; }
+    }
+
+    private sealed class ContractProfileSelectionDto
+    {
+        public string ProfileId { get; init; } = string.Empty;
+
+        public string? ProfileVersion { get; init; }
+
+        public Dictionary<string, string> Options { get; init; } = new Dictionary<string, string>(StringComparer.Ordinal);
     }
 
     private sealed class AlternateContractOptionsDto

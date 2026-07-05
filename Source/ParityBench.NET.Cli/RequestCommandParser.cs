@@ -1,4 +1,4 @@
-namespace ParityBench.NET.Cli;
+﻿namespace ParityBench.NET.Cli;
 
 public static class RequestCommandParser
 {
@@ -7,6 +7,7 @@ public static class RequestCommandParser
         "--endpoint-a",
         "--endpoint-b",
         "--model",
+        "--profile",
         "--concurrency",
         "--timeout",
         "--content-type",
@@ -34,6 +35,7 @@ public static class RequestCommandParser
         string? endpointA = null;
         string? endpointB = null;
         string modelName = "Auto";
+        string? contractProfileId = null;
         int maxConcurrency = 4;
         TimeSpan timeout = TimeSpan.FromSeconds(30);
         string? contentTypeOverride = null;
@@ -72,6 +74,9 @@ public static class RequestCommandParser
                     break;
                 case "--model":
                     modelName = string.IsNullOrWhiteSpace(value) ? "Auto" : value;
+                    break;
+                case "--profile":
+                    contractProfileId = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
                     break;
                 case "--concurrency":
                     if (!int.TryParse(value, out maxConcurrency) || maxConcurrency <= 0)
@@ -133,6 +138,7 @@ public static class RequestCommandParser
                 endpointAUri!,
                 endpointBUri!,
                 modelName,
+                contractProfileId,
                 maxConcurrency,
                 timeout,
                 contentTypeOverride,
@@ -145,7 +151,7 @@ public static class RequestCommandParser
     }
 
     public static string Usage =>
-        "request <request-directory> --endpoint-a <url> --endpoint-b <url> [--model Auto] [--concurrency <n>] [--timeout <seconds>] [--content-type <type>] [--header <Name: Value>] [--header-a <Name: Value>] [--header-b <Name: Value>] [--report-output <directory>] [--report-assets <directory>]";
+        "request <request-directory> --endpoint-a <url> --endpoint-b <url> [--model Auto] [--profile <profile-id>] [--concurrency <n>] [--timeout <seconds>] [--content-type <type>] [--header <Name: Value>] [--header-a <Name: Value>] [--header-b <Name: Value>] [--report-output <directory>] [--report-assets <directory>]";
 
     private static RequestCommandParseResult Failure(string error) =>
         new RequestCommandParseResult(null, new[] { error });
