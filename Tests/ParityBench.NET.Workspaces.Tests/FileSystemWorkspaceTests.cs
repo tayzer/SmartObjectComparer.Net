@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -122,6 +122,50 @@ public sealed class FileSystemWorkspaceTests
     }
 
     [TestMethod]
+    public async Task SaveRunDetails_WhenOutcomeMessageExists_CanLoadIt()
+    {
+        string workspaceRoot = CreateTempDirectory();
+        FileSystemRunDetailStore store = new FileSystemRunDetailStore(workspaceRoot);
+        RequestPairResult[] details = new[]
+        {
+            new RequestPairResult(
+                "one.json",
+                RequestPairOutcome.StatusCodeMismatch,
+                CreateResponse(EndpointSlot.A, "runs/run-1/artifacts/A/one.json"),
+                CreateResponse(EndpointSlot.B, "runs/run-1/artifacts/B/one.json"),
+                outcomeMessage: "Endpoint A returned 200 and endpoint B returned 500."),
+        };
+
+        RunDetailReference reference = await store.SaveDetailsAsync(new RunId("run-1"), details);
+        IReadOnlyList<RequestPairResult> loadedDetails = await store.LoadDetailsAsync(reference);
+
+        Assert.AreEqual("Endpoint A returned 200 and endpoint B returned 500.", loadedDetails[0].OutcomeMessage);
+    }
+
+    [TestMethod]
+    public async Task SaveRunDetails_WhenRawTextDifferencesExist_CanLoadThem()
+    {
+        string workspaceRoot = CreateTempDirectory();
+        FileSystemRunDetailStore store = new FileSystemRunDetailStore(workspaceRoot);
+        RequestPairResult[] details = new[]
+        {
+            new RequestPairResult(
+                "one.txt",
+                RequestPairOutcome.BothNonSuccess,
+                CreateResponse(EndpointSlot.A, "runs/run-1/artifacts/A/one.txt"),
+                CreateResponse(EndpointSlot.B, "runs/run-1/artifacts/B/one.txt"),
+                differenceCount: 1,
+                differences: new[] { new ComparisonDifference("Body.Line[1]", "first", "second", "Raw line differs.") }),
+        };
+
+        RunDetailReference reference = await store.SaveDetailsAsync(new RunId("run-1"), details);
+        IReadOnlyList<RequestPairResult> loadedDetails = await store.LoadDetailsAsync(reference);
+
+        Assert.AreEqual(RequestPairOutcome.BothNonSuccess, loadedDetails[0].Outcome);
+        Assert.AreEqual("Body.Line[1]", loadedDetails[0].Differences[0].PropertyPath);
+        Assert.AreEqual("Raw line differs.", loadedDetails[0].Differences[0].Message);
+    }
+    [TestMethod]
     public async Task SaveRun_WhenRunIsSaved_CanLoadRunAndSummary()
     {
         string workspaceRoot = CreateTempDirectory();
@@ -216,4 +260,5 @@ public sealed class FileSystemWorkspaceTests
     private static string ToSha256(byte[] content) =>
         Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
 }
+
 

@@ -1,4 +1,4 @@
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 using ParityBench.NET.Application.Runs;
 using ParityBench.NET.Domain.Runs;
@@ -117,6 +117,94 @@ public sealed class ComparisonRunServiceTests
     }
 
     [TestMethod]
+    public async Task StartRun_WhenCancelIsRequestedByRunId_MarksRunCancelled()
+    {
+        FakeRunStore store = new FakeRunStore();
+        FakeRunCancellationRegistry cancellationRegistry = new FakeRunCancellationRegistry();
+        FakeComparisonRunExecutor executor = new FakeComparisonRunExecutor
+        {
+            ExecuteAsyncCore = async (run, _, cancellationToken) =>
+            {
+                cancellationRegistry.RequestCancellation(run.Id);
+                await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken).ConfigureAwait(false);
+                return CreateSummary();
+            },
+        };
+        ComparisonRunService service = CreateService(store, executor, runCancellationRegistry: cancellationRegistry);
+        ComparisonRun run = ComparisonRun.Create(new RunId("run-1"), CreateOptions());
+        await store.SaveAsync(run);
+
+        ComparisonRun cancelledRun = await service.StartRunAsync(run.Id);
+
+        Assert.AreEqual(RunStatus.Cancelled, cancelledRun.Status);
+        CollectionAssert.Contains(cancellationRegistry.RequestedRuns, run.Id);
+        CollectionAssert.Contains(cancellationRegistry.CompletedRuns, run.Id);
+        CollectionAssert.DoesNotContain(store.SavedStatuses, RunStatus.Completed);
+    }
+
+    [TestMethod]
+    public async Task StartRun_WhenExecutorCancelsAfterProgress_DoesNotCompleteRun()
+    {
+        FakeRunStore store = new FakeRunStore();
+        FakeComparisonRunExecutor executor = new FakeComparisonRunExecutor
+        {
+            ExecuteAsyncCore = async (_, progressReporter, cancellationToken) =>
+            {
+                await progressReporter
+                    .ReportAsync(RunStatus.Executing, new RunProgress(50, "Halfway.", 1, 2), cancellationToken)
+                    .ConfigureAwait(false);
+                throw new OperationCanceledException();
+            },
+        };
+        ComparisonRunService service = CreateService(store, executor);
+        ComparisonRun run = ComparisonRun.Create(new RunId("run-1"), CreateOptions());
+        await store.SaveAsync(run);
+
+        ComparisonRun cancelledRun = await service.StartRunAsync(run.Id);
+
+        Assert.AreEqual(RunStatus.Cancelled, cancelledRun.Status);
+        CollectionAssert.DoesNotContain(store.SavedStatuses, RunStatus.Completed);
+    }
+
+    [TestMethod]
+    public async Task StartRun_WhenExecutorFailsAfterCancellationRequest_MarksCancelledNotFailed()
+    {
+        FakeRunStore store = new FakeRunStore();
+        FakeRunCancellationRegistry cancellationRegistry = new FakeRunCancellationRegistry();
+        FakeComparisonRunExecutor executor = new FakeComparisonRunExecutor
+        {
+            ExecuteAsyncCore = (run, _, _) =>
+            {
+                cancellationRegistry.RequestCancellation(run.Id);
+                throw new InvalidOperationException("Late executor failure.");
+            },
+        };
+        ComparisonRunService service = CreateService(store, executor, runCancellationRegistry: cancellationRegistry);
+        ComparisonRun run = ComparisonRun.Create(new RunId("run-1"), CreateOptions());
+        await store.SaveAsync(run);
+
+        ComparisonRun cancelledRun = await service.StartRunAsync(run.Id);
+
+        Assert.AreEqual(RunStatus.Cancelled, cancelledRun.Status);
+        CollectionAssert.DoesNotContain(store.SavedStatuses, RunStatus.Failed);
+    }
+
+    [TestMethod]
+    public async Task StartRun_WhenRunCompletes_UnregistersCancellation()
+    {
+        FakeRunStore store = new FakeRunStore();
+        FakeRunCancellationRegistry cancellationRegistry = new FakeRunCancellationRegistry();
+        ComparisonRunService service = CreateService(store, runCancellationRegistry: cancellationRegistry);
+        ComparisonRun run = ComparisonRun.Create(new RunId("run-1"), CreateOptions());
+        await store.SaveAsync(run);
+
+        await service.StartRunAsync(run.Id);
+
+        CollectionAssert.Contains(cancellationRegistry.CompletedRuns, run.Id);
+        Assert.IsFalse(cancellationRegistry.IsCancellationRequested(run.Id));
+    }
+
+    [TestMethod]
     public async Task StartRun_WhenRunDoesNotExist_ThrowsRunNotFoundException()
     {
         ComparisonRunService service = CreateService(new FakeRunStore());
@@ -137,6 +225,23 @@ public sealed class ComparisonRunServiceTests
 
         Assert.AreEqual(RunStatus.Cancelled, cancelledRun.Status);
         CollectionAssert.Contains(store.SavedStatuses, RunStatus.Cancelled);
+    }
+
+    [TestMethod]
+    public async Task CancelRun_WhenRunIsExecuting_RequestsCancellationAndPublishesCancelled()
+    {
+        FakeRunStore store = new FakeRunStore();
+        FakeRunCancellationRegistry cancellationRegistry = new FakeRunCancellationRegistry();
+        FakeRunEventPublisher eventPublisher = new FakeRunEventPublisher();
+        ComparisonRunService service = CreateService(store, eventPublisher: eventPublisher, runCancellationRegistry: cancellationRegistry);
+        ComparisonRun run = ComparisonRun.Create(new RunId("run-1"), CreateOptions()).Start();
+        await store.SaveAsync(run);
+
+        ComparisonRun cancelledRun = await service.CancelRunAsync(run.Id);
+
+        Assert.AreEqual(RunStatus.Cancelled, cancelledRun.Status);
+        CollectionAssert.Contains(cancellationRegistry.RequestedRuns, run.Id);
+        CollectionAssert.Contains(eventPublisher.PublishedStatuses, RunStatus.Cancelled);
     }
 
     [TestMethod]
@@ -192,12 +297,14 @@ public sealed class ComparisonRunServiceTests
         FakeRunStore store,
         FakeComparisonRunExecutor? executor = null,
         FakeRunEventPublisher? eventPublisher = null,
-        FakeRunIdGenerator? runIdGenerator = null) =>
+        FakeRunIdGenerator? runIdGenerator = null,
+        FakeRunCancellationRegistry? runCancellationRegistry = null) =>
         new ComparisonRunService(
             store,
             executor ?? new FakeComparisonRunExecutor(),
             eventPublisher ?? new FakeRunEventPublisher(),
-            runIdGenerator ?? new FakeRunIdGenerator(new RunId("generated-run")));
+            runIdGenerator ?? new FakeRunIdGenerator(new RunId("generated-run")),
+            runCancellationRegistry ?? new FakeRunCancellationRegistry());
 
     private static RunOptions CreateOptions() =>
         new RunOptions(
@@ -284,5 +391,45 @@ public sealed class ComparisonRunServiceTests
         }
 
         public RunId CreateId() => runId;
+    }
+
+    private sealed class FakeRunCancellationRegistry : IRunCancellationRegistry
+    {
+        private readonly Dictionary<RunId, CancellationTokenSource> sources = new Dictionary<RunId, CancellationTokenSource>();
+
+        public List<RunId> RequestedRuns { get; } = new List<RunId>();
+
+        public List<RunId> CompletedRuns { get; } = new List<RunId>();
+
+        public CancellationToken CreateLinkedToken(RunId runId, CancellationToken cancellationToken)
+        {
+            CancellationTokenSource source = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            sources[runId] = source;
+            return source.Token;
+        }
+
+        public bool RequestCancellation(RunId runId)
+        {
+            RequestedRuns.Add(runId);
+            if (!sources.TryGetValue(runId, out CancellationTokenSource? source))
+            {
+                return false;
+            }
+
+            source.Cancel();
+            return true;
+        }
+
+        public bool IsCancellationRequested(RunId runId) =>
+            sources.TryGetValue(runId, out CancellationTokenSource? source) && source.IsCancellationRequested;
+
+        public void Complete(RunId runId)
+        {
+            CompletedRuns.Add(runId);
+            if (sources.Remove(runId, out CancellationTokenSource? source))
+            {
+                source.Dispose();
+            }
+        }
     }
 }

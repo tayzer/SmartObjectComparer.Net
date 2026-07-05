@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -39,7 +39,8 @@ public sealed class BasicRequestAbFlowIntegrationTests
             runStore,
             executor,
             new CapturingRunEventPublisher(),
-            new FixedRunIdGenerator(new RunId("run-1")));
+            new FixedRunIdGenerator(new RunId("run-1")),
+            new InMemoryRunCancellationRegistry());
 
         ComparisonRun createdRun = await service.CreateRunAsync(CreateOptions(manifest.BatchReference));
         ComparisonRun completedRun = await service.StartRunAsync(createdRun.Id);
@@ -84,7 +85,8 @@ public sealed class BasicRequestAbFlowIntegrationTests
             runStore,
             executor,
             new CapturingRunEventPublisher(),
-            new FixedRunIdGenerator(new RunId("run-1")));
+            new FixedRunIdGenerator(new RunId("run-1")),
+            new InMemoryRunCancellationRegistry());
         ComparisonOptions comparisonOptions = new ComparisonOptions(
             ignoreStringCase: true,
             maskRules: new[] { new MaskRuleDefinition("token") });
@@ -210,3 +212,4 @@ public sealed class BasicRequestAbFlowIntegrationTests
         public string? Token { get; set; }
     }
 }
+

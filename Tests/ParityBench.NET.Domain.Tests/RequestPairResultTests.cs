@@ -1,5 +1,6 @@
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 
+using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
 
@@ -54,7 +55,48 @@ public sealed class RequestPairResultTests
     }
 
     [TestMethod]
-    public void Summarize_WhenPairResultsContainMixedOutcomes_ReturnsExpectedCounts()
+    public void Classify_WhenStatusCodesMismatch_ReturnsStatusCodeMismatchWithStatusDifference()
+    {
+        RequestPairResult result = RequestPairResult.FromRawTextComparison(
+            CreateRequest(),
+            CreateResponse(EndpointSlot.A, 200, 12, "abc"),
+            CreateResponse(EndpointSlot.B, 500, 12, "abc"),
+            new[] { new ComparisonDifference("HttpStatus", "200", "500", "Status differs.") });
+
+        Assert.AreEqual(RequestPairOutcome.StatusCodeMismatch, result.Outcome);
+        Assert.AreEqual("HttpStatus", result.Differences[0].PropertyPath);
+        Assert.IsNull(result.AreEqual);
+        Assert.IsTrue(result.OutcomeMessage?.Contains("200", StringComparison.Ordinal) == true);
+    }
+
+    [TestMethod]
+    public void Classify_WhenBothEndpointsAreNonSuccess_ReturnsBothNonSuccess()
+    {
+        RequestPairResult result = RequestPairResult.FromRawTextComparison(
+            CreateRequest(),
+            CreateResponse(EndpointSlot.A, 500, 12, "abc"),
+            CreateResponse(EndpointSlot.B, 503, 12, "abc"),
+            Array.Empty<ComparisonDifference>());
+
+        Assert.AreEqual(RequestPairOutcome.BothNonSuccess, result.Outcome);
+        Assert.AreEqual(0, result.DifferenceCount);
+        Assert.IsNull(result.AreEqual);
+        Assert.IsTrue(result.OutcomeMessage?.Contains("non-success", StringComparison.OrdinalIgnoreCase) == true);
+    }
+
+    [TestMethod]
+    public void Create_WhenOutcomeMessageIsWhitespace_StoresNull()
+    {
+        RequestPairResult result = new RequestPairResult(
+            "one.json",
+            RequestPairOutcome.BothNonSuccess,
+            outcomeMessage: " ");
+
+        Assert.IsNull(result.OutcomeMessage);
+    }
+
+    [TestMethod]
+    public void Summarize_WhenResultsContainStatusAndNonSuccess_CountsDedicatedBuckets()
     {
         RequestPairResult[] results = new[]
         {

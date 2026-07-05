@@ -1,4 +1,4 @@
-using ParityBench.NET.Domain.Runs;
+﻿using ParityBench.NET.Domain.Runs;
 
 namespace ParityBench.NET.Application.Runs;
 
@@ -8,17 +8,20 @@ public sealed class ComparisonRunService : IComparisonRunUseCases
     private readonly IComparisonRunExecutor executor;
     private readonly IRunEventPublisher eventPublisher;
     private readonly IRunIdGenerator runIdGenerator;
+    private readonly IRunCancellationRegistry runCancellationRegistry;
 
     public ComparisonRunService(
         IRunStore runStore,
         IComparisonRunExecutor executor,
         IRunEventPublisher eventPublisher,
-        IRunIdGenerator runIdGenerator)
+        IRunIdGenerator runIdGenerator,
+        IRunCancellationRegistry runCancellationRegistry)
     {
         this.runStore = runStore;
         this.executor = executor;
         this.eventPublisher = eventPublisher;
         this.runIdGenerator = runIdGenerator;
+        this.runCancellationRegistry = runCancellationRegistry;
     }
 
     public async Task<ComparisonRun> CreateRunAsync(
@@ -40,6 +43,7 @@ public sealed class ComparisonRunService : IComparisonRunUseCases
         currentRun = currentRun.Start();
         await SaveAndPublishAsync(currentRun, cancellationToken).ConfigureAwait(false);
 
+        CancellationToken executionToken = runCancellationRegistry.CreateLinkedToken(runId, cancellationToken);
         RunProgressReporter reporter = new RunProgressReporter(async (status, progress, token) =>
         {
             currentRun = currentRun.Advance(status, progress);
@@ -49,8 +53,9 @@ public sealed class ComparisonRunService : IComparisonRunUseCases
         try
         {
             RunResultSummary summary = await executor
-                .ExecuteAsync(currentRun, reporter, cancellationToken)
+                .ExecuteAsync(currentRun, reporter, executionToken)
                 .ConfigureAwait(false);
+            executionToken.ThrowIfCancellationRequested();
 
             currentRun = currentRun.Complete(summary);
             await SaveAndPublishAsync(currentRun, cancellationToken).ConfigureAwait(false);
@@ -62,11 +67,21 @@ public sealed class ComparisonRunService : IComparisonRunUseCases
             await SaveAndPublishAsync(currentRun, CancellationToken.None).ConfigureAwait(false);
             return currentRun;
         }
+        catch (Exception ex) when (runCancellationRegistry.IsCancellationRequested(runId))
+        {
+            currentRun = currentRun.Cancel($"Run was cancelled after executor error: {ex.Message}");
+            await SaveAndPublishAsync(currentRun, CancellationToken.None).ConfigureAwait(false);
+            return currentRun;
+        }
         catch (Exception ex)
         {
             currentRun = currentRun.Fail(ex.Message);
             await SaveAndPublishAsync(currentRun, CancellationToken.None).ConfigureAwait(false);
             return currentRun;
+        }
+        finally
+        {
+            runCancellationRegistry.Complete(runId);
         }
     }
 
@@ -75,6 +90,7 @@ public sealed class ComparisonRunService : IComparisonRunUseCases
         CancellationToken cancellationToken = default)
     {
         ComparisonRun run = await LoadRequiredRunAsync(runId, cancellationToken).ConfigureAwait(false);
+        runCancellationRegistry.RequestCancellation(runId);
         ComparisonRun cancelledRun = run.Cancel();
 
         await SaveAndPublishAsync(cancelledRun, cancellationToken).ConfigureAwait(false);

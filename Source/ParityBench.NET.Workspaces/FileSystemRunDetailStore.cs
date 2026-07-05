@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
 using ParityBench.NET.Application.Requests;
@@ -67,6 +67,7 @@ public sealed class FileSystemRunDetailStore : IRunDetailStore
             ResponseA = result.ResponseA is null ? null : ToDto(result.ResponseA),
             ResponseB = result.ResponseB is null ? null : ToDto(result.ResponseB),
             ErrorMessage = result.ErrorMessage,
+            OutcomeMessage = result.OutcomeMessage,
             AreEqual = result.AreEqual,
             DifferenceCount = result.DifferenceCount,
             Differences = result.Differences.Select(ToDto).ToList(),
@@ -102,7 +103,9 @@ public sealed class FileSystemRunDetailStore : IRunDetailStore
             dto.ErrorMessage,
             dto.AreEqual,
             dto.DifferenceCount,
-            dto.Differences.Select(FromDto));
+            dto.Differences.Select(FromDto),
+            dto.OutcomeMessage);
+
 
     private ResponseArtifactMetadata FromDto(ResponseArtifactMetadataDto dto) =>
         new ResponseArtifactMetadata(
@@ -131,6 +134,8 @@ public sealed class FileSystemRunDetailStore : IRunDetailStore
         public ResponseArtifactMetadataDto? ResponseB { get; init; }
 
         public string? ErrorMessage { get; init; }
+
+        public string? OutcomeMessage { get; init; }
 
         public bool? AreEqual { get; init; }
 
@@ -167,3 +172,5 @@ public sealed class FileSystemRunDetailStore : IRunDetailStore
         public string? Message { get; init; }
     }
 }
+
+

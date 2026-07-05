@@ -29,7 +29,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             endpointRequestSender,
             runArtifactStore,
             runDetailStore,
-            new HashOnlyResponseComparer())
+            new RawTextResponseComparer(runArtifactStore, new HashOnlyResponseComparer()))
     {
     }
 
@@ -61,7 +61,9 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         this.endpointRequestSender = endpointRequestSender;
         this.runArtifactStore = runArtifactStore;
         this.runDetailStore = runDetailStore;
-        this.responseComparer = responseComparer;
+        this.responseComparer = responseComparer is RawTextResponseComparer
+            ? responseComparer
+            : new RawTextResponseComparer(runArtifactStore, responseComparer);
         this.alternateContractProfileRegistry = alternateContractProfileRegistry;
     }
 
@@ -629,4 +631,5 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             new EndpointExecutionResult(endpoint, null, null, null, null, errorMessage);
     }
 }
+
 

@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -161,11 +161,55 @@ public sealed class BasicComparisonRunExecutorTests
         Assert.IsTrue(artifactStore.SavedBodies.Values.All(body => !body.Contains("secret-1234", StringComparison.Ordinal)));
     }
 
+    [TestMethod]
+    public async Task ExecuteAsync_WhenCancellationTokenIsCancelled_StopsWithoutSavingFinalDetails()
+    {
+        RequestItem request = new RequestItem("one.json", "application/json", 2);
+        FakeRunDetailStore detailStore = new FakeRunDetailStore();
+        BasicComparisonRunExecutor executor = CreateExecutor(
+            CreateBatch(new[] { request }),
+            FakeEndpointRequestSender.ForBody("same"),
+            detailStore: detailStore);
+        using CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+        cancellationTokenSource.Cancel();
+
+        await AssertThrowsAsync<OperationCanceledException>(() =>
+            executor.ExecuteAsync(CreateRun(), new CapturingProgressReporter(), cancellationTokenSource.Token));
+
+        Assert.AreEqual(0, detailStore.SaveCount);
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_WhenEndpointThrows_ReturnsReadableExecutionFailedPair()
+    {
+        FakeRunDetailStore detailStore = new FakeRunDetailStore();
+        FakeEndpointRequestSender sender = new FakeEndpointRequestSender(request =>
+        {
+            if (request.Endpoint == EndpointSlot.B)
+            {
+                throw new InvalidOperationException("Endpoint B failed.");
+            }
+
+            return new EndpointResponse(200, "application/json", CreateStream("same"));
+        });
+        BasicComparisonRunExecutor executor = CreateExecutor(
+            CreateBatch(new[] { new RequestItem("one.json", "application/json", 2) }),
+            sender,
+            detailStore: detailStore);
+
+        await executor.ExecuteAsync(CreateRun(), new CapturingProgressReporter());
+
+        RequestPairResult result = detailStore.SavedResults.Single();
+        Assert.AreEqual(RequestPairOutcome.ExecutionFailed, result.Outcome);
+        Assert.IsTrue(result.ErrorMessage?.Contains("Endpoint B failed", StringComparison.Ordinal) == true);
+    }
+
     private static BasicComparisonRunExecutor CreateExecutor(
         RequestBatchManifest manifest,
         FakeEndpointRequestSender sender,
         FakeRunArtifactStore? artifactStore = null,
-        IResponseComparer? responseComparer = null)
+        IResponseComparer? responseComparer = null,
+        FakeRunDetailStore? detailStore = null)
     {
         FakeRequestBatchStore requestBatchStore = new FakeRequestBatchStore(manifest);
         return responseComparer is null
@@ -173,15 +217,33 @@ public sealed class BasicComparisonRunExecutorTests
                 requestBatchStore,
                 sender,
                 artifactStore ?? new FakeRunArtifactStore(),
-                new FakeRunDetailStore())
+                detailStore ?? new FakeRunDetailStore())
             : new BasicComparisonRunExecutor(
                 requestBatchStore,
                 sender,
                 artifactStore ?? new FakeRunArtifactStore(),
-                new FakeRunDetailStore(),
+                detailStore ?? new FakeRunDetailStore(),
                 responseComparer);
     }
 
+    private static async Task AssertThrowsAsync<TException>(Func<Task> action)
+        where TException : Exception
+    {
+        try
+        {
+            await action().ConfigureAwait(false);
+        }
+        catch (TException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            Assert.Fail($"Expected {typeof(TException).Name}, but got {ex.GetType().Name}.");
+        }
+
+        Assert.Fail($"Expected {typeof(TException).Name}, but no exception was thrown.");
+    }
     private static RequestBatchManifest CreateBatch(IReadOnlyList<RequestItem> requests) =>
         new RequestBatchManifest(new RequestBatchReference("batch-1"), requests);
 
@@ -352,11 +414,14 @@ public sealed class BasicComparisonRunExecutorTests
     {
         public IReadOnlyList<RequestPairResult> SavedResults { get; private set; } = Array.Empty<RequestPairResult>();
 
+        public int SaveCount { get; private set; }
+
         public Task<RunDetailReference> SaveDetailsAsync(
             RunId runId,
             IReadOnlyList<RequestPairResult> results,
             CancellationToken cancellationToken = default)
         {
+            SaveCount++;
             SavedResults = results;
             return Task.FromResult(new RunDetailReference($"runs/{runId.Value}/details/index.json"));
         }
@@ -381,3 +446,5 @@ public sealed class BasicComparisonRunExecutorTests
         }
     }
 }
+
+

@@ -1,4 +1,4 @@
-using ParityBench.NET.Domain.Comparison;
+﻿using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Runs;
 
 namespace ParityBench.NET.Domain.Requests;
@@ -13,13 +13,15 @@ public sealed record RequestPairResult
         string? errorMessage = null,
         bool? areEqual = null,
         int? differenceCount = null,
-        IEnumerable<ComparisonDifference>? differences = null)
+        IEnumerable<ComparisonDifference>? differences = null,
+        string? outcomeMessage = null)
     {
         RelativePath = new RequestItem(relativePath).RelativePath;
         Outcome = outcome;
         ResponseA = responseA;
         ResponseB = responseB;
         ErrorMessage = string.IsNullOrWhiteSpace(errorMessage) ? null : errorMessage;
+        OutcomeMessage = string.IsNullOrWhiteSpace(outcomeMessage) ? null : outcomeMessage;
         Differences = (differences ?? Array.Empty<ComparisonDifference>()).ToList();
         DifferenceCount = differenceCount ?? Differences.Count;
         AreEqual = areEqual ?? (outcome switch
@@ -39,6 +41,8 @@ public sealed record RequestPairResult
     public ResponseArtifactMetadata? ResponseB { get; }
 
     public string? ErrorMessage { get; }
+
+    public string? OutcomeMessage { get; }
 
     public bool? AreEqual { get; }
 
@@ -87,14 +91,16 @@ public sealed record RequestPairResult
                 request.RelativePath,
                 RequestPairOutcome.StatusCodeMismatch,
                 responseA,
-                responseB);
+                responseB,
+                outcomeMessage: BuildStatusOutcomeMessage(RequestPairOutcome.StatusCodeMismatch, responseA.StatusCode, responseB.StatusCode));
         }
 
         return new RequestPairResult(
             request.RelativePath,
             RequestPairOutcome.BothNonSuccess,
             responseA,
-            responseB);
+            responseB,
+            outcomeMessage: BuildStatusOutcomeMessage(RequestPairOutcome.BothNonSuccess, responseA.StatusCode, responseB.StatusCode));
     }
 
     public static RequestPairResult FromComparison(
@@ -112,10 +118,40 @@ public sealed record RequestPairResult
             areEqual ? RequestPairOutcome.Equal : RequestPairOutcome.Different,
             responseA,
             responseB,
-            equalitySummary,
-            areEqual,
-            materializedDifferences.Count,
-            materializedDifferences);
+            areEqual: areEqual,
+            differenceCount: materializedDifferences.Count,
+            differences: materializedDifferences,
+            outcomeMessage: equalitySummary);
+    }
+
+    public static RequestPairResult FromRawTextComparison(
+        RequestItem request,
+        ResponseArtifactMetadata responseA,
+        ResponseArtifactMetadata responseB,
+        IEnumerable<ComparisonDifference> differences,
+        string? outcomeMessage = null)
+    {
+        bool endpointASucceeded = IsSuccessStatusCode(responseA.StatusCode);
+        bool endpointBSucceeded = IsSuccessStatusCode(responseB.StatusCode);
+        if (endpointASucceeded && endpointBSucceeded)
+        {
+            throw new InvalidOperationException("Raw text comparison is only valid for non-success response pairs.");
+        }
+
+        List<ComparisonDifference> materializedDifferences = differences.ToList();
+        RequestPairOutcome outcome = endpointASucceeded != endpointBSucceeded
+            ? RequestPairOutcome.StatusCodeMismatch
+            : RequestPairOutcome.BothNonSuccess;
+
+        return new RequestPairResult(
+            request.RelativePath,
+            outcome,
+            responseA,
+            responseB,
+            areEqual: null,
+            differenceCount: materializedDifferences.Count,
+            differences: materializedDifferences,
+            outcomeMessage: outcomeMessage ?? BuildStatusOutcomeMessage(outcome, responseA.StatusCode, responseB.StatusCode));
     }
 
     public static RunResultSummary Summarize(
@@ -135,5 +171,12 @@ public sealed record RequestPairResult
     }
 
     private static bool IsSuccessStatusCode(int statusCode) => statusCode is >= 200 and <= 299;
-}
 
+    private static string BuildStatusOutcomeMessage(
+        RequestPairOutcome outcome,
+        int statusCodeA,
+        int statusCodeB) =>
+        outcome == RequestPairOutcome.StatusCodeMismatch
+            ? $"Endpoint A returned {statusCodeA} and endpoint B returned {statusCodeB}."
+            : $"Both endpoints returned non-success status codes: A={statusCodeA}, B={statusCodeB}.";
+}
