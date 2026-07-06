@@ -19,6 +19,7 @@ public sealed class StaticReportBundleWriterTests
 {
     private readonly JsonSerializerOptions jsonOptions = StaticReportJsonOptions.Create();
 
+
     [TestMethod]
     public async Task WriteAsync_WhenRunHasDetails_WritesManifestPagedDetailsAndRawSidecars()
     {
@@ -41,6 +42,7 @@ public sealed class StaticReportBundleWriterTests
         Assert.AreEqual(2, Directory.EnumerateFiles(Path.Combine(outputDirectory, "raw")).Count());
     }
 
+
     [TestMethod]
     public async Task WriteAsync_WhenRawArtifactIsLarge_DoesNotEmbedBodyInReportData()
     {
@@ -59,6 +61,7 @@ public sealed class StaticReportBundleWriterTests
         string manifestJson = await File.ReadAllTextAsync(Path.Combine(outputDirectory, "report.data.json"));
         Assert.IsFalse(manifestJson.Contains(largeBody, StringComparison.Ordinal));
     }
+
 
     [TestMethod]
     public async Task WriteAsync_WhenDetailCountExceedsPageSize_WritesMultipleDetailPages()
@@ -87,6 +90,7 @@ public sealed class StaticReportBundleWriterTests
         Assert.IsTrue(File.Exists(Path.Combine(outputDirectory, "details", "page-000001.json")));
     }
 
+
     [TestMethod]
     public async Task WriteAsync_WhenReportAssetsAreMissing_ThrowsInvalidOperationException()
     {
@@ -97,6 +101,7 @@ public sealed class StaticReportBundleWriterTests
         await AssertThrowsAsync<InvalidOperationException>(() =>
             writer.WriteAsync(results.Run.Id, Path.Combine(tempFolder.Path, "report"), Path.Combine(tempFolder.Path, "missing")));
     }
+
 
     [TestMethod]
     public async Task WriteAsync_WhenArtifactIdsContainUnsafeCharacters_WritesSafeSidecarPaths()
@@ -129,6 +134,7 @@ public sealed class StaticReportBundleWriterTests
             Assert.IsTrue(File.Exists(Path.Combine(outputDirectory, artifactId.Replace('/', Path.DirectorySeparatorChar))));
         }
     }
+
 
     [TestMethod]
     public async Task WriteAsync_WhenRunHasReportDifferences_WritesV2MetadataAnalysisAndRawRows()
@@ -169,6 +175,46 @@ public sealed class StaticReportBundleWriterTests
         Assert.AreEqual(2, page.Items[0].RawTextDifferences.Count);
         Assert.AreEqual(StaticReportRawTextDifferenceType.StatusCodeDifference, page.Items[0].RawTextDifferences[0].Type);
     }
+
+    [TestMethod]
+    public async Task WriteAsync_WhenPairHasFocusedArtifacts_RewritesFocusedSidecars()
+    {
+        using TempFolder tempFolder = new TempFolder();
+        string assetsDirectory = CreateAssetsDirectory(tempFolder);
+        string outputDirectory = Path.Combine(tempFolder.Path, "report");
+        RequestPairResult pair = new RequestPairResult(
+            "one.json",
+            RequestPairOutcome.Different,
+            CreateResponse(EndpointSlot.A, "artifact-a", 200),
+            CreateResponse(EndpointSlot.B, "artifact-b", 200),
+            areEqual: false,
+            differenceCount: 1,
+            differences: new[] { new ComparisonDifference("Name", "Alice", "Alicia", "Name changed.") },
+            focusedResponseA: CreateResponse(EndpointSlot.A, "focused-a", 200),
+            focusedResponseB: CreateResponse(EndpointSlot.B, "focused-b", 200),
+            focusedRawContentIgnorePaths: new[] { "Customer.Token" });
+        FakeRunResults results = CreateResults(pair);
+        FakeArtifactStore artifacts = new FakeArtifactStore();
+        artifacts.Add("artifact-a", "full-a");
+        artifacts.Add("artifact-b", "full-b");
+        artifacts.Add("focused-a", "focused-a-body");
+        artifacts.Add("focused-b", "focused-b-body");
+        StaticReportBundleWriter writer = new StaticReportBundleWriter(results, artifacts);
+
+        StaticReportBundleResult result = await writer.WriteAsync(results.Run.Id, outputDirectory, assetsDirectory);
+
+        StaticReportDetailPage page = await ReadJsonAsync<StaticReportDetailPage>(Path.Combine(outputDirectory, "details", "page-000000.json"));
+        RequestPairResult rewritten = page.Items[0];
+        Assert.AreEqual(4, result.RawArtifactCount);
+        Assert.IsTrue(rewritten.HasFocusedRawContent);
+        StringAssert.StartsWith(rewritten.FocusedResponseA!.Artifact.ArtifactId, "raw/");
+        StringAssert.StartsWith(rewritten.FocusedResponseB!.Artifact.ArtifactId, "raw/");
+        CollectionAssert.Contains(rewritten.FocusedRawContentIgnorePaths.ToList(), "Customer.Token");
+        Assert.IsTrue(File.Exists(Path.Combine(outputDirectory, rewritten.FocusedResponseA.Artifact.ArtifactId.Replace('/', Path.DirectorySeparatorChar))));
+        Assert.IsTrue(File.Exists(Path.Combine(outputDirectory, rewritten.FocusedResponseB.Artifact.ArtifactId.Replace('/', Path.DirectorySeparatorChar))));
+    }
+
+
 
 
     [TestMethod]
@@ -373,3 +419,4 @@ public sealed class StaticReportBundleWriterTests
         }
     }
 }
+

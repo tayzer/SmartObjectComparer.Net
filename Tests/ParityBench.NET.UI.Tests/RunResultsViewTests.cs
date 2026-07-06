@@ -40,6 +40,7 @@ public sealed class RunResultsViewTests
         }
     }
 
+
     [TestMethod]
     public void RunHistory_WhenRunsAreLoaded_RendersSummaryCounts()
     {
@@ -60,6 +61,7 @@ public sealed class RunResultsViewTests
         StringAssert.Contains(component.Markup, "Different 1");
     }
 
+
     [TestMethod]
     public void RunResult_WhenRendered_RendersV1StyleReportSurface()
     {
@@ -79,6 +81,7 @@ public sealed class RunResultsViewTests
         StringAssert.Contains(component.Markup, "CSV");
     }
 
+
     [TestMethod]
     public void RunResult_WhenDetailsArePaged_RendersCurrentPageOnly()
     {
@@ -97,6 +100,7 @@ public sealed class RunResultsViewTests
         StringAssert.Contains(component.Markup, "Showing 1-25 of 26");
     }
 
+
     [TestMethod]
     public void RunResult_WhenPairIsSelected_RendersStructuredDetailWithoutEagerRawRead()
     {
@@ -114,6 +118,7 @@ public sealed class RunResultsViewTests
         StringAssert.Contains(component.Markup, "Subject.ContactProfile.NotificationPreference.MarketingConsent");
         Assert.AreEqual(0, dataSource.PreviewReadCount);
     }
+
 
     [TestMethod]
     public void RunResult_WhenNestedStructuredDifferencesRender_CanCollapseParentNode()
@@ -142,6 +147,7 @@ public sealed class RunResultsViewTests
         });
     }
 
+
     [TestMethod]
     public void RunResult_WhenAllDifferencesTabIsOpened_RendersPropertyTreeAndAffectedPairLink()
     {
@@ -163,6 +169,7 @@ public sealed class RunResultsViewTests
         StringAssert.Contains(component.Markup, "customers/one.json");
     }
 
+
     [TestMethod]
     public void RunResult_WhenPairHasRawTextRows_RendersRawDifferenceDetail()
     {
@@ -180,6 +187,67 @@ public sealed class RunResultsViewTests
         StringAssert.Contains(component.Markup, "502");
     }
 
+
+
+    [TestMethod]
+    public void RunResult_WhenFocusedContentExists_RendersFocusedOptionAndLoadsFocusedArtifacts()
+    {
+        RunId runId = new RunId("run-1");
+        RequestPairResult pair = CreateFocusedPair("one.json");
+        dataSource.Run = CreateCompletedRun(runId);
+        dataSource.Summary = dataSource.Run.Summary;
+        dataSource.Details = new[] { pair };
+        dataSource.Previews[pair.ResponseA!.Artifact.ArtifactId] = CreatePreview(pair.ResponseA.Artifact, "full-a");
+        dataSource.Previews[pair.ResponseB!.Artifact.ArtifactId] = CreatePreview(pair.ResponseB.Artifact, "full-b");
+        dataSource.Previews[pair.FocusedResponseA!.Artifact.ArtifactId] = CreatePreview(pair.FocusedResponseA.Artifact, "focused-a");
+        dataSource.Previews[pair.FocusedResponseB!.Artifact.ArtifactId] = CreatePreview(pair.FocusedResponseB.Artifact, "focused-b");
+
+        IRenderedComponent<RunResult> component = testContext.Render<RunResult>(parameters =>
+            parameters.Add(result => result.RunId, runId));
+        Type modeType = typeof(RunResult).GetNestedType("DetailViewMode", System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("DetailViewMode was not found.");
+        object focusedMode = Enum.Parse(modeType, "Focused");
+        object? task = typeof(RunResult)
+            .GetMethod("OnDetailViewModeChangedAsync", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?.Invoke(component.Instance, new[] { focusedMode });
+        Assert.IsNotNull(task);
+        ((Task)task).GetAwaiter().GetResult();
+        component.Render();
+
+        component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "Focused"));
+        StringAssert.Contains(component.Markup, "focused-a");
+        StringAssert.Contains(component.Markup, "focused-b");
+        Assert.IsFalse(component.Markup.Contains("full-a", StringComparison.Ordinal));
+        Assert.IsFalse(component.Markup.Contains("full-b", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void RunResult_WhenFullContentIsJson_FormatsSideBySideDisplay()
+    {
+        RunId runId = new RunId("run-1");
+        RequestPairResult pair = CreateDifferentPair("one.json");
+        dataSource.Run = CreateCompletedRun(runId);
+        dataSource.Summary = dataSource.Run.Summary;
+        dataSource.Details = new[] { pair };
+        dataSource.Previews[pair.ResponseA!.Artifact.ArtifactId] = CreatePreview(pair.ResponseA.Artifact, @"{""name"":""Alice"",""city"":""London""}");
+        dataSource.Previews[pair.ResponseB!.Artifact.ArtifactId] = CreatePreview(pair.ResponseB.Artifact, @"{""name"":""Alicia"",""city"":""Paris""}");
+
+        IRenderedComponent<RunResult> component = testContext.Render<RunResult>(parameters =>
+            parameters.Add(result => result.RunId, runId));
+        Type modeType = typeof(RunResult).GetNestedType("DetailViewMode", System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("DetailViewMode was not found.");
+        object fullMode = Enum.Parse(modeType, "Full");
+        object? task = typeof(RunResult)
+            .GetMethod("OnDetailViewModeChangedAsync", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?.Invoke(component.Instance, new[] { fullMode });
+        Assert.IsNotNull(task);
+        ((Task)task).GetAwaiter().GetResult();
+        component.Render();
+
+        IReadOnlyList<string> renderedLines = component.FindAll(".v1-line-text").Select(line => line.TextContent).ToList();
+        CollectionAssert.Contains(renderedLines.ToList(), "  \"name\": \"Alice\",");
+        CollectionAssert.Contains(renderedLines.ToList(), "  \"city\": \"London\"");
+    }
     [TestMethod]
     public void RunResult_WhenDataSourceFails_ShowsRecoverableError()
     {
@@ -232,6 +300,19 @@ public sealed class RunResultsViewTests
                 new ComparisonDifference("Subject.ContactProfile.NotificationPreference.MarketingConsent", "Accepted", "Declined", "Marketing consent changed."),
             });
 
+
+    private static RequestPairResult CreateFocusedPair(string relativePath) =>
+        new RequestPairResult(
+            relativePath,
+            RequestPairOutcome.Different,
+            CreateResponse(EndpointSlot.A, relativePath),
+            CreateResponse(EndpointSlot.B, relativePath),
+            areEqual: false,
+            differenceCount: 1,
+            differences: new[] { new ComparisonDifference("Name", "Alice", "Alicia", "Name changed.") },
+            focusedResponseA: CreateFocusedResponse(EndpointSlot.A, relativePath),
+            focusedResponseB: CreateFocusedResponse(EndpointSlot.B, relativePath),
+            focusedRawContentIgnorePaths: new[] { "Customer.Token" });
     private static RequestPairResult CreateRawPair(string relativePath) =>
         new RequestPairResult(
             relativePath,
@@ -256,6 +337,15 @@ public sealed class RunResultsViewTests
             10,
             "abc");
 
+
+    private static ResponseArtifactMetadata CreateFocusedResponse(EndpointSlot endpoint, string relativePath) =>
+        new ResponseArtifactMetadata(
+            endpoint,
+            new ArtifactReference($"runs/run-1/artifacts/{endpoint}/focused/{relativePath}", "text/plain"),
+            200,
+            "text/plain",
+            8,
+            "focused");
     private static ArtifactContentPreview CreatePreview(
         ArtifactReference artifact,
         string content,
@@ -373,3 +463,4 @@ public sealed class RunResultsViewTests
         }
     }
 }
+

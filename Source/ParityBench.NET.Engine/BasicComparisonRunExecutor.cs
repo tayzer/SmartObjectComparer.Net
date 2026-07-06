@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 
 using ParityBench.NET.Application.ContractProfiles;
@@ -187,7 +187,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         }
 
         string? errorMessage = BuildErrorMessage(endpointA, endpointB);
-        return await responseComparer
+        RequestPairResult pairResult = await responseComparer
             .CompareAsync(
                 request,
                 comparisonOptions,
@@ -196,6 +196,8 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                 errorMessage,
                 cancellationToken)
             .ConfigureAwait(false);
+
+        return await AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, cancellationToken).ConfigureAwait(false);
     }
     private async Task<EndpointExecutionResult> ExecuteEndpointAsync(
         ComparisonRun run,
@@ -271,16 +273,20 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         string? errorMessage = BuildErrorMessage(endpointA, endpointB);
         if (!string.IsNullOrWhiteSpace(errorMessage))
         {
-            return await responseComparer
+            RequestPairResult pairResult = await responseComparer
                 .CompareAsync(request, comparisonOptions, endpointA.Metadata, endpointB.Metadata, errorMessage, cancellationToken)
                 .ConfigureAwait(false);
+
+            return await AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, cancellationToken).ConfigureAwait(false);
         }
 
         if (!endpointA.IsSuccessStatusCode || !endpointB.IsSuccessStatusCode)
         {
-            return await responseComparer
+            RequestPairResult pairResult = await responseComparer
                 .CompareAsync(request, comparisonOptions, endpointA.Metadata, endpointB.Metadata, null, cancellationToken)
                 .ConfigureAwait(false);
+
+            return await AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, cancellationToken).ConfigureAwait(false);
         }
 
         try
@@ -304,9 +310,11 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                 cancellationToken)
                 .ConfigureAwait(false);
 
-            return await responseComparer
+            RequestPairResult pairResult = await responseComparer
                 .CompareAsync(request, comparisonOptions, canonicalA, canonicalB, null, cancellationToken)
                 .ConfigureAwait(false);
+
+            return await AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -320,6 +328,18 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                 errorMessage: ex.Message);
         }
     }
+    private Task<RequestPairResult> AttachFocusedRawContentAsync(
+        RequestPairResult result,
+        RunId runId,
+        RunOptions comparisonOptions,
+        CancellationToken cancellationToken) =>
+        FocusedRawContentBuilder.TryAttachFocusedRawContentAsync(
+            result,
+            runId,
+            comparisonOptions.Comparison,
+            runArtifactStore,
+            cancellationToken);
+
     private async Task<PreparedRequest> PrepareRegularRequestAsync(
         ComparisonRun run,
         RequestItem request,
@@ -655,5 +675,4 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             new EndpointExecutionResult(endpoint, null, errorMessage);
     }
 }
-
 

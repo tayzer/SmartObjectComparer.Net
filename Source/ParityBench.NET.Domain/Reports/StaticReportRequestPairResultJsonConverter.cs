@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 using ParityBench.NET.Domain.Comparison;
@@ -26,6 +26,9 @@ internal sealed class StaticReportRequestPairResultJsonConverter : JsonConverter
         List<ComparisonDifference>? differences = ReadOptional<List<ComparisonDifference>>(root, "differences", options);
         string? outcomeMessage = ReadOptionalString(root, "outcomeMessage");
         List<StaticReportRawTextDifference>? rawTextDifferences = ReadOptional<List<StaticReportRawTextDifference>>(root, "rawTextDifferences", options);
+        ResponseArtifactMetadata? focusedResponseA = ReadOptional<ResponseArtifactMetadata>(root, "focusedResponseA", options);
+        ResponseArtifactMetadata? focusedResponseB = ReadOptional<ResponseArtifactMetadata>(root, "focusedResponseB", options);
+        List<string>? focusedRawContentIgnorePaths = ReadOptional<List<string>>(root, "focusedRawContentIgnorePaths", options);
 
         return new RequestPairResult(
             relativePath,
@@ -37,7 +40,10 @@ internal sealed class StaticReportRequestPairResultJsonConverter : JsonConverter
             differenceCount,
             differences,
             outcomeMessage,
-            rawTextDifferences);
+            rawTextDifferences,
+            focusedResponseA,
+            focusedResponseB,
+            focusedRawContentIgnorePaths);
     }
 
     public override void Write(
@@ -59,6 +65,10 @@ internal sealed class StaticReportRequestPairResultJsonConverter : JsonConverter
         WriteOptionalString(writer, "outcomeMessage", value.OutcomeMessage);
         writer.WritePropertyName("rawTextDifferences");
         JsonSerializer.Serialize(writer, value.RawTextDifferences, options);
+        WriteOptional(writer, "focusedResponseA", value.FocusedResponseA, options);
+        WriteOptional(writer, "focusedResponseB", value.FocusedResponseB, options);
+        writer.WritePropertyName("focusedRawContentIgnorePaths");
+        JsonSerializer.Serialize(writer, value.FocusedRawContentIgnorePaths, options);
         writer.WriteEndObject();
     }
 
@@ -136,3 +146,4 @@ internal sealed class StaticReportRequestPairResultJsonConverter : JsonConverter
         writer.WriteString(propertyName, value);
     }
 }
+

@@ -180,6 +180,16 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
             outputDirectory,
             copiedArtifacts,
             cancellationToken).ConfigureAwait(false);
+        ResponseArtifactMetadata? focusedResponseA = await RewriteArtifactAsync(
+            item.FocusedResponseA,
+            outputDirectory,
+            copiedArtifacts,
+            cancellationToken).ConfigureAwait(false);
+        ResponseArtifactMetadata? focusedResponseB = await RewriteArtifactAsync(
+            item.FocusedResponseB,
+            outputDirectory,
+            copiedArtifacts,
+            cancellationToken).ConfigureAwait(false);
 
         return new RequestPairResult(
             item.RelativePath,
@@ -191,7 +201,10 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
             item.DifferenceCount,
             item.Differences,
             item.OutcomeMessage,
-            BuildRawTextDifferences(item, responseA, responseB));
+            BuildRawTextDifferences(item, responseA, responseB),
+            focusedResponseA,
+            focusedResponseB,
+            item.FocusedRawContentIgnorePaths);
     }
 
     private async Task<ResponseArtifactMetadata?> RewriteArtifactAsync(
@@ -526,3 +539,4 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
         public int AffectedPairCount { get; set; }
     }
 }
+

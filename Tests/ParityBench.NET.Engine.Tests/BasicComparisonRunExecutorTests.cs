@@ -195,6 +195,67 @@ public sealed class BasicComparisonRunExecutorTests
     }
 
     [TestMethod]
+    public async Task ExecuteAsync_WhenIgnoreCompleteRulePrunesJson_AttachesFocusedRawContent()
+    {
+        RequestItem request = new RequestItem("one.json", "application/json", 2);
+        FakeRunArtifactStore artifactStore = new FakeRunArtifactStore();
+        FakeRunDetailStore detailStore = new FakeRunDetailStore();
+        FakeEndpointRequestSender sender = new FakeEndpointRequestSender(endpointRequest =>
+            endpointRequest.Endpoint == EndpointSlot.A
+                ? new EndpointResponse(200, "application/json", CreateStream(@"{""name"":""Alice"",""token"":""secret""}"))
+                : new EndpointResponse(200, "application/json", CreateStream(@"{""name"":""Alicia"",""token"":""other""}")));
+        BasicComparisonRunExecutor executor = CreateExecutor(
+            CreateBatch(new[] { request }),
+            sender,
+            artifactStore,
+            detailStore: detailStore);
+        ComparisonRun run = CreateRun(
+            comparisonOptions: new ComparisonOptions(
+                ignoreRules: new[] { new IgnoreRuleDefinition("token") }));
+
+        await executor.ExecuteAsync(run, new CapturingProgressReporter());
+
+        RequestPairResult result = detailStore.SavedResults.Single();
+        Assert.IsTrue(result.HasFocusedRawContent);
+        CollectionAssert.Contains(result.FocusedRawContentIgnorePaths.ToList(), "token");
+        string focusedA = artifactStore.SavedBodies[result.FocusedResponseA!.Artifact.ArtifactId];
+        string focusedB = artifactStore.SavedBodies[result.FocusedResponseB!.Artifact.ArtifactId];
+        Assert.IsTrue(focusedA.Contains("Alice", StringComparison.Ordinal));
+        Assert.IsTrue(focusedB.Contains("Alicia", StringComparison.Ordinal));
+        Assert.IsFalse(focusedA.Contains("secret", StringComparison.Ordinal));
+        Assert.IsFalse(focusedB.Contains("other", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_WhenSmartPropertyIgnorePrunesJson_AttachesFocusedRawContent()
+    {
+        RequestItem request = new RequestItem("one.json", "application/json", 2);
+        FakeRunArtifactStore artifactStore = new FakeRunArtifactStore();
+        FakeRunDetailStore detailStore = new FakeRunDetailStore();
+        FakeEndpointRequestSender sender = new FakeEndpointRequestSender(endpointRequest =>
+            endpointRequest.Endpoint == EndpointSlot.A
+                ? new EndpointResponse(200, "application/json", CreateStream(@"{""name"":""Alice"",""ReportId"":""A-1""}"))
+                : new EndpointResponse(200, "application/json", CreateStream(@"{""name"":""Alicia"",""ReportId"":""B-1""}")));
+        BasicComparisonRunExecutor executor = CreateExecutor(
+            CreateBatch(new[] { request }),
+            sender,
+            artifactStore,
+            detailStore: detailStore);
+        ComparisonRun run = CreateRun(
+            comparisonOptions: new ComparisonOptions(
+                smartIgnoreRules: new[] { new SmartIgnoreRuleDefinition(SmartIgnoreRuleKind.PropertyName, "ReportId") }));
+
+        await executor.ExecuteAsync(run, new CapturingProgressReporter());
+
+        RequestPairResult result = detailStore.SavedResults.Single();
+        Assert.IsTrue(result.HasFocusedRawContent);
+        string focusedA = artifactStore.SavedBodies[result.FocusedResponseA!.Artifact.ArtifactId];
+        string focusedB = artifactStore.SavedBodies[result.FocusedResponseB!.Artifact.ArtifactId];
+        Assert.IsFalse(focusedA.Contains("ReportId", StringComparison.Ordinal));
+        Assert.IsFalse(focusedB.Contains("ReportId", StringComparison.Ordinal));
+        Assert.IsTrue(result.FocusedRawContentIgnorePaths.Any(path => string.Equals(path, "ReportId", StringComparison.OrdinalIgnoreCase)));
+    }
+    [TestMethod]
     public async Task ExecuteAsync_WhenCancellationTokenIsCancelled_StopsWithoutSavingFinalDetails()
     {
         RequestItem request = new RequestItem("one.json", "application/json", 2);

@@ -9,17 +9,20 @@ namespace ParityBench.NET.Domain.Tests;
 [TestClass]
 public sealed class RequestPairResultTests
 {
+
     [TestMethod]
     public void Create_WhenRequestRelativePathIsRooted_ThrowsArgumentException()
     {
         AssertThrows<ArgumentException>(() => new RequestItem(@"C:\requests\one.json"));
     }
 
+
     [TestMethod]
     public void Create_WhenRequestRelativePathContainsParentTraversal_ThrowsArgumentException()
     {
         AssertThrows<ArgumentException>(() => new RequestItem("../one.json"));
     }
+
 
     [TestMethod]
     public void Classify_WhenBothSuccessHashesMatch_ReturnsEqual()
@@ -32,6 +35,7 @@ public sealed class RequestPairResultTests
         Assert.AreEqual(RequestPairOutcome.Equal, result.Outcome);
     }
 
+
     [TestMethod]
     public void Classify_WhenBothSuccessHashesDiffer_ReturnsDifferent()
     {
@@ -43,6 +47,7 @@ public sealed class RequestPairResultTests
         Assert.AreEqual(RequestPairOutcome.Different, result.Outcome);
     }
 
+
     [TestMethod]
     public void Classify_WhenOnlyOneEndpointSucceeds_ReturnsStatusCodeMismatch()
     {
@@ -53,6 +58,7 @@ public sealed class RequestPairResultTests
 
         Assert.AreEqual(RequestPairOutcome.StatusCodeMismatch, result.Outcome);
     }
+
 
     [TestMethod]
     public void Classify_WhenStatusCodesMismatch_ReturnsStatusCodeMismatchWithStatusDifference()
@@ -69,6 +75,7 @@ public sealed class RequestPairResultTests
         Assert.IsTrue(result.OutcomeMessage?.Contains("200", StringComparison.Ordinal) == true);
     }
 
+
     [TestMethod]
     public void Classify_WhenBothEndpointsAreNonSuccess_ReturnsBothNonSuccess()
     {
@@ -84,6 +91,7 @@ public sealed class RequestPairResultTests
         Assert.IsTrue(result.OutcomeMessage?.Contains("non-success", StringComparison.OrdinalIgnoreCase) == true);
     }
 
+
     [TestMethod]
     public void Create_WhenOutcomeMessageIsWhitespace_StoresNull()
     {
@@ -94,6 +102,7 @@ public sealed class RequestPairResultTests
 
         Assert.IsNull(result.OutcomeMessage);
     }
+
 
     [TestMethod]
     public void Summarize_WhenResultsContainStatusAndNonSuccess_CountsDedicatedBuckets()
@@ -118,6 +127,7 @@ public sealed class RequestPairResultTests
         Assert.IsNotNull(summary.DetailIndexReference);
     }
 
+
     [TestMethod]
     public void Create_WhenExecutionMetricsAreProvided_PreservesMetricValues()
     {
@@ -139,6 +149,7 @@ public sealed class RequestPairResultTests
         Assert.AreEqual(42, summary.ExecutionMetrics?.ResponseBytesWritten);
     }
 
+
     [TestMethod]
     public void Create_WhenSummaryOmitsExecutionMetrics_RemainsBackwardCompatible()
     {
@@ -146,6 +157,54 @@ public sealed class RequestPairResultTests
             new[] { new RequestPairResult("equal.json", RequestPairOutcome.Equal) });
 
         Assert.IsNull(summary.ExecutionMetrics);
+    }
+
+    [TestMethod]
+    public void StaticReportJson_WhenFocusedRawContentExists_RoundTripsMetadata()
+    {
+        RequestPairResult result = new RequestPairResult(
+            "one.json",
+            RequestPairOutcome.Different,
+            CreateResponse(EndpointSlot.A, 200, 12, "abc"),
+            CreateResponse(EndpointSlot.B, 200, 13, "def"),
+            focusedResponseA: CreateResponse(EndpointSlot.A, 200, 8, "focused-a"),
+            focusedResponseB: CreateResponse(EndpointSlot.B, 200, 9, "focused-b"),
+            focusedRawContentIgnorePaths: new[] { "Customer.Token" });
+
+        string json = System.Text.Json.JsonSerializer.Serialize(result, ParityBench.NET.Domain.Reports.StaticReportJsonOptions.Create());
+        RequestPairResult? roundTripped = System.Text.Json.JsonSerializer.Deserialize<RequestPairResult>(json, ParityBench.NET.Domain.Reports.StaticReportJsonOptions.Create());
+
+        Assert.IsNotNull(roundTripped);
+        Assert.IsTrue(roundTripped.HasFocusedRawContent);
+        Assert.AreEqual("artifact-A", roundTripped.FocusedResponseA?.Artifact.ArtifactId);
+        Assert.AreEqual("artifact-B", roundTripped.FocusedResponseB?.Artifact.ArtifactId);
+        CollectionAssert.Contains(roundTripped.FocusedRawContentIgnorePaths.ToList(), "Customer.Token");
+    }
+
+
+    [TestMethod]
+    public void StaticReportJson_WhenFocusedFieldsAreMissing_LoadsBackwardCompatiblePair()
+    {
+        const string json = """
+            {
+              "relativePath": "one.json",
+              "outcome": "Equal",
+              "responseA": null,
+              "responseB": null,
+              "errorMessage": null,
+              "areEqual": true,
+              "differenceCount": 0,
+              "differences": [],
+              "outcomeMessage": null,
+              "rawTextDifferences": []
+            }
+            """;
+
+        RequestPairResult? result = System.Text.Json.JsonSerializer.Deserialize<RequestPairResult>(json, ParityBench.NET.Domain.Reports.StaticReportJsonOptions.Create());
+
+        Assert.IsNotNull(result);
+        Assert.IsFalse(result.HasFocusedRawContent);
+        Assert.AreEqual(0, result.FocusedRawContentIgnorePaths.Count);
     }
     private static void AssertThrows<TException>(Action action)
         where TException : Exception
@@ -181,3 +240,4 @@ public sealed class RequestPairResultTests
             contentLength,
             sha256);
 }
+

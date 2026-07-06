@@ -1,5 +1,7 @@
 @using System.Globalization
 @using System.Text.Json
+@using System.Xml
+@using System.Xml.Linq
 @using ParityBench.NET.Domain.Reports
 @using Microsoft.AspNetCore.Components
 @using Microsoft.JSInterop
@@ -351,6 +353,7 @@ else if (run is not null)
                         <MudSelect T="DetailViewMode" Value="@detailViewMode" ValueChanged="OnDetailViewModeChangedAsync" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 10rem;">
                             <MudSelectItem T="DetailViewMode" Value="DetailViewMode.Structured">Structured</MudSelectItem>
                             @if (selectedPair.RawTextDifferences.Count > 0) { <MudSelectItem T="DetailViewMode" Value="DetailViewMode.Raw">Raw Differences</MudSelectItem> }
+                            @if (selectedPair.HasFocusedRawContent) { <MudSelectItem T="DetailViewMode" Value="DetailViewMode.Focused">Focused</MudSelectItem> }
                             @if (HasArtifactContent(selectedPair)) { <MudSelectItem T="DetailViewMode" Value="DetailViewMode.Full">Full</MudSelectItem> }
                         </MudSelect>
                         <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Download" OnClick="ExportSelectedPairJsonAsync">Export This Result</MudButton>
@@ -374,7 +377,7 @@ else if (run is not null)
                             <RowTemplate><MudTd>@context.Type</MudTd><MudTd>@FormatRawLine(context)</MudTd><MudTd Class="v1-code v1-diff-a">@(context.TextA ?? string.Empty)</MudTd><MudTd Class="v1-code v1-diff-b">@(context.TextB ?? string.Empty)</MudTd></RowTemplate>
                         </MudTable>
                     }
-                    else if (detailViewMode == DetailViewMode.Full)
+                    else if (IsSideBySideRawContentView)
                     {
                         <MudStack Row="true" Spacing="2" Class="flex-wrap mb-2">
                             <MudSwitch T="bool" Value="@syncScroll" ValueChanged="OnSyncScrollChangedAsync" Label="Sync scroll" />
@@ -605,7 +608,12 @@ else if (run is not null)
     {
         detailViewMode = mode;
         shouldRefreshScrollSync = true;
-        if (mode == DetailViewMode.Full) { await LoadContentAsync(); }
+        if (mode is DetailViewMode.Full or DetailViewMode.Focused)
+        {
+            contentA = null;
+            contentB = null;
+            await LoadContentAsync();
+        }
     }
 
     private async Task LoadContentAsync()
@@ -615,8 +623,15 @@ else if (run is not null)
         contentErrorMessage = null;
         try
         {
-            if (selectedPair.ResponseA?.Artifact is not null) { contentA = await DataSource.ReadArtifactContentAsync(selectedPair.ResponseA.Artifact); }
-            if (selectedPair.ResponseB?.Artifact is not null) { contentB = await DataSource.ReadArtifactContentAsync(selectedPair.ResponseB.Artifact); }
+            var artifactA = detailViewMode == DetailViewMode.Focused
+                ? selectedPair.FocusedResponseA?.Artifact
+                : selectedPair.ResponseA?.Artifact;
+            var artifactB = detailViewMode == DetailViewMode.Focused
+                ? selectedPair.FocusedResponseB?.Artifact
+                : selectedPair.ResponseB?.Artifact;
+
+            if (artifactA is not null) { contentA = FormatArtifactPreview(await DataSource.ReadArtifactContentAsync(artifactA)); }
+            if (artifactB is not null) { contentB = FormatArtifactPreview(await DataSource.ReadArtifactContentAsync(artifactB)); }
         }
         catch (Exception ex) { contentErrorMessage = ex.Message; }
         finally
@@ -627,6 +642,94 @@ else if (run is not null)
     }
 
 
+
+    private static ArtifactContentPreview FormatArtifactPreview(ArtifactContentPreview preview)
+    {
+        string formattedContent = FormatStructuredText(preview.Content, preview.ContentType, preview.Artifact.ArtifactId);
+        if (string.Equals(formattedContent, preview.Content, StringComparison.Ordinal))
+        {
+            return preview;
+        }
+
+        return new ArtifactContentPreview(
+            preview.Artifact,
+            formattedContent,
+            preview.BytesRead,
+            preview.IsTruncated,
+            preview.ContentType,
+            preview.TotalLength);
+    }
+
+    private static string FormatStructuredText(string text, string? contentType, string? fileName) =>
+        DetectDocumentKind(contentType, fileName, text) switch
+        {
+            StructuredDocumentKind.Json => TryFormatJson(text),
+            StructuredDocumentKind.Xml => TryFormatXml(text),
+            _ => text,
+        };
+
+    private static string TryFormatJson(string text)
+    {
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(text);
+            return JsonSerializer.Serialize(document.RootElement, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (JsonException)
+        {
+            return text;
+        }
+    }
+
+    private static string TryFormatXml(string text)
+    {
+        try
+        {
+            XDocument document = XDocument.Parse(text, LoadOptions.None);
+            return document.ToString(SaveOptions.None);
+        }
+        catch (Exception ex) when (ex is XmlException or InvalidOperationException)
+        {
+            return text;
+        }
+    }
+
+    private static StructuredDocumentKind DetectDocumentKind(string? contentType, string? fileName, string text)
+    {
+        if (contentType?.Contains("json", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return StructuredDocumentKind.Json;
+        }
+
+        if (contentType?.Contains("xml", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return StructuredDocumentKind.Xml;
+        }
+
+        string extension = Path.GetExtension(fileName ?? string.Empty);
+        if (string.Equals(extension, ".json", StringComparison.OrdinalIgnoreCase))
+        {
+            return StructuredDocumentKind.Json;
+        }
+
+        if (string.Equals(extension, ".xml", StringComparison.OrdinalIgnoreCase))
+        {
+            return StructuredDocumentKind.Xml;
+        }
+
+        ReadOnlySpan<char> firstNonWhitespace = text.AsSpan().TrimStart();
+        if (firstNonWhitespace.Length == 0)
+        {
+            return StructuredDocumentKind.Unknown;
+        }
+
+        return firstNonWhitespace[0] switch
+        {
+            '{' or '[' => StructuredDocumentKind.Json,
+            '<' => StructuredDocumentKind.Xml,
+            _ => StructuredDocumentKind.Unknown,
+        };
+    }
     private IReadOnlyList<StaticReportPropertyDifferenceSummary> GetFilteredDifferenceProperties()
     {
         if (differenceIndex is null) { return Array.Empty<StaticReportPropertyDifferenceSummary>(); }
@@ -793,13 +896,13 @@ else if (run is not null)
     {
         if (!shouldRefreshScrollSync) { return; }
         shouldRefreshScrollSync = false;
-        await SetSyncedScrollAsync(detailViewMode == DetailViewMode.Full && syncScroll && !isLoadingContent && string.IsNullOrWhiteSpace(contentErrorMessage));
+        await SetSyncedScrollAsync(IsSideBySideRawContentView && syncScroll && !isLoadingContent && string.IsNullOrWhiteSpace(contentErrorMessage));
     }
 
     private async Task OnSyncScrollChangedAsync(bool value)
     {
         syncScroll = value;
-        await SetSyncedScrollAsync(detailViewMode == DetailViewMode.Full && syncScroll && !isLoadingContent && string.IsNullOrWhiteSpace(contentErrorMessage));
+        await SetSyncedScrollAsync(IsSideBySideRawContentView && syncScroll && !isLoadingContent && string.IsNullOrWhiteSpace(contentErrorMessage));
     }
 
     private async Task SetSyncedScrollAsync(bool enabled)
@@ -950,6 +1053,7 @@ else if (run is not null)
         || item.Differences.Any(difference => string.Equals(GetDifferenceCategory(difference), categoryFilter, StringComparison.OrdinalIgnoreCase));
 
     private static RequestPairOutcome? ParseStatusFilter(string value) => Enum.TryParse<RequestPairOutcome>(value, out var outcome) ? outcome : null;
+    private bool IsSideBySideRawContentView => detailViewMode is DetailViewMode.Full or DetailViewMode.Focused;
     private static bool HasArtifactContent(RequestPairResult pair) => pair.ResponseA?.Artifact is not null || pair.ResponseB?.Artifact is not null;
     private static string[] SplitLines(string? content) => string.IsNullOrEmpty(content) ? Array.Empty<string>() : content.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n').Split('\n');
     private static string FormatDate(DateTimeOffset value) => value.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
@@ -1025,6 +1129,9 @@ else if (run is not null)
 
         public int DifferenceCount { get; set; }
     }
-    private enum DetailViewMode { Structured, Raw, Full }
+    private enum DetailViewMode { Structured, Raw, Focused, Full }
+    private enum StructuredDocumentKind { Unknown, Json, Xml }
     private sealed record LineModel(int LineNumber, string Text, string CssClass);
 }
+
+

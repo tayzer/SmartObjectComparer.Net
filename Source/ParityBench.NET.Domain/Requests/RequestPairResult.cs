@@ -1,4 +1,4 @@
-﻿using ParityBench.NET.Domain.Comparison;
+using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Reports;
 using ParityBench.NET.Domain.Runs;
 
@@ -16,7 +16,10 @@ public sealed record RequestPairResult
         int? differenceCount = null,
         IEnumerable<ComparisonDifference>? differences = null,
         string? outcomeMessage = null,
-        IEnumerable<StaticReportRawTextDifference>? rawTextDifferences = null)
+        IEnumerable<StaticReportRawTextDifference>? rawTextDifferences = null,
+        ResponseArtifactMetadata? focusedResponseA = null,
+        ResponseArtifactMetadata? focusedResponseB = null,
+        IEnumerable<string>? focusedRawContentIgnorePaths = null)
     {
         RelativePath = new RequestItem(relativePath).RelativePath;
         Outcome = outcome;
@@ -26,6 +29,13 @@ public sealed record RequestPairResult
         OutcomeMessage = string.IsNullOrWhiteSpace(outcomeMessage) ? null : outcomeMessage;
         Differences = (differences ?? Array.Empty<ComparisonDifference>()).ToList();
         RawTextDifferences = (rawTextDifferences ?? Array.Empty<StaticReportRawTextDifference>()).ToList();
+        FocusedResponseA = focusedResponseA;
+        FocusedResponseB = focusedResponseB;
+        FocusedRawContentIgnorePaths = (focusedRawContentIgnorePaths ?? Array.Empty<string>())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => path.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
         DifferenceCount = differenceCount ?? Differences.Count;
         AreEqual = areEqual ?? (outcome switch
         {
@@ -54,6 +64,35 @@ public sealed record RequestPairResult
     public IReadOnlyList<ComparisonDifference> Differences { get; }
 
     public IReadOnlyList<StaticReportRawTextDifference> RawTextDifferences { get; }
+
+    public ResponseArtifactMetadata? FocusedResponseA { get; }
+
+    public ResponseArtifactMetadata? FocusedResponseB { get; }
+
+    public IReadOnlyList<string> FocusedRawContentIgnorePaths { get; }
+
+    public bool HasFocusedRawContent =>
+        FocusedRawContentIgnorePaths.Count > 0 &&
+        (FocusedResponseA?.Artifact is not null || FocusedResponseB?.Artifact is not null);
+
+    public RequestPairResult WithFocusedRawContent(
+        ResponseArtifactMetadata focusedResponseA,
+        ResponseArtifactMetadata focusedResponseB,
+        IEnumerable<string> focusedRawContentIgnorePaths) =>
+        new RequestPairResult(
+            RelativePath,
+            Outcome,
+            ResponseA,
+            ResponseB,
+            ErrorMessage,
+            AreEqual,
+            DifferenceCount,
+            Differences,
+            OutcomeMessage,
+            RawTextDifferences,
+            focusedResponseA,
+            focusedResponseB,
+            focusedRawContentIgnorePaths);
 
     public static RequestPairResult Classify(
         RequestItem request,
@@ -187,3 +226,4 @@ public sealed record RequestPairResult
             ? $"Endpoint A returned {statusCodeA} and endpoint B returned {statusCodeB}."
             : $"Both endpoints returned non-success status codes: A={statusCodeA}, B={statusCodeB}.";
 }
+
