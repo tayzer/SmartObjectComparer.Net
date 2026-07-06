@@ -37,7 +37,7 @@ PropertyName=SourceSystem
 Body.ConsumerReportResponse.Subject.NationalIdentifier|preserveLast=4
 ```
 
-Expected with suggested rules: three equal pairs and one different pair.
+Expected with suggested rules: three equal pairs and two different pairs, including a nested contact preference case.
 
 ## JSON/JSON Consumer Report
 
@@ -68,7 +68,7 @@ PropertyName=SourceSystem
 Subject.NationalIdentifier|preserveLast=4
 ```
 
-Expected with suggested rules: four equal pairs and one different pair.
+Expected with suggested rules: four equal pairs and two different pairs, including a nested contact preference case.
 
 ## XML/JSON Sample Contract Profile
 

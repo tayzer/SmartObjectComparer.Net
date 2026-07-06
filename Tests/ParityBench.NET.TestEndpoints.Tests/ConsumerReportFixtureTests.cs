@@ -36,6 +36,25 @@ public sealed class ConsumerReportFixtureTests
             responseB.Subject.NationalIdentifier[^4..]);
     }
 
+    [TestMethod]
+    public void ConsumerReportJson_WhenScenarioUsesNestedContactPreferences_ReturnsTwoDifferencesOnNestedObject()
+    {
+        ConsumerReportRequest request = CreateRequest("CR-2002");
+
+        ConsumerReportResponse responseA = ConsumerReportFixtures.CreateResponse(EndpointVariant.A, request);
+        ConsumerReportResponse responseB = ConsumerReportFixtures.CreateResponse(EndpointVariant.B, request);
+
+        Assert.AreEqual(
+            responseA.Subject.ContactProfile.PrimaryChannel.EmailAddress,
+            responseB.Subject.ContactProfile.PrimaryChannel.EmailAddress);
+        Assert.AreNotEqual(
+            responseA.Subject.ContactProfile.NotificationPreference.StatementDelivery,
+            responseB.Subject.ContactProfile.NotificationPreference.StatementDelivery);
+        Assert.AreNotEqual(
+            responseA.Subject.ContactProfile.NotificationPreference.MarketingConsent,
+            responseB.Subject.ContactProfile.NotificationPreference.MarketingConsent);
+    }
+
     private static ConsumerReportRequest CreateRequest(string reportRequestId) =>
         new ConsumerReportRequest(
             reportRequestId,

@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.Json;
 
 using ParityBench.NET.Domain.Reports;
@@ -16,6 +16,7 @@ public sealed class StaticReportRunResultsViewDataSource : IRunResultsViewDataSo
     private readonly JsonSerializerOptions jsonOptions;
     private readonly Dictionary<int, StaticReportDetailPage> detailPageCache = new Dictionary<int, StaticReportDetailPage>();
     private StaticReportManifest? manifest;
+    private StaticReportDifferenceIndex? differenceIndex;
 
     public StaticReportRunResultsViewDataSource(HttpClient httpClient)
     {
@@ -76,6 +77,44 @@ public sealed class StaticReportRunResultsViewDataSource : IRunResultsViewDataSo
         return reportManifest.Analysis;
     }
 
+
+    public async Task<StaticReportDifferenceIndex> LoadDifferenceIndexAsync(
+        RunId runId,
+        CancellationToken cancellationToken = default)
+    {
+        if (differenceIndex is not null)
+        {
+            return differenceIndex;
+        }
+
+        StaticReportManifest reportManifest = await LoadManifestAsync(cancellationToken).ConfigureAwait(false);
+        EnsureRunMatches(reportManifest, runId);
+
+        string? indexPath = reportManifest.Analysis?.DifferenceIndexPath;
+        if (!string.IsNullOrWhiteSpace(indexPath))
+        {
+            try
+            {
+                await using Stream stream = await httpClient.GetStreamAsync(indexPath, cancellationToken).ConfigureAwait(false);
+                differenceIndex = await JsonSerializer.DeserializeAsync<StaticReportDifferenceIndex>(
+                    stream,
+                    jsonOptions,
+                    cancellationToken).ConfigureAwait(false);
+                if (differenceIndex is not null)
+                {
+                    return differenceIndex;
+                }
+            }
+            catch (HttpRequestException)
+            {
+                // Older schema-v2 reports may not have the optional sidecar. Fall back to detail pages.
+            }
+        }
+
+        IReadOnlyList<RequestPairResult> details = await LoadAllDetailsAsync(reportManifest, cancellationToken).ConfigureAwait(false);
+        differenceIndex = StaticReportDifferenceIndexBuilder.Build(details);
+        return differenceIndex;
+    }
     public async Task<RunDetailPage> LoadRunDetailsAsync(
         RunId runId,
         RunDetailQuery query,

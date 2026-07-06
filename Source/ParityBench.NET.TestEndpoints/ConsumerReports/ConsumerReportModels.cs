@@ -86,6 +86,8 @@ public sealed class ConsumerReportSubject
     public string NationalIdentifier { get; set; } = string.Empty;
 
     public ConsumerReportAddress CurrentAddress { get; set; } = new ConsumerReportAddress();
+
+    public ConsumerReportContactProfile ContactProfile { get; set; } = new ConsumerReportContactProfile();
 }
 
 public sealed class ConsumerReportAddress
@@ -97,6 +99,27 @@ public sealed class ConsumerReportAddress
     public string Postcode { get; set; } = string.Empty;
 
     public string CountryCode { get; set; } = string.Empty;
+}
+
+public sealed class ConsumerReportContactProfile
+{
+    public ConsumerReportContactChannel PrimaryChannel { get; set; } = new ConsumerReportContactChannel();
+
+    public ConsumerReportNotificationPreference NotificationPreference { get; set; } = new ConsumerReportNotificationPreference();
+}
+
+public sealed class ConsumerReportContactChannel
+{
+    public string EmailAddress { get; set; } = string.Empty;
+
+    public string MobileNumber { get; set; } = string.Empty;
+}
+
+public sealed class ConsumerReportNotificationPreference
+{
+    public string StatementDelivery { get; set; } = string.Empty;
+
+    public string MarketingConsent { get; set; } = string.Empty;
 }
 
 public sealed class ConsumerReportScore

@@ -118,6 +118,9 @@ public sealed class ParityBenchHomeTests
         public Task<StaticReportAnalysisSnapshot?> LoadReportAnalysisAsync(RunId runId, CancellationToken cancellationToken = default) =>
             Task.FromResult<StaticReportAnalysisSnapshot?>(null);
 
+        public Task<StaticReportDifferenceIndex> LoadDifferenceIndexAsync(RunId runId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new StaticReportDifferenceIndex(0, 0));
+
         public Task<RunDetailPage> LoadRunDetailsAsync(
             RunId runId,
             RunDetailQuery query,

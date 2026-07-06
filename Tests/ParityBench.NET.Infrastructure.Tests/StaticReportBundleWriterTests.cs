@@ -170,6 +170,50 @@ public sealed class StaticReportBundleWriterTests
         Assert.AreEqual(StaticReportRawTextDifferenceType.StatusCodeDifference, page.Items[0].RawTextDifferences[0].Type);
     }
 
+
+    [TestMethod]
+    public async Task WriteAsync_WhenRunHasStructuredDifferences_WritesDifferenceIndexSidecar()
+    {
+        using TempFolder tempFolder = new TempFolder();
+        string assetsDirectory = CreateAssetsDirectory(tempFolder);
+        string outputDirectory = Path.Combine(tempFolder.Path, "report");
+        RequestPairResult pair = new RequestPairResult(
+            "customers/one.json",
+            RequestPairOutcome.Different,
+            CreateResponse(EndpointSlot.A, "artifact-a", 200),
+            CreateResponse(EndpointSlot.B, "artifact-b", 200),
+            areEqual: false,
+            differenceCount: 4,
+            differences: new[]
+            {
+                new ComparisonDifference("Customer.Addresses[0].City", "London", "Paris", "City changed."),
+                new ComparisonDifference("Customer.Addresses[1].City", "York", "Lyon", "City changed."),
+                new ComparisonDifference("Subject.ContactProfile.NotificationPreference.StatementDelivery", "Postal", "Email", "Statement delivery preference changed."),
+                new ComparisonDifference("Subject.ContactProfile.NotificationPreference.MarketingConsent", "Accepted", "Declined", "Marketing consent changed."),
+            });
+        FakeRunResults results = CreateResults(pair);
+        FakeArtifactStore artifacts = new FakeArtifactStore();
+        artifacts.Add("artifact-a", new string('a', 20000));
+        artifacts.Add("artifact-b", "small");
+        StaticReportBundleWriter writer = new StaticReportBundleWriter(results, artifacts);
+
+        await writer.WriteAsync(results.Run.Id, outputDirectory, assetsDirectory);
+
+        StaticReportManifest manifest = await ReadJsonAsync<StaticReportManifest>(Path.Combine(outputDirectory, "report.data.json"));
+        StaticReportDifferenceIndex index = await ReadJsonAsync<StaticReportDifferenceIndex>(Path.Combine(outputDirectory, "analysis", "difference-index.json"));
+        string indexJson = await File.ReadAllTextAsync(Path.Combine(outputDirectory, "analysis", "difference-index.json"));
+
+        Assert.AreEqual("analysis/difference-index.json", manifest.Analysis?.DifferenceIndexPath);
+        Assert.AreEqual(4, index.TotalDifferences);
+        Assert.AreEqual(1, index.AffectedPairCount);
+        List<string> normalizedPaths = index.Properties.Select(property => property.NormalizedPath).ToList();
+        CollectionAssert.Contains(normalizedPaths, "Customer.Addresses[*].City");
+        CollectionAssert.Contains(normalizedPaths, "Subject.ContactProfile.NotificationPreference.StatementDelivery");
+        CollectionAssert.Contains(normalizedPaths, "Subject.ContactProfile.NotificationPreference.MarketingConsent");
+        Assert.IsTrue(index.Properties.All(property => property.AffectedPairs.Any(pair => pair.RelativePath == "customers/one.json")));
+        Assert.IsFalse(indexJson.Contains(new string('a', 20000), StringComparison.Ordinal));
+    }
+
     private static ResponseArtifactMetadata CreateResponse(EndpointSlot endpoint, string artifactId, int statusCode) =>
         new ResponseArtifactMetadata(endpoint, new ArtifactReference(artifactId, "text/plain"), statusCode, "text/plain", 1, artifactId);
 

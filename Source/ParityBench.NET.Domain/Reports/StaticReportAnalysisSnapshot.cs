@@ -1,4 +1,4 @@
-﻿namespace ParityBench.NET.Domain.Reports;
+namespace ParityBench.NET.Domain.Reports;
 
 public sealed record StaticReportAnalysisSnapshot
 {
@@ -9,7 +9,8 @@ public sealed record StaticReportAnalysisSnapshot
         int errorPairs,
         int totalDifferences,
         IReadOnlyList<StaticReportDifferenceCategorySummary>? categories = null,
-        IReadOnlyList<StaticReportAffectedObjectSummary>? topAffectedObjects = null)
+        IReadOnlyList<StaticReportAffectedObjectSummary>? topAffectedObjects = null,
+        string? differenceIndexPath = null)
     {
         EnsureNonNegative(totalPairs, nameof(totalPairs));
         EnsureNonNegative(analyzedPairs, nameof(analyzedPairs));
@@ -24,6 +25,7 @@ public sealed record StaticReportAnalysisSnapshot
         TotalDifferences = totalDifferences;
         Categories = (categories ?? Array.Empty<StaticReportDifferenceCategorySummary>()).ToList();
         TopAffectedObjects = (topAffectedObjects ?? Array.Empty<StaticReportAffectedObjectSummary>()).ToList();
+        DifferenceIndexPath = string.IsNullOrWhiteSpace(differenceIndexPath) ? null : differenceIndexPath.Trim();
     }
 
     public int TotalPairs { get; }
@@ -39,6 +41,8 @@ public sealed record StaticReportAnalysisSnapshot
     public IReadOnlyList<StaticReportDifferenceCategorySummary> Categories { get; }
 
     public IReadOnlyList<StaticReportAffectedObjectSummary> TopAffectedObjects { get; }
+
+    public string? DifferenceIndexPath { get; }
 
     public IReadOnlyList<string> AvailableCategories =>
         Categories.Select(category => category.Category).Distinct(StringComparer.OrdinalIgnoreCase).ToList();

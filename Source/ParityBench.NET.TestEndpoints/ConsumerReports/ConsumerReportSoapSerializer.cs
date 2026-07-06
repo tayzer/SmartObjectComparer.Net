@@ -70,7 +70,20 @@ public static class ConsumerReportSoapSerializer
                 new XElement(ConsumerReport + "Line1", subject.CurrentAddress.Line1),
                 new XElement(ConsumerReport + "City", subject.CurrentAddress.City),
                 new XElement(ConsumerReport + "Postcode", subject.CurrentAddress.Postcode),
-                new XElement(ConsumerReport + "CountryCode", subject.CurrentAddress.CountryCode)));
+                new XElement(ConsumerReport + "CountryCode", subject.CurrentAddress.CountryCode)),
+            WriteContactProfile(subject.ContactProfile));
+
+    private static XElement WriteContactProfile(ConsumerReportContactProfile contactProfile) =>
+        new XElement(
+            ConsumerReport + "ContactProfile",
+            new XElement(
+                ConsumerReport + "PrimaryChannel",
+                new XElement(ConsumerReport + "EmailAddress", contactProfile.PrimaryChannel.EmailAddress),
+                new XElement(ConsumerReport + "MobileNumber", contactProfile.PrimaryChannel.MobileNumber)),
+            new XElement(
+                ConsumerReport + "NotificationPreference",
+                new XElement(ConsumerReport + "StatementDelivery", contactProfile.NotificationPreference.StatementDelivery),
+                new XElement(ConsumerReport + "MarketingConsent", contactProfile.NotificationPreference.MarketingConsent)));
 
     private static XElement WriteScore(ConsumerReportScore score) =>
         new XElement(

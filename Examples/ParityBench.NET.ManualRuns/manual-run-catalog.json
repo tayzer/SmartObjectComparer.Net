@@ -20,9 +20,9 @@
       "smartIgnoreRules": "PropertyName=ReportId\nPropertyName=GeneratedAt\nPropertyName=ProviderTraceId\nPropertyName=ProcessingMilliseconds\nPropertyName=SourceSystem",
       "maskRules": "Body.ConsumerReportResponse.Subject.NationalIdentifier|preserveLast=4",
       "expectedWithSuggestedRules": {
-        "total": 4,
+        "total": 5,
         "equal": 3,
-        "different": 1
+        "different": 2
       }
     },
     {
@@ -43,9 +43,9 @@
       "smartIgnoreRules": "PropertyName=ReportId\nPropertyName=GeneratedAt\nPropertyName=ProviderTraceId\nPropertyName=ProcessingMilliseconds\nPropertyName=SourceSystem",
       "maskRules": "Subject.NationalIdentifier|preserveLast=4",
       "expectedWithSuggestedRules": {
-        "total": 5,
+        "total": 6,
         "equal": 4,
-        "different": 1
+        "different": 2
       }
     },
     {

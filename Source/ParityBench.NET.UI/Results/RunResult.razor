@@ -21,6 +21,25 @@
     .v1-line-text { flex: 1; padding: 0 .5rem; white-space: pre-wrap; overflow-wrap: anywhere; }
     .v1-nowrap .v1-line-text { white-space: pre; overflow-wrap: normal; }
     .v1-line-changed { background: rgba(245, 124, 0, .10); }
+    .v1-property-tree-container { max-height: 34rem; overflow: auto; border-right: 1px solid var(--mud-palette-lines-default); }
+    .v1-property-detail-panel { max-height: 34rem; overflow: auto; }
+    .v1-tree-node-content { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: .5rem; padding: .25rem .5rem; border-radius: 4px; cursor: pointer; }
+    .v1-tree-node-content.selected { background: var(--mud-palette-primary); color: var(--mud-palette-primary-text); }
+    .v1-tree-node-label { min-width: 0; display: inline-flex; align-items: center; gap: .35rem; overflow-wrap: anywhere; }
+    .v1-diff-card { border: 1px solid var(--mud-palette-lines-default); }
+    .v1-structured-tree { border: 1px solid var(--mud-palette-lines-default); border-radius: 4px; overflow: hidden; }
+    .v1-structured-node { border: 0; }
+    .v1-structured-node-header { min-height: 2rem; width: 100%; justify-content: flex-start; border-bottom: 1px solid var(--mud-palette-lines-default); border-radius: 0; background: var(--mud-palette-surface); cursor: pointer; text-align: left; text-transform: none; }
+    .v1-structured-node-header:hover { background: var(--mud-palette-action-default-hover); }
+    .v1-structured-node-toggle { margin: 0 .25rem 0 0; padding: 0; width: 1.5rem; height: 1.5rem; }
+    .v1-structured-node-name { font-weight: 600; line-height: 1.2; }
+    .v1-structured-count { margin-left: .5rem; color: var(--mud-palette-error); font-size: .75rem; font-weight: 600; }
+    .v1-structured-node-children { display: block; }
+    .v1-structured-diff-list { border-bottom: 1px solid var(--mud-palette-lines-default); background: var(--mud-palette-background-grey); }
+    .v1-structured-diff-row { display: grid; grid-template-columns: minmax(18rem, 2fr) minmax(8rem, 1fr) minmax(8rem, 1fr); align-items: stretch; border-top: 1px solid var(--mud-palette-lines-default); }
+    .v1-structured-diff-row:first-child { border-top: 0; }
+    .v1-structured-diff-cell { padding: .35rem .55rem; min-width: 0; }
+    .v1-structured-diff-prop { font-family: Consolas, Monaco, 'Courier New', monospace; font-size: .78rem; overflow-wrap: anywhere; }
 </style>
 
 @if (RunId is null)
@@ -90,7 +109,7 @@ else if (run is not null)
         @if (analysis is not null)
         {
             <MudPaper Outlined="true" Class="pa-0">
-                <MudTabs Elevation="0" PanelClass="pa-4">
+                <MudTabs Elevation="0" PanelClass="pa-4" ActivePanelIndex="@analysisTabIndex" ActivePanelIndexChanged="OnAnalysisTabChangedAsync">
                     <MudTabPanel Text="Run Details" Icon="@Icons.Material.Filled.Assessment">
                         <MudGrid>
                             <MudItem xs="12" md="5">
@@ -117,6 +136,122 @@ else if (run is not null)
                                 </MudTable>
                             </MudItem>
                         </MudGrid>
+                    </MudTabPanel>
+                    <MudTabPanel Text="All Differences" Icon="@Icons.Material.Filled.AccountTree">
+                        @if (isLoadingDifferenceIndex)
+                        {
+                            <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                        }
+                        else if (!string.IsNullOrWhiteSpace(differenceIndexErrorMessage))
+                        {
+                            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">@differenceIndexErrorMessage</MudAlert>
+                        }
+                        else if (differenceIndex is null)
+                        {
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.AccountTree" OnClick="LoadDifferenceIndexAsync">Load All Differences</MudButton>
+                        }
+                        else if (differenceIndex.Properties.Count == 0)
+                        {
+                            <MudAlert Severity="Severity.Success" Variant="Variant.Outlined">No structured domain-model differences were found.</MudAlert>
+                        }
+                        else
+                        {
+                            <MudGrid Spacing="0">
+                                <MudItem xs="12" md="4">
+                                    <div class="v1-property-tree-container">
+                                        <MudStack Class="pa-3" Spacing="2">
+                                            <MudTextField T="string" @bind-Value="allDifferencesFilter" Placeholder="Filter by path or pair..." Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+                                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">@FilteredDifferenceProperties.Count.ToString("N0", CultureInfo.InvariantCulture) properties</MudText>
+                                                <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
+                                                    <MudIconButton Icon="@Icons.Material.Filled.UnfoldMore" Size="Size.Small" OnClick="ExpandAllDifferenceNodes" />
+                                                    <MudIconButton Icon="@Icons.Material.Filled.UnfoldLess" Size="Size.Small" OnClick="CollapseAllDifferenceNodes" />
+                                                </MudButtonGroup>
+                                            </MudStack>
+                                            @if (!string.IsNullOrWhiteSpace(differenceTreeInfoMessage))
+                                            {
+                                                <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true">@differenceTreeInfoMessage</MudAlert>
+                                            }
+                                        </MudStack>
+                                        @if (DifferenceTreeNodes.Count == 0)
+                                        {
+                                            <MudAlert Severity="Severity.Info" Variant="Variant.Text" Class="ma-3">No differences match the current filter.</MudAlert>
+                                        }
+                                        else
+                                        {
+                                            <MudTreeView T="string" Items="DifferenceTreeItems" Hover="true" Dense="true" Class="pa-2">
+                                                <ItemTemplate>
+                                                    @{
+                                                        var node = context as PropertyTreeNode;
+                                                    }
+                                                    @if (node is not null)
+                                                    {
+                                                        <MudTreeViewItem T="string" @bind-Expanded="@context.Expanded" Items="@context.Children" Value="@context.Value" OnClick="@(() => SelectPropertyTreeNode(context))">
+                                                            <BodyContent Context="_">
+                                                                <div class="v1-tree-node-content @(node.FullPath == selectedPropertyPath ? "selected" : string.Empty)">
+                                                                    <span class="v1-tree-node-label">
+                                                                        <MudIcon Icon="@(node.IsLeaf ? Icons.Material.Filled.Circle : Icons.Material.Filled.Folder)" Size="Size.Small" />
+                                                                        <span>@node.Name</span>
+                                                                    </span>
+                                                                    <MudChip T="string" Size="Size.Small" Color="@(node.IsLeaf ? Color.Info : Color.Default)" Variant="Variant.Text">@node.DifferenceCount.ToString("N0", CultureInfo.InvariantCulture)</MudChip>
+                                                                </div>
+                                                            </BodyContent>
+                                                        </MudTreeViewItem>
+                                                    }
+                                                </ItemTemplate>
+                                            </MudTreeView>
+                                        }
+                                    </div>
+                                </MudItem>
+                                <MudItem xs="12" md="8">
+                                    <div class="v1-property-detail-panel pa-4" id="all-differences-property-detail-panel">
+                                        @if (SelectedPropertySummary is null)
+                                        {
+                                            <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="pa-8" Style="min-height: 20rem;">
+                                                <MudIcon Icon="@Icons.Material.Filled.TouchApp" Size="Size.Large" Color="Color.Secondary" />
+                                                <MudText Typo="Typo.h6" Color="Color.Secondary">Select a Property</MudText>
+                                                <MudText Typo="Typo.body2" Color="Color.Secondary">Click a leaf in the tree to see affected pairs.</MudText>
+                                            </MudStack>
+                                        }
+                                        else
+                                        {
+                                            <MudStack Spacing="3">
+                                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="flex-wrap">
+                                                    <MudText Typo="Typo.h6"><MudIcon Icon="@Icons.Material.Filled.Code" Class="mr-2" /><code>@SelectedPropertySummary.NormalizedPath</code></MudText>
+                                                    <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Info">@SelectedPropertySummary.AffectedPairCount.ToString("N0", CultureInfo.InvariantCulture) pairs</MudChip>
+                                                        <MudChip T="string" Size="Size.Small">@SelectedPropertySummary.OccurrenceCount.ToString("N0", CultureInfo.InvariantCulture) diffs</MudChip>
+                                                        <MudChip T="string" Size="Size.Small">@SelectedPropertySummary.Category</MudChip>
+                                                    </MudStack>
+                                                </MudStack>
+                                                @foreach (var affectedPair in SelectedPropertySummary.AffectedPairs)
+                                                {
+                                                    <MudPaper Outlined="true" Class="pa-3 v1-diff-card">
+                                                        <MudStack Spacing="2">
+                                                            <MudStack Row="true" AlignItems="AlignItems.Center" Class="flex-wrap" Spacing="1">
+                                                                <MudIcon Icon="@Icons.Material.Filled.InsertDriveFile" Size="Size.Small" Color="Color.Secondary" />
+                                                                <MudLink Color="Color.Primary" Style="cursor: pointer; font-weight: 600;" OnClick="@(() => SelectPairByRelativePathAsync(affectedPair.RelativePath))">@affectedPair.RelativePath</MudLink>
+                                                                <MudChip T="string" Size="Size.Small" Color="@GetOutcomeColor(affectedPair.Outcome)" Variant="Variant.Outlined">@affectedPair.Outcome</MudChip>
+                                                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@affectedPair.OccurrenceCount diffs</MudChip>
+                                                                @if (affectedPair.StatusCodeA.HasValue) { <MudChip T="string" Size="Size.Small" Color="@GetStatusCodeColor(affectedPair.StatusCodeA.Value)" Variant="Variant.Outlined">@LabelA: @affectedPair.StatusCodeA</MudChip> }
+                                                                @if (affectedPair.StatusCodeB.HasValue) { <MudChip T="string" Size="Size.Small" Color="@GetStatusCodeColor(affectedPair.StatusCodeB.Value)" Variant="Variant.Outlined">@LabelB: @affectedPair.StatusCodeB</MudChip> }
+                                                                <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Color="Color.Primary" OnClick="@(() => SelectPairByRelativePathAsync(affectedPair.RelativePath))" />
+                                                            </MudStack>
+                                                            <MudText Typo="Typo.caption" Color="Color.Secondary"><code>@affectedPair.PropertyPath</code></MudText>
+                                                            <MudGrid Spacing="2">
+                                                                <MudItem xs="12" sm="6"><div class="v1-diff-a pa-2"><MudText Typo="Typo.caption" Color="Color.Success">@LabelA</MudText><div class="v1-code">@(affectedPair.ValueA ?? "null")</div></div></MudItem>
+                                                                <MudItem xs="12" sm="6"><div class="v1-diff-b pa-2"><MudText Typo="Typo.caption" Color="Color.Error">@LabelB</MudText><div class="v1-code">@(affectedPair.ValueB ?? "null")</div></div></MudItem>
+                                                            </MudGrid>
+                                                            @if (!string.IsNullOrWhiteSpace(affectedPair.Message)) { <MudText Typo="Typo.caption" Color="Color.Secondary">@affectedPair.Message</MudText> }
+                                                        </MudStack>
+                                                    </MudPaper>
+                                                }
+                                            </MudStack>
+                                        }
+                                    </div>
+                                </MudItem>
+                            </MudGrid>
+                        }
                     </MudTabPanel>
                     <MudTabPanel Text="Options" Icon="@Icons.Material.Filled.Tune">
                         <MudStack Row="true" Spacing="1" Class="flex-wrap">
@@ -258,19 +393,36 @@ else if (run is not null)
                     }
                     else
                     {
-                        <MudStack Row="true" Spacing="2" Class="flex-wrap mb-3">
-                            <MudTextField T="string" @bind-Value="structuredSearchFilter" Placeholder="Search differences..." Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Style="min-width: 16rem;" />
-                            <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="() => showAllDifferences = !showAllDifferences">@(showAllDifferences ? "Show Top 100 Per Group" : "Show All Differences")</MudButton>
-                        </MudStack>
-                        @if (selectedPair.Differences.Count == 0) { <MudAlert Severity="Severity.Success" Variant="Variant.Text">@(selectedPair.OutcomeMessage ?? "No structured differences were recorded.")</MudAlert> }
-                        @foreach (var group in GetStructuredGroups(selectedPair))
-                        {
-                            var items = showAllDifferences ? group.ToList() : group.Take(100).ToList();
-                            <MudPaper Outlined="true" Class="pa-3 mb-3"><MudText Typo="Typo.subtitle2">@group.Key (@group.Count() diffs)</MudText>
-                                <MudTable T="ComparisonDifference" Items="items" Dense="true" Hover="true" Elevation="0"><HeaderContent><MudTh>Property</MudTh><MudTh>@LabelA</MudTh><MudTh>@LabelB</MudTh></HeaderContent><RowTemplate><MudTd><code>@context.PropertyPath</code></MudTd><MudTd Class="v1-diff-a">@(context.ValueA ?? "null")</MudTd><MudTd Class="v1-diff-b">@(context.ValueB ?? "null")</MudTd></RowTemplate></MudTable>
-                                @if (group.Count() > items.Count) { <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true">And @(group.Count() - items.Count) more differences in this group...</MudAlert> }
-                            </MudPaper>
-                        }
+                        <MudPaper Outlined="true" Class="pa-0">
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pa-3 flex-wrap" Spacing="2">
+                                <MudText Typo="Typo.h6"><MudIcon Icon="@Icons.Material.Filled.List" Class="mr-2" />All Differences</MudText>
+                                <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="() => showAllDifferences = !showAllDifferences">@(showAllDifferences ? "Show Top 100 Per Group" : "Show All Differences")</MudButton>
+                            </MudStack>
+                            <MudDivider />
+                            <div class="pa-4">
+                                <MudTextField T="string" @bind-Value="structuredSearchFilter" Placeholder="Search differences..." Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Style="min-width: 16rem;" Class="mb-3" />
+                                @{
+                                    IReadOnlyList<StructuredDifferenceNode> structuredNodes = GetStructuredDifferenceTree(selectedPair);
+                                }
+                                @if (selectedPair.Differences.Count == 0)
+                                {
+                                    <MudAlert Severity="Severity.Success" Variant="Variant.Text">@(selectedPair.OutcomeMessage ?? "No structured differences were recorded.")</MudAlert>
+                                }
+                                else if (structuredNodes.Count == 0)
+                                {
+                                    <MudAlert Severity="Severity.Info" Variant="Variant.Text">No differences match the current search.</MudAlert>
+                                }
+                                else
+                                {
+                                    <div class="v1-structured-tree">
+                                        @foreach (StructuredDifferenceNode node in structuredNodes)
+                                        {
+                                            @RenderStructuredDifferenceNode(node, 0)
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </MudPaper>
                     }
                 </div>
             </MudPaper>
@@ -289,6 +441,7 @@ else if (run is not null)
     private RunResultSummary? summary;
     private StaticReportMetadata? metadata;
     private StaticReportAnalysisSnapshot? analysis;
+    private StaticReportDifferenceIndex? differenceIndex;
     private RunDetailPage? detailPage;
     private RequestPairResult? selectedPair;
     private ArtifactContentPreview? contentA;
@@ -298,7 +451,10 @@ else if (run is not null)
     private bool isLoading;
     private bool isLoadingContent;
     private bool showAllDifferences;
+    private HashSet<string> collapsedStructuredGroups = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     private bool resultsCollapsed;
+    private bool isLoadingDifferenceIndex;
+    private int analysisTabIndex;
     private readonly string filePanelPrefix = $"report-file-panels-{Guid.NewGuid():N}";
     private bool syncScroll = true;
     private bool highlightDifferences = true;
@@ -307,9 +463,13 @@ else if (run is not null)
     private string statusFilter = AllFilter;
     private string categoryFilter = AllFilter;
     private string structuredSearchFilter = string.Empty;
+    private string allDifferencesFilter = string.Empty;
+    private string? selectedPropertyPath;
     private string? errorMessage;
     private string? contentErrorMessage;
     private string? downloadErrorMessage;
+    private string? differenceIndexErrorMessage;
+    private string differenceTreeInfoMessage = string.Empty;
     private bool shouldRefreshScrollSync;
     private DetailViewMode detailViewMode = DetailViewMode.Structured;
 
@@ -325,6 +485,10 @@ else if (run is not null)
     private string RightPanelId => $"{filePanelPrefix}-right";
     private IReadOnlyList<string> AvailableCategories => analysis?.AvailableCategories ?? Array.Empty<string>();
     private IReadOnlyList<RequestPairResult> VisiblePageItems => detailPage is null ? Array.Empty<RequestPairResult>() : detailPage.Items.Where(MatchesCategoryFilter).ToList();
+    private IReadOnlyList<StaticReportPropertyDifferenceSummary> FilteredDifferenceProperties => GetFilteredDifferenceProperties();
+    private StaticReportPropertyDifferenceSummary? SelectedPropertySummary => differenceIndex?.Properties.FirstOrDefault(property => string.Equals(property.NormalizedPath, selectedPropertyPath, StringComparison.OrdinalIgnoreCase));
+    private IReadOnlyList<PropertyTreeNode> DifferenceTreeNodes => BuildDifferenceTree(FilteredDifferenceProperties);
+    private IReadOnlyList<TreeItemData<string>> DifferenceTreeItems => DifferenceTreeNodes.Cast<TreeItemData<string>>().ToList();
 
     protected override async Task OnParametersSetAsync()
     {
@@ -343,6 +507,9 @@ else if (run is not null)
             isLoading = true;
             errorMessage = null;
             selectedPair = null;
+            differenceIndex = null;
+            selectedPropertyPath = null;
+            differenceIndexErrorMessage = null;
             contentA = null;
             contentB = null;
             RunId runId = RunId.Value;
@@ -356,7 +523,7 @@ else if (run is not null)
         catch (Exception ex)
         {
             errorMessage = ex.Message;
-            run = null; summary = null; metadata = null; analysis = null; detailPage = null;
+            run = null; summary = null; metadata = null; analysis = null; differenceIndex = null; detailPage = null;
         }
         finally { isLoading = false; }
     }
@@ -368,6 +535,35 @@ else if (run is not null)
         detailPage = await DataSource.LoadRunDetailsAsync(runId, new RunDetailQuery(detailOffset, pageSize, ParseStatusFilter(statusFilter), searchFilter));
     }
 
+
+    private async Task OnAnalysisTabChangedAsync(int value)
+    {
+        analysisTabIndex = value;
+        if (value == 1 && differenceIndex is null && !isLoadingDifferenceIndex)
+        {
+            await LoadDifferenceIndexAsync();
+        }
+    }
+
+    private async Task LoadDifferenceIndexAsync()
+    {
+        if (RunId is null) { return; }
+        try
+        {
+            isLoadingDifferenceIndex = true;
+            differenceIndexErrorMessage = null;
+            differenceIndex = await DataSource.LoadDifferenceIndexAsync(RunId.Value);
+            selectedPropertyPath = differenceIndex.Properties.FirstOrDefault()?.NormalizedPath;
+        }
+        catch (Exception ex)
+        {
+            differenceIndexErrorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoadingDifferenceIndex = false;
+        }
+    }
     private async Task OnSearchChangedAsync(string value) { searchFilter = value ?? string.Empty; detailOffset = 0; await LoadDetailPageAsync(); }
     private async Task OnStatusFilterChangedAsync(string value) { statusFilter = value ?? AllFilter; detailOffset = 0; await LoadDetailPageAsync(); }
     private Task OnCategoryFilterChanged(string value) { categoryFilter = value ?? AllFilter; return Task.CompletedTask; }
@@ -375,15 +571,22 @@ else if (run is not null)
     private async Task PreviousPageAsync() { detailOffset = Math.Max(0, detailOffset - pageSize); await LoadDetailPageAsync(); }
     private async Task NextPageAsync() { if (detailPage?.HasMore == true) { detailOffset += pageSize; await LoadDetailPageAsync(); } }
 
-    private async Task SelectAffectedObjectAsync(string identifier)
+    private Task SelectAffectedObjectAsync(string identifier) => SelectPairByRelativePathAsync(identifier);
+
+    private async Task SelectPairByRelativePathAsync(string relativePath)
     {
-        searchFilter = identifier;
+        searchFilter = relativePath;
+        statusFilter = AllFilter;
+        categoryFilter = AllFilter;
         detailOffset = 0;
         await LoadDetailPageAsync();
-        RequestPairResult? pair = detailPage?.Items.FirstOrDefault(item => string.Equals(item.RelativePath, identifier, StringComparison.OrdinalIgnoreCase));
-        if (pair is not null) { await SelectPairAsync(pair); }
+        RequestPairResult? pair = detailPage?.Items.FirstOrDefault(item => string.Equals(item.RelativePath, relativePath, StringComparison.OrdinalIgnoreCase))
+            ?? detailPage?.Items.FirstOrDefault(item => item.RelativePath.Contains(relativePath, StringComparison.OrdinalIgnoreCase));
+        if (pair is not null)
+        {
+            await SelectPairAsync(pair);
+        }
     }
-
     private async Task SelectPairAsync(RequestPairResult pair)
     {
         selectedPair = pair;
@@ -391,6 +594,7 @@ else if (run is not null)
         detailViewMode = pair.RawTextDifferences.Count > 0 ? DetailViewMode.Raw : DetailViewMode.Structured;
         structuredSearchFilter = string.Empty;
         showAllDifferences = false;
+        collapsedStructuredGroups = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         shouldRefreshScrollSync = true;
         await ScrollToDetailAsync();
     }
@@ -422,6 +626,138 @@ else if (run is not null)
         }
     }
 
+
+    private IReadOnlyList<StaticReportPropertyDifferenceSummary> GetFilteredDifferenceProperties()
+    {
+        if (differenceIndex is null) { return Array.Empty<StaticReportPropertyDifferenceSummary>(); }
+        if (string.IsNullOrWhiteSpace(allDifferencesFilter)) { return differenceIndex.Properties; }
+        string filter = allDifferencesFilter.Trim();
+        return differenceIndex.Properties
+            .Where(property => property.NormalizedPath.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                || property.PropertyPath.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                || property.Category.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                || property.AffectedPairs.Any(pair => pair.RelativePath.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                    || (pair.ValueA?.Contains(filter, StringComparison.OrdinalIgnoreCase) == true)
+                    || (pair.ValueB?.Contains(filter, StringComparison.OrdinalIgnoreCase) == true)))
+            .ToList();
+    }
+
+    private static IReadOnlyList<PropertyTreeNode> BuildDifferenceTree(IReadOnlyList<StaticReportPropertyDifferenceSummary> properties)
+    {
+        List<PropertyTreeNode> roots = new List<PropertyTreeNode>();
+        Dictionary<string, PropertyTreeNode> nodeMap = new Dictionary<string, PropertyTreeNode>(StringComparer.OrdinalIgnoreCase);
+        foreach (StaticReportPropertyDifferenceSummary property in properties)
+        {
+            string[] segments = property.NormalizedPath.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (segments.Length == 0) { segments = new[] { property.NormalizedPath }; }
+            PropertyTreeNode? parent = null;
+            string currentPath = string.Empty;
+            for (int index = 0; index < segments.Length; index++)
+            {
+                string segment = segments[index];
+                currentPath = string.IsNullOrEmpty(currentPath) ? segment : $"{currentPath}.{segment}";
+                bool isLeaf = index == segments.Length - 1;
+                if (!nodeMap.TryGetValue(currentPath, out PropertyTreeNode? node))
+                {
+                    node = new PropertyTreeNode(segment, isLeaf ? property.NormalizedPath : currentPath)
+                    {
+                        Expanded = index < 2,
+                        IsLeaf = isLeaf,
+                    };
+                    nodeMap.Add(currentPath, node);
+                    if (parent is null) { roots.Add(node); }
+                    else
+                    {
+                        parent.Children ??= new List<TreeItemData<string>>();
+                        parent.Children.Add(node);
+                    }
+                }
+
+                if (isLeaf)
+                {
+                    node.IsLeaf = true;
+                    node.FullPath = property.NormalizedPath;
+                    node.DifferenceCount += property.OccurrenceCount;
+                }
+
+                parent = node;
+            }
+        }
+
+        foreach (PropertyTreeNode root in roots)
+        {
+            CalculateTreeNodeCount(root);
+        }
+
+        return roots;
+    }
+
+    private static int CalculateTreeNodeCount(PropertyTreeNode node)
+    {
+        int total = node.DifferenceCount;
+        foreach (PropertyTreeNode child in node.Children?.OfType<PropertyTreeNode>() ?? Enumerable.Empty<PropertyTreeNode>())
+        {
+            total += CalculateTreeNodeCount(child);
+        }
+
+        node.DifferenceCount = total;
+        return total;
+    }
+
+    private void SelectPropertyTreeNode(TreeItemData<string> treeItem)
+    {
+        if (treeItem is not PropertyTreeNode node) { return; }
+        if (node.IsLeaf) { selectedPropertyPath = node.FullPath; }
+        else { node.Expanded = !node.Expanded; }
+    }
+
+    private void ExpandAllDifferenceNodes()
+    {
+        IReadOnlyList<PropertyTreeNode> nodes = DifferenceTreeNodes;
+        int count = CountTreeNodes(nodes);
+        if (count > 2500)
+        {
+            foreach (PropertyTreeNode node in nodes) { SetExpandedToDepth(node, 0, 3); }
+            differenceTreeInfoMessage = $"Large tree detected ({count:N0} nodes). Expanded the first 3 levels.";
+        }
+        else
+        {
+            foreach (PropertyTreeNode node in nodes) { SetExpandedRecursive(node, true); }
+            differenceTreeInfoMessage = string.Empty;
+        }
+    }
+
+    private void CollapseAllDifferenceNodes()
+    {
+        foreach (PropertyTreeNode node in DifferenceTreeNodes) { SetExpandedRecursive(node, false); }
+        differenceTreeInfoMessage = string.Empty;
+    }
+
+    private static void SetExpandedRecursive(TreeItemData<string> treeItem, bool expanded)
+    {
+        treeItem.Expanded = expanded;
+        foreach (TreeItemData<string> child in treeItem.Children ?? Enumerable.Empty<TreeItemData<string>>()) { SetExpandedRecursive(child, expanded); }
+    }
+
+    private static void SetExpandedToDepth(TreeItemData<string> treeItem, int depth, int maxDepth)
+    {
+        treeItem.Expanded = depth < maxDepth;
+        foreach (TreeItemData<string> child in treeItem.Children ?? Enumerable.Empty<TreeItemData<string>>()) { SetExpandedToDepth(child, depth + 1, maxDepth); }
+    }
+
+    private static int CountTreeNodes(IEnumerable<TreeItemData<string>> roots)
+    {
+        int count = 0;
+        Stack<TreeItemData<string>> stack = new Stack<TreeItemData<string>>(roots);
+        while (stack.Count > 0)
+        {
+            TreeItemData<string> node = stack.Pop();
+            count++;
+            foreach (TreeItemData<string> child in node.Children ?? Enumerable.Empty<TreeItemData<string>>()) { stack.Push(child); }
+        }
+
+        return count;
+    }
     private async Task ExportJsonAsync()
     {
         if (RunId is null) { return; }
@@ -496,12 +832,109 @@ else if (run is not null)
         }
     }
 
-    private IReadOnlyList<IGrouping<string, ComparisonDifference>> GetStructuredGroups(RequestPairResult pair) => pair.Differences
-        .Where(MatchesStructuredSearch)
-        .GroupBy(difference => NormalizeGroupPath(difference.PropertyPath))
-        .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
-        .ToList();
+    private IReadOnlyList<StructuredDifferenceNode> GetStructuredDifferenceTree(RequestPairResult pair) =>
+        BuildStructuredDifferenceTree(pair.Differences.Where(MatchesStructuredSearch));
 
+    private static IReadOnlyList<StructuredDifferenceNode> BuildStructuredDifferenceTree(IEnumerable<ComparisonDifference> differences)
+    {
+        List<StructuredDifferenceNode> roots = new List<StructuredDifferenceNode>();
+        Dictionary<string, StructuredDifferenceNode> nodesByPath = new Dictionary<string, StructuredDifferenceNode>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (ComparisonDifference difference in differences.OrderBy(difference => StaticReportDifferenceIndexBuilder.NormalizePropertyPath(difference.PropertyPath), StringComparer.OrdinalIgnoreCase))
+        {
+            string normalizedPath = StaticReportDifferenceIndexBuilder.NormalizePropertyPath(difference.PropertyPath);
+            string[] segments = normalizedPath.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (segments.Length == 0) { segments = new[] { normalizedPath }; }
+
+            StructuredDifferenceNode? parent = null;
+            string currentPath = string.Empty;
+            for (int index = 0; index < segments.Length; index++)
+            {
+                string segment = segments[index];
+                currentPath = string.IsNullOrEmpty(currentPath) ? segment : $"{currentPath}.{segment}";
+                if (!nodesByPath.TryGetValue(currentPath, out StructuredDifferenceNode? node))
+                {
+                    node = new StructuredDifferenceNode(segment, currentPath);
+                    nodesByPath.Add(currentPath, node);
+                    if (parent is null) { roots.Add(node); }
+                    else { parent.Children.Add(node); }
+                }
+
+                if (index == segments.Length - 1)
+                {
+                    node.Differences.Add(difference);
+                }
+
+                parent = node;
+            }
+        }
+
+        SortStructuredDifferenceNodes(roots);
+        return roots;
+    }
+
+    private static void SortStructuredDifferenceNodes(List<StructuredDifferenceNode> nodes)
+    {
+        nodes.Sort((left, right) => string.Compare(left.Name, right.Name, StringComparison.OrdinalIgnoreCase));
+        foreach (StructuredDifferenceNode node in nodes)
+        {
+            node.Differences.Sort((left, right) => string.Compare(left.PropertyPath, right.PropertyPath, StringComparison.OrdinalIgnoreCase));
+            SortStructuredDifferenceNodes(node.Children);
+        }
+    }
+
+    private RenderFragment RenderStructuredDifferenceNode(StructuredDifferenceNode node, int depth) => @<div class="v1-structured-node">
+        @{
+            bool isCollapsed = IsStructuredGroupCollapsed(node.FullPath);
+            List<ComparisonDifference> visibleDifferences = showAllDifferences
+                ? node.Differences.ToList()
+                : node.Differences.Take(100).ToList();
+            string indent = $"padding-left: {Math.Min(depth * 1.1, 8):0.##}rem;";
+        }
+        <MudButton Class="v1-structured-node-header" Style="@indent" title="@node.FullPath" Variant="Variant.Text" FullWidth="true" OnClick="@(() => ToggleStructuredGroup(node.FullPath))">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0" Class="flex-wrap px-1 py-1">
+                <MudIcon Class="v1-structured-node-toggle" Icon="@(isCollapsed ? Icons.Material.Filled.ChevronRight : Icons.Material.Filled.ExpandMore)" Size="Size.Small" />
+                <span class="v1-structured-node-name">@node.Name</span>
+                <span class="v1-structured-count">@node.DifferenceCount diff@(node.DifferenceCount == 1 ? string.Empty : "s")</span>
+            </MudStack>
+        </MudButton>
+        @if (!isCollapsed)
+        {
+            @if (visibleDifferences.Count > 0)
+            {
+                <div class="v1-structured-diff-list">
+                    @foreach (ComparisonDifference difference in visibleDifferences)
+                    {
+                        <div class="v1-structured-diff-row">
+                            <div class="v1-structured-diff-cell v1-structured-diff-prop">@difference.PropertyPath</div>
+                            <div class="v1-structured-diff-cell v1-diff-a">@(difference.ValueA ?? "null")</div>
+                            <div class="v1-structured-diff-cell v1-diff-b">@(difference.ValueB ?? "null")</div>
+                        </div>
+                    }
+                </div>
+                @if (node.Differences.Count > visibleDifferences.Count) { <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true" Class="mx-2 my-1">And @(node.Differences.Count - visibleDifferences.Count) more differences in this branch...</MudAlert> }
+            }
+            @if (node.Children.Count > 0)
+            {
+                <div class="v1-structured-node-children">
+                    @foreach (StructuredDifferenceNode child in node.Children)
+                    {
+                        @RenderStructuredDifferenceNode(child, depth + 1)
+                    }
+                </div>
+            }
+        }
+    </div>;
+
+    private bool IsStructuredGroupCollapsed(string groupKey) => collapsedStructuredGroups.Contains(groupKey);
+
+    private void ToggleStructuredGroup(string groupKey)
+    {
+        if (!collapsedStructuredGroups.Add(groupKey))
+        {
+            collapsedStructuredGroups.Remove(groupKey);
+        }
+    }
     private bool MatchesStructuredSearch(ComparisonDifference difference)
     {
         if (string.IsNullOrWhiteSpace(structuredSearchFilter)) { return true; }
@@ -523,7 +956,6 @@ else if (run is not null)
     private static string FormatDuration(TimeSpan value) => value.TotalMinutes >= 1 ? $"{(int)value.TotalMinutes}m {value.Seconds:D2}s" : value.TotalSeconds >= 1 ? $"{value.TotalSeconds:F2}s" : $"{value.TotalMilliseconds:F0} ms";
     private static string FormatBool(bool value) => value ? "on" : "off";
     private static string FormatRawLine(StaticReportRawTextDifference difference) => difference.LineNumberA.HasValue && difference.LineNumberB.HasValue ? $"{difference.LineNumberA}/{difference.LineNumberB}" : difference.LineNumberA?.ToString(CultureInfo.InvariantCulture) ?? difference.LineNumberB?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
-    private static string NormalizeGroupPath(string propertyPath) => string.IsNullOrWhiteSpace(propertyPath) ? "Response" : propertyPath.Contains('[', StringComparison.Ordinal) ? propertyPath.Substring(0, propertyPath.IndexOf('[', StringComparison.Ordinal)) + "[*]" : propertyPath;
     private string GetPairRowClass(RequestPairResult pair, int index) => selectedPair is not null && string.Equals(selectedPair.RelativePath, pair.RelativePath, StringComparison.OrdinalIgnoreCase) ? "mud-theme-primary" : string.Empty;
     private static Color GetDifferenceChipColor(RequestPairResult pair) => pair.Outcome == RequestPairOutcome.Equal ? Color.Success : pair.Outcome == RequestPairOutcome.ExecutionFailed ? Color.Warning : Color.Error;
     private static Color GetStatusCodeColor(int statusCode) => statusCode switch { >= 200 and < 300 => Color.Success, >= 300 and < 400 => Color.Info, >= 400 and < 500 => Color.Warning, >= 500 => Color.Error, _ => Color.Default };
@@ -558,6 +990,41 @@ else if (run is not null)
         return string.IsNullOrWhiteSpace(sanitized) ? "comparison-result" : sanitized;
     }
 
+    private sealed class StructuredDifferenceNode
+    {
+        public StructuredDifferenceNode(string name, string fullPath)
+        {
+            Name = name;
+            FullPath = fullPath;
+        }
+
+        public string Name { get; }
+
+        public string FullPath { get; }
+
+        public List<StructuredDifferenceNode> Children { get; } = new List<StructuredDifferenceNode>();
+
+        public List<ComparisonDifference> Differences { get; } = new List<ComparisonDifference>();
+
+        public int DifferenceCount => Differences.Count + Children.Sum(child => child.DifferenceCount);
+    }
+    private sealed class PropertyTreeNode : TreeItemData<string>
+    {
+        public PropertyTreeNode(string name, string fullPath) : base(fullPath)
+        {
+            Name = name;
+            FullPath = fullPath;
+            Text = name;
+        }
+
+        public string Name { get; }
+
+        public string FullPath { get; set; }
+
+        public bool IsLeaf { get; set; }
+
+        public int DifferenceCount { get; set; }
+    }
     private enum DetailViewMode { Structured, Raw, Full }
     private sealed record LineModel(int LineNumber, string Text, string CssClass);
 }

@@ -1,4 +1,4 @@
-﻿using ParityBench.NET.Domain.Reports;
+using ParityBench.NET.Domain.Reports;
 using ParityBench.NET.Domain.Results;
 using ParityBench.NET.Domain.Runs;
 
@@ -18,6 +18,8 @@ public interface IRunResultsViewDataSource
     Task<StaticReportMetadata?> LoadReportMetadataAsync(RunId runId, CancellationToken cancellationToken = default);
 
     Task<StaticReportAnalysisSnapshot?> LoadReportAnalysisAsync(RunId runId, CancellationToken cancellationToken = default);
+
+    Task<StaticReportDifferenceIndex> LoadDifferenceIndexAsync(RunId runId, CancellationToken cancellationToken = default);
 
     Task<RunDetailPage> LoadRunDetailsAsync(
         RunId runId,

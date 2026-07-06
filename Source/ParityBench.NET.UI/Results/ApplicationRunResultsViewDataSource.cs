@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.Json;
 
 using ParityBench.NET.Application.Results;
@@ -44,6 +44,14 @@ public sealed class ApplicationRunResultsViewDataSource : IRunResultsViewDataSou
         return BuildAnalysisSnapshot(details);
     }
 
+
+    public async Task<StaticReportDifferenceIndex> LoadDifferenceIndexAsync(
+        RunId runId,
+        CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<RequestPairResult> details = await LoadAllDetailsAsync(runId, cancellationToken);
+        return StaticReportDifferenceIndexBuilder.Build(details);
+    }
     public Task<RunDetailPage> LoadRunDetailsAsync(
         RunId runId,
         RunDetailQuery query,

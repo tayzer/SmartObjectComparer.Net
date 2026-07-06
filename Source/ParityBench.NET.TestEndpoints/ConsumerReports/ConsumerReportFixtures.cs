@@ -17,6 +17,7 @@ public static class ConsumerReportFixtures
             "CR-1003" => WithNullEmptyCollectionDifference(response, variant),
             "CR-1004" => WithMaskableIdentifierDifference(response, variant),
             "CR-2001" => WithRealRiskDifference(response, variant),
+            "CR-2002" => WithNestedContactPreferenceDifferences(response, variant),
             _ => response,
         };
     }
@@ -45,6 +46,19 @@ public static class ConsumerReportFixtures
                     City = "Bristol",
                     Postcode = "BS1 8PB",
                     CountryCode = "GB",
+                },
+                ContactProfile = new ConsumerReportContactProfile
+                {
+                    PrimaryChannel = new ConsumerReportContactChannel
+                    {
+                        EmailAddress = "alex.morgan@example.test",
+                        MobileNumber = "+447700900123",
+                    },
+                    NotificationPreference = new ConsumerReportNotificationPreference
+                    {
+                        StatementDelivery = "Postal",
+                        MarketingConsent = "Accepted",
+                    },
                 },
             },
             Score = new ConsumerReportScore
@@ -137,6 +151,19 @@ public static class ConsumerReportFixtures
             response.Score.ProbabilityOfDefault = 0.071m;
             response.RiskBand = "Medium";
             response.Accounts[0].MonthsInArrears = 2;
+        }
+
+        return response;
+    }
+
+    private static ConsumerReportResponse WithNestedContactPreferenceDifferences(
+        ConsumerReportResponse response,
+        EndpointVariant variant)
+    {
+        if (variant == EndpointVariant.B)
+        {
+            response.Subject.ContactProfile.NotificationPreference.StatementDelivery = "Email";
+            response.Subject.ContactProfile.NotificationPreference.MarketingConsent = "Declined";
         }
 
         return response;

@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -19,6 +19,8 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
     private const string ManifestFileName = "report.data.json";
     private const string DetailsDirectoryName = "details";
     private const string RawDirectoryName = "raw";
+    private const string AnalysisDirectoryName = "analysis";
+    private const string DifferenceIndexFileName = "difference-index.json";
     private const int TopAffectedObjectLimit = 25;
     private readonly IComparisonRunResultUseCases resultUseCases;
     private readonly IRunArtifactStore artifactStore;
@@ -51,8 +53,10 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
 
         string detailsDirectory = Path.Combine(normalizedOutputDirectory, DetailsDirectoryName);
         string rawDirectory = Path.Combine(normalizedOutputDirectory, RawDirectoryName);
+        string analysisDirectory = Path.Combine(normalizedOutputDirectory, AnalysisDirectoryName);
         Directory.CreateDirectory(detailsDirectory);
         Directory.CreateDirectory(rawDirectory);
+        Directory.CreateDirectory(analysisDirectory);
 
         ComparisonRun run = await resultUseCases.LoadRunAsync(runId, cancellationToken).ConfigureAwait(false);
         RunResultSummary? summary = await resultUseCases.LoadRunSummaryAsync(runId, cancellationToken).ConfigureAwait(false);
@@ -108,6 +112,10 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
             pageIndex++;
         }
 
+        string differenceIndexPath = $"{AnalysisDirectoryName}/{DifferenceIndexFileName}";
+        StaticReportDifferenceIndex differenceIndex = StaticReportDifferenceIndexBuilder.Build(analysisItems);
+        await WriteJsonAsync(Path.Combine(analysisDirectory, DifferenceIndexFileName), differenceIndex, cancellationToken).ConfigureAwait(false);
+
         DateTimeOffset generatedAtValue = generatedAt ?? DateTimeOffset.UtcNow;
         StaticReportManifest manifest = new StaticReportManifest(
             StaticReportManifest.CurrentSchemaVersion,
@@ -117,7 +125,7 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
             detailPageSize,
             pageInfos,
             StaticReportMetadata.FromRun(run, generatedAtValue),
-            BuildAnalysisSnapshot(analysisItems));
+            BuildAnalysisSnapshot(analysisItems, differenceIndexPath));
 
         string manifestPath = Path.Combine(normalizedOutputDirectory, ManifestFileName);
         await WriteJsonAsync(manifestPath, manifest, cancellationToken).ConfigureAwait(false);
@@ -297,7 +305,7 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
         return int.TryParse(numberText, NumberStyles.None, CultureInfo.InvariantCulture, out lineNumber) && lineNumber > 0;
     }
 
-    private static StaticReportAnalysisSnapshot BuildAnalysisSnapshot(IReadOnlyList<RequestPairResult> items)
+    private static StaticReportAnalysisSnapshot BuildAnalysisSnapshot(IReadOnlyList<RequestPairResult> items, string? differenceIndexPath = null)
     {
         Dictionary<string, CategoryAccumulator> categories = new Dictionary<string, CategoryAccumulator>(StringComparer.OrdinalIgnoreCase);
         foreach (RequestPairResult item in items)
@@ -317,7 +325,7 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
                 }
 
                 accumulator.AffectedPairCount++;
-                accumulator.OccurrenceCount += Math.Max(1, item.Differences.Count(difference => string.Equals(CategorizeDifference(difference), category, StringComparison.OrdinalIgnoreCase)));
+                accumulator.OccurrenceCount += Math.Max(1, item.Differences.Count(difference => string.Equals(StaticReportDifferenceIndexBuilder.CategorizeDifference(difference), category, StringComparison.OrdinalIgnoreCase)));
             }
         }
 
@@ -350,7 +358,8 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
             items.Count(item => item.Outcome == RequestPairOutcome.ExecutionFailed),
             items.Sum(item => item.DifferenceCount),
             categorySummaries,
-            affectedObjects);
+            affectedObjects,
+            differenceIndexPath);
     }
 
     private static IEnumerable<string> GetPairCategories(RequestPairResult item)
@@ -379,43 +388,8 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
 
         foreach (ComparisonDifference difference in item.Differences)
         {
-            yield return CategorizeDifference(difference);
+            yield return StaticReportDifferenceIndexBuilder.CategorizeDifference(difference);
         }
-    }
-
-    private static string CategorizeDifference(ComparisonDifference difference)
-    {
-        string path = difference.PropertyPath ?? string.Empty;
-        string message = difference.Message ?? string.Empty;
-        if (string.Equals(path, "HttpStatus", StringComparison.OrdinalIgnoreCase))
-        {
-            return "HTTP Status";
-        }
-
-        if (path.StartsWith("Body.", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Raw Body";
-        }
-
-        if (message.Contains("missing", StringComparison.OrdinalIgnoreCase)
-            || message.Contains("null", StringComparison.OrdinalIgnoreCase)
-            || difference.ValueA is null
-            || difference.ValueB is null)
-        {
-            return "Missing Properties";
-        }
-
-        if (path.Contains('[', StringComparison.Ordinal) || message.Contains("collection", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Collection / Order";
-        }
-
-        if (message.Contains("type", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Critical";
-        }
-
-        return "Value Differences";
     }
 
     private async Task WriteJsonAsync<T>(

@@ -9,6 +9,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 using MudBlazor.Services;
 
+using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Reports;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Results;
@@ -106,6 +107,50 @@ public sealed class StaticReportRunResultsViewDataSourceTests
         }
     }
 
+
+    [TestMethod]
+    public async Task LoadDifferenceIndex_WhenSidecarExists_ReturnsPackagedIndex()
+    {
+        RequestPairResult pair = CreateDifferentPair("customers/one.json");
+        TestReportData reportData = CreateReportData(pair);
+        StaticReportDifferenceIndex packagedIndex = new StaticReportDifferenceIndex(
+            1,
+            1,
+            new[]
+            {
+                new StaticReportPropertyDifferenceSummary(
+                    "Customer.Name",
+                    "Customer.Name",
+                    "Value Differences",
+                    1,
+                    1,
+                    new[] { new StaticReportAffectedPairDifference("customers/one.json", "Customer.Name", "Customer.Name", "Value Differences", 1, RequestPairOutcome.Different) }),
+            });
+        reportData.Manifest = CreateManifest(reportData.Pages[0].Items, "analysis/difference-index.json");
+        reportData.Files["analysis/difference-index.json"] = JsonSerializer.SerializeToUtf8Bytes(packagedIndex, jsonOptions);
+        StaticReportRunResultsViewDataSource dataSource = CreateDataSource(reportData);
+
+        StaticReportDifferenceIndex index = await dataSource.LoadDifferenceIndexAsync(new RunId("run-1"));
+
+        Assert.AreEqual(1, index.TotalDifferences);
+        Assert.AreEqual("Customer.Name", index.Properties[0].NormalizedPath);
+    }
+
+    [TestMethod]
+    public async Task LoadDifferenceIndex_WhenSidecarIsMissing_FallsBackToDetailPages()
+    {
+        RequestPairResult pair = CreateDifferentPair("customers/one.json");
+        TestReportData reportData = CreateReportData(pair);
+        reportData.Manifest = CreateManifest(reportData.Pages[0].Items, "analysis/missing.json");
+        StaticReportRunResultsViewDataSource dataSource = CreateDataSource(reportData);
+
+        StaticReportDifferenceIndex index = await dataSource.LoadDifferenceIndexAsync(new RunId("run-1"));
+
+        Assert.AreEqual(1, index.TotalDifferences);
+        Assert.AreEqual("Customer.Name", index.Properties[0].NormalizedPath);
+        Assert.AreEqual("customers/one.json", index.Properties[0].AffectedPairs[0].RelativePath);
+    }
+
     private StaticReportRunResultsViewDataSource CreateDataSource(TestReportData reportData)
     {
         Dictionary<string, byte[]> files = new Dictionary<string, byte[]>(reportData.Files, StringComparer.OrdinalIgnoreCase)
@@ -150,6 +195,33 @@ public sealed class StaticReportRunResultsViewDataSourceTests
         return reportData;
     }
 
+
+    private static StaticReportManifest CreateManifest(IReadOnlyList<RequestPairResult> pairs, string? differenceIndexPath = null)
+    {
+        RunId runId = new RunId("run-1");
+        RunResultSummary summary = RequestPairResult.Summarize(pairs, new RunDetailReference("details"));
+        ComparisonRun run = ComparisonRun.Create(runId, CreateOptions()).Start().Complete(summary);
+        StaticReportAnalysisSnapshot? analysis = differenceIndexPath is null
+            ? null
+            : new StaticReportAnalysisSnapshot(
+                pairs.Count,
+                pairs.Count(pair => pair.Outcome != RequestPairOutcome.ExecutionFailed),
+                pairs.Count(pair => pair.Outcome != RequestPairOutcome.Equal && pair.Outcome != RequestPairOutcome.ExecutionFailed),
+                pairs.Count(pair => pair.Outcome == RequestPairOutcome.ExecutionFailed),
+                pairs.Sum(pair => pair.DifferenceCount),
+                differenceIndexPath: differenceIndexPath);
+        return new StaticReportManifest(
+            StaticReportManifest.CurrentSchemaVersion,
+            DateTimeOffset.Parse("2026-01-01T00:00:00Z"),
+            StaticReportRunSnapshot.FromRun(run),
+            summary,
+            StaticReportManifest.DefaultDetailPageSize,
+            new[]
+            {
+                new StaticReportDetailPageInfo(0, 0, pairs.Count, "details/page-000000.json"),
+            },
+            analysis: analysis);
+    }
     private static RunOptions CreateOptions() =>
         new RunOptions(
             new RequestBatchReference("batch-1"),
@@ -169,6 +241,16 @@ public sealed class StaticReportRunResultsViewDataSourceTests
             areEqual: outcome == RequestPairOutcome.Equal,
             differenceCount: outcome == RequestPairOutcome.Equal ? 0 : 1);
 
+
+    private static RequestPairResult CreateDifferentPair(string relativePath) =>
+        new RequestPairResult(
+            relativePath,
+            RequestPairOutcome.Different,
+            new ResponseArtifactMetadata(EndpointSlot.A, new ArtifactReference("raw/a.body", "text/plain"), 200, "text/plain", 10, "a"),
+            new ResponseArtifactMetadata(EndpointSlot.B, new ArtifactReference("raw/b.body", "text/plain"), 200, "text/plain", 10, "b"),
+            areEqual: false,
+            differenceCount: 1,
+            differences: new[] { new ComparisonDifference("Customer.Name", "Alice", "Alicia", "Name changed.") });
     private sealed class TestReportData
     {
         public TestReportData(
@@ -179,7 +261,7 @@ public sealed class StaticReportRunResultsViewDataSourceTests
             Pages = pages;
         }
 
-        public StaticReportManifest Manifest { get; }
+        public StaticReportManifest Manifest { get; set; }
 
         public IReadOnlyList<StaticReportDetailPage> Pages { get; }
 

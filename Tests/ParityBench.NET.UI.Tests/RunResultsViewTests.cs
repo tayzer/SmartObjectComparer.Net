@@ -110,8 +110,57 @@ public sealed class RunResultsViewTests
             parameters.Add(result => result.RunId, runId));
 
         component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "Detailed Comparison"));
-        StringAssert.Contains(component.Markup, "customer.name");
+        StringAssert.Contains(component.Markup, "Subject.ContactProfile.NotificationPreference.StatementDelivery");
+        StringAssert.Contains(component.Markup, "Subject.ContactProfile.NotificationPreference.MarketingConsent");
         Assert.AreEqual(0, dataSource.PreviewReadCount);
+    }
+
+    [TestMethod]
+    public void RunResult_WhenNestedStructuredDifferencesRender_CanCollapseParentNode()
+    {
+        RunId runId = new RunId("run-1");
+        RequestPairResult pair = CreateDifferentPair("one.json");
+        dataSource.Run = CreateCompletedRun(runId);
+        dataSource.Summary = dataSource.Run.Summary;
+        dataSource.Details = new[] { pair };
+
+        IRenderedComponent<RunResult> component = testContext.Render<RunResult>(parameters =>
+            parameters.Add(result => result.RunId, runId));
+
+        component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "Subject.ContactProfile.NotificationPreference"));
+        var notificationPreferenceHeader = component.FindAll(".v1-structured-node-header")
+            .First(header => string.Equals(header.GetAttribute("title"), "Subject.ContactProfile.NotificationPreference", StringComparison.Ordinal)
+                && header.TextContent.Contains("2 diffs", StringComparison.OrdinalIgnoreCase));
+
+        notificationPreferenceHeader.Click();
+
+        component.WaitForAssertion(() =>
+        {
+            StringAssert.Contains(component.Markup, "Subject.ContactProfile.NotificationPreference");
+            Assert.IsFalse(component.Markup.Contains("Subject.ContactProfile.NotificationPreference.StatementDelivery", StringComparison.Ordinal));
+            Assert.IsFalse(component.Markup.Contains("Subject.ContactProfile.NotificationPreference.MarketingConsent", StringComparison.Ordinal));
+        });
+    }
+
+    [TestMethod]
+    public void RunResult_WhenAllDifferencesTabIsOpened_RendersPropertyTreeAndAffectedPairLink()
+    {
+        RunId runId = new RunId("run-1");
+        RequestPairResult pair = CreateDifferentPair("customers/one.json");
+        dataSource.Run = CreateCompletedRun(runId);
+        dataSource.Summary = dataSource.Run.Summary;
+        dataSource.Details = new[] { pair };
+
+        IRenderedComponent<RunResult> component = testContext.Render<RunResult>(parameters =>
+            parameters.Add(result => result.RunId, runId));
+
+        component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "All Differences"));
+        component.FindAll(".mud-tab").First(tab => tab.TextContent.Contains("All Differences", StringComparison.OrdinalIgnoreCase)).Click();
+
+        component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "Filter by path or pair"));
+        StringAssert.Contains(component.Markup, "Subject");
+        StringAssert.Contains(component.Markup, "ContactProfile");
+        StringAssert.Contains(component.Markup, "customers/one.json");
     }
 
     [TestMethod]
@@ -176,8 +225,12 @@ public sealed class RunResultsViewTests
             CreateResponse(EndpointSlot.A, relativePath),
             CreateResponse(EndpointSlot.B, relativePath),
             areEqual: false,
-            differenceCount: 1,
-            differences: new[] { new ComparisonDifference("customer.name", "Alice", "Alicia", "Name changed.") });
+            differenceCount: 2,
+            differences: new[]
+            {
+                new ComparisonDifference("Subject.ContactProfile.NotificationPreference.StatementDelivery", "Postal", "Email", "Statement delivery preference changed."),
+                new ComparisonDifference("Subject.ContactProfile.NotificationPreference.MarketingConsent", "Accepted", "Declined", "Marketing consent changed."),
+            });
 
     private static RequestPairResult CreateRawPair(string relativePath) =>
         new RequestPairResult(
@@ -261,6 +314,12 @@ public sealed class RunResultsViewTests
                 new[] { new StaticReportDifferenceCategorySummary("Value Differences", "Value Differences", 1, 1) },
                 Details.Where(detail => detail.Outcome != RequestPairOutcome.Equal).Select(detail => new StaticReportAffectedObjectSummary(detail.RelativePath, Math.Max(1, detail.DifferenceCount), "Value Differences", detail.Outcome.ToString())).ToList());
             return Task.FromResult<StaticReportAnalysisSnapshot?>(snapshot);
+        }
+
+        public Task<StaticReportDifferenceIndex> LoadDifferenceIndexAsync(RunId runId, CancellationToken cancellationToken = default)
+        {
+            ThrowIfConfigured();
+            return Task.FromResult(StaticReportDifferenceIndexBuilder.Build(Details));
         }
 
         public Task<RunDetailPage> LoadRunDetailsAsync(
