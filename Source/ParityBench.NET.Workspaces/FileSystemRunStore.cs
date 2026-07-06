@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 using ParityBench.NET.Application.Runs;
@@ -11,6 +11,10 @@ namespace ParityBench.NET.Workspaces;
 
 public sealed class FileSystemRunStore : IRunStore
 {
+    private const int SnapshotBufferSize = 81920;
+    private const int FileOperationRetryCount = 5;
+    private static readonly TimeSpan FileOperationRetryDelay = TimeSpan.FromMilliseconds(25);
+
     private readonly JsonSerializerOptions jsonOptions = new JsonSerializerOptions
     {
         WriteIndented = true,
@@ -31,10 +35,16 @@ public sealed class FileSystemRunStore : IRunStore
         string runPath = GetRunPath(run.Id);
         Directory.CreateDirectory(Path.GetDirectoryName(runPath) ?? workspaceRoot);
 
-        await using FileStream stream = File.Create(runPath);
-        await JsonSerializer
-            .SerializeAsync(stream, ToDto(run), jsonOptions, cancellationToken)
-            .ConfigureAwait(false);
+        await ExecuteFileOperationWithRetryAsync(
+            async () =>
+            {
+                await using FileStream stream = OpenSnapshotForWrite(runPath);
+                await JsonSerializer
+                    .SerializeAsync(stream, ToDto(run), jsonOptions, cancellationToken)
+                    .ConfigureAwait(false);
+                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+            },
+            cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<ComparisonRun?> LoadAsync(
@@ -47,10 +57,15 @@ public sealed class FileSystemRunStore : IRunStore
             return null;
         }
 
-        await using FileStream stream = File.OpenRead(runPath);
-        RunSnapshotDto? dto = await JsonSerializer
-            .DeserializeAsync<RunSnapshotDto>(stream, jsonOptions, cancellationToken)
-            .ConfigureAwait(false);
+        RunSnapshotDto? dto = await ExecuteFileOperationWithRetryAsync(
+            async () =>
+            {
+                await using FileStream stream = OpenSnapshotForRead(runPath);
+                return await JsonSerializer
+                    .DeserializeAsync<RunSnapshotDto>(stream, jsonOptions, cancellationToken)
+                    .ConfigureAwait(false);
+            },
+            cancellationToken).ConfigureAwait(false);
 
         return dto is null ? null : FromDto(dto);
     }
@@ -68,10 +83,15 @@ public sealed class FileSystemRunStore : IRunStore
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            await using FileStream stream = File.OpenRead(runPath);
-            RunSnapshotDto? dto = await JsonSerializer
-                .DeserializeAsync<RunSnapshotDto>(stream, jsonOptions, cancellationToken)
-                .ConfigureAwait(false);
+            RunSnapshotDto? dto = await ExecuteFileOperationWithRetryAsync(
+                async () =>
+                {
+                    await using FileStream stream = OpenSnapshotForRead(runPath);
+                    return await JsonSerializer
+                        .DeserializeAsync<RunSnapshotDto>(stream, jsonOptions, cancellationToken)
+                        .ConfigureAwait(false);
+                },
+                cancellationToken).ConfigureAwait(false);
 
             if (dto is not null)
             {
@@ -97,6 +117,60 @@ public sealed class FileSystemRunStore : IRunStore
         FileSystemWorkspacePaths.GetSafePath(
             workspaceRoot,
             FileSystemWorkspacePaths.ToLogicalPath("runs", runId.Value, "run.json"));
+
+    private static FileStream OpenSnapshotForWrite(string path) =>
+        new FileStream(
+            path,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.ReadWrite | FileShare.Delete,
+            SnapshotBufferSize,
+            useAsync: true);
+
+    private static FileStream OpenSnapshotForRead(string path) =>
+        new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete,
+            SnapshotBufferSize,
+            useAsync: true);
+
+    private static async Task<T> ExecuteFileOperationWithRetryAsync<T>(
+        Func<Task<T>> operation,
+        CancellationToken cancellationToken)
+    {
+        for (int attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return await operation().ConfigureAwait(false);
+            }
+            catch (IOException) when (attempt < FileOperationRetryCount)
+            {
+                await Task.Delay(FileOperationRetryDelay, cancellationToken).ConfigureAwait(false);
+            }
+            catch (UnauthorizedAccessException) when (attempt < FileOperationRetryCount)
+            {
+                await Task.Delay(FileOperationRetryDelay, cancellationToken).ConfigureAwait(false);
+            }
+            catch (JsonException) when (attempt < FileOperationRetryCount)
+            {
+                await Task.Delay(FileOperationRetryDelay, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private static Task ExecuteFileOperationWithRetryAsync(
+        Func<Task> operation,
+        CancellationToken cancellationToken) =>
+        ExecuteFileOperationWithRetryAsync(
+            async () =>
+            {
+                await operation().ConfigureAwait(false);
+                return true;
+            },
+            cancellationToken);
 
     private RunSnapshotDto ToDto(ComparisonRun run) =>
         new RunSnapshotDto

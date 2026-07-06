@@ -19,7 +19,7 @@
             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="flex-wrap">
                 <MudStack Spacing="0">
                     <MudText Typo="Typo.h6">Run @run.Id.Value</MudText>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">@run.Status · @run.UpdatedAt.LocalDateTime</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@run.Status - @run.UpdatedAt.LocalDateTime</MudText>
                 </MudStack>
                 <RunSummaryCounts Summary="summary" />
             </MudStack>
@@ -93,7 +93,7 @@
         loadedRunId = RunId;
         loadedRefreshVersion = RefreshVersion;
         detailOffset = 0;
-        await LoadRunAsync().ConfigureAwait(false);
+        await LoadRunAsync();
     }
 
     private async Task LoadRunAsync()
@@ -112,9 +112,9 @@
             selectedPair = null;
             previewA = null;
             previewB = null;
-            run = await DataSource.LoadRunAsync(runId).ConfigureAwait(false);
-            summary = await DataSource.LoadRunSummaryAsync(runId).ConfigureAwait(false);
-            await LoadDetailPageAsync().ConfigureAwait(false);
+            run = await DataSource.LoadRunAsync(runId);
+            summary = await DataSource.LoadRunSummaryAsync(runId);
+            await LoadDetailPageAsync();
         }
         catch (Exception ex)
         {
@@ -138,14 +138,13 @@
 
         RunId runId = RunId ?? throw new InvalidOperationException("Run id is required.");
         detailPage = await DataSource
-            .LoadRunDetailsAsync(runId, new RunDetailQuery(detailOffset, PageSize))
-            .ConfigureAwait(false);
+            .LoadRunDetailsAsync(runId, new RunDetailQuery(detailOffset, PageSize));
     }
 
     private async Task PreviousPageAsync()
     {
         detailOffset = Math.Max(0, detailOffset - PageSize);
-        await LoadDetailPageAsync().ConfigureAwait(false);
+        await LoadDetailPageAsync();
     }
 
     private async Task NextPageAsync()
@@ -156,7 +155,7 @@
         }
 
         detailOffset += PageSize;
-        await LoadDetailPageAsync().ConfigureAwait(false);
+        await LoadDetailPageAsync();
     }
 
     private async Task SelectPairAsync(RequestPairResult pair)
@@ -170,12 +169,12 @@
         {
             if (pair.ResponseA?.Artifact is not null)
             {
-                previewA = await DataSource.ReadArtifactPreviewAsync(pair.ResponseA.Artifact).ConfigureAwait(false);
+                previewA = await DataSource.ReadArtifactPreviewAsync(pair.ResponseA.Artifact);
             }
 
             if (pair.ResponseB?.Artifact is not null)
             {
-                previewB = await DataSource.ReadArtifactPreviewAsync(pair.ResponseB.Artifact).ConfigureAwait(false);
+                previewB = await DataSource.ReadArtifactPreviewAsync(pair.ResponseB.Artifact);
             }
         }
         catch (Exception ex)

@@ -329,7 +329,7 @@
     {
         try
         {
-            defaults = await DataSource.LoadDefaultsAsync().ConfigureAwait(false);
+            defaults = await DataSource.LoadDefaultsAsync();
             RefreshAvailableProfiles(clearInvalidSelection: false);
         }
         catch (Exception ex)
@@ -358,7 +358,7 @@
         ApplyComparisonOptions(preset.ComparisonOptions);
         contentTypeOverride = preset.RequestExecutionOptions.ContentTypeOverride ?? string.Empty;
         RefreshAvailableProfiles(clearInvalidSelection: false);
-        await Task.CompletedTask.ConfigureAwait(false);
+        await Task.CompletedTask;
     }
 
     private Task HandleModelChangedAsync(string value)
@@ -389,7 +389,7 @@
 
     private async Task PickRequestDirectoryAsync()
     {
-        string? selectedDirectory = await SourcePicker.PickRequestDirectoryAsync().ConfigureAwait(false);
+        string? selectedDirectory = await SourcePicker.PickRequestDirectoryAsync();
         if (string.IsNullOrWhiteSpace(selectedDirectory))
         {
             return;
@@ -403,7 +403,7 @@
 
     private async Task PickRequestFilesAsync()
     {
-        IReadOnlyList<string> selectedFiles = await SourcePicker.PickRequestFilesAsync().ConfigureAwait(false);
+        IReadOnlyList<string> selectedFiles = await SourcePicker.PickRequestFilesAsync();
         if (selectedFiles.Count == 0)
         {
             return;
@@ -425,11 +425,11 @@
             progressLog.Clear();
 
             RequestComparisonRunRequest request = BuildRequest();
-            currentRun = await DataSource.CreateRunFromDirectoryAsync(request).ConfigureAwait(false);
+            currentRun = await DataSource.CreateRunFromDirectoryAsync(request);
             RecordProgress(currentRun);
-            await NotifyRunChangedAsync(currentRun).ConfigureAwait(false);
+            await NotifyRunChangedAsync(currentRun);
 
-            bool started = await DataSource.StartRunAsync(currentRun.Id).ConfigureAwait(false);
+            bool started = await DataSource.StartRunAsync(currentRun.Id);
             if (!started)
             {
                 errorMessage = "Run is already active.";
@@ -437,7 +437,7 @@
             }
 
             isRunning = true;
-            await PollUntilTerminalAsync(currentRun.Id).ConfigureAwait(false);
+            await PollUntilTerminalAsync(currentRun.Id);
         }
         catch (Exception ex)
         {
@@ -461,10 +461,10 @@
         {
             errorMessage = null;
             successMessage = null;
-            currentRun = await DataSource.CancelRunAsync(currentRun.Id).ConfigureAwait(false);
+            currentRun = await DataSource.CancelRunAsync(currentRun.Id);
             RecordProgress(currentRun);
             isRunning = false;
-            await NotifyRunChangedAsync(currentRun).ConfigureAwait(false);
+            await NotifyRunChangedAsync(currentRun);
         }
         catch (Exception ex)
         {
@@ -485,8 +485,7 @@
             errorMessage = null;
             successMessage = null;
             StaticReportBundleWriteResult result = await DataSource
-                .GenerateReportAsync(currentRun.Id, reportOutputDirectory, string.IsNullOrWhiteSpace(reportAssetsDirectory) ? null : reportAssetsDirectory)
-                .ConfigureAwait(false);
+                .GenerateReportAsync(currentRun.Id, reportOutputDirectory, string.IsNullOrWhiteSpace(reportAssetsDirectory) ? null : reportAssetsDirectory);
             successMessage = $"Report written to {result.OutputDirectory}";
         }
         catch (Exception ex)
@@ -503,10 +502,11 @@
     {
         while (true)
         {
-            await Task.Delay(PollDelayMilliseconds).ConfigureAwait(false);
-            currentRun = await DataSource.LoadRunAsync(runId).ConfigureAwait(false);
+            await Task.Delay(PollDelayMilliseconds);
+            currentRun = await DataSource.LoadRunAsync(runId);
             RecordProgress(currentRun);
-            await NotifyRunChangedAsync(currentRun).ConfigureAwait(false);
+            await NotifyRunChangedAsync(currentRun);
+            await InvokeAsync(StateHasChanged);
 
             if (currentRun.IsTerminal)
             {
@@ -518,8 +518,8 @@
 
     private async Task NotifyRunChangedAsync(ComparisonRun run)
     {
-        await RunSelected.InvokeAsync(run.Id).ConfigureAwait(false);
-        await RunChanged.InvokeAsync(run).ConfigureAwait(false);
+        await RunSelected.InvokeAsync(run.Id);
+        await RunChanged.InvokeAsync(run);
     }
 
     private RequestComparisonRunRequest BuildRequest()

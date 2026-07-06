@@ -49,7 +49,7 @@ public partial class App : System.Windows.Application
             })
             .Build();
 
-        await host.StartAsync().ConfigureAwait(false);
+        await host.StartAsync();
 
         MainWindow mainWindow = new MainWindow(host.Services);
         MainWindow = mainWindow;
@@ -60,7 +60,7 @@ public partial class App : System.Windows.Application
     {
         if (host is not null)
         {
-            await host.StopAsync().ConfigureAwait(false);
+            await host.StopAsync();
             host.Dispose();
         }
 

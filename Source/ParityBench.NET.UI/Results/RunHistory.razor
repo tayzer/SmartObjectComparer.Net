@@ -57,7 +57,7 @@
         try
         {
             errorMessage = null;
-            runs = await DataSource.ListRunsAsync().ConfigureAwait(false);
+            runs = await DataSource.ListRunsAsync();
         }
         catch (Exception ex)
         {

@@ -280,6 +280,61 @@ public sealed class FileSystemWorkspaceTests
         Assert.AreEqual("profile-a", loadedRun.Options.ContractProfile?.ProfileId);
     }
 
+    [TestMethod]
+    public async Task SaveRun_WhenExistingSnapshotIsOpenForRead_ReplacesSnapshot()
+    {
+        string workspaceRoot = CreateTempDirectory();
+        FileSystemRunStore store = new FileSystemRunStore(workspaceRoot);
+        RunId runId = new RunId("run-1");
+        ComparisonRun createdRun = ComparisonRun.Create(runId, CreateOptions());
+        await store.SaveAsync(createdRun);
+        string runPath = Path.Combine(workspaceRoot, "runs", runId.Value, "run.json");
+
+        await using FileStream reader = new FileStream(
+            runPath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 81920,
+            useAsync: true);
+
+        ComparisonRun executingRun = createdRun
+            .Start()
+            .Advance(RunStatus.Executing, new RunProgress(50, "Executing."));
+        await store.SaveAsync(executingRun);
+
+        ComparisonRun? loadedRun = await store.LoadAsync(runId);
+
+        Assert.IsNotNull(loadedRun);
+        Assert.AreEqual(RunStatus.Executing, loadedRun.Status);
+        Assert.AreEqual(50, loadedRun.Progress.PercentComplete);
+    }
+
+    [TestMethod]
+    public async Task LoadRun_WhenSnapshotIsOpenForSharedWrite_ReturnsRun()
+    {
+        string workspaceRoot = CreateTempDirectory();
+        FileSystemRunStore store = new FileSystemRunStore(workspaceRoot);
+        RunId runId = new RunId("run-1");
+        ComparisonRun run = ComparisonRun.Create(runId, CreateOptions());
+        await store.SaveAsync(run);
+        string runPath = Path.Combine(workspaceRoot, "runs", runId.Value, "run.json");
+
+        await using FileStream writer = new FileStream(
+            runPath,
+            FileMode.Open,
+            FileAccess.ReadWrite,
+            FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 81920,
+            useAsync: true);
+
+        ComparisonRun? loadedRun = await store.LoadAsync(runId);
+
+        Assert.IsNotNull(loadedRun);
+        Assert.AreEqual(runId.Value, loadedRun.Id.Value);
+        Assert.AreEqual(RunStatus.Created, loadedRun.Status);
+    }
+
     private static string CreateTempDirectory()
     {
         string path = Path.Combine(Path.GetTempPath(), "ParityBenchNET.Tests", Guid.NewGuid().ToString("N"));
