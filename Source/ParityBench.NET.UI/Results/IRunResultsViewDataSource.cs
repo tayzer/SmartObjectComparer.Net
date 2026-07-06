@@ -1,3 +1,4 @@
+﻿using ParityBench.NET.Domain.Reports;
 using ParityBench.NET.Domain.Results;
 using ParityBench.NET.Domain.Runs;
 
@@ -14,6 +15,10 @@ public interface IRunResultsViewDataSource
 
     Task<RunResultSummary?> LoadRunSummaryAsync(RunId runId, CancellationToken cancellationToken = default);
 
+    Task<StaticReportMetadata?> LoadReportMetadataAsync(RunId runId, CancellationToken cancellationToken = default);
+
+    Task<StaticReportAnalysisSnapshot?> LoadReportAnalysisAsync(RunId runId, CancellationToken cancellationToken = default);
+
     Task<RunDetailPage> LoadRunDetailsAsync(
         RunId runId,
         RunDetailQuery query,
@@ -23,4 +28,13 @@ public interface IRunResultsViewDataSource
         ArtifactReference artifact,
         int maxBytes = 64 * 1024,
         CancellationToken cancellationToken = default);
+
+    Task<ArtifactContentPreview> ReadArtifactContentAsync(
+        ArtifactReference artifact,
+        int maxBytes = 512 * 1024,
+        CancellationToken cancellationToken = default);
+
+    Task<string> ExportRunDetailsJsonAsync(RunId runId, CancellationToken cancellationToken = default);
+
+    Task<string> ExportRunDetailsCsvAsync(RunId runId, CancellationToken cancellationToken = default);
 }

@@ -9,6 +9,7 @@ using MudBlazor.Services;
 using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Results;
 using ParityBench.NET.Application.Workflow;
+using ParityBench.NET.Domain.Reports;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Results;
 using ParityBench.NET.Domain.Runs;
@@ -111,6 +112,12 @@ public sealed class ParityBenchHomeTests
         public Task<RunResultSummary?> LoadRunSummaryAsync(RunId runId, CancellationToken cancellationToken = default) =>
             Task.FromResult<RunResultSummary?>(null);
 
+        public Task<StaticReportMetadata?> LoadReportMetadataAsync(RunId runId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<StaticReportMetadata?>(null);
+
+        public Task<StaticReportAnalysisSnapshot?> LoadReportAnalysisAsync(RunId runId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<StaticReportAnalysisSnapshot?>(null);
+
         public Task<RunDetailPage> LoadRunDetailsAsync(
             RunId runId,
             RunDetailQuery query,
@@ -122,5 +129,17 @@ public sealed class ParityBenchHomeTests
             int maxBytes = 64 * 1024,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+
+        public Task<ArtifactContentPreview> ReadArtifactContentAsync(
+            ArtifactReference artifact,
+            int maxBytes = 512 * 1024,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<string> ExportRunDetailsJsonAsync(RunId runId, CancellationToken cancellationToken = default) =>
+            Task.FromResult("[]");
+
+        public Task<string> ExportRunDetailsCsvAsync(RunId runId, CancellationToken cancellationToken = default) =>
+            Task.FromResult("Request,Outcome,Differences");
     }
 }

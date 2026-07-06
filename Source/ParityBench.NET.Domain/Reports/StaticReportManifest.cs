@@ -4,7 +4,9 @@ namespace ParityBench.NET.Domain.Reports;
 
 public sealed record StaticReportManifest
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
+
+    public const int MinimumSupportedSchemaVersion = 1;
 
     public const int DefaultDetailPageSize = 100;
 
@@ -14,11 +16,15 @@ public sealed record StaticReportManifest
         StaticReportRunSnapshot run,
         RunResultSummary? summary,
         int detailPageSize,
-        IReadOnlyList<StaticReportDetailPageInfo>? detailPages = null)
+        IReadOnlyList<StaticReportDetailPageInfo>? detailPages = null,
+        StaticReportMetadata? metadata = null,
+        StaticReportAnalysisSnapshot? analysis = null)
     {
-        if (schemaVersion != CurrentSchemaVersion)
+        if (schemaVersion is < MinimumSupportedSchemaVersion or > CurrentSchemaVersion)
         {
-            throw new ArgumentOutOfRangeException(nameof(schemaVersion), $"Static report schema version must be {CurrentSchemaVersion}.");
+            throw new ArgumentOutOfRangeException(
+                nameof(schemaVersion),
+                $"Static report schema version must be between {MinimumSupportedSchemaVersion} and {CurrentSchemaVersion}.");
         }
 
         ArgumentNullException.ThrowIfNull(run);
@@ -34,6 +40,8 @@ public sealed record StaticReportManifest
         Summary = summary;
         DetailPageSize = detailPageSize;
         DetailPages = (detailPages ?? Array.Empty<StaticReportDetailPageInfo>()).ToList();
+        Metadata = metadata;
+        Analysis = analysis;
     }
 
     public int SchemaVersion { get; }
@@ -47,4 +55,8 @@ public sealed record StaticReportManifest
     public int DetailPageSize { get; }
 
     public IReadOnlyList<StaticReportDetailPageInfo> DetailPages { get; }
+
+    public StaticReportMetadata? Metadata { get; }
+
+    public StaticReportAnalysisSnapshot? Analysis { get; }
 }

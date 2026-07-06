@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 
 using ParityBench.NET.Domain.Reports;
@@ -58,6 +58,24 @@ public sealed class StaticReportRunResultsViewDataSource : IRunResultsViewDataSo
         return reportManifest.Summary ?? reportManifest.Run.Summary;
     }
 
+    public async Task<StaticReportMetadata?> LoadReportMetadataAsync(
+        RunId runId,
+        CancellationToken cancellationToken = default)
+    {
+        StaticReportManifest reportManifest = await LoadManifestAsync(cancellationToken).ConfigureAwait(false);
+        EnsureRunMatches(reportManifest, runId);
+        return reportManifest.Metadata ?? StaticReportMetadata.FromRun(reportManifest.Run.ToRun(), reportManifest.GeneratedAt);
+    }
+
+    public async Task<StaticReportAnalysisSnapshot?> LoadReportAnalysisAsync(
+        RunId runId,
+        CancellationToken cancellationToken = default)
+    {
+        StaticReportManifest reportManifest = await LoadManifestAsync(cancellationToken).ConfigureAwait(false);
+        EnsureRunMatches(reportManifest, runId);
+        return reportManifest.Analysis;
+    }
+
     public async Task<RunDetailPage> LoadRunDetailsAsync(
         RunId runId,
         RunDetailQuery query,
@@ -76,9 +94,15 @@ public sealed class StaticReportRunResultsViewDataSource : IRunResultsViewDataSo
         return await LoadFilteredPageAsync(reportManifest, query, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<ArtifactContentPreview> ReadArtifactPreviewAsync(
+    public Task<ArtifactContentPreview> ReadArtifactPreviewAsync(
         ArtifactReference artifact,
         int maxBytes = 64 * 1024,
+        CancellationToken cancellationToken = default) =>
+        ReadArtifactContentAsync(artifact, maxBytes, cancellationToken);
+
+    public async Task<ArtifactContentPreview> ReadArtifactContentAsync(
+        ArtifactReference artifact,
+        int maxBytes = 512 * 1024,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(artifact);
@@ -114,6 +138,26 @@ public sealed class StaticReportRunResultsViewDataSource : IRunResultsViewDataSo
             previewBytes,
             isTruncated,
             artifact.ContentType);
+    }
+
+    public async Task<string> ExportRunDetailsJsonAsync(
+        RunId runId,
+        CancellationToken cancellationToken = default)
+    {
+        StaticReportManifest reportManifest = await LoadManifestAsync(cancellationToken).ConfigureAwait(false);
+        EnsureRunMatches(reportManifest, runId);
+        IReadOnlyList<RequestPairResult> details = await LoadAllDetailsAsync(reportManifest, cancellationToken).ConfigureAwait(false);
+        return JsonSerializer.Serialize(details, jsonOptions);
+    }
+
+    public async Task<string> ExportRunDetailsCsvAsync(
+        RunId runId,
+        CancellationToken cancellationToken = default)
+    {
+        StaticReportManifest reportManifest = await LoadManifestAsync(cancellationToken).ConfigureAwait(false);
+        EnsureRunMatches(reportManifest, runId);
+        IReadOnlyList<RequestPairResult> details = await LoadAllDetailsAsync(reportManifest, cancellationToken).ConfigureAwait(false);
+        return BuildCsv(details);
     }
 
     private async Task<RunDetailPage> LoadUnfilteredPageAsync(
@@ -176,6 +220,20 @@ public sealed class StaticReportRunResultsViewDataSource : IRunResultsViewDataSo
         return new RunDetailPage(items, matchedCount, query.Offset, query.Limit);
     }
 
+    private async Task<IReadOnlyList<RequestPairResult>> LoadAllDetailsAsync(
+        StaticReportManifest reportManifest,
+        CancellationToken cancellationToken)
+    {
+        List<RequestPairResult> details = new List<RequestPairResult>();
+        foreach (StaticReportDetailPageInfo pageInfo in reportManifest.DetailPages.OrderBy(page => page.PageIndex))
+        {
+            StaticReportDetailPage page = await LoadDetailPageAsync(pageInfo, cancellationToken).ConfigureAwait(false);
+            details.AddRange(page.Items);
+        }
+
+        return details;
+    }
+
     private async Task<StaticReportManifest> LoadManifestAsync(CancellationToken cancellationToken)
     {
         if (manifest is not null)
@@ -225,5 +283,33 @@ public sealed class StaticReportRunResultsViewDataSource : IRunResultsViewDataSo
         {
             throw new InvalidOperationException($"Run '{runId}' was not found in this static report.");
         }
+    }
+
+    private static string BuildCsv(IReadOnlyList<RequestPairResult> details)
+    {
+        StringBuilder builder = new StringBuilder();
+        builder.AppendLine("Request,Outcome,Differences,StatusA,StatusB,Error");
+        foreach (RequestPairResult item in details)
+        {
+            builder.Append(EscapeCsv(item.RelativePath)).Append(',')
+                .Append(EscapeCsv(item.Outcome.ToString())).Append(',')
+                .Append(item.DifferenceCount).Append(',')
+                .Append(item.ResponseA?.StatusCode.ToString() ?? string.Empty).Append(',')
+                .Append(item.ResponseB?.StatusCode.ToString() ?? string.Empty).Append(',')
+                .Append(EscapeCsv(item.ErrorMessage ?? item.OutcomeMessage ?? string.Empty))
+                .AppendLine();
+        }
+
+        return builder.ToString();
+    }
+
+    private static string EscapeCsv(string value)
+    {
+        if (!value.Contains(',') && !value.Contains('"') && !value.Contains('\n') && !value.Contains('\r'))
+        {
+            return value;
+        }
+
+        return $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
     }
 }

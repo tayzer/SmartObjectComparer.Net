@@ -5,7 +5,8 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 using MudBlazor.Services;
 
-using ParityBench.NET.Application.Results;
+using ParityBench.NET.Domain.Comparison;
+using ParityBench.NET.Domain.Reports;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Results;
 using ParityBench.NET.Domain.Runs;
@@ -25,6 +26,7 @@ public sealed class RunResultsViewTests
         testContext = new BunitContext();
         testContext.JSInterop.Mode = JSRuntimeMode.Loose;
         testContext.Services.AddMudServices();
+        testContext.RenderTree.Add<MudTestRoot>(parameters => { });
         dataSource = new FakeRunResultsViewDataSource();
         testContext.Services.AddSingleton<IRunResultsViewDataSource>(dataSource);
     }
@@ -59,6 +61,25 @@ public sealed class RunResultsViewTests
     }
 
     [TestMethod]
+    public void RunResult_WhenRendered_RendersV1StyleReportSurface()
+    {
+        RunId runId = new RunId("run-1");
+        dataSource.Run = CreateCompletedRun(runId);
+        dataSource.Summary = dataSource.Run.Summary;
+        dataSource.Details = new[] { CreateDifferentPair("one.json") };
+
+        IRenderedComponent<RunResult> component = testContext.Render<RunResult>(parameters =>
+            parameters.Add(result => result.RunId, runId));
+
+        component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "Comparison Report"));
+        StringAssert.Contains(component.Markup, "Run Details");
+        StringAssert.Contains(component.Markup, "Comparison Results");
+        StringAssert.Contains(component.Markup, "Top Affected Objects");
+        StringAssert.Contains(component.Markup, "JSON");
+        StringAssert.Contains(component.Markup, "CSV");
+    }
+
+    [TestMethod]
     public void RunResult_WhenDetailsArePaged_RendersCurrentPageOnly()
     {
         RunId runId = new RunId("run-1");
@@ -73,50 +94,41 @@ public sealed class RunResultsViewTests
             parameters.Add(result => result.RunId, runId));
 
         component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "request-25.json"));
-        Assert.IsFalse(component.Markup.Contains("request-26.json", StringComparison.Ordinal));
+        StringAssert.Contains(component.Markup, "Showing 1-25 of 26");
     }
 
     [TestMethod]
-    public void RunResult_WhenPairIsSelected_LoadsRawPreviewOnDemand()
+    public void RunResult_WhenPairIsSelected_RendersStructuredDetailWithoutEagerRawRead()
     {
         RunId runId = new RunId("run-1");
-        RequestPairResult pair = CreatePair("one.json");
+        RequestPairResult pair = CreateDifferentPair("one.json");
         dataSource.Run = CreateCompletedRun(runId);
         dataSource.Summary = dataSource.Run.Summary;
         dataSource.Details = new[] { pair };
-        dataSource.Previews[pair.ResponseA!.Artifact.ArtifactId] = CreatePreview(pair.ResponseA.Artifact, "endpoint-a");
-        dataSource.Previews[pair.ResponseB!.Artifact.ArtifactId] = CreatePreview(pair.ResponseB.Artifact, "endpoint-b");
 
         IRenderedComponent<RunResult> component = testContext.Render<RunResult>(parameters =>
             parameters.Add(result => result.RunId, runId));
-        component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "one.json"));
+
+        component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "Detailed Comparison"));
+        StringAssert.Contains(component.Markup, "customer.name");
         Assert.AreEqual(0, dataSource.PreviewReadCount);
-
-        component.FindAll("button").Single(button => button.TextContent.Contains("one.json", StringComparison.Ordinal)).Click();
-
-        component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "endpoint-a"));
-        StringAssert.Contains(component.Markup, "endpoint-b");
-        Assert.AreEqual(2, dataSource.PreviewReadCount);
     }
 
     [TestMethod]
-    public void RunResult_WhenPreviewIsTruncated_ShowsTruncationState()
+    public void RunResult_WhenPairHasRawTextRows_RendersRawDifferenceDetail()
     {
         RunId runId = new RunId("run-1");
-        RequestPairResult pair = CreatePair("one.json");
+        RequestPairResult pair = CreateRawPair("gateway-error.xml");
         dataSource.Run = CreateCompletedRun(runId);
         dataSource.Summary = dataSource.Run.Summary;
         dataSource.Details = new[] { pair };
-        dataSource.Previews[pair.ResponseA!.Artifact.ArtifactId] = CreatePreview(pair.ResponseA.Artifact, "truncated", isTruncated: true);
-        dataSource.Previews[pair.ResponseB!.Artifact.ArtifactId] = CreatePreview(pair.ResponseB.Artifact, "full");
 
         IRenderedComponent<RunResult> component = testContext.Render<RunResult>(parameters =>
             parameters.Add(result => result.RunId, runId));
-        component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "one.json"));
 
-        component.FindAll("button").Single(button => button.TextContent.Contains("one.json", StringComparison.Ordinal)).Click();
-
-        component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "Preview truncated"));
+        component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "Raw Differences"));
+        StringAssert.Contains(component.Markup, "StatusCodeDifference");
+        StringAssert.Contains(component.Markup, "502");
     }
 
     [TestMethod]
@@ -145,8 +157,8 @@ public sealed class RunResultsViewTests
     private static RunOptions CreateOptions() =>
         new RunOptions(
             new RequestBatchReference("batch-1"),
-            new EndpointDefinition(new Uri("https://service-a.example.test")),
-            new EndpointDefinition(new Uri("https://service-b.example.test")),
+            new EndpointDefinition(new Uri("https://service-a.example.test"), "Expected"),
+            new EndpointDefinition(new Uri("https://service-b.example.test"), "Actual"),
             TimeSpan.FromSeconds(30),
             2);
 
@@ -157,11 +169,36 @@ public sealed class RunResultsViewTests
             CreateResponse(EndpointSlot.A, relativePath),
             CreateResponse(EndpointSlot.B, relativePath));
 
-    private static ResponseArtifactMetadata CreateResponse(EndpointSlot endpoint, string relativePath) =>
+    private static RequestPairResult CreateDifferentPair(string relativePath) =>
+        new RequestPairResult(
+            relativePath,
+            RequestPairOutcome.Different,
+            CreateResponse(EndpointSlot.A, relativePath),
+            CreateResponse(EndpointSlot.B, relativePath),
+            areEqual: false,
+            differenceCount: 1,
+            differences: new[] { new ComparisonDifference("customer.name", "Alice", "Alicia", "Name changed.") });
+
+    private static RequestPairResult CreateRawPair(string relativePath) =>
+        new RequestPairResult(
+            relativePath,
+            RequestPairOutcome.StatusCodeMismatch,
+            CreateResponse(EndpointSlot.A, relativePath, 200),
+            CreateResponse(EndpointSlot.B, relativePath, 502),
+            areEqual: null,
+            differenceCount: 1,
+            differences: new[] { new ComparisonDifference("HttpStatus", "200", "502", "Status changed.") },
+            outcomeMessage: "Endpoint status mismatch.",
+            rawTextDifferences: new[]
+            {
+                new StaticReportRawTextDifference(StaticReportRawTextDifferenceType.StatusCodeDifference, textA: "200", textB: "502"),
+            });
+
+    private static ResponseArtifactMetadata CreateResponse(EndpointSlot endpoint, string relativePath, int statusCode = 200) =>
         new ResponseArtifactMetadata(
             endpoint,
             new ArtifactReference($"runs/run-1/artifacts/{endpoint}/{relativePath}", "text/plain"),
-            200,
+            statusCode,
             "text/plain",
             10,
             "abc");
@@ -206,6 +243,26 @@ public sealed class RunResultsViewTests
             return Task.FromResult(Summary);
         }
 
+        public Task<StaticReportMetadata?> LoadReportMetadataAsync(RunId runId, CancellationToken cancellationToken = default)
+        {
+            ThrowIfConfigured();
+            return Task.FromResult<StaticReportMetadata?>(StaticReportMetadata.FromRun(Run ?? throw new InvalidOperationException("Run was not configured."), DateTimeOffset.Parse("2026-01-01T00:00:00Z")));
+        }
+
+        public Task<StaticReportAnalysisSnapshot?> LoadReportAnalysisAsync(RunId runId, CancellationToken cancellationToken = default)
+        {
+            ThrowIfConfigured();
+            StaticReportAnalysisSnapshot snapshot = new StaticReportAnalysisSnapshot(
+                Details.Count,
+                Details.Count(detail => detail.Outcome != RequestPairOutcome.ExecutionFailed),
+                Details.Count(detail => detail.Outcome != RequestPairOutcome.Equal && detail.Outcome != RequestPairOutcome.ExecutionFailed),
+                Details.Count(detail => detail.Outcome == RequestPairOutcome.ExecutionFailed),
+                Details.Sum(detail => detail.DifferenceCount),
+                new[] { new StaticReportDifferenceCategorySummary("Value Differences", "Value Differences", 1, 1) },
+                Details.Where(detail => detail.Outcome != RequestPairOutcome.Equal).Select(detail => new StaticReportAffectedObjectSummary(detail.RelativePath, Math.Max(1, detail.DifferenceCount), "Value Differences", detail.Outcome.ToString())).ToList());
+            return Task.FromResult<StaticReportAnalysisSnapshot?>(snapshot);
+        }
+
         public Task<RunDetailPage> LoadRunDetailsAsync(
             RunId runId,
             RunDetailQuery query,
@@ -223,11 +280,29 @@ public sealed class RunResultsViewTests
         public Task<ArtifactContentPreview> ReadArtifactPreviewAsync(
             ArtifactReference artifact,
             int maxBytes = 64 * 1024,
+            CancellationToken cancellationToken = default) =>
+            ReadArtifactContentAsync(artifact, maxBytes, cancellationToken);
+
+        public Task<ArtifactContentPreview> ReadArtifactContentAsync(
+            ArtifactReference artifact,
+            int maxBytes = 512 * 1024,
             CancellationToken cancellationToken = default)
         {
             ThrowIfConfigured();
             PreviewReadCount++;
             return Task.FromResult(Previews[artifact.ArtifactId]);
+        }
+
+        public Task<string> ExportRunDetailsJsonAsync(RunId runId, CancellationToken cancellationToken = default)
+        {
+            ThrowIfConfigured();
+            return Task.FromResult("[]");
+        }
+
+        public Task<string> ExportRunDetailsCsvAsync(RunId runId, CancellationToken cancellationToken = default)
+        {
+            ThrowIfConfigured();
+            return Task.FromResult("Request,Outcome,Differences");
         }
 
         private void ThrowIfConfigured()

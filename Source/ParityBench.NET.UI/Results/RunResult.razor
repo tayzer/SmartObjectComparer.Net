@@ -1,95 +1,334 @@
-﻿@inject IRunResultsViewDataSource DataSource
+@using System.Globalization
+@using System.Text.Json
+@using ParityBench.NET.Domain.Reports
+@using Microsoft.AspNetCore.Components
+@using Microsoft.JSInterop
+@inject IRunResultsViewDataSource DataSource
+@inject IJSRuntime JS
 
-<MudPaper Outlined="true" Class="pa-4">
-    @if (RunId is null)
-    {
-        <MudText Typo="Typo.body2" Color="Color.Secondary">Select a run</MudText>
-    }
-    else if (isLoading)
-    {
-        <MudProgressCircular Indeterminate="true" Size="Size.Small" />
-    }
-    else if (errorMessage is not null)
-    {
-        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@errorMessage</MudAlert>
-    }
-    else if (run is not null)
-    {
-        <MudStack Spacing="3">
-            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="flex-wrap">
-                <MudStack Spacing="0">
-                    <MudText Typo="Typo.h6">Run @run.Id.Value</MudText>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">@run.Status - @run.UpdatedAt.LocalDateTime</MudText>
+<style>
+    .v1-report-header { border-left: 4px solid var(--mud-palette-primary); }
+    .v1-report-stat { min-width: 8rem; border: 1px solid var(--mud-palette-lines-default); }
+    .v1-code { font-family: Consolas, Monaco, 'Courier New', monospace; font-size: .825rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .v1-diff-a { background: rgba(46, 125, 50, .10); border-left: 3px solid #2e7d32; }
+    .v1-diff-b { background: rgba(211, 47, 47, .10); border-left: 3px solid #d32f2f; }
+    .v1-file-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border: 1px solid var(--mud-palette-lines-default); max-height: 44rem; overflow: hidden; }
+    .v1-file-panel { min-width: 0; overflow: auto; max-height: 44rem; }
+    .v1-file-panel:first-child { border-right: 1px solid var(--mud-palette-lines-default); }
+    .v1-file-header { position: sticky; top: 0; z-index: 1; background: var(--mud-palette-surface); border-bottom: 1px solid var(--mud-palette-lines-default); padding: .5rem .75rem; }
+    .v1-line { display: flex; min-height: 1.45rem; }
+    .v1-line-number { width: 3.75rem; flex: 0 0 3.75rem; text-align: right; padding: 0 .5rem; color: var(--mud-palette-text-secondary); background: var(--mud-palette-background-grey); user-select: none; }
+    .v1-line-text { flex: 1; padding: 0 .5rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .v1-nowrap .v1-line-text { white-space: pre; overflow-wrap: normal; }
+    .v1-line-changed { background: rgba(245, 124, 0, .10); }
+</style>
+
+@if (RunId is null)
+{
+    <MudText Typo="Typo.body2" Color="Color.Secondary">Select a run</MudText>
+}
+else if (isLoading)
+{
+    <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="pa-8">
+        <MudProgressCircular Indeterminate="true" Size="Size.Large" />
+        <MudText Typo="Typo.body2" Color="Color.Secondary">Loading comparison report...</MudText>
+    </MudStack>
+}
+else if (errorMessage is not null)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@errorMessage</MudAlert>
+}
+else if (run is not null)
+{
+    <MudStack Spacing="4">
+        <MudPaper Outlined="true" Class="pa-4 v1-report-header">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Class="flex-wrap" Spacing="2">
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.h5">@(metadata?.ReportTitle ?? "Comparison Report")</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Run @run.Id.Value - @run.Status - updated @FormatDate(run.UpdatedAt)</MudText>
+                    <MudStack Row="true" Spacing="2" Class="flex-wrap">
+                        <MudText Typo="Typo.body2"><strong>@LabelA:</strong> @EndpointA</MudText>
+                        <MudText Typo="Typo.body2"><strong>@LabelB:</strong> @EndpointB</MudText>
+                    </MudStack>
                 </MudStack>
-                <RunSummaryCounts Summary="summary" />
+                <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary">@ModelName</MudChip>
+                    @if (metadata?.Elapsed is not null)
+                    {
+                        <MudChip T="string" Size="Size.Small">@FormatDuration(metadata.Elapsed.Value)</MudChip>
+                    }
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info">Generated @FormatDate(metadata?.GeneratedAt ?? DateTimeOffset.UtcNow)</MudChip>
+                </MudStack>
             </MudStack>
+        </MudPaper>
 
-            @if (detailPage is not null)
-            {
-                <MudStack Spacing="2">
-                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                        <MudText Typo="Typo.subtitle1">Pairs @detailPage.TotalCount</MudText>
-                        <MudStack Row="true" Spacing="1">
-                            <MudButton Variant="Variant.Outlined" Size="Size.Small" Disabled="@(detailOffset == 0)" OnClick="PreviousPageAsync">Previous</MudButton>
-                            <MudButton Variant="Variant.Outlined" Size="Size.Small" Disabled="@(!detailPage.HasMore)" OnClick="NextPageAsync">Next</MudButton>
+        <MudStack Row="true" Spacing="2" Class="flex-wrap">
+            @Stat("Total", summary?.TotalPairs ?? analysis?.TotalPairs ?? 0, Color.Default)
+            @Stat("Equal", summary?.EqualPairs ?? 0, Color.Success)
+            @Stat("Different", summary?.DifferentPairs ?? analysis?.DifferentPairs ?? 0, Color.Warning)
+            @Stat("Errors", summary?.ErrorPairs ?? analysis?.ErrorPairs ?? 0, Color.Error)
+            @Stat("Status", summary?.StatusCodeMismatchPairs ?? 0, Color.Info)
+            @Stat("Non-success", summary?.BothNonSuccessPairs ?? 0, Color.Secondary)
+            @Stat("Total Diffs", analysis?.TotalDifferences ?? 0, Color.Primary)
+        </MudStack>
+
+        @if (metadata?.ExecutionMetrics is not null)
+        {
+            <MudPaper Outlined="true" Class="pa-3">
+                <MudStack Row="true" Spacing="1" Class="flex-wrap" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.subtitle2">Request Comparison Timings</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary">Total: @FormatDuration(metadata.ExecutionMetrics.TotalDuration)</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info">Execution: @FormatDuration(metadata.ExecutionMetrics.RequestExecutionDuration)</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info">Comparison: @FormatDuration(metadata.ExecutionMetrics.ComparisonDuration)</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info">Finalization: @FormatDuration(metadata.ExecutionMetrics.FinalizationDuration)</MudChip>
+                    <MudChip T="string" Size="Size.Small">Requests: @metadata.ExecutionMetrics.RequestCount</MudChip>
+                    <MudChip T="string" Size="Size.Small">Concurrency: @metadata.ExecutionMetrics.MaxConcurrency</MudChip>
+                </MudStack>
+            </MudPaper>
+        }
+
+        @if (analysis is not null)
+        {
+            <MudPaper Outlined="true" Class="pa-0">
+                <MudTabs Elevation="0" PanelClass="pa-4">
+                    <MudTabPanel Text="Run Details" Icon="@Icons.Material.Filled.Assessment">
+                        <MudGrid>
+                            <MudItem xs="12" md="5">
+                                <MudText Typo="Typo.subtitle1" Class="mb-2">Difference Categories</MudText>
+                                <MudTable T="StaticReportDifferenceCategorySummary" Items="analysis.Categories" Dense="true" Hover="true" Elevation="0">
+                                    <HeaderContent><MudTh>Category</MudTh><MudTh>Occurrences</MudTh><MudTh>Pairs</MudTh></HeaderContent>
+                                    <RowTemplate>
+                                        <MudTd DataLabel="Category">@context.DisplayName</MudTd>
+                                        <MudTd DataLabel="Occurrences">@context.OccurrenceCount</MudTd>
+                                        <MudTd DataLabel="Pairs">@context.AffectedPairCount</MudTd>
+                                    </RowTemplate>
+                                </MudTable>
+                            </MudItem>
+                            <MudItem xs="12" md="7">
+                                <MudText Typo="Typo.subtitle1" Class="mb-2">Top Affected Objects</MudText>
+                                <MudTable T="StaticReportAffectedObjectSummary" Items="analysis.TopAffectedObjects" Dense="true" Hover="true" Elevation="0">
+                                    <HeaderContent><MudTh>Request</MudTh><MudTh>Category</MudTh><MudTh>Diffs</MudTh><MudTh></MudTh></HeaderContent>
+                                    <RowTemplate>
+                                        <MudTd DataLabel="Request">@context.Identifier</MudTd>
+                                        <MudTd DataLabel="Category"><MudChip T="string" Size="Size.Small">@context.Category</MudChip></MudTd>
+                                        <MudTd DataLabel="Diffs">@context.DifferenceCount</MudTd>
+                                        <MudTd><MudButton Variant="Variant.Text" Size="Size.Small" OnClick="@(() => SelectAffectedObjectAsync(context.Identifier))">View</MudButton></MudTd>
+                                    </RowTemplate>
+                                </MudTable>
+                            </MudItem>
+                        </MudGrid>
+                    </MudTabPanel>
+                    <MudTabPanel Text="Options" Icon="@Icons.Material.Filled.Tune">
+                        <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                            <MudChip T="string" Size="Size.Small">Max differences @run.Options.Comparison.MaxDifferences</MudChip>
+                            <MudChip T="string" Size="Size.Small">Ignore namespaces @FormatBool(run.Options.Comparison.IgnoreXmlNamespaces)</MudChip>
+                            <MudChip T="string" Size="Size.Small">Ignore order @FormatBool(run.Options.Comparison.IgnoreCollectionOrder)</MudChip>
+                            <MudChip T="string" Size="Size.Small">Ignore case @FormatBool(run.Options.Comparison.IgnoreStringCase)</MudChip>
+                            <MudChip T="string" Size="Size.Small">Ignore rules @run.Options.Comparison.IgnoreRules.Count</MudChip>
+                            <MudChip T="string" Size="Size.Small">Smart ignores @run.Options.Comparison.SmartIgnoreRules.Count</MudChip>
+                            <MudChip T="string" Size="Size.Small">Masks @run.Options.Comparison.MaskRules.Count</MudChip>
                         </MudStack>
+                    </MudTabPanel>
+                </MudTabs>
+            </MudPaper>
+        }
+        <MudPaper Outlined="true" Class="pa-0">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pa-3 flex-wrap" Spacing="2">
+                <MudText Typo="Typo.h6"><MudIcon Icon="@Icons.Material.Filled.CompareArrows" Class="mr-2" />@LabelA vs @LabelB Comparison Results</MudText>
+                <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@(resultsCollapsed ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ExpandLess)" OnClick="() => resultsCollapsed = !resultsCollapsed">@(resultsCollapsed ? "Expand" : "Collapse")</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Download" OnClick="ExportJsonAsync">JSON</MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Download" OnClick="ExportCsvAsync">CSV</MudButton>
+                </MudStack>
+            </MudStack>
+            @if (!resultsCollapsed)
+            {
+                <MudDivider />
+                <div class="pa-3">
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="flex-wrap mb-3">
+                        <MudTextField T="string" Value="@searchFilter" ValueChanged="OnSearchChangedAsync" Placeholder="Search by request..." Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" DebounceInterval="300" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Style="min-width: 16rem;" />
+                        <MudSelect T="string" Value="@statusFilter" ValueChanged="OnStatusFilterChangedAsync" Label="Status" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 12rem;">
+                            <MudSelectItem T="string" Value="@AllFilter">All</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Equal")">Equal</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("Different")">Different</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("StatusCodeMismatch")">Status mismatch</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("BothNonSuccess")">Non-success</MudSelectItem>
+                            <MudSelectItem T="string" Value="@("ExecutionFailed")">Errors</MudSelectItem>
+                        </MudSelect>
+                        <MudSelect T="string" Value="@categoryFilter" ValueChanged="OnCategoryFilterChanged" Label="Category" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 13rem;">
+                            <MudSelectItem T="string" Value="@AllFilter">All Categories</MudSelectItem>
+                            @foreach (var category in AvailableCategories)
+                            {
+                                <MudSelectItem T="string" Value="@category">@category</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudSelect T="int" Value="@pageSize" ValueChanged="OnPageSizeChangedAsync" Label="Rows" Variant="Variant.Outlined" Margin="Margin.Dense" Style="width: 7rem;">
+                            @foreach (var option in PageSizeOptions)
+                            {
+                                <MudSelectItem T="int" Value="@option">@option</MudSelectItem>
+                            }
+                        </MudSelect>
                     </MudStack>
 
-                    <MudTable T="RequestPairResult" Items="detailPage.Items" Dense="true" Hover="true" Elevation="0">
-                        <HeaderContent>
-                            <MudTh>Request</MudTh>
-                            <MudTh>Outcome</MudTh>
-                            <MudTh>Differences</MudTh>
-                        </HeaderContent>
-                        <RowTemplate>
-                            <MudTd DataLabel="Request">
-                                <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="@(() => SelectPairAsync(context))">@context.RelativePath</MudButton>
-                            </MudTd>
-                            <MudTd DataLabel="Outcome">@context.Outcome</MudTd>
-                            <MudTd DataLabel="Differences">@context.DifferenceCount</MudTd>
-                        </RowTemplate>
-                    </MudTable>
-                </MudStack>
+                    @if (detailPage is null)
+                    {
+                        <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                    }
+                    else
+                    {
+                        <MudTable T="RequestPairResult" Items="VisiblePageItems" Dense="true" Hover="true" Elevation="0" RowClassFunc="GetPairRowClass" OnRowClick="OnPairRowClickedAsync">
+                            <HeaderContent><MudTh>Status</MudTh><MudTh>Request</MudTh><MudTh>HTTP Status</MudTh><MudTh>Differences</MudTh><MudTh>Category</MudTh><MudTh></MudTh></HeaderContent>
+                            <RowTemplate>
+                                <MudTd DataLabel="Status"><MudIcon Icon="@GetOutcomeIcon(context.Outcome)" Color="@GetOutcomeColor(context.Outcome)" /></MudTd>
+                                <MudTd DataLabel="Request"><MudButton Variant="Variant.Text" Size="Size.Small" OnClick="@(() => SelectPairAsync(context))">@context.RelativePath</MudButton></MudTd>
+                                <MudTd DataLabel="HTTP Status">
+                                    <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                                        @if (context.ResponseA is not null)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="@GetStatusCodeColor(context.ResponseA.StatusCode)" Variant="Variant.Outlined">@LabelA: @context.ResponseA.StatusCode</MudChip>
+                                        }
+                                        @if (context.ResponseB is not null)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="@GetStatusCodeColor(context.ResponseB.StatusCode)" Variant="Variant.Outlined">@LabelB: @context.ResponseB.StatusCode</MudChip>
+                                        }
+                                    </MudStack>
+                                </MudTd>
+                                <MudTd DataLabel="Differences"><MudChip T="string" Size="Size.Small" Color="@GetDifferenceChipColor(context)">@(context.Outcome == RequestPairOutcome.ExecutionFailed ? "-" : context.DifferenceCount)</MudChip></MudTd>
+                                <MudTd DataLabel="Category"><MudChip T="string" Size="Size.Small">@GetPairCategory(context)</MudChip></MudTd>
+                                <MudTd><MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.Visibility" OnClick="@(() => SelectPairAsync(context))">View</MudButton></MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mt-3 flex-wrap">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Showing @(detailPage.TotalCount == 0 ? 0 : detailPage.Offset + 1)-@(detailPage.Offset + detailPage.Items.Count) of @detailPage.TotalCount</MudText>
+                            <MudStack Row="true" Spacing="1"><MudButton Variant="Variant.Outlined" Size="Size.Small" Disabled="@(detailOffset == 0)" OnClick="PreviousPageAsync">Previous</MudButton><MudButton Variant="Variant.Outlined" Size="Size.Small" Disabled="@(!detailPage.HasMore)" OnClick="NextPageAsync">Next</MudButton></MudStack>
+                        </MudStack>
+                    }
+                </div>
             }
+        </MudPaper>
 
-            <PairDetail Pair="selectedPair" PreviewA="previewA" PreviewB="previewB" />
-        </MudStack>
-    }
-</MudPaper>
+        @if (selectedPair is not null)
+        {
+            <MudPaper Outlined="true" Class="pa-0" id="report-detailed-differences-section">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pa-3 flex-wrap" Spacing="2">
+                    <MudStack Spacing="0"><MudText Typo="Typo.h6"><MudIcon Icon="@Icons.Material.Filled.Compare" Class="mr-2" />Detailed Comparison</MudText><MudText Typo="Typo.caption" Color="Color.Secondary">@selectedPair.RelativePath</MudText></MudStack>
+                    <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                        <MudSelect T="DetailViewMode" Value="@detailViewMode" ValueChanged="OnDetailViewModeChangedAsync" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 10rem;">
+                            <MudSelectItem T="DetailViewMode" Value="DetailViewMode.Structured">Structured</MudSelectItem>
+                            @if (selectedPair.RawTextDifferences.Count > 0) { <MudSelectItem T="DetailViewMode" Value="DetailViewMode.Raw">Raw Differences</MudSelectItem> }
+                            @if (HasArtifactContent(selectedPair)) { <MudSelectItem T="DetailViewMode" Value="DetailViewMode.Full">Full</MudSelectItem> }
+                        </MudSelect>
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Download" OnClick="ExportSelectedPairJsonAsync">Export This Result</MudButton>
+                    </MudStack>
+                </MudStack>
+                <MudDivider />
+                <div class="pa-4">
+                    @if (!string.IsNullOrWhiteSpace(selectedPair.ErrorMessage))
+                    {
+                        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@selectedPair.ErrorMessage</MudAlert>
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Text" Class="mt-2">Check the request payload, endpoint configuration, content type, and whether an error page was returned instead of the expected response.</MudAlert>
+                    }
+                    else if (detailViewMode == DetailViewMode.Raw)
+                    {
+                        @if (selectedPair.ResponseA is not null && selectedPair.ResponseB is not null)
+                        {
+                            <MudAlert Severity="@(selectedPair.Outcome == RequestPairOutcome.StatusCodeMismatch ? Severity.Warning : Severity.Error)" Variant="Variant.Outlined" Class="mb-3">HTTP Status Codes: @LabelA @selectedPair.ResponseA.StatusCode, @LabelB @selectedPair.ResponseB.StatusCode</MudAlert>
+                        }
+                        <MudTable T="StaticReportRawTextDifference" Items="selectedPair.RawTextDifferences" Dense="true" Hover="true" Elevation="0">
+                            <HeaderContent><MudTh>Type</MudTh><MudTh>Line</MudTh><MudTh>@LabelA</MudTh><MudTh>@LabelB</MudTh></HeaderContent>
+                            <RowTemplate><MudTd>@context.Type</MudTd><MudTd>@FormatRawLine(context)</MudTd><MudTd Class="v1-code v1-diff-a">@(context.TextA ?? string.Empty)</MudTd><MudTd Class="v1-code v1-diff-b">@(context.TextB ?? string.Empty)</MudTd></RowTemplate>
+                        </MudTable>
+                    }
+                    else if (detailViewMode == DetailViewMode.Full)
+                    {
+                        <MudStack Row="true" Spacing="2" Class="flex-wrap mb-2">
+                            <MudSwitch T="bool" Value="@syncScroll" ValueChanged="OnSyncScrollChangedAsync" Label="Sync scroll" />
+                            <MudSwitch T="bool" @bind-Value="highlightDifferences" Label="Highlight" />
+                            <MudSwitch T="bool" @bind-Value="wordWrap" Label="Wrap" />
+                        </MudStack>
+                        @if (isLoadingContent) { <MudProgressCircular Indeterminate="true" Size="Size.Small" /> }
+                        else if (!string.IsNullOrWhiteSpace(contentErrorMessage)) { <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">@contentErrorMessage</MudAlert> }
+                        else
+                        {
+                            <div class="v1-file-grid">
+                                @RenderFilePanel(LabelA, selectedPair.ResponseA?.Artifact.ArtifactId ?? selectedPair.RelativePath, contentA, true)
+                                @RenderFilePanel(LabelB, selectedPair.ResponseB?.Artifact.ArtifactId ?? selectedPair.RelativePath, contentB, false)
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <MudStack Row="true" Spacing="2" Class="flex-wrap mb-3">
+                            <MudTextField T="string" @bind-Value="structuredSearchFilter" Placeholder="Search differences..." Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Style="min-width: 16rem;" />
+                            <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="() => showAllDifferences = !showAllDifferences">@(showAllDifferences ? "Show Top 100 Per Group" : "Show All Differences")</MudButton>
+                        </MudStack>
+                        @if (selectedPair.Differences.Count == 0) { <MudAlert Severity="Severity.Success" Variant="Variant.Text">@(selectedPair.OutcomeMessage ?? "No structured differences were recorded.")</MudAlert> }
+                        @foreach (var group in GetStructuredGroups(selectedPair))
+                        {
+                            var items = showAllDifferences ? group.ToList() : group.Take(100).ToList();
+                            <MudPaper Outlined="true" Class="pa-3 mb-3"><MudText Typo="Typo.subtitle2">@group.Key (@group.Count() diffs)</MudText>
+                                <MudTable T="ComparisonDifference" Items="items" Dense="true" Hover="true" Elevation="0"><HeaderContent><MudTh>Property</MudTh><MudTh>@LabelA</MudTh><MudTh>@LabelB</MudTh></HeaderContent><RowTemplate><MudTd><code>@context.PropertyPath</code></MudTd><MudTd Class="v1-diff-a">@(context.ValueA ?? "null")</MudTd><MudTd Class="v1-diff-b">@(context.ValueB ?? "null")</MudTd></RowTemplate></MudTable>
+                                @if (group.Count() > items.Count) { <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true">And @(group.Count() - items.Count) more differences in this group...</MudAlert> }
+                            </MudPaper>
+                        }
+                    }
+                </div>
+            </MudPaper>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(downloadErrorMessage)) { <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">@downloadErrorMessage</MudAlert> }
+    </MudStack>
+}
 
 @code {
-    private const int PageSize = 25;
-
+    private const string AllFilter = "All";
+    private static readonly int[] PageSizeOptions = { 25, 50, 100, 250 };
     private RunId? loadedRunId;
     private int loadedRefreshVersion = -1;
     private ComparisonRun? run;
     private RunResultSummary? summary;
+    private StaticReportMetadata? metadata;
+    private StaticReportAnalysisSnapshot? analysis;
     private RunDetailPage? detailPage;
     private RequestPairResult? selectedPair;
-    private ArtifactContentPreview? previewA;
-    private ArtifactContentPreview? previewB;
+    private ArtifactContentPreview? contentA;
+    private ArtifactContentPreview? contentB;
     private int detailOffset;
+    private int pageSize = 25;
     private bool isLoading;
+    private bool isLoadingContent;
+    private bool showAllDifferences;
+    private bool resultsCollapsed;
+    private readonly string filePanelPrefix = $"report-file-panels-{Guid.NewGuid():N}";
+    private bool syncScroll = true;
+    private bool highlightDifferences = true;
+    private bool wordWrap = true;
+    private string searchFilter = string.Empty;
+    private string statusFilter = AllFilter;
+    private string categoryFilter = AllFilter;
+    private string structuredSearchFilter = string.Empty;
     private string? errorMessage;
+    private string? contentErrorMessage;
+    private string? downloadErrorMessage;
+    private bool shouldRefreshScrollSync;
+    private DetailViewMode detailViewMode = DetailViewMode.Structured;
 
-    [Parameter]
-    public RunId? RunId { get; set; }
+    [Parameter] public RunId? RunId { get; set; }
+    [Parameter] public int RefreshVersion { get; set; }
 
-    [Parameter]
-    public int RefreshVersion { get; set; }
+    private string LabelA => metadata?.EndpointALabel ?? run?.Options.EndpointA.Label ?? "Endpoint A";
+    private string LabelB => metadata?.EndpointBLabel ?? run?.Options.EndpointB.Label ?? "Endpoint B";
+    private string EndpointA => metadata?.EndpointA ?? run?.Options.EndpointA.Uri.ToString() ?? string.Empty;
+    private string EndpointB => metadata?.EndpointB ?? run?.Options.EndpointB.Uri.ToString() ?? string.Empty;
+    private string ModelName => metadata?.ModelName ?? run?.Options.ModelName ?? "Auto";
+    private string LeftPanelId => $"{filePanelPrefix}-left";
+    private string RightPanelId => $"{filePanelPrefix}-right";
+    private IReadOnlyList<string> AvailableCategories => analysis?.AvailableCategories ?? Array.Empty<string>();
+    private IReadOnlyList<RequestPairResult> VisiblePageItems => detailPage is null ? Array.Empty<RequestPairResult>() : detailPage.Items.Where(MatchesCategoryFilter).ToList();
 
     protected override async Task OnParametersSetAsync()
     {
-        if (RunId is null)
-        {
-            return;
-        }
-
-        if (RunId == loadedRunId && RefreshVersion == loadedRefreshVersion)
-        {
-            return;
-        }
-
+        if (RunId is null || (RunId == loadedRunId && RefreshVersion == loadedRefreshVersion)) { return; }
         loadedRunId = RunId;
         loadedRefreshVersion = RefreshVersion;
         detailOffset = 0;
@@ -98,88 +337,227 @@
 
     private async Task LoadRunAsync()
     {
-        if (RunId is null)
-        {
-            return;
-        }
-
-        RunId runId = RunId ?? throw new InvalidOperationException("Run id is required.");
-
+        if (RunId is null) { return; }
         try
         {
             isLoading = true;
             errorMessage = null;
             selectedPair = null;
-            previewA = null;
-            previewB = null;
+            contentA = null;
+            contentB = null;
+            RunId runId = RunId.Value;
             run = await DataSource.LoadRunAsync(runId);
             summary = await DataSource.LoadRunSummaryAsync(runId);
+            metadata = await DataSource.LoadReportMetadataAsync(runId);
+            analysis = await DataSource.LoadReportAnalysisAsync(runId);
             await LoadDetailPageAsync();
+            if (detailPage?.Items.Count > 0) { await SelectPairAsync(detailPage.Items[0]); }
         }
         catch (Exception ex)
         {
             errorMessage = ex.Message;
-            run = null;
-            summary = null;
-            detailPage = null;
+            run = null; summary = null; metadata = null; analysis = null; detailPage = null;
         }
-        finally
-        {
-            isLoading = false;
-        }
+        finally { isLoading = false; }
     }
 
     private async Task LoadDetailPageAsync()
     {
-        if (RunId is null)
-        {
-            return;
-        }
-
-        RunId runId = RunId ?? throw new InvalidOperationException("Run id is required.");
-        detailPage = await DataSource
-            .LoadRunDetailsAsync(runId, new RunDetailQuery(detailOffset, PageSize));
+        if (RunId is null) { return; }
+        RunId runId = RunId.Value;
+        detailPage = await DataSource.LoadRunDetailsAsync(runId, new RunDetailQuery(detailOffset, pageSize, ParseStatusFilter(statusFilter), searchFilter));
     }
 
-    private async Task PreviousPageAsync()
-    {
-        detailOffset = Math.Max(0, detailOffset - PageSize);
-        await LoadDetailPageAsync();
-    }
+    private async Task OnSearchChangedAsync(string value) { searchFilter = value ?? string.Empty; detailOffset = 0; await LoadDetailPageAsync(); }
+    private async Task OnStatusFilterChangedAsync(string value) { statusFilter = value ?? AllFilter; detailOffset = 0; await LoadDetailPageAsync(); }
+    private Task OnCategoryFilterChanged(string value) { categoryFilter = value ?? AllFilter; return Task.CompletedTask; }
+    private async Task OnPageSizeChangedAsync(int value) { pageSize = value; detailOffset = 0; await LoadDetailPageAsync(); }
+    private async Task PreviousPageAsync() { detailOffset = Math.Max(0, detailOffset - pageSize); await LoadDetailPageAsync(); }
+    private async Task NextPageAsync() { if (detailPage?.HasMore == true) { detailOffset += pageSize; await LoadDetailPageAsync(); } }
 
-    private async Task NextPageAsync()
+    private async Task SelectAffectedObjectAsync(string identifier)
     {
-        if (detailPage?.HasMore != true)
-        {
-            return;
-        }
-
-        detailOffset += PageSize;
+        searchFilter = identifier;
+        detailOffset = 0;
         await LoadDetailPageAsync();
+        RequestPairResult? pair = detailPage?.Items.FirstOrDefault(item => string.Equals(item.RelativePath, identifier, StringComparison.OrdinalIgnoreCase));
+        if (pair is not null) { await SelectPairAsync(pair); }
     }
 
     private async Task SelectPairAsync(RequestPairResult pair)
     {
         selectedPair = pair;
-        previewA = null;
-        previewB = null;
-        errorMessage = null;
+        contentA = null; contentB = null; contentErrorMessage = null;
+        detailViewMode = pair.RawTextDifferences.Count > 0 ? DetailViewMode.Raw : DetailViewMode.Structured;
+        structuredSearchFilter = string.Empty;
+        showAllDifferences = false;
+        shouldRefreshScrollSync = true;
+        await ScrollToDetailAsync();
+    }
 
+    private Task OnPairRowClickedAsync(TableRowClickEventArgs<RequestPairResult> args) => args.Item is null ? Task.CompletedTask : SelectPairAsync(args.Item);
+
+    private async Task OnDetailViewModeChangedAsync(DetailViewMode mode)
+    {
+        detailViewMode = mode;
+        shouldRefreshScrollSync = true;
+        if (mode == DetailViewMode.Full) { await LoadContentAsync(); }
+    }
+
+    private async Task LoadContentAsync()
+    {
+        if (selectedPair is null || isLoadingContent) { return; }
+        isLoadingContent = true;
+        contentErrorMessage = null;
         try
         {
-            if (pair.ResponseA?.Artifact is not null)
-            {
-                previewA = await DataSource.ReadArtifactPreviewAsync(pair.ResponseA.Artifact);
-            }
-
-            if (pair.ResponseB?.Artifact is not null)
-            {
-                previewB = await DataSource.ReadArtifactPreviewAsync(pair.ResponseB.Artifact);
-            }
+            if (selectedPair.ResponseA?.Artifact is not null) { contentA = await DataSource.ReadArtifactContentAsync(selectedPair.ResponseA.Artifact); }
+            if (selectedPair.ResponseB?.Artifact is not null) { contentB = await DataSource.ReadArtifactContentAsync(selectedPair.ResponseB.Artifact); }
         }
-        catch (Exception ex)
+        catch (Exception ex) { contentErrorMessage = ex.Message; }
+        finally
         {
-            errorMessage = ex.Message;
+            isLoadingContent = false;
+            shouldRefreshScrollSync = true;
         }
     }
+
+    private async Task ExportJsonAsync()
+    {
+        if (RunId is null) { return; }
+        try { await DownloadTextAsync($"{RunId.Value}-comparison-results.json", "application/json", await DataSource.ExportRunDetailsJsonAsync(RunId.Value)); }
+        catch (Exception ex) { downloadErrorMessage = ex.Message; }
+    }
+
+    private async Task ExportCsvAsync()
+    {
+        if (RunId is null) { return; }
+        try { await DownloadTextAsync($"{RunId.Value}-comparison-results.csv", "text/csv", await DataSource.ExportRunDetailsCsvAsync(RunId.Value)); }
+        catch (Exception ex) { downloadErrorMessage = ex.Message; }
+    }
+
+    private async Task ExportSelectedPairJsonAsync()
+    {
+        if (selectedPair is null) { return; }
+        try
+        {
+            string json = JsonSerializer.Serialize(selectedPair, StaticReportJsonOptions.Create());
+            await DownloadTextAsync($"{SanitizeFileName(selectedPair.RelativePath)}.json", "application/json", json);
+        }
+        catch (Exception ex) { downloadErrorMessage = ex.Message; }
+    }
+
+    private async Task DownloadTextAsync(string fileName, string contentType, string content)
+    {
+        downloadErrorMessage = null;
+        await JS.InvokeVoidAsync("parityBenchDownloadText", fileName, contentType, content);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!shouldRefreshScrollSync) { return; }
+        shouldRefreshScrollSync = false;
+        await SetSyncedScrollAsync(detailViewMode == DetailViewMode.Full && syncScroll && !isLoadingContent && string.IsNullOrWhiteSpace(contentErrorMessage));
+    }
+
+    private async Task OnSyncScrollChangedAsync(bool value)
+    {
+        syncScroll = value;
+        await SetSyncedScrollAsync(detailViewMode == DetailViewMode.Full && syncScroll && !isLoadingContent && string.IsNullOrWhiteSpace(contentErrorMessage));
+    }
+
+    private async Task SetSyncedScrollAsync(bool enabled)
+    {
+        try { await JS.InvokeVoidAsync("parityBenchSetSyncedScroll", LeftPanelId, RightPanelId, enabled); }
+        catch { }
+    }
+
+    private async Task ScrollToDetailAsync()
+    {
+        try { await JS.InvokeVoidAsync("parityBenchScrollToElement", "report-detailed-differences-section"); }
+        catch { }
+    }
+
+    private RenderFragment Stat(string label, int value, Color color) => @<MudPaper Outlined="true" Class="pa-3 v1-report-stat"><MudText Typo="Typo.h5" Color="@color">@value.ToString("N0", CultureInfo.InvariantCulture)</MudText><MudText Typo="Typo.caption" Color="Color.Secondary">@label</MudText></MudPaper>;
+
+    private RenderFragment RenderFilePanel(string label, string fileName, ArtifactContentPreview? content, bool left) => @<div id="@(left ? LeftPanelId : RightPanelId)" class="v1-file-panel"><div class="v1-file-header"><strong>@label</strong> - @fileName</div>@if (content?.IsTruncated == true) { <div class="pa-2"><MudText Typo="Typo.caption" Color="Color.Warning">Content truncated for display.</MudText></div> }@foreach (var line in BuildLineModels(left)) { <div class="@line.CssClass"><span class="v1-line-number">@line.LineNumber</span><span class="v1-line-text">@line.Text</span></div> }</div>;
+
+    private IEnumerable<LineModel> BuildLineModels(bool left)
+    {
+        string[] lines = SplitLines(left ? contentA?.Content : contentB?.Content);
+        string[] opposite = SplitLines(left ? contentB?.Content : contentA?.Content);
+        int count = Math.Max(lines.Length, 1);
+        for (int index = 0; index < count; index++)
+        {
+            string text = index < lines.Length ? lines[index] : string.Empty;
+            string other = index < opposite.Length ? opposite[index] : string.Empty;
+            bool changed = highlightDifferences && !string.Equals(text, other, StringComparison.Ordinal);
+            yield return new LineModel(index + 1, text, $"v1-line {(wordWrap ? string.Empty : "v1-nowrap")} {(changed ? "v1-line-changed" : string.Empty)}");
+        }
+    }
+
+    private IReadOnlyList<IGrouping<string, ComparisonDifference>> GetStructuredGroups(RequestPairResult pair) => pair.Differences
+        .Where(MatchesStructuredSearch)
+        .GroupBy(difference => NormalizeGroupPath(difference.PropertyPath))
+        .OrderBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    private bool MatchesStructuredSearch(ComparisonDifference difference)
+    {
+        if (string.IsNullOrWhiteSpace(structuredSearchFilter)) { return true; }
+        string filter = structuredSearchFilter.Trim();
+        return difference.PropertyPath.Contains(filter, StringComparison.OrdinalIgnoreCase)
+            || (difference.ValueA?.Contains(filter, StringComparison.OrdinalIgnoreCase) == true)
+            || (difference.ValueB?.Contains(filter, StringComparison.OrdinalIgnoreCase) == true)
+            || (difference.Message?.Contains(filter, StringComparison.OrdinalIgnoreCase) == true);
+    }
+
+    private bool MatchesCategoryFilter(RequestPairResult item) => string.Equals(categoryFilter, AllFilter, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(GetPairCategory(item), categoryFilter, StringComparison.OrdinalIgnoreCase)
+        || item.Differences.Any(difference => string.Equals(GetDifferenceCategory(difference), categoryFilter, StringComparison.OrdinalIgnoreCase));
+
+    private static RequestPairOutcome? ParseStatusFilter(string value) => Enum.TryParse<RequestPairOutcome>(value, out var outcome) ? outcome : null;
+    private static bool HasArtifactContent(RequestPairResult pair) => pair.ResponseA?.Artifact is not null || pair.ResponseB?.Artifact is not null;
+    private static string[] SplitLines(string? content) => string.IsNullOrEmpty(content) ? Array.Empty<string>() : content.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n').Split('\n');
+    private static string FormatDate(DateTimeOffset value) => value.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+    private static string FormatDuration(TimeSpan value) => value.TotalMinutes >= 1 ? $"{(int)value.TotalMinutes}m {value.Seconds:D2}s" : value.TotalSeconds >= 1 ? $"{value.TotalSeconds:F2}s" : $"{value.TotalMilliseconds:F0} ms";
+    private static string FormatBool(bool value) => value ? "on" : "off";
+    private static string FormatRawLine(StaticReportRawTextDifference difference) => difference.LineNumberA.HasValue && difference.LineNumberB.HasValue ? $"{difference.LineNumberA}/{difference.LineNumberB}" : difference.LineNumberA?.ToString(CultureInfo.InvariantCulture) ?? difference.LineNumberB?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
+    private static string NormalizeGroupPath(string propertyPath) => string.IsNullOrWhiteSpace(propertyPath) ? "Response" : propertyPath.Contains('[', StringComparison.Ordinal) ? propertyPath.Substring(0, propertyPath.IndexOf('[', StringComparison.Ordinal)) + "[*]" : propertyPath;
+    private string GetPairRowClass(RequestPairResult pair, int index) => selectedPair is not null && string.Equals(selectedPair.RelativePath, pair.RelativePath, StringComparison.OrdinalIgnoreCase) ? "mud-theme-primary" : string.Empty;
+    private static Color GetDifferenceChipColor(RequestPairResult pair) => pair.Outcome == RequestPairOutcome.Equal ? Color.Success : pair.Outcome == RequestPairOutcome.ExecutionFailed ? Color.Warning : Color.Error;
+    private static Color GetStatusCodeColor(int statusCode) => statusCode switch { >= 200 and < 300 => Color.Success, >= 300 and < 400 => Color.Info, >= 400 and < 500 => Color.Warning, >= 500 => Color.Error, _ => Color.Default };
+    private static Color GetOutcomeColor(RequestPairOutcome outcome) => outcome switch { RequestPairOutcome.Equal => Color.Success, RequestPairOutcome.Different => Color.Error, RequestPairOutcome.StatusCodeMismatch => Color.Warning, RequestPairOutcome.BothNonSuccess => Color.Error, RequestPairOutcome.ExecutionFailed => Color.Warning, _ => Color.Default };
+    private static string GetOutcomeIcon(RequestPairOutcome outcome) => outcome switch { RequestPairOutcome.Equal => Icons.Material.Filled.CheckCircle, RequestPairOutcome.Different => Icons.Material.Filled.Cancel, RequestPairOutcome.StatusCodeMismatch => Icons.Material.Filled.SyncProblem, RequestPairOutcome.BothNonSuccess => Icons.Material.Filled.ErrorOutline, RequestPairOutcome.ExecutionFailed => Icons.Material.Filled.Warning, _ => Icons.Material.Filled.Help };
+
+    private static string GetPairCategory(RequestPairResult item)
+    {
+        if (item.Outcome == RequestPairOutcome.Equal) { return "Equal"; }
+        if (item.Outcome == RequestPairOutcome.ExecutionFailed) { return "Errors"; }
+        if (item.Outcome == RequestPairOutcome.StatusCodeMismatch) { return "HTTP Status"; }
+        if (item.Outcome == RequestPairOutcome.BothNonSuccess) { return "Non-Success"; }
+        return item.Differences.Count == 0 ? "Other" : GetDifferenceCategory(item.Differences[0]);
+    }
+
+    private static string GetDifferenceCategory(ComparisonDifference difference)
+    {
+        string path = difference.PropertyPath ?? string.Empty;
+        string message = difference.Message ?? string.Empty;
+        if (string.Equals(path, "HttpStatus", StringComparison.OrdinalIgnoreCase)) { return "HTTP Status"; }
+        if (path.StartsWith("Body.", StringComparison.OrdinalIgnoreCase)) { return "Raw Body"; }
+        if (message.Contains("missing", StringComparison.OrdinalIgnoreCase) || message.Contains("null", StringComparison.OrdinalIgnoreCase) || difference.ValueA is null || difference.ValueB is null) { return "Missing Properties"; }
+        if (path.Contains('[', StringComparison.Ordinal) || message.Contains("collection", StringComparison.OrdinalIgnoreCase)) { return "Collection / Order"; }
+        if (message.Contains("type", StringComparison.OrdinalIgnoreCase)) { return "Critical"; }
+        return "Value Differences";
+    }
+
+    private static string SanitizeFileName(string value)
+    {
+        char[] invalid = Path.GetInvalidFileNameChars();
+        string sanitized = new string(value.Select(character => invalid.Contains(character) ? '-' : character).ToArray());
+        return string.IsNullOrWhiteSpace(sanitized) ? "comparison-result" : sanitized;
+    }
+
+    private enum DetailViewMode { Structured, Raw, Full }
+    private sealed record LineModel(int LineNumber, string Text, string CssClass);
 }

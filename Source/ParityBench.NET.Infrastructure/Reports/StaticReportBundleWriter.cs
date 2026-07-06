@@ -1,12 +1,12 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
 using ParityBench.NET.Application.Reports;
-
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Results;
+using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Reports;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Results;
@@ -19,6 +19,7 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
     private const string ManifestFileName = "report.data.json";
     private const string DetailsDirectoryName = "details";
     private const string RawDirectoryName = "raw";
+    private const int TopAffectedObjectLimit = 25;
     private readonly IComparisonRunResultUseCases resultUseCases;
     private readonly IRunArtifactStore artifactStore;
     private readonly JsonSerializerOptions jsonOptions;
@@ -57,6 +58,7 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
         RunResultSummary? summary = await resultUseCases.LoadRunSummaryAsync(runId, cancellationToken).ConfigureAwait(false);
         List<StaticReportDetailPageInfo> pageInfos = new List<StaticReportDetailPageInfo>();
         Dictionary<string, ArtifactReference> copiedArtifacts = new Dictionary<string, ArtifactReference>(StringComparer.Ordinal);
+        List<RequestPairResult> analysisItems = new List<RequestPairResult>();
 
         int offset = 0;
         int pageIndex = 0;
@@ -74,11 +76,13 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
             List<RequestPairResult> rewrittenItems = new List<RequestPairResult>(detailPage.Items.Count);
             foreach (RequestPairResult item in detailPage.Items)
             {
-                rewrittenItems.Add(await RewriteArtifactsAsync(
+                RequestPairResult rewrittenItem = await RewriteArtifactsAsync(
                     item,
                     normalizedOutputDirectory,
                     copiedArtifacts,
-                    cancellationToken).ConfigureAwait(false));
+                    cancellationToken).ConfigureAwait(false);
+                rewrittenItems.Add(rewrittenItem);
+                analysisItems.Add(rewrittenItem);
             }
 
             string pageFileName = $"page-{pageIndex.ToString("D6", CultureInfo.InvariantCulture)}.json";
@@ -104,13 +108,16 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
             pageIndex++;
         }
 
+        DateTimeOffset generatedAtValue = generatedAt ?? DateTimeOffset.UtcNow;
         StaticReportManifest manifest = new StaticReportManifest(
             StaticReportManifest.CurrentSchemaVersion,
-            generatedAt ?? DateTimeOffset.UtcNow,
+            generatedAtValue,
             StaticReportRunSnapshot.FromRun(run),
             summary,
             detailPageSize,
-            pageInfos);
+            pageInfos,
+            StaticReportMetadata.FromRun(run, generatedAtValue),
+            BuildAnalysisSnapshot(analysisItems));
 
         string manifestPath = Path.Combine(normalizedOutputDirectory, ManifestFileName);
         await WriteJsonAsync(manifestPath, manifest, cancellationToken).ConfigureAwait(false);
@@ -175,7 +182,8 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
             item.AreEqual,
             item.DifferenceCount,
             item.Differences,
-            item.OutcomeMessage);
+            item.OutcomeMessage,
+            BuildRawTextDifferences(item, responseA, responseB));
     }
 
     private async Task<ResponseArtifactMetadata?> RewriteArtifactAsync(
@@ -215,6 +223,199 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
             response.ContentType,
             response.ContentLength,
             response.Sha256);
+    }
+
+    private static IReadOnlyList<StaticReportRawTextDifference> BuildRawTextDifferences(
+        RequestPairResult item,
+        ResponseArtifactMetadata? responseA,
+        ResponseArtifactMetadata? responseB)
+    {
+        if (item.Outcome is not (RequestPairOutcome.StatusCodeMismatch or RequestPairOutcome.BothNonSuccess))
+        {
+            return item.RawTextDifferences;
+        }
+
+        List<StaticReportRawTextDifference> rows = new List<StaticReportRawTextDifference>();
+        if (responseA is not null && responseB is not null && responseA.StatusCode != responseB.StatusCode)
+        {
+            rows.Add(new StaticReportRawTextDifference(
+                StaticReportRawTextDifferenceType.StatusCodeDifference,
+                textA: responseA.StatusCode.ToString(CultureInfo.InvariantCulture),
+                textB: responseB.StatusCode.ToString(CultureInfo.InvariantCulture),
+                message: item.OutcomeMessage));
+        }
+
+        foreach (ComparisonDifference difference in item.Differences)
+        {
+            if (string.Equals(difference.PropertyPath, "HttpStatus", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (string.Equals(difference.PropertyPath, "BodyPreview", StringComparison.OrdinalIgnoreCase))
+            {
+                rows.Add(new StaticReportRawTextDifference(
+                    StaticReportRawTextDifferenceType.PreviewTruncated,
+                    textA: difference.ValueA,
+                    textB: difference.ValueB,
+                    message: difference.Message));
+                continue;
+            }
+
+            if (TryParseBodyLineNumber(difference.PropertyPath, out int lineNumber))
+            {
+                StaticReportRawTextDifferenceType type = difference.ValueA is null
+                    ? StaticReportRawTextDifferenceType.OnlyInB
+                    : difference.ValueB is null
+                        ? StaticReportRawTextDifferenceType.OnlyInA
+                        : StaticReportRawTextDifferenceType.Modified;
+                rows.Add(new StaticReportRawTextDifference(
+                    type,
+                    difference.ValueA is null ? null : lineNumber,
+                    difference.ValueB is null ? null : lineNumber,
+                    difference.ValueA,
+                    difference.ValueB,
+                    difference.Message));
+            }
+        }
+
+        return rows;
+    }
+
+    private static bool TryParseBodyLineNumber(
+        string propertyPath,
+        out int lineNumber)
+    {
+        const string prefix = "Body.Line[";
+        lineNumber = 0;
+        if (!propertyPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) || !propertyPath.EndsWith("]", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        string numberText = propertyPath.Substring(prefix.Length, propertyPath.Length - prefix.Length - 1);
+        return int.TryParse(numberText, NumberStyles.None, CultureInfo.InvariantCulture, out lineNumber) && lineNumber > 0;
+    }
+
+    private static StaticReportAnalysisSnapshot BuildAnalysisSnapshot(IReadOnlyList<RequestPairResult> items)
+    {
+        Dictionary<string, CategoryAccumulator> categories = new Dictionary<string, CategoryAccumulator>(StringComparer.OrdinalIgnoreCase);
+        foreach (RequestPairResult item in items)
+        {
+            List<string> pairCategories = GetPairCategories(item).ToList();
+            if (pairCategories.Count == 0)
+            {
+                pairCategories.Add(item.Outcome == RequestPairOutcome.Equal ? "Equal" : "Other");
+            }
+
+            foreach (string category in pairCategories.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (!categories.TryGetValue(category, out CategoryAccumulator? accumulator))
+                {
+                    accumulator = new CategoryAccumulator(category);
+                    categories.Add(category, accumulator);
+                }
+
+                accumulator.AffectedPairCount++;
+                accumulator.OccurrenceCount += Math.Max(1, item.Differences.Count(difference => string.Equals(CategorizeDifference(difference), category, StringComparison.OrdinalIgnoreCase)));
+            }
+        }
+
+        IReadOnlyList<StaticReportDifferenceCategorySummary> categorySummaries = categories.Values
+            .OrderByDescending(category => category.OccurrenceCount)
+            .ThenBy(category => category.Category, StringComparer.OrdinalIgnoreCase)
+            .Select(category => new StaticReportDifferenceCategorySummary(
+                category.Category,
+                category.Category,
+                category.OccurrenceCount,
+                category.AffectedPairCount))
+            .ToList();
+
+        IReadOnlyList<StaticReportAffectedObjectSummary> affectedObjects = items
+            .Where(item => item.Outcome != RequestPairOutcome.Equal)
+            .OrderByDescending(item => Math.Max(item.DifferenceCount, item.Differences.Count))
+            .ThenBy(item => item.RelativePath, StringComparer.OrdinalIgnoreCase)
+            .Take(TopAffectedObjectLimit)
+            .Select(item => new StaticReportAffectedObjectSummary(
+                item.RelativePath,
+                Math.Max(item.DifferenceCount, item.Differences.Count),
+                GetPairCategories(item).FirstOrDefault() ?? "Other",
+                item.Outcome.ToString()))
+            .ToList();
+
+        return new StaticReportAnalysisSnapshot(
+            items.Count,
+            items.Count(item => item.Outcome != RequestPairOutcome.ExecutionFailed),
+            items.Count(item => item.Outcome is RequestPairOutcome.Different or RequestPairOutcome.StatusCodeMismatch or RequestPairOutcome.BothNonSuccess),
+            items.Count(item => item.Outcome == RequestPairOutcome.ExecutionFailed),
+            items.Sum(item => item.DifferenceCount),
+            categorySummaries,
+            affectedObjects);
+    }
+
+    private static IEnumerable<string> GetPairCategories(RequestPairResult item)
+    {
+        if (item.Outcome == RequestPairOutcome.Equal)
+        {
+            yield return "Equal";
+            yield break;
+        }
+
+        if (item.Outcome == RequestPairOutcome.ExecutionFailed)
+        {
+            yield return "Errors";
+            yield break;
+        }
+
+        if (item.Outcome == RequestPairOutcome.StatusCodeMismatch)
+        {
+            yield return "HTTP Status";
+        }
+
+        if (item.Outcome == RequestPairOutcome.BothNonSuccess)
+        {
+            yield return "Non-Success";
+        }
+
+        foreach (ComparisonDifference difference in item.Differences)
+        {
+            yield return CategorizeDifference(difference);
+        }
+    }
+
+    private static string CategorizeDifference(ComparisonDifference difference)
+    {
+        string path = difference.PropertyPath ?? string.Empty;
+        string message = difference.Message ?? string.Empty;
+        if (string.Equals(path, "HttpStatus", StringComparison.OrdinalIgnoreCase))
+        {
+            return "HTTP Status";
+        }
+
+        if (path.StartsWith("Body.", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Raw Body";
+        }
+
+        if (message.Contains("missing", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("null", StringComparison.OrdinalIgnoreCase)
+            || difference.ValueA is null
+            || difference.ValueB is null)
+        {
+            return "Missing Properties";
+        }
+
+        if (path.Contains('[', StringComparison.Ordinal) || message.Contains("collection", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Collection / Order";
+        }
+
+        if (message.Contains("type", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Critical";
+        }
+
+        return "Value Differences";
     }
 
     private async Task WriteJsonAsync<T>(
@@ -335,5 +536,19 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
             string destinationSubDirectory = Path.Combine(destinationDirectory, Path.GetFileName(sourceSubDirectory));
             CopyDirectory(sourceSubDirectory, destinationSubDirectory);
         }
+    }
+
+    private sealed class CategoryAccumulator
+    {
+        public CategoryAccumulator(string category)
+        {
+            Category = category;
+        }
+
+        public string Category { get; }
+
+        public int OccurrenceCount { get; set; }
+
+        public int AffectedPairCount { get; set; }
     }
 }

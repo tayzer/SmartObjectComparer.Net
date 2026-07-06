@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 using ParityBench.NET.Application.Requests;
+using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Application.Results;
 using ParityBench.NET.Domain.Reports;
 using ParityBench.NET.Domain.Requests;
@@ -128,6 +129,49 @@ public sealed class StaticReportBundleWriterTests
             Assert.IsTrue(File.Exists(Path.Combine(outputDirectory, artifactId.Replace('/', Path.DirectorySeparatorChar))));
         }
     }
+
+    [TestMethod]
+    public async Task WriteAsync_WhenRunHasReportDifferences_WritesV2MetadataAnalysisAndRawRows()
+    {
+        using TempFolder tempFolder = new TempFolder();
+        string assetsDirectory = CreateAssetsDirectory(tempFolder);
+        string outputDirectory = Path.Combine(tempFolder.Path, "report");
+        RequestPairResult pair = new RequestPairResult(
+            "status.xml",
+            RequestPairOutcome.StatusCodeMismatch,
+            CreateResponse(EndpointSlot.A, "artifact-a", 200),
+            CreateResponse(EndpointSlot.B, "artifact-b", 502),
+            areEqual: null,
+            differenceCount: 2,
+            differences: new[]
+            {
+                new ComparisonDifference("HttpStatus", "200", "502", "Status changed."),
+                new ComparisonDifference("Body.Line[1]", "ok", "bad gateway", "Raw response body line 1 differs."),
+            },
+            outcomeMessage: "Endpoint status mismatch.");
+        FakeRunResults results = CreateResults(pair);
+        FakeArtifactStore artifacts = new FakeArtifactStore();
+        artifacts.Add("artifact-a", "ok");
+        artifacts.Add("artifact-b", "bad gateway");
+        StaticReportBundleWriter writer = new StaticReportBundleWriter(results, artifacts);
+
+        await writer.WriteAsync(results.Run.Id, outputDirectory, assetsDirectory);
+
+        StaticReportManifest manifest = await ReadJsonAsync<StaticReportManifest>(Path.Combine(outputDirectory, "report.data.json"));
+        StaticReportDetailPage page = await ReadJsonAsync<StaticReportDetailPage>(Path.Combine(outputDirectory, "details", "page-000000.json"));
+
+        Assert.AreEqual(StaticReportManifest.CurrentSchemaVersion, manifest.SchemaVersion);
+        Assert.IsNotNull(manifest.Metadata);
+        Assert.AreEqual("run-1", manifest.Metadata.RunId);
+        Assert.IsNotNull(manifest.Analysis);
+        Assert.IsTrue(manifest.Analysis.Categories.Any(category => category.Category == "HTTP Status"));
+        Assert.IsTrue(manifest.Analysis.TopAffectedObjects.Any(item => item.Identifier == "status.xml"));
+        Assert.AreEqual(2, page.Items[0].RawTextDifferences.Count);
+        Assert.AreEqual(StaticReportRawTextDifferenceType.StatusCodeDifference, page.Items[0].RawTextDifferences[0].Type);
+    }
+
+    private static ResponseArtifactMetadata CreateResponse(EndpointSlot endpoint, string artifactId, int statusCode) =>
+        new ResponseArtifactMetadata(endpoint, new ArtifactReference(artifactId, "text/plain"), statusCode, "text/plain", 1, artifactId);
 
     private async Task<T> ReadJsonAsync<T>(string path)
     {

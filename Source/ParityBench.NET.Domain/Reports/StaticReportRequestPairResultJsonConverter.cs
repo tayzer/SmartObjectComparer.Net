@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 
 using ParityBench.NET.Domain.Comparison;
@@ -25,6 +25,7 @@ internal sealed class StaticReportRequestPairResultJsonConverter : JsonConverter
         int? differenceCount = ReadOptional<int>(root, "differenceCount", options);
         List<ComparisonDifference>? differences = ReadOptional<List<ComparisonDifference>>(root, "differences", options);
         string? outcomeMessage = ReadOptionalString(root, "outcomeMessage");
+        List<StaticReportRawTextDifference>? rawTextDifferences = ReadOptional<List<StaticReportRawTextDifference>>(root, "rawTextDifferences", options);
 
         return new RequestPairResult(
             relativePath,
@@ -35,7 +36,8 @@ internal sealed class StaticReportRequestPairResultJsonConverter : JsonConverter
             areEqual,
             differenceCount,
             differences,
-            outcomeMessage);
+            outcomeMessage,
+            rawTextDifferences);
     }
 
     public override void Write(
@@ -55,6 +57,8 @@ internal sealed class StaticReportRequestPairResultJsonConverter : JsonConverter
         writer.WritePropertyName("differences");
         JsonSerializer.Serialize(writer, value.Differences, options);
         WriteOptionalString(writer, "outcomeMessage", value.OutcomeMessage);
+        writer.WritePropertyName("rawTextDifferences");
+        JsonSerializer.Serialize(writer, value.RawTextDifferences, options);
         writer.WriteEndObject();
     }
 

@@ -1,4 +1,5 @@
-using ParityBench.NET.Domain.Comparison;
+﻿using ParityBench.NET.Domain.Comparison;
+using ParityBench.NET.Domain.Reports;
 using ParityBench.NET.Domain.Runs;
 
 namespace ParityBench.NET.Domain.Requests;
@@ -14,7 +15,8 @@ public sealed record RequestPairResult
         bool? areEqual = null,
         int? differenceCount = null,
         IEnumerable<ComparisonDifference>? differences = null,
-        string? outcomeMessage = null)
+        string? outcomeMessage = null,
+        IEnumerable<StaticReportRawTextDifference>? rawTextDifferences = null)
     {
         RelativePath = new RequestItem(relativePath).RelativePath;
         Outcome = outcome;
@@ -23,6 +25,7 @@ public sealed record RequestPairResult
         ErrorMessage = string.IsNullOrWhiteSpace(errorMessage) ? null : errorMessage;
         OutcomeMessage = string.IsNullOrWhiteSpace(outcomeMessage) ? null : outcomeMessage;
         Differences = (differences ?? Array.Empty<ComparisonDifference>()).ToList();
+        RawTextDifferences = (rawTextDifferences ?? Array.Empty<StaticReportRawTextDifference>()).ToList();
         DifferenceCount = differenceCount ?? Differences.Count;
         AreEqual = areEqual ?? (outcome switch
         {
@@ -49,6 +52,8 @@ public sealed record RequestPairResult
     public int DifferenceCount { get; }
 
     public IReadOnlyList<ComparisonDifference> Differences { get; }
+
+    public IReadOnlyList<StaticReportRawTextDifference> RawTextDifferences { get; }
 
     public static RequestPairResult Classify(
         RequestItem request,
