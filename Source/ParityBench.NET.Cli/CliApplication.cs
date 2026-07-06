@@ -61,6 +61,11 @@ public static class CliApplication
         services.AddSingleton<IRunEventPublisher, NoOpRunEventPublisher>();
         services.AddSingleton<IResponseBodyDeserializer, JsonXmlResponseBodyDeserializer>();
         services.AddSingleton<IContractPayloadSerializer, JsonXmlContractPayloadSerializer>();
+        InMemoryRequestComparisonEndpointRegistry endpointDefaults = new InMemoryRequestComparisonEndpointRegistry();
+        InMemoryRequestComparisonPresetRegistry presetDefaults = new InMemoryRequestComparisonPresetRegistry();
+        RequestComparisonFixtureDefaults.Register(endpointDefaults, presetDefaults);
+        services.AddSingleton<IRequestComparisonEndpointRegistry>(endpointDefaults);
+        services.AddSingleton<IRequestComparisonPresetRegistry>(presetDefaults);
         services.AddSingleton<IResponseModelRegistry>(_ =>
         {
             ResponseModelRegistry registry = new ResponseModelRegistry();
@@ -95,6 +100,7 @@ public static class CliApplication
         services.AddSingleton<IReportAssetLocator, ReportAssetLocator>();
         services.AddSingleton<IStaticReportBundleWriter, StaticReportBundleWriter>();
         services.AddSingleton<IRequestComparisonWorkflowUseCases, RequestComparisonWorkflowService>();
+        services.AddSingleton<IRequestComparisonDefaultsUseCases, RequestComparisonDefaultsService>();
         services.AddSingleton<RequestCommandRunner>();
     }
 

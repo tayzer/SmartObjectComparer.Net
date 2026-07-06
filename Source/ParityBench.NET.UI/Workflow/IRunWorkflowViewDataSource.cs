@@ -1,4 +1,4 @@
-﻿using ParityBench.NET.Application.Reports;
+using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Workflow;
 using ParityBench.NET.Domain.Runs;
 
@@ -9,6 +9,8 @@ namespace ParityBench.NET.UI.Workflow;
 /// </summary>
 public interface IRunWorkflowViewDataSource
 {
+    Task<RequestComparisonDefaults> LoadDefaultsAsync(CancellationToken cancellationToken = default);
+
     Task<ComparisonRun> CreateRunFromDirectoryAsync(
         RequestComparisonRunRequest request,
         CancellationToken cancellationToken = default);

@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 using System.Xml.Serialization;
 
 using ParityBench.NET.Application.ContractProfiles;
@@ -47,6 +47,8 @@ public static class BuiltInContractProfiles
             endpointBResponseFormat: PayloadFormat.Json,
             canonicalResponseFormat: PayloadFormat.Xml,
             canonicalResponseContentType: "application/xml",
+            suggestedEndpointAId: "sample/customer-lookup/soap",
+            suggestedEndpointBId: "sample/customer-lookup/json",
             canonicalToEndpointResponseMaskPathMap: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["Envelope.Body.CustomerLookupResponse.SensitiveToken"] = "payload.raw_token",

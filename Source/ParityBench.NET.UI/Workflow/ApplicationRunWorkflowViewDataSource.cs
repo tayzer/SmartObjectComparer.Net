@@ -1,4 +1,4 @@
-﻿using ParityBench.NET.Application.Reports;
+using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Results;
 using ParityBench.NET.Application.Workflow;
 using ParityBench.NET.Domain.Runs;
@@ -10,16 +10,22 @@ public sealed class ApplicationRunWorkflowViewDataSource : IRunWorkflowViewDataS
     private readonly IRequestComparisonWorkflowUseCases workflowUseCases;
     private readonly IComparisonRunJobUseCases jobUseCases;
     private readonly IComparisonRunResultUseCases resultUseCases;
+    private readonly IRequestComparisonDefaultsUseCases defaultsUseCases;
 
     public ApplicationRunWorkflowViewDataSource(
         IRequestComparisonWorkflowUseCases workflowUseCases,
         IComparisonRunJobUseCases jobUseCases,
-        IComparisonRunResultUseCases resultUseCases)
+        IComparisonRunResultUseCases resultUseCases,
+        IRequestComparisonDefaultsUseCases defaultsUseCases)
     {
         this.workflowUseCases = workflowUseCases ?? throw new ArgumentNullException(nameof(workflowUseCases));
         this.jobUseCases = jobUseCases ?? throw new ArgumentNullException(nameof(jobUseCases));
         this.resultUseCases = resultUseCases ?? throw new ArgumentNullException(nameof(resultUseCases));
+        this.defaultsUseCases = defaultsUseCases ?? throw new ArgumentNullException(nameof(defaultsUseCases));
     }
+
+    public Task<RequestComparisonDefaults> LoadDefaultsAsync(CancellationToken cancellationToken = default) =>
+        defaultsUseCases.LoadDefaultsAsync(cancellationToken);
 
     public Task<ComparisonRun> CreateRunFromDirectoryAsync(
         RequestComparisonRunRequest request,

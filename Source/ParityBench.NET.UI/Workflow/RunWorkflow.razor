@@ -24,6 +24,20 @@
     <MudPaper Elevation="1" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
         <MudStack Spacing="2">
             <MudText Typo="Typo.subtitle1">Step 1: Upload Request Files</MudText>
+            @if (defaults.Presets.Count > 0)
+            {
+                <MudSelect T="string"
+                           Label="Example preset"
+                           Value="selectedPresetId"
+                           ValueChanged="HandlePresetChangedAsync"
+                           Variant="Variant.Outlined"
+                           Clearable="true">
+                    @foreach (RequestComparisonPresetOption preset in defaults.Presets)
+                    {
+                        <MudSelectItem T="string" Value="@preset.PresetId">@preset.Label</MudSelectItem>
+                    }
+                </MudSelect>
+            }
             @if (SourcePicker.IsAvailable)
             {
                 <MudStack Row="true" Spacing="2" Class="flex-wrap">
@@ -61,10 +75,28 @@
             <MudText Typo="Typo.subtitle1">Step 2: Model &amp; Configuration</MudText>
             <MudGrid Spacing="2">
                 <MudItem xs="12" md="4">
-                    <MudTextField T="string" Label="Select Domain Model" @bind-Value="modelName" Immediate="true" Variant="Variant.Outlined" />
+                    <MudAutocomplete T="string"
+                                     Label="Select Domain Model"
+                                     Value="modelName"
+                                     ValueChanged="HandleModelChangedAsync"
+                                     SearchFunc="SearchModelNamesAsync"
+                                     Immediate="true"
+                                     CoerceValue="true"
+                                     ResetValueOnEmptyText="false"
+                                     MaxItems="50"
+                                     Variant="Variant.Outlined" />
                 </MudItem>
                 <MudItem xs="12" md="4">
-                    <MudTextField T="string" Label="Contract Profile" @bind-Value="contractProfileId" Immediate="true" Variant="Variant.Outlined" />
+                    <MudAutocomplete T="string"
+                                     Label="Contract Profile"
+                                     Value="contractProfileId"
+                                     ValueChanged="HandleProfileChangedAsync"
+                                     SearchFunc="SearchProfileIdsAsync"
+                                     Immediate="true"
+                                     CoerceValue="true"
+                                     ResetValueOnEmptyText="false"
+                                     MaxItems="50"
+                                     Variant="Variant.Outlined" />
                 </MudItem>
                 <MudItem xs="12" md="4">
                     <MudTextField T="string" Label="Max Differences" @bind-Value="maxDifferences" Immediate="true" Variant="Variant.Outlined" />
@@ -82,6 +114,18 @@
                     </MudStack>
                 </MudExpansionPanel>
                 <MudExpansionPanel Text="Ignore Rules">
+                    @if (selectedProfileOption?.DefaultIgnoreRules.Count > 0)
+                    {
+                        <MudStack Spacing="1" Class="mb-3">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Profile default ignore rules</MudText>
+                            <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                                @foreach (IgnoreRuleDefinition rule in selectedProfileOption.DefaultIgnoreRules)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@rule.PropertyPath</MudChip>
+                                }
+                            </MudStack>
+                        </MudStack>
+                    }
                     <MudGrid Spacing="2">
                         <MudItem xs="12" md="4">
                             <MudTextField T="string" Label="Ignore Paths" Lines="4" @bind-Value="ignoreRules" Variant="Variant.Outlined" />
@@ -103,10 +147,28 @@
             <MudText Typo="Typo.subtitle1">Step 3: Configure Endpoints</MudText>
             <MudGrid Spacing="2">
                 <MudItem xs="12" md="6">
-                    <MudTextField T="string" Label="Endpoint A" @bind-Value="endpointA" Immediate="true" Variant="Variant.Outlined" />
+                    <MudAutocomplete T="string"
+                                     Label="Endpoint A"
+                                     Value="endpointA"
+                                     ValueChanged="HandleEndpointAChanged"
+                                     SearchFunc="SearchEndpointUrlsAsync"
+                                     Immediate="true"
+                                     CoerceValue="true"
+                                     ResetValueOnEmptyText="false"
+                                     MaxItems="50"
+                                     Variant="Variant.Outlined" />
                 </MudItem>
                 <MudItem xs="12" md="6">
-                    <MudTextField T="string" Label="Endpoint B" @bind-Value="endpointB" Immediate="true" Variant="Variant.Outlined" />
+                    <MudAutocomplete T="string"
+                                     Label="Endpoint B"
+                                     Value="endpointB"
+                                     ValueChanged="HandleEndpointBChanged"
+                                     SearchFunc="SearchEndpointUrlsAsync"
+                                     Immediate="true"
+                                     CoerceValue="true"
+                                     ResetValueOnEmptyText="false"
+                                     MaxItems="50"
+                                     Variant="Variant.Outlined" />
                 </MudItem>
             </MudGrid>
 
@@ -214,6 +276,10 @@
 
 @code {
     private const int PollDelayMilliseconds = 750;
+    private RequestComparisonDefaults defaults = CreateEmptyDefaults();
+    private IReadOnlyList<ContractProfileOption> availableProfileOptions = Array.Empty<ContractProfileOption>();
+    private ContractProfileOption? selectedProfileOption;
+    private string selectedPresetId = string.Empty;
     private string requestDirectory = string.Empty;
     private IReadOnlyList<string> sourceFiles = Array.Empty<string>();
     private string requestSourceDescription = string.Empty;
@@ -259,8 +325,63 @@
         && !isBusy
         && !string.IsNullOrWhiteSpace(reportOutputDirectory);
 
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            defaults = await DataSource.LoadDefaultsAsync().ConfigureAwait(false);
+            RefreshAvailableProfiles(clearInvalidSelection: false);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private async Task HandlePresetChangedAsync(string value)
+    {
+        selectedPresetId = value ?? string.Empty;
+        RequestComparisonPresetOption? preset = defaults.Presets.FirstOrDefault(candidate =>
+            string.Equals(candidate.PresetId, selectedPresetId, StringComparison.OrdinalIgnoreCase));
+        if (preset is null)
+        {
+            return;
+        }
+
+        sourceFiles = Array.Empty<string>();
+        requestDirectory = preset.RequestDirectory;
+        requestSourceDescription = $"Selected example preset: {preset.Label}";
+        endpointA = preset.EndpointA.ToString();
+        endpointB = preset.EndpointB.ToString();
+        modelName = preset.ModelName;
+        contractProfileId = preset.ContractProfileId ?? string.Empty;
+        ApplyComparisonOptions(preset.ComparisonOptions);
+        contentTypeOverride = preset.RequestExecutionOptions.ContentTypeOverride ?? string.Empty;
+        RefreshAvailableProfiles(clearInvalidSelection: false);
+        await Task.CompletedTask.ConfigureAwait(false);
+    }
+
+    private Task HandleModelChangedAsync(string value)
+    {
+        modelName = string.IsNullOrWhiteSpace(value) ? "Auto" : value.Trim();
+        RefreshAvailableProfiles(clearInvalidSelection: true);
+        return Task.CompletedTask;
+    }
+
+    private Task HandleProfileChangedAsync(string value)
+    {
+        contractProfileId = value?.Trim() ?? string.Empty;
+        RefreshSelectedProfile();
+        ApplyProfileEndpointSuggestions();
+        return Task.CompletedTask;
+    }
+
+    private void HandleEndpointAChanged(string value) => endpointA = value?.Trim() ?? string.Empty;
+
+    private void HandleEndpointBChanged(string value) => endpointB = value?.Trim() ?? string.Empty;
     private void HandleRequestDirectoryChanged(string value)
     {
+        selectedPresetId = string.Empty;
         requestDirectory = value;
         sourceFiles = Array.Empty<string>();
         requestSourceDescription = string.IsNullOrWhiteSpace(value) ? string.Empty : $"Selected request folder: {value}";
@@ -274,6 +395,7 @@
             return;
         }
 
+        selectedPresetId = string.Empty;
         requestDirectory = selectedDirectory;
         sourceFiles = Array.Empty<string>();
         requestSourceDescription = $"Selected request folder: {selectedDirectory}";
@@ -287,6 +409,7 @@
             return;
         }
 
+        selectedPresetId = string.Empty;
         sourceFiles = selectedFiles;
         requestDirectory = GetCommonSourceDirectory(selectedFiles);
         requestSourceDescription = $"Selected {selectedFiles.Count} request files from {requestDirectory}";
@@ -440,9 +563,122 @@
             commonHeaders: ParseHeaders(commonHeaders),
             endpointAHeaders: ParseHeaders(endpointAHeaders),
             endpointBHeaders: ParseHeaders(endpointBHeaders),
+            endpointALabel: ResolveEndpointLabel(endpointA),
+            endpointBLabel: ResolveEndpointLabel(endpointB),
             sourceFiles: sourceFiles.Count == 0 ? null : sourceFiles);
     }
 
+    private void ApplyComparisonOptions(ComparisonOptions options)
+    {
+        ignoreCollectionOrder = options.IgnoreCollectionOrder;
+        ignoreStringCase = options.IgnoreStringCase;
+        ignoreTrailingWhitespace = options.IgnoreTrailingWhitespaceAtEnd;
+        treatNullAndEmptyCollectionsEqual = options.TreatNullAndEmptyCollectionsAsEqual;
+        ignoreXmlNamespaces = options.IgnoreXmlNamespaces;
+        maxDifferences = options.MaxDifferences.ToString();
+        ignoreRules = FormatIgnoreRules(options.IgnoreRules);
+        smartIgnoreRules = FormatSmartIgnoreRules(options.SmartIgnoreRules);
+        maskRules = FormatMaskRules(options.MaskRules);
+    }
+
+    private void RefreshAvailableProfiles(bool clearInvalidSelection)
+    {
+        availableProfileOptions = defaults.ContractProfiles
+            .Where(profile => string.Equals(profile.ResponseModelName, modelName, StringComparison.Ordinal))
+            .ToArray();
+        RefreshSelectedProfile();
+
+        if (clearInvalidSelection && !string.IsNullOrWhiteSpace(contractProfileId) && selectedProfileOption is null)
+        {
+            contractProfileId = string.Empty;
+            RefreshSelectedProfile();
+        }
+    }
+
+    private void RefreshSelectedProfile()
+    {
+        selectedProfileOption = availableProfileOptions.FirstOrDefault(profile =>
+            string.Equals(profile.ProfileId, contractProfileId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void ApplyProfileEndpointSuggestions()
+    {
+        if (selectedProfileOption is null)
+        {
+            return;
+        }
+
+        EndpointOption? suggestedEndpointA = ResolveEndpoint(selectedProfileOption.EndpointASuggestedEndpointId);
+        EndpointOption? suggestedEndpointB = ResolveEndpoint(selectedProfileOption.EndpointBSuggestedEndpointId);
+        if (suggestedEndpointA is not null)
+        {
+            endpointA = suggestedEndpointA.Url.ToString();
+        }
+
+        if (suggestedEndpointB is not null)
+        {
+            endpointB = suggestedEndpointB.Url.ToString();
+        }
+    }
+
+    private EndpointOption? ResolveEndpoint(string? endpointId) =>
+        string.IsNullOrWhiteSpace(endpointId)
+            ? null
+            : defaults.Endpoints.FirstOrDefault(endpoint => string.Equals(endpoint.EndpointId, endpointId, StringComparison.OrdinalIgnoreCase));
+
+    private string? ResolveEndpointLabel(string endpointUrl) =>
+        defaults.Endpoints.FirstOrDefault(endpoint => string.Equals(endpoint.Url.ToString(), endpointUrl, StringComparison.OrdinalIgnoreCase))?.Label;
+
+    private Task<IEnumerable<string>> SearchModelNamesAsync(string value, CancellationToken cancellationToken) =>
+        Task.FromResult(FilterOptions(new[] { "Auto" }.Concat(defaults.ResponseModels.Select(model => model.ModelName)), value));
+
+    private Task<IEnumerable<string>> SearchProfileIdsAsync(string value, CancellationToken cancellationToken) =>
+        Task.FromResult(FilterOptions(availableProfileOptions.Select(profile => profile.ProfileId), value));
+
+    private Task<IEnumerable<string>> SearchEndpointUrlsAsync(string value, CancellationToken cancellationToken)
+    {
+        IEnumerable<string> matches = defaults.Endpoints
+            .Where(endpoint => MatchesSearch(endpoint.Label, value)
+                || MatchesSearch(endpoint.EndpointId, value)
+                || MatchesSearch(endpoint.Url.ToString(), value))
+            .Select(endpoint => endpoint.Url.ToString());
+
+        return Task.FromResult(matches);
+    }
+
+    private static IEnumerable<string> FilterOptions(IEnumerable<string> options, string search) =>
+        options
+            .Where(option => MatchesSearch(option, search))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(option => option, StringComparer.OrdinalIgnoreCase);
+
+    private static bool MatchesSearch(string value, string search) =>
+        string.IsNullOrWhiteSpace(search) || value.Contains(search, StringComparison.OrdinalIgnoreCase);
+
+    private static string FormatIgnoreRules(IReadOnlyList<IgnoreRuleDefinition> rules) =>
+        string.Join(Environment.NewLine, rules.Select(rule => rule.PropertyPath));
+
+    private static string FormatSmartIgnoreRules(IReadOnlyList<SmartIgnoreRuleDefinition> rules) =>
+        string.Join(Environment.NewLine, rules.Select(rule => $"{rule.Kind}={rule.Value}"));
+
+    private static string FormatMaskRules(IReadOnlyList<MaskRuleDefinition> rules) =>
+        string.Join(Environment.NewLine, rules.Select(FormatMaskRule));
+
+    private static string FormatMaskRule(MaskRuleDefinition rule)
+    {
+        List<string> segments = new List<string> { rule.PropertyPath };
+        if (rule.PreserveLastCharacters > 0)
+        {
+            segments.Add($"preserveLast={rule.PreserveLastCharacters}");
+        }
+
+        if (!string.Equals(rule.MaskCharacter, "*", StringComparison.Ordinal))
+        {
+            segments.Add($"mask={rule.MaskCharacter}");
+        }
+
+        return string.Join("|", segments);
+    }
     private void RecordProgress(ComparisonRun run)
     {
         string entry = $"{DateTimeOffset.Now:HH:mm:ss} {run.Status}: {run.Progress.Message}";
@@ -539,4 +775,11 @@
 
         return headers;
     }
+
+    private static RequestComparisonDefaults CreateEmptyDefaults() =>
+        new RequestComparisonDefaults(
+            Array.Empty<ResponseModelOption>(),
+            Array.Empty<ContractProfileOption>(),
+            Array.Empty<EndpointOption>(),
+            Array.Empty<RequestComparisonPresetOption>());
 }

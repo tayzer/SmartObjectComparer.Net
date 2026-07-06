@@ -3,6 +3,7 @@ using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
+using MudBlazor;
 using MudBlazor.Services;
 
 using ParityBench.NET.Application.Reports;
@@ -28,6 +29,7 @@ public sealed class ParityBenchHomeTests
         testContext = new BunitContext();
         testContext.JSInterop.Mode = JSRuntimeMode.Loose;
         testContext.Services.AddMudServices();
+        testContext.RenderTree.Add<MudTestRoot>(parameters => { });
         testContext.Services.AddSingleton<IRunWorkflowViewDataSource>(new FakeRunWorkflowViewDataSource());
         testContext.Services.AddSingleton<IRunResultsViewDataSource>(new FakeRunResultsViewDataSource());
         testContext.Services.AddSingleton<IRequestSourcePicker>(new NoOpRequestSourcePicker());
@@ -61,6 +63,13 @@ public sealed class ParityBenchHomeTests
 
     private sealed class FakeRunWorkflowViewDataSource : IRunWorkflowViewDataSource
     {
+        public Task<RequestComparisonDefaults> LoadDefaultsAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(new RequestComparisonDefaults(
+                Array.Empty<ResponseModelOption>(),
+                Array.Empty<ContractProfileOption>(),
+                Array.Empty<EndpointOption>(),
+                Array.Empty<RequestComparisonPresetOption>()));
+
         public Task<ComparisonRun> CreateRunFromDirectoryAsync(
             RequestComparisonRunRequest request,
             CancellationToken cancellationToken = default) =>

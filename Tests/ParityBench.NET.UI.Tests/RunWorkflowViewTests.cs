@@ -4,10 +4,12 @@ using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
+using MudBlazor;
 using MudBlazor.Services;
 
 using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Workflow;
+using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
 using ParityBench.NET.UI.Workflow;
@@ -27,6 +29,7 @@ public sealed class RunWorkflowViewTests
         testContext = new BunitContext();
         testContext.JSInterop.Mode = JSRuntimeMode.Loose;
         testContext.Services.AddMudServices();
+        testContext.RenderTree.Add<MudTestRoot>(parameters => { });
         dataSource = new FakeRunWorkflowViewDataSource();
         sourcePicker = new FakeRequestSourcePicker();
         testContext.Services.AddSingleton<IRunWorkflowViewDataSource>(dataSource);
@@ -103,6 +106,101 @@ public sealed class RunWorkflowViewTests
         Assert.IsTrue(dataSource.StartWasCalled);
     }
 
+    [TestMethod]
+    public void RunWorkflow_WhenDefaultsLoad_RendersModelProfileAndEndpointOptions()
+    {
+        IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();
+
+        component.WaitForAssertion(() =>
+        {
+            StringAssert.Contains(component.Markup, "Example preset");
+            StringAssert.Contains(component.Markup, "Select Domain Model");
+            StringAssert.Contains(component.Markup, "Contract Profile");
+            StringAssert.Contains(component.Markup, "Endpoint A");
+            StringAssert.Contains(component.Markup, "Endpoint B");
+        });
+    }
+
+    [TestMethod]
+    public void RunWorkflow_WhenPresetIsSelected_PopulatesRequestFieldsAndRules()
+    {
+        IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();
+
+        SelectPreset(component, "json-json-consumer-report");
+        component.FindAll("button")
+            .Single(button => button.TextContent.Contains("Start Comparison", StringComparison.Ordinal))
+            .Click();
+
+        component.WaitForAssertion(() => Assert.IsNotNull(dataSource.LastRequest));
+        Assert.AreEqual("Examples/ParityBench.NET.ManualRuns/json-json", dataSource.LastRequest!.SourceDirectory);
+        Assert.AreEqual("https://fixture.example.test/consumer-report/json/a", dataSource.LastRequest.EndpointA.ToString().TrimEnd('/'));
+        Assert.AreEqual("https://fixture.example.test/consumer-report/json/b", dataSource.LastRequest.EndpointB.ToString().TrimEnd('/'));
+        Assert.AreEqual("ConsumerReportJsonResponse", dataSource.LastRequest.ModelName);
+        Assert.IsTrue(dataSource.LastRequest.ComparisonOptions.IgnoreStringCase);
+        Assert.AreEqual("Subject.NationalIdentifier", dataSource.LastRequest.ComparisonOptions.MaskRules.Single().PropertyPath);
+    }
+
+    [TestMethod]
+    public void RunWorkflow_WhenProfileIsSelected_ShowsDefaultIgnoreRules()
+    {
+        IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();
+
+        SetAutocompleteValue(component, 0, "SampleSoapCustomerLookupResponseEnvelope");
+        SetAutocompleteValue(component, 1, "sample-soap-to-json");
+
+        component.WaitForAssertion(() =>
+        {
+            StringAssert.Contains(component.Markup, "Profile default ignore rules");
+            StringAssert.Contains(component.Markup, "SourceSystem");
+        });
+    }
+
+    [TestMethod]
+    public void RunWorkflow_WhenCustomEndpointIsTyped_UsesCustomValue()
+    {
+        IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();
+
+        ChangeTextField(component, "Request Directory", "requests");
+        SetAutocompleteValue(component, 2, "https://custom-a.example.test/api");
+        SetAutocompleteValue(component, 3, "https://custom-b.example.test/api");
+        component.FindAll("button")
+            .Single(button => button.TextContent.Contains("Start Comparison", StringComparison.Ordinal))
+            .Click();
+
+        component.WaitForAssertion(() => Assert.IsNotNull(dataSource.LastRequest));
+        Assert.AreEqual(new Uri("https://custom-a.example.test/api"), dataSource.LastRequest!.EndpointA);
+        Assert.AreEqual(new Uri("https://custom-b.example.test/api"), dataSource.LastRequest.EndpointB);
+    }
+
+    [TestMethod]
+    public void RunWorkflow_WhenCustomModelIsTyped_UsesCustomValue()
+    {
+        IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();
+
+        ChangeTextField(component, "Request Directory", "requests");
+        SetAutocompleteValue(component, 0, "CustomModelName");
+        SetAutocompleteValue(component, 2, "https://a.example.test/api");
+        SetAutocompleteValue(component, 3, "https://b.example.test/api");
+        component.FindAll("button")
+            .Single(button => button.TextContent.Contains("Start Comparison", StringComparison.Ordinal))
+            .Click();
+
+        component.WaitForAssertion(() => Assert.IsNotNull(dataSource.LastRequest));
+        Assert.AreEqual("CustomModelName", dataSource.LastRequest!.ModelName);
+    }
+
+    private static void SelectPreset(IRenderedComponent<RunWorkflow> component, string presetId)
+    {
+        IRenderedComponent<MudSelect<string>> select = component.FindComponent<MudSelect<string>>();
+        component.InvokeAsync(() => select.Instance.ValueChanged.InvokeAsync(presetId)).GetAwaiter().GetResult();
+    }
+
+    private static void SetAutocompleteValue(IRenderedComponent<RunWorkflow> component, int index, string value)
+    {
+        IRenderedComponent<MudAutocomplete<string>> autocomplete = component.FindComponents<MudAutocomplete<string>>()[index];
+        component.InvokeAsync(() => autocomplete.Instance.ValueChanged.InvokeAsync(value)).GetAwaiter().GetResult();
+    }
+
     private static void ChangeTextField(IRenderedComponent<RunWorkflow> component, string labelText, string value)
     {
         IElement label = component.FindAll("label")
@@ -137,6 +235,9 @@ public sealed class RunWorkflowViewTests
     private sealed class FakeRunWorkflowViewDataSource : IRunWorkflowViewDataSource
     {
         public RequestComparisonRunRequest? LastRequest { get; private set; }
+
+        public Task<RequestComparisonDefaults> LoadDefaultsAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(CreateDefaults());
 
         public bool StartWasCalled { get; private set; }
 
@@ -174,6 +275,46 @@ public sealed class RunWorkflowViewTests
             string? reportAssetsDirectory = null,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+
+        private static RequestComparisonDefaults CreateDefaults() =>
+            new RequestComparisonDefaults(
+                new[]
+                {
+                    new ResponseModelOption("ConsumerReportJsonResponse"),
+                    new ResponseModelOption("SampleSoapCustomerLookupResponseEnvelope"),
+                },
+                new[]
+                {
+                    new ContractProfileOption(
+                        "SampleSoapCustomerLookupResponseEnvelope",
+                        "sample-soap-to-json",
+                        "1",
+                        "sample/customer-lookup/soap",
+                        "sample/customer-lookup/json",
+                        new[] { new IgnoreRuleDefinition("SourceSystem") }),
+                },
+                new[]
+                {
+                    new EndpointOption("consumer-report/json/a", "Consumer Report JSON A", new Uri("https://fixture.example.test/consumer-report/json/a")),
+                    new EndpointOption("consumer-report/json/b", "Consumer Report JSON B", new Uri("https://fixture.example.test/consumer-report/json/b")),
+                    new EndpointOption("sample/customer-lookup/soap", "Sample Customer Lookup SOAP", new Uri("https://fixture.example.test/sample/customer-lookup/soap/a")),
+                    new EndpointOption("sample/customer-lookup/json", "Sample Customer Lookup JSON", new Uri("https://fixture.example.test/sample/customer-lookup/json/b")),
+                },
+                new[]
+                {
+                    new RequestComparisonPresetOption(
+                        "json-json-consumer-report",
+                        "JSON/JSON consumer report",
+                        "Examples/ParityBench.NET.ManualRuns/json-json",
+                        new Uri("https://fixture.example.test/consumer-report/json/a"),
+                        new Uri("https://fixture.example.test/consumer-report/json/b"),
+                        "ConsumerReportJsonResponse",
+                        null,
+                        new ComparisonOptions(
+                            ignoreStringCase: true,
+                            maskRules: new[] { new MaskRuleDefinition("Subject.NationalIdentifier", 4) }),
+                        new RequestExecutionOptions()),
+                });
 
         private static RunOptions CreateOptions() =>
             new RunOptions(

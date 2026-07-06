@@ -34,7 +34,9 @@ builder.Services
 builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
 builder.Services.AddMudServices();
-RegisterV2Services(builder.Services, workspaceRoot);
+string fixtureBaseUrl = builder.Configuration["ParityBench:RequestDefaults:FixtureBaseUrl"]
+    ?? RequestComparisonFixtureDefaults.DefaultFixtureBaseUrl;
+RegisterV2Services(builder.Services, workspaceRoot, fixtureBaseUrl);
 
 WebApplication app = builder.Build();
 
@@ -52,7 +54,7 @@ app.MapFallbackToPage("/_Host");
 
 app.Run();
 
-static void RegisterV2Services(IServiceCollection services, string workspaceRoot)
+static void RegisterV2Services(IServiceCollection services, string workspaceRoot, string fixtureBaseUrl)
 {
     services.AddSingleton(new HttpClient());
     services.AddSingleton<IRequestBatchStore>(_ => new FileSystemRequestBatchStore(workspaceRoot));
@@ -66,6 +68,11 @@ static void RegisterV2Services(IServiceCollection services, string workspaceRoot
     services.AddSingleton<IRunEventPublisher, NoOpRunEventPublisher>();
     services.AddSingleton<IResponseBodyDeserializer, JsonXmlResponseBodyDeserializer>();
     services.AddSingleton<IContractPayloadSerializer, JsonXmlContractPayloadSerializer>();
+    InMemoryRequestComparisonEndpointRegistry endpointDefaults = new InMemoryRequestComparisonEndpointRegistry();
+    InMemoryRequestComparisonPresetRegistry presetDefaults = new InMemoryRequestComparisonPresetRegistry();
+    RequestComparisonFixtureDefaults.Register(endpointDefaults, presetDefaults, fixtureBaseUrl);
+    services.AddSingleton<IRequestComparisonEndpointRegistry>(endpointDefaults);
+    services.AddSingleton<IRequestComparisonPresetRegistry>(presetDefaults);
     services.AddSingleton<IResponseModelRegistry>(_ =>
     {
         ResponseModelRegistry registry = new ResponseModelRegistry();
@@ -101,6 +108,7 @@ static void RegisterV2Services(IServiceCollection services, string workspaceRoot
     services.AddSingleton<IStaticReportBundleWriter, StaticReportBundleWriter>();
     services.AddSingleton<IRequestComparisonWorkflowUseCases, RequestComparisonWorkflowService>();
     services.AddSingleton<IComparisonRunJobUseCases, ComparisonRunJobService>();
+    services.AddSingleton<IRequestComparisonDefaultsUseCases, RequestComparisonDefaultsService>();
     services.AddScoped<IRunResultsViewDataSource, ApplicationRunResultsViewDataSource>();
     services.AddScoped<IRunWorkflowViewDataSource, ApplicationRunWorkflowViewDataSource>();
     services.AddScoped<IRequestSourcePicker, NoOpRequestSourcePicker>();
