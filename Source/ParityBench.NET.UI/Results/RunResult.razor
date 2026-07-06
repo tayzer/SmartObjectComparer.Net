@@ -474,6 +474,8 @@ else if (run is not null)
     private string? differenceIndexErrorMessage;
     private string differenceTreeInfoMessage = string.Empty;
     private bool shouldRefreshScrollSync;
+    private bool syncScrollInitialized;
+    private string? lastSyncSignature;
     private DetailViewMode detailViewMode = DetailViewMode.Structured;
 
     [Parameter] public RunId? RunId { get; set; }
@@ -894,22 +896,72 @@ else if (run is not null)
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!shouldRefreshScrollSync) { return; }
+        if (!IsSideBySideVisible())
+        {
+            if (syncScrollInitialized)
+            {
+                await SetSyncedScrollAsync(false);
+            }
+
+            lastSyncSignature = null;
+            shouldRefreshScrollSync = false;
+            return;
+        }
+
+        string currentSignature = BuildSyncSignature();
+        if (!firstRender && !shouldRefreshScrollSync && string.Equals(lastSyncSignature, currentSignature, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        await SetSyncedScrollAsync(syncScroll);
         shouldRefreshScrollSync = false;
-        await SetSyncedScrollAsync(IsSideBySideRawContentView && syncScroll && !isLoadingContent && string.IsNullOrWhiteSpace(contentErrorMessage));
+        lastSyncSignature = currentSignature;
     }
 
     private async Task OnSyncScrollChangedAsync(bool value)
     {
         syncScroll = value;
-        await SetSyncedScrollAsync(IsSideBySideRawContentView && syncScroll && !isLoadingContent && string.IsNullOrWhiteSpace(contentErrorMessage));
+        shouldRefreshScrollSync = true;
+        if (IsSideBySideVisible())
+        {
+            await SetSyncedScrollAsync(syncScroll);
+            lastSyncSignature = BuildSyncSignature();
+            shouldRefreshScrollSync = false;
+        }
     }
 
     private async Task SetSyncedScrollAsync(bool enabled)
     {
-        try { await JS.InvokeVoidAsync("parityBenchSetSyncedScroll", LeftPanelId, RightPanelId, enabled); }
-        catch { }
+        try
+        {
+            await JS.InvokeVoidAsync("parityBenchSetSyncedScroll", LeftPanelId, RightPanelId, enabled);
+            syncScrollInitialized = enabled;
+        }
+        catch
+        {
+            syncScrollInitialized = false;
+        }
     }
+
+    private string BuildSyncSignature() => string.Join('|',
+        LeftPanelId,
+        RightPanelId,
+        detailViewMode,
+        syncScroll,
+        contentA?.Artifact.ArtifactId ?? string.Empty,
+        contentB?.Artifact.ArtifactId ?? string.Empty,
+        contentA?.Content.Length ?? 0,
+        contentB?.Content.Length ?? 0,
+        wordWrap,
+        highlightDifferences,
+        contentErrorMessage ?? string.Empty);
+
+    private bool IsSideBySideVisible() =>
+        IsSideBySideRawContentView &&
+        !isLoadingContent &&
+        string.IsNullOrWhiteSpace(contentErrorMessage) &&
+        (contentA is not null || contentB is not null);
 
     private async Task ScrollToDetailAsync()
     {
@@ -1133,5 +1185,3 @@ else if (run is not null)
     private enum StructuredDocumentKind { Unknown, Json, Xml }
     private sealed record LineModel(int LineNumber, string Text, string CssClass);
 }
-
-

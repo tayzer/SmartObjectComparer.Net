@@ -47,7 +47,7 @@ internal static class FocusedRawContentBuilder
         ResponseArtifactMetadata focusedResponseA = await SaveFocusedResponseAsync(runId, result.RelativePath, result.ResponseA, focusedA.Content, artifactStore, cancellationToken).ConfigureAwait(false);
         ResponseArtifactMetadata focusedResponseB = await SaveFocusedResponseAsync(runId, result.RelativePath, result.ResponseB, focusedB.Content, artifactStore, cancellationToken).ConfigureAwait(false);
 
-        return result.WithFocusedRawContent(focusedResponseA, focusedResponseB, ignorePaths);
+        return result.WithFocusedRawContent(focusedResponseA, focusedResponseB, ignorePaths.Select(ToDisplayIgnorePath));
     }
 
 
@@ -61,19 +61,21 @@ internal static class FocusedRawContentBuilder
             .Where(rule => rule.IsEnabled && rule.Kind == SmartIgnoreRuleKind.PropertyName && !string.IsNullOrWhiteSpace(rule.Value))
             .SelectMany(rule => new[] { rule.Value.Trim(), $"*.{rule.Value.Trim()}" });
 
-        IEnumerable<string> smartWildcardPaths = comparisonOptions.SmartIgnoreRules
+        IEnumerable<string> smartNamePatterns = comparisonOptions.SmartIgnoreRules
             .Where(rule => rule.IsEnabled
                 && rule.Kind == SmartIgnoreRuleKind.NamePattern
-                && !string.IsNullOrWhiteSpace(rule.Value)
-                && rule.Value.Contains('*', StringComparison.Ordinal))
-            .Select(rule => rule.Value.Trim());
+                && !string.IsNullOrWhiteSpace(rule.Value))
+            .Select(rule => "regex:" + rule.Value.Trim());
 
         return ignoreRulePaths
             .Concat(smartPropertyPaths)
-            .Concat(smartWildcardPaths)
+            .Concat(smartNamePatterns)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
+    private static string ToDisplayIgnorePath(string ignorePath) =>
+        ignorePath.StartsWith("regex:", StringComparison.OrdinalIgnoreCase) ? ignorePath["regex:".Length..] : ignorePath;
+
     private static async Task<FocusedContent?> TryBuildFocusedContentAsync(
         ResponseArtifactMetadata response,
         IReadOnlyCollection<string> ignorePaths,
@@ -409,6 +411,12 @@ internal static class FocusedRawContentBuilder
         {
             foreach (string pattern in ignorePatterns.Where(pattern => !string.IsNullOrWhiteSpace(pattern)).Distinct(StringComparer.OrdinalIgnoreCase))
             {
+                if (pattern.StartsWith("regex:", StringComparison.OrdinalIgnoreCase))
+                {
+                    wildcardPatternRegexes.Add(BuildSmartNamePatternRegex(pattern["regex:".Length..]));
+                    continue;
+                }
+
                 exactPaths.Add(pattern);
                 if (pattern.Contains("[*]", StringComparison.Ordinal))
                 {
@@ -453,7 +461,21 @@ internal static class FocusedRawContentBuilder
             string regexPattern = "^" + Regex.Escape(pattern).Replace("\\*", ".*", StringComparison.Ordinal) + "($|\\.)";
             return new Regex(regexPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.ExplicitCapture, MatchRegexTimeout);
         }
+
+        private static Regex BuildSmartNamePatternRegex(string pattern)
+        {
+            try
+            {
+                return new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.Compiled, MatchRegexTimeout);
+            }
+            catch (ArgumentException)
+            {
+                string wildcardPattern = "^" + Regex.Escape(pattern)
+                    .Replace("\\*", ".*", StringComparison.Ordinal)
+                    .Replace("\\?", ".", StringComparison.Ordinal) + "$";
+
+                return new Regex(wildcardPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.ExplicitCapture, MatchRegexTimeout);
+            }
+        }
     }
 }
-
-

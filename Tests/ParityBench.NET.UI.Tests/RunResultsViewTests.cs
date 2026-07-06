@@ -247,6 +247,11 @@ public sealed class RunResultsViewTests
         IReadOnlyList<string> renderedLines = component.FindAll(".v1-line-text").Select(line => line.TextContent).ToList();
         CollectionAssert.Contains(renderedLines.ToList(), "  \"name\": \"Alice\",");
         CollectionAssert.Contains(renderedLines.ToList(), "  \"city\": \"London\"");
+        component.WaitForAssertion(() => Assert.IsTrue(testContext.JSInterop.Invocations.Any(invocation =>
+            invocation.Identifier == "parityBenchSetSyncedScroll" &&
+            invocation.Arguments.Count == 3 &&
+            invocation.Arguments[2] is bool enabled &&
+            enabled)));
     }
     [TestMethod]
     public void RunResult_WhenDataSourceFails_ShowsRecoverableError()
@@ -463,4 +468,3 @@ public sealed class RunResultsViewTests
         }
     }
 }
-

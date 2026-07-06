@@ -255,6 +255,37 @@ public sealed class BasicComparisonRunExecutorTests
         Assert.IsFalse(focusedB.Contains("ReportId", StringComparison.Ordinal));
         Assert.IsTrue(result.FocusedRawContentIgnorePaths.Any(path => string.Equals(path, "ReportId", StringComparison.OrdinalIgnoreCase)));
     }
+
+    [TestMethod]
+    public async Task ExecuteAsync_WhenSmartNamePatternIgnorePrunesJson_AttachesFocusedRawContent()
+    {
+        RequestItem request = new RequestItem("one.json", "application/json", 2);
+        FakeRunArtifactStore artifactStore = new FakeRunArtifactStore();
+        FakeRunDetailStore detailStore = new FakeRunDetailStore();
+        FakeEndpointRequestSender sender = new FakeEndpointRequestSender(endpointRequest =>
+            endpointRequest.Endpoint == EndpointSlot.A
+                ? new EndpointResponse(200, "application/json", CreateStream(@"{""name"":""Alice"",""meta"":{""ProviderTraceId"":""A-1""}}"))
+                : new EndpointResponse(200, "application/json", CreateStream(@"{""name"":""Alicia"",""meta"":{""ProviderTraceId"":""B-1""}}")));
+        BasicComparisonRunExecutor executor = CreateExecutor(
+            CreateBatch(new[] { request }),
+            sender,
+            artifactStore,
+            detailStore: detailStore);
+        ComparisonRun run = CreateRun(
+            comparisonOptions: new ComparisonOptions(
+                smartIgnoreRules: new[] { new SmartIgnoreRuleDefinition(SmartIgnoreRuleKind.NamePattern, @".*ProviderTraceId$") }));
+
+        await executor.ExecuteAsync(run, new CapturingProgressReporter());
+
+        RequestPairResult result = detailStore.SavedResults.Single();
+        Assert.IsTrue(result.HasFocusedRawContent);
+        string focusedA = artifactStore.SavedBodies[result.FocusedResponseA!.Artifact.ArtifactId];
+        string focusedB = artifactStore.SavedBodies[result.FocusedResponseB!.Artifact.ArtifactId];
+        Assert.IsFalse(focusedA.Contains("ProviderTraceId", StringComparison.Ordinal));
+        Assert.IsFalse(focusedB.Contains("ProviderTraceId", StringComparison.Ordinal));
+        CollectionAssert.Contains(result.FocusedRawContentIgnorePaths.ToList(), @".*ProviderTraceId$");
+    }
+
     [TestMethod]
     public async Task ExecuteAsync_WhenCancellationTokenIsCancelled_StopsWithoutSavingFinalDetails()
     {
@@ -643,4 +674,3 @@ public sealed class BasicComparisonRunExecutorTests
         }
     }
 }
-

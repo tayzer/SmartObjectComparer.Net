@@ -19,9 +19,18 @@ window.parityBenchScrollToElement = (id) => {
 };
 
 window.parityBenchSetSyncedScroll = (leftId, rightId, enabled) => {
-    const left = document.getElementById(leftId);
-    const right = document.getElementById(rightId);
     const stateKey = "__parityBenchSyncedScroll";
+    const scheduleKey = "__parityBenchSyncedScrollSchedules";
+    window[scheduleKey] = window[scheduleKey] || new Map();
+    const scheduleId = `${leftId}|${rightId}`;
+
+    const clearScheduledBind = () => {
+        const timeoutId = window[scheduleKey].get(scheduleId);
+        if (timeoutId) {
+            window.clearTimeout(timeoutId);
+            window[scheduleKey].delete(scheduleId);
+        }
+    };
 
     const detach = (element) => {
         const state = element?.[stateKey];
@@ -33,35 +42,58 @@ window.parityBenchSetSyncedScroll = (leftId, rightId, enabled) => {
         delete element[stateKey];
     };
 
-    detach(left);
-    detach(right);
+    const configure = () => {
+        const left = document.getElementById(leftId);
+        const right = document.getElementById(rightId);
 
-    if (!enabled || !left || !right) {
+        detach(left);
+        detach(right);
+
+        if (!enabled || !left || !right) {
+            return false;
+        }
+
+        let isSyncing = false;
+        const bind = (source, target) => {
+            const handler = () => {
+                if (isSyncing) {
+                    return;
+                }
+
+                isSyncing = true;
+                const topRange = Math.max(1, source.scrollHeight - source.clientHeight);
+                const leftRange = Math.max(1, source.scrollWidth - source.clientWidth);
+                const targetTopRange = Math.max(0, target.scrollHeight - target.clientHeight);
+                const targetLeftRange = Math.max(0, target.scrollWidth - target.clientWidth);
+
+                target.scrollTop = (source.scrollTop / topRange) * targetTopRange;
+                target.scrollLeft = (source.scrollLeft / leftRange) * targetLeftRange;
+                window.requestAnimationFrame(() => { isSyncing = false; });
+            };
+
+            source[stateKey] = { handler };
+            source.addEventListener("scroll", handler, { passive: true });
+        };
+
+        bind(left, right);
+        bind(right, left);
+        return true;
+    };
+
+    clearScheduledBind();
+    const configured = configure();
+    if (!enabled) {
         return;
     }
 
-    let isSyncing = false;
-    const bind = (source, target) => {
-        const handler = () => {
-            if (isSyncing) {
-                return;
-            }
-
-            isSyncing = true;
-            const topRange = Math.max(1, source.scrollHeight - source.clientHeight);
-            const leftRange = Math.max(1, source.scrollWidth - source.clientWidth);
-            const targetTopRange = Math.max(0, target.scrollHeight - target.clientHeight);
-            const targetLeftRange = Math.max(0, target.scrollWidth - target.clientWidth);
-
-            target.scrollTop = (source.scrollTop / topRange) * targetTopRange;
-            target.scrollLeft = (source.scrollLeft / leftRange) * targetLeftRange;
-            window.requestAnimationFrame(() => { isSyncing = false; });
-        };
-
-        source[stateKey] = { handler };
-        source.addEventListener("scroll", handler, { passive: true });
-    };
-
-    bind(left, right);
-    bind(right, left);
+    window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+            configure();
+            const timeoutId = window.setTimeout(() => {
+                configure();
+                window[scheduleKey].delete(scheduleId);
+            }, configured ? 150 : 50);
+            window[scheduleKey].set(scheduleId, timeoutId);
+        });
+    });
 };
