@@ -17,6 +17,15 @@ public interface IRequestBatchStore
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Stages explicit eligible request files under a batch reference and returns the persisted manifest.
+    /// </summary>
+    Task<RequestBatchManifest> StageFilesAsync(
+        string sourceDirectory,
+        IReadOnlyList<string> sourceFiles,
+        RequestBatchReference batchReference,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Loads a staged request-batch manifest.
     /// </summary>
     Task<RequestBatchManifest> LoadManifestAsync(

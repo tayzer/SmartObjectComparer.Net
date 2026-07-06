@@ -34,55 +34,33 @@ public sealed class FileSystemRequestBatchStore : IRequestBatchStore
         RequestBatchReference batchReference,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(sourceDirectory))
-        {
-            throw new ArgumentException("Source directory must not be empty.", nameof(sourceDirectory));
-        }
+        string sourceRoot = GetExistingSourceRoot(sourceDirectory);
+        return await StageEligibleFilesAsync(
+            sourceRoot,
+            EnumerateEligibleFiles(sourceRoot),
+            batchReference,
+            cancellationToken)
+            .ConfigureAwait(false);
+    }
 
-        string sourceRoot = Path.GetFullPath(sourceDirectory);
-        if (!Directory.Exists(sourceRoot))
-        {
-            throw new DirectoryNotFoundException($"Request directory was not found: {sourceRoot}");
-        }
+    public async Task<RequestBatchManifest> StageFilesAsync(
+        string sourceDirectory,
+        IReadOnlyList<string> sourceFiles,
+        RequestBatchReference batchReference,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(sourceFiles);
 
-        string batchRoot = GetBatchRoot(batchReference);
-        string requestRoot = Path.Combine(batchRoot, "requests");
-        Directory.CreateDirectory(requestRoot);
+        string sourceRoot = GetExistingSourceRoot(sourceDirectory);
+        IReadOnlyList<string> eligibleSourceFiles = sourceFiles
+            .Select(Path.GetFullPath)
+            .Where(path => IsEligibleSourceFile(sourceRoot, path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(path => Path.GetRelativePath(sourceRoot, path), StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
-        List<RequestItem> requests = new List<RequestItem>();
-        foreach (string sourceFilePath in EnumerateEligibleFiles(sourceRoot))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            string relativePath = GetSafeSourceRelativePath(sourceRoot, sourceFilePath);
-            string destinationPath = FileSystemWorkspacePaths.GetSafePath(requestRoot, relativePath);
-            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath) ?? requestRoot);
-
-            await using (FileStream source = new FileStream(
-                sourceFilePath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.Read,
-                bufferSize: 81920,
-                FileOptions.Asynchronous | FileOptions.SequentialScan))
-            await using (FileStream destination = new FileStream(
-                destinationPath,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
-                bufferSize: 81920,
-                FileOptions.Asynchronous | FileOptions.SequentialScan))
-            {
-                await source.CopyToAsync(destination, cancellationToken).ConfigureAwait(false);
-            }
-
-            FileInfo fileInfo = new FileInfo(sourceFilePath);
-            requests.Add(new RequestItem(relativePath, GetContentType(fileInfo.Extension), fileInfo.Length));
-        }
-
-        RequestBatchManifest manifest = new RequestBatchManifest(batchReference, requests);
-        await SaveManifestAsync(batchRoot, manifest, cancellationToken).ConfigureAwait(false);
-        return manifest;
+        return await StageEligibleFilesAsync(sourceRoot, eligibleSourceFiles, batchReference, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async Task<RequestBatchManifest> LoadManifestAsync(
@@ -128,13 +106,88 @@ public sealed class FileSystemRequestBatchStore : IRequestBatchStore
         return Task.FromResult(stream);
     }
 
+    private async Task<RequestBatchManifest> StageEligibleFilesAsync(
+        string sourceRoot,
+        IReadOnlyList<string> sourceFilePaths,
+        RequestBatchReference batchReference,
+        CancellationToken cancellationToken)
+    {
+        string batchRoot = GetBatchRoot(batchReference);
+        string requestRoot = Path.Combine(batchRoot, "requests");
+        Directory.CreateDirectory(requestRoot);
+
+        List<RequestItem> requests = new List<RequestItem>();
+        foreach (string sourceFilePath in sourceFilePaths)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            string relativePath = GetSafeSourceRelativePath(sourceRoot, sourceFilePath);
+            string destinationPath = FileSystemWorkspacePaths.GetSafePath(requestRoot, relativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath) ?? requestRoot);
+
+            await using (FileStream source = new FileStream(
+                sourceFilePath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                bufferSize: 81920,
+                FileOptions.Asynchronous | FileOptions.SequentialScan))
+            await using (FileStream destination = new FileStream(
+                destinationPath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 81920,
+                FileOptions.Asynchronous | FileOptions.SequentialScan))
+            {
+                await source.CopyToAsync(destination, cancellationToken).ConfigureAwait(false);
+            }
+
+            FileInfo fileInfo = new FileInfo(sourceFilePath);
+            requests.Add(new RequestItem(relativePath, GetContentType(fileInfo.Extension), fileInfo.Length));
+        }
+
+        RequestBatchManifest manifest = new RequestBatchManifest(batchReference, requests);
+        await SaveManifestAsync(batchRoot, manifest, cancellationToken).ConfigureAwait(false);
+        return manifest;
+    }
+
+    private string GetExistingSourceRoot(string sourceDirectory)
+    {
+        if (string.IsNullOrWhiteSpace(sourceDirectory))
+        {
+            throw new ArgumentException("Source directory must not be empty.", nameof(sourceDirectory));
+        }
+
+        string sourceRoot = Path.GetFullPath(sourceDirectory);
+        if (!Directory.Exists(sourceRoot))
+        {
+            throw new DirectoryNotFoundException($"Request directory was not found: {sourceRoot}");
+        }
+
+        return sourceRoot;
+    }
+
     private IReadOnlyList<string> EnumerateEligibleFiles(string sourceRoot) =>
         Directory.EnumerateFiles(sourceRoot, "*", SearchOption.AllDirectories)
-            .Where(path => !path.EndsWith(".headers.json", StringComparison.OrdinalIgnoreCase))
-            .Where(path => !Path.GetFileName(path).StartsWith("_", StringComparison.Ordinal))
-            .Where(path => eligibleExtensions.Contains(Path.GetExtension(path)))
+            .Where(path => IsEligibleSourceFile(sourceRoot, path))
             .OrderBy(path => Path.GetRelativePath(sourceRoot, path), StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+    private bool IsEligibleSourceFile(string sourceRoot, string sourceFilePath)
+    {
+        if (!File.Exists(sourceFilePath))
+        {
+            return false;
+        }
+
+        string fullSourceRoot = Path.GetFullPath(sourceRoot);
+        string fullSourceFilePath = Path.GetFullPath(sourceFilePath);
+        return FileSystemWorkspacePaths.IsPathInsideDirectory(fullSourceFilePath, fullSourceRoot)
+            && !fullSourceFilePath.EndsWith(".headers.json", StringComparison.OrdinalIgnoreCase)
+            && !Path.GetFileName(fullSourceFilePath).StartsWith("_", StringComparison.Ordinal)
+            && eligibleExtensions.Contains(Path.GetExtension(fullSourceFilePath));
+    }
 
     private string GetSafeSourceRelativePath(string sourceRoot, string sourceFilePath)
     {

@@ -1,42 +1,10 @@
-﻿<MudThemeProvider />
+<MudThemeProvider />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
 <MudLayout>
-    <MudAppBar Elevation="1" Dense="true">
-        <MudText Typo="Typo.h6">ParityBench.NET</MudText>
-    </MudAppBar>
     <MudMainContent Class="pa-4">
-        <MudGrid Spacing="3">
-            <MudItem xs="12">
-                <RunWorkflow RunSelected="SelectRun" RunChanged="HandleRunChanged" />
-            </MudItem>
-            <MudItem xs="12" md="4" @key="historyVersion">
-                <RunHistory RunSelected="SelectRun" />
-            </MudItem>
-            <MudItem xs="12" md="8">
-                <RunResult RunId="selectedRunId" RefreshVersion="resultRefreshVersion" />
-            </MudItem>
-        </MudGrid>
+        <ParityBenchHome />
     </MudMainContent>
 </MudLayout>
-
-@code {
-    private RunId? selectedRunId;
-    private int historyVersion;
-    private int resultRefreshVersion;
-
-    private void SelectRun(RunId runId)
-    {
-        selectedRunId = runId;
-        resultRefreshVersion++;
-    }
-
-    private void HandleRunChanged(ComparisonRun run)
-    {
-        selectedRunId = run.Id;
-        historyVersion++;
-        resultRefreshVersion++;
-    }
-}

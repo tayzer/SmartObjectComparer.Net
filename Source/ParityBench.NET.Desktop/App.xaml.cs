@@ -12,6 +12,7 @@ using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Results;
 using ParityBench.NET.Application.Runs;
 using ParityBench.NET.Application.Workflow;
+using ParityBench.NET.Desktop.Services;
 using ParityBench.NET.Engine;
 using ParityBench.NET.Infrastructure;
 using ParityBench.NET.Infrastructure.Reports;
@@ -115,5 +116,6 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IComparisonRunJobUseCases, ComparisonRunJobService>();
         services.AddScoped<IRunResultsViewDataSource, ApplicationRunResultsViewDataSource>();
         services.AddScoped<IRunWorkflowViewDataSource, ApplicationRunWorkflowViewDataSource>();
+        services.AddScoped<IRequestSourcePicker, DesktopRequestSourcePicker>();
     }
 }

@@ -1,0 +1,72 @@
+<MudStack Spacing="4">
+    <MudPaper Elevation="2" Class="pa-4">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="flex-wrap">
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.h4">File Comparison Tool (XML &amp; JSON)</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">ParityBench.NET V2 request comparison</MudText>
+            </MudStack>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudText Typo="Typo.caption" Color="Color.Default">@SelectedRunDisplay</MudText>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+
+    <MudTabs Rounded="true" Border="true" @bind-ActivePanelIndex="activeTabIndex">
+        <MudTabPanel Text="Request Comparison (A/B)">
+            <MudStack Spacing="4">
+                <RunWorkflow RunSelected="SelectRun" RunChanged="HandleRunChanged" />
+                @if (selectedRunId is not null)
+                {
+                    <MudPaper Elevation="2" Class="pa-4">
+                        <MudText Typo="Typo.h6" Class="mb-3">Request Comparison Results</MudText>
+                        <RunResult RunId="selectedRunId" RefreshVersion="resultRefreshVersion" />
+                    </MudPaper>
+                }
+            </MudStack>
+        </MudTabPanel>
+        <MudTabPanel Text="Run History">
+            <MudGrid Spacing="3">
+                <MudItem xs="12" md="4" @key="historyVersion">
+                    <RunHistory RunSelected="SelectHistoricalRun" />
+                </MudItem>
+                <MudItem xs="12" md="8">
+                    <RunResult RunId="selectedRunId" RefreshVersion="resultRefreshVersion" />
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+    </MudTabs>
+</MudStack>
+
+@code {
+    private const int RequestComparisonTabIndex = 0;
+    private const int RunHistoryTabIndex = 1;
+    private RunId? selectedRunId;
+    private int activeTabIndex = RequestComparisonTabIndex;
+    private int historyVersion;
+    private int resultRefreshVersion;
+
+    private string SelectedRunDisplay => selectedRunId is null
+        ? "No run selected"
+        : $"Selected run: {selectedRunId.Value.Value}";
+
+    private void SelectRun(RunId runId)
+    {
+        selectedRunId = runId;
+        resultRefreshVersion++;
+    }
+
+    private void SelectHistoricalRun(RunId runId)
+    {
+        selectedRunId = runId;
+        activeTabIndex = RunHistoryTabIndex;
+        resultRefreshVersion++;
+    }
+
+    private void HandleRunChanged(ComparisonRun run)
+    {
+        selectedRunId = run.Id;
+        activeTabIndex = RequestComparisonTabIndex;
+        historyVersion++;
+        resultRefreshVersion++;
+    }
+}

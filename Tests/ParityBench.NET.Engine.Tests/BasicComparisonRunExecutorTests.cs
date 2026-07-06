@@ -379,6 +379,13 @@ public sealed class BasicComparisonRunExecutorTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(manifest);
 
+        public Task<RequestBatchManifest> StageFilesAsync(
+            string sourceDirectory,
+            IReadOnlyList<string> sourceFiles,
+            RequestBatchReference batchReference,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(manifest);
+
         public Task<RequestBatchManifest> LoadManifestAsync(
             RequestBatchReference batchReference,
             CancellationToken cancellationToken = default) =>

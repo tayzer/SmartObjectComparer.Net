@@ -1,4 +1,4 @@
-﻿using ParityBench.NET.Application.Reports;
+using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Runs;
 using ParityBench.NET.Domain.Runs;
@@ -39,9 +39,18 @@ public sealed class RequestComparisonWorkflowService : IRequestComparisonWorkflo
         ValidateModelName(request.ModelName);
 
         RequestBatchReference batchReference = requestBatchReferenceGenerator.CreateReference();
-        await requestBatchStore
-            .StageDirectoryAsync(request.SourceDirectory, batchReference, cancellationToken)
-            .ConfigureAwait(false);
+        if (request.SourceFiles.Count == 0)
+        {
+            await requestBatchStore
+                .StageDirectoryAsync(request.SourceDirectory, batchReference, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            await requestBatchStore
+                .StageFilesAsync(request.SourceDirectory, request.SourceFiles, batchReference, cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         RunOptions runOptions = new RunOptions(
             batchReference,

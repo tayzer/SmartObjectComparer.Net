@@ -41,6 +41,26 @@ public sealed class RequestComparisonWorkflowServiceTests
     }
 
     [TestMethod]
+    public async Task CreateRunFromDirectory_WhenSourceFilesAreProvided_StagesExplicitFiles()
+    {
+        FakeRequestBatchStore batchStore = new FakeRequestBatchStore();
+        RequestComparisonWorkflowService service = CreateService(batchStore);
+        string[] sourceFiles = new[] { "requests/one.json", "requests/two.xml" };
+        RequestComparisonRunRequest request = new RequestComparisonRunRequest(
+            "requests",
+            new Uri("https://a.example.test"),
+            new Uri("https://b.example.test"),
+            TimeSpan.FromSeconds(30),
+            3,
+            sourceFiles: sourceFiles);
+
+        await service.CreateRunFromDirectoryAsync(request).ConfigureAwait(false);
+
+        Assert.AreEqual("requests", batchStore.StagedSourceDirectory);
+        CollectionAssert.AreEqual(sourceFiles, batchStore.StagedSourceFiles.ToArray());
+        Assert.AreEqual(new RequestBatchReference("batch-1"), batchStore.StagedBatchReference);
+    }
+    [TestMethod]
     public async Task GenerateReport_WhenRunIsCompleted_CallsStaticReportWriterWithResolvedAssets()
     {
         FakeReportAssetLocator locator = new FakeReportAssetLocator("resolved-assets");
@@ -113,12 +133,26 @@ public sealed class RequestComparisonWorkflowServiceTests
 
         public RequestBatchReference? StagedBatchReference { get; private set; }
 
+        public IReadOnlyList<string> StagedSourceFiles { get; private set; } = Array.Empty<string>();
+
         public Task<RequestBatchManifest> StageDirectoryAsync(
             string sourceDirectory,
             RequestBatchReference batchReference,
             CancellationToken cancellationToken = default)
         {
             StagedSourceDirectory = sourceDirectory;
+            StagedBatchReference = batchReference;
+            return Task.FromResult(new RequestBatchManifest(batchReference, Array.Empty<RequestItem>()));
+        }
+
+        public Task<RequestBatchManifest> StageFilesAsync(
+            string sourceDirectory,
+            IReadOnlyList<string> sourceFiles,
+            RequestBatchReference batchReference,
+            CancellationToken cancellationToken = default)
+        {
+            StagedSourceDirectory = sourceDirectory;
+            StagedSourceFiles = sourceFiles;
             StagedBatchReference = batchReference;
             return Task.FromResult(new RequestBatchManifest(batchReference, Array.Empty<RequestItem>()));
         }

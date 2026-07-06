@@ -103,4 +103,5 @@ static void RegisterV2Services(IServiceCollection services, string workspaceRoot
     services.AddSingleton<IComparisonRunJobUseCases, ComparisonRunJobService>();
     services.AddScoped<IRunResultsViewDataSource, ApplicationRunResultsViewDataSource>();
     services.AddScoped<IRunWorkflowViewDataSource, ApplicationRunWorkflowViewDataSource>();
+    services.AddScoped<IRequestSourcePicker, NoOpRequestSourcePicker>();
 }

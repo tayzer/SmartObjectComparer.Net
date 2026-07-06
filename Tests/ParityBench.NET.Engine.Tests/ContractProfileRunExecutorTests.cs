@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -332,6 +332,13 @@ public sealed class ContractProfileRunExecutorTests
 
         public Task<RequestBatchManifest> StageDirectoryAsync(
             string sourceDirectory,
+            RequestBatchReference batchReference,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(manifest);
+
+        public Task<RequestBatchManifest> StageFilesAsync(
+            string sourceDirectory,
+            IReadOnlyList<string> sourceFiles,
             RequestBatchReference batchReference,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(manifest);

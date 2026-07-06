@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -48,6 +48,28 @@ public sealed class FileSystemWorkspaceTests
         Assert.AreEqual("one.json", manifest.Requests[0].RelativePath);
     }
 
+    [TestMethod]
+    public async Task StageFiles_WhenExplicitFilesAreProvided_StagesOnlySelectedEligibleFiles()
+    {
+        string workspaceRoot = CreateTempDirectory();
+        string sourceRoot = CreateTempDirectory();
+        Directory.CreateDirectory(Path.Combine(sourceRoot, "nested"));
+        string selectedJson = Path.Combine(sourceRoot, "one.json");
+        string selectedXml = Path.Combine(sourceRoot, "nested", "two.xml");
+        await File.WriteAllTextAsync(selectedJson, "{}");
+        await File.WriteAllTextAsync(selectedXml, "<two />");
+        await File.WriteAllTextAsync(Path.Combine(sourceRoot, "unselected.json"), "{}");
+        FileSystemRequestBatchStore store = new FileSystemRequestBatchStore(workspaceRoot);
+
+        RequestBatchManifest manifest = await store.StageFilesAsync(
+            sourceRoot,
+            new[] { selectedXml, selectedJson },
+            new RequestBatchReference("batch-1"));
+
+        CollectionAssert.AreEqual(
+            new[] { "nested/two.xml", "one.json" },
+            manifest.Requests.Select(request => request.RelativePath).ToArray());
+    }
     [TestMethod]
     public async Task SaveResponseArtifact_WhenStreamIsSaved_WritesContentAndReturnsHashMetadata()
     {

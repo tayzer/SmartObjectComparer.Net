@@ -1,4 +1,4 @@
-﻿using ParityBench.NET.Domain.ContractProfiles;
+using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
@@ -21,7 +21,8 @@ public sealed record RequestComparisonRunRequest
         IReadOnlyDictionary<string, string>? endpointAHeaders = null,
         IReadOnlyDictionary<string, string>? endpointBHeaders = null,
         string? endpointALabel = null,
-        string? endpointBLabel = null)
+        string? endpointBLabel = null,
+        IReadOnlyList<string>? sourceFiles = null)
     {
         if (string.IsNullOrWhiteSpace(sourceDirectory))
         {
@@ -55,9 +56,12 @@ public sealed record RequestComparisonRunRequest
         EndpointBHeaders = CopyHeaders(endpointBHeaders);
         EndpointALabel = string.IsNullOrWhiteSpace(endpointALabel) ? null : endpointALabel.Trim();
         EndpointBLabel = string.IsNullOrWhiteSpace(endpointBLabel) ? null : endpointBLabel.Trim();
+        SourceFiles = CopySourceFiles(sourceFiles);
     }
 
     public string SourceDirectory { get; }
+
+    public IReadOnlyList<string> SourceFiles { get; }
 
     public Uri EndpointA { get; }
 
@@ -97,6 +101,27 @@ public sealed record RequestComparisonRunRequest
                     copied[header.Key] = header.Value;
                 }
             }
+        }
+
+        return copied;
+    }
+
+    private static IReadOnlyList<string> CopySourceFiles(IReadOnlyList<string>? sourceFiles)
+    {
+        if (sourceFiles is null || sourceFiles.Count == 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        List<string> copied = new List<string>(sourceFiles.Count);
+        foreach (string sourceFile in sourceFiles)
+        {
+            if (string.IsNullOrWhiteSpace(sourceFile))
+            {
+                throw new ArgumentException("Source file paths must not be empty.", nameof(sourceFiles));
+            }
+
+            copied.Add(sourceFile);
         }
 
         return copied;
