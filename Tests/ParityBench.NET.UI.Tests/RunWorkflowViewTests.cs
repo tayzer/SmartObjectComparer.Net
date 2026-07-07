@@ -141,7 +141,7 @@ public sealed class RunWorkflowViewTests
     }
 
     [TestMethod]
-    public void RunWorkflow_WhenProfileIsSelected_ShowsDefaultIgnoreRules()
+    public void RunWorkflow_WhenProfileIsSelected_ShowsDefaultComparisonRules()
     {
         IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();
 
@@ -150,6 +150,11 @@ public sealed class RunWorkflowViewTests
 
         component.WaitForAssertion(() =>
         {
+            StringAssert.Contains(component.Markup, "Profile default comparison rules");
+            StringAssert.Contains(component.Markup, "Ignore collection order");
+            StringAssert.Contains(component.Markup, "Ignore paths: 1");
+            StringAssert.Contains(component.Markup, "Smart ignores: 1");
+            StringAssert.Contains(component.Markup, "Masks: 1");
             StringAssert.Contains(component.Markup, "Profile default ignore rules");
             StringAssert.Contains(component.Markup, "SourceSystem");
         });
@@ -291,7 +296,11 @@ public sealed class RunWorkflowViewTests
                         "1",
                         "sample/customer-lookup/soap",
                         "sample/customer-lookup/json",
-                        new[] { new IgnoreRuleDefinition("SourceSystem") }),
+                        new ComparisonRuleDefaults(
+                            ignoreCollectionOrder: true,
+                            ignoreRules: new[] { new IgnoreRuleDefinition("SourceSystem") },
+                            smartIgnoreRules: new[] { new SmartIgnoreRuleDefinition(SmartIgnoreRuleKind.PropertyName, "TraceId") },
+                            maskRules: new[] { new MaskRuleDefinition("SensitiveToken") })),
                 },
                 new[]
                 {
@@ -325,3 +334,5 @@ public sealed class RunWorkflowViewTests
                 2);
     }
 }
+
+

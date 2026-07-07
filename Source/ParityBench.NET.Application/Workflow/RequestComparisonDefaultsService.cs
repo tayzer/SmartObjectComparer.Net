@@ -59,7 +59,9 @@ public sealed class RequestComparisonDefaultsService : IRequestComparisonDefault
                 profile.ProfileVersion,
                 profile.EndpointA.SuggestedEndpointId,
                 profile.EndpointB.SuggestedEndpointId,
-                profile.DefaultIgnoreRules.ToArray());
+                profile.DefaultComparisonRules);
         }
     }
 }
+
+

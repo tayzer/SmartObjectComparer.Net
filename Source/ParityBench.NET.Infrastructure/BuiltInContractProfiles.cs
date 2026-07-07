@@ -87,7 +87,7 @@ public static class BuiltInContractProfiles
             canonicalResponseContentType: "application/json",
             suggestedEndpointAId: "customer-lookup/soap",
             suggestedEndpointBId: "customer-lookup/json",
-            defaultIgnoreRules: new[] { new IgnoreRuleDefinition("SourceSystem") },
+            defaultComparisonRules: new ComparisonRuleDefaults(ignoreRules: new[] { new IgnoreRuleDefinition("SourceSystem") }),
             requestPreparation: async (context, cancellationToken) =>
             {
                 ExpectedJsonCustomerLookupAuthorizationTokenResponse tokens = await tokenProvider
@@ -332,6 +332,7 @@ public sealed class ExpectedJsonCustomerLookupSoapResponse
 
     public string TraceId { get; set; } = string.Empty;
 }
+
 
 
 

@@ -1,4 +1,4 @@
-﻿using ParityBench.NET.Application.ContractProfiles;
+using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Requests;
@@ -37,7 +37,9 @@ public sealed class SameContractProfile : IContractProfile
 
     public string CanonicalResponseContentType => "text/plain";
 
-    public IReadOnlyList<IgnoreRuleDefinition> DefaultIgnoreRules => Array.Empty<IgnoreRuleDefinition>();
+    public IReadOnlyList<IgnoreRuleDefinition> DefaultIgnoreRules => DefaultComparisonRules.IgnoreRules;
+
+    public ComparisonRuleDefaults DefaultComparisonRules { get; } = new ComparisonRuleDefaults();
 
     public IReadOnlyDictionary<string, string> CanonicalToEndpointResponseMaskPathMap => new Dictionary<string, string>();
 
@@ -70,3 +72,5 @@ public sealed class SameContractProfile : IContractProfile
         return ValueTask.FromResult(new NormalizedContractResponse(payload, ProfileId));
     }
 }
+
+

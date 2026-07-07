@@ -34,6 +34,7 @@ public sealed class ContractProfile<TEndpointARequest, TEndpointBRequest, TCanon
         string? suggestedEndpointAId = null,
         string? suggestedEndpointBId = null,
         IReadOnlyList<IgnoreRuleDefinition>? defaultIgnoreRules = null,
+        ComparisonRuleDefaults? defaultComparisonRules = null,
         IReadOnlyDictionary<string, string>? canonicalToEndpointResponseMaskPathMap = null,
         Func<ContractRequestPreparationContext<TEndpointARequest>, CancellationToken, ValueTask<PreparedContractRequest>>? requestPreparation = null,
         Func<ContractResponseNormalizationContext, CancellationToken, ValueTask<NormalizedContractResponse>>? endpointAResponseNormalizer = null,
@@ -54,7 +55,7 @@ public sealed class ContractProfile<TEndpointARequest, TEndpointBRequest, TCanon
         EndpointB = new ContractEndpointProfile(endpointBRequestFormat, endpointBRequestContentType, endpointBResponseFormat, suggestedEndpointBId);
         CanonicalResponseFormat = canonicalResponseFormat;
         CanonicalResponseContentType = string.IsNullOrWhiteSpace(canonicalResponseContentType) ? "application/xml" : canonicalResponseContentType.Trim();
-        DefaultIgnoreRules = (defaultIgnoreRules ?? Array.Empty<IgnoreRuleDefinition>()).ToArray();
+        DefaultComparisonRules = CreateDefaultComparisonRules(defaultComparisonRules, defaultIgnoreRules);
         CanonicalToEndpointResponseMaskPathMap = new Dictionary<string, string>(
             canonicalToEndpointResponseMaskPathMap ?? new Dictionary<string, string>(),
             StringComparer.OrdinalIgnoreCase);
@@ -82,7 +83,9 @@ public sealed class ContractProfile<TEndpointARequest, TEndpointBRequest, TCanon
 
     public string CanonicalResponseContentType { get; }
 
-    public IReadOnlyList<IgnoreRuleDefinition> DefaultIgnoreRules { get; }
+    public IReadOnlyList<IgnoreRuleDefinition> DefaultIgnoreRules => DefaultComparisonRules.IgnoreRules;
+
+    public ComparisonRuleDefaults DefaultComparisonRules { get; }
 
     public IReadOnlyDictionary<string, string> CanonicalToEndpointResponseMaskPathMap { get; }
 
@@ -209,4 +212,25 @@ public sealed class ContractProfile<TEndpointARequest, TEndpointBRequest, TCanon
             contentType,
             (destination, token) => serializer.SerializeAsync(value, valueType, format, destination, token),
             cancellationToken);
+
+    private static ComparisonRuleDefaults CreateDefaultComparisonRules(
+        ComparisonRuleDefaults? defaultComparisonRules,
+        IReadOnlyList<IgnoreRuleDefinition>? defaultIgnoreRules)
+    {
+        IReadOnlyList<IgnoreRuleDefinition> legacyIgnoreRules = defaultIgnoreRules ?? Array.Empty<IgnoreRuleDefinition>();
+        if (defaultComparisonRules is null)
+        {
+            return new ComparisonRuleDefaults(ignoreRules: legacyIgnoreRules);
+        }
+
+        return new ComparisonRuleDefaults(
+            defaultComparisonRules.IgnoreCollectionOrder,
+            defaultComparisonRules.IgnoreStringCase,
+            defaultComparisonRules.IgnoreTrailingWhitespaceAtEnd,
+            defaultComparisonRules.TreatNullAndEmptyCollectionsAsEqual,
+            defaultComparisonRules.IgnoreXmlNamespaces,
+            defaultComparisonRules.IgnoreRules.Concat(legacyIgnoreRules),
+            defaultComparisonRules.SmartIgnoreRules,
+            defaultComparisonRules.MaskRules);
+    }
 }

@@ -58,6 +58,36 @@ public sealed class ComparisonOptionsTests
     }
 
     [TestMethod]
+    public void Create_WhenComparisonRuleDefaultsIncludeRules_StoresCopiedRuleSets()
+    {
+        IgnoreRuleDefinition[] ignoreRules = new[] { new IgnoreRuleDefinition("Name") };
+        SmartIgnoreRuleDefinition[] smartIgnoreRules = new[] { new SmartIgnoreRuleDefinition(SmartIgnoreRuleKind.PropertyName, "CorrelationId") };
+        MaskRuleDefinition[] maskRules = new[] { new MaskRuleDefinition("Token") };
+
+        ComparisonRuleDefaults defaults = new ComparisonRuleDefaults(
+            ignoreCollectionOrder: true,
+            ignoreStringCase: true,
+            ignoreTrailingWhitespaceAtEnd: true,
+            treatNullAndEmptyCollectionsAsEqual: true,
+            ignoreXmlNamespaces: true,
+            ignoreRules: ignoreRules,
+            smartIgnoreRules: smartIgnoreRules,
+            maskRules: maskRules);
+        ignoreRules[0] = new IgnoreRuleDefinition("Changed");
+        smartIgnoreRules[0] = new SmartIgnoreRuleDefinition(SmartIgnoreRuleKind.PropertyName, "Changed");
+        maskRules[0] = new MaskRuleDefinition("Changed");
+
+        Assert.IsTrue(defaults.IgnoreCollectionOrder);
+        Assert.IsTrue(defaults.IgnoreStringCase);
+        Assert.IsTrue(defaults.IgnoreTrailingWhitespaceAtEnd);
+        Assert.IsTrue(defaults.TreatNullAndEmptyCollectionsAsEqual);
+        Assert.IsTrue(defaults.IgnoreXmlNamespaces);
+        Assert.IsTrue(defaults.HasDefaults);
+        Assert.AreEqual("Name", defaults.IgnoreRules[0].PropertyPath);
+        Assert.AreEqual("CorrelationId", defaults.SmartIgnoreRules[0].Value);
+        Assert.AreEqual("Token", defaults.MaskRules[0].PropertyPath);
+    }
+    [TestMethod]
     public void Create_WhenRunOptionsIncludeComparisonAndExecutionOptions_StoresOptions()
     {
         ComparisonOptions comparisonOptions = new ComparisonOptions(ignoreStringCase: true);
@@ -97,3 +127,4 @@ public sealed class ComparisonOptionsTests
         Assert.Fail($"Expected {typeof(TException).Name}, but no exception was thrown.");
     }
 }
+

@@ -106,6 +106,18 @@
             <MudExpansionPanels Elevation="0" MultiExpansion="true">
                 <MudExpansionPanel Text="Comparison Options">
                     <MudStack Spacing="2">
+                        @if (HasProfileDefaultComparisonRules(selectedProfileOption))
+                        {
+                            <MudStack Spacing="1" Class="mb-3">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Profile default comparison rules</MudText>
+                                <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                                    @foreach (string summary in GetProfileDefaultRuleSummary(selectedProfileOption!.DefaultComparisonRules))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@summary</MudChip>
+                                    }
+                                </MudStack>
+                            </MudStack>
+                        }
                         <MudSwitch @bind-Value="ignoreCollectionOrder" Label="Ignore Collection Order" Color="Color.Primary" />
                         <MudSwitch @bind-Value="ignoreStringCase" Label="Ignore String Case" Color="Color.Primary" />
                         <MudSwitch @bind-Value="ignoreTrailingWhitespace" Label="Ignore Trailing Spaces/Tabs at End of Strings" Color="Color.Primary" />
@@ -114,12 +126,12 @@
                     </MudStack>
                 </MudExpansionPanel>
                 <MudExpansionPanel Text="Ignore Rules">
-                    @if (selectedProfileOption?.DefaultIgnoreRules.Count > 0)
+                    @if (selectedProfileOption?.DefaultComparisonRules.IgnoreRules.Count > 0)
                     {
                         <MudStack Spacing="1" Class="mb-3">
                             <MudText Typo="Typo.caption" Color="Color.Secondary">Profile default ignore rules</MudText>
                             <MudStack Row="true" Spacing="1" Class="flex-wrap">
-                                @foreach (IgnoreRuleDefinition rule in selectedProfileOption.DefaultIgnoreRules)
+                                @foreach (IgnoreRuleDefinition rule in selectedProfileOption.DefaultComparisonRules.IgnoreRules)
                                 {
                                     <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@rule.PropertyPath</MudChip>
                                 }
@@ -655,6 +667,54 @@
     private static bool MatchesSearch(string value, string search) =>
         string.IsNullOrWhiteSpace(search) || value.Contains(search, StringComparison.OrdinalIgnoreCase);
 
+    private static bool HasProfileDefaultComparisonRules(ContractProfileOption? profile) =>
+        profile?.DefaultComparisonRules.HasDefaults == true;
+
+    private static IReadOnlyList<string> GetProfileDefaultRuleSummary(ComparisonRuleDefaults defaults)
+    {
+        List<string> summaries = new List<string>();
+        if (defaults.IgnoreCollectionOrder)
+        {
+            summaries.Add("Ignore collection order");
+        }
+
+        if (defaults.IgnoreStringCase)
+        {
+            summaries.Add("Ignore string case");
+        }
+
+        if (defaults.IgnoreTrailingWhitespaceAtEnd)
+        {
+            summaries.Add("Ignore trailing whitespace");
+        }
+
+        if (defaults.TreatNullAndEmptyCollectionsAsEqual)
+        {
+            summaries.Add("Null and empty collections equal");
+        }
+
+        if (defaults.IgnoreXmlNamespaces)
+        {
+            summaries.Add("Ignore XML namespaces");
+        }
+
+        if (defaults.IgnoreRules.Count > 0)
+        {
+            summaries.Add($"Ignore paths: {defaults.IgnoreRules.Count}");
+        }
+
+        if (defaults.SmartIgnoreRules.Count > 0)
+        {
+            summaries.Add($"Smart ignores: {defaults.SmartIgnoreRules.Count}");
+        }
+
+        if (defaults.MaskRules.Count > 0)
+        {
+            summaries.Add($"Masks: {defaults.MaskRules.Count}");
+        }
+
+        return summaries;
+    }
     private static string FormatIgnoreRules(IReadOnlyList<IgnoreRuleDefinition> rules) =>
         string.Join(Environment.NewLine, rules.Select(rule => rule.PropertyPath));
 
@@ -783,3 +843,4 @@
             Array.Empty<EndpointOption>(),
             Array.Empty<RequestComparisonPresetOption>());
 }
+

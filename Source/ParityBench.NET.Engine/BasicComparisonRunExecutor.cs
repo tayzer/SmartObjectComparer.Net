@@ -164,8 +164,8 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         RunExecutionCounters counters,
         CancellationToken cancellationToken)
     {
-        Task<EndpointExecutionResult> endpointATask = ExecuteEndpointAsync(run, request, EndpointSlot.A, contractProfile, counters, cancellationToken);
-        Task<EndpointExecutionResult> endpointBTask = ExecuteEndpointAsync(run, request, EndpointSlot.B, contractProfile, counters, cancellationToken);
+        Task<EndpointExecutionResult> endpointATask = ExecuteEndpointAsync(run, comparisonOptions, request, EndpointSlot.A, contractProfile, counters, cancellationToken);
+        Task<EndpointExecutionResult> endpointBTask = ExecuteEndpointAsync(run, comparisonOptions, request, EndpointSlot.B, contractProfile, counters, cancellationToken);
 
         await Task.WhenAll(endpointATask, endpointBTask).ConfigureAwait(false);
 
@@ -201,6 +201,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
     }
     private async Task<EndpointExecutionResult> ExecuteEndpointAsync(
         ComparisonRun run,
+        RunOptions comparisonOptions,
         RequestItem request,
         EndpointSlot endpoint,
         IContractProfile? contractProfile,
@@ -239,7 +240,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                     response.StatusCode,
                     response.ContentType,
                     response.Body,
-                    run.Options.Comparison.MaskRules,
+                    comparisonOptions.Comparison.MaskRules,
                     counters,
                     cancellationToken)
                     .ConfigureAwait(false);
@@ -516,16 +517,17 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         IContractProfile profile)
     {
         ComparisonOptions current = options.Comparison;
+        ComparisonRuleDefaults profileDefaults = profile.DefaultComparisonRules;
         ComparisonOptions comparisonOptions = new ComparisonOptions(
-            current.IgnoreCollectionOrder,
-            current.IgnoreStringCase,
-            current.IgnoreTrailingWhitespaceAtEnd,
-            current.TreatNullAndEmptyCollectionsAsEqual,
-            current.IgnoreXmlNamespaces,
+            profileDefaults.IgnoreCollectionOrder || current.IgnoreCollectionOrder,
+            profileDefaults.IgnoreStringCase || current.IgnoreStringCase,
+            profileDefaults.IgnoreTrailingWhitespaceAtEnd || current.IgnoreTrailingWhitespaceAtEnd,
+            profileDefaults.TreatNullAndEmptyCollectionsAsEqual || current.TreatNullAndEmptyCollectionsAsEqual,
+            profileDefaults.IgnoreXmlNamespaces || current.IgnoreXmlNamespaces,
             current.MaxDifferences,
-            profile.DefaultIgnoreRules.Concat(current.IgnoreRules),
-            current.SmartIgnoreRules,
-            current.MaskRules);
+            profileDefaults.IgnoreRules.Concat(current.IgnoreRules),
+            profileDefaults.SmartIgnoreRules.Concat(current.SmartIgnoreRules),
+            profileDefaults.MaskRules.Concat(current.MaskRules));
 
         return new RunOptions(
             options.RequestBatch,
@@ -675,4 +677,5 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             new EndpointExecutionResult(endpoint, null, errorMessage);
     }
 }
+
 

@@ -102,6 +102,30 @@ public sealed class ContractProfileRunExecutorTests
     }
 
     [TestMethod]
+    public async Task ExecuteAsync_WhenProfileDefaultIgnoresCollectionOrder_AppliesDefaultWithRunOptionsUnset()
+    {
+        RequestItem request = new RequestItem("one.xml", "application/xml", 10);
+        InMemoryArtifactStore artifactStore = new InMemoryArtifactStore();
+        CollectionOrderingProfile profile = new CollectionOrderingProfile();
+        ResponseModelRegistry modelRegistry = new ResponseModelRegistry();
+        modelRegistry.Register<OrderedItemsResponse>("CanonicalModel");
+        CompareNetObjectsResponseComparer comparer = new CompareNetObjectsResponseComparer(
+            artifactStore,
+            new JsonXmlResponseBodyDeserializer(modelRegistry));
+        BasicComparisonRunExecutor executor = new BasicComparisonRunExecutor(
+            new FakeRequestBatchStore(CreateManifest(request), "<request />"),
+            new CapturingEndpointRequestSender(_ => "<ok />"),
+            artifactStore,
+            new FakeRunDetailStore(),
+            comparer,
+            CreateRegistry(profile));
+
+        RunResultSummary summary = await executor.ExecuteAsync(CreateRun(), new CapturingProgressReporter());
+
+        Assert.AreEqual(1, summary.EqualPairs);
+        Assert.AreEqual(0, summary.DifferentPairs);
+    }
+    [TestMethod]
     public async Task ExecuteAsync_WhenUsingBuiltInSampleProfile_ComparesCanonicalArtifacts()
     {
         RequestItem request = new RequestItem("one.xml", "application/xml", 10);
@@ -202,7 +226,9 @@ public sealed class ContractProfileRunExecutorTests
 
         public string CanonicalResponseContentType => "application/json";
 
-        public IReadOnlyList<IgnoreRuleDefinition> DefaultIgnoreRules => Array.Empty<IgnoreRuleDefinition>();
+        public virtual IReadOnlyList<IgnoreRuleDefinition> DefaultIgnoreRules => DefaultComparisonRules.IgnoreRules;
+
+        public virtual ComparisonRuleDefaults DefaultComparisonRules { get; } = new ComparisonRuleDefaults();
 
         public IReadOnlyDictionary<string, string> CanonicalToEndpointResponseMaskPathMap => new Dictionary<string, string>();
 
@@ -246,11 +272,33 @@ public sealed class ContractProfileRunExecutorTests
             ValueTask.FromResult(CreateNormalizedResponse());
 
         protected NormalizedContractResponse CreateNormalizedResponse() =>
+            CreateNormalizedResponse("{\"id\":1}");
+
+        protected NormalizedContractResponse CreateNormalizedResponse(string json) =>
             new NormalizedContractResponse(
-                ContractPayload.FromBytes(Encoding.UTF8.GetBytes("{\"id\":1}"), PayloadFormat.Json, "application/json"),
+                ContractPayload.FromBytes(Encoding.UTF8.GetBytes(json), PayloadFormat.Json, "application/json"),
                 ProfileId);
     }
 
+    private sealed class CollectionOrderingProfile : FakeContractProfile
+    {
+        public override ComparisonRuleDefaults DefaultComparisonRules { get; } = new ComparisonRuleDefaults(ignoreCollectionOrder: true);
+
+        protected override ValueTask<NormalizedContractResponse> NormalizeEndpointAResponseAsync(
+            ContractResponseNormalizationContext context,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(CreateNormalizedResponse("{\"items\":[\"a\",\"b\"]}"));
+
+        protected override ValueTask<NormalizedContractResponse> NormalizeEndpointBResponseAsync(
+            ContractResponseNormalizationContext context,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(CreateNormalizedResponse("{\"items\":[\"b\",\"a\"]}"));
+    }
+
+    private sealed class OrderedItemsResponse
+    {
+        public IReadOnlyList<string> Items { get; init; } = Array.Empty<string>();
+    }
     private sealed class ThrowingNormalizationProfile : FakeContractProfile
     {
         protected override ValueTask<NormalizedContractResponse> NormalizeEndpointAResponseAsync(
@@ -441,5 +489,7 @@ public sealed class ContractProfileRunExecutorTests
             Task.CompletedTask;
     }
 }
+
+
 
 

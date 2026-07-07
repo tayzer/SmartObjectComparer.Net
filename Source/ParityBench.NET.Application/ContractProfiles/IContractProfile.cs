@@ -70,6 +70,11 @@ public interface IContractProfile
     IReadOnlyList<IgnoreRuleDefinition> DefaultIgnoreRules { get; }
 
     /// <summary>
+    /// Gets comparison defaults that should apply whenever this profile is selected.
+    /// </summary>
+    ComparisonRuleDefaults DefaultComparisonRules { get; }
+
+    /// <summary>
     /// Gets canonical-to-endpoint response mask path mappings owned by this profile.
     /// </summary>
     IReadOnlyDictionary<string, string> CanonicalToEndpointResponseMaskPathMap { get; }

@@ -46,6 +46,7 @@ public sealed class RequestComparisonDefaultsServiceTests
         Assert.AreEqual("customer/soap", profile.EndpointASuggestedEndpointId);
         Assert.AreEqual("customer/json", profile.EndpointBSuggestedEndpointId);
         Assert.AreEqual("TraceId", profile.DefaultIgnoreRules.Single().PropertyPath);
+        Assert.AreEqual("TraceId", profile.DefaultComparisonRules.IgnoreRules.Single().PropertyPath);
     }
 
     [TestMethod]
@@ -165,7 +166,7 @@ public sealed class RequestComparisonDefaultsServiceTests
             ProfileId = profileId;
             EndpointA = new ContractEndpointProfile(PayloadFormat.Xml, "application/xml", PayloadFormat.Xml, suggestedEndpointAId);
             EndpointB = new ContractEndpointProfile(PayloadFormat.Json, "application/json", PayloadFormat.Json, suggestedEndpointBId);
-            DefaultIgnoreRules = defaultIgnoreRules;
+            DefaultComparisonRules = new ComparisonRuleDefaults(ignoreRules: defaultIgnoreRules);
         }
 
         public string ProfileId { get; }
@@ -190,7 +191,9 @@ public sealed class RequestComparisonDefaultsServiceTests
 
         public string CanonicalResponseContentType => "application/json";
 
-        public IReadOnlyList<IgnoreRuleDefinition> DefaultIgnoreRules { get; }
+        public IReadOnlyList<IgnoreRuleDefinition> DefaultIgnoreRules => DefaultComparisonRules.IgnoreRules;
+
+        public ComparisonRuleDefaults DefaultComparisonRules { get; }
 
         public IReadOnlyDictionary<string, string> CanonicalToEndpointResponseMaskPathMap => new Dictionary<string, string>();
 
@@ -207,3 +210,5 @@ public sealed class RequestComparisonDefaultsServiceTests
             throw new NotSupportedException();
     }
 }
+
+

@@ -1,8 +1,9 @@
-﻿using System.Text;
+using System.Text;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 using ParityBench.NET.Application.ContractProfiles;
+using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Infrastructure;
@@ -68,6 +69,51 @@ public sealed class ContractProfileInfrastructureTests
         Assert.AreEqual("SimpleModel", profile.ResponseModelName);
     }
 
+    [TestMethod]
+    public void Create_WhenLegacyDefaultIgnoreRulesAreProvided_ProjectsThemIntoComparisonDefaults()
+    {
+        IContractProfile profile = new ContractProfile<
+            SampleSoapCustomerLookupRequestEnvelope,
+            SampleAlternateJsonCustomerLookupRequest,
+            SampleSoapCustomerLookupResponseEnvelope,
+            SampleAlternateJsonCustomerLookupResponse>(
+            new JsonXmlContractPayloadSerializer(),
+            "legacy-profile",
+            "SimpleModel",
+            _ => new SampleAlternateJsonCustomerLookupRequest(),
+            _ => new SampleSoapCustomerLookupResponseEnvelope(),
+            defaultIgnoreRules: new[] { new IgnoreRuleDefinition("TraceId") });
+
+        Assert.AreEqual("TraceId", profile.DefaultIgnoreRules.Single().PropertyPath);
+        Assert.AreSame(profile.DefaultIgnoreRules, profile.DefaultComparisonRules.IgnoreRules);
+    }
+
+    [TestMethod]
+    public void Create_WhenComparisonDefaultsAreProvided_ExposesGlobalAndRuleDefaults()
+    {
+        IContractProfile profile = new ContractProfile<
+            SampleSoapCustomerLookupRequestEnvelope,
+            SampleAlternateJsonCustomerLookupRequest,
+            SampleSoapCustomerLookupResponseEnvelope,
+            SampleAlternateJsonCustomerLookupResponse>(
+            new JsonXmlContractPayloadSerializer(),
+            "defaults-profile",
+            "SimpleModel",
+            _ => new SampleAlternateJsonCustomerLookupRequest(),
+            _ => new SampleSoapCustomerLookupResponseEnvelope(),
+            defaultComparisonRules: new ComparisonRuleDefaults(
+                ignoreCollectionOrder: true,
+                ignoreStringCase: true,
+                ignoreRules: new[] { new IgnoreRuleDefinition("SourceSystem") },
+                smartIgnoreRules: new[] { new SmartIgnoreRuleDefinition(SmartIgnoreRuleKind.PropertyName, "TraceId") },
+                maskRules: new[] { new MaskRuleDefinition("Token") }));
+
+        Assert.IsTrue(profile.DefaultComparisonRules.IgnoreCollectionOrder);
+        Assert.IsTrue(profile.DefaultComparisonRules.IgnoreStringCase);
+        Assert.AreEqual("SourceSystem", profile.DefaultIgnoreRules.Single().PropertyPath);
+        Assert.AreEqual("TraceId", profile.DefaultComparisonRules.SmartIgnoreRules.Single().Value);
+        Assert.AreEqual("Token", profile.DefaultComparisonRules.MaskRules.Single().PropertyPath);
+    }
     [TestMethod]
     public async Task SerializeAsync_WhenJsonPayloadIsWritten_WritesToDestinationStream()
     {
