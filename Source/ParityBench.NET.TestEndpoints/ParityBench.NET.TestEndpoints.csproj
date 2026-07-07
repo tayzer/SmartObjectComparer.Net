@@ -4,4 +4,8 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\ParityBench.NET.ClientCustomerLookupExample\ParityBench.NET.ClientCustomerLookupExample.csproj" />
+  </ItemGroup>
+
 </Project>

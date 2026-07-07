@@ -1,11 +1,11 @@
 using System.IO;
 using System.Net.Http;
 using System.Windows;
-
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using MudBlazor.Services;
-
+using ParityBench.NET.ClientCustomerLookupExample;
 using ParityBench.NET.Application.AcceptedDifferences;
 using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.Application.Reports;
@@ -46,7 +46,8 @@ public partial class App : System.Windows.Application
                 string fixtureBaseUrl = context.Configuration["ParityBench:RequestDefaults:FixtureBaseUrl"]
                     ?? RequestComparisonFixtureDefaults.DefaultFixtureBaseUrl;
 
-                RegisterV2Services(services, workspaceRoot, fixtureBaseUrl, context.Configuration["ParityBench:AcceptedDifferences:StorePath"]);
+                services.AddClientCustomerLookupExample(context.Configuration);
+                RegisterV2Services(services, workspaceRoot, fixtureBaseUrl, context.Configuration["ParityBench:AcceptedDifferences:StorePath"], context.Configuration);
             })
             .Build();
 
@@ -68,7 +69,26 @@ public partial class App : System.Windows.Application
         base.OnExit(e);
     }
 
-    private static void RegisterV2Services(IServiceCollection services, string workspaceRoot, string fixtureBaseUrl, string? acceptedDifferenceStorePath)
+    private static string FindManualRunRoot()
+    {
+        foreach (string candidateRoot in new[] { Environment.CurrentDirectory, AppContext.BaseDirectory })
+        {
+            DirectoryInfo? directory = new DirectoryInfo(candidateRoot);
+            while (directory is not null)
+            {
+                string manualRunRoot = Path.Combine(directory.FullName, "Examples", "ParityBench.NET.ManualRuns");
+                if (Directory.Exists(manualRunRoot))
+                {
+                    return manualRunRoot;
+                }
+
+                directory = directory.Parent;
+            }
+        }
+
+        return Path.Combine("Examples", "ParityBench.NET.ManualRuns");
+    }
+    private static void RegisterV2Services(IServiceCollection services, string workspaceRoot, string fixtureBaseUrl, string? acceptedDifferenceStorePath, IConfiguration configuration)
     {
         Directory.CreateDirectory(workspaceRoot);
         services.AddSingleton(new HttpClient());
@@ -87,6 +107,7 @@ public partial class App : System.Windows.Application
         InMemoryRequestComparisonEndpointRegistry endpointDefaults = new InMemoryRequestComparisonEndpointRegistry();
         InMemoryRequestComparisonPresetRegistry presetDefaults = new InMemoryRequestComparisonPresetRegistry();
         RequestComparisonFixtureDefaults.Register(endpointDefaults, presetDefaults, fixtureBaseUrl);
+        ClientCustomerLookupExampleDefaults.Register(endpointDefaults, presetDefaults, configuration, FindManualRunRoot());
         services.AddSingleton<IRequestComparisonEndpointRegistry>(endpointDefaults);
         services.AddSingleton<IRequestComparisonPresetRegistry>(presetDefaults);
         services.AddSingleton<IResponseModelRegistry>(_ =>
@@ -94,12 +115,14 @@ public partial class App : System.Windows.Application
             ResponseModelRegistry registry = new ResponseModelRegistry();
             BuiltInResponseModelRegistration.Register(registry);
             ConsumerReportFixtureResponseModelRegistration.Register(registry);
+            registry.RegisterClientCustomerLookupResponseModel();
             return registry;
         });
         services.AddSingleton<IContractProfileRegistry>(serviceProvider =>
         {
             ContractProfileRegistry registry = new ContractProfileRegistry();
             registry.Register(BuiltInContractProfiles.CreateSampleSoapToJson(serviceProvider.GetRequiredService<IContractPayloadSerializer>()));
+            registry.RegisterClientCustomerLookupProfile(serviceProvider);
             return registry;
         });
         services.AddSingleton<IComparisonRunExecutor>(serviceProvider =>

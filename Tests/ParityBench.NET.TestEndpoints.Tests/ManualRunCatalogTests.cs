@@ -48,7 +48,11 @@ public sealed class ManualRunCatalogTests
             .Select(reference => reference.Attribute("Include")?.Value ?? string.Empty)
             .ToArray();
 
-        CollectionAssert.AreEqual(Array.Empty<string>(), projectReferences);
+        string[] v1References = projectReferences
+            .Where(reference => reference.Contains("ComparisonTool.", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        CollectionAssert.AreEqual(Array.Empty<string>(), v1References);
     }
 
     private static string GetRepositoryRoot()

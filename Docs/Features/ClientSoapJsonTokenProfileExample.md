@@ -13,6 +13,39 @@ This example shows how a client would set up one contract-profile comparison whe
 
 The important design choice is that the selected response model is the final canonical JSON response model, not the SOAP response envelope.
 
+## Can This Be Driven From Appsettings?
+
+Yes. Put environment-specific values in appsettings and keep behavior in the profile.
+
+Use appsettings for:
+
+- Endpoint A URL.
+- Endpoint A static headers such as `SOAPAction` and `Content-Type: text/xml`.
+- Endpoint B URL.
+- Endpoint B static headers such as the endpoint subscription key.
+- Token client 1 URL and subscription key.
+- Token client 2 URL and subscription key.
+- Optional timeout, retry, or client-specific HTTP settings.
+
+Keep these in code or a registered client package:
+
+- SOAP request and response models.
+- Endpoint B JSON request and response models.
+- Canonical JSON response model.
+- Mapster mapping configuration.
+- The contract profile ID and profile behavior.
+- Token orchestration logic.
+
+The profile links to appsettings by using stable endpoint IDs and an options section name. In this example:
+
+| Profile value | Appsettings value |
+|---|---|
+| `suggestedEndpointAId: "client/customer-lookup/soap"` | configured Endpoint A ID or name |
+| `suggestedEndpointBId: "client/customer-lookup/json"` | configured Endpoint B ID or name |
+| `ClientCustomerLookup:Tokens` | token provider options section |
+
+That lets the client deploy one profile implementation, edit appsettings per environment, select the profile, and run the tool.
+
 ## What The Client Selects In The Tool
 
 Use these values in the run:
@@ -359,10 +392,21 @@ public static class ClientCustomerLookupProfile
 }
 ```
 
+## DI Checklist
+
+In addition to appsettings, the host must register the client profile components with DI:
+
+1. Bind token/client options from `ClientCustomerLookup:Tokens`.
+2. Register Mapster configuration and `IMapper`.
+3. Register the token provider and its `HttpClient`.
+4. Register `ClientCustomerLookupResponse` in `IResponseModelRegistry`.
+5. Register the contract profile in `IContractProfileRegistry`.
+6. Register endpoint options from appsettings if the host does not already do this.
+7. Keep built-in models and profiles when adding the client registrations.
+
 ## Host Registration
 
 Register the canonical response model, Mapster mappings, token provider, and contract profile in the host composition root.
-
 ```csharp
 using Mapster;
 using MapsterMapper;
@@ -402,9 +446,32 @@ services.AddSingleton<IContractProfileRegistry>(serviceProvider =>
 
 If the host already registers built-in response models or profiles, add the client model and profile to the existing registry instead of replacing it.
 
+For an appsettings-first setup, the host should also load endpoint options from configuration into the endpoint registry. Conceptually:
+
+```csharp
+services.AddSingleton<IRequestComparisonEndpointRegistry>(serviceProvider =>
+{
+    InMemoryRequestComparisonEndpointRegistry registry = new();
+
+    foreach (ClientEndpointOption endpoint in configuration
+        .GetSection("RequestComparison:EndpointOptions:Endpoints")
+        .Get<List<ClientEndpointOption>>() ?? new())
+    {
+        registry.Register(new EndpointOption(
+            endpoint.Id,
+            endpoint.Name,
+            new Uri(endpoint.Url)));
+    }
+
+    return registry;
+});
+```
+
+The endpoint registry provides selectable endpoint URLs. Header defaults are applied by the run setup path in the current request-comparison host. If you are wiring the newer V2 host directly, make sure the same appsettings endpoint headers are carried into the run request or endpoint definition before execution.
+
 ## Configuration
 
-Keep secrets outside the profile and outside committed appsettings files. The example below shows the shape only.
+Keep secrets outside the profile and outside committed appsettings files. The example below shows the shape only. Use environment variables, user secrets, Key Vault, or the client's existing secret provider for the actual subscription keys.
 
 ```json
 {
@@ -419,31 +486,47 @@ Keep secrets outside the profile and outside committed appsettings files. The ex
 }
 ```
 
-Endpoint configuration should still carry endpoint-specific headers:
+Endpoint configuration should carry endpoint-specific URLs and static headers. The profile's suggested endpoint IDs should match these configured endpoint IDs or names.
 
 ```json
 {
-  "Endpoints": [
-    {
-      "Id": "client/customer-lookup/soap",
-      "Url": "https://endpoint-a.example.com/customerLookup",
-      "Method": "POST",
-      "Headers": {
-        "SOAPAction": "urn:ClientCustomerLookup",
-        "Content-Type": "text/xml"
-      }
+  "RequestComparison": {
+    "EndpointOptions": {
+      "AllowCustom": true,
+      "Endpoints": [
+        {
+          "Id": "client/customer-lookup/soap",
+          "Name": "Client Customer Lookup SOAP",
+          "Url": "https://endpoint-a.example.com/customerLookup",
+          "ContentType": "text/xml",
+          "DefaultHeaders": {
+            "SOAPAction": "urn:ClientCustomerLookup"
+          }
+        },
+        {
+          "Id": "client/customer-lookup/json",
+          "Name": "Client Customer Lookup JSON",
+          "Url": "https://endpoint-b.example.com/customer-lookup",
+          "ContentType": "application/json",
+          "DefaultHeaders": {
+            "Ocp-Apim-Subscription-Key": "<from secret store>"
+          }
+        }
+      ]
     },
-    {
-      "Id": "client/customer-lookup/json",
-      "Url": "https://endpoint-b.example.com/customer-lookup",
-      "Method": "POST",
-      "Headers": {
-        "Ocp-Apim-Subscription-Key": "<from secret store>"
+    "Profiles": {
+      "ClientCustomerLookup": {
+        "ResponseModel": "ClientCustomerLookupResponse",
+        "ProfileId": "client.customer-lookup.soap-json.tokens.v1",
+        "EndpointAId": "client/customer-lookup/soap",
+        "EndpointBId": "client/customer-lookup/json"
       }
     }
-  ]
+  }
 }
 ```
+
+The `Profiles` section is optional unless your host wants to preselect or validate a named client setup. The contract profile itself still needs to be registered in code so the tool has the Mapster mapping and token orchestration behavior.
 
 ## Expected Runtime Flow
 

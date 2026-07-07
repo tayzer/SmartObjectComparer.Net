@@ -136,6 +136,8 @@ public sealed class RunWorkflowViewTests
         Assert.AreEqual("https://fixture.example.test/consumer-report/json/a", dataSource.LastRequest.EndpointA.ToString().TrimEnd('/'));
         Assert.AreEqual("https://fixture.example.test/consumer-report/json/b", dataSource.LastRequest.EndpointB.ToString().TrimEnd('/'));
         Assert.AreEqual("ConsumerReportJsonResponse", dataSource.LastRequest.ModelName);
+        Assert.AreEqual("application/json", dataSource.LastRequest.EndpointAHeaders["Content-Type"]);
+        Assert.AreEqual("fixture-key", dataSource.LastRequest.EndpointBHeaders["X-Fixture-Key"]);
         Assert.IsTrue(dataSource.LastRequest.ComparisonOptions.IgnoreStringCase);
         Assert.AreEqual("Subject.NationalIdentifier", dataSource.LastRequest.ComparisonOptions.MaskRules.Single().PropertyPath);
     }
@@ -322,7 +324,9 @@ public sealed class RunWorkflowViewTests
                         new ComparisonOptions(
                             ignoreStringCase: true,
                             maskRules: new[] { new MaskRuleDefinition("Subject.NationalIdentifier", 4) }),
-                        new RequestExecutionOptions()),
+                        new RequestExecutionOptions(),
+                        new Dictionary<string, string> { ["Content-Type"] = "application/json" },
+                        new Dictionary<string, string> { ["X-Fixture-Key"] = "fixture-key" }),
                 });
 
         private static RunOptions CreateOptions() =>

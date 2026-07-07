@@ -64,7 +64,8 @@ public sealed record ContractProfileOption
 public sealed record EndpointOption(
     string EndpointId,
     string Label,
-    Uri Url);
+    Uri Url,
+    IReadOnlyDictionary<string, string>? DefaultHeaders = null);
 
 public sealed record RequestComparisonPresetOption(
     string PresetId,
@@ -75,4 +76,6 @@ public sealed record RequestComparisonPresetOption(
     string ModelName,
     string? ContractProfileId,
     ComparisonOptions ComparisonOptions,
-    RequestExecutionOptions RequestExecutionOptions);
+    RequestExecutionOptions RequestExecutionOptions,
+    IReadOnlyDictionary<string, string>? EndpointAHeaders = null,
+    IReadOnlyDictionary<string, string>? EndpointBHeaders = null);

@@ -369,6 +369,8 @@
         contractProfileId = preset.ContractProfileId ?? string.Empty;
         ApplyComparisonOptions(preset.ComparisonOptions);
         contentTypeOverride = preset.RequestExecutionOptions.ContentTypeOverride ?? string.Empty;
+        endpointAHeaders = FormatHeaders(preset.EndpointAHeaders);
+        endpointBHeaders = FormatHeaders(preset.EndpointBHeaders);
         RefreshAvailableProfiles(clearInvalidSelection: false);
         await Task.CompletedTask;
     }
@@ -625,11 +627,13 @@
         if (suggestedEndpointA is not null)
         {
             endpointA = suggestedEndpointA.Url.ToString();
+            endpointAHeaders = FormatHeaders(suggestedEndpointA.DefaultHeaders);
         }
 
         if (suggestedEndpointB is not null)
         {
             endpointB = suggestedEndpointB.Url.ToString();
+            endpointBHeaders = FormatHeaders(suggestedEndpointB.DefaultHeaders);
         }
     }
 
@@ -812,6 +816,11 @@
 
         return parsed;
     }
+
+    private static string FormatHeaders(IReadOnlyDictionary<string, string>? headers) =>
+        headers is null || headers.Count == 0
+            ? string.Empty
+            : string.Join(Environment.NewLine, headers.Select(header => $"{header.Key}: {header.Value}"));
 
     private static IReadOnlyDictionary<string, string> ParseHeaders(string text)
     {

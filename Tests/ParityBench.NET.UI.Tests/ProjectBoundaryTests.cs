@@ -30,7 +30,9 @@ public sealed class ProjectBoundaryTests
     [TestMethod]
     public void ProjectBoundary_WhenProjectIsDesktop_ReferencesOnlyV2Projects()
     {
-        string[] expectedReferences = ExpectedHostReferences();
+        string[] expectedReferences = ExpectedHostReferences()
+            .Concat(new[] { @"..\ParityBench.NET.ClientCustomerLookupExample\ParityBench.NET.ClientCustomerLookupExample.csproj" })
+            .ToArray();
 
         AssertProjectReferences("ParityBench.NET.Desktop", "ParityBench.NET.Desktop.csproj", expectedReferences);
     }

@@ -1,3 +1,4 @@
+using ParityBench.NET.TestEndpoints.ClientCustomerLookup;
 using ParityBench.NET.TestEndpoints.ConsumerReports;
 using ParityBench.NET.TestEndpoints.SampleCustomerLookup;
 
@@ -18,6 +19,7 @@ app.MapGet("/health", () => Results.Ok(new
 
 app.MapConsumerReportEndpoints();
 app.MapSampleCustomerLookupEndpoints();
+app.MapClientCustomerLookupEndpoints();
 
 app.Run();
 
