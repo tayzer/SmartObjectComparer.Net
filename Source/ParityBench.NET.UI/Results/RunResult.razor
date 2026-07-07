@@ -6,6 +6,7 @@
 @using Microsoft.AspNetCore.Components
 @using Microsoft.JSInterop
 @inject IRunResultsViewDataSource DataSource
+@inject IAcceptedDifferenceUseCases AcceptedDifferences
 @inject IJSRuntime JS
 
 <style>
@@ -256,6 +257,8 @@ else if (run is not null)
                         }
                     </MudTabPanel>
                     <MudTabPanel Text="Options" Icon="@Icons.Material.Filled.Tune">
+                        <AcceptedDifferenceProfilesPanel OnProfilesChanged="ReloadAcceptedMatchesAsync" />
+                        <MudDivider Class="my-3" />
                         <MudStack Row="true" Spacing="1" Class="flex-wrap">
                             <MudChip T="string" Size="Size.Small">Max differences @run.Options.Comparison.MaxDifferences</MudChip>
                             <MudChip T="string" Size="Size.Small">Ignore namespaces @FormatBool(run.Options.Comparison.IgnoreXmlNamespaces)</MudChip>
@@ -403,7 +406,14 @@ else if (run is not null)
                             </MudStack>
                             <MudDivider />
                             <div class="pa-4">
-                                <MudTextField T="string" @bind-Value="structuredSearchFilter" Placeholder="Search differences..." Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Style="min-width: 16rem;" Class="mb-3" />
+                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="flex-wrap mb-3">
+                                    <MudTextField T="string" @bind-Value="structuredSearchFilter" Placeholder="Search differences..." Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Style="min-width: 16rem;" />
+                                    <MudSwitch T="bool" @bind-Value="hideAcceptedDifferences" Color="Color.Primary" Label="Hide accepted / known bugs" />
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Default">@GetTrackingCount(null) New</MudChip>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success">@GetTrackingCount(AcceptedDifferenceStatus.AcceptedDifference) Accepted</MudChip>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">@GetTrackingCount(AcceptedDifferenceStatus.KnownBug) Known Bugs</MudChip>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info">@GetTrackingCount(AcceptedDifferenceStatus.FixedVerified) Fixed / Verified</MudChip>
+                                </MudStack>
                                 @{
                                     IReadOnlyList<StructuredDifferenceNode> structuredNodes = GetStructuredDifferenceTree(selectedPair);
                                 }
@@ -431,6 +441,33 @@ else if (run is not null)
             </MudPaper>
         }
 
+        @if (editingAcceptedDifference is not null)
+        {
+            <MudPaper Outlined="true" Class="pa-3">
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.subtitle2">Track Difference</MudText>
+                    <MudText Typo="Typo.body2"><strong>Property:</strong> @editingAcceptedDifference.PropertyPath</MudText>
+                    <MudSelect T="AcceptedDifferenceStatus" @bind-Value="acceptedDifferenceEditorStatus" Label="Classification" Variant="Variant.Outlined" Margin="Margin.Dense">
+                        <MudSelectItem Value="@AcceptedDifferenceStatus.AcceptedDifference">Accepted Difference</MudSelectItem>
+                        <MudSelectItem Value="@AcceptedDifferenceStatus.KnownBug">Known Bug</MudSelectItem>
+                        <MudSelectItem Value="@AcceptedDifferenceStatus.FixedVerified">Fixed / Verified</MudSelectItem>
+                    </MudSelect>
+                    @if (acceptedDifferenceEditorStatus == AcceptedDifferenceStatus.KnownBug)
+                    {
+                        <MudTextField T="string" @bind-Value="acceptedDifferenceEditorTicket" Label="Ticket ID" Variant="Variant.Outlined" Margin="Margin.Dense" Required="true" />
+                    }
+                    <MudTextField T="string" @bind-Value="acceptedDifferenceEditorNotes" Label="Notes" Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+                    @if (!string.IsNullOrWhiteSpace(acceptedDifferenceErrorMessage))
+                    {
+                        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Dense="true">@acceptedDifferenceErrorMessage</MudAlert>
+                    }
+                    <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                        <MudButton Variant="Variant.Text" OnClick="CloseAcceptedDifferenceEditor">Cancel</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!CanSaveAcceptedDifference)" OnClick="SaveAcceptedDifferenceAsync">Save</MudButton>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        }
         @if (!string.IsNullOrWhiteSpace(downloadErrorMessage)) { <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">@downloadErrorMessage</MudAlert> }
     </MudStack>
 }
@@ -477,6 +514,13 @@ else if (run is not null)
     private bool syncScrollInitialized;
     private string? lastSyncSignature;
     private DetailViewMode detailViewMode = DetailViewMode.Structured;
+    private Dictionary<string, AcceptedDifferenceProfile> acceptedDifferenceMatches = new Dictionary<string, AcceptedDifferenceProfile>(StringComparer.Ordinal);
+    private bool hideAcceptedDifferences;
+    private ComparisonDifference? editingAcceptedDifference;
+    private AcceptedDifferenceStatus acceptedDifferenceEditorStatus = AcceptedDifferenceStatus.AcceptedDifference;
+    private string acceptedDifferenceEditorNotes = string.Empty;
+    private string acceptedDifferenceEditorTicket = string.Empty;
+    private string? acceptedDifferenceErrorMessage;
 
     [Parameter] public RunId? RunId { get; set; }
     [Parameter] public int RefreshVersion { get; set; }
@@ -538,6 +582,7 @@ else if (run is not null)
         if (RunId is null) { return; }
         RunId runId = RunId.Value;
         detailPage = await DataSource.LoadRunDetailsAsync(runId, new RunDetailQuery(detailOffset, pageSize, ParseStatusFilter(statusFilter), searchFilter));
+        await ReloadAcceptedMatchesAsync();
     }
 
 
@@ -988,7 +1033,7 @@ else if (run is not null)
     }
 
     private IReadOnlyList<StructuredDifferenceNode> GetStructuredDifferenceTree(RequestPairResult pair) =>
-        BuildStructuredDifferenceTree(pair.Differences.Where(MatchesStructuredSearch));
+        BuildStructuredDifferenceTree(pair.Differences.Where(MatchesStructuredSearch).Where(MatchesAcceptedDifferenceVisibility));
 
     private static IReadOnlyList<StructuredDifferenceNode> BuildStructuredDifferenceTree(IEnumerable<ComparisonDifference> differences)
     {
@@ -1061,7 +1106,19 @@ else if (run is not null)
                     @foreach (ComparisonDifference difference in visibleDifferences)
                     {
                         <div class="v1-structured-diff-row">
-                            <div class="v1-structured-diff-cell v1-structured-diff-prop">@difference.PropertyPath</div>
+                            <div class="v1-structured-diff-cell v1-structured-diff-prop">
+                                <MudStack Spacing="1">
+                                    <code>@difference.PropertyPath</code>
+                                    <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                                        <MudChip T="string" Size="Size.Small" Color="@GetAcceptedDifferenceColor(difference)">@GetAcceptedDifferenceLabel(difference)</MudChip>
+                                        <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.BookmarkAdd" Disabled="@AcceptedDifferences.IsReadOnly" OnClick="@(() => OpenAcceptedDifferenceEditor(difference))">@(GetAcceptedDifferenceProfile(difference) is null ? "Track" : "Edit")</MudButton>
+                                        @if (GetAcceptedDifferenceProfile(difference) is not null && !AcceptedDifferences.IsReadOnly)
+                                        {
+                                            <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Error" OnClick="@(() => ClearAcceptedDifferenceAsync(difference))">Clear</MudButton>
+                                        }
+                                    </MudStack>
+                                </MudStack>
+                            </div>
                             <div class="v1-structured-diff-cell v1-diff-a">@(difference.ValueA ?? "null")</div>
                             <div class="v1-structured-diff-cell v1-diff-b">@(difference.ValueB ?? "null")</div>
                         </div>
@@ -1098,6 +1155,122 @@ else if (run is not null)
             || (difference.ValueA?.Contains(filter, StringComparison.OrdinalIgnoreCase) == true)
             || (difference.ValueB?.Contains(filter, StringComparison.OrdinalIgnoreCase) == true)
             || (difference.Message?.Contains(filter, StringComparison.OrdinalIgnoreCase) == true);
+    }
+
+    private async Task ReloadAcceptedMatchesAsync()
+    {
+        List<ComparisonDifference> differences = new List<ComparisonDifference>();
+        if (detailPage is not null)
+        {
+            differences.AddRange(detailPage.Items.SelectMany(item => item.Differences).Where(IsStructuredAcceptedDifferenceCandidate));
+        }
+
+        if (selectedPair is not null)
+        {
+            differences.AddRange(selectedPair.Differences.Where(IsStructuredAcceptedDifferenceCandidate));
+        }
+
+        acceptedDifferenceMatches = new Dictionary<string, AcceptedDifferenceProfile>(
+            await AcceptedDifferences.MatchAsync(differences),
+            StringComparer.Ordinal);
+    }
+
+    private bool MatchesAcceptedDifferenceVisibility(ComparisonDifference difference)
+    {
+        if (!hideAcceptedDifferences)
+        {
+            return true;
+        }
+
+        AcceptedDifferenceProfile? profile = GetAcceptedDifferenceProfile(difference);
+        return profile?.Status is not (AcceptedDifferenceStatus.AcceptedDifference or AcceptedDifferenceStatus.KnownBug);
+    }
+
+    private AcceptedDifferenceProfile? GetAcceptedDifferenceProfile(ComparisonDifference difference)
+    {
+        string fingerprint = AcceptedDifferences.CreateFingerprint(difference).Fingerprint;
+        return acceptedDifferenceMatches.GetValueOrDefault(fingerprint);
+    }
+
+    private string GetAcceptedDifferenceLabel(ComparisonDifference difference)
+    {
+        AcceptedDifferenceProfile? profile = GetAcceptedDifferenceProfile(difference);
+        return profile?.Status switch
+        {
+            AcceptedDifferenceStatus.AcceptedDifference => "Accepted",
+            AcceptedDifferenceStatus.KnownBug when !string.IsNullOrWhiteSpace(profile.TicketId) => $"Bug: {profile.TicketId}",
+            AcceptedDifferenceStatus.KnownBug => "Known Bug",
+            AcceptedDifferenceStatus.FixedVerified => "Fixed / Verified",
+            _ => "New",
+        };
+    }
+
+    private Color GetAcceptedDifferenceColor(ComparisonDifference difference) => GetAcceptedDifferenceProfile(difference)?.Status switch
+    {
+        AcceptedDifferenceStatus.AcceptedDifference => Color.Success,
+        AcceptedDifferenceStatus.KnownBug => Color.Warning,
+        AcceptedDifferenceStatus.FixedVerified => Color.Info,
+        _ => Color.Default,
+    };
+
+    private int GetTrackingCount(AcceptedDifferenceStatus? status)
+    {
+        IEnumerable<ComparisonDifference> differences = selectedPair?.Differences.Where(IsStructuredAcceptedDifferenceCandidate) ?? Array.Empty<ComparisonDifference>();
+        return status is null
+            ? differences.Count(difference => GetAcceptedDifferenceProfile(difference) is null)
+            : differences.Count(difference => GetAcceptedDifferenceProfile(difference)?.Status == status.Value);
+    }
+
+    private void OpenAcceptedDifferenceEditor(ComparisonDifference difference)
+    {
+        editingAcceptedDifference = difference;
+        AcceptedDifferenceProfile? profile = GetAcceptedDifferenceProfile(difference);
+        acceptedDifferenceEditorStatus = profile?.Status ?? AcceptedDifferenceStatus.AcceptedDifference;
+        acceptedDifferenceEditorNotes = profile?.Notes ?? string.Empty;
+        acceptedDifferenceEditorTicket = profile?.TicketId ?? string.Empty;
+        acceptedDifferenceErrorMessage = null;
+    }
+
+    private void CloseAcceptedDifferenceEditor()
+    {
+        editingAcceptedDifference = null;
+        acceptedDifferenceErrorMessage = null;
+    }
+
+    private bool CanSaveAcceptedDifference => editingAcceptedDifference is not null &&
+        (acceptedDifferenceEditorStatus != AcceptedDifferenceStatus.KnownBug || !string.IsNullOrWhiteSpace(acceptedDifferenceEditorTicket));
+
+    private async Task SaveAcceptedDifferenceAsync()
+    {
+        if (editingAcceptedDifference is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await AcceptedDifferences.SaveAsync(editingAcceptedDifference, acceptedDifferenceEditorStatus, acceptedDifferenceEditorNotes, acceptedDifferenceEditorTicket);
+            CloseAcceptedDifferenceEditor();
+            await ReloadAcceptedMatchesAsync();
+        }
+        catch (Exception ex)
+        {
+            acceptedDifferenceErrorMessage = ex.Message;
+        }
+    }
+
+    private async Task ClearAcceptedDifferenceAsync(ComparisonDifference difference)
+    {
+        await AcceptedDifferences.RemoveAsync(difference);
+        await ReloadAcceptedMatchesAsync();
+    }
+
+    private static bool IsStructuredAcceptedDifferenceCandidate(ComparisonDifference difference)
+    {
+        string path = difference.PropertyPath ?? string.Empty;
+        return !string.Equals(path, "HttpStatus", StringComparison.OrdinalIgnoreCase)
+            && !path.StartsWith("Body.", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(path, "BodyPreview", StringComparison.OrdinalIgnoreCase);
     }
 
     private bool MatchesCategoryFilter(RequestPairResult item) => string.Equals(categoryFilter, AllFilter, StringComparison.OrdinalIgnoreCase)

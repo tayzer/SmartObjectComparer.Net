@@ -1,3 +1,4 @@
+using ParityBench.NET.Domain.AcceptedDifferences;
 using ParityBench.NET.Domain.Runs;
 
 namespace ParityBench.NET.Domain.Reports;
@@ -18,7 +19,8 @@ public sealed record StaticReportManifest
         int detailPageSize,
         IReadOnlyList<StaticReportDetailPageInfo>? detailPages = null,
         StaticReportMetadata? metadata = null,
-        StaticReportAnalysisSnapshot? analysis = null)
+        StaticReportAnalysisSnapshot? analysis = null,
+        AcceptedDifferenceProfileStore? acceptedDifferences = null)
     {
         if (schemaVersion is < MinimumSupportedSchemaVersion or > CurrentSchemaVersion)
         {
@@ -42,6 +44,7 @@ public sealed record StaticReportManifest
         DetailPages = (detailPages ?? Array.Empty<StaticReportDetailPageInfo>()).ToList();
         Metadata = metadata;
         Analysis = analysis;
+        AcceptedDifferences = acceptedDifferences;
     }
 
     public int SchemaVersion { get; }
@@ -59,4 +62,6 @@ public sealed record StaticReportManifest
     public StaticReportMetadata? Metadata { get; }
 
     public StaticReportAnalysisSnapshot? Analysis { get; }
+
+    public AcceptedDifferenceProfileStore? AcceptedDifferences { get; }
 }

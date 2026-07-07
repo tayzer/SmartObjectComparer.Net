@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.DataProtection;
 
 using MudBlazor.Services;
 
+using ParityBench.NET.Application.AcceptedDifferences;
 using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Requests;
@@ -36,7 +37,7 @@ builder.Services.AddServerSideBlazor();
 builder.Services.AddMudServices();
 string fixtureBaseUrl = builder.Configuration["ParityBench:RequestDefaults:FixtureBaseUrl"]
     ?? RequestComparisonFixtureDefaults.DefaultFixtureBaseUrl;
-RegisterV2Services(builder.Services, workspaceRoot, fixtureBaseUrl);
+RegisterV2Services(builder.Services, workspaceRoot, fixtureBaseUrl, builder.Configuration["ParityBench:AcceptedDifferences:StorePath"]);
 
 WebApplication app = builder.Build();
 
@@ -54,13 +55,14 @@ app.MapFallbackToPage("/_Host");
 
 app.Run();
 
-static void RegisterV2Services(IServiceCollection services, string workspaceRoot, string fixtureBaseUrl)
+static void RegisterV2Services(IServiceCollection services, string workspaceRoot, string fixtureBaseUrl, string? acceptedDifferenceStorePath)
 {
     services.AddSingleton(new HttpClient());
     services.AddSingleton<IRequestBatchStore>(_ => new FileSystemRequestBatchStore(workspaceRoot));
     services.AddSingleton<IRunStore>(_ => new FileSystemRunStore(workspaceRoot));
     services.AddSingleton<IRunDetailStore>(_ => new FileSystemRunDetailStore(workspaceRoot));
     services.AddSingleton<IRunArtifactStore>(_ => new FileSystemRunArtifactStore(workspaceRoot));
+    services.AddSingleton<IAcceptedDifferenceUseCases>(_ => new FileSystemAcceptedDifferenceStore(workspaceRoot, acceptedDifferenceStorePath));
     services.AddSingleton<IEndpointRequestSender, HttpClientEndpointRequestSender>();
     services.AddSingleton<IRunCancellationRegistry, InMemoryRunCancellationRegistry>();
     services.AddSingleton<IRunIdGenerator, GuidRunIdGenerator>();

@@ -3,9 +3,11 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
+using ParityBench.NET.Application.AcceptedDifferences;
 using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Results;
+using ParityBench.NET.Domain.AcceptedDifferences;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Reports;
 using ParityBench.NET.Domain.Requests;
@@ -24,14 +26,17 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
     private const int TopAffectedObjectLimit = 25;
     private readonly IComparisonRunResultUseCases resultUseCases;
     private readonly IRunArtifactStore artifactStore;
+    private readonly IAcceptedDifferenceUseCases? acceptedDifferenceUseCases;
     private readonly JsonSerializerOptions jsonOptions;
 
     public StaticReportBundleWriter(
         IComparisonRunResultUseCases resultUseCases,
-        IRunArtifactStore artifactStore)
+        IRunArtifactStore artifactStore,
+        IAcceptedDifferenceUseCases? acceptedDifferenceUseCases = null)
     {
         this.resultUseCases = resultUseCases ?? throw new ArgumentNullException(nameof(resultUseCases));
         this.artifactStore = artifactStore ?? throw new ArgumentNullException(nameof(artifactStore));
+        this.acceptedDifferenceUseCases = acceptedDifferenceUseCases;
         jsonOptions = StaticReportJsonOptions.Create();
     }
 
@@ -116,6 +121,13 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
         StaticReportDifferenceIndex differenceIndex = StaticReportDifferenceIndexBuilder.Build(analysisItems);
         await WriteJsonAsync(Path.Combine(analysisDirectory, DifferenceIndexFileName), differenceIndex, cancellationToken).ConfigureAwait(false);
 
+        AcceptedDifferenceProfileStore? acceptedDifferenceSnapshot = acceptedDifferenceUseCases is null
+            ? null
+            : new AcceptedDifferenceProfileStore
+            {
+                Profiles = (await acceptedDifferenceUseCases.ListAsync(cancellationToken).ConfigureAwait(false)).ToList(),
+            };
+
         DateTimeOffset generatedAtValue = generatedAt ?? DateTimeOffset.UtcNow;
         StaticReportManifest manifest = new StaticReportManifest(
             StaticReportManifest.CurrentSchemaVersion,
@@ -125,7 +137,8 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
             detailPageSize,
             pageInfos,
             StaticReportMetadata.FromRun(run, generatedAtValue),
-            BuildAnalysisSnapshot(analysisItems, differenceIndexPath));
+            BuildAnalysisSnapshot(analysisItems, differenceIndexPath),
+            acceptedDifferenceSnapshot);
 
         string manifestPath = Path.Combine(normalizedOutputDirectory, ManifestFileName);
         await WriteJsonAsync(manifestPath, manifest, cancellationToken).ConfigureAwait(false);

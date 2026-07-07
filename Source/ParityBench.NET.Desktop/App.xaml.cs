@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using MudBlazor.Services;
 
+using ParityBench.NET.Application.AcceptedDifferences;
 using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Requests;
@@ -45,7 +46,7 @@ public partial class App : System.Windows.Application
                 string fixtureBaseUrl = context.Configuration["ParityBench:RequestDefaults:FixtureBaseUrl"]
                     ?? RequestComparisonFixtureDefaults.DefaultFixtureBaseUrl;
 
-                RegisterV2Services(services, workspaceRoot, fixtureBaseUrl);
+                RegisterV2Services(services, workspaceRoot, fixtureBaseUrl, context.Configuration["ParityBench:AcceptedDifferences:StorePath"]);
             })
             .Build();
 
@@ -67,7 +68,7 @@ public partial class App : System.Windows.Application
         base.OnExit(e);
     }
 
-    private static void RegisterV2Services(IServiceCollection services, string workspaceRoot, string fixtureBaseUrl)
+    private static void RegisterV2Services(IServiceCollection services, string workspaceRoot, string fixtureBaseUrl, string? acceptedDifferenceStorePath)
     {
         Directory.CreateDirectory(workspaceRoot);
         services.AddSingleton(new HttpClient());
@@ -75,6 +76,7 @@ public partial class App : System.Windows.Application
         services.AddSingleton<IRunStore>(_ => new FileSystemRunStore(workspaceRoot));
         services.AddSingleton<IRunDetailStore>(_ => new FileSystemRunDetailStore(workspaceRoot));
         services.AddSingleton<IRunArtifactStore>(_ => new FileSystemRunArtifactStore(workspaceRoot));
+        services.AddSingleton<IAcceptedDifferenceUseCases>(_ => new FileSystemAcceptedDifferenceStore(workspaceRoot, acceptedDifferenceStorePath));
         services.AddSingleton<IEndpointRequestSender, HttpClientEndpointRequestSender>();
         services.AddSingleton<IRunCancellationRegistry, InMemoryRunCancellationRegistry>();
         services.AddSingleton<IRunIdGenerator, GuidRunIdGenerator>();

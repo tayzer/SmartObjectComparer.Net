@@ -5,6 +5,8 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 using MudBlazor.Services;
 
+using ParityBench.NET.Application.AcceptedDifferences;
+using ParityBench.NET.Domain.AcceptedDifferences;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Reports;
 using ParityBench.NET.Domain.Requests;
@@ -19,6 +21,7 @@ public sealed class RunResultsViewTests
 {
     private BunitContext testContext = null!;
     private FakeRunResultsViewDataSource dataSource = null!;
+    private InMemoryAcceptedDifferenceUseCases acceptedDifferences = null!;
 
     [TestInitialize]
     public void SetUp()
@@ -28,7 +31,9 @@ public sealed class RunResultsViewTests
         testContext.Services.AddMudServices();
         testContext.RenderTree.Add<MudTestRoot>(parameters => { });
         dataSource = new FakeRunResultsViewDataSource();
+        acceptedDifferences = new InMemoryAcceptedDifferenceUseCases(isReadOnly: false);
         testContext.Services.AddSingleton<IRunResultsViewDataSource>(dataSource);
+        testContext.Services.AddSingleton<IAcceptedDifferenceUseCases>(acceptedDifferences);
     }
 
     [TestCleanup]
@@ -170,6 +175,23 @@ public sealed class RunResultsViewTests
     }
 
 
+    [TestMethod]
+    public void RunResult_WhenDifferenceHasAcceptedProfile_RendersTrackingChip()
+    {
+        RunId runId = new RunId("run-1");
+        RequestPairResult pair = CreateDifferentPair("one.json");
+        acceptedDifferences.SaveAsync(pair.Differences[0], AcceptedDifferenceStatus.AcceptedDifference, "Expected variance.").GetAwaiter().GetResult();
+        dataSource.Run = CreateCompletedRun(runId);
+        dataSource.Summary = dataSource.Run.Summary;
+        dataSource.Details = new[] { pair };
+
+        IRenderedComponent<RunResult> component = testContext.Render<RunResult>(parameters =>
+            parameters.Add(result => result.RunId, runId));
+
+        component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "Accepted"));
+        StringAssert.Contains(component.Markup, "1 Accepted");
+        StringAssert.Contains(component.Markup, "1 New");
+    }
     [TestMethod]
     public void RunResult_WhenPairHasRawTextRows_RendersRawDifferenceDetail()
     {

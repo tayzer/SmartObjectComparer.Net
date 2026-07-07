@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 
 using MudBlazor.Services;
 
+using ParityBench.NET.Application.AcceptedDifferences;
+
 using ParityBench.NET.Report;
 using ParityBench.NET.Report.Results;
 using ParityBench.NET.UI.Results;
@@ -14,5 +16,6 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 builder.Services.AddMudServices();
 builder.Services.AddScoped(_ => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
 builder.Services.AddScoped<IRunResultsViewDataSource, StaticReportRunResultsViewDataSource>();
+builder.Services.AddScoped<IAcceptedDifferenceUseCases, StaticReportAcceptedDifferenceUseCases>();
 
 await builder.Build().RunAsync().ConfigureAwait(false);

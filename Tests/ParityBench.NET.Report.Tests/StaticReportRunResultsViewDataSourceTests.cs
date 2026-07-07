@@ -9,6 +9,8 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 using MudBlazor.Services;
 
+using ParityBench.NET.Application.AcceptedDifferences;
+
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Reports;
 using ParityBench.NET.Domain.Requests;
@@ -95,6 +97,7 @@ public sealed class StaticReportRunResultsViewDataSourceTests
             testContext.Services.AddMudServices();
             StaticReportRunResultsViewDataSource dataSource = CreateDataSource(CreateReportData(CreatePair("one.json", RequestPairOutcome.Equal)));
             testContext.Services.AddSingleton<IRunResultsViewDataSource>(dataSource);
+            testContext.Services.AddSingleton<IAcceptedDifferenceUseCases>(new InMemoryAcceptedDifferenceUseCases(isReadOnly: false));
 
             IRenderedComponent<ReportRoot> component = testContext.Render<ReportRoot>();
 
