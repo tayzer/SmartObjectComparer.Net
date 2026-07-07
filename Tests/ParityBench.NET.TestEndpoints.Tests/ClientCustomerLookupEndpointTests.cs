@@ -104,18 +104,7 @@ public sealed class ClientCustomerLookupEndpointTests
     [TestMethod]
     public async Task JsonEndpoint_WhenHeadersAreValid_ReturnsCompatibleJsonResponse()
     {
-        using HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, "/client/customer-lookup/json")
-        {
-            Content = JsonContent.Create(new ClientCustomerLookupJsonRequest
-            {
-                CustomerId = "2001",
-                CorrelationId = "trace-2001",
-            }),
-        };
-        request.Headers.Add(
-            ClientCustomerLookupTokenProvider.SubscriptionKeyHeaderName,
-            ClientCustomerLookupEndpoints.EndpointBSubscriptionKey);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", ClientCustomerLookupEndpoints.FinalToken);
+        using HttpRequestMessage request = CreateValidJsonRequest("2001", "trace-2001");
 
         using HttpResponseMessage response = await client.SendAsync(request);
         ClientCustomerLookupJsonResponse? body = await response.Content.ReadFromJsonAsync<ClientCustomerLookupJsonResponse>();
@@ -126,8 +115,49 @@ public sealed class ClientCustomerLookupEndpointTests
         Assert.AreEqual("trace-2001", body?.TraceId);
     }
 
-    private static string CreateSoapRequest() =>
-        "<Envelope><Body><LookupRequest><UserName>demo-user</UserName><Password>demo-password</Password><CustomerId>2001</CustomerId><CorrelationId>trace-2001</CorrelationId></LookupRequest></Body></Envelope>";
+
+    [TestMethod]
+    public async Task Endpoints_WhenDifferenceScenarioIsRequested_ReturnDifferentCustomerNames()
+    {
+        using HttpRequestMessage soapRequest = new HttpRequestMessage(HttpMethod.Post, "/client/customer-lookup/soap")
+        {
+            Content = new StringContent(CreateSoapRequest("2002", "trace-2002"), Encoding.UTF8, "text/xml"),
+        };
+        soapRequest.Headers.Add("SOAPAction", ClientCustomerLookupEndpoints.SoapAction);
+
+        using HttpResponseMessage soapResponse = await client.SendAsync(soapRequest);
+        string soapBody = await soapResponse.Content.ReadAsStringAsync();
+
+        using HttpRequestMessage jsonRequest = CreateValidJsonRequest("2002", "trace-2002");
+        using HttpResponseMessage jsonResponse = await client.SendAsync(jsonRequest);
+        ClientCustomerLookupJsonResponse? jsonBody = await jsonResponse.Content.ReadFromJsonAsync<ClientCustomerLookupJsonResponse>();
+
+        Assert.AreEqual(HttpStatusCode.OK, soapResponse.StatusCode);
+        Assert.AreEqual(HttpStatusCode.OK, jsonResponse.StatusCode);
+        StringAssert.Contains(soapBody, "<CustomerName>Riley Morgan</CustomerName>");
+        Assert.AreEqual("Riley Morgan Updated", jsonBody?.CustomerName);
+    }
+    private static string CreateSoapRequest() => CreateSoapRequest("2001", "trace-2001");
+
+    private static string CreateSoapRequest(string customerId, string correlationId) =>
+        $"<Envelope><Body><LookupRequest><UserName>demo-user</UserName><Password>demo-password</Password><CustomerId>{customerId}</CustomerId><CorrelationId>{correlationId}</CorrelationId></LookupRequest></Body></Envelope>";
+
+    private static HttpRequestMessage CreateValidJsonRequest(string customerId, string correlationId)
+    {
+        HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, "/client/customer-lookup/json")
+        {
+            Content = JsonContent.Create(new ClientCustomerLookupJsonRequest
+            {
+                CustomerId = customerId,
+                CorrelationId = correlationId,
+            }),
+        };
+        request.Headers.Add(
+            ClientCustomerLookupTokenProvider.SubscriptionKeyHeaderName,
+            ClientCustomerLookupEndpoints.EndpointBSubscriptionKey);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", ClientCustomerLookupEndpoints.FinalToken);
+        return request;
+    }
 
     private sealed class TokenResponse
     {

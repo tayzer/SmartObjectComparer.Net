@@ -70,7 +70,7 @@ public static class ClientCustomerLookupEndpoints
         return Results.Json(new ClientCustomerLookupJsonResponse
         {
             ResultCode = "OK",
-            CustomerName = ResolveCustomerName(request.CustomerId),
+            CustomerName = ResolveEndpointBCustomerName(request.CustomerId),
             TraceId = request.CorrelationId,
         });
     }
@@ -115,11 +115,13 @@ public static class ClientCustomerLookupEndpoints
         new ClientCustomerLookupSoapResponse
         {
             StatusCode = "OK",
-            CustomerName = ResolveCustomerName(request.CustomerId),
+            CustomerName = ResolveEndpointACustomerName(request.CustomerId),
             TraceId = request.CorrelationId,
         };
 
-    private static string ResolveCustomerName(string customerId) =>
+    private static string ResolveEndpointACustomerName(string customerId) => "Riley Morgan";
+
+    private static string ResolveEndpointBCustomerName(string customerId) =>
         string.Equals(customerId, "2002", StringComparison.Ordinal) ? "Riley Morgan Updated" : "Riley Morgan";
 
     private static bool HasHeader(HttpContext context, string name, string expectedValue) =>
