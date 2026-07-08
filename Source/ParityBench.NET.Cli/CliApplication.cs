@@ -1,6 +1,9 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 using ParityBench.NET.Application.ContractProfiles;
+using ParityBench.NET.Application.Observability;
 using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Results;
@@ -35,20 +38,57 @@ public static class CliApplication
             return 2;
         }
 
+        IConfiguration configuration = CreateConfiguration();
         ServiceCollection services = new ServiceCollection();
-        RegisterServices(services, workspaceRoot ?? GetDefaultWorkspaceRoot());
+        RegisterServices(services, workspaceRoot ?? GetDefaultWorkspaceRoot(), configuration, parseResult.Options!.Observability);
         configureServices?.Invoke(services);
 
         await using ServiceProvider serviceProvider = services.BuildServiceProvider();
         RequestCommandRunner runner = serviceProvider.GetRequiredService<RequestCommandRunner>();
         return await runner
-            .RunAsync(parseResult.Options!, output, error, cancellationToken)
+            .RunAsync(parseResult.Options, output, error, cancellationToken)
             .ConfigureAwait(false);
     }
 
-    public static void RegisterServices(IServiceCollection services, string workspaceRoot)
+    public static void RegisterServices(
+        IServiceCollection services,
+        string workspaceRoot,
+        IConfiguration configuration,
+        ObservabilityCliOptions? observabilityOverrides = null)
     {
         Directory.CreateDirectory(workspaceRoot);
+        services.AddSingleton<IConfiguration>(configuration);
+        services.AddLogging(builder =>
+        {
+            builder.AddConfiguration(configuration.GetSection("Logging"));
+            builder.AddConsole();
+            if (observabilityOverrides?.LogLevel is LogLevel logLevel)
+            {
+                builder.SetMinimumLevel(logLevel);
+            }
+        });
+        services.AddParityBenchObservability(configuration, options =>
+        {
+            if (observabilityOverrides?.LogDurations == true)
+            {
+                options.LogDurations = true;
+            }
+
+            if (observabilityOverrides?.LogExceptions == true)
+            {
+                options.LogExceptions = true;
+            }
+
+            if (observabilityOverrides?.PersistDiagnostics == true)
+            {
+                options.PersistDiagnostics = true;
+            }
+
+            if (observabilityOverrides?.SlowPathThresholdMs is int threshold)
+            {
+                options.SlowPathThresholdMs = threshold;
+            }
+        });
         services.AddSingleton(new HttpClient());
         services.AddSingleton<IRequestBatchStore>(_ => new FileSystemRequestBatchStore(workspaceRoot));
         services.AddSingleton<IRunStore>(_ => new FileSystemRunStore(workspaceRoot));
@@ -93,7 +133,8 @@ public static class CliApplication
                 artifactStore,
                 serviceProvider.GetRequiredService<IRunDetailStore>(),
                 comparer,
-                serviceProvider.GetRequiredService<IContractProfileRegistry>());
+                serviceProvider.GetRequiredService<IContractProfileRegistry>(),
+                serviceProvider.GetRequiredService<IObservabilityRecorder>());
         });
         services.AddSingleton<IComparisonRunUseCases, ComparisonRunService>();
         services.AddSingleton<IComparisonRunResultUseCases, ComparisonRunResultService>();
@@ -103,6 +144,17 @@ public static class CliApplication
         services.AddSingleton<IRequestComparisonDefaultsUseCases, RequestComparisonDefaultsService>();
         services.AddSingleton<RequestCommandRunner>();
     }
+
+    public static void RegisterServices(IServiceCollection services, string workspaceRoot) =>
+        RegisterServices(services, workspaceRoot, CreateConfiguration());
+
+    private static IConfiguration CreateConfiguration() =>
+        new ConfigurationBuilder()
+            .SetBasePath(AppContext.BaseDirectory)
+            .AddJsonFile("appsettings.json", optional: true)
+            .AddJsonFile($"appsettings.{Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Production"}.json", optional: true)
+            .AddEnvironmentVariables("PB_")
+            .Build();
 
     private static string GetDefaultWorkspaceRoot() =>
         Path.Combine(

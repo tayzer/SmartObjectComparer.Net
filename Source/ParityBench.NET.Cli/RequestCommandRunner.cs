@@ -1,4 +1,4 @@
-﻿using ParityBench.NET.Domain.ContractProfiles;
+using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Workflow;
 using ParityBench.NET.Domain.Comparison;
@@ -95,6 +95,20 @@ public sealed class RequestCommandRunner
         await output.WriteLineAsync($"Status mismatches: {summary.StatusCodeMismatchPairs}").ConfigureAwait(false);
         await output.WriteLineAsync($"Both non-success: {summary.BothNonSuccessPairs}").ConfigureAwait(false);
         await output.WriteLineAsync($"Errors: {summary.ErrorPairs}").ConfigureAwait(false);
+
+        if (summary.ExecutionMetrics is not null)
+        {
+            await output.WriteLineAsync($"Duration: {summary.ExecutionMetrics.TotalDuration.TotalMilliseconds:F0}ms").ConfigureAwait(false);
+            await output.WriteLineAsync($"Request execution: {summary.ExecutionMetrics.RequestExecutionDuration.TotalMilliseconds:F0}ms").ConfigureAwait(false);
+            await output.WriteLineAsync($"Comparison: {summary.ExecutionMetrics.ComparisonDuration.TotalMilliseconds:F0}ms").ConfigureAwait(false);
+            await output.WriteLineAsync($"Finalization: {summary.ExecutionMetrics.FinalizationDuration.TotalMilliseconds:F0}ms").ConfigureAwait(false);
+        }
+
+        if (run.Diagnostics is not null)
+        {
+            await output.WriteLineAsync($"Slow paths: {run.Diagnostics.SlowRequestPaths.Count}").ConfigureAwait(false);
+            await output.WriteLineAsync($"Exception diagnostics: {run.Diagnostics.Exceptions.Count}").ConfigureAwait(false);
+        }
     }
 
     private static IReadOnlyDictionary<string, string> ParseHeaders(IEnumerable<string> headerLines)

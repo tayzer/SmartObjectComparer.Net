@@ -1,4 +1,6 @@
-﻿namespace ParityBench.NET.Cli;
+using Microsoft.Extensions.Logging;
+
+namespace ParityBench.NET.Cli;
 
 public sealed record RequestCommandOptions(
     string RequestDirectory,
@@ -13,4 +15,12 @@ public sealed record RequestCommandOptions(
     IReadOnlyList<string> EndpointAHeaders,
     IReadOnlyList<string> EndpointBHeaders,
     string? ReportOutputDirectory,
-    string? ReportAssetsDirectory);
+    string? ReportAssetsDirectory,
+    ObservabilityCliOptions Observability);
+
+public sealed record ObservabilityCliOptions(
+    LogLevel? LogLevel = null,
+    bool LogDurations = false,
+    bool LogExceptions = false,
+    bool PersistDiagnostics = false,
+    int? SlowPathThresholdMs = null);

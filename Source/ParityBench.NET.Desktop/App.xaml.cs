@@ -8,6 +8,7 @@ using MudBlazor.Services;
 using ParityBench.NET.ClientCustomerLookupExample;
 using ParityBench.NET.Application.AcceptedDifferences;
 using ParityBench.NET.Application.ContractProfiles;
+using ParityBench.NET.Application.Observability;
 using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Results;
@@ -91,6 +92,7 @@ public partial class App : System.Windows.Application
     private static void RegisterV2Services(IServiceCollection services, string workspaceRoot, string fixtureBaseUrl, string? acceptedDifferenceStorePath, IConfiguration configuration)
     {
         Directory.CreateDirectory(workspaceRoot);
+        services.AddParityBenchObservability(configuration);
         services.AddSingleton(new HttpClient());
         services.AddSingleton<IRequestBatchStore>(_ => new FileSystemRequestBatchStore(workspaceRoot));
         services.AddSingleton<IRunStore>(_ => new FileSystemRunStore(workspaceRoot));
@@ -139,7 +141,8 @@ public partial class App : System.Windows.Application
                 artifactStore,
                 serviceProvider.GetRequiredService<IRunDetailStore>(),
                 comparer,
-                serviceProvider.GetRequiredService<IContractProfileRegistry>());
+                serviceProvider.GetRequiredService<IContractProfileRegistry>(),
+                serviceProvider.GetRequiredService<IObservabilityRecorder>());
         });
         services.AddSingleton<IComparisonRunUseCases, ComparisonRunService>();
         services.AddSingleton<IComparisonRunResultUseCases, ComparisonRunResultService>();

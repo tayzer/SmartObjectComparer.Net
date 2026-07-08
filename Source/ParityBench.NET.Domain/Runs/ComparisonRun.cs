@@ -12,7 +12,8 @@ public sealed record ComparisonRun
         DateTimeOffset? startedAt,
         DateTimeOffset? completedAt,
         RunResultSummary? summary,
-        string? errorMessage)
+        string? errorMessage,
+        RunDiagnosticsSnapshot? diagnostics)
     {
         Id = id;
         Options = options;
@@ -24,6 +25,7 @@ public sealed record ComparisonRun
         CompletedAt = completedAt;
         Summary = summary;
         ErrorMessage = errorMessage;
+        Diagnostics = diagnostics;
     }
 
     public RunId Id { get; init; }
@@ -46,6 +48,8 @@ public sealed record ComparisonRun
 
     public string? ErrorMessage { get; init; }
 
+    public RunDiagnosticsSnapshot? Diagnostics { get; init; }
+
     public bool IsTerminal => Status is RunStatus.Completed or RunStatus.Failed or RunStatus.Cancelled;
 
     public static ComparisonRun Create(RunId id, RunOptions options, DateTimeOffset? createdAt = null)
@@ -63,6 +67,7 @@ public sealed record ComparisonRun
             null,
             null,
             null,
+            null,
             null);
     }
 
@@ -76,7 +81,8 @@ public sealed record ComparisonRun
         DateTimeOffset? startedAt,
         DateTimeOffset? completedAt,
         RunResultSummary? summary,
-        string? errorMessage)
+        string? errorMessage,
+        RunDiagnosticsSnapshot? diagnostics = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(progress);
@@ -91,7 +97,8 @@ public sealed record ComparisonRun
             startedAt,
             completedAt,
             summary,
-            string.IsNullOrWhiteSpace(errorMessage) ? null : errorMessage);
+            string.IsNullOrWhiteSpace(errorMessage) ? null : errorMessage,
+            diagnostics);
     }
 
     public ComparisonRun Start(DateTimeOffset? startedAt = null)
@@ -133,7 +140,10 @@ public sealed record ComparisonRun
         };
     }
 
-    public ComparisonRun Complete(RunResultSummary summary, DateTimeOffset? completedAt = null)
+    public ComparisonRun Complete(
+        RunResultSummary summary,
+        DateTimeOffset? completedAt = null,
+        RunDiagnosticsSnapshot? diagnostics = null)
     {
         ArgumentNullException.ThrowIfNull(summary);
         EnsureNotTerminal();
@@ -147,10 +157,14 @@ public sealed record ComparisonRun
             CompletedAt = timestamp,
             Summary = summary,
             ErrorMessage = null,
+            Diagnostics = diagnostics,
         };
     }
 
-    public ComparisonRun Fail(string errorMessage, DateTimeOffset? failedAt = null)
+    public ComparisonRun Fail(
+        string errorMessage,
+        DateTimeOffset? failedAt = null,
+        RunDiagnosticsSnapshot? diagnostics = null)
     {
         if (string.IsNullOrWhiteSpace(errorMessage))
         {
@@ -167,6 +181,7 @@ public sealed record ComparisonRun
             UpdatedAt = timestamp,
             CompletedAt = timestamp,
             ErrorMessage = errorMessage,
+            Diagnostics = diagnostics,
         };
     }
 

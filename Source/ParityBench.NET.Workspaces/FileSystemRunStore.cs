@@ -185,6 +185,7 @@ public sealed class FileSystemRunStore : IRunStore
             CompletedAt = run.CompletedAt,
             Summary = run.Summary is null ? null : ToDto(run.Summary),
             ErrorMessage = run.ErrorMessage,
+            Diagnostics = run.Diagnostics is null ? null : ToDto(run.Diagnostics),
         };
 
     private RunOptionsDto ToDto(RunOptions options) =>
@@ -329,7 +330,8 @@ public sealed class FileSystemRunStore : IRunStore
             dto.StartedAt,
             dto.CompletedAt,
             dto.Summary is null ? null : FromDto(dto.Summary),
-            dto.ErrorMessage);
+            dto.ErrorMessage,
+            dto.Diagnostics is null ? null : FromDto(dto.Diagnostics));
 
     private RunOptions FromDto(RunOptionsDto dto)
     {
@@ -458,6 +460,77 @@ public sealed class FileSystemRunStore : IRunStore
     private ArtifactReference FromDto(ArtifactReferenceDto dto) =>
         new ArtifactReference(dto.ArtifactId, dto.ContentType);
 
+    private RunDiagnosticsSnapshotDto ToDto(RunDiagnosticsSnapshot diagnostics) =>
+        new RunDiagnosticsSnapshotDto
+        {
+            SlowRequestPaths = diagnostics.SlowRequestPaths.Select(ToDto).ToList(),
+            Exceptions = diagnostics.Exceptions.Select(ToDto).ToList(),
+        };
+
+    private SlowRequestPathDiagnosticDto ToDto(SlowRequestPathDiagnostic slowPath) =>
+        new SlowRequestPathDiagnosticDto
+        {
+            RelativePath = slowPath.RelativePath,
+            DurationMilliseconds = slowPath.Duration.TotalMilliseconds,
+        };
+
+    private ExceptionDiagnosticDto ToDto(ExceptionDiagnostic exception) =>
+        new ExceptionDiagnosticDto
+        {
+            Stage = exception.Stage,
+            ExceptionType = exception.ExceptionType,
+            Message = exception.Message,
+            StackTrace = exception.StackTrace,
+            RelativePath = exception.RelativePath,
+            Endpoint = exception.Endpoint,
+        };
+
+    private RunDiagnosticsSnapshot FromDto(RunDiagnosticsSnapshotDto dto) =>
+        new RunDiagnosticsSnapshot(
+            dto.SlowRequestPaths.Select(FromDto).ToList(),
+            dto.Exceptions.Select(FromDto).ToList());
+
+    private SlowRequestPathDiagnostic FromDto(SlowRequestPathDiagnosticDto dto) =>
+        new SlowRequestPathDiagnostic(
+            dto.RelativePath,
+            TimeSpan.FromMilliseconds(dto.DurationMilliseconds));
+
+    private ExceptionDiagnostic FromDto(ExceptionDiagnosticDto dto) =>
+        new ExceptionDiagnostic(
+            dto.Stage,
+            dto.ExceptionType,
+            dto.Message,
+            dto.StackTrace,
+            dto.RelativePath,
+            dto.Endpoint);
+    private sealed class RunDiagnosticsSnapshotDto
+    {
+        public List<SlowRequestPathDiagnosticDto> SlowRequestPaths { get; init; } = new List<SlowRequestPathDiagnosticDto>();
+
+        public List<ExceptionDiagnosticDto> Exceptions { get; init; } = new List<ExceptionDiagnosticDto>();
+    }
+
+    private sealed class SlowRequestPathDiagnosticDto
+    {
+        public string RelativePath { get; init; } = string.Empty;
+
+        public double DurationMilliseconds { get; init; }
+    }
+
+    private sealed class ExceptionDiagnosticDto
+    {
+        public string Stage { get; init; } = string.Empty;
+
+        public string ExceptionType { get; init; } = string.Empty;
+
+        public string Message { get; init; } = string.Empty;
+
+        public string? StackTrace { get; init; }
+
+        public string? RelativePath { get; init; }
+
+        public EndpointSlot? Endpoint { get; init; }
+    }
     private sealed class RunSnapshotDto
     {
         public string Id { get; init; } = string.Empty;
@@ -479,6 +552,8 @@ public sealed class FileSystemRunStore : IRunStore
         public RunResultSummaryDto? Summary { get; init; }
 
         public string? ErrorMessage { get; init; }
+
+        public RunDiagnosticsSnapshotDto? Diagnostics { get; init; }
     }
 
     private sealed class RunOptionsDto
@@ -673,4 +748,3 @@ public sealed class FileSystemRunStore : IRunStore
         public string? ContentType { get; init; }
     }
 }
-

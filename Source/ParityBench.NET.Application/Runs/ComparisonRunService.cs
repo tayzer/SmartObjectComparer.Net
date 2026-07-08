@@ -1,3 +1,4 @@
+using ParityBench.NET.Application.Observability;
 using ParityBench.NET.Domain.Runs;
 
 namespace ParityBench.NET.Application.Runs;
@@ -9,19 +10,22 @@ public sealed class ComparisonRunService : IComparisonRunUseCases
     private readonly IRunEventPublisher eventPublisher;
     private readonly IRunIdGenerator runIdGenerator;
     private readonly IRunCancellationRegistry runCancellationRegistry;
+    private readonly IObservabilityRecorder observabilityRecorder;
 
     public ComparisonRunService(
         IRunStore runStore,
         IComparisonRunExecutor executor,
         IRunEventPublisher eventPublisher,
         IRunIdGenerator runIdGenerator,
-        IRunCancellationRegistry runCancellationRegistry)
+        IRunCancellationRegistry runCancellationRegistry,
+        IObservabilityRecorder? observabilityRecorder = null)
     {
         this.runStore = runStore;
         this.executor = executor;
         this.eventPublisher = eventPublisher;
         this.runIdGenerator = runIdGenerator;
         this.runCancellationRegistry = runCancellationRegistry;
+        this.observabilityRecorder = observabilityRecorder ?? NoOpObservabilityRecorder.Instance;
     }
 
     public async Task<ComparisonRun> CreateRunAsync(
@@ -57,7 +61,7 @@ public sealed class ComparisonRunService : IComparisonRunUseCases
                 .ConfigureAwait(false);
             executionToken.ThrowIfCancellationRequested();
 
-            currentRun = currentRun.Complete(summary);
+            currentRun = currentRun.Complete(summary, diagnostics: observabilityRecorder.CreateSnapshot(runId));
             await SaveAndPublishAsync(currentRun, cancellationToken).ConfigureAwait(false);
             return currentRun;
         }
@@ -69,13 +73,15 @@ public sealed class ComparisonRunService : IComparisonRunUseCases
         }
         catch (Exception ex) when (runCancellationRegistry.IsCancellationRequested(runId))
         {
+            observabilityRecorder.RecordException(runId, "RunCancellation", ex);
             currentRun = currentRun.Cancel($"Run was cancelled after executor error: {ex.Message}");
             await SaveAndPublishAsync(currentRun, CancellationToken.None).ConfigureAwait(false);
             return currentRun;
         }
         catch (Exception ex)
         {
-            currentRun = currentRun.Fail(ex.Message);
+            observabilityRecorder.RecordException(runId, "RunExecution", ex);
+            currentRun = currentRun.Fail(ex.Message, diagnostics: observabilityRecorder.CreateSnapshot(runId));
             await SaveAndPublishAsync(currentRun, CancellationToken.None).ConfigureAwait(false);
             return currentRun;
         }

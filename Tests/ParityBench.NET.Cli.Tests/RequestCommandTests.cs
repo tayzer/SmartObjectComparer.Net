@@ -55,6 +55,34 @@ public sealed class RequestCommandTests
     }
 
     [TestMethod]
+    public void Parse_WhenObservabilityOptionsAreProvided_ReturnsOverrides()
+    {
+        RequestCommandParseResult result = RequestCommandParser.Parse(new[]
+        {
+            "request",
+            "requests",
+            "--endpoint-a",
+            "https://a.example.test",
+            "--endpoint-b",
+            "https://b.example.test",
+            "--log-level",
+            "Debug",
+            "--log-durations",
+            "--log-exceptions",
+            "--persist-diagnostics",
+            "--slow-path-threshold-ms",
+            "0",
+        });
+
+        Assert.IsTrue(result.IsSuccess);
+        Assert.IsNotNull(result.Options);
+        Assert.AreEqual(Microsoft.Extensions.Logging.LogLevel.Debug, result.Options.Observability.LogLevel);
+        Assert.IsTrue(result.Options.Observability.LogDurations);
+        Assert.IsTrue(result.Options.Observability.LogExceptions);
+        Assert.IsTrue(result.Options.Observability.PersistDiagnostics);
+        Assert.AreEqual(0, result.Options.Observability.SlowPathThresholdMs);
+    }
+    [TestMethod]
     public void Parse_WhenEndpointUrlIsInvalid_ReturnsValidationError()
     {
         RequestCommandParseResult result = RequestCommandParser.Parse(new[]

@@ -14,7 +14,8 @@ public sealed record StaticReportRunSnapshot
         DateTimeOffset? startedAt = null,
         DateTimeOffset? completedAt = null,
         RunResultSummary? summary = null,
-        string? errorMessage = null)
+        string? errorMessage = null,
+        RunDiagnosticsSnapshot? diagnostics = null)
     {
         if (string.IsNullOrWhiteSpace(runId))
         {
@@ -34,6 +35,7 @@ public sealed record StaticReportRunSnapshot
         CompletedAt = completedAt;
         Summary = summary;
         ErrorMessage = string.IsNullOrWhiteSpace(errorMessage) ? null : errorMessage;
+        Diagnostics = diagnostics;
     }
 
     public string RunId { get; }
@@ -56,6 +58,8 @@ public sealed record StaticReportRunSnapshot
 
     public string? ErrorMessage { get; }
 
+    public RunDiagnosticsSnapshot? Diagnostics { get; }
+
     public static StaticReportRunSnapshot FromRun(ComparisonRun run)
     {
         ArgumentNullException.ThrowIfNull(run);
@@ -70,7 +74,8 @@ public sealed record StaticReportRunSnapshot
             run.StartedAt,
             run.CompletedAt,
             run.Summary,
-            run.ErrorMessage);
+            run.ErrorMessage,
+            run.Diagnostics);
     }
 
     public ComparisonRun ToRun() =>
@@ -84,5 +89,6 @@ public sealed record StaticReportRunSnapshot
             StartedAt,
             CompletedAt,
             Summary,
-            ErrorMessage);
+            ErrorMessage,
+            Diagnostics);
 }

@@ -3,6 +3,7 @@ using System.Text;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
+using ParityBench.NET.Application.Observability;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Runs;
 using ParityBench.NET.Domain.Comparison;
@@ -45,6 +46,47 @@ public sealed class BasicComparisonRunExecutorTests
         Assert.IsTrue(summary.ExecutionMetrics.TotalDuration >= TimeSpan.Zero);
     }
 
+    [TestMethod]
+    public async Task ExecuteAsync_WhenRequestPathExceedsThreshold_RecordsSlowPath()
+    {
+        RequestItem request = new RequestItem("one.json", "application/json", 2);
+        CapturingObservabilityRecorder recorder = new CapturingObservabilityRecorder(TimeSpan.Zero);
+        BasicComparisonRunExecutor executor = CreateExecutor(
+            CreateBatch(new[] { request }),
+            FakeEndpointRequestSender.ForBody("same"),
+            observabilityRecorder: recorder);
+
+        await executor.ExecuteAsync(CreateRun(), new CapturingProgressReporter());
+
+        Assert.AreEqual(1, recorder.SlowPaths.Count);
+        Assert.AreEqual("one.json", recorder.SlowPaths[0].RelativePath);
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_WhenEndpointThrows_RecordsExceptionDiagnostic()
+    {
+        CapturingObservabilityRecorder recorder = new CapturingObservabilityRecorder(TimeSpan.Zero);
+        FakeEndpointRequestSender sender = new FakeEndpointRequestSender(request =>
+        {
+            if (request.Endpoint == EndpointSlot.B)
+            {
+                throw new InvalidOperationException("Endpoint B failed.");
+            }
+
+            return new EndpointResponse(200, "application/json", CreateStream("same"));
+        });
+        BasicComparisonRunExecutor executor = CreateExecutor(
+            CreateBatch(new[] { new RequestItem("one.json", "application/json", 2) }),
+            sender,
+            observabilityRecorder: recorder);
+
+        await executor.ExecuteAsync(CreateRun(), new CapturingProgressReporter());
+
+        Assert.AreEqual(1, recorder.Exceptions.Count);
+        Assert.AreEqual("EndpointExecution", recorder.Exceptions[0].Stage);
+        Assert.AreEqual("one.json", recorder.Exceptions[0].RelativePath);
+        Assert.AreEqual(EndpointSlot.B, recorder.Exceptions[0].Endpoint);
+    }
     [TestMethod]
     public async Task ExecuteAsync_WhenLargeResponsesHaveNoMasks_StreamsResponsesToArtifacts()
     {
@@ -334,23 +376,20 @@ public sealed class BasicComparisonRunExecutorTests
         FakeEndpointRequestSender sender,
         FakeRunArtifactStore? artifactStore = null,
         IResponseComparer? responseComparer = null,
-        FakeRunDetailStore? detailStore = null)
+        FakeRunDetailStore? detailStore = null,
+        IObservabilityRecorder? observabilityRecorder = null)
     {
         FakeRequestBatchStore requestBatchStore = new FakeRequestBatchStore(manifest);
-        return responseComparer is null
-            ? new BasicComparisonRunExecutor(
-                requestBatchStore,
-                sender,
-                artifactStore ?? new FakeRunArtifactStore(),
-                detailStore ?? new FakeRunDetailStore())
-            : new BasicComparisonRunExecutor(
-                requestBatchStore,
-                sender,
-                artifactStore ?? new FakeRunArtifactStore(),
-                detailStore ?? new FakeRunDetailStore(),
-                responseComparer);
+        IRunArtifactStore resolvedArtifactStore = artifactStore ?? new FakeRunArtifactStore();
+        return new BasicComparisonRunExecutor(
+            requestBatchStore,
+            sender,
+            resolvedArtifactStore,
+            detailStore ?? new FakeRunDetailStore(),
+            responseComparer ?? new RawTextResponseComparer(resolvedArtifactStore, new HashOnlyResponseComparer()),
+            null,
+            observabilityRecorder);
     }
-
     private static async Task AssertThrowsAsync<TException>(Func<Task> action)
         where TException : Exception
     {
@@ -455,6 +494,48 @@ public sealed class BasicComparisonRunExecutorTests
         public override void SetLength(long value) => throw new NotSupportedException();
 
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+    private sealed class CapturingObservabilityRecorder : IObservabilityRecorder
+    {
+        public CapturingObservabilityRecorder(TimeSpan slowPathThreshold)
+        {
+            SlowPathThreshold = slowPathThreshold;
+        }
+
+        public bool IsDurationLoggingEnabled => true;
+
+        public bool IsExceptionLoggingEnabled => true;
+
+        public bool IsDiagnosticsPersistenceEnabled => true;
+
+        public TimeSpan SlowPathThreshold { get; }
+
+        public List<SlowRequestPathDiagnostic> SlowPaths { get; } = new List<SlowRequestPathDiagnostic>();
+
+        public List<ExceptionDiagnostic> Exceptions { get; } = new List<ExceptionDiagnostic>();
+
+        public void RecordRunPhase(RunId runId, string phaseName, TimeSpan duration)
+        {
+        }
+
+        public void RecordRequestPath(RunId runId, string relativePath, TimeSpan duration)
+        {
+            if (duration >= SlowPathThreshold)
+            {
+                SlowPaths.Add(new SlowRequestPathDiagnostic(relativePath, duration));
+            }
+        }
+
+        public void RecordException(
+            RunId runId,
+            string stage,
+            Exception exception,
+            string? relativePath = null,
+            EndpointSlot? endpoint = null) =>
+            Exceptions.Add(new ExceptionDiagnostic(stage, exception.GetType().Name, exception.Message, exception.StackTrace, relativePath, endpoint));
+
+        public RunDiagnosticsSnapshot? CreateSnapshot(RunId runId) =>
+            new RunDiagnosticsSnapshot(SlowPaths, Exceptions);
     }
     private sealed class FakeRequestBatchStore : IRequestBatchStore
     {

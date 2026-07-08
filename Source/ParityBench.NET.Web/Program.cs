@@ -4,6 +4,7 @@ using MudBlazor.Services;
 
 using ParityBench.NET.Application.AcceptedDifferences;
 using ParityBench.NET.Application.ContractProfiles;
+using ParityBench.NET.Application.Observability;
 using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Results;
@@ -37,7 +38,7 @@ builder.Services.AddServerSideBlazor();
 builder.Services.AddMudServices();
 string fixtureBaseUrl = builder.Configuration["ParityBench:RequestDefaults:FixtureBaseUrl"]
     ?? RequestComparisonFixtureDefaults.DefaultFixtureBaseUrl;
-RegisterV2Services(builder.Services, workspaceRoot, fixtureBaseUrl, builder.Configuration["ParityBench:AcceptedDifferences:StorePath"]);
+RegisterV2Services(builder.Services, workspaceRoot, fixtureBaseUrl, builder.Configuration["ParityBench:AcceptedDifferences:StorePath"], builder.Configuration);
 
 WebApplication app = builder.Build();
 
@@ -55,8 +56,9 @@ app.MapFallbackToPage("/_Host");
 
 app.Run();
 
-static void RegisterV2Services(IServiceCollection services, string workspaceRoot, string fixtureBaseUrl, string? acceptedDifferenceStorePath)
+static void RegisterV2Services(IServiceCollection services, string workspaceRoot, string fixtureBaseUrl, string? acceptedDifferenceStorePath, IConfiguration configuration)
 {
+    services.AddParityBenchObservability(configuration);
     services.AddSingleton(new HttpClient());
     services.AddSingleton<IRequestBatchStore>(_ => new FileSystemRequestBatchStore(workspaceRoot));
     services.AddSingleton<IRunStore>(_ => new FileSystemRunStore(workspaceRoot));
@@ -102,7 +104,8 @@ static void RegisterV2Services(IServiceCollection services, string workspaceRoot
             artifactStore,
             serviceProvider.GetRequiredService<IRunDetailStore>(),
             comparer,
-            serviceProvider.GetRequiredService<IContractProfileRegistry>());
+            serviceProvider.GetRequiredService<IContractProfileRegistry>(),
+            serviceProvider.GetRequiredService<IObservabilityRecorder>());
     });
     services.AddSingleton<IComparisonRunUseCases, ComparisonRunService>();
     services.AddSingleton<IComparisonRunResultUseCases, ComparisonRunResultService>();

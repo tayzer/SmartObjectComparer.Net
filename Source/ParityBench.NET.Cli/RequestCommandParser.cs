@@ -1,4 +1,6 @@
-﻿namespace ParityBench.NET.Cli;
+using Microsoft.Extensions.Logging;
+
+namespace ParityBench.NET.Cli;
 
 public static class RequestCommandParser
 {
@@ -16,6 +18,15 @@ public static class RequestCommandParser
         "--header-b",
         "--report-output",
         "--report-assets",
+        "--log-level",
+        "--slow-path-threshold-ms",
+    };
+
+    private static readonly HashSet<string> FlagOptions = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "--log-durations",
+        "--log-exceptions",
+        "--persist-diagnostics",
     };
 
     public static RequestCommandParseResult Parse(IReadOnlyList<string> args)
@@ -41,6 +52,11 @@ public static class RequestCommandParser
         string? contentTypeOverride = null;
         string? reportOutputDirectory = null;
         string? reportAssetsDirectory = null;
+        LogLevel? logLevel = null;
+        bool logDurations = false;
+        bool logExceptions = false;
+        bool persistDiagnostics = false;
+        int? slowPathThresholdMs = null;
         List<string> commonHeaders = new List<string>();
         List<string> endpointAHeaders = new List<string>();
         List<string> endpointBHeaders = new List<string>();
@@ -49,6 +65,25 @@ public static class RequestCommandParser
         while (index < args.Count)
         {
             string option = args[index];
+            if (FlagOptions.Contains(option))
+            {
+                switch (option)
+                {
+                    case "--log-durations":
+                        logDurations = true;
+                        break;
+                    case "--log-exceptions":
+                        logExceptions = true;
+                        break;
+                    case "--persist-diagnostics":
+                        persistDiagnostics = true;
+                        break;
+                }
+
+                index++;
+                continue;
+            }
+
             if (!OptionsWithValues.Contains(option))
             {
                 errors.Add($"Unknown option '{option}'.");
@@ -112,6 +147,26 @@ public static class RequestCommandParser
                 case "--report-assets":
                     reportAssetsDirectory = value;
                     break;
+                case "--log-level":
+                    if (Enum.TryParse(value, ignoreCase: true, out LogLevel parsedLogLevel))
+                    {
+                        logLevel = parsedLogLevel;
+                    }
+                    else
+                    {
+                        errors.Add("--log-level must be one of Trace, Debug, Information, Warning, Error, Critical, or None.");
+                    }
+                    break;
+                case "--slow-path-threshold-ms":
+                    if (!int.TryParse(value, out int threshold) || threshold < 0)
+                    {
+                        errors.Add("--slow-path-threshold-ms must be zero or a positive whole number.");
+                    }
+                    else
+                    {
+                        slowPathThresholdMs = threshold;
+                    }
+                    break;
             }
 
             index += 2;
@@ -146,12 +201,13 @@ public static class RequestCommandParser
                 endpointAHeaders,
                 endpointBHeaders,
                 reportOutputDirectory,
-                reportAssetsDirectory),
+                reportAssetsDirectory,
+                new ObservabilityCliOptions(logLevel, logDurations, logExceptions, persistDiagnostics, slowPathThresholdMs)),
             Array.Empty<string>());
     }
 
     public static string Usage =>
-        "request <request-directory> --endpoint-a <url> --endpoint-b <url> [--model Auto] [--profile <profile-id>] [--concurrency <n>] [--timeout <seconds>] [--content-type <type>] [--header <Name: Value>] [--header-a <Name: Value>] [--header-b <Name: Value>] [--report-output <directory>] [--report-assets <directory>]";
+        "request <request-directory> --endpoint-a <url> --endpoint-b <url> [--model Auto] [--profile <profile-id>] [--concurrency <n>] [--timeout <seconds>] [--content-type <type>] [--header <Name: Value>] [--header-a <Name: Value>] [--header-b <Name: Value>] [--report-output <directory>] [--report-assets <directory>] [--log-level <level>] [--log-durations] [--log-exceptions] [--persist-diagnostics] [--slow-path-threshold-ms <n>]";
 
     private static RequestCommandParseResult Failure(string error) =>
         new RequestCommandParseResult(null, new[] { error });

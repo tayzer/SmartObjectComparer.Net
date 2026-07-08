@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 
 using ParityBench.NET.Application.ContractProfiles;
+using ParityBench.NET.Application.Observability;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Runs;
 using ParityBench.NET.Domain.ContractProfiles;
@@ -19,6 +20,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
     private readonly IRunDetailStore runDetailStore;
     private readonly IResponseComparer responseComparer;
     private readonly IContractProfileRegistry? contractProfileRegistry;
+    private readonly IObservabilityRecorder observabilityRecorder;
 
     public BasicComparisonRunExecutor(
         IRequestBatchStore requestBatchStore,
@@ -56,7 +58,8 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         IRunArtifactStore runArtifactStore,
         IRunDetailStore runDetailStore,
         IResponseComparer responseComparer,
-        IContractProfileRegistry? contractProfileRegistry)
+        IContractProfileRegistry? contractProfileRegistry,
+        IObservabilityRecorder? observabilityRecorder = null)
     {
         this.requestBatchStore = requestBatchStore;
         this.endpointRequestSender = endpointRequestSender;
@@ -66,6 +69,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             ? responseComparer
             : new RawTextResponseComparer(runArtifactStore, responseComparer);
         this.contractProfileRegistry = contractProfileRegistry;
+        this.observabilityRecorder = observabilityRecorder ?? NoOpObservabilityRecorder.Instance;
     }
 
     public async Task<RunResultSummary> ExecuteAsync(
@@ -119,7 +123,10 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             ConcurrentBag<RequestPairResult> chunkResults = new ConcurrentBag<RequestPairResult>();
             await Parallel.ForEachAsync(chunk, parallelOptions, async (request, token) =>
             {
+                Stopwatch requestPathStopwatch = Stopwatch.StartNew();
                 RequestPairResult result = await ExecutePairAsync(run, comparisonOptions, request, contractProfile, counters, token).ConfigureAwait(false);
+                requestPathStopwatch.Stop();
+                observabilityRecorder.RecordRequestPath(run.Id, request.RelativePath, requestPathStopwatch.Elapsed);
                 chunkResults.Add(result);
 
                 int completed = Interlocked.Increment(ref completedRequests);
@@ -179,8 +186,10 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             run.Options.MaxConcurrency,
             counters.ResponseBytesWritten);
 
+        RecordRunPhases(run.Id, executionMetrics);
         return summaryAccumulator.ToSummary(detailReference, executionMetrics);
     }
+
     private async Task<RequestPairResult> ExecutePairAsync(
         ComparisonRun run,
         RunOptions comparisonOptions,
@@ -224,6 +233,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
 
         return await AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, cancellationToken).ConfigureAwait(false);
     }
+
     private async Task<EndpointExecutionResult> ExecuteEndpointAsync(
         ComparisonRun run,
         RunOptions comparisonOptions,
@@ -275,6 +285,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         }
         catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
+            observabilityRecorder.RecordException(run.Id, "EndpointExecution", ex, request.RelativePath, endpoint);
             return EndpointExecutionResult.Failure(endpoint, ex.Message);
         }
         catch (OperationCanceledException)
@@ -283,9 +294,11 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         }
         catch (Exception ex)
         {
+            observabilityRecorder.RecordException(run.Id, "EndpointExecution", ex, request.RelativePath, endpoint);
             return EndpointExecutionResult.Failure(endpoint, ex.Message);
         }
     }
+
     private async Task<RequestPairResult> CompleteContractProfilePairAsync(
         ComparisonRun run,
         RunOptions comparisonOptions,
@@ -348,12 +361,14 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         }
         catch (Exception ex)
         {
+            observabilityRecorder.RecordException(run.Id, "ContractProfileComparison", ex, request.RelativePath);
             return new RequestPairResult(
                 request.RelativePath,
                 RequestPairOutcome.ExecutionFailed,
                 errorMessage: ex.Message);
         }
     }
+
     private Task<RequestPairResult> AttachFocusedRawContentAsync(
         RequestPairResult result,
         RunId runId,
@@ -480,6 +495,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             cancellationToken)
             .ConfigureAwait(false);
     }
+
     private async Task<ResponseArtifactMetadata> PersistResponseAsync(
         RunId runId,
         EndpointSlot endpoint,
@@ -522,6 +538,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             request.Headers,
             request.HeadersA,
             request.HeadersB);
+
     private IContractProfile? ResolveContractProfile(RunOptions options)
     {
         if (contractProfileRegistry is null)
@@ -565,6 +582,14 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             options.RequestExecution,
             options.ContractProfile,
             options.LargeRun);
+    }
+
+    private void RecordRunPhases(RunId runId, RunExecutionMetrics executionMetrics)
+    {
+        observabilityRecorder.RecordRunPhase(runId, "Total", executionMetrics.TotalDuration);
+        observabilityRecorder.RecordRunPhase(runId, "RequestExecution", executionMetrics.RequestExecutionDuration);
+        observabilityRecorder.RecordRunPhase(runId, "Comparison", executionMetrics.ComparisonDuration);
+        observabilityRecorder.RecordRunPhase(runId, "Finalization", executionMetrics.FinalizationDuration);
     }
 
     private int CalculateExecutionPercent(int completedRequests, int totalRequests)
@@ -696,6 +721,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                 detailReference,
                 executionMetrics);
     }
+
     private sealed class RunExecutionCounters
     {
         private long responseBytesWritten;
@@ -705,6 +731,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         public void AddResponseBytes(long bytesWritten) =>
             Interlocked.Add(ref responseBytesWritten, bytesWritten);
     }
+
     private sealed class PreparedRequest : IAsyncDisposable
     {
         private readonly IAsyncDisposable? owner;
@@ -769,5 +796,3 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             new EndpointExecutionResult(endpoint, null, errorMessage);
     }
 }
-
-
