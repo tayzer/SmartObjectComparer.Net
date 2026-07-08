@@ -1,0 +1,580 @@
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
+
+<style>
+    .irs-row, .irs-tree-row { justify-content: flex-start; text-transform: none; border-left: 4px solid transparent; border-radius: 4px; color: inherit; }
+    .irs-row.selected, .irs-tree-row.selected {
+        background: var(--mud-palette-primary);
+        color: var(--mud-palette-primary-text);
+        border-left-color: var(--mud-palette-primary-darken);
+    }
+</style>
+
+<MudPaper Outlined="true" Class="pa-3">
+    <MudStack Spacing="3">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="flex-wrap">
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.subtitle1">Ignore Rules Studio</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@ModelNameDisplay</MudText>
+            </MudStack>
+            <MudChip T="string" Size="Size.Small" Color="Color.Info">@Rules.Count custom rule(s)</MudChip>
+        </MudStack>
+
+        <MudStack Row="true" Spacing="1" Class="flex-wrap">
+            <InputFile OnChange="ImportConfigurationAsync" accept=".json" id="@importInputId" style="display: none;" />
+            <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Upload" HtmlTag="label" for="@importInputId">Import Config</MudButton>
+            <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Download" OnClick="ExportConfigurationAsync">Export Config</MudButton>
+            <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Error" StartIcon="@Icons.Material.Filled.DeleteSweep" Disabled="@(!Rules.Any())" OnClick="ClearRulesAsync">Clear Rules</MudButton>
+        </MudStack>
+
+        @if (!string.IsNullOrWhiteSpace(statusMessage))
+        {
+            <MudAlert Severity="@(statusIsError ? Severity.Error : Severity.Success)" Variant="Variant.Outlined" Dense="true">@statusMessage</MudAlert>
+        }
+
+        @if (ModelType is null)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">Select a registered domain model to browse properties.</MudAlert>
+        }
+        else
+        {
+            <MudGrid Spacing="3">
+                <MudItem xs="12" md="7">
+                    <MudTabs Rounded="true" Border="true">
+                        <MudTabPanel Text="Search">
+                            <MudStack Spacing="2" Class="pa-2">
+                                <MudTextField T="string" @bind-Value="searchTerm" Label="Search Properties" Variant="Variant.Outlined" Immediate="true" Clearable="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+                                <MudPaper Outlined="true" Style="max-height: 430px; overflow-y: auto;">
+                                    @foreach (PropertyPathEntry property in FilteredProperties)
+                                    {
+                                        bool selected = string.Equals(selectedPath, property.Path, StringComparison.Ordinal);
+                                        <MudButton Variant="Variant.Text" FullWidth="true" Class="@("irs-row" + (selected ? " selected" : string.Empty))" OnClick="@(() => SelectPath(property.Path))">
+                                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pa-2">
+                                            <MudStack Spacing="0">
+                                                <MudText Typo="Typo.body2" Style="font-family: Consolas, monospace; word-break: break-all;">@property.Path</MudText>
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">@property.TypeName</MudText>
+                                            </MudStack>
+                                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                                @if (selected)
+                                                {
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Check">Selected</MudChip>
+                                                }
+                                                @if (HasRule(property.Path))
+                                                {
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">Configured</MudChip>
+                                                }
+                                            </MudStack>
+                                        </MudStack>
+                                        </MudButton>
+                                        <MudDivider />
+                                    }
+                                </MudPaper>
+                            </MudStack>
+                        </MudTabPanel>
+                        <MudTabPanel Text="Tree">
+                            <MudStack Spacing="2" Class="pa-2">
+                                <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                                    <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.UnfoldMore" OnClick="ExpandAll">Expand All</MudButton>
+                                    <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.UnfoldLess" OnClick="CollapseAll">Collapse All</MudButton>
+                                    <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.SelectAll" OnClick="ToggleSelectAllVisible">@(AllVisibleSelected ? "Deselect Visible" : "Select Visible")</MudButton>
+                                </MudStack>
+                                <MudPaper Outlined="true" Class="pa-2" Style="max-height: 430px; overflow-y: auto;">
+                                    @foreach (RuleTreeNode node in treeNodes)
+                                    {
+                                        @RenderTreeNode(node, 0)
+                                    }
+                                </MudPaper>
+                            </MudStack>
+                        </MudTabPanel>
+                    </MudTabs>
+                </MudItem>
+                <MudItem xs="12" md="5">
+                    <MudStack Spacing="3">
+                        <MudPaper Outlined="true" Class="pa-3">
+                            <MudStack Spacing="2">
+                                <MudText Typo="Typo.subtitle2">Rule Editor</MudText>
+                                <MudTextField T="string" Value="selectedPath" ValueChanged="HandleSelectedPathChanged" Label="Property Path" Variant="Variant.Outlined" />
+                                <MudCheckBox T="bool" @bind-Value="ignoreCompletely" Label="Ignore completely" Color="Color.Primary" />
+                                <MudCheckBox T="bool" @bind-Value="ignoreCollectionOrder" Label="Ignore collection order" Disabled="@(!SelectedPathIsCollection)" Color="Color.Primary" />
+                                <MudCheckBox T="bool" @bind-Value="treatNullAndEmptyCollectionsAsEqual" Label="Treat null and empty collections as equal" Color="Color.Primary" />
+                                <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Add" Disabled="@(string.IsNullOrWhiteSpace(selectedPath))" OnClick="SaveCurrentRuleAsync">Add Or Update Rule</MudButton>
+                            </MudStack>
+                        </MudPaper>
+
+                        @if (selectedPropertyPaths.Any())
+                        {
+                            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                    <MudText>@selectedPropertyPaths.Count selected</MudText>
+                                    <MudStack Row="true" Spacing="1">
+                                        <MudButton Variant="Variant.Filled" Size="Size.Small" Color="Color.Success" OnClick="AddSelectedRulesAsync">Ignore Selected</MudButton>
+                                        <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="ClearSelection">Clear</MudButton>
+                                    </MudStack>
+                                </MudStack>
+                            </MudAlert>
+                        }
+
+                        <MudPaper Outlined="true" Class="pa-3">
+                            <MudStack Spacing="2">
+                                <MudText Typo="Typo.subtitle2">Current Ignore Rules</MudText>
+                                @if (!Rules.Any())
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">No custom ignore rules configured.</MudText>
+                                }
+                                else
+                                {
+                                    <MudPaper Outlined="true" Style="max-height: 330px; overflow-y: auto;">
+                                        @foreach (IgnoreRuleDefinition rule in Rules.OrderBy(rule => rule.PropertyPath, StringComparer.OrdinalIgnoreCase))
+                                        {
+                                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Class="pa-2">
+                                                <MudStack Spacing="1">
+                                                    <MudText Typo="Typo.body2" Style="font-family: Consolas, monospace; word-break: break-all;">@rule.PropertyPath</MudText>
+                                                    <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                                                        @foreach (string summary in RuleSummary(rule))
+                                                        {
+                                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@summary</MudChip>
+                                                        }
+                                                    </MudStack>
+                                                </MudStack>
+                                                <MudStack Row="true" Spacing="0">
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" OnClick="@(() => EditRule(rule))" />
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => RemoveRuleAsync(rule.PropertyPath))" />
+                                                </MudStack>
+                                            </MudStack>
+                                            <MudDivider />
+                                        }
+                                    </MudPaper>
+                                }
+                            </MudStack>
+                        </MudPaper>
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter] public Type? ModelType { get; set; }
+    [Parameter] public string ModelName { get; set; } = "Auto";
+    [Parameter] public List<IgnoreRuleDefinition> Rules { get; set; } = new();
+    [Parameter] public EventCallback<List<IgnoreRuleDefinition>> RulesChanged { get; set; }
+    [Parameter] public bool IgnoreCollectionOrder { get; set; }
+    [Parameter] public EventCallback<bool> IgnoreCollectionOrderChanged { get; set; }
+    [Parameter] public bool IgnoreStringCase { get; set; }
+    [Parameter] public EventCallback<bool> IgnoreStringCaseChanged { get; set; }
+    [Parameter] public bool IgnoreTrailingWhitespaceAtEnd { get; set; }
+    [Parameter] public EventCallback<bool> IgnoreTrailingWhitespaceAtEndChanged { get; set; }
+    [Parameter] public bool TreatNullAndEmptyCollectionsAsEqual { get; set; }
+    [Parameter] public EventCallback<bool> TreatNullAndEmptyCollectionsAsEqualChanged { get; set; }
+    [Parameter] public bool IgnoreXmlNamespaces { get; set; }
+    [Parameter] public EventCallback<bool> IgnoreXmlNamespacesChanged { get; set; }
+    [Parameter] public int MaxDifferences { get; set; } = 100;
+    [Parameter] public EventCallback<int> MaxDifferencesChanged { get; set; }
+
+    private readonly string importInputId = $"ignore-config-import-{Guid.NewGuid():N}";
+    private string searchTerm = string.Empty;
+    private string selectedPath = string.Empty;
+    private bool ignoreCompletely = true;
+    private bool ignoreCollectionOrder;
+    private bool treatNullAndEmptyCollectionsAsEqual;
+    private string? statusMessage;
+    private bool statusIsError;
+    private IReadOnlyList<PropertyPathEntry> propertyPaths = Array.Empty<PropertyPathEntry>();
+    private readonly List<RuleTreeNode> treeNodes = new();
+    private readonly HashSet<string> expandedPaths = new(StringComparer.Ordinal);
+    private readonly HashSet<string> selectedPropertyPaths = new(StringComparer.Ordinal);
+
+    private string ModelNameDisplay => ModelType is null ? "No browsable model selected" : $"{ModelName} ({propertyPaths.Count} paths)";
+
+    private bool SelectedPathIsCollection => propertyPaths.Any(property => string.Equals(property.Path, selectedPath, StringComparison.Ordinal) && property.IsCollection);
+
+    private IReadOnlyList<PropertyPathEntry> FilteredProperties =>
+        string.IsNullOrWhiteSpace(searchTerm)
+            ? propertyPaths
+            : propertyPaths.Where(property => property.Path.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    private bool AllVisibleSelected
+    {
+        get
+        {
+            List<string> visiblePaths = treeNodes.SelectMany(FlattenTree).Select(node => node.FullPath).Where(path => !string.IsNullOrWhiteSpace(path)).ToList();
+            return visiblePaths.Count > 0 && visiblePaths.All(selectedPropertyPaths.Contains);
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        propertyPaths = PropertyPathExplorer.GetPropertyPaths(ModelType);
+        BuildTree();
+    }
+
+    private void BuildTree()
+    {
+        treeNodes.Clear();
+        foreach (PropertyPathEntry property in propertyPaths)
+        {
+            AddTreePath(property);
+        }
+    }
+
+    private void AddTreePath(PropertyPathEntry property)
+    {
+        List<string> segments = SplitPath(property.Path);
+        List<RuleTreeNode> currentLevel = treeNodes;
+        string currentPath = string.Empty;
+
+        for (int index = 0; index < segments.Count; index++)
+        {
+            string segment = segments[index];
+            currentPath = string.IsNullOrEmpty(currentPath)
+                ? segment
+                : segment == "[*]" ? $"{currentPath}[*]" : $"{currentPath}.{segment}";
+
+            RuleTreeNode? node = currentLevel.FirstOrDefault(existing => string.Equals(existing.Name, segment, StringComparison.Ordinal));
+            if (node is null)
+            {
+                bool leaf = index == segments.Count - 1;
+                node = new RuleTreeNode(segment, currentPath, leaf ? property : null);
+                currentLevel.Add(node);
+            }
+
+            currentLevel = node.Children;
+        }
+    }
+
+    private static List<string> SplitPath(string path)
+    {
+        List<string> segments = new();
+        foreach (string part in path.Split('.', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (!part.Contains("[*]", StringComparison.Ordinal))
+            {
+                segments.Add(part);
+                continue;
+            }
+
+            int index = part.IndexOf("[*]", StringComparison.Ordinal);
+            string before = part[..index];
+            string after = part[(index + 3)..];
+            if (!string.IsNullOrWhiteSpace(before))
+            {
+                segments.Add(before);
+            }
+
+            segments.Add("[*]");
+            if (!string.IsNullOrWhiteSpace(after))
+            {
+                segments.Add(after);
+            }
+        }
+
+        return segments;
+    }
+
+    private void SelectPath(string path)
+    {
+        selectedPath = path;
+        IgnoreRuleDefinition? existing = Rules.FirstOrDefault(rule => string.Equals(rule.PropertyPath, path, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null)
+        {
+            ignoreCompletely = existing.IgnoreCompletely;
+            ignoreCollectionOrder = existing.IgnoreCollectionOrder;
+            treatNullAndEmptyCollectionsAsEqual = existing.TreatNullAndEmptyCollectionsAsEqual;
+            return;
+        }
+
+        bool pathIsCollection = propertyPaths.Any(property => string.Equals(property.Path, path, StringComparison.Ordinal) && property.IsCollection);
+        ignoreCompletely = !pathIsCollection;
+        ignoreCollectionOrder = pathIsCollection;
+        treatNullAndEmptyCollectionsAsEqual = false;
+    }
+
+    private void HandleSelectedPathChanged(string value)
+    {
+        selectedPath = value?.Trim() ?? string.Empty;
+    }
+
+    private async Task SaveCurrentRuleAsync()
+    {
+        if (string.IsNullOrWhiteSpace(selectedPath))
+        {
+            return;
+        }
+
+        await UpsertRulesAsync(new[] { CreateRule(selectedPath) });
+        SetStatus($"Saved ignore rule for '{selectedPath}'.", false);
+    }
+
+    private async Task AddSelectedRulesAsync()
+    {
+        List<IgnoreRuleDefinition> newRules = selectedPropertyPaths.Select(CreateRule).ToList();
+        await UpsertRulesAsync(newRules);
+        SetStatus($"Added {newRules.Count} ignore rule(s).", false);
+        ClearSelection();
+    }
+
+    private IgnoreRuleDefinition CreateRule(string path) =>
+        new IgnoreRuleDefinition(
+            path.Trim(),
+            ignoreCompletely,
+            !ignoreCompletely && ignoreCollectionOrder,
+            treatNullAndEmptyCollectionsAsEqual);
+
+    private async Task UpsertRulesAsync(IEnumerable<IgnoreRuleDefinition> rules)
+    {
+        List<IgnoreRuleDefinition> updated = Rules
+            .Where(existing => !rules.Any(rule => string.Equals(rule.PropertyPath, existing.PropertyPath, StringComparison.OrdinalIgnoreCase)))
+            .Concat(rules)
+            .OrderBy(rule => rule.PropertyPath, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        Rules = updated;
+        await RulesChanged.InvokeAsync(updated);
+    }
+
+    private async Task RemoveRuleAsync(string path)
+    {
+        List<IgnoreRuleDefinition> updated = Rules
+            .Where(rule => !string.Equals(rule.PropertyPath, path, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        Rules = updated;
+        await RulesChanged.InvokeAsync(updated);
+        SetStatus($"Removed '{path}'.", false);
+    }
+
+    private async Task ClearRulesAsync()
+    {
+        Rules = new List<IgnoreRuleDefinition>();
+        await RulesChanged.InvokeAsync(Rules);
+        SetStatus("Cleared custom ignore rules.", false);
+    }
+
+    private void EditRule(IgnoreRuleDefinition rule)
+    {
+        selectedPath = rule.PropertyPath;
+        ignoreCompletely = rule.IgnoreCompletely;
+        ignoreCollectionOrder = rule.IgnoreCollectionOrder;
+        treatNullAndEmptyCollectionsAsEqual = rule.TreatNullAndEmptyCollectionsAsEqual;
+    }
+
+    private async Task ExportConfigurationAsync()
+    {
+        try
+        {
+            ComparisonConfigurationFile export = new(
+                1,
+                new ComparisonConfigurationGlobalSettings(
+                    IgnoreCollectionOrder,
+                    IgnoreStringCase,
+                    IgnoreTrailingWhitespaceAtEnd,
+                    TreatNullAndEmptyCollectionsAsEqual,
+                    IgnoreXmlNamespaces),
+                Math.Max(1, MaxDifferences),
+                Rules.OrderBy(rule => rule.PropertyPath, StringComparer.OrdinalIgnoreCase).ToList());
+
+            string json = ComparisonConfigurationFileSerializer.Serialize(export);
+            await JS.InvokeVoidAsync("parityBenchDownloadText", $"comparison-config-{DateTime.Now:yyyyMMdd-HHmmss}.json", "application/json", json);
+            SetStatus($"Exported {Rules.Count} ignore rule(s).", false);
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Export failed: {ex.Message}", true);
+        }
+    }
+
+    private async Task ImportConfigurationAsync(InputFileChangeEventArgs args)
+    {
+        try
+        {
+            const long maxFileSize = 1024 * 1024;
+            await using Stream stream = args.File.OpenReadStream(maxFileSize);
+            using StreamReader reader = new(stream);
+            ComparisonConfigurationFile configuration = ComparisonConfigurationFileSerializer.Deserialize(await reader.ReadToEndAsync());
+
+            Rules = configuration.IgnoreRules.ToList();
+            await RulesChanged.InvokeAsync(Rules);
+            await IgnoreCollectionOrderChanged.InvokeAsync(configuration.GlobalSettings.IgnoreCollectionOrder);
+            await IgnoreStringCaseChanged.InvokeAsync(configuration.GlobalSettings.IgnoreStringCase);
+            await IgnoreTrailingWhitespaceAtEndChanged.InvokeAsync(configuration.GlobalSettings.IgnoreTrailingWhitespaceAtEnd);
+            await TreatNullAndEmptyCollectionsAsEqualChanged.InvokeAsync(configuration.GlobalSettings.TreatNullAndEmptyCollectionsAsEqual);
+            await IgnoreXmlNamespacesChanged.InvokeAsync(configuration.GlobalSettings.IgnoreXmlNamespaces);
+            await MaxDifferencesChanged.InvokeAsync(configuration.MaxDifferences);
+            SetStatus($"Imported {Rules.Count} ignore rule(s) and comparison settings.", false);
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Import failed: {ex.Message}", true);
+        }
+    }
+
+    private void ToggleSelectAllVisible()
+    {
+        List<string> visiblePaths = treeNodes.SelectMany(FlattenTree).Select(node => node.FullPath).Where(path => !string.IsNullOrWhiteSpace(path)).ToList();
+        if (AllVisibleSelected)
+        {
+            foreach (string path in visiblePaths)
+            {
+                selectedPropertyPaths.Remove(path);
+            }
+        }
+        else
+        {
+            foreach (string path in visiblePaths)
+            {
+                selectedPropertyPaths.Add(path);
+            }
+        }
+    }
+
+    private void ClearSelection() => selectedPropertyPaths.Clear();
+
+    private void ExpandAll()
+    {
+        foreach (RuleTreeNode node in treeNodes.SelectMany(FlattenTree))
+        {
+            if (node.Children.Count > 0)
+            {
+                expandedPaths.Add(node.FullPath);
+            }
+        }
+    }
+
+    private void CollapseAll() => expandedPaths.Clear();
+
+    private IEnumerable<RuleTreeNode> FlattenTree(RuleTreeNode node)
+    {
+        yield return node;
+        foreach (RuleTreeNode child in node.Children.SelectMany(FlattenTree))
+        {
+            yield return child;
+        }
+    }
+
+    private RenderFragment RenderTreeNode(RuleTreeNode node, int depth) => @<div>
+        @{
+            bool selected = string.Equals(selectedPath, node.FullPath, StringComparison.Ordinal);
+        }
+        <MudButton Variant="Variant.Text" FullWidth="true" Class="@("irs-tree-row" + (selected ? " selected" : string.Empty))" Style="@TreeNodeIndentStyle(depth)" OnClick="@(() => HandleTreeNodeClick(node))">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="pa-1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    @if (node.Children.Count > 0)
+                    {
+                        <MudIcon Icon="@(expandedPaths.Contains(node.FullPath) ? Icons.Material.Filled.ExpandMore : Icons.Material.Filled.ChevronRight)" Size="Size.Small" />
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@(selectedPropertyPaths.Contains(node.FullPath) ? Icons.Material.Filled.CheckBox : Icons.Material.Filled.CheckBoxOutlineBlank)" Size="Size.Small" />
+                    }
+                    <MudText Typo="Typo.body2" Style="font-family: Consolas, monospace;">@node.Name</MudText>
+                    @if (node.Entry is not null)
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@node.Entry.TypeName</MudChip>
+                    }
+                </MudStack>
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                    @if (selected)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled" Icon="@Icons.Material.Filled.Check">Selected</MudChip>
+                    }
+                    @if (HasRule(node.FullPath))
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">Configured</MudChip>
+                    }
+                </MudStack>
+            </MudStack>
+        </MudButton>
+        @if (node.Children.Count > 0 && expandedPaths.Contains(node.FullPath))
+        {
+            @foreach (RuleTreeNode child in node.Children.OrderBy(child => child.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                @RenderTreeNode(child, depth + 1)
+            }
+        }
+    </div>;
+
+    private void HandleTreeNodeClick(RuleTreeNode node)
+    {
+        if (node.Children.Count == 0)
+        {
+            SelectAndTogglePath(node.FullPath);
+            return;
+        }
+
+        SelectPath(node.FullPath);
+        ToggleExpanded(node.FullPath);
+    }
+
+    private void SelectAndTogglePath(string path)
+    {
+        SelectPath(path);
+        if (!selectedPropertyPaths.Add(path))
+        {
+            selectedPropertyPaths.Remove(path);
+        }
+    }
+
+    private void ToggleExpanded(string path)
+    {
+        if (!expandedPaths.Add(path))
+        {
+            expandedPaths.Remove(path);
+        }
+    }
+
+    private void ToggleSelected(string path, bool selected)
+    {
+        if (selected)
+        {
+            selectedPropertyPaths.Add(path);
+        }
+        else
+        {
+            selectedPropertyPaths.Remove(path);
+        }
+    }
+
+    private bool HasRule(string path) => Rules.Any(rule => string.Equals(rule.PropertyPath, path, StringComparison.OrdinalIgnoreCase));
+
+    private static IEnumerable<string> RuleSummary(IgnoreRuleDefinition rule)
+    {
+        if (rule.IgnoreCompletely)
+        {
+            yield return "Ignore completely";
+        }
+
+        if (rule.IgnoreCollectionOrder)
+        {
+            yield return "Ignore order";
+        }
+
+        if (rule.TreatNullAndEmptyCollectionsAsEqual)
+        {
+            yield return "Null/empty equal";
+        }
+    }
+
+    private static string TreeNodeIndentStyle(int depth) => $"padding-left: {depth * 18}px;";
+
+    private void SetStatus(string message, bool isError)
+    {
+        statusMessage = message;
+        statusIsError = isError;
+    }
+
+    private sealed class RuleTreeNode
+    {
+        public RuleTreeNode(string name, string fullPath, PropertyPathEntry? entry)
+        {
+            Name = name;
+            FullPath = fullPath;
+            Entry = entry;
+        }
+
+        public string Name { get; }
+        public string FullPath { get; }
+        public PropertyPathEntry? Entry { get; set; }
+        public List<RuleTreeNode> Children { get; } = new();
+    }
+}

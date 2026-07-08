@@ -71,6 +71,8 @@ public sealed class ParityBenchHomeTests
                 Array.Empty<EndpointOption>(),
                 Array.Empty<RequestComparisonPresetOption>()));
 
+        public Type? ResolveResponseModelType(string modelName) => null;
+
         public Task<ComparisonRun> CreateRunFromDirectoryAsync(
             RequestComparisonRunRequest request,
             CancellationToken cancellationToken = default) =>

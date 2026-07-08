@@ -1,6 +1,7 @@
 using AngleSharp.Dom;
 using Bunit;
 
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -120,6 +121,111 @@ public sealed class RunWorkflowViewTests
             StringAssert.Contains(component.Markup, "Endpoint B");
         });
     }
+    [TestMethod]
+    public void RunWorkflow_WhenModelIsSelected_RendersRuleStudiosWithModelPaths()
+    {
+        IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();
+
+        SetAutocompleteValue(component, 0, "ConsumerReportJsonResponse");
+
+        component.WaitForAssertion(() =>
+        {
+            StringAssert.Contains(component.Markup, "Ignore Rules Studio");
+            StringAssert.Contains(component.Markup, "Mask Rules Studio");
+            StringAssert.Contains(component.Markup, "Subject.NationalIdentifier");
+            StringAssert.Contains(component.Markup, "ProviderTraceId");
+        });
+    }
+    [TestMethod]
+    public void IgnoreRulesStudio_WhenSearchRowIsClicked_PopulatesEditorPath()
+    {
+        IRenderedComponent<IgnoreRulesStudio> component = testContext.Render<IgnoreRulesStudio>(parameters => parameters
+            .Add(p => p.ModelType, typeof(FakeRunWorkflowViewDataSource.FakeConsumerReportResponse))
+            .Add(p => p.ModelName, "ConsumerReportJsonResponse")
+            .Add(p => p.Rules, new List<IgnoreRuleDefinition>()));
+
+        FindButtonContaining(component, "ProviderTraceId").Click();
+
+        component.WaitForAssertion(() => Assert.AreEqual("ProviderTraceId", GetTextFieldValue(component, "Property Path")));
+        StringAssert.Contains(component.Markup, "Selected");
+    }
+
+    [TestMethod]
+    public void IgnoreRulesStudio_WhenTreeLeafRowIsClicked_TogglesSelectionAndPopulatesEditorPath()
+    {
+        IRenderedComponent<IgnoreRulesStudio> component = testContext.Render<IgnoreRulesStudio>(parameters => parameters
+            .Add(p => p.ModelType, typeof(FakeRunWorkflowViewDataSource.FakeConsumerReportResponse))
+            .Add(p => p.ModelName, "ConsumerReportJsonResponse")
+            .Add(p => p.Rules, new List<IgnoreRuleDefinition>()));
+
+        ClickTab(component, "Tree");
+        FindLastButtonContaining(component, "ProviderTraceId").Click();
+
+        component.WaitForAssertion(() =>
+        {
+            Assert.AreEqual("ProviderTraceId", GetTextFieldValue(component, "Property Path"));
+            StringAssert.Contains(component.Markup, "1 selected");
+        });
+    }
+
+    [TestMethod]
+    public void IgnoreRulesStudio_WhenCollectionPathIsClicked_EnablesCollectionOrderRule()
+    {
+        IRenderedComponent<IgnoreRulesStudio> component = testContext.Render<IgnoreRulesStudio>(parameters => parameters
+            .Add(p => p.ModelType, typeof(FakeRunWorkflowViewDataSource.FakeConsumerReportResponse))
+            .Add(p => p.ModelName, "ConsumerReportJsonResponse")
+            .Add(p => p.Rules, new List<IgnoreRuleDefinition>()));
+
+        FindButtonContaining(component, "Aliases").Click();
+
+        component.WaitForAssertion(() =>
+        {
+            Assert.AreEqual("Aliases", GetTextFieldValue(component, "Property Path"));
+            IElement collectionOrderInput = FindCheckboxInput(component, "Ignore collection order");
+            Assert.IsNull(collectionOrderInput.GetAttribute("disabled"));
+            Assert.IsNotNull(collectionOrderInput.GetAttribute("checked"));
+        });
+
+        FindButtonContaining(component, "Add Or Update Rule").Click();
+
+        component.WaitForAssertion(() =>
+        {
+            IgnoreRuleDefinition rule = component.Instance.Rules.Single();
+            Assert.AreEqual("Aliases", rule.PropertyPath);
+            Assert.IsFalse(rule.IgnoreCompletely);
+            Assert.IsTrue(rule.IgnoreCollectionOrder);
+        });
+    }
+    [TestMethod]
+    public void MaskRulesStudio_WhenSearchRowIsClicked_PopulatesEditorPath()
+    {
+        IRenderedComponent<MaskRulesStudio> component = testContext.Render<MaskRulesStudio>(parameters => parameters
+            .Add(p => p.ModelType, typeof(FakeRunWorkflowViewDataSource.FakeConsumerReportResponse))
+            .Add(p => p.ModelName, "ConsumerReportJsonResponse")
+            .Add(p => p.Rules, new List<MaskRuleDefinition>()));
+
+        FindButtonContaining(component, "Subject.NationalIdentifier").Click();
+
+        component.WaitForAssertion(() => Assert.AreEqual("Subject.NationalIdentifier", GetTextFieldValue(component, "Property Path")));
+        StringAssert.Contains(component.Markup, "Selected");
+    }
+
+    [TestMethod]
+    public void MaskRulesStudio_WhenTreeLeafRowIsClicked_PopulatesEditorPath()
+    {
+        IRenderedComponent<MaskRulesStudio> component = testContext.Render<MaskRulesStudio>(parameters => parameters
+            .Add(p => p.ModelType, typeof(FakeRunWorkflowViewDataSource.FakeConsumerReportResponse))
+            .Add(p => p.ModelName, "ConsumerReportJsonResponse")
+            .Add(p => p.Rules, new List<MaskRuleDefinition>()));
+
+        ClickTab(component, "Tree");
+        FindLastButtonContaining(component, "Subject").Click();
+        FindLastButtonContaining(component, "NationalIdentifier").Click();
+
+        component.WaitForAssertion(() => Assert.AreEqual("Subject.NationalIdentifier", GetTextFieldValue(component, "Property Path")));
+    }
+
+
 
     [TestMethod]
     public void RunWorkflow_WhenPresetIsSelected_PopulatesRequestFieldsAndRules()
@@ -196,6 +302,37 @@ public sealed class RunWorkflowViewTests
         Assert.AreEqual("CustomModelName", dataSource.LastRequest!.ModelName);
     }
 
+
+    private static IElement FindButtonContaining<TComponent>(IRenderedComponent<TComponent> component, string text)
+        where TComponent : IComponent =>
+        component.FindAll("button")
+            .First(button => button.TextContent.Contains(text, StringComparison.Ordinal));
+
+
+    private static IElement FindLastButtonContaining<TComponent>(IRenderedComponent<TComponent> component, string text)
+        where TComponent : IComponent =>
+        component.FindAll("button")
+            .Last(button => button.TextContent.Contains(text, StringComparison.Ordinal));
+    private static void ClickTab<TComponent>(IRenderedComponent<TComponent> component, string text)
+        where TComponent : IComponent =>
+        component.FindAll("[role='tab']")
+            .Single(tab => tab.TextContent.Contains(text, StringComparison.Ordinal))
+            .Click();
+
+    private static IElement FindCheckboxInput<TComponent>(IRenderedComponent<TComponent> component, string labelText)
+        where TComponent : IComponent =>
+        component.FindAll("label")
+            .Single(label => label.TextContent.Contains(labelText, StringComparison.Ordinal))
+            .QuerySelector("input")!;
+    private static string? GetTextFieldValue<TComponent>(IRenderedComponent<TComponent> component, string labelText)
+        where TComponent : IComponent
+    {
+        IElement label = component.FindAll("label")
+            .Single(element => string.Equals(element.TextContent.Trim(), labelText, StringComparison.Ordinal));
+        string? inputId = label.GetAttribute("for");
+        Assert.IsFalse(string.IsNullOrWhiteSpace(inputId));
+        return component.Find($"#{inputId}").GetAttribute("value");
+    }
     private static void SelectPreset(IRenderedComponent<RunWorkflow> component, string presetId)
     {
         IRenderedComponent<MudSelect<string>> select = component.FindComponent<MudSelect<string>>();
@@ -247,6 +384,13 @@ public sealed class RunWorkflowViewTests
             Task.FromResult(CreateDefaults());
 
         public bool StartWasCalled { get; private set; }
+
+        public Type? ResolveResponseModelType(string modelName) => modelName switch
+        {
+            "ConsumerReportJsonResponse" => typeof(FakeConsumerReportResponse),
+            "SampleSoapCustomerLookupResponseEnvelope" => typeof(FakeSoapCustomerLookupResponseEnvelope),
+            _ => null,
+        };
 
         public Task<ComparisonRun> CreateRunFromDirectoryAsync(
             RequestComparisonRunRequest request,
@@ -328,6 +472,24 @@ public sealed class RunWorkflowViewTests
                         new Dictionary<string, string> { ["Content-Type"] = "application/json" },
                         new Dictionary<string, string> { ["X-Fixture-Key"] = "fixture-key" }),
                 });
+
+        public sealed class FakeConsumerReportResponse
+        {
+            public FakeSubject Subject { get; set; } = new();
+            public List<string> Aliases { get; set; } = new();
+            public string ProviderTraceId { get; set; } = string.Empty;
+        }
+
+        public sealed class FakeSubject
+        {
+            public string NationalIdentifier { get; set; } = string.Empty;
+        }
+
+        private sealed class FakeSoapCustomerLookupResponseEnvelope
+        {
+            public string SourceSystem { get; set; } = string.Empty;
+            public string SensitiveToken { get; set; } = string.Empty;
+        }
 
         private static RunOptions CreateOptions() =>
             new RunOptions(

@@ -50,6 +50,72 @@ public sealed class RunWorkflowRuleParserTests
         AssertThrows<InvalidOperationException>(() => RunWorkflowRuleParser.ParseSmartIgnoreRules("PropertyName"));
     }
 
+    [TestMethod]
+    public void ComparisonConfigurationFileSerializer_WhenV2ConfigurationProvided_RoundTripsSettingsAndRules()
+    {
+        ComparisonConfigurationFile configuration = new ComparisonConfigurationFile(
+            1,
+            new ComparisonConfigurationGlobalSettings(
+                IgnoreCollectionOrder: true,
+                IgnoreStringCase: true,
+                IgnoreTrailingWhitespaceAtEnd: true,
+                TreatNullAndEmptyCollectionsAsEqual: true,
+                IgnoreXmlNamespaces: false),
+            25,
+            new[] { new IgnoreRuleDefinition("Subject.TraceId", ignoreCollectionOrder: true) });
+
+        string json = ComparisonConfigurationFileSerializer.Serialize(configuration);
+        ComparisonConfigurationFile parsed = ComparisonConfigurationFileSerializer.Deserialize(json);
+
+        Assert.AreEqual(25, parsed.MaxDifferences);
+        Assert.IsTrue(parsed.GlobalSettings.IgnoreCollectionOrder);
+        Assert.IsTrue(parsed.GlobalSettings.IgnoreStringCase);
+        Assert.AreEqual("Subject.TraceId", parsed.IgnoreRules.Single().PropertyPath);
+        Assert.IsTrue(parsed.IgnoreRules.Single().IgnoreCollectionOrder);
+    }
+
+    [TestMethod]
+    public void ComparisonConfigurationFileSerializer_WhenV1ConfigurationProvided_ImportsGlobalSettingsAndIgnoreRules()
+    {
+        string json = """
+            {
+              "schemaVersion": 1,
+              "globalSettings": {
+                "ignoreCollectionOrder": true,
+                "ignoreStringCase": false,
+                "ignoreTrailingWhitespaceAtEnd": true,
+                "treatNullAndEmptyCollectionsAsEqual": true,
+                "ignoreXmlNamespaces": true
+              },
+              "ignoreRules": [
+                { "propertyPath": "SourceSystem", "ignoreCompletely": true }
+              ]
+            }
+            """;
+
+        ComparisonConfigurationFile parsed = ComparisonConfigurationFileSerializer.Deserialize(json);
+
+        Assert.AreEqual(100, parsed.MaxDifferences);
+        Assert.IsTrue(parsed.GlobalSettings.IgnoreCollectionOrder);
+        Assert.IsTrue(parsed.GlobalSettings.IgnoreTrailingWhitespaceAtEnd);
+        Assert.AreEqual("SourceSystem", parsed.IgnoreRules.Single().PropertyPath);
+    }
+
+    [TestMethod]
+    public void MaskRuleFileSerializer_WhenArrayOrContainerProvided_ImportsRules()
+    {
+        IReadOnlyList<MaskRuleDefinition> arrayRules = MaskRuleFileSerializer.Deserialize(
+            """[{"propertyPath":"Subject.Token","preserveLastCharacters":4,"maskCharacter":"#"}]""");
+        IReadOnlyList<MaskRuleDefinition> containerRules = MaskRuleFileSerializer.Deserialize(
+            """{"maskRules":[{"propertyPath":"Subject.Id","preserveLastCharacters":2,"maskCharacter":"*"}]}""");
+
+        Assert.AreEqual("Subject.Token", arrayRules.Single().PropertyPath);
+        Assert.AreEqual(4, arrayRules.Single().PreserveLastCharacters);
+        Assert.AreEqual("#", arrayRules.Single().MaskCharacter);
+        Assert.AreEqual("Subject.Id", containerRules.Single().PropertyPath);
+        Assert.AreEqual(2, containerRules.Single().PreserveLastCharacters);
+    }
+
     private static void AssertThrows<TException>(Action action)
         where TException : Exception
     {

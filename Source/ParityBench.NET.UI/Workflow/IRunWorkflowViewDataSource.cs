@@ -11,6 +11,8 @@ public interface IRunWorkflowViewDataSource
 {
     Task<RequestComparisonDefaults> LoadDefaultsAsync(CancellationToken cancellationToken = default);
 
+    Type? ResolveResponseModelType(string modelName);
+
     Task<ComparisonRun> CreateRunFromDirectoryAsync(
         RequestComparisonRunRequest request,
         CancellationToken cancellationToken = default);
