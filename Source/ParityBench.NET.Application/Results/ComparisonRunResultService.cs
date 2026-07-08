@@ -1,7 +1,10 @@
 using System.Text;
+using System.Text.Json;
 
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Runs;
+using ParityBench.NET.Domain.Reports;
+using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Results;
 using ParityBench.NET.Domain.Runs;
 
@@ -46,6 +49,32 @@ public sealed class ComparisonRunResultService : IComparisonRunResultUseCases
         return run.Summary;
     }
 
+    public async Task<StaticReportAnalysisSnapshot?> LoadReportAnalysisAsync(
+        RunId runId,
+        CancellationToken cancellationToken = default)
+    {
+        ComparisonRun run = await LoadRunAsync(runId, cancellationToken).ConfigureAwait(false);
+        if (run.Summary?.DetailIndexReference is null)
+        {
+            return null;
+        }
+
+        return await runDetailStore.LoadAnalysisAsync(run.Summary.DetailIndexReference, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<StaticReportDifferenceIndex?> LoadDifferenceIndexAsync(
+        RunId runId,
+        CancellationToken cancellationToken = default)
+    {
+        ComparisonRun run = await LoadRunAsync(runId, cancellationToken).ConfigureAwait(false);
+        if (run.Summary?.DetailIndexReference is null)
+        {
+            return null;
+        }
+
+        return await runDetailStore.LoadDifferenceIndexAsync(run.Summary.DetailIndexReference, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<RunDetailPage> LoadRunDetailsAsync(
         RunId runId,
         RunDetailQuery query,
@@ -56,12 +85,61 @@ public sealed class ComparisonRunResultService : IComparisonRunResultUseCases
         ComparisonRun run = await LoadRunAsync(runId, cancellationToken).ConfigureAwait(false);
         if (run.Summary?.DetailIndexReference is null)
         {
-            return new RunDetailPage(Array.Empty<ParityBench.NET.Domain.Requests.RequestPairResult>(), 0, query.Offset, query.Limit);
+            return new RunDetailPage(Array.Empty<RequestPairResult>(), 0, query.Offset, query.Limit);
         }
 
         return await runDetailStore
             .LoadPageAsync(run.Summary.DetailIndexReference, query, cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    public async Task ExportRunDetailsJsonAsync(
+        RunId runId,
+        Stream destination,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+
+        await using Utf8JsonWriter writer = new Utf8JsonWriter(destination, new JsonWriterOptions { Indented = true });
+        writer.WriteStartArray();
+        await ForEachDetailPageAsync(
+            runId,
+            async page =>
+            {
+                foreach (RequestPairResult item in page.Items)
+                {
+                    JsonSerializer.Serialize(writer, item, StaticReportJsonOptions.Create());
+                }
+
+                await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
+            },
+            cancellationToken).ConfigureAwait(false);
+        writer.WriteEndArray();
+        await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task ExportRunDetailsCsvAsync(
+        RunId runId,
+        Stream destination,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+
+        using StreamWriter writer = new StreamWriter(destination, new UTF8Encoding(false), leaveOpen: true);
+        await writer.WriteLineAsync("Request,Outcome,Differences,StatusA,StatusB,Error").ConfigureAwait(false);
+        await ForEachDetailPageAsync(
+            runId,
+            async page =>
+            {
+                foreach (RequestPairResult item in page.Items)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    await writer.WriteLineAsync(BuildCsvRow(item)).ConfigureAwait(false);
+                }
+
+                await writer.FlushAsync().ConfigureAwait(false);
+            },
+            cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<ArtifactContentPreview> ReadArtifactPreviewAsync(
@@ -107,6 +185,30 @@ public sealed class ComparisonRunResultService : IComparisonRunResultUseCases
             totalLength);
     }
 
+    private async Task ForEachDetailPageAsync(
+        RunId runId,
+        Func<RunDetailPage, Task> handlePageAsync,
+        CancellationToken cancellationToken)
+    {
+        int offset = 0;
+        while (true)
+        {
+            RunDetailPage page = await LoadRunDetailsAsync(runId, new RunDetailQuery(offset, RunDetailQuery.MaxLimit), cancellationToken).ConfigureAwait(false);
+            if (page.Items.Count == 0)
+            {
+                break;
+            }
+
+            await handlePageAsync(page).ConfigureAwait(false);
+            if (!page.HasMore)
+            {
+                break;
+            }
+
+            offset += page.Items.Count;
+        }
+    }
+
     private async Task<Stream> OpenArtifactAsync(
         ArtifactReference artifact,
         CancellationToken cancellationToken)
@@ -119,5 +221,26 @@ public sealed class ComparisonRunResultService : IComparisonRunResultUseCases
         {
             throw new ArtifactNotFoundException(artifact, ex);
         }
+    }
+
+    private static string BuildCsvRow(RequestPairResult item) =>
+        string.Join(",", new[]
+        {
+            EscapeCsv(item.RelativePath),
+            EscapeCsv(item.Outcome.ToString()),
+            item.DifferenceCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            item.ResponseA?.StatusCode.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
+            item.ResponseB?.StatusCode.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty,
+            EscapeCsv(item.ErrorMessage ?? item.OutcomeMessage ?? string.Empty),
+        });
+
+    private static string EscapeCsv(string value)
+    {
+        if (!value.Contains(',') && !value.Contains('"') && !value.Contains('\n') && !value.Contains('\r'))
+        {
+            return value;
+        }
+
+        return $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
     }
 }

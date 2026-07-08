@@ -83,7 +83,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             : CreateRunOptionsWithProfileDefaults(run.Options, contractProfile);
 
         await progressReporter
-            .ReportAsync(RunStatus.Parsing, new RunProgress(5, "Loading request batch."), cancellationToken)
+            .ReportAsync(RunStatus.Parsing, new RunProgress(5, "Loading request batch."), cancellationToken, force: true)
             .ConfigureAwait(false);
 
         RequestBatchManifest manifest = await requestBatchStore
@@ -92,56 +92,81 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
 
         int totalRequests = manifest.Requests.Count;
         await progressReporter
-            .ReportAsync(RunStatus.Executing, new RunProgress(10, "Executing requests.", 0, totalRequests), cancellationToken)
+            .ReportAsync(RunStatus.Executing, new RunProgress(10, "Executing requests.", 0, totalRequests), cancellationToken, force: true)
             .ConfigureAwait(false);
 
-        ConcurrentBag<RequestPairResult> results = new ConcurrentBag<RequestPairResult>();
         RunExecutionCounters counters = new RunExecutionCounters();
+        RunSummaryAccumulator summaryAccumulator = new RunSummaryAccumulator();
         int completedRequests = 0;
+        int chunkSize = Math.Max(1, comparisonOptions.LargeRun.ChunkSize);
+        IReadOnlyList<IReadOnlyList<RequestItem>> chunks = Partition(manifest.Requests, chunkSize);
         ParallelOptions parallelOptions = new ParallelOptions
         {
             CancellationToken = cancellationToken,
-            MaxDegreeOfParallelism = run.Options.MaxConcurrency,
+            MaxDegreeOfParallelism = comparisonOptions.MaxConcurrency,
         };
 
         Stopwatch requestExecutionStopwatch = Stopwatch.StartNew();
-        await Parallel.ForEachAsync(manifest.Requests, parallelOptions, async (request, token) =>
-        {
-            RequestPairResult result = await ExecutePairAsync(run, comparisonOptions, request, contractProfile, counters, token).ConfigureAwait(false);
-            results.Add(result);
+        Stopwatch comparisonStopwatch = new Stopwatch();
+        Stopwatch finalizationStopwatch = new Stopwatch();
+        await using IRunDetailWriter detailWriter = await runDetailStore
+            .CreateWriterAsync(run.Id, comparisonOptions.LargeRun.DetailPageSize, cancellationToken)
+            .ConfigureAwait(false);
 
-            int completed = Interlocked.Increment(ref completedRequests);
+        for (int chunkIndex = 0; chunkIndex < chunks.Count; chunkIndex++)
+        {
+            IReadOnlyList<RequestItem> chunk = chunks[chunkIndex];
+            ConcurrentBag<RequestPairResult> chunkResults = new ConcurrentBag<RequestPairResult>();
+            await Parallel.ForEachAsync(chunk, parallelOptions, async (request, token) =>
+            {
+                RequestPairResult result = await ExecutePairAsync(run, comparisonOptions, request, contractProfile, counters, token).ConfigureAwait(false);
+                chunkResults.Add(result);
+
+                int completed = Interlocked.Increment(ref completedRequests);
+                await progressReporter
+                    .ReportAsync(
+                        RunStatus.Executing,
+                        new RunProgress(
+                            CalculateExecutionPercent(completed, totalRequests),
+                            $"Executed {completed} of {totalRequests} requests.",
+                            completed,
+                            totalRequests),
+                        token)
+                    .ConfigureAwait(false);
+            }).ConfigureAwait(false);
+
+            comparisonStopwatch.Start();
+            List<RequestPairResult> orderedChunkResults = chunkResults
+                .OrderBy(result => result.RelativePath, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            comparisonStopwatch.Stop();
+
+            summaryAccumulator.Add(orderedChunkResults);
+            await detailWriter.AppendAsync(orderedChunkResults, cancellationToken).ConfigureAwait(false);
+
             await progressReporter
                 .ReportAsync(
-                    RunStatus.Executing,
+                    RunStatus.Comparing,
                     new RunProgress(
-                        CalculateExecutionPercent(completed, totalRequests),
-                        $"Executed {completed} of {totalRequests} requests.",
-                        completed,
+                        CalculateExecutionPercent(completedRequests, totalRequests),
+                        chunks.Count > 1
+                            ? $"Persisted chunk {chunkIndex + 1} of {chunks.Count}."
+                            : "Persisted comparison results.",
+                        completedRequests,
                         totalRequests),
-                    token)
+                    cancellationToken,
+                    force: true)
                 .ConfigureAwait(false);
-        }).ConfigureAwait(false);
+        }
+
         requestExecutionStopwatch.Stop();
 
-        Stopwatch comparisonStopwatch = Stopwatch.StartNew();
-        List<RequestPairResult> orderedResults = results
-            .OrderBy(result => result.RelativePath, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
+        finalizationStopwatch.Start();
         await progressReporter
-            .ReportAsync(RunStatus.Comparing, new RunProgress(90, "Classifying response pairs.", totalRequests, totalRequests), cancellationToken)
-            .ConfigureAwait(false);
-        comparisonStopwatch.Stop();
-
-        Stopwatch finalizationStopwatch = Stopwatch.StartNew();
-        await progressReporter
-            .ReportAsync(RunStatus.Finalizing, new RunProgress(95, "Saving result details.", totalRequests, totalRequests), cancellationToken)
+            .ReportAsync(RunStatus.Finalizing, new RunProgress(95, "Saving result details.", totalRequests, totalRequests), cancellationToken, force: true)
             .ConfigureAwait(false);
 
-        RunDetailReference detailReference = await runDetailStore
-            .SaveDetailsAsync(run.Id, orderedResults, cancellationToken)
-            .ConfigureAwait(false);
+        RunDetailReference detailReference = await detailWriter.CompleteAsync(cancellationToken).ConfigureAwait(false);
         finalizationStopwatch.Stop();
         totalStopwatch.Stop();
 
@@ -154,7 +179,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             run.Options.MaxConcurrency,
             counters.ResponseBytesWritten);
 
-        return RequestPairResult.Summarize(orderedResults, detailReference, executionMetrics);
+        return summaryAccumulator.ToSummary(detailReference, executionMetrics);
     }
     private async Task<RequestPairResult> ExecutePairAsync(
         ComparisonRun run,
@@ -538,7 +563,8 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             options.ResponseModelName,
             comparisonOptions,
             options.RequestExecution,
-            options.ContractProfile);
+            options.ContractProfile,
+            options.LargeRun);
     }
 
     private int CalculateExecutionPercent(int completedRequests, int totalRequests)
@@ -604,6 +630,72 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         return null;
     }
 
+    private static IReadOnlyList<IReadOnlyList<RequestItem>> Partition(
+        IReadOnlyList<RequestItem> requests,
+        int chunkSize)
+    {
+        if (requests.Count == 0)
+        {
+            return Array.Empty<IReadOnlyList<RequestItem>>();
+        }
+
+        List<IReadOnlyList<RequestItem>> chunks = new List<IReadOnlyList<RequestItem>>((int)Math.Ceiling(requests.Count / (double)chunkSize));
+        for (int index = 0; index < requests.Count; index += chunkSize)
+        {
+            chunks.Add(requests.Skip(index).Take(Math.Min(chunkSize, requests.Count - index)).ToList());
+        }
+
+        return chunks;
+    }
+
+    private sealed class RunSummaryAccumulator
+    {
+        private int totalPairs;
+        private int equalPairs;
+        private int differentPairs;
+        private int errorPairs;
+        private int statusCodeMismatchPairs;
+        private int bothNonSuccessPairs;
+
+        public void Add(IEnumerable<RequestPairResult> results)
+        {
+            foreach (RequestPairResult result in results)
+            {
+                totalPairs++;
+                switch (result.Outcome)
+                {
+                    case RequestPairOutcome.Equal:
+                        equalPairs++;
+                        break;
+                    case RequestPairOutcome.Different:
+                        differentPairs++;
+                        break;
+                    case RequestPairOutcome.ExecutionFailed:
+                        errorPairs++;
+                        break;
+                    case RequestPairOutcome.StatusCodeMismatch:
+                        statusCodeMismatchPairs++;
+                        break;
+                    case RequestPairOutcome.BothNonSuccess:
+                        bothNonSuccessPairs++;
+                        break;
+                }
+            }
+        }
+
+        public RunResultSummary ToSummary(
+            RunDetailReference detailReference,
+            RunExecutionMetrics executionMetrics) =>
+            new RunResultSummary(
+                totalPairs,
+                equalPairs,
+                differentPairs,
+                errorPairs,
+                statusCodeMismatchPairs,
+                bothNonSuccessPairs,
+                detailReference,
+                executionMetrics);
+    }
     private sealed class RunExecutionCounters
     {
         private long responseBytesWritten;

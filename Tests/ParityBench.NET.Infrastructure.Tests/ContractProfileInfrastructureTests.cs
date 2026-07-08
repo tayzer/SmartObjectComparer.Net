@@ -1,4 +1,5 @@
 using System.Text;
+using System.Xml.Serialization;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -161,6 +162,39 @@ public sealed class ContractProfileInfrastructureTests
     }
 
     [TestMethod]
+    public async Task DeserializeAsync_WhenIgnoringNamespaces_DeserializesModelWithNamespacedXmlAttributes()
+    {
+        JsonXmlContractPayloadSerializer serializer = new JsonXmlContractPayloadSerializer();
+        const string xml = "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:tns=\"urn:trended\"><soap:Body><tns:GetTrendedData><tns:Request><tns:AccountId>abc</tns:AccountId><tns:Periods><tns:Period>2024</tns:Period><tns:Period>2025</tns:Period></tns:Periods></tns:Request></tns:GetTrendedData></soap:Body></soap:Envelope>";
+        using MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
+
+        object result = await serializer.DeserializeAsync(
+            typeof(NamespacedSoapRequestEnvelope),
+            stream,
+            PayloadFormat.Xml,
+            ignoreXmlNamespaces: true);
+
+        NamespacedSoapRequestEnvelope envelope = (NamespacedSoapRequestEnvelope)result;
+        Assert.AreEqual("abc", envelope.Body.GetTrendedData.Request.AccountId);
+        CollectionAssert.AreEqual(
+            new[] { "2024", "2025" },
+            envelope.Body.GetTrendedData.Request.Periods.ToArray());
+    }
+
+    [TestMethod]
+    public async Task DeserializeAsync_WhenNamespacesAreNotIgnored_RemainsStrictForNamespacedModels()
+    {
+        JsonXmlContractPayloadSerializer serializer = new JsonXmlContractPayloadSerializer();
+        const string xml = "<Envelope><Body><GetTrendedData><Request><AccountId>abc</AccountId></Request></GetTrendedData></Body></Envelope>";
+        using MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
+
+        await AssertThrowsAsync<InvalidOperationException>(() => serializer.DeserializeAsync(
+            typeof(NamespacedSoapRequestEnvelope),
+            stream,
+            PayloadFormat.Xml,
+            ignoreXmlNamespaces: false));
+    }
+    [TestMethod]
     public async Task PrepareRequestAsync_WhenUsingSampleProfile_ProducesEndpointBJsonRequest()
     {
         IContractProfile profile = CreateSampleProfile();
@@ -289,6 +323,24 @@ public sealed class ContractProfileInfrastructureTests
         }
     }
 
+    private static async Task AssertThrowsAsync<TException>(Func<Task> action)
+        where TException : Exception
+    {
+        try
+        {
+            await action().ConfigureAwait(false);
+        }
+        catch (TException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            Assert.Fail($"Expected {typeof(TException).Name}, but got {ex.GetType().Name}.");
+        }
+
+        Assert.Fail($"Expected {typeof(TException).Name}, but no exception was thrown.");
+    }
     private static void AssertThrows<TException>(Action action)
         where TException : Exception
     {
@@ -308,6 +360,38 @@ public sealed class ContractProfileInfrastructureTests
         Assert.Fail($"Expected {typeof(TException).Name}, but no exception was thrown.");
     }
 
+    [XmlRoot("Envelope", Namespace = SoapNamespace)]
+    public sealed class NamespacedSoapRequestEnvelope
+    {
+        private const string SoapNamespace = "http://schemas.xmlsoap.org/soap/envelope/";
+
+        [XmlElement("Body", Namespace = SoapNamespace)]
+        public NamespacedSoapRequestBody Body { get; set; } = new NamespacedSoapRequestBody();
+    }
+
+    public sealed class NamespacedSoapRequestBody
+    {
+        [XmlElement("GetTrendedData", Namespace = TrendedNamespace)]
+        public NamespacedGetTrendedData GetTrendedData { get; set; } = new NamespacedGetTrendedData();
+    }
+
+    public sealed class NamespacedGetTrendedData
+    {
+        [XmlElement("Request", Namespace = TrendedNamespace)]
+        public NamespacedTrendedDataRequest Request { get; set; } = new NamespacedTrendedDataRequest();
+    }
+
+    public sealed class NamespacedTrendedDataRequest
+    {
+        [XmlElement("AccountId", Namespace = TrendedNamespace)]
+        public string AccountId { get; set; } = string.Empty;
+
+        [XmlArray("Periods", Namespace = TrendedNamespace)]
+        [XmlArrayItem("Period", Namespace = TrendedNamespace)]
+        public List<string> Periods { get; set; } = new List<string>();
+    }
+
+    private const string TrendedNamespace = "urn:trended";
     private sealed class FixedTokenProvider : IExpectedJsonCustomerLookupAuthorizationTokenProvider
     {
         private readonly string token;

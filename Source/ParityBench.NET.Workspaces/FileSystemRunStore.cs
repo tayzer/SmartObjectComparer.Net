@@ -200,6 +200,7 @@ public sealed class FileSystemRunStore : IRunStore
             Comparison = ToDto(options.Comparison),
             RequestExecution = ToDto(options.RequestExecution),
             ContractProfile = options.ContractProfile is null ? null : ToDto(options.ContractProfile),
+            LargeRun = ToDto(options.LargeRun),
         };
 
     private EndpointDefinitionDto ToDto(EndpointDefinition endpoint) =>
@@ -303,6 +304,11 @@ public sealed class FileSystemRunStore : IRunStore
         {
             DetailId = reference.DetailId,
             Artifact = reference.Artifact is null ? null : ToDto(reference.Artifact),
+            SchemaVersion = reference.SchemaVersion,
+            PageSize = reference.PageSize,
+            TotalCount = reference.TotalCount,
+            AnalysisArtifact = reference.AnalysisArtifact is null ? null : ToDto(reference.AnalysisArtifact),
+            DifferenceIndexArtifact = reference.DifferenceIndexArtifact is null ? null : ToDto(reference.DifferenceIndexArtifact),
         };
 
     private ArtifactReferenceDto ToDto(ArtifactReference reference) =>
@@ -341,7 +347,8 @@ public sealed class FileSystemRunStore : IRunStore
             responseModelName,
             dto.Comparison is null ? null : FromDto(dto.Comparison),
             dto.RequestExecution is null ? null : FromDto(dto.RequestExecution),
-            contractProfile);
+            contractProfile,
+            dto.LargeRun is null ? null : FromDto(dto.LargeRun));
     }
 
     private EndpointDefinition FromDto(EndpointDefinitionDto dto) =>
@@ -365,6 +372,25 @@ public sealed class FileSystemRunStore : IRunStore
     private RequestExecutionOptions FromDto(RequestExecutionOptionsDto dto) =>
         new RequestExecutionOptions(dto.ContentTypeOverride);
 
+    private LargeRunOptionsDto ToDto(LargeRunOptions options) =>
+        new LargeRunOptionsDto
+        {
+            LargeRunThreshold = options.LargeRunThreshold,
+            ChunkSize = options.ChunkSize,
+            DetailPageSize = options.DetailPageSize,
+            ComparisonConcurrency = options.ComparisonConcurrency,
+            ProgressUpdateItemInterval = options.ProgressUpdateItemInterval,
+            ProgressUpdateMillisecondsInterval = options.ProgressUpdateMillisecondsInterval,
+        };
+
+    private LargeRunOptions FromDto(LargeRunOptionsDto dto) =>
+        new LargeRunOptions(
+            dto.LargeRunThreshold <= 0 ? 1000 : dto.LargeRunThreshold,
+            dto.ChunkSize <= 0 ? 500 : dto.ChunkSize,
+            dto.DetailPageSize <= 0 ? 250 : dto.DetailPageSize,
+            dto.ComparisonConcurrency,
+            dto.ProgressUpdateItemInterval <= 0 ? 100 : dto.ProgressUpdateItemInterval,
+            dto.ProgressUpdateMillisecondsInterval <= 0 ? 500 : dto.ProgressUpdateMillisecondsInterval);
     private ContractProfileSelection FromDto(ContractProfileSelectionDto dto) =>
         new ContractProfileSelection(dto.ProfileId, dto.ProfileVersion, dto.Options);
 
@@ -422,7 +448,12 @@ public sealed class FileSystemRunStore : IRunStore
     private RunDetailReference FromDto(RunDetailReferenceDto dto) =>
         new RunDetailReference(
             dto.DetailId,
-            dto.Artifact is null ? null : FromDto(dto.Artifact));
+            dto.Artifact is null ? null : FromDto(dto.Artifact),
+            dto.SchemaVersion <= 0 ? 1 : dto.SchemaVersion,
+            dto.PageSize <= 0 ? 250 : dto.PageSize,
+            Math.Max(0, dto.TotalCount),
+            dto.AnalysisArtifact is null ? null : FromDto(dto.AnalysisArtifact),
+            dto.DifferenceIndexArtifact is null ? null : FromDto(dto.DifferenceIndexArtifact));
 
     private ArtifactReference FromDto(ArtifactReferenceDto dto) =>
         new ArtifactReference(dto.ArtifactId, dto.ContentType);
@@ -472,6 +503,8 @@ public sealed class FileSystemRunStore : IRunStore
 
         public ContractProfileSelectionDto? ContractProfile { get; init; }
 
+        public LargeRunOptionsDto? LargeRun { get; init; }
+
         public AlternateContractOptionsDto? AlternateContract { get; init; }
     }
 
@@ -510,6 +543,20 @@ public sealed class FileSystemRunStore : IRunStore
         public string? ContentTypeOverride { get; init; }
     }
 
+    private sealed class LargeRunOptionsDto
+    {
+        public int LargeRunThreshold { get; init; } = 1000;
+
+        public int ChunkSize { get; init; } = 500;
+
+        public int DetailPageSize { get; init; } = 250;
+
+        public int? ComparisonConcurrency { get; init; }
+
+        public int ProgressUpdateItemInterval { get; init; } = 100;
+
+        public int ProgressUpdateMillisecondsInterval { get; init; } = 500;
+    }
     private sealed class ContractProfileSelectionDto
     {
         public string ProfileId { get; init; } = string.Empty;
@@ -607,6 +654,16 @@ public sealed class FileSystemRunStore : IRunStore
         public string DetailId { get; init; } = string.Empty;
 
         public ArtifactReferenceDto? Artifact { get; init; }
+
+        public int SchemaVersion { get; init; } = 1;
+
+        public int PageSize { get; init; } = 250;
+
+        public int TotalCount { get; init; }
+
+        public ArtifactReferenceDto? AnalysisArtifact { get; init; }
+
+        public ArtifactReferenceDto? DifferenceIndexArtifact { get; init; }
     }
 
     private sealed class ArtifactReferenceDto

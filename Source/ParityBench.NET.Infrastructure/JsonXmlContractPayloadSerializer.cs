@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.Json;
 using System.Xml;
 using System.Xml.Linq;
@@ -11,6 +11,8 @@ namespace ParityBench.NET.Infrastructure;
 
 public sealed class JsonXmlContractPayloadSerializer : IContractPayloadSerializer
 {
+    private const int ErrorPreviewLength = 1000;
+    private static readonly NamespaceAgnosticXmlSerializerFactory XmlSerializerFactory = new NamespaceAgnosticXmlSerializerFactory();
     private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
     {
         PropertyNameCaseInsensitive = true,
@@ -82,17 +84,28 @@ public sealed class JsonXmlContractPayloadSerializer : IContractPayloadSerialize
         using StreamReader reader = new StreamReader(body, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, leaveOpen: false);
         string xml = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
 
-        if (ignoreXmlNamespaces)
+        try
         {
-            XDocument document = XDocument.Parse(xml, LoadOptions.PreserveWhitespace);
-            xml = StripNamespaces(document).ToString(SaveOptions.DisableFormatting);
+            if (ignoreXmlNamespaces)
+            {
+                XDocument document = XDocument.Parse(xml, LoadOptions.PreserveWhitespace);
+                xml = StripNamespaces(document).ToString(SaveOptions.DisableFormatting);
+            }
+
+            XmlSerializer serializer = XmlSerializerFactory.GetSerializer(targetType, ignoreXmlNamespaces);
+            using StringReader stringReader = new StringReader(xml);
+            object? result = serializer.Deserialize(stringReader);
+
+            return result ?? throw new InvalidOperationException($"XML payload could not be deserialized as '{targetType.Name}'.");
         }
-
-        XmlSerializer serializer = new XmlSerializer(targetType);
-        using StringReader stringReader = new StringReader(xml);
-        object? result = serializer.Deserialize(stringReader);
-
-        return result ?? throw new InvalidOperationException($"XML payload could not be deserialized as '{targetType.Name}'.");
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            throw new InvalidOperationException(
+                $"XML payload could not be deserialized as '{targetType.FullName}'. "
+                + $"IgnoreXmlNamespaces={ignoreXmlNamespaces}. "
+                + $"Preview: {CreatePreview(xml)}",
+                ex);
+        }
     }
 
     private static void SerializeXml(
@@ -127,4 +140,13 @@ public sealed class JsonXmlContractPayloadSerializer : IContractPayloadSerialize
                 .Where(attribute => !attribute.IsNamespaceDeclaration)
                 .Select(attribute => new XAttribute(attribute.Name.LocalName, attribute.Value)),
             element.Nodes().Select(node => node is XElement child ? StripNamespaces(child) : node));
+
+    private static string CreatePreview(string xml)
+    {
+        string preview = xml.Length <= ErrorPreviewLength
+            ? xml
+            : xml[..ErrorPreviewLength];
+
+        return preview.Replace(Environment.NewLine, " ", StringComparison.Ordinal);
+    }
 }

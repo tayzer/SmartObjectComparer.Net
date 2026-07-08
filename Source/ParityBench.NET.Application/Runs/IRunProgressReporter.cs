@@ -14,4 +14,11 @@ public interface IRunProgressReporter
         RunStatus status,
         RunProgress progress,
         CancellationToken cancellationToken = default);
+
+    Task ReportAsync(
+        RunStatus status,
+        RunProgress progress,
+        CancellationToken cancellationToken = default,
+        bool force = false) =>
+        ReportAsync(status, progress, cancellationToken);
 }

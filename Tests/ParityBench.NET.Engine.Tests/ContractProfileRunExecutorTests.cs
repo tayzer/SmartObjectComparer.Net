@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Serialization;
+using System.Xml.Serialization;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -157,6 +159,61 @@ public sealed class ContractProfileRunExecutorTests
             .Where(pair => pair.Key.Contains("/canonical/", StringComparison.OrdinalIgnoreCase))
             .All(pair => pair.Value.Contains("<Envelope", StringComparison.Ordinal)));
         Assert.IsTrue(sender.CapturedRequests.Single(sent => sent.Endpoint == EndpointSlot.B).Body.Contains("\"lookupId\":\"123\"", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_WhenContractProfileSourceRequestHasNamespacedSoapModel_TransformsEndpointBRequest()
+    {
+        RequestItem request = new RequestItem("one.xml", "application/xml", 10);
+        InMemoryArtifactStore artifactStore = new InMemoryArtifactStore();
+        IContractPayloadSerializer serializer = new JsonXmlContractPayloadSerializer();
+        IContractProfile profile = new ContractProfile<
+            NamespacedSoapRequestEnvelope,
+            NamespacedAlternateRequest,
+            NamespacedCanonicalResponse,
+            NamespacedAlternateResponse>(
+            serializer,
+            "namespaced-soap-json",
+            "NamespacedCanonicalResponse",
+            requestEnvelope => new NamespacedAlternateRequest
+            {
+                AccountId = requestEnvelope.Body.GetTrendedData.Request.AccountId,
+            },
+            alternateResponse => new NamespacedCanonicalResponse
+            {
+                Status = alternateResponse.Status,
+            },
+            endpointBResponseFormat: PayloadFormat.Json,
+            canonicalResponseFormat: PayloadFormat.Json,
+            canonicalResponseContentType: "application/json",
+            endpointAResponseNormalizer: (_, _) => ValueTask.FromResult(new NormalizedContractResponse(
+                ContractPayload.FromBytes(Encoding.UTF8.GetBytes("{\"status\":\"OK\"}"), PayloadFormat.Json, "application/json"),
+                "namespaced-soap-json")));
+        ResponseModelRegistry modelRegistry = new ResponseModelRegistry();
+        modelRegistry.Register<NamespacedCanonicalResponse>("NamespacedCanonicalResponse");
+        CompareNetObjectsResponseComparer comparer = new CompareNetObjectsResponseComparer(
+            artifactStore,
+            new JsonXmlResponseBodyDeserializer(modelRegistry));
+        CapturingEndpointRequestSender sender = new CapturingEndpointRequestSender(endpointRequest =>
+            endpointRequest.Endpoint == EndpointSlot.A
+                ? "{\"status\":\"OK\"}"
+                : "{\"status\":\"OK\"}");
+        const string requestBody = "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:tns=\"urn:trended\"><soap:Body><tns:GetTrendedData><tns:Request><tns:AccountId>abc</tns:AccountId></tns:Request></tns:GetTrendedData></soap:Body></soap:Envelope>";
+        BasicComparisonRunExecutor executor = new BasicComparisonRunExecutor(
+            new FakeRequestBatchStore(CreateManifest(request), requestBody),
+            sender,
+            artifactStore,
+            new FakeRunDetailStore(),
+            comparer,
+            CreateRegistry(profile));
+
+        RunResultSummary summary = await executor.ExecuteAsync(CreateRun("NamespacedCanonicalResponse", "namespaced-soap-json"), new CapturingProgressReporter());
+
+        Assert.AreEqual(0, summary.ErrorPairs);
+        Assert.AreEqual(1, summary.EqualPairs);
+        CapturedRequest endpointBRequest = sender.CapturedRequests.Single(sent => sent.Endpoint == EndpointSlot.B);
+        Assert.AreEqual("application/json", endpointBRequest.ContentType);
+        Assert.IsTrue(endpointBRequest.Body.Contains("\"accountId\":\"abc\"", StringComparison.Ordinal));
     }
 
     private static BasicComparisonRunExecutor CreateExecutor(
@@ -332,6 +389,53 @@ public sealed class ContractProfileRunExecutorTests
             return CreateNormalizedResponse();
         }
     }
+
+    [XmlRoot("Envelope", Namespace = SoapNamespace)]
+    public sealed class NamespacedSoapRequestEnvelope
+    {
+        private const string SoapNamespace = "http://schemas.xmlsoap.org/soap/envelope/";
+
+        [XmlElement("Body", Namespace = SoapNamespace)]
+        public NamespacedSoapRequestBody Body { get; set; } = new NamespacedSoapRequestBody();
+    }
+
+    public sealed class NamespacedSoapRequestBody
+    {
+        [XmlElement("GetTrendedData", Namespace = TrendedNamespace)]
+        public NamespacedGetTrendedData GetTrendedData { get; set; } = new NamespacedGetTrendedData();
+    }
+
+    public sealed class NamespacedGetTrendedData
+    {
+        [XmlElement("Request", Namespace = TrendedNamespace)]
+        public NamespacedTrendedDataRequest Request { get; set; } = new NamespacedTrendedDataRequest();
+    }
+
+    public sealed class NamespacedTrendedDataRequest
+    {
+        [XmlElement("AccountId", Namespace = TrendedNamespace)]
+        public string AccountId { get; set; } = string.Empty;
+    }
+
+    public sealed class NamespacedAlternateRequest
+    {
+        [JsonPropertyName("accountId")]
+        public string AccountId { get; init; } = string.Empty;
+    }
+
+    public sealed class NamespacedCanonicalResponse
+    {
+        [JsonPropertyName("status")]
+        public string Status { get; init; } = string.Empty;
+    }
+
+    public sealed class NamespacedAlternateResponse
+    {
+        [JsonPropertyName("status")]
+        public string Status { get; init; } = string.Empty;
+    }
+
+    private const string TrendedNamespace = "urn:trended";
 
     private sealed class CapturingEndpointRequestSender : IEndpointRequestSender
     {

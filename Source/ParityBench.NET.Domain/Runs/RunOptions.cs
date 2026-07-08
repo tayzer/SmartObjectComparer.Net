@@ -1,4 +1,4 @@
-﻿using ParityBench.NET.Domain.Comparison;
+using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Requests;
 
@@ -15,7 +15,8 @@ public sealed record RunOptions
         string responseModelName = "Auto",
         ComparisonOptions? comparisonOptions = null,
         RequestExecutionOptions? requestExecutionOptions = null,
-        ContractProfileSelection? contractProfileSelection = null)
+        ContractProfileSelection? contractProfileSelection = null,
+        LargeRunOptions? largeRunOptions = null)
     {
         ArgumentNullException.ThrowIfNull(endpointA);
         ArgumentNullException.ThrowIfNull(endpointB);
@@ -39,6 +40,7 @@ public sealed record RunOptions
         Comparison = comparisonOptions ?? new ComparisonOptions();
         RequestExecution = requestExecutionOptions ?? new RequestExecutionOptions();
         ContractProfile = contractProfileSelection;
+        LargeRun = largeRunOptions ?? new LargeRunOptions();
     }
 
     public RequestBatchReference RequestBatch { get; }
@@ -60,4 +62,6 @@ public sealed record RunOptions
     public RequestExecutionOptions RequestExecution { get; }
 
     public ContractProfileSelection? ContractProfile { get; }
+
+    public LargeRunOptions LargeRun { get; }
 }

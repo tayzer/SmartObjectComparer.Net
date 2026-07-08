@@ -118,7 +118,8 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
         }
 
         string differenceIndexPath = $"{AnalysisDirectoryName}/{DifferenceIndexFileName}";
-        StaticReportDifferenceIndex differenceIndex = StaticReportDifferenceIndexBuilder.Build(analysisItems);
+        StaticReportDifferenceIndex differenceIndex = await resultUseCases.LoadDifferenceIndexAsync(runId, cancellationToken).ConfigureAwait(false)
+            ?? StaticReportDifferenceIndexBuilder.Build(analysisItems);
         await WriteJsonAsync(Path.Combine(analysisDirectory, DifferenceIndexFileName), differenceIndex, cancellationToken).ConfigureAwait(false);
 
         AcceptedDifferenceProfileStore? acceptedDifferenceSnapshot = acceptedDifferenceUseCases is null
@@ -137,7 +138,7 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
             detailPageSize,
             pageInfos,
             StaticReportMetadata.FromRun(run, generatedAtValue),
-            BuildAnalysisSnapshot(analysisItems, differenceIndexPath),
+            (await resultUseCases.LoadReportAnalysisAsync(runId, cancellationToken).ConfigureAwait(false)) ?? BuildAnalysisSnapshot(analysisItems, differenceIndexPath),
             acceptedDifferenceSnapshot);
 
         string manifestPath = Path.Combine(normalizedOutputDirectory, ManifestFileName);

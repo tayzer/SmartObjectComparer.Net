@@ -2,6 +2,7 @@ using System.Text;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
+using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Results;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Results;
@@ -77,6 +78,61 @@ public sealed class FileSystemResultBrowsingTests
         Assert.AreEqual("two.json", page.Items[0].RelativePath);
     }
 
+
+    [TestMethod]
+    public async Task IncrementalWriter_WhenResultsSpanPages_WritesPagedManifestAndReadsDirectPage()
+    {
+        string workspaceRoot = CreateTempDirectory();
+        FileSystemRunDetailStore detailStore = new FileSystemRunDetailStore(workspaceRoot);
+        await using IRunDetailWriter writer = await detailStore.CreateWriterAsync(new RunId("run-1"), pageSize: 3);
+        await writer.AppendAsync(Enumerable.Range(1, 8).Select(index => CreateResult($"request-{index:00}.json", RequestPairOutcome.Equal)).ToArray());
+        RunDetailReference reference = await writer.CompleteAsync();
+
+        Assert.AreEqual(2, reference.SchemaVersion);
+        Assert.AreEqual(3, reference.PageSize);
+        Assert.AreEqual(8, reference.TotalCount);
+        Assert.IsTrue(File.Exists(Path.Combine(workspaceRoot, "runs", "run-1", "details", "manifest.json")));
+        Assert.AreEqual(3, Directory.EnumerateFiles(Path.Combine(workspaceRoot, "runs", "run-1", "details", "pages"), "page-*.json").Count());
+
+        RunDetailPage page = await detailStore.LoadPageAsync(reference, new RunDetailQuery(offset: 3, limit: 3));
+
+        CollectionAssert.AreEqual(
+            new[] { "request-04.json", "request-05.json", "request-06.json" },
+            page.Items.Select(item => item.RelativePath).ToArray());
+    }
+
+    [TestMethod]
+    public async Task IncrementalWriter_WhenCompleted_PersistsAnalysisAndDifferenceIndexSidecars()
+    {
+        string workspaceRoot = CreateTempDirectory();
+        FileSystemRunDetailStore detailStore = new FileSystemRunDetailStore(workspaceRoot);
+        RequestPairResult different = new RequestPairResult(
+            "request-01.json",
+            RequestPairOutcome.Different,
+            CreateResponse(EndpointSlot.A, "request-01.json"),
+            CreateResponse(EndpointSlot.B, "request-01.json"),
+            differenceCount: 1,
+            differences: new[] { new ParityBench.NET.Domain.Comparison.ComparisonDifference("Customer.Name", "A", "B", "Name differs.") });
+
+        await using IRunDetailWriter writer = await detailStore.CreateWriterAsync(new RunId("run-1"), pageSize: 10);
+        await writer.AppendAsync(new[] { different });
+        RunDetailReference reference = await writer.CompleteAsync();
+
+        Assert.IsNotNull(reference.AnalysisArtifact);
+        Assert.IsNotNull(reference.DifferenceIndexArtifact);
+        Assert.IsTrue(File.Exists(Path.Combine(workspaceRoot, reference.AnalysisArtifact!.ArtifactId.Replace('/', Path.DirectorySeparatorChar))));
+        Assert.IsTrue(File.Exists(Path.Combine(workspaceRoot, reference.DifferenceIndexArtifact!.ArtifactId.Replace('/', Path.DirectorySeparatorChar))));
+
+        var analysis = await detailStore.LoadAnalysisAsync(reference);
+        var index = await detailStore.LoadDifferenceIndexAsync(reference);
+
+        Assert.IsNotNull(analysis);
+        Assert.AreEqual(1, analysis!.TotalPairs);
+        Assert.AreEqual(1, analysis.TotalDifferences);
+        Assert.IsNotNull(index);
+        Assert.AreEqual(1, index!.TotalDifferences);
+        Assert.AreEqual("Customer.Name", index.Properties[0].NormalizedPath);
+    }
     [TestMethod]
     public async Task ReadArtifactPreview_WhenStreamIsOpened_DoesNotLoadDetailIndex()
     {
