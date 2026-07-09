@@ -15,7 +15,7 @@
         <MudTabPanel Text="Request Comparison (A/B)">
             <MudStack Spacing="4">
                 <RunWorkflow RunSelected="SelectRun" RunChanged="HandleRunChanged" />
-                @if (selectedRunId is not null)
+                @if (ShouldShowSelectedRunResults)
                 {
                     <MudPaper Elevation="2" Class="pa-4">
                         <MudText Typo="Typo.h6" Class="mb-3">Request Comparison Results</MudText>
@@ -41,6 +41,7 @@
     private const int RequestComparisonTabIndex = 0;
     private const int RunHistoryTabIndex = 1;
     private RunId? selectedRunId;
+    private ComparisonRun? selectedRun;
     private int activeTabIndex = RequestComparisonTabIndex;
     private int historyVersion;
     private int resultRefreshVersion;
@@ -49,8 +50,15 @@
         ? "No run selected"
         : $"Selected run: {selectedRunId.Value.Value}";
 
+    private bool ShouldShowSelectedRunResults => selectedRunId is not null && selectedRun?.IsTerminal == true;
+
     private void SelectRun(RunId runId)
     {
+        if (selectedRunId != runId)
+        {
+            selectedRun = null;
+        }
+
         selectedRunId = runId;
         resultRefreshVersion++;
     }
@@ -58,6 +66,7 @@
     private void SelectHistoricalRun(RunId runId)
     {
         selectedRunId = runId;
+        selectedRun = null;
         activeTabIndex = RunHistoryTabIndex;
         resultRefreshVersion++;
     }
@@ -65,6 +74,7 @@
     private void HandleRunChanged(ComparisonRun run)
     {
         selectedRunId = run.Id;
+        selectedRun = run;
         activeTabIndex = RequestComparisonTabIndex;
         historyVersion++;
         resultRefreshVersion++;

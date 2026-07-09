@@ -67,6 +67,53 @@ public sealed class RunResultsViewTests
     }
 
 
+
+    [TestMethod]
+    public void RunResult_WhenRunIsExecuting_SkipsReportDetailLoaders()
+    {
+        RunId runId = new RunId("run-1");
+        dataSource.Run = ComparisonRun.Create(runId, CreateOptions())
+            .Start()
+            .Advance(RunStatus.Executing, new RunProgress(25, "Executed 125 of 500 requests.", 125, 500));
+
+        IRenderedComponent<RunResult> component = testContext.Render<RunResult>(parameters =>
+            parameters.Add(result => result.RunId, runId));
+
+        component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "Executed 125 of 500 requests."));
+        Assert.IsFalse(component.Markup.Contains("Comparison Report", StringComparison.Ordinal));
+        Assert.AreEqual(0, dataSource.SummaryLoadCount);
+        Assert.AreEqual(0, dataSource.MetadataLoadCount);
+        Assert.AreEqual(0, dataSource.AnalysisLoadCount);
+        Assert.AreEqual(0, dataSource.DetailLoadCount);
+    }
+
+    [TestMethod]
+    public void RunResult_WhenTerminalRunHasNoSummary_SkipsReportDetailLoaders()
+    {
+        RunId runId = new RunId("run-1");
+        dataSource.Run = ComparisonRun.Rehydrate(
+            runId,
+            CreateOptions(),
+            RunStatus.Completed,
+            new RunProgress(100, "Run finished."),
+            DateTimeOffset.UtcNow.AddMinutes(-1),
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow.AddMinutes(-1),
+            DateTimeOffset.UtcNow,
+            summary: null,
+            errorMessage: null);
+
+        IRenderedComponent<RunResult> component = testContext.Render<RunResult>(parameters =>
+            parameters.Add(result => result.RunId, runId));
+
+        component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "Run finished."));
+        Assert.IsFalse(component.Markup.Contains("Comparison Report", StringComparison.Ordinal));
+        Assert.AreEqual(1, dataSource.SummaryLoadCount);
+        Assert.AreEqual(0, dataSource.MetadataLoadCount);
+        Assert.AreEqual(0, dataSource.AnalysisLoadCount);
+        Assert.AreEqual(0, dataSource.DetailLoadCount);
+    }
+
     [TestMethod]
     public void RunResult_WhenRendered_RendersV1StyleReportSurface()
     {
@@ -423,6 +470,14 @@ public sealed class RunResultsViewTests
 
         public int PreviewReadCount { get; private set; }
 
+        public int SummaryLoadCount { get; private set; }
+
+        public int MetadataLoadCount { get; private set; }
+
+        public int AnalysisLoadCount { get; private set; }
+
+        public int DetailLoadCount { get; private set; }
+
         public string? ErrorMessage { get; set; }
 
         public Task<IReadOnlyList<RunListItem>> ListRunsAsync(CancellationToken cancellationToken = default)
@@ -440,18 +495,21 @@ public sealed class RunResultsViewTests
         public Task<RunResultSummary?> LoadRunSummaryAsync(RunId runId, CancellationToken cancellationToken = default)
         {
             ThrowIfConfigured();
+            SummaryLoadCount++;
             return Task.FromResult(Summary);
         }
 
         public Task<StaticReportMetadata?> LoadReportMetadataAsync(RunId runId, CancellationToken cancellationToken = default)
         {
             ThrowIfConfigured();
+            MetadataLoadCount++;
             return Task.FromResult<StaticReportMetadata?>(StaticReportMetadata.FromRun(Run ?? throw new InvalidOperationException("Run was not configured."), DateTimeOffset.Parse("2026-01-01T00:00:00Z")));
         }
 
         public Task<StaticReportAnalysisSnapshot?> LoadReportAnalysisAsync(RunId runId, CancellationToken cancellationToken = default)
         {
             ThrowIfConfigured();
+            AnalysisLoadCount++;
             StaticReportAnalysisSnapshot snapshot = new StaticReportAnalysisSnapshot(
                 Details.Count,
                 Details.Count(detail => detail.Outcome != RequestPairOutcome.ExecutionFailed),
@@ -475,6 +533,7 @@ public sealed class RunResultsViewTests
             CancellationToken cancellationToken = default)
         {
             ThrowIfConfigured();
+            DetailLoadCount++;
             List<RequestPairResult> matches = Details
                 .Where(detail => query.Outcome is null || detail.Outcome == query.Outcome.Value)
                 .Where(detail => query.RelativePathSearch is null || detail.RelativePath.Contains(query.RelativePathSearch, StringComparison.OrdinalIgnoreCase))

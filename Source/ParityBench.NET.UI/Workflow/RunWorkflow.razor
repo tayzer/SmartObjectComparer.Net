@@ -249,6 +249,18 @@
                 </MudButton>
             </MudStack>
 
+            @if (isPreparingRequestBatch)
+            {
+                <MudStack Spacing="2">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                        <MudText Typo="Typo.subtitle2" Color="Color.Primary">Preparing request batch...</MudText>
+                    </MudStack>
+                    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+                    <MudText Typo="Typo.body2">Copying request files into the run workspace.</MudText>
+                </MudStack>
+            }
+
             @if (currentRun is not null)
             {
                 <MudStack Spacing="2">
@@ -312,7 +324,7 @@
     private string endpointA = string.Empty;
     private string endpointB = string.Empty;
     private string timeoutSeconds = "30";
-    private string maxConcurrency = "4";
+    private string maxConcurrency = "32";
     private string modelName = "Auto";
     private string contractProfileId = string.Empty;
     private string contentTypeOverride = string.Empty;
@@ -333,6 +345,7 @@
     private Type? selectedModelType;
     private bool isBusy;
     private bool isRunning;
+    private bool isPreparingRequestBatch;
     private string? errorMessage;
     private string? successMessage;
     private ComparisonRun? currentRun;
@@ -357,6 +370,8 @@
         try
         {
             defaults = await DataSource.LoadDefaultsAsync();
+            timeoutSeconds = defaults.RunDefaults.TimeoutSeconds.ToString();
+            maxConcurrency = defaults.RunDefaults.MaxConcurrency.ToString();
             RefreshSelectedModelType();
             RefreshAvailableProfiles(clearInvalidSelection: false);
         }
@@ -455,9 +470,13 @@
             errorMessage = null;
             successMessage = null;
             progressLog.Clear();
+            currentRun = null;
+            isPreparingRequestBatch = true;
+            await InvokeAsync(StateHasChanged);
 
             RequestComparisonRunRequest request = BuildRequest();
             currentRun = await DataSource.CreateRunFromDirectoryAsync(request);
+            isPreparingRequestBatch = false;
             RecordProgress(currentRun);
             await NotifyRunChangedAsync(currentRun);
 
@@ -478,6 +497,7 @@
         finally
         {
             isBusy = false;
+            isPreparingRequestBatch = false;
             isRunning = currentRun is not null && DataSource.IsRunning(currentRun.Id);
         }
     }

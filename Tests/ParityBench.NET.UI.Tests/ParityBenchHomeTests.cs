@@ -7,9 +7,11 @@ using MudBlazor;
 using MudBlazor.Services;
 
 using ParityBench.NET.Application.Reports;
+using ParityBench.NET.Application.AcceptedDifferences;
 using ParityBench.NET.Application.Results;
 using ParityBench.NET.Application.Workflow;
 using ParityBench.NET.Domain.Reports;
+using ParityBench.NET.Domain.AcceptedDifferences;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Results;
 using ParityBench.NET.Domain.Runs;
@@ -34,6 +36,7 @@ public sealed class ParityBenchHomeTests
         testContext.Services.AddSingleton<IRunWorkflowViewDataSource>(new FakeRunWorkflowViewDataSource());
         testContext.Services.AddSingleton<IRunResultsViewDataSource>(new FakeRunResultsViewDataSource());
         testContext.Services.AddSingleton<IRequestSourcePicker>(new NoOpRequestSourcePicker());
+        testContext.Services.AddSingleton<IAcceptedDifferenceUseCases>(new InMemoryAcceptedDifferenceUseCases(isReadOnly: false));
     }
 
     [TestCleanup]
@@ -61,6 +64,52 @@ public sealed class ParityBenchHomeTests
         Assert.IsFalse(component.Markup.Contains("No runs found", StringComparison.Ordinal));
         StringAssert.Contains(component.Markup, "Start Comparison");
     }
+
+
+    [TestMethod]
+    public void ParityBenchHome_WhenRunIsExecuting_DoesNotRenderRequestResultsPanel()
+    {
+        IRenderedComponent<ParityBenchHome> component = testContext.Render<ParityBenchHome>();
+        IRenderedComponent<RunWorkflow> workflow = component.FindComponent<RunWorkflow>();
+
+        component.InvokeAsync(() => workflow.Instance.RunChanged.InvokeAsync(CreateExecutingRun(new RunId("run-1")))).GetAwaiter().GetResult();
+        Assert.IsFalse(component.Markup.Contains("Request Comparison Results", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void ParityBenchHome_WhenRunIsCompleted_RendersRequestResultsPanel()
+    {
+        IRenderedComponent<ParityBenchHome> component = testContext.Render<ParityBenchHome>();
+        IRenderedComponent<RunWorkflow> workflow = component.FindComponent<RunWorkflow>();
+
+        component.InvokeAsync(() => workflow.Instance.RunChanged.InvokeAsync(CreateCompletedRun(new RunId("run-1")))).GetAwaiter().GetResult();
+        component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "Request Comparison Results"));
+    }
+
+    private static ComparisonRun CreateExecutingRun(RunId runId) =>
+        ComparisonRun.Create(runId, CreateOptions())
+            .Start()
+            .Advance(RunStatus.Executing, new RunProgress(25, "Executed 125 of 500 requests.", 125, 500));
+
+    private static ComparisonRun CreateCompletedRun(RunId runId)
+    {
+        RunResultSummary summary = new RunResultSummary(
+            totalPairs: 1,
+            equalPairs: 1,
+            differentPairs: 0,
+            errorPairs: 0,
+            detailIndexReference: new RunDetailReference("runs/run-1/details/manifest.json"));
+
+        return ComparisonRun.Create(runId, CreateOptions()).Start().Complete(summary);
+    }
+
+    private static RunOptions CreateOptions() =>
+        new RunOptions(
+            new RequestBatchReference("batch-1"),
+            new EndpointDefinition(new Uri("https://service-a.example.test"), "Expected"),
+            new EndpointDefinition(new Uri("https://service-b.example.test"), "Actual"),
+            TimeSpan.FromSeconds(30),
+            32);
 
     private sealed class FakeRunWorkflowViewDataSource : IRunWorkflowViewDataSource
     {

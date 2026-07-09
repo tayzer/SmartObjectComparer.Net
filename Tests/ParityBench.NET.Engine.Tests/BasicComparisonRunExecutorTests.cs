@@ -181,6 +181,29 @@ public sealed class BasicComparisonRunExecutorTests
             && progress.Progress.TotalItems == 5));
     }
 
+
+    [TestMethod]
+    public async Task ExecuteAsync_WhenFiveHundredRequestsExist_CompletesAndHonorsConcurrencyLimit()
+    {
+        RequestItem[] requests = Enumerable
+            .Range(1, 500)
+            .Select(index => new RequestItem($"request-{index:000}.json", "application/json", 2))
+            .ToArray();
+        FakeEndpointRequestSender sender = FakeEndpointRequestSender.ForBody("same", TimeSpan.FromMilliseconds(1));
+        CapturingProgressReporter progressReporter = new CapturingProgressReporter();
+        BasicComparisonRunExecutor executor = CreateExecutor(CreateBatch(requests), sender);
+
+        RunResultSummary summary = await executor.ExecuteAsync(CreateRun(maxConcurrency: 32), progressReporter);
+
+        Assert.AreEqual(500, summary.TotalPairs);
+        Assert.AreEqual(500, summary.EqualPairs);
+        Assert.IsTrue(sender.MaxActiveRequestPaths <= 32);
+        Assert.IsTrue(progressReporter.Events.Any(progress =>
+            progress.Status == RunStatus.Executing
+            && progress.Progress.CompletedItems == 500
+            && progress.Progress.TotalItems == 500));
+    }
+
     [TestMethod]
     public async Task ExecuteAsync_WhenRunUsesHeaders_MergesEndpointAndRequestHeaders()
     {

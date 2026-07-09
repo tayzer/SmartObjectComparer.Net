@@ -9,6 +9,7 @@ namespace ParityBench.NET.Workspaces;
 
 public sealed class FileSystemRequestBatchStore : IRequestBatchStore
 {
+    private const int MaxStagingCopyConcurrency = 8;
     private readonly HashSet<string> eligibleExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         ".json",
@@ -116,37 +117,51 @@ public sealed class FileSystemRequestBatchStore : IRequestBatchStore
         string requestRoot = Path.Combine(batchRoot, "requests");
         Directory.CreateDirectory(requestRoot);
 
-        List<RequestItem> requests = new List<RequestItem>();
-        foreach (string sourceFilePath in sourceFilePaths)
+        IReadOnlyList<StagedRequestCopyPlan> copyPlans = sourceFilePaths
+            .Select(sourceFilePath =>
+            {
+                string relativePath = GetSafeSourceRelativePath(sourceRoot, sourceFilePath);
+                FileInfo fileInfo = new FileInfo(sourceFilePath);
+                return new StagedRequestCopyPlan(
+                    sourceFilePath,
+                    FileSystemWorkspacePaths.GetSafePath(requestRoot, relativePath),
+                    relativePath,
+                    GetContentType(fileInfo.Extension),
+                    fileInfo.Length);
+            })
+            .ToArray();
+
+        ParallelOptions parallelOptions = new ParallelOptions
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            CancellationToken = cancellationToken,
+            MaxDegreeOfParallelism = MaxStagingCopyConcurrency,
+        };
 
-            string relativePath = GetSafeSourceRelativePath(sourceRoot, sourceFilePath);
-            string destinationPath = FileSystemWorkspacePaths.GetSafePath(requestRoot, relativePath);
-            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath) ?? requestRoot);
+        await Parallel.ForEachAsync(copyPlans, parallelOptions, async (copyPlan, token) =>
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(copyPlan.DestinationPath) ?? requestRoot);
 
-            await using (FileStream source = new FileStream(
-                sourceFilePath,
+            await using FileStream source = new FileStream(
+                copyPlan.SourcePath,
                 FileMode.Open,
                 FileAccess.Read,
                 FileShare.Read,
                 bufferSize: 81920,
-                FileOptions.Asynchronous | FileOptions.SequentialScan))
-            await using (FileStream destination = new FileStream(
-                destinationPath,
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
+            await using FileStream destination = new FileStream(
+                copyPlan.DestinationPath,
                 FileMode.CreateNew,
                 FileAccess.Write,
                 FileShare.None,
                 bufferSize: 81920,
-                FileOptions.Asynchronous | FileOptions.SequentialScan))
-            {
-                await source.CopyToAsync(destination, cancellationToken).ConfigureAwait(false);
-            }
+                FileOptions.Asynchronous | FileOptions.SequentialScan);
 
-            FileInfo fileInfo = new FileInfo(sourceFilePath);
-            requests.Add(new RequestItem(relativePath, GetContentType(fileInfo.Extension), fileInfo.Length));
-        }
+            await source.CopyToAsync(destination, token).ConfigureAwait(false);
+        }).ConfigureAwait(false);
 
+        IReadOnlyList<RequestItem> requests = copyPlans
+            .Select(copyPlan => new RequestItem(copyPlan.RelativePath, copyPlan.ContentType, copyPlan.ContentLength))
+            .ToArray();
         RequestBatchManifest manifest = new RequestBatchManifest(batchReference, requests);
         await SaveManifestAsync(batchRoot, manifest, cancellationToken).ConfigureAwait(false);
         return manifest;
@@ -263,6 +278,12 @@ public sealed class FileSystemRequestBatchStore : IRequestBatchStore
             dto.HeadersA,
             dto.HeadersB);
 
+    private sealed record StagedRequestCopyPlan(
+        string SourcePath,
+        string DestinationPath,
+        string RelativePath,
+        string ContentType,
+        long ContentLength);
     private sealed class RequestBatchManifestDto
     {
         public string BatchReference { get; init; } = string.Empty;

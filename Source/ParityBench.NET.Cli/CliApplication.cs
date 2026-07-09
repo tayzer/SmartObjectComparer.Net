@@ -89,6 +89,7 @@ public static class CliApplication
                 options.SlowPathThresholdMs = threshold;
             }
         });
+        services.Configure<RequestComparisonRunDefaults>(configuration.GetSection("RequestComparison:Defaults"));
         services.AddSingleton(new HttpClient());
         services.AddSingleton<IRequestBatchStore>(_ => new FileSystemRequestBatchStore(workspaceRoot));
         services.AddSingleton<IRunStore>(_ => new FileSystemRunStore(workspaceRoot));

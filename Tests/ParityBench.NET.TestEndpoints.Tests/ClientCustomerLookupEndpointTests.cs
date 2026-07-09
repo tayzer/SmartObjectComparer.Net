@@ -110,9 +110,12 @@ public sealed class ClientCustomerLookupEndpointTests
         ClientCustomerLookupJsonResponse? body = await response.Content.ReadFromJsonAsync<ClientCustomerLookupJsonResponse>();
 
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
-        Assert.AreEqual("OK", body?.ResultCode);
-        Assert.AreEqual("Riley Morgan", body?.CustomerName);
-        Assert.AreEqual("trace-2001", body?.TraceId);
+        Assert.AreEqual("OK", body?.Details.ResultCode);
+        Assert.AreEqual("trace-2001", body?.Details.TraceId);
+        Assert.AreEqual("Riley Morgan", body?.Applicants.FirstOrDefault()?.Profile.FullName);
+        Assert.AreEqual("identity", body?.Applicants.FirstOrDefault()?.RuleEvaluations.FirstOrDefault()?.RuleSet);
+        Assert.AreEqual("ID_DOC_MATCH", body?.Applicants.FirstOrDefault()?.RuleEvaluations.FirstOrDefault()?.Outcomes.FirstOrDefault()?.Code);
+        Assert.IsFalse(body?.IsAThing ?? false);
     }
 
 
@@ -135,7 +138,8 @@ public sealed class ClientCustomerLookupEndpointTests
         Assert.AreEqual(HttpStatusCode.OK, soapResponse.StatusCode);
         Assert.AreEqual(HttpStatusCode.OK, jsonResponse.StatusCode);
         StringAssert.Contains(soapBody, "<CustomerName>Riley Morgan</CustomerName>");
-        Assert.AreEqual("Riley Morgan Updated", jsonBody?.CustomerName);
+        Assert.AreEqual("Riley Morgan Updated", jsonBody?.Applicants.FirstOrDefault()?.Profile.FullName);
+        Assert.AreEqual("FAIL", jsonBody?.Applicants.FirstOrDefault()?.RuleEvaluations.LastOrDefault()?.Outcomes.FirstOrDefault()?.Result);
     }
     private static string CreateSoapRequest() => CreateSoapRequest("2001", "trace-2001");
 

@@ -56,24 +56,93 @@ public sealed class ClientCustomerLookupJsonRequest
 
 public sealed class ClientCustomerLookupJsonResponse
 {
-    [JsonPropertyName("resultCode")]
-    public string ResultCode { get; init; } = string.Empty;
+    [JsonPropertyName("details")]
+    public ClientCustomerLookupDetails Details { get; init; } = new ClientCustomerLookupDetails();
 
-    [JsonPropertyName("customerName")]
-    public string CustomerName { get; init; } = string.Empty;
+    [JsonPropertyName("apps")]
+    public ClientCustomerLookupApplicant[] Applicants { get; init; } = Array.Empty<ClientCustomerLookupApplicant>();
 
-    [JsonPropertyName("traceId")]
-    public string TraceId { get; init; } = string.Empty;
+    [JsonIgnore]
+    public bool IsAThing { get; init; }
 }
 
 public sealed class ClientCustomerLookupResponse
 {
+    [JsonPropertyName("details")]
+    public ClientCustomerLookupDetails Details { get; init; } = new ClientCustomerLookupDetails();
+
+    [JsonPropertyName("apps")]
+    public ClientCustomerLookupApplicant[] Applicants { get; init; } = Array.Empty<ClientCustomerLookupApplicant>();
+
+    [JsonIgnore]
+    public bool IsAThing { get; init; }
+}
+
+public sealed class ClientCustomerLookupDetails
+{
     [JsonPropertyName("resultCode")]
     public string ResultCode { get; init; } = string.Empty;
 
-    [JsonPropertyName("customerName")]
-    public string CustomerName { get; init; } = string.Empty;
-
     [JsonPropertyName("traceId")]
     public string TraceId { get; init; } = string.Empty;
+
+    [JsonPropertyName("decisionEngine")]
+    public string DecisionEngine { get; init; } = string.Empty;
+}
+
+public sealed class ClientCustomerLookupApplicant
+{
+    [JsonPropertyName("applicantId")]
+    public string ApplicantId { get; init; } = string.Empty;
+
+    [JsonPropertyName("profile")]
+    public ClientCustomerLookupApplicantProfile Profile { get; init; } = new ClientCustomerLookupApplicantProfile();
+
+    [JsonPropertyName("ruleEvaluations")]
+    public ClientCustomerLookupRuleEvaluation[] RuleEvaluations { get; init; } = Array.Empty<ClientCustomerLookupRuleEvaluation>();
+
+    [JsonPropertyName("flags")]
+    public string[] Flags { get; init; } = Array.Empty<string>();
+}
+
+public sealed class ClientCustomerLookupApplicantProfile
+{
+    [JsonPropertyName("fullName")]
+    public string FullName { get; init; } = string.Empty;
+
+    [JsonPropertyName("addresses")]
+    public ClientCustomerLookupAddress[] Addresses { get; init; } = Array.Empty<ClientCustomerLookupAddress>();
+}
+
+public sealed class ClientCustomerLookupAddress
+{
+    [JsonPropertyName("type")]
+    public string Type { get; init; } = string.Empty;
+
+    [JsonPropertyName("city")]
+    public string City { get; init; } = string.Empty;
+
+    [JsonPropertyName("country")]
+    public string Country { get; init; } = string.Empty;
+}
+
+public sealed class ClientCustomerLookupRuleEvaluation
+{
+    [JsonPropertyName("ruleSet")]
+    public string RuleSet { get; init; } = string.Empty;
+
+    [JsonPropertyName("outcomes")]
+    public ClientCustomerLookupRuleOutcome[] Outcomes { get; init; } = Array.Empty<ClientCustomerLookupRuleOutcome>();
+}
+
+public sealed class ClientCustomerLookupRuleOutcome
+{
+    [JsonPropertyName("code")]
+    public string Code { get; init; } = string.Empty;
+
+    [JsonPropertyName("result")]
+    public string Result { get; init; } = string.Empty;
+
+    [JsonPropertyName("triggeredChecks")]
+    public string[] TriggeredChecks { get; init; } = Array.Empty<string>();
 }

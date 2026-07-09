@@ -69,9 +69,17 @@ public static class ClientCustomerLookupEndpoints
 
         return Results.Json(new ClientCustomerLookupJsonResponse
         {
-            ResultCode = "OK",
-            CustomerName = ResolveEndpointBCustomerName(request.CustomerId),
-            TraceId = request.CorrelationId,
+            Details = new ClientCustomerLookupDetails
+            {
+                ResultCode = "OK",
+                TraceId = request.CorrelationId,
+                DecisionEngine = "EndpointB-JSON-Service",
+            },
+            Applicants = new[]
+            {
+                CreateEndpointBApplicant(request.CustomerId, request.CorrelationId),
+            },
+            IsAThing = true,
         });
     }
 
@@ -123,6 +131,63 @@ public static class ClientCustomerLookupEndpoints
 
     private static string ResolveEndpointBCustomerName(string customerId) =>
         string.Equals(customerId, "2002", StringComparison.Ordinal) ? "Riley Morgan Updated" : "Riley Morgan";
+
+    private static ClientCustomerLookupApplicant CreateEndpointBApplicant(string customerId, string correlationId) =>
+        new ClientCustomerLookupApplicant
+        {
+            ApplicantId = correlationId,
+            Profile = new ClientCustomerLookupApplicantProfile
+            {
+                FullName = ResolveEndpointBCustomerName(customerId),
+                Addresses = new[]
+                {
+                    new ClientCustomerLookupAddress
+                    {
+                        Type = "HOME",
+                        City = "Seattle",
+                        Country = "US",
+                    },
+                    new ClientCustomerLookupAddress
+                    {
+                        Type = "MAILING",
+                        City = string.Equals(customerId, "2002", StringComparison.Ordinal) ? "Bellevue" : "Tacoma",
+                        Country = "US",
+                    },
+                },
+            },
+            RuleEvaluations = new[]
+            {
+                new ClientCustomerLookupRuleEvaluation
+                {
+                    RuleSet = "identity",
+                    Outcomes = new[]
+                    {
+                        new ClientCustomerLookupRuleOutcome
+                        {
+                            Code = "ID_DOC_MATCH",
+                            Result = "PASS",
+                            TriggeredChecks = new[] { "name_match", "dob_match" },
+                        },
+                    },
+                },
+                new ClientCustomerLookupRuleEvaluation
+                {
+                    RuleSet = "fraud",
+                    Outcomes = new[]
+                    {
+                        new ClientCustomerLookupRuleOutcome
+                        {
+                            Code = "DEVICE_RISK",
+                            Result = string.Equals(customerId, "2002", StringComparison.Ordinal) ? "FAIL" : "REVIEW",
+                            TriggeredChecks = new[] { "ip_velocity", "device_reuse" },
+                        },
+                    },
+                },
+            },
+            Flags = string.Equals(customerId, "2002", StringComparison.Ordinal)
+                ? new[] { "KYC_COMPLETE", "FRAUD_ALERT" }
+                : new[] { "KYC_COMPLETE", "MANUAL_REVIEW_REQUIRED" },
+        };
 
     private static bool HasHeader(HttpContext context, string name, string expectedValue) =>
         context.Request.Headers.TryGetValue(name, out var value)

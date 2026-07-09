@@ -138,26 +138,95 @@ public sealed class ClientEndpointBRequest
 
 public sealed class ClientEndpointBResponse
 {
-    [JsonPropertyName("resultCode")]
-    public string ResultCode { get; init; } = string.Empty;
+    [JsonPropertyName("details")]
+    public ClientLookupDetails Details { get; init; } = new();
 
-    [JsonPropertyName("customerName")]
-    public string CustomerName { get; init; } = string.Empty;
+    [JsonPropertyName("apps")]
+    public ClientApplicant[] Applicants { get; init; } = Array.Empty<ClientApplicant>();
 
-    [JsonPropertyName("traceId")]
-    public string TraceId { get; init; } = string.Empty;
+    [JsonIgnore]
+    public bool IsAThing { get; init; }
 }
 
 public sealed class ClientCustomerLookupResponse
 {
+    [JsonPropertyName("details")]
+    public ClientLookupDetails Details { get; init; } = new();
+
+    [JsonPropertyName("apps")]
+    public ClientApplicant[] Applicants { get; init; } = Array.Empty<ClientApplicant>();
+
+    [JsonIgnore]
+    public bool IsAThing { get; init; }
+}
+
+public sealed class ClientLookupDetails
+{
     [JsonPropertyName("resultCode")]
     public string ResultCode { get; init; } = string.Empty;
 
-    [JsonPropertyName("customerName")]
-    public string CustomerName { get; init; } = string.Empty;
-
     [JsonPropertyName("traceId")]
     public string TraceId { get; init; } = string.Empty;
+
+    [JsonPropertyName("decisionEngine")]
+    public string DecisionEngine { get; init; } = string.Empty;
+}
+
+public sealed class ClientApplicant
+{
+    [JsonPropertyName("applicantId")]
+    public string ApplicantId { get; init; } = string.Empty;
+
+    [JsonPropertyName("profile")]
+    public ClientApplicantProfile Profile { get; init; } = new();
+
+    [JsonPropertyName("ruleEvaluations")]
+    public ClientRuleEvaluation[] RuleEvaluations { get; init; } = Array.Empty<ClientRuleEvaluation>();
+
+    [JsonPropertyName("flags")]
+    public string[] Flags { get; init; } = Array.Empty<string>();
+}
+
+public sealed class ClientApplicantProfile
+{
+    [JsonPropertyName("fullName")]
+    public string FullName { get; init; } = string.Empty;
+
+    [JsonPropertyName("addresses")]
+    public ClientAddress[] Addresses { get; init; } = Array.Empty<ClientAddress>();
+}
+
+public sealed class ClientAddress
+{
+    [JsonPropertyName("type")]
+    public string Type { get; init; } = string.Empty;
+
+    [JsonPropertyName("city")]
+    public string City { get; init; } = string.Empty;
+
+    [JsonPropertyName("country")]
+    public string Country { get; init; } = string.Empty;
+}
+
+public sealed class ClientRuleEvaluation
+{
+    [JsonPropertyName("ruleSet")]
+    public string RuleSet { get; init; } = string.Empty;
+
+    [JsonPropertyName("outcomes")]
+    public ClientRuleOutcome[] Outcomes { get; init; } = Array.Empty<ClientRuleOutcome>();
+}
+
+public sealed class ClientRuleOutcome
+{
+    [JsonPropertyName("code")]
+    public string Code { get; init; } = string.Empty;
+
+    [JsonPropertyName("result")]
+    public string Result { get; init; } = string.Empty;
+
+    [JsonPropertyName("triggeredChecks")]
+    public string[] TriggeredChecks { get; init; } = Array.Empty<string>();
 }
 ```
 
@@ -177,9 +246,45 @@ public static class ClientCustomerLookupMapsterConfig
             .Map(dest => dest.CorrelationId, src => src.Body.LookupRequest.CorrelationId);
 
         config.NewConfig<ClientSoapResponseEnvelope, ClientCustomerLookupResponse>()
-            .Map(dest => dest.ResultCode, src => src.Body.LookupResponse.StatusCode)
-            .Map(dest => dest.CustomerName, src => src.Body.LookupResponse.CustomerName)
-            .Map(dest => dest.TraceId, src => src.Body.LookupResponse.TraceId);
+            .Map(dest => dest.Details, src => new ClientLookupDetails
+            {
+                ResultCode = src.Body.LookupResponse.StatusCode,
+                TraceId = src.Body.LookupResponse.TraceId,
+                DecisionEngine = "EndpointA-SOAP-Normalizer"
+            })
+            .Map(dest => dest.Applicants, src => new[]
+            {
+                new ClientApplicant
+                {
+                    ApplicantId = src.Body.LookupResponse.TraceId,
+                    Profile = new ClientApplicantProfile
+                    {
+                        FullName = src.Body.LookupResponse.CustomerName,
+                        Addresses = new[]
+                        {
+                            new ClientAddress { Type = "HOME", City = "Seattle", Country = "US" },
+                            new ClientAddress { Type = "MAILING", City = "Tacoma", Country = "US" }
+                        }
+                    },
+                    RuleEvaluations = new[]
+                    {
+                        new ClientRuleEvaluation
+                        {
+                            RuleSet = "identity",
+                            Outcomes = new[]
+                            {
+                                new ClientRuleOutcome
+                                {
+                                    Code = "ID_DOC_MATCH",
+                                    Result = "PASS",
+                                    TriggeredChecks = new[] { "name_match", "dob_match" }
+                                }
+                            }
+                        }
+                    },
+                    Flags = new[] { "KYC_COMPLETE", "MANUAL_REVIEW_REQUIRED" }
+                }
+            });
 
         config.NewConfig<ClientEndpointBResponse, ClientCustomerLookupResponse>();
     }
@@ -327,10 +432,21 @@ public static class ClientCustomerLookupProfile
             canonicalResponseContentType: "application/json",
             suggestedEndpointAId: "client/customer-lookup/soap",
             suggestedEndpointBId: "client/customer-lookup/json",
-            defaultIgnoreRules: new[]
-            {
-                new IgnoreRuleDefinition("traceId")
-            },
+            defaultComparisonRules: new ComparisonRuleDefaults(
+                ignoreXmlNamespaces: true,
+                ignoreRules: new[]
+                {
+                    new IgnoreRuleDefinition("details.traceId"),
+                    new IgnoreRuleDefinition("details.decisionEngine"),
+                    new IgnoreRuleDefinition(
+                        "apps.profile.addresses",
+                        ignoreCompletely: false,
+                        ignoreCollectionOrder: true),
+                    new IgnoreRuleDefinition(
+                        "apps.ruleEvaluations.outcomes.triggeredChecks",
+                        ignoreCompletely: false,
+                        ignoreCollectionOrder: true)
+                }),
             requestPreparation: async (context, cancellationToken) =>
             {
                 ClientTokenResult finalToken = await tokenProvider.GetFinalTokenAsync(

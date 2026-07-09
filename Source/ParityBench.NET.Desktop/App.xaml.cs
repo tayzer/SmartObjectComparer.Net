@@ -93,6 +93,7 @@ public partial class App : System.Windows.Application
     {
         Directory.CreateDirectory(workspaceRoot);
         services.AddParityBenchObservability(configuration);
+        services.Configure<RequestComparisonRunDefaults>(configuration.GetSection("RequestComparison:Defaults"));
         services.AddSingleton(new HttpClient());
         services.AddSingleton<IRequestBatchStore>(_ => new FileSystemRequestBatchStore(workspaceRoot));
         services.AddSingleton<IRunStore>(_ => new FileSystemRunStore(workspaceRoot));

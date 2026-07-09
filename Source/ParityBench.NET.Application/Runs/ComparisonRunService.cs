@@ -136,6 +136,7 @@ public sealed class ComparisonRunService : IComparisonRunUseCases
         private readonly object syncRoot = new object();
         private DateTimeOffset lastPublishedAt = DateTimeOffset.MinValue;
         private int lastPublishedCompletedItems;
+        private RunStatus? lastPublishedStatus;
 
         public RunProgressReporter(
             LargeRunOptions options,
@@ -157,7 +158,7 @@ public sealed class ComparisonRunService : IComparisonRunUseCases
             CancellationToken cancellationToken = default,
             bool force = false)
         {
-            if (!force && !ShouldPublish(progress))
+            if (!force && !ShouldPublish(status, progress))
             {
                 return Task.CompletedTask;
             }
@@ -165,21 +166,23 @@ public sealed class ComparisonRunService : IComparisonRunUseCases
             return reportAsync(status, progress, cancellationToken);
         }
 
-        private bool ShouldPublish(RunProgress progress)
+        private bool ShouldPublish(RunStatus status, RunProgress progress)
         {
             DateTimeOffset now = DateTimeOffset.UtcNow;
             int completed = progress.CompletedItems ?? 0;
             lock (syncRoot)
             {
+                bool statusChanged = lastPublishedStatus != status;
                 bool itemIntervalReached = completed - lastPublishedCompletedItems >= options.ProgressUpdateItemInterval;
                 bool timeIntervalReached = now - lastPublishedAt >= TimeSpan.FromMilliseconds(options.ProgressUpdateMillisecondsInterval);
-                if (!itemIntervalReached && !timeIntervalReached)
+                if (!statusChanged && !itemIntervalReached && !timeIntervalReached)
                 {
                     return false;
                 }
 
                 lastPublishedAt = now;
                 lastPublishedCompletedItems = completed;
+                lastPublishedStatus = status;
                 return true;
             }
         }

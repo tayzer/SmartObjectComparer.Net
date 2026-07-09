@@ -14,6 +14,14 @@ public static class ClientCustomerLookupProfileFactory
     public const string SuggestedEndpointAId = "client/customer-lookup/soap";
     public const string SuggestedEndpointBId = "client/customer-lookup/json";
 
+    private static readonly IReadOnlyList<IgnoreRuleDefinition> BaselineIgnoreRules = new[]
+    {
+        new IgnoreRuleDefinition("details.traceId"),
+        new IgnoreRuleDefinition("details.decisionEngine"),
+        new IgnoreRuleDefinition("apps.profile.addresses", ignoreCompletely: false, ignoreCollectionOrder: true),
+        new IgnoreRuleDefinition("apps.ruleEvaluations.outcomes.triggeredChecks", ignoreCompletely: false, ignoreCollectionOrder: true),
+    };
+
     public static IContractProfile Create(
         IContractPayloadSerializer serializer,
         IClientCustomerLookupTokenProvider tokenProvider,
@@ -25,8 +33,7 @@ public static class ClientCustomerLookupProfileFactory
         ArgumentNullException.ThrowIfNull(mapsterConfig);
 
         ContractPayloadFactory payloadFactory = new ContractPayloadFactory();
-        ComparisonRuleDefaults effectiveComparisonRules =
-            defaultComparisonRules ?? new ComparisonRuleDefaults(ignoreXmlNamespaces: true);
+        ComparisonRuleDefaults effectiveComparisonRules = BuildEffectiveComparisonRules(defaultComparisonRules);
 
         return new ContractProfile<
             ClientCustomerLookupSoapRequestEnvelope,
@@ -112,6 +119,33 @@ public static class ClientCustomerLookupProfileFactory
                 return new NormalizedContractResponse(body, ProfileId);
             },
             payloadFactory: payloadFactory);
+    }
+
+    private static ComparisonRuleDefaults BuildEffectiveComparisonRules(ComparisonRuleDefaults? externalDefaults)
+    {
+        if (externalDefaults is null)
+        {
+            return new ComparisonRuleDefaults(
+                ignoreXmlNamespaces: true,
+                ignoreRules: BaselineIgnoreRules);
+        }
+
+        IReadOnlyList<IgnoreRuleDefinition> mergedIgnoreRules = BaselineIgnoreRules
+            .Concat(externalDefaults.IgnoreRules)
+            .Where(rule => !string.IsNullOrWhiteSpace(rule.PropertyPath))
+            .GroupBy(rule => rule.PropertyPath, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.Last())
+            .ToList();
+
+        return new ComparisonRuleDefaults(
+            ignoreCollectionOrder: externalDefaults.IgnoreCollectionOrder,
+            ignoreStringCase: externalDefaults.IgnoreStringCase,
+            ignoreTrailingWhitespaceAtEnd: externalDefaults.IgnoreTrailingWhitespaceAtEnd,
+            treatNullAndEmptyCollectionsAsEqual: externalDefaults.TreatNullAndEmptyCollectionsAsEqual,
+            ignoreXmlNamespaces: true,
+            ignoreRules: mergedIgnoreRules,
+            smartIgnoreRules: externalDefaults.SmartIgnoreRules,
+            maskRules: externalDefaults.MaskRules);
     }
 }
 

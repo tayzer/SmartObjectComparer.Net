@@ -31,6 +31,42 @@ public sealed class FileSystemWorkspaceTests
             manifest.Requests.Select(request => request.RelativePath).ToArray());
     }
 
+
+    [TestMethod]
+    public async Task StageDirectory_WhenManyFilesAreStaged_CopiesFilesAndPreservesManifestOrder()
+    {
+        string workspaceRoot = CreateTempDirectory();
+        string sourceRoot = CreateTempDirectory();
+        Directory.CreateDirectory(Path.Combine(sourceRoot, "nested"));
+        for (int index = 75; index >= 1; index--)
+        {
+            string relativePath = index % 2 == 0
+                ? Path.Combine("nested", $"request-{index:000}.json")
+                : $"request-{index:000}.xml";
+            string sourcePath = Path.Combine(sourceRoot, relativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(sourcePath) ?? sourceRoot);
+            await File.WriteAllTextAsync(sourcePath, $"payload-{index:000}");
+        }
+
+        FileSystemRequestBatchStore store = new FileSystemRequestBatchStore(workspaceRoot);
+
+        RequestBatchManifest manifest = await store.StageDirectoryAsync(sourceRoot, new RequestBatchReference("batch-1"));
+
+        string[] expectedRelativePaths = Directory.EnumerateFiles(sourceRoot, "*", SearchOption.AllDirectories)
+            .Where(path => path.EndsWith(".json", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
+            .Select(path => Path.GetRelativePath(sourceRoot, path).Replace('\\', '/'))
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        CollectionAssert.AreEqual(expectedRelativePaths, manifest.Requests.Select(request => request.RelativePath).ToArray());
+
+        foreach (RequestItem request in manifest.Requests)
+        {
+            string stagedPath = Path.Combine(workspaceRoot, "request-batches", "batch-1", "requests", request.RelativePath.Replace('/', Path.DirectorySeparatorChar));
+            Assert.IsTrue(File.Exists(stagedPath), $"Missing staged file {request.RelativePath}");
+            Assert.AreEqual(await File.ReadAllTextAsync(Path.Combine(sourceRoot, request.RelativePath.Replace('/', Path.DirectorySeparatorChar))), await File.ReadAllTextAsync(stagedPath));
+        }
+    }
+
     [TestMethod]
     public async Task StageDirectory_WhenDirectoryContainsSidecarsAndUnderscoreFiles_ExcludesNonRequests()
     {

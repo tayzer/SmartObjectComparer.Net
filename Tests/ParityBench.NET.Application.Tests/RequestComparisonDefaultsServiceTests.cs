@@ -1,4 +1,5 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.Extensions.Options;
 
 using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.Application.Requests;
@@ -89,16 +90,30 @@ public sealed class RequestComparisonDefaultsServiceTests
         Assert.IsTrue(preset.ComparisonOptions.IgnoreStringCase);
     }
 
+
+    [TestMethod]
+    public async Task LoadDefaults_WhenRunDefaultsAreConfigured_ReturnsConfiguredValues()
+    {
+        RequestComparisonDefaultsService service = CreateService(
+            runDefaults: new RequestComparisonRunDefaults(maxConcurrency: 12, timeoutSeconds: 45));
+
+        RequestComparisonDefaults defaults = await service.LoadDefaultsAsync().ConfigureAwait(false);
+
+        Assert.AreEqual(12, defaults.RunDefaults.MaxConcurrency);
+        Assert.AreEqual(45, defaults.RunDefaults.TimeoutSeconds);
+    }
     private static RequestComparisonDefaultsService CreateService(
         IResponseModelRegistry? modelRegistry = null,
         IContractProfileRegistry? profileRegistry = null,
         IRequestComparisonEndpointRegistry? endpointRegistry = null,
-        IRequestComparisonPresetRegistry? presetRegistry = null) =>
+        IRequestComparisonPresetRegistry? presetRegistry = null,
+        RequestComparisonRunDefaults? runDefaults = null) =>
         new RequestComparisonDefaultsService(
             modelRegistry ?? new FakeResponseModelRegistry(),
             profileRegistry ?? new FakeContractProfileRegistry(),
             endpointRegistry ?? new InMemoryRequestComparisonEndpointRegistry(),
-            presetRegistry ?? new InMemoryRequestComparisonPresetRegistry());
+            presetRegistry ?? new InMemoryRequestComparisonPresetRegistry(),
+            runDefaults is null ? null : Options.Create(runDefaults));
 
     private sealed class FakeResponseModelRegistry : IResponseModelRegistry
     {

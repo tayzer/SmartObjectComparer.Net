@@ -1,6 +1,7 @@
 using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Domain.ContractProfiles;
+using Microsoft.Extensions.Options;
 
 namespace ParityBench.NET.Application.Workflow;
 
@@ -10,17 +11,20 @@ public sealed class RequestComparisonDefaultsService : IRequestComparisonDefault
     private readonly IContractProfileRegistry contractProfileRegistry;
     private readonly IRequestComparisonEndpointRegistry endpointRegistry;
     private readonly IRequestComparisonPresetRegistry presetRegistry;
+    private readonly RequestComparisonRunDefaults runDefaults;
 
     public RequestComparisonDefaultsService(
         IResponseModelRegistry responseModelRegistry,
         IContractProfileRegistry contractProfileRegistry,
         IRequestComparisonEndpointRegistry endpointRegistry,
-        IRequestComparisonPresetRegistry presetRegistry)
+        IRequestComparisonPresetRegistry presetRegistry,
+        IOptions<RequestComparisonRunDefaults>? runDefaults = null)
     {
         this.responseModelRegistry = responseModelRegistry ?? throw new ArgumentNullException(nameof(responseModelRegistry));
         this.contractProfileRegistry = contractProfileRegistry ?? throw new ArgumentNullException(nameof(contractProfileRegistry));
         this.endpointRegistry = endpointRegistry ?? throw new ArgumentNullException(nameof(endpointRegistry));
         this.presetRegistry = presetRegistry ?? throw new ArgumentNullException(nameof(presetRegistry));
+        this.runDefaults = runDefaults?.Value ?? new RequestComparisonRunDefaults();
     }
 
     public Task<RequestComparisonDefaults> LoadDefaultsAsync(CancellationToken cancellationToken = default)
@@ -43,7 +47,8 @@ public sealed class RequestComparisonDefaultsService : IRequestComparisonDefault
             responseModels,
             contractProfiles,
             endpointRegistry.ListEndpoints(),
-            presetRegistry.ListPresets());
+            presetRegistry.ListPresets(),
+            runDefaults);
 
         return Task.FromResult(defaults);
     }

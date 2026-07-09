@@ -59,6 +59,7 @@ app.Run();
 static void RegisterV2Services(IServiceCollection services, string workspaceRoot, string fixtureBaseUrl, string? acceptedDifferenceStorePath, IConfiguration configuration)
 {
     services.AddParityBenchObservability(configuration);
+    services.Configure<RequestComparisonRunDefaults>(configuration.GetSection("RequestComparison:Defaults"));
     services.AddSingleton(new HttpClient());
     services.AddSingleton<IRequestBatchStore>(_ => new FileSystemRequestBatchStore(workspaceRoot));
     services.AddSingleton<IRunStore>(_ => new FileSystemRunStore(workspaceRoot));

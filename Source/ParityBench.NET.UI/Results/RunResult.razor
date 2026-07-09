@@ -60,6 +60,23 @@ else if (errorMessage is not null)
 {
     <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@errorMessage</MudAlert>
 }
+else if (run is not null && (!run.IsTerminal || summary is null))
+{
+    <MudPaper Outlined="true" Class="pa-4">
+        <MudStack Spacing="2">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                <MudChip T="string" Color="@GetRunStatusColor(run.Status)" Variant="Variant.Filled">@run.Status</MudChip>
+                <MudText Typo="Typo.subtitle2">Run @run.Id.Value</MudText>
+            </MudStack>
+            <MudProgressLinear Color="@GetRunStatusColor(run.Status)" Value="run.Progress.PercentComplete" Striped="@(!run.IsTerminal)" Size="Size.Large" />
+            <MudText Typo="Typo.body2">@GetRunStatusMessage(run)</MudText>
+            @if (run.Progress.CompletedItems is not null && run.Progress.TotalItems is not null)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@run.Progress.CompletedItems of @run.Progress.TotalItems</MudText>
+            }
+        </MudStack>
+    </MudPaper>
+}
 else if (run is not null)
 {
     <MudStack Spacing="4">
@@ -562,7 +579,24 @@ else if (run is not null)
             contentB = null;
             RunId runId = RunId.Value;
             run = await DataSource.LoadRunAsync(runId);
+            if (!run.IsTerminal)
+            {
+                summary = null;
+                metadata = null;
+                analysis = null;
+                detailPage = null;
+                return;
+            }
+
             summary = await DataSource.LoadRunSummaryAsync(runId);
+            if (summary is null)
+            {
+                metadata = null;
+                analysis = null;
+                detailPage = null;
+                return;
+            }
+
             metadata = await DataSource.LoadReportMetadataAsync(runId);
             analysis = await DataSource.LoadReportAnalysisAsync(runId);
             await LoadDetailPageAsync();
@@ -689,6 +723,28 @@ else if (run is not null)
 
 
 
+    private static Color GetRunStatusColor(RunStatus status) => status switch
+    {
+        RunStatus.Completed => Color.Success,
+        RunStatus.Failed => Color.Error,
+        RunStatus.Cancelled => Color.Warning,
+        _ => Color.Primary,
+    };
+
+    private static string GetRunStatusMessage(ComparisonRun run)
+    {
+        if (!string.IsNullOrWhiteSpace(run.ErrorMessage))
+        {
+            return run.ErrorMessage!;
+        }
+
+        if (!string.IsNullOrWhiteSpace(run.Progress.Message))
+        {
+            return run.Progress.Message;
+        }
+
+        return run.IsTerminal ? "Run finished without result details." : "Run is still in progress.";
+    }
     private static ArtifactContentPreview FormatArtifactPreview(ArtifactContentPreview preview)
     {
         string formattedContent = FormatStructuredText(preview.Content, preview.ContentType, preview.Artifact.ArtifactId);

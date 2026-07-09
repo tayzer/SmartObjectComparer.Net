@@ -121,6 +121,26 @@ public sealed class RunWorkflowViewTests
             StringAssert.Contains(component.Markup, "Endpoint B");
         });
     }
+
+    [TestMethod]
+    public void RunWorkflow_WhenDefaultsLoad_UsesV2RunDefaults()
+    {
+        IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();
+
+        component.WaitForAssertion(() => Assert.AreEqual("32", GetTextFieldValue(component, "Max Concurrency")));
+        Assert.AreEqual("30", GetTextFieldValue(component, "Request Timeout (seconds)"));
+    }
+
+    [TestMethod]
+    public void RunWorkflow_WhenDefaultsAreConfigured_UsesConfiguredRunDefaults()
+    {
+        dataSource.RunDefaults = new RequestComparisonRunDefaults(maxConcurrency: 12, timeoutSeconds: 45);
+
+        IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();
+
+        component.WaitForAssertion(() => Assert.AreEqual("12", GetTextFieldValue(component, "Max Concurrency")));
+        Assert.AreEqual("45", GetTextFieldValue(component, "Request Timeout (seconds)"));
+    }
     [TestMethod]
     public void RunWorkflow_WhenModelIsSelected_RendersRuleStudiosWithModelPaths()
     {
@@ -414,6 +434,8 @@ public sealed class RunWorkflowViewTests
     {
         public RequestComparisonRunRequest? LastRequest { get; private set; }
 
+        public RequestComparisonRunDefaults RunDefaults { get; set; } = new RequestComparisonRunDefaults();
+
         public Task<RequestComparisonDefaults> LoadDefaultsAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(CreateDefaults());
 
@@ -461,7 +483,7 @@ public sealed class RunWorkflowViewTests
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        private static RequestComparisonDefaults CreateDefaults() =>
+        private RequestComparisonDefaults CreateDefaults() =>
             new RequestComparisonDefaults(
                 new[]
                 {
@@ -505,7 +527,8 @@ public sealed class RunWorkflowViewTests
                         new RequestExecutionOptions(),
                         new Dictionary<string, string> { ["Content-Type"] = "application/json" },
                         new Dictionary<string, string> { ["X-Fixture-Key"] = "fixture-key" }),
-                });
+                },
+                RunDefaults);
 
         public sealed class FakeConsumerReportResponse
         {

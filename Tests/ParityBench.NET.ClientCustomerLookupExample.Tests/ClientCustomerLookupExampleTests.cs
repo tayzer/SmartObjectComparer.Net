@@ -9,6 +9,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.ClientCustomerLookupExample;
+using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Infrastructure;
@@ -18,6 +19,36 @@ namespace ParityBench.NET.ClientCustomerLookupExample.Tests;
 [TestClass]
 public sealed class ClientCustomerLookupExampleTests
 {
+    [TestMethod]
+    public void Create_WhenNoExternalDefaults_IncludesBaselineDefaultComparisonRules()
+    {
+        IContractProfile profile = CreateProfile();
+        ComparisonRuleDefaults defaults = profile.DefaultComparisonRules;
+
+        Assert.IsTrue(defaults.IgnoreXmlNamespaces);
+
+        AssertRule(
+            defaults,
+            "details.traceId",
+            ignoreCompletely: true,
+            ignoreCollectionOrder: false);
+        AssertRule(
+            defaults,
+            "details.decisionEngine",
+            ignoreCompletely: true,
+            ignoreCollectionOrder: false);
+        AssertRule(
+            defaults,
+            "apps.profile.addresses",
+            ignoreCompletely: false,
+            ignoreCollectionOrder: true);
+        AssertRule(
+            defaults,
+            "apps.ruleEvaluations.outcomes.triggeredChecks",
+            ignoreCompletely: false,
+            ignoreCollectionOrder: true);
+    }
+
     [TestMethod]
     public void Mapster_WhenMappingSoapRequest_ProducesEndpointBJsonRequest()
     {
@@ -105,9 +136,13 @@ public sealed class ClientCustomerLookupExampleTests
 
         string json = await ReadPayloadAsStringAsync(normalized.Body);
         Assert.AreEqual("application/json", normalized.ContentType);
+        StringAssert.Contains(json, "\"details\":{");
         StringAssert.Contains(json, "\"resultCode\":\"OK\"");
-        StringAssert.Contains(json, "\"customerName\":\"Riley Morgan\"");
         StringAssert.Contains(json, "\"traceId\":\"trace-2001\"");
+        StringAssert.Contains(json, "\"apps\":[{");
+        StringAssert.Contains(json, "\"fullName\":\"Riley Morgan\"");
+        StringAssert.Contains(json, "\"ruleEvaluations\":[");
+        Assert.IsFalse(json.Contains("\"isAThing\"", StringComparison.Ordinal));
     }
 
     [TestMethod]
@@ -115,7 +150,7 @@ public sealed class ClientCustomerLookupExampleTests
     {
         IContractProfile profile = CreateProfile();
         byte[] responseBody = Encoding.UTF8.GetBytes(
-            "{\"resultCode\":\"OK\",\"customerName\":\"Riley Morgan\",\"traceId\":\"trace-2001\"}");
+            "{\"details\":{\"resultCode\":\"OK\",\"traceId\":\"trace-2001\",\"decisionEngine\":\"EndpointB-JSON-Service\"},\"apps\":[{\"applicantId\":\"trace-2001\",\"profile\":{\"fullName\":\"Riley Morgan\",\"addresses\":[{\"type\":\"HOME\",\"city\":\"Seattle\",\"country\":\"US\"}]},\"ruleEvaluations\":[{\"ruleSet\":\"identity\",\"outcomes\":[{\"code\":\"ID_DOC_MATCH\",\"result\":\"PASS\",\"triggeredChecks\":[\"name_match\"]}]}],\"flags\":[\"KYC_COMPLETE\"]}],\"isAThing\":true}");
 
         NormalizedContractResponse normalized = await profile.NormalizeResponseAsync(
             EndpointSlot.B,
@@ -128,9 +163,13 @@ public sealed class ClientCustomerLookupExampleTests
 
         string json = await ReadPayloadAsStringAsync(normalized.Body);
         Assert.AreEqual("application/json", normalized.ContentType);
+        StringAssert.Contains(json, "\"details\":{");
         StringAssert.Contains(json, "\"resultCode\":\"OK\"");
-        StringAssert.Contains(json, "\"customerName\":\"Riley Morgan\"");
         StringAssert.Contains(json, "\"traceId\":\"trace-2001\"");
+        StringAssert.Contains(json, "\"apps\":[{");
+        StringAssert.Contains(json, "\"fullName\":\"Riley Morgan\"");
+        StringAssert.Contains(json, "\"ruleEvaluations\":[");
+        Assert.IsFalse(json.Contains("\"isAThing\"", StringComparison.Ordinal));
     }
 
     private static IContractProfile CreateProfile() =>
@@ -165,6 +204,19 @@ public sealed class ClientCustomerLookupExampleTests
         {
             return await reader.ReadToEndAsync().ConfigureAwait(false);
         }
+    }
+
+    private static void AssertRule(
+        ComparisonRuleDefaults defaults,
+        string path,
+        bool ignoreCompletely,
+        bool ignoreCollectionOrder)
+    {
+        IgnoreRuleDefinition rule = defaults.IgnoreRules.Single(candidate =>
+            string.Equals(candidate.PropertyPath, path, StringComparison.OrdinalIgnoreCase));
+
+        Assert.AreEqual(ignoreCompletely, rule.IgnoreCompletely);
+        Assert.AreEqual(ignoreCollectionOrder, rule.IgnoreCollectionOrder);
     }
 
     private sealed class FixedTokenProvider : IClientCustomerLookupTokenProvider
