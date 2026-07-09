@@ -43,6 +43,9 @@ public class RequestBatchDirectoryStagerTests : IDisposable
         File.Exists(Path.Combine(batchRoot, "region-a", "nested", "request.xml")).ShouldBeTrue();
         File.Exists(Path.Combine(batchRoot, "region-a", "nested", "_ignored.xml")).ShouldBeFalse();
         File.Exists(Path.Combine(batchRoot, "region-a", "nested", "ignored.csv")).ShouldBeFalse();
+        File.ReadAllText(Path.Combine(batchRoot, "root.json")).ShouldBe("{}");
+        File.ReadAllText(Path.Combine(batchRoot, "root.json.headers.json")).ShouldContain("x-test");
+        File.ReadAllText(Path.Combine(batchRoot, "region-a", "nested", "request.xml")).ShouldContain("<Request");
     }
 
     [TestMethod]

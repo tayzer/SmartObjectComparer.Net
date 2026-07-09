@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Runtime.InteropServices;
 
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Domain.Requests;
@@ -141,22 +142,10 @@ public sealed class FileSystemRequestBatchStore : IRequestBatchStore
         {
             Directory.CreateDirectory(Path.GetDirectoryName(copyPlan.DestinationPath) ?? requestRoot);
 
-            await using FileStream source = new FileStream(
-                copyPlan.SourcePath,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.Read,
-                bufferSize: 81920,
-                FileOptions.Asynchronous | FileOptions.SequentialScan);
-            await using FileStream destination = new FileStream(
-                copyPlan.DestinationPath,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
-                bufferSize: 81920,
-                FileOptions.Asynchronous | FileOptions.SequentialScan);
-
-            await source.CopyToAsync(destination, token).ConfigureAwait(false);
+            if (!TryCreateHardLink(copyPlan.DestinationPath, copyPlan.SourcePath))
+            {
+                await CopyFileAsync(copyPlan.SourcePath, copyPlan.DestinationPath, token).ConfigureAwait(false);
+            }
         }).ConfigureAwait(false);
 
         IReadOnlyList<RequestItem> requests = copyPlans
@@ -215,6 +204,83 @@ public sealed class FileSystemRequestBatchStore : IRequestBatchStore
 
         return new RequestItem(Path.GetRelativePath(fullSourceRoot, fullSourceFilePath)).RelativePath;
     }
+
+    private static bool TryCreateHardLink(string destinationPath, string sourcePath)
+    {
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                return TryCreateWindowsHardLink(destinationPath, sourcePath);
+            }
+
+            if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+            {
+                return TryCreateUnixHardLink(destinationPath, sourcePath);
+            }
+
+            return false;
+        }
+        catch (PlatformNotSupportedException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+        catch (NotSupportedException)
+        {
+            return false;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (DllNotFoundException)
+        {
+            return false;
+        }
+        catch (EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryCreateWindowsHardLink(string destinationPath, string sourcePath) =>
+        CreateHardLinkWindows(destinationPath, sourcePath, IntPtr.Zero);
+
+    private static bool TryCreateUnixHardLink(string destinationPath, string sourcePath) =>
+        CreateHardLinkUnix(sourcePath, destinationPath) == 0;
+
+    private static async Task CopyFileAsync(string sourcePath, string destinationPath, CancellationToken cancellationToken)
+    {
+        await using FileStream source = new FileStream(
+            sourcePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            bufferSize: 81920,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using FileStream destination = new FileStream(
+            destinationPath,
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.None,
+            bufferSize: 81920,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        await source.CopyToAsync(destination, cancellationToken).ConfigureAwait(false);
+    }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool CreateHardLinkWindows(
+        string lpFileName,
+        string lpExistingFileName,
+        IntPtr lpSecurityAttributes);
+
+    [DllImport("libc", EntryPoint = "link", SetLastError = true)]
+    private static extern int CreateHardLinkUnix(string oldpath, string newpath);
 
     private string GetContentType(string extension) =>
         extension.ToLowerInvariant() switch

@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 namespace ComparisonTool.Core.RequestComparison.Services;
 
 /// <summary>
@@ -76,8 +78,36 @@ public static class RequestBatchDirectoryStager
         var relativePath = GetSafeRelativePath(sourceRoot, sourceFilePath);
         var destinationPath = GetSafeDestinationPath(batchRoot, relativePath);
         Directory.CreateDirectory(Path.GetDirectoryName(destinationPath) ?? batchRoot);
-        File.Copy(sourceFilePath, destinationPath, overwrite: false);
+        LinkOrCopyFile(sourceFilePath, destinationPath);
     }
+
+    private static void LinkOrCopyFile(string sourceFilePath, string destinationPath)
+    {
+        if (!TryCreateHardLink(sourceFilePath, destinationPath))
+        {
+            File.Copy(sourceFilePath, destinationPath, overwrite: false);
+        }
+    }
+
+    private static bool TryCreateHardLink(string sourceFilePath, string destinationPath)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+
+        try
+        {
+            return CreateHardLink(destinationPath, sourceFilePath, IntPtr.Zero);
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    [DllImport("Kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool CreateHardLink(string lpFileName, string lpExistingFileName, IntPtr lpSecurityAttributes);
 
     private static string GetSafeDestinationPath(string batchRoot, string relativePath)
     {

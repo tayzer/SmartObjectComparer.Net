@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.IO;
+using System.Runtime.InteropServices;
 using ComparisonTool.Core.Abstractions;
 using ComparisonTool.Core.Comparison.Results;
 using ComparisonTool.Core.RequestComparison.Models;
@@ -81,7 +82,7 @@ public class InProcessRequestComparisonGateway : IRequestComparisonGateway
             }
 
             var destPath = GetSafeUniqueDestinationPath(batchPath, Path.GetFileName(filePath), stagedPaths);
-            File.Copy(filePath, destPath, overwrite: false);
+            LinkOrCopyFile(filePath, destPath);
             copiedCount++;
         }
 
@@ -176,6 +177,34 @@ public class InProcessRequestComparisonGateway : IRequestComparisonGateway
 
         return Task.CompletedTask;
     }
+
+    private static void LinkOrCopyFile(string sourceFilePath, string destinationPath)
+    {
+        if (!TryCreateHardLink(sourceFilePath, destinationPath))
+        {
+            File.Copy(sourceFilePath, destinationPath, overwrite: false);
+        }
+    }
+
+    private static bool TryCreateHardLink(string sourceFilePath, string destinationPath)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return false;
+        }
+
+        try
+        {
+            return CreateHardLink(destinationPath, sourceFilePath, IntPtr.Zero);
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    [DllImport("Kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool CreateHardLink(string lpFileName, string lpExistingFileName, IntPtr lpSecurityAttributes);
 
 
     private static string GetSafeUniqueDestinationPath(string batchPath, string fileName, ISet<string> stagedPaths)
