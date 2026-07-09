@@ -82,8 +82,10 @@ internal sealed class NamespaceAgnosticXmlSerializerFactory
 
     private static XmlAttributes? CreateMemberOverrides(MemberInfo member)
     {
-        List<XmlElementAttribute> elementAttributes = member
+        List<XmlElementAttribute> sourceElementAttributes = member
             .GetCustomAttributes<XmlElementAttribute>()
+            .ToList();
+        List<XmlElementAttribute> elementAttributes = sourceElementAttributes
             .Select(CloneWithoutNamespace)
             .ToList();
         XmlArrayAttribute? arrayAttribute = member
@@ -95,12 +97,14 @@ internal sealed class NamespaceAgnosticXmlSerializerFactory
         XmlAttributeAttribute? attributeAttribute = member
             .GetCustomAttribute<XmlAttributeAttribute>();
 
+        bool hasOrderOverride = sourceElementAttributes.Any(attribute => attribute.Order >= 0)
+            || arrayAttribute?.Order >= 0;
         bool hasNamespaceOverride = elementAttributes.Any(HasEmptyNamespaceOverride)
             || (arrayAttribute is not null && !string.IsNullOrEmpty(arrayAttribute.Namespace))
             || arrayItemAttributes.Any(HasEmptyNamespaceOverride)
             || (attributeAttribute is not null && !string.IsNullOrEmpty(attributeAttribute.Namespace));
 
-        if (!hasNamespaceOverride)
+        if (!hasNamespaceOverride && !hasOrderOverride)
         {
             return null;
         }
@@ -244,10 +248,6 @@ internal sealed class NamespaceAgnosticXmlSerializerFactory
         clone.Form = source.Form;
         clone.IsNullable = source.IsNullable;
         clone.Namespace = string.IsNullOrEmpty(source.Namespace) ? source.Namespace : string.Empty;
-        if (source.Order >= 0)
-        {
-            clone.Order = source.Order;
-        }
 
         return clone;
     }
@@ -260,10 +260,6 @@ internal sealed class NamespaceAgnosticXmlSerializerFactory
             IsNullable = source.IsNullable,
             Namespace = string.IsNullOrEmpty(source.Namespace) ? source.Namespace : string.Empty,
         };
-        if (source.Order >= 0)
-        {
-            clone.Order = source.Order;
-        }
 
         return clone;
     }

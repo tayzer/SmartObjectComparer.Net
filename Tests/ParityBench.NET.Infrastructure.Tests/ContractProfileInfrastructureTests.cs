@@ -162,6 +162,38 @@ public sealed class ContractProfileInfrastructureTests
     }
 
     [TestMethod]
+    public async Task DeserializeAsync_WhenIgnoringNamespaces_RemovesInconsistentOrderFromGeneratedModels()
+    {
+        JsonXmlContractPayloadSerializer serializer = new JsonXmlContractPayloadSerializer();
+        const string xml = "<GeneratedOrderedResponse><Status>OK</Status><Message>Ready</Message></GeneratedOrderedResponse>";
+        using MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
+
+        object result = await serializer.DeserializeAsync(
+            typeof(GeneratedOrderedResponse),
+            stream,
+            PayloadFormat.Xml,
+            ignoreXmlNamespaces: true);
+
+        GeneratedOrderedResponse response = (GeneratedOrderedResponse)result;
+        Assert.AreEqual("OK", response.Status);
+        Assert.AreEqual("Ready", response.Message);
+    }
+
+    [TestMethod]
+    public async Task DeserializeAsync_WhenNamespacesAreNotIgnored_PreservesInconsistentOrderFailure()
+    {
+        JsonXmlContractPayloadSerializer serializer = new JsonXmlContractPayloadSerializer();
+        const string xml = "<GeneratedOrderedResponse><Status>OK</Status><Message>Ready</Message></GeneratedOrderedResponse>";
+        using MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
+
+        await AssertThrowsAsync<InvalidOperationException>(() => serializer.DeserializeAsync(
+            typeof(GeneratedOrderedResponse),
+            stream,
+            PayloadFormat.Xml,
+            ignoreXmlNamespaces: false));
+    }
+
+    [TestMethod]
     public async Task DeserializeAsync_WhenIgnoringNamespaces_DeserializesModelWithNamespacedXmlAttributes()
     {
         JsonXmlContractPayloadSerializer serializer = new JsonXmlContractPayloadSerializer();
@@ -360,12 +392,20 @@ public sealed class ContractProfileInfrastructureTests
         Assert.Fail($"Expected {typeof(TException).Name}, but no exception was thrown.");
     }
 
+    public sealed class GeneratedOrderedResponse
+    {
+        [XmlElement("Status", Order = 1)]
+        public string Status { get; set; } = string.Empty;
+
+        public string Message { get; set; } = string.Empty;
+    }
+
     [XmlRoot("Envelope", Namespace = SoapNamespace)]
     public sealed class NamespacedSoapRequestEnvelope
     {
         private const string SoapNamespace = "http://schemas.xmlsoap.org/soap/envelope/";
 
-        [XmlElement("Body", Namespace = SoapNamespace)]
+        [XmlElement("Body", Namespace = SoapNamespace, Order = 1)]
         public NamespacedSoapRequestBody Body { get; set; } = new NamespacedSoapRequestBody();
     }
 
@@ -383,7 +423,7 @@ public sealed class ContractProfileInfrastructureTests
 
     public sealed class NamespacedTrendedDataRequest
     {
-        [XmlElement("AccountId", Namespace = TrendedNamespace)]
+        [XmlElement("AccountId", Namespace = TrendedNamespace, Order = 1)]
         public string AccountId { get; set; } = string.Empty;
 
         [XmlArray("Periods", Namespace = TrendedNamespace)]

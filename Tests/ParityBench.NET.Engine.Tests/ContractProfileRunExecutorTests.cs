@@ -186,9 +186,23 @@ public sealed class ContractProfileRunExecutorTests
             endpointBResponseFormat: PayloadFormat.Json,
             canonicalResponseFormat: PayloadFormat.Json,
             canonicalResponseContentType: "application/json",
-            endpointAResponseNormalizer: (_, _) => ValueTask.FromResult(new NormalizedContractResponse(
-                ContractPayload.FromBytes(Encoding.UTF8.GetBytes("{\"status\":\"OK\"}"), PayloadFormat.Json, "application/json"),
-                "namespaced-soap-json")));
+            endpointAResponseNormalizer: async (context, cancellationToken) =>
+            {
+                await using Stream stream = await context.OpenSourceResponseBodyAsync(cancellationToken).ConfigureAwait(false);
+                NamespacedSoapResponseEnvelope soapResponse = (NamespacedSoapResponseEnvelope)await serializer
+                    .DeserializeAsync(
+                        typeof(NamespacedSoapResponseEnvelope),
+                        stream,
+                        context.SourceFormat,
+                        ignoreXmlNamespaces: true,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                string json = $"{{\"status\":\"{soapResponse.Body.GetTrendedDataResponse.Status}\"}}";
+
+                return new NormalizedContractResponse(
+                    ContractPayload.FromBytes(Encoding.UTF8.GetBytes(json), PayloadFormat.Json, "application/json"),
+                    "namespaced-soap-json");
+            });
         ResponseModelRegistry modelRegistry = new ResponseModelRegistry();
         modelRegistry.Register<NamespacedCanonicalResponse>("NamespacedCanonicalResponse");
         CompareNetObjectsResponseComparer comparer = new CompareNetObjectsResponseComparer(
@@ -196,7 +210,7 @@ public sealed class ContractProfileRunExecutorTests
             new JsonXmlResponseBodyDeserializer(modelRegistry));
         CapturingEndpointRequestSender sender = new CapturingEndpointRequestSender(endpointRequest =>
             endpointRequest.Endpoint == EndpointSlot.A
-                ? "{\"status\":\"OK\"}"
+                ? "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:tns=\"urn:trended\"><soap:Body><tns:GetTrendedDataResponse><tns:Status>OK</tns:Status><tns:TraceId>trace-a</tns:TraceId></tns:GetTrendedDataResponse></soap:Body></soap:Envelope>"
                 : "{\"status\":\"OK\"}");
         const string requestBody = "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:tns=\"urn:trended\"><soap:Body><tns:GetTrendedData><tns:Request><tns:AccountId>abc</tns:AccountId></tns:Request></tns:GetTrendedData></soap:Body></soap:Envelope>";
         BasicComparisonRunExecutor executor = new BasicComparisonRunExecutor(
@@ -395,7 +409,7 @@ public sealed class ContractProfileRunExecutorTests
     {
         private const string SoapNamespace = "http://schemas.xmlsoap.org/soap/envelope/";
 
-        [XmlElement("Body", Namespace = SoapNamespace)]
+        [XmlElement("Body", Namespace = SoapNamespace, Order = 1)]
         public NamespacedSoapRequestBody Body { get; set; } = new NamespacedSoapRequestBody();
     }
 
@@ -413,8 +427,31 @@ public sealed class ContractProfileRunExecutorTests
 
     public sealed class NamespacedTrendedDataRequest
     {
-        [XmlElement("AccountId", Namespace = TrendedNamespace)]
+        [XmlElement("AccountId", Namespace = TrendedNamespace, Order = 1)]
         public string AccountId { get; set; } = string.Empty;
+    }
+
+    [XmlRoot("Envelope", Namespace = SoapNamespace)]
+    public sealed class NamespacedSoapResponseEnvelope
+    {
+        private const string SoapNamespace = "http://schemas.xmlsoap.org/soap/envelope/";
+
+        [XmlElement("Body", Namespace = SoapNamespace, Order = 1)]
+        public NamespacedSoapResponseBody Body { get; set; } = new NamespacedSoapResponseBody();
+    }
+
+    public sealed class NamespacedSoapResponseBody
+    {
+        [XmlElement("GetTrendedDataResponse", Namespace = TrendedNamespace)]
+        public NamespacedGetTrendedDataResponse GetTrendedDataResponse { get; set; } = new NamespacedGetTrendedDataResponse();
+    }
+
+    public sealed class NamespacedGetTrendedDataResponse
+    {
+        [XmlElement("Status", Namespace = TrendedNamespace, Order = 1)]
+        public string Status { get; set; } = string.Empty;
+
+        public string TraceId { get; set; } = string.Empty;
     }
 
     public sealed class NamespacedAlternateRequest
