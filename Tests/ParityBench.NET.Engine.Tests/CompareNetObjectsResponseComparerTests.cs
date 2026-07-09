@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Serialization;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -119,6 +120,92 @@ public sealed class CompareNetObjectsResponseComparerTests
 
         string differences = string.Join(" | ", result.Differences.Select(difference => $"{difference.PropertyPath}:{difference.ValueA}->{difference.ValueB}"));
         Assert.AreEqual(RequestPairOutcome.Equal, result.Outcome, differences);
+    }
+
+    [TestMethod]
+    public async Task CompareAsync_WhenUnorderedApplicantsDifferOnlyByIgnoredNestedRules_DoesNotReportMissingApplicants()
+    {
+        CompareNetObjectsResponseComparer comparer = CreateComparer(
+            ("a", () => new ReportResponseModel
+            {
+                IsAThing = true,
+                Details = new ReportDetails { ReportId = "r-1" },
+                Applicants = new[]
+                {
+                    new Applicant { Id = "1", Name = "Alice", Score = 100, Address = new ApplicantAddress { Line1 = "old-a", Postcode = "AA1" } },
+                    new Applicant { Id = "2", Name = "Bob", Score = 200, Address = new ApplicantAddress { Line1 = "old-b", Postcode = "BB1" } },
+                },
+            }),
+            ("b", () => new ReportResponseModel
+            {
+                IsAThing = false,
+                Details = new ReportDetails { ReportId = "r-1" },
+                Applicants = new[]
+                {
+                    new Applicant { Id = "2", Name = "Bob", Score = 999, Address = new ApplicantAddress { Line1 = "new-b", Postcode = "BB1" } },
+                    new Applicant { Id = "1", Name = "Alice", Score = 888, Address = new ApplicantAddress { Line1 = "new-a", Postcode = "AA1" } },
+                },
+            }));
+
+        RequestPairResult result = await comparer.CompareAsync(
+            CreateRequest(),
+            CreateOptions(comparisonOptions: new ComparisonOptions(
+                ignoreCollectionOrder: true,
+                ignoreRules: new[]
+                {
+                    new IgnoreRuleDefinition("Applicants[*].Score"),
+                    new IgnoreRuleDefinition("Applicants[*].Address.Line1"),
+                })),
+            CreateResponse(EndpointSlot.A, "a"),
+            CreateResponse(EndpointSlot.B, "b"),
+            null);
+
+        string differences = string.Join(" | ", result.Differences.Select(difference => $"{difference.PropertyPath}:{difference.ValueA}->{difference.ValueB}"));
+        Assert.AreEqual(RequestPairOutcome.Equal, result.Outcome, differences);
+        Assert.IsFalse(differences.Contains("null", StringComparison.OrdinalIgnoreCase), differences);
+    }
+
+    [TestMethod]
+    public async Task CompareAsync_WhenUnorderedApplicantsHaveRealSiblingDifference_ReturnsRealApplicantDifference()
+    {
+        CompareNetObjectsResponseComparer comparer = CreateComparer(
+            ("a", () => new ReportResponseModel
+            {
+                Details = new ReportDetails { ReportId = "r-1" },
+                Applicants = new[]
+                {
+                    new Applicant { Id = "1", Name = "Alice", Score = 100, Address = new ApplicantAddress { Line1 = "old-a", Postcode = "AA1" } },
+                    new Applicant { Id = "2", Name = "Bob", Score = 200, Address = new ApplicantAddress { Line1 = "old-b", Postcode = "BB1" } },
+                },
+            }),
+            ("b", () => new ReportResponseModel
+            {
+                Details = new ReportDetails { ReportId = "r-1" },
+                Applicants = new[]
+                {
+                    new Applicant { Id = "2", Name = "Bob", Score = 999, Address = new ApplicantAddress { Line1 = "new-b", Postcode = "BB1" } },
+                    new Applicant { Id = "1", Name = "Alicia", Score = 888, Address = new ApplicantAddress { Line1 = "new-a", Postcode = "AA1" } },
+                },
+            }));
+
+        RequestPairResult result = await comparer.CompareAsync(
+            CreateRequest(),
+            CreateOptions(comparisonOptions: new ComparisonOptions(
+                ignoreCollectionOrder: true,
+                ignoreRules: new[]
+                {
+                    new IgnoreRuleDefinition("Applicants[*].Score"),
+                    new IgnoreRuleDefinition("Applicants[*].Address.Line1"),
+                })),
+            CreateResponse(EndpointSlot.A, "a"),
+            CreateResponse(EndpointSlot.B, "b"),
+            null);
+
+        string differences = string.Join(" | ", result.Differences.Select(difference => $"{difference.PropertyPath}:{difference.ValueA}->{difference.ValueB}"));
+        Assert.AreEqual(RequestPairOutcome.Different, result.Outcome, differences);
+        Assert.AreEqual(1, result.Differences.Count, differences);
+        StringAssert.Contains(result.Differences.Single().PropertyPath, "Name");
+        Assert.IsFalse(differences.Contains("null", StringComparison.OrdinalIgnoreCase), differences);
     }
 
     [TestMethod]
@@ -416,6 +503,41 @@ public sealed class CompareNetObjectsResponseComparerTests
             string artifactId = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
             return models[artifactId]();
         }
+    }
+
+    public sealed class ReportResponseModel
+    {
+        [JsonPropertyName("details")]
+        public ReportDetails? Details { get; set; }
+
+        [JsonPropertyName("apps")]
+        public Applicant[]? Applicants { get; set; }
+
+        [JsonIgnore]
+        public bool IsAThing { get; set; }
+    }
+
+    public sealed class ReportDetails
+    {
+        public string? ReportId { get; set; }
+    }
+
+    public sealed class Applicant
+    {
+        public string? Id { get; set; }
+
+        public string? Name { get; set; }
+
+        public int Score { get; set; }
+
+        public ApplicantAddress? Address { get; set; }
+    }
+
+    public sealed class ApplicantAddress
+    {
+        public string? Line1 { get; set; }
+
+        public string? Postcode { get; set; }
     }
 
     public sealed class SampleResponse

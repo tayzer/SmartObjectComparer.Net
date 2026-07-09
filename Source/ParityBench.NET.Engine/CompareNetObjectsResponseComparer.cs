@@ -1,4 +1,7 @@
 using System.Collections;
+using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
 using KellermanSoftware.CompareNetObjects;
@@ -57,8 +60,11 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
                 .DeserializeAsync(options.ResponseModelName, bodyB, responseB.ContentType, options.Comparison, cancellationToken)
                 .ConfigureAwait(false);
 
+            object comparisonModelA = ComparisonModelNormalizer.Normalize(modelA, options.Comparison);
+            object comparisonModelB = ComparisonModelNormalizer.Normalize(modelB, options.Comparison);
+
             CompareLogic compareLogic = CreateCompareLogic(options.Comparison);
-            ComparisonResult comparisonResult = compareLogic.Compare(modelA, modelB);
+            ComparisonResult comparisonResult = compareLogic.Compare(comparisonModelA, comparisonModelB);
             List<ComparisonDifference> differences = comparisonResult
                 .Differences
                 .Where(difference => !ShouldFilterDifference(difference, options.Comparison))
@@ -96,16 +102,17 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
         compareLogic.Config.ComparePrivateFields = false;
         compareLogic.Config.ComparePrivateProperties = true;
         compareLogic.Config.CompareReadOnly = true;
-        compareLogic.Config.IgnoreCollectionOrder = ShouldIgnoreCollectionOrder(options);
+        compareLogic.Config.IgnoreCollectionOrder = false;
         compareLogic.Config.CaseSensitive = !options.IgnoreStringCase;
         compareLogic.Config.Caching = true;
         compareLogic.Config.SkipInvalidIndexers = true;
-        compareLogic.Config.MembersToIgnore = BuildMembersToIgnore(options);
+        compareLogic.Config.MembersToIgnore = BuildMembersToIgnore();
+        compareLogic.Config.AttributesToIgnore = new List<Type> { typeof(JsonIgnoreAttribute) };
 
         return compareLogic;
     }
 
-    private static List<string> BuildMembersToIgnore(ComparisonOptions options) =>
+    private static List<string> BuildMembersToIgnore() =>
         new List<string>
         {
             "Length",
@@ -348,6 +355,231 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
     }
 
     private static bool IsSuccessStatusCode(int statusCode) => statusCode is >= 200 and <= 299;
+
+    private static class ComparisonModelNormalizer
+    {
+        public static object Normalize(object model, ComparisonOptions options)
+        {
+            if (!ShouldNormalize(options))
+            {
+                return model;
+            }
+
+            Dictionary<object, object> visited = new Dictionary<object, object>(ReferenceEqualityComparer.Instance);
+            return NormalizeValue(model, string.Empty, options, visited) ?? model;
+        }
+
+        private static bool ShouldNormalize(ComparisonOptions options) =>
+            ShouldIgnoreCollectionOrder(options)
+            || options.IgnoreRules.Any(rule => rule.IgnoreCompletely)
+            || options.SmartIgnoreRules.Any(rule => rule.IsEnabled);
+
+        private static object? NormalizeValue(
+            object? value,
+            string path,
+            ComparisonOptions options,
+            Dictionary<object, object> visited)
+        {
+            if (value is null || IsSimpleValue(value.GetType()))
+            {
+                return value;
+            }
+
+            if (ShouldIgnoreByRule(path, options) || ShouldIgnoreBySmartPath(path, options))
+            {
+                return GetDefaultValue(value.GetType());
+            }
+
+            if (visited.TryGetValue(value, out object? existing))
+            {
+                return existing;
+            }
+
+            Type type = value.GetType();
+            if (type.IsArray)
+            {
+                Array source = (Array)value;
+                Type elementType = type.GetElementType() ?? typeof(object);
+                object?[] items = source
+                    .Cast<object?>()
+                    .Select((item, index) => NormalizeValue(item, $"{path}[{index}]", options, visited))
+                    .ToArray();
+
+                if (ShouldIgnoreCollectionOrder(options))
+                {
+                    items = items.OrderBy(CreateSortKey, StringComparer.Ordinal).ToArray();
+                }
+
+                Array clone = Array.CreateInstance(elementType, items.Length);
+                visited[value] = clone;
+                for (int index = 0; index < items.Length; index++)
+                {
+                    clone.SetValue(items[index], index);
+                }
+
+                return clone;
+            }
+
+            if (value is IDictionary dictionary)
+            {
+                IDictionary clone = CreateDictionaryClone(type);
+                visited[value] = clone;
+                foreach (DictionaryEntry entry in dictionary)
+                {
+                    string childPath = string.IsNullOrWhiteSpace(path) ? Convert.ToString(entry.Key) ?? string.Empty : $"{path}.{entry.Key}";
+                    clone[entry.Key] = NormalizeValue(entry.Value, childPath, options, visited);
+                }
+
+                return clone;
+            }
+
+            if (value is IEnumerable enumerable && value is not string)
+            {
+                IList items = CreateListClone(type, GetEnumerableElementType(type));
+                visited[value] = items;
+                foreach ((object? item, int index) in enumerable.Cast<object?>().Select((item, index) => (item, index)))
+                {
+                    items.Add(NormalizeValue(item, $"{path}[{index}]", options, visited));
+                }
+
+                if (ShouldIgnoreCollectionOrder(options))
+                {
+                    List<object?> sortedItems = items.Cast<object?>().OrderBy(CreateSortKey, StringComparer.Ordinal).ToList();
+                    items.Clear();
+                    foreach (object? item in sortedItems)
+                    {
+                        items.Add(item);
+                    }
+                }
+
+                return items;
+            }
+
+            object? cloneObject = CreateObjectClone(type);
+            if (cloneObject is null)
+            {
+                return value;
+            }
+
+            visited[value] = cloneObject;
+            foreach (PropertyInfo property in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                if (property.GetIndexParameters().Length > 0 || !property.CanRead || !property.CanWrite)
+                {
+                    continue;
+                }
+
+                string propertyPath = string.IsNullOrWhiteSpace(path) ? property.Name : $"{path}.{property.Name}";
+                object? normalizedPropertyValue = HasJsonIgnoreAttribute(property) || ShouldIgnoreByRule(propertyPath, options) || ShouldIgnoreBySmartPath(propertyPath, options)
+                    ? GetDefaultValue(property.PropertyType)
+                    : NormalizeValue(property.GetValue(value), propertyPath, options, visited);
+
+                property.SetValue(cloneObject, normalizedPropertyValue);
+            }
+
+            return cloneObject;
+        }
+
+        private static bool ShouldIgnoreBySmartPath(string path, ComparisonOptions options)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return false;
+            }
+
+            string leafName = GetLeafPropertyName(path);
+            foreach (SmartIgnoreRuleDefinition rule in options.SmartIgnoreRules.Where(rule => rule.IsEnabled))
+            {
+                if (rule.Kind == SmartIgnoreRuleKind.PropertyName
+                    && string.Equals(leafName, rule.Value, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                if (rule.Kind == SmartIgnoreRuleKind.NamePattern && MatchesPattern(path, rule.Value))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool HasJsonIgnoreAttribute(PropertyInfo property) =>
+            property.GetCustomAttribute<JsonIgnoreAttribute>() is not null
+            || property.GetCustomAttributes(inherit: true).Any(attribute =>
+                string.Equals(attribute.GetType().FullName, "Newtonsoft.Json.JsonIgnoreAttribute", StringComparison.Ordinal));
+
+        private static object? CreateObjectClone(Type type)
+        {
+            ConstructorInfo? constructor = type.GetConstructor(Type.EmptyTypes);
+            return constructor is null ? null : Activator.CreateInstance(type);
+        }
+
+        private static IList CreateListClone(Type sourceType, Type elementType)
+        {
+            if (!sourceType.IsInterface && sourceType.GetConstructor(Type.EmptyTypes) is not null && typeof(IList).IsAssignableFrom(sourceType))
+            {
+                return (IList)Activator.CreateInstance(sourceType)!;
+            }
+
+            Type listType = typeof(List<>).MakeGenericType(elementType);
+            return (IList)Activator.CreateInstance(listType)!;
+        }
+
+        private static IDictionary CreateDictionaryClone(Type sourceType)
+        {
+            if (!sourceType.IsInterface && sourceType.GetConstructor(Type.EmptyTypes) is not null && typeof(IDictionary).IsAssignableFrom(sourceType))
+            {
+                return (IDictionary)Activator.CreateInstance(sourceType)!;
+            }
+
+            return new Hashtable();
+        }
+
+        private static Type GetEnumerableElementType(Type type)
+        {
+            if (type.IsGenericType && type.GetGenericArguments().Length == 1)
+            {
+                return type.GetGenericArguments()[0];
+            }
+
+            Type? enumerableType = type.GetInterfaces()
+                .FirstOrDefault(interfaceType => interfaceType.IsGenericType && interfaceType.GetGenericTypeDefinition() == typeof(IEnumerable<>));
+
+            return enumerableType?.GetGenericArguments()[0] ?? typeof(object);
+        }
+
+        private static string CreateSortKey(object? value)
+        {
+            if (value is null)
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                return JsonSerializer.Serialize(value, value.GetType());
+            }
+            catch (Exception ex) when (ex is NotSupportedException or JsonException or InvalidOperationException)
+            {
+                return value.ToString() ?? string.Empty;
+            }
+        }
+
+        private static object? GetDefaultValue(Type type) => type.IsValueType ? Activator.CreateInstance(type) : null;
+
+        private static bool IsSimpleValue(Type type) =>
+            type.IsPrimitive
+            || type.IsEnum
+            || type == typeof(string)
+            || type == typeof(decimal)
+            || type == typeof(DateTime)
+            || type == typeof(DateTimeOffset)
+            || type == typeof(TimeSpan)
+            || type == typeof(Guid)
+            || type == typeof(Uri);
+    }
 }
 
 
