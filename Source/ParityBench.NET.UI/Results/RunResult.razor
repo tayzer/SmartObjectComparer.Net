@@ -245,7 +245,6 @@ else if (run is not null)
                                                                 <MudItem xs="12" sm="6"><div class="v1-diff-a pa-2"><MudText Typo="Typo.caption" Color="Color.Success">@LabelA</MudText><div class="v1-code">@(affectedPair.ValueA ?? "null")</div></div></MudItem>
                                                                 <MudItem xs="12" sm="6"><div class="v1-diff-b pa-2"><MudText Typo="Typo.caption" Color="Color.Error">@LabelB</MudText><div class="v1-code">@(affectedPair.ValueB ?? "null")</div></div></MudItem>
                                                             </MudGrid>
-                                                            @if (!string.IsNullOrWhiteSpace(affectedPair.Message)) { <MudText Typo="Typo.caption" Color="Color.Secondary">@affectedPair.Message</MudText> }
                                                         </MudStack>
                                                     </MudPaper>
                                                 }
@@ -1358,3 +1357,4 @@ else if (run is not null)
     private enum StructuredDocumentKind { Unknown, Json, Xml }
     private sealed record LineModel(int LineNumber, string Text, string CssClass);
 }
+

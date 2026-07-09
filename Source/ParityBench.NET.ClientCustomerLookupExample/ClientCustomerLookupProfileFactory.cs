@@ -17,13 +17,16 @@ public static class ClientCustomerLookupProfileFactory
     public static IContractProfile Create(
         IContractPayloadSerializer serializer,
         IClientCustomerLookupTokenProvider tokenProvider,
-        TypeAdapterConfig mapsterConfig)
+        TypeAdapterConfig mapsterConfig,
+        ComparisonRuleDefaults? defaultComparisonRules = null)
     {
         ArgumentNullException.ThrowIfNull(serializer);
         ArgumentNullException.ThrowIfNull(tokenProvider);
         ArgumentNullException.ThrowIfNull(mapsterConfig);
 
         ContractPayloadFactory payloadFactory = new ContractPayloadFactory();
+        ComparisonRuleDefaults effectiveComparisonRules =
+            defaultComparisonRules ?? new ComparisonRuleDefaults(ignoreXmlNamespaces: true);
 
         return new ContractProfile<
             ClientCustomerLookupSoapRequestEnvelope,
@@ -43,7 +46,7 @@ public static class ClientCustomerLookupProfileFactory
             canonicalResponseContentType: "application/json",
             suggestedEndpointAId: SuggestedEndpointAId,
             suggestedEndpointBId: SuggestedEndpointBId,
-            defaultComparisonRules: new ComparisonRuleDefaults(ignoreXmlNamespaces: true),
+            defaultComparisonRules: effectiveComparisonRules,
             requestPreparation: async (context, cancellationToken) =>
             {
                 ClientCustomerLookupTokenResult finalToken = await tokenProvider
@@ -111,3 +114,4 @@ public static class ClientCustomerLookupProfileFactory
             payloadFactory: payloadFactory);
     }
 }
+

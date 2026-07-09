@@ -9,6 +9,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.ClientCustomerLookupExample;
+using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Infrastructure;
@@ -38,6 +39,142 @@ public sealed class ClientCustomerLookupExampleTests
 
         Assert.AreEqual("2001", mapped.CustomerId);
         Assert.AreEqual("trace-2001", mapped.CorrelationId);
+    }
+
+    [TestMethod]
+    public void ComparisonRuleDefaultsLoader_WhenNoFileIsConfigured_KeepsNamespaceIgnoringDefault()
+    {
+        ComparisonRuleDefaults defaults = ClientCustomerLookupComparisonRuleDefaultsLoader.Load(
+            new ClientCustomerLookupComparisonOptions(),
+            AppContext.BaseDirectory);
+
+        Assert.IsTrue(defaults.IgnoreXmlNamespaces);
+        Assert.AreEqual(0, defaults.IgnoreRules.Count);
+    }
+
+    [TestMethod]
+    public void ComparisonRuleDefaultsLoader_WhenFileIsConfigured_LoadsIgnoreRulesAndSkipsComments()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), $"paritybench-client-rules-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string rulesPath = Path.Combine(directory, "ignore-rules.txt");
+        File.WriteAllLines(rulesPath, new[]
+        {
+            "# client-specific ignores",
+            "",
+            " Item.AccountId ",
+            "Response.Metadata.Timestamp",
+        });
+
+        try
+        {
+            ComparisonRuleDefaults defaults = ClientCustomerLookupComparisonRuleDefaultsLoader.Load(
+                new ClientCustomerLookupComparisonOptions { IgnoreRulesFile = "ignore-rules.txt" },
+                directory);
+
+            Assert.IsTrue(defaults.IgnoreXmlNamespaces);
+            CollectionAssert.AreEqual(
+                new[] { "Item.AccountId", "Response.Metadata.Timestamp" },
+                defaults.IgnoreRules.Select(rule => rule.PropertyPath).ToArray());
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void ComparisonRuleDefaultsLoader_WhenJsonConfigurationIsConfigured_LoadsV1SettingsAndIgnoreRules()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), $"paritybench-client-rules-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string rulesPath = Path.Combine(directory, "ignore-rules.json");
+        File.WriteAllText(rulesPath, """
+            {
+              "schemaVersion": 1,
+              "globalSettings": {
+                "ignoreCollectionOrder": true,
+                "ignoreStringCase": true,
+                "ignoreTrailingWhitespaceAtEnd": true,
+                "treatNullAndEmptyCollectionsAsEqual": true,
+                "ignoreXmlNamespaces": false
+              },
+              "ignoreRules": [
+                {
+                  "propertyPath": "Item.AccountId",
+                  "ignoreCompletely": true,
+                  "ignoreCollectionOrder": false,
+                  "treatNullAndEmptyCollectionsAsEqual": true
+                },
+                {
+                  "propertyPath": "Response.Metadata.Timestamp",
+                  "ignoreCompletely": true,
+                  "ignoreCollectionOrder": true,
+                  "treatNullAndEmptyCollectionsAsEqual": false
+                }
+              ]
+            }
+            """);
+
+        try
+        {
+            ComparisonRuleDefaults defaults = ClientCustomerLookupComparisonRuleDefaultsLoader.Load(
+                new ClientCustomerLookupComparisonOptions { IgnoreRulesFile = "ignore-rules.json" },
+                directory);
+
+            Assert.IsTrue(defaults.IgnoreCollectionOrder);
+            Assert.IsTrue(defaults.IgnoreStringCase);
+            Assert.IsTrue(defaults.IgnoreTrailingWhitespaceAtEnd);
+            Assert.IsTrue(defaults.TreatNullAndEmptyCollectionsAsEqual);
+            Assert.IsTrue(defaults.IgnoreXmlNamespaces);
+            Assert.AreEqual(2, defaults.IgnoreRules.Count);
+            IgnoreRuleDefinition accountRule = defaults.IgnoreRules.Single(rule => rule.PropertyPath == "Item.AccountId");
+            Assert.IsTrue(accountRule.IgnoreCompletely);
+            Assert.IsFalse(accountRule.IgnoreCollectionOrder);
+            Assert.IsTrue(accountRule.TreatNullAndEmptyCollectionsAsEqual);
+            Assert.IsTrue(defaults.IgnoreRules.Single(rule => rule.PropertyPath == "Response.Metadata.Timestamp").IgnoreCollectionOrder);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void ComparisonRuleDefaultsLoader_WhenConfiguredFileIsMissing_ThrowsClearError()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), $"paritybench-client-rules-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+
+        try
+        {
+            InvalidOperationException exception = AssertThrows<InvalidOperationException>(() =>
+                ClientCustomerLookupComparisonRuleDefaultsLoader.Load(
+                    new ClientCustomerLookupComparisonOptions { IgnoreRulesFile = "missing.txt" },
+                    directory));
+
+            StringAssert.Contains(exception.Message, "ignore rules file");
+            StringAssert.Contains(exception.Message, "missing.txt");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void Create_WhenComparisonDefaultsAreProvided_UsesThemForProfileDefaults()
+    {
+        IContractProfile profile = ClientCustomerLookupProfileFactory.Create(
+            new JsonXmlContractPayloadSerializer(),
+            new FixedTokenProvider("final-token"),
+            ClientCustomerLookupMapsterConfig.CreateConfig(),
+            new ComparisonRuleDefaults(
+                ignoreXmlNamespaces: true,
+                ignoreRules: new[] { new IgnoreRuleDefinition("Item.AccountId") }));
+
+        Assert.IsTrue(profile.DefaultComparisonRules.IgnoreXmlNamespaces);
+        Assert.AreEqual("Item.AccountId", profile.DefaultComparisonRules.IgnoreRules.Single().PropertyPath);
     }
 
     [TestMethod]
@@ -165,6 +302,22 @@ public sealed class ClientCustomerLookupExampleTests
         {
             return await reader.ReadToEndAsync().ConfigureAwait(false);
         }
+    }
+
+    private static TException AssertThrows<TException>(Action action)
+        where TException : Exception
+    {
+        try
+        {
+            action();
+        }
+        catch (TException ex)
+        {
+            return ex;
+        }
+
+        Assert.Fail($"Expected exception of type {typeof(TException).FullName}.");
+        throw new InvalidOperationException("Assert.Fail should have thrown.");
     }
 
     private sealed class FixedTokenProvider : IClientCustomerLookupTokenProvider

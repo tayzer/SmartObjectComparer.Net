@@ -1,6 +1,7 @@
 using Mapster;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Infrastructure;
@@ -10,6 +11,7 @@ namespace ParityBench.NET.ClientCustomerLookupExample;
 public static class ClientCustomerLookupExampleServiceCollectionExtensions
 {
     public const string ConfigurationSectionName = "ClientCustomerLookup:Tokens";
+    public const string ComparisonConfigurationSectionName = "ClientCustomerLookup:Comparison";
 
     public static IServiceCollection AddClientCustomerLookupExample(
         this IServiceCollection services,
@@ -20,6 +22,8 @@ public static class ClientCustomerLookupExampleServiceCollectionExtensions
 
         services.Configure<ClientCustomerLookupTokenOptions>(
             configuration.GetSection(ConfigurationSectionName));
+        services.Configure<ClientCustomerLookupComparisonOptions>(
+            configuration.GetSection(ComparisonConfigurationSectionName));
         services.AddSingleton(_ => ClientCustomerLookupMapsterConfig.CreateConfig());
         services.AddHttpClient<IClientCustomerLookupTokenProvider, ClientCustomerLookupTokenProvider>();
         return services;
@@ -42,6 +46,9 @@ public static class ClientCustomerLookupExampleServiceCollectionExtensions
         registry.Register(ClientCustomerLookupProfileFactory.Create(
             serviceProvider.GetRequiredService<IContractPayloadSerializer>(),
             serviceProvider.GetRequiredService<IClientCustomerLookupTokenProvider>(),
-            serviceProvider.GetRequiredService<TypeAdapterConfig>()));
+            serviceProvider.GetRequiredService<TypeAdapterConfig>(),
+            ClientCustomerLookupComparisonRuleDefaultsLoader.Load(
+                serviceProvider.GetRequiredService<IOptions<ClientCustomerLookupComparisonOptions>>().Value)));
     }
 }
+

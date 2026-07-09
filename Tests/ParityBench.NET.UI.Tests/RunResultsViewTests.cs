@@ -121,6 +121,9 @@ public sealed class RunResultsViewTests
         component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "Detailed Comparison"));
         StringAssert.Contains(component.Markup, "Subject.ContactProfile.NotificationPreference.StatementDelivery");
         StringAssert.Contains(component.Markup, "Subject.ContactProfile.NotificationPreference.MarketingConsent");
+        StringAssert.Contains(component.Markup, "Postal");
+        StringAssert.Contains(component.Markup, "Email");
+        Assert.IsFalse(component.Markup.Contains("Statement delivery preference changed.", StringComparison.Ordinal));
         Assert.AreEqual(0, dataSource.PreviewReadCount);
     }
 
@@ -172,6 +175,9 @@ public sealed class RunResultsViewTests
         StringAssert.Contains(component.Markup, "Subject");
         StringAssert.Contains(component.Markup, "ContactProfile");
         StringAssert.Contains(component.Markup, "customers/one.json");
+        StringAssert.Contains(component.Markup, "Postal");
+        StringAssert.Contains(component.Markup, "Email");
+        Assert.IsFalse(component.Markup.Contains("Statement delivery preference changed.", StringComparison.Ordinal));
     }
 
 
@@ -275,6 +281,30 @@ public sealed class RunResultsViewTests
             invocation.Arguments[2] is bool enabled &&
             enabled)));
     }
+    [TestMethod]
+    public void PairDetail_WhenDifferenceHasDebugMessage_HidesMessageButKeepsValues()
+    {
+        RequestPairResult pair = new RequestPairResult(
+            "accounts/one.json",
+            RequestPairOutcome.Different,
+            CreateResponse(EndpointSlot.A, "accounts/one.json"),
+            CreateResponse(EndpointSlot.B, "accounts/one.json"),
+            areEqual: false,
+            differenceCount: 1,
+            differences: new[]
+            {
+                new ComparisonDifference("Item.AccountId", "123", "456", "Expected.Item.AccountId != Actual.Item.AccountId"),
+            });
+
+        IRenderedComponent<PairDetail> component = testContext.Render<PairDetail>(parameters => parameters
+            .Add(detail => detail.Pair, pair));
+
+        StringAssert.Contains(component.Markup, "Item.AccountId");
+        StringAssert.Contains(component.Markup, "A: 123");
+        StringAssert.Contains(component.Markup, "B: 456");
+        Assert.IsFalse(component.Markup.Contains("Expected.Item.AccountId != Actual.Item.AccountId", StringComparison.Ordinal));
+    }
+
     [TestMethod]
     public void RunResult_WhenDataSourceFails_ShowsRecoverableError()
     {
@@ -490,3 +520,4 @@ public sealed class RunResultsViewTests
         }
     }
 }
+
