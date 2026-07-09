@@ -196,6 +196,37 @@ public sealed class RunWorkflowViewTests
             Assert.IsTrue(rule.IgnoreCollectionOrder);
         });
     }
+
+    [TestMethod]
+    public void IgnoreRulesStudio_WhenManyCurrentRulesAreConfigured_CapsAndFiltersList()
+    {
+        List<IgnoreRuleDefinition> rules = Enumerable
+            .Range(0, 30)
+            .Select(index => new IgnoreRuleDefinition($"Rule{index:00}"))
+            .Append(new IgnoreRuleDefinition("Target.VisibleRule"))
+            .ToList();
+        IRenderedComponent<IgnoreRulesStudio> component = testContext.Render<IgnoreRulesStudio>(parameters => parameters
+            .Add(p => p.ModelType, typeof(FakeRunWorkflowViewDataSource.FakeConsumerReportResponse))
+            .Add(p => p.ModelName, "ConsumerReportJsonResponse")
+            .Add(p => p.Rules, rules));
+
+        component.WaitForAssertion(() =>
+        {
+            StringAssert.Contains(component.Markup, "31 custom");
+            StringAssert.Contains(component.Markup, "Rule00");
+            Assert.IsFalse(component.Markup.Contains("Rule29", StringComparison.Ordinal));
+            StringAssert.Contains(component.Markup, "Show all 31 rules");
+        });
+
+        ChangeTextField(component, "Filter Current Ignore Rules", "Target");
+
+        component.WaitForAssertion(() =>
+        {
+            StringAssert.Contains(component.Markup, "Target.VisibleRule");
+            Assert.IsFalse(component.Markup.Contains("Rule00", StringComparison.Ordinal));
+        });
+    }
+
     [TestMethod]
     public void MaskRulesStudio_WhenSearchRowIsClicked_PopulatesEditorPath()
     {
@@ -263,8 +294,10 @@ public sealed class RunWorkflowViewTests
             StringAssert.Contains(component.Markup, "Ignore paths: 1");
             StringAssert.Contains(component.Markup, "Smart ignores: 1");
             StringAssert.Contains(component.Markup, "Masks: 1");
-            StringAssert.Contains(component.Markup, "Profile default ignore rules");
-            StringAssert.Contains(component.Markup, "SourceSystem");
+            StringAssert.Contains(component.Markup, "1 profile default ignore rule will be applied automatically.");
+            StringAssert.Contains(component.Markup, "1 profile default mask rule will be applied automatically.");
+            Assert.IsFalse(component.Markup.Contains("Profile default ignore rules", StringComparison.Ordinal));
+            Assert.IsFalse(component.Markup.Contains("Profile default mask rules", StringComparison.Ordinal));
         });
     }
 
@@ -345,7 +378,8 @@ public sealed class RunWorkflowViewTests
         component.InvokeAsync(() => autocomplete.Instance.ValueChanged.InvokeAsync(value)).GetAwaiter().GetResult();
     }
 
-    private static void ChangeTextField(IRenderedComponent<RunWorkflow> component, string labelText, string value)
+    private static void ChangeTextField<TComponent>(IRenderedComponent<TComponent> component, string labelText, string value)
+        where TComponent : IComponent
     {
         IElement label = component.FindAll("label")
             .Single(element => string.Equals(element.TextContent.Trim(), labelText, StringComparison.Ordinal));

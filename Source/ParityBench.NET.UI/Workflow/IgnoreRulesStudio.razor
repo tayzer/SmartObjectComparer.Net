@@ -117,34 +117,51 @@
 
                         <MudPaper Outlined="true" Class="pa-3">
                             <MudStack Spacing="2">
-                                <MudText Typo="Typo.subtitle2">Current Ignore Rules</MudText>
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="flex-wrap">
+                                    <MudText Typo="Typo.subtitle2">Current Ignore Rules</MudText>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info">@Rules.Count custom</MudChip>
+                                </MudStack>
                                 @if (!Rules.Any())
                                 {
                                     <MudText Typo="Typo.body2" Color="Color.Secondary">No custom ignore rules configured.</MudText>
                                 }
                                 else
                                 {
-                                    <MudPaper Outlined="true" Style="max-height: 330px; overflow-y: auto;">
-                                        @foreach (IgnoreRuleDefinition rule in Rules.OrderBy(rule => rule.PropertyPath, StringComparer.OrdinalIgnoreCase))
-                                        {
-                                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Class="pa-2">
-                                                <MudStack Spacing="1">
-                                                    <MudText Typo="Typo.body2" Style="font-family: Consolas, monospace; word-break: break-all;">@rule.PropertyPath</MudText>
-                                                    <MudStack Row="true" Spacing="1" Class="flex-wrap">
-                                                        @foreach (string summary in RuleSummary(rule))
-                                                        {
-                                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@summary</MudChip>
-                                                        }
+                                    <MudTextField T="string" @bind-Value="currentRuleSearchTerm" Label="Filter Current Ignore Rules" Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Clearable="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+                                    @if (FilteredCurrentRules.Count == 0)
+                                    {
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">No custom ignore rules match the current filter.</MudText>
+                                    }
+                                    else
+                                    {
+                                        <MudPaper Outlined="true" Style="max-height: 330px; overflow-y: auto;">
+                                            @foreach (IgnoreRuleDefinition rule in VisibleCurrentRules)
+                                            {
+                                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Class="pa-2">
+                                                    <MudStack Spacing="1">
+                                                        <MudText Typo="Typo.body2" Style="font-family: Consolas, monospace; word-break: break-all;">@rule.PropertyPath</MudText>
+                                                        <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                                                            @foreach (string summary in RuleSummary(rule))
+                                                            {
+                                                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@summary</MudChip>
+                                                            }
+                                                        </MudStack>
+                                                    </MudStack>
+                                                    <MudStack Row="true" Spacing="0">
+                                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" OnClick="@(() => EditRule(rule))" />
+                                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => RemoveRuleAsync(rule.PropertyPath))" />
                                                     </MudStack>
                                                 </MudStack>
-                                                <MudStack Row="true" Spacing="0">
-                                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" OnClick="@(() => EditRule(rule))" />
-                                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => RemoveRuleAsync(rule.PropertyPath))" />
-                                                </MudStack>
-                                            </MudStack>
-                                            <MudDivider />
+                                                <MudDivider />
+                                            }
+                                        </MudPaper>
+                                        @if (FilteredCurrentRules.Count > CurrentRulePreviewLimit)
+                                        {
+                                            <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="ToggleShowAllCurrentRules">
+                                                @(showAllCurrentRules ? "Show fewer" : $"Show all {FilteredCurrentRules.Count} rules")
+                                            </MudButton>
                                         }
-                                    </MudPaper>
+                                    }
                                 }
                             </MudStack>
                         </MudPaper>
@@ -173,14 +190,17 @@
     [Parameter] public int MaxDifferences { get; set; } = 100;
     [Parameter] public EventCallback<int> MaxDifferencesChanged { get; set; }
 
+    private const int CurrentRulePreviewLimit = 25;
     private readonly string importInputId = $"ignore-config-import-{Guid.NewGuid():N}";
     private string searchTerm = string.Empty;
+    private string currentRuleSearchTerm = string.Empty;
     private string selectedPath = string.Empty;
     private bool ignoreCompletely = true;
     private bool ignoreCollectionOrder;
     private bool treatNullAndEmptyCollectionsAsEqual;
     private string? statusMessage;
     private bool statusIsError;
+    private bool showAllCurrentRules;
     private IReadOnlyList<PropertyPathEntry> propertyPaths = Array.Empty<PropertyPathEntry>();
     private readonly List<RuleTreeNode> treeNodes = new();
     private readonly HashSet<string> expandedPaths = new(StringComparer.Ordinal);
@@ -194,6 +214,18 @@
         string.IsNullOrWhiteSpace(searchTerm)
             ? propertyPaths
             : propertyPaths.Where(property => property.Path.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    private IReadOnlyList<IgnoreRuleDefinition> FilteredCurrentRules =>
+        Rules
+            .Where(rule => string.IsNullOrWhiteSpace(currentRuleSearchTerm)
+                || rule.PropertyPath.Contains(currentRuleSearchTerm.Trim(), StringComparison.OrdinalIgnoreCase))
+            .OrderBy(rule => rule.PropertyPath, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private IReadOnlyList<IgnoreRuleDefinition> VisibleCurrentRules =>
+        showAllCurrentRules
+            ? FilteredCurrentRules
+            : FilteredCurrentRules.Take(CurrentRulePreviewLimit).ToList();
 
     private bool AllVisibleSelected
     {
@@ -429,6 +461,8 @@
     }
 
     private void ClearSelection() => selectedPropertyPaths.Clear();
+
+    private void ToggleShowAllCurrentRules() => showAllCurrentRules = !showAllCurrentRules;
 
     private void ExpandAll()
     {

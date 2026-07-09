@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Text.RegularExpressions;
 
 using KellermanSoftware.CompareNetObjects;
@@ -91,7 +91,7 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
     private static CompareLogic CreateCompareLogic(ComparisonOptions options)
     {
         CompareLogic compareLogic = new CompareLogic();
-        compareLogic.Config.MaxDifferences = Math.Min(options.MaxDifferences, 1000);
+        compareLogic.Config.MaxDifferences = CalculateInternalMaxDifferences(options);
         compareLogic.Config.IgnoreObjectTypes = false;
         compareLogic.Config.ComparePrivateFields = false;
         compareLogic.Config.ComparePrivateProperties = true;
@@ -105,40 +105,30 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
         return compareLogic;
     }
 
-    private static List<string> BuildMembersToIgnore(ComparisonOptions options)
-    {
-        List<string> membersToIgnore = new List<string>
+    private static List<string> BuildMembersToIgnore(ComparisonOptions options) =>
+        new List<string>
         {
             "Length",
             "LongLength",
             "NativeLength",
         };
 
-        foreach (IgnoreRuleDefinition rule in options.IgnoreRules.Where(rule => rule.IgnoreCompletely))
-        {
-            foreach (string pattern in ExpandIgnorePath(rule.PropertyPath))
-            {
-                if (!membersToIgnore.Contains(pattern, StringComparer.Ordinal))
-                {
-                    membersToIgnore.Add(pattern);
-                }
-            }
-        }
-
-        return membersToIgnore;
-    }
-
-    private static IEnumerable<string> ExpandIgnorePath(string propertyPath)
+    private static int CalculateInternalMaxDifferences(ComparisonOptions options)
     {
-        yield return propertyPath;
+        int requested = Math.Max(1, options.MaxDifferences);
+        bool filtersMaySuppressDifferences = options.IgnoreRules.Count > 0
+            || options.SmartIgnoreRules.Count > 0
+            || options.IgnoreTrailingWhitespaceAtEnd
+            || options.TreatNullAndEmptyCollectionsAsEqual;
 
-        if (propertyPath.Contains("[*]", StringComparison.Ordinal))
+        if (!filtersMaySuppressDifferences)
         {
-            for (int index = 0; index < 10; index++)
-            {
-                yield return propertyPath.Replace("[*]", $"[{index}]", StringComparison.Ordinal);
-            }
+            return Math.Min(requested, 1000);
         }
+
+        int ruleHeadroom = Math.Max(100, options.IgnoreRules.Count * 25);
+        int expanded = Math.Max(requested * 10, requested + ruleHeadroom);
+        return Math.Min(expanded, 10000);
     }
 
     private static bool CanModelCompare(
@@ -165,7 +155,7 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
         || options.SmartIgnoreRules.Any(rule => rule.IsEnabled && rule.Kind == SmartIgnoreRuleKind.CollectionOrdering);
 
     private static bool ShouldFilterDifference(Difference difference, ComparisonOptions options) =>
-        ShouldIgnoreByRule(difference.PropertyName, options)
+        ShouldIgnoreByRule(NormalizeComparisonPath(difference.PropertyName), options)
         || ShouldIgnoreBySmartRule(difference, options)
         || ShouldIgnoreByTrailingWhitespace(difference, options)
         || ShouldIgnoreByNullEmptyCollectionRule(difference, options);
@@ -177,7 +167,7 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
 
     private static bool ShouldIgnoreBySmartRule(Difference difference, ComparisonOptions options)
     {
-        string propertyPath = difference.PropertyName ?? string.Empty;
+        string propertyPath = NormalizeComparisonPath(difference.PropertyName);
         string leafName = GetLeafPropertyName(propertyPath);
 
         foreach (SmartIgnoreRuleDefinition rule in options.SmartIgnoreRules.Where(rule => rule.IsEnabled))
@@ -221,7 +211,7 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
     {
         bool appliesGlobally = options.TreatNullAndEmptyCollectionsAsEqual;
         bool appliesByRule = options.IgnoreRules.Any(rule =>
-            rule.TreatNullAndEmptyCollectionsAsEqual && PathMatches(rule.PropertyPath, difference.PropertyName));
+            rule.TreatNullAndEmptyCollectionsAsEqual && PathMatches(rule.PropertyPath, NormalizeComparisonPath(difference.PropertyName)));
 
         if (!appliesGlobally && !appliesByRule)
         {
@@ -271,6 +261,8 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
 
     private static bool PathMatches(string rulePath, string? propertyPath)
     {
+        propertyPath = NormalizeComparisonPath(propertyPath);
+
         if (string.IsNullOrWhiteSpace(propertyPath))
         {
             return false;
@@ -317,17 +309,32 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
 
     private static string GetLeafPropertyName(string propertyPath)
     {
-        string cleanedPath = Regex.Replace(propertyPath, "\\[\\d+\\]", string.Empty, RegexOptions.None, RegexTimeout);
+        string cleanedPath = Regex.Replace(NormalizeComparisonPath(propertyPath), "\\[\\d+\\]", string.Empty, RegexOptions.None, RegexTimeout);
         int separatorIndex = cleanedPath.LastIndexOf('.');
         return separatorIndex < 0 ? cleanedPath : cleanedPath[(separatorIndex + 1)..];
     }
 
     private static ComparisonDifference ToDomainDifference(Difference difference) =>
         new ComparisonDifference(
-            string.IsNullOrWhiteSpace(difference.PropertyName) ? "Response" : difference.PropertyName,
+            string.IsNullOrWhiteSpace(difference.PropertyName) ? "Response" : NormalizeComparisonPath(difference.PropertyName),
             difference.Object1Value?.ToString(),
             difference.Object2Value?.ToString(),
             difference.ToString());
+
+    private static string NormalizeComparisonPath(string? propertyPath)
+    {
+        if (string.IsNullOrWhiteSpace(propertyPath))
+        {
+            return string.Empty;
+        }
+
+        return Regex.Replace(
+            propertyPath.Trim(),
+            @"\.System\.Collections(?:\.Generic)?\.(?:IList|ICollection|IEnumerable)\.Item\[(\d+)\]",
+            "[$1]",
+            RegexOptions.IgnoreCase,
+            RegexTimeout);
+    }
 
     private static bool IsSuccessStatusCode(int statusCode) => statusCode is >= 200 and <= 299;
 }

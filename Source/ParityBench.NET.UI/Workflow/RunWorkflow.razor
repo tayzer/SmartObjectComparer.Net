@@ -128,15 +128,9 @@
                 <MudExpansionPanel Text="Ignore Rules">
                     @if (selectedProfileOption?.DefaultComparisonRules.IgnoreRules.Count > 0)
                     {
-                        <MudStack Spacing="1" Class="mb-3">
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">Profile default ignore rules</MudText>
-                            <MudStack Row="true" Spacing="1" Class="flex-wrap">
-                                @foreach (IgnoreRuleDefinition rule in selectedProfileOption.DefaultComparisonRules.IgnoreRules)
-                                {
-                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@rule.PropertyPath</MudChip>
-                                }
-                            </MudStack>
-                        </MudStack>
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true" Class="mb-3">
+                            @selectedProfileOption.DefaultComparisonRules.IgnoreRules.Count profile default ignore rule@(selectedProfileOption.DefaultComparisonRules.IgnoreRules.Count == 1 ? string.Empty : "s") will be applied automatically.
+                        </MudAlert>
                     }
                     <MudStack Spacing="3">
                         <IgnoreRulesStudio ModelType="selectedModelType"
@@ -161,15 +155,9 @@
                 <MudExpansionPanel Text="Mask Rules">
                     @if (selectedProfileOption?.DefaultComparisonRules.MaskRules.Count > 0)
                     {
-                        <MudStack Spacing="1" Class="mb-3">
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">Profile default mask rules</MudText>
-                            <MudStack Row="true" Spacing="1" Class="flex-wrap">
-                                @foreach (MaskRuleDefinition rule in selectedProfileOption.DefaultComparisonRules.MaskRules)
-                                {
-                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@rule.PropertyPath</MudChip>
-                                }
-                            </MudStack>
-                        </MudStack>
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true" Class="mb-3">
+                            @selectedProfileOption.DefaultComparisonRules.MaskRules.Count profile default mask rule@(selectedProfileOption.DefaultComparisonRules.MaskRules.Count == 1 ? string.Empty : "s") will be applied automatically.
+                        </MudAlert>
                     }
                     <MaskRulesStudio ModelType="selectedModelType"
                                      ModelName="@modelName"

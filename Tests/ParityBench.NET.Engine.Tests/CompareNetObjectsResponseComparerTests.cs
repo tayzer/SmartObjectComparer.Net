@@ -175,6 +175,57 @@ public sealed class CompareNetObjectsResponseComparerTests
     }
 
     [TestMethod]
+    public async Task CompareAsync_WhenIgnoreRuleMatchesNestedSibling_ReturnsRemainingSiblingDifference()
+    {
+        CompareNetObjectsResponseComparer comparer = CreateComparer(
+            ("a", () => new ComplexResponse { Detail = new ComplexDetail { Ignored = "ignore-a", Remaining = "left" } }),
+            ("b", () => new ComplexResponse { Detail = new ComplexDetail { Ignored = "ignore-b", Remaining = "right" } }));
+
+        RequestPairResult result = await comparer.CompareAsync(
+            CreateRequest(),
+            CreateOptions(comparisonOptions: new ComparisonOptions(
+                ignoreRules: new[] { new IgnoreRuleDefinition("Detail.Ignored") })),
+            CreateResponse(EndpointSlot.A, "a"),
+            CreateResponse(EndpointSlot.B, "b"),
+            null);
+
+        Assert.AreEqual(RequestPairOutcome.Different, result.Outcome);
+        Assert.AreEqual(1, result.Differences.Count);
+        Assert.AreEqual("Detail.Remaining", result.Differences.Single().PropertyPath);
+    }
+
+    [TestMethod]
+    public async Task CompareAsync_WhenManyIgnoredDifferencesExist_StillReturnsNonIgnoredDifferences()
+    {
+        CompareNetObjectsResponseComparer comparer = CreateComparer(
+            ("a", () => new ManyIgnoredResponse
+            {
+                Items = Enumerable.Range(0, 20).Select(index => new ManyIgnoredItem { Ignored = $"a-{index}", Shared = index }).ToList(),
+                Visible = "left",
+            }),
+            ("b", () => new ManyIgnoredResponse
+            {
+                Items = Enumerable.Range(0, 20).Select(index => new ManyIgnoredItem { Ignored = $"b-{index}", Shared = index }).ToList(),
+                Visible = "right",
+            }));
+
+        RequestPairResult result = await comparer.CompareAsync(
+            CreateRequest(),
+            CreateOptions(comparisonOptions: new ComparisonOptions(
+                maxDifferences: 2,
+                ignoreRules: new[] { new IgnoreRuleDefinition("Items[*].Ignored") })),
+            CreateResponse(EndpointSlot.A, "a"),
+            CreateResponse(EndpointSlot.B, "b"),
+            null);
+
+        Assert.AreEqual(RequestPairOutcome.Different, result.Outcome);
+        string differencePaths = string.Join(" | ", result.Differences.Select(difference => $"{difference.PropertyPath}:{difference.ValueA}->{difference.ValueB}"));
+        Assert.IsTrue(result.Differences.Any(difference => difference.PropertyPath.Contains("Visible", StringComparison.Ordinal)), differencePaths);
+        Assert.IsFalse(result.Differences.Any(difference => difference.PropertyPath.Contains("Ignored", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsTrue(result.Differences.Count <= 2);
+    }
+
+    [TestMethod]
     public async Task CompareAsync_WhenConcurrentRunsUseDifferentOptions_ProducesIsolatedResults()
     {
         CompareNetObjectsResponseComparer comparer = CreateComparer(
@@ -201,7 +252,7 @@ public sealed class CompareNetObjectsResponseComparerTests
     }
 
     private static CompareNetObjectsResponseComparer CreateComparer(
-        params (string ArtifactId, Func<SampleResponse> Factory)[] models)
+        params (string ArtifactId, Func<object> Factory)[] models)
     {
         InMemoryArtifactStore artifactStore = new InMemoryArtifactStore(models.Select(model => model.ArtifactId));
         FakeResponseBodyDeserializer deserializer = new FakeResponseBodyDeserializer(models);
@@ -263,9 +314,9 @@ public sealed class CompareNetObjectsResponseComparerTests
 
     private sealed class FakeResponseBodyDeserializer : IResponseBodyDeserializer
     {
-        private readonly Dictionary<string, Func<SampleResponse>> models;
+        private readonly Dictionary<string, Func<object>> models;
 
-        public FakeResponseBodyDeserializer(IEnumerable<(string ArtifactId, Func<SampleResponse> Factory)> models)
+        public FakeResponseBodyDeserializer(IEnumerable<(string ArtifactId, Func<object> Factory)> models)
         {
             this.models = models.ToDictionary(model => model.ArtifactId, model => model.Factory, StringComparer.Ordinal);
         }
@@ -294,6 +345,32 @@ public sealed class CompareNetObjectsResponseComparerTests
         public string? CorrelationId { get; init; }
 
         public List<int>? Values { get; init; }
+    }
+
+    public sealed class ComplexResponse
+    {
+        public ComplexDetail Detail { get; init; } = new ComplexDetail();
+    }
+
+    public sealed class ComplexDetail
+    {
+        public string? Ignored { get; init; }
+
+        public string? Remaining { get; init; }
+    }
+
+    public sealed class ManyIgnoredResponse
+    {
+        public List<ManyIgnoredItem> Items { get; init; } = new List<ManyIgnoredItem>();
+
+        public string? Visible { get; init; }
+    }
+
+    public sealed class ManyIgnoredItem
+    {
+        public string? Ignored { get; init; }
+
+        public int Shared { get; init; }
     }
 }
 
