@@ -65,9 +65,14 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
 
             CompareLogic compareLogic = CreateCompareLogic(options.Comparison);
             ComparisonResult comparisonResult = compareLogic.Compare(comparisonModelA, comparisonModelB);
-            List<ComparisonDifference> differences = comparisonResult
+            List<Difference> filteredDifferences = comparisonResult
                 .Differences
                 .Where(difference => !ShouldFilterDifference(difference, options.Comparison))
+                .ToList();
+
+            List<Difference> deduplicatedDifferences = DeduplicateDifferences(filteredDifferences);
+
+            List<ComparisonDifference> differences = deduplicatedDifferences
                 .Take(options.Comparison.MaxDifferences)
                 .Select(ToDomainDifference)
                 .ToList();
@@ -123,16 +128,8 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
     private static int CalculateInternalMaxDifferences(ComparisonOptions options)
     {
         int requested = Math.Max(1, options.MaxDifferences);
-        bool filtersMaySuppressDifferences = options.IgnoreRules.Count > 0
-            || options.SmartIgnoreRules.Count > 0
-            || options.IgnoreTrailingWhitespaceAtEnd
-            || options.TreatNullAndEmptyCollectionsAsEqual;
-
-        if (!filtersMaySuppressDifferences)
-        {
-            return Math.Min(requested, 1000);
-        }
-
+        // Post-processing can suppress entries (filters and deduplication), so gather headroom
+        // before applying the user-facing max in this comparer.
         int ruleHeadroom = Math.Max(100, options.IgnoreRules.Count * 25);
         int expanded = Math.Max(requested * 10, requested + ruleHeadroom);
         return Math.Min(expanded, 10000);
@@ -323,12 +320,35 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
         return separatorIndex < 0 ? cleanedPath : cleanedPath[(separatorIndex + 1)..];
     }
 
+    private static List<Difference> DeduplicateDifferences(IEnumerable<Difference> differences)
+    {
+        HashSet<(string Path, string? ValueA, string? ValueB)> seen =
+            new HashSet<(string Path, string? ValueA, string? ValueB)>();
+        List<Difference> uniqueDifferences = new List<Difference>();
+
+        foreach (Difference difference in differences)
+        {
+            string propertyPath = GetDomainDifferencePropertyPath(difference);
+            var dedupeKey = (propertyPath.ToUpperInvariant(), difference.Object1Value?.ToString(), difference.Object2Value?.ToString());
+
+            if (seen.Add(dedupeKey))
+            {
+                uniqueDifferences.Add(difference);
+            }
+        }
+
+        return uniqueDifferences;
+    }
+
     private static ComparisonDifference ToDomainDifference(Difference difference) =>
         new ComparisonDifference(
-            string.IsNullOrWhiteSpace(difference.PropertyName) ? "Response" : NormalizeComparisonPath(difference.PropertyName),
+            GetDomainDifferencePropertyPath(difference),
             difference.Object1Value?.ToString(),
             difference.Object2Value?.ToString(),
             difference.ToString());
+
+    private static string GetDomainDifferencePropertyPath(Difference difference) =>
+        string.IsNullOrWhiteSpace(difference.PropertyName) ? "Response" : NormalizeComparisonPath(difference.PropertyName);
 
     private static string NormalizeComparisonPath(string? propertyPath)
     {

@@ -313,6 +313,151 @@ public sealed class CompareNetObjectsResponseComparerTests
     }
 
     [TestMethod]
+    public async Task CompareAsync_WhenV2ComparisonProducesDuplicateNormalizedDifference_CollapsesToSingleDifference()
+    {
+        CompareNetObjectsResponseComparer comparer = CreateComparer(
+            ("a", () => new DuplicateDiffRootResponse
+            {
+                Applicants =
+                [
+                    new DuplicateDiffApplicant
+                    {
+                        Datasets =
+                        [
+                            new DuplicateDiffDataset
+                            {
+                                Accounts =
+                                [
+                                    new DuplicateDiffAccount
+                                    {
+                                        AccountDetails = new DuplicateDiffAccountDetails
+                                        {
+                                            AccountGroupId = new DuplicateDiffAccountGroup { Id = "A" },
+                                        },
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                ],
+                TraceId = "same",
+            }),
+            ("b", () => new DuplicateDiffRootResponse
+            {
+                Applicants =
+                [
+                    new DuplicateDiffApplicant
+                    {
+                        Datasets =
+                        [
+                            new DuplicateDiffDataset
+                            {
+                                Accounts =
+                                [
+                                    new DuplicateDiffAccount
+                                    {
+                                        AccountDetails = new DuplicateDiffAccountDetails
+                                        {
+                                            AccountGroupId = new DuplicateDiffAccountGroup { Id = "B" },
+                                        },
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                ],
+                TraceId = "same",
+            }));
+
+        RequestPairResult result = await comparer.CompareAsync(
+            CreateRequest(),
+            CreateOptions(),
+            CreateResponse(EndpointSlot.A, "a"),
+            CreateResponse(EndpointSlot.B, "b"),
+            null);
+
+        Assert.AreEqual(RequestPairOutcome.Different, result.Outcome);
+        Assert.AreEqual(1, result.Differences.Count);
+        Assert.IsTrue(
+            result.Differences[0].PropertyPath.Contains("Applicants[0].Datasets[0].Accounts[0].AccountDetails.AccountGroupId.Id", StringComparison.Ordinal),
+            string.Join(" | ", result.Differences.Select(difference => difference.PropertyPath)));
+    }
+
+    [TestMethod]
+    public async Task CompareAsync_WhenDuplicateDifferenceExistsAndMaxDifferencesIsApplied_DeduplicatesBeforeCap()
+    {
+        CompareNetObjectsResponseComparer comparer = CreateComparer(
+            ("a", () => new DuplicateDiffRootResponse
+            {
+                Applicants =
+                [
+                    new DuplicateDiffApplicant
+                    {
+                        Datasets =
+                        [
+                            new DuplicateDiffDataset
+                            {
+                                Accounts =
+                                [
+                                    new DuplicateDiffAccount
+                                    {
+                                        AccountDetails = new DuplicateDiffAccountDetails
+                                        {
+                                            AccountGroupId = new DuplicateDiffAccountGroup { Id = "A" },
+                                        },
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                ],
+                TraceId = "left",
+            }),
+            ("b", () => new DuplicateDiffRootResponse
+            {
+                Applicants =
+                [
+                    new DuplicateDiffApplicant
+                    {
+                        Datasets =
+                        [
+                            new DuplicateDiffDataset
+                            {
+                                Accounts =
+                                [
+                                    new DuplicateDiffAccount
+                                    {
+                                        AccountDetails = new DuplicateDiffAccountDetails
+                                        {
+                                            AccountGroupId = new DuplicateDiffAccountGroup { Id = "B" },
+                                        },
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                ],
+                TraceId = "right",
+            }));
+
+        RequestPairResult result = await comparer.CompareAsync(
+            CreateRequest(),
+            CreateOptions(comparisonOptions: new ComparisonOptions(maxDifferences: 2)),
+            CreateResponse(EndpointSlot.A, "a"),
+            CreateResponse(EndpointSlot.B, "b"),
+            null);
+
+        Assert.AreEqual(RequestPairOutcome.Different, result.Outcome);
+        Assert.AreEqual(2, result.Differences.Count);
+        Assert.IsTrue(
+            result.Differences.Any(difference => difference.PropertyPath.Contains("AccountGroupId.Id", StringComparison.Ordinal)),
+            string.Join(" | ", result.Differences.Select(difference => difference.PropertyPath)));
+        Assert.IsTrue(
+            result.Differences.Any(difference => difference.PropertyPath.Equals("TraceId", StringComparison.Ordinal)),
+            string.Join(" | ", result.Differences.Select(difference => difference.PropertyPath)));
+    }
+
+    [TestMethod]
     public async Task CompareAsync_WhenIgnoreRuleTargetsInterfaceCollection_SuppressesCollectionChildDifferences()
     {
         CompareNetObjectsResponseComparer comparer = CreateComparer(
@@ -584,6 +729,38 @@ public sealed class CompareNetObjectsResponseComparerTests
         public string? Ignored { get; init; }
 
         public int Shared { get; init; }
+    }
+
+    public sealed class DuplicateDiffRootResponse
+    {
+        public DuplicateDiffApplicant[] Applicants { get; init; } = Array.Empty<DuplicateDiffApplicant>();
+
+        public string? TraceId { get; init; }
+    }
+
+    public sealed class DuplicateDiffApplicant
+    {
+        public IList<DuplicateDiffDataset> Datasets { get; init; } = new List<DuplicateDiffDataset>();
+    }
+
+    public sealed class DuplicateDiffDataset
+    {
+        public IList<DuplicateDiffAccount> Accounts { get; init; } = new List<DuplicateDiffAccount>();
+    }
+
+    public sealed class DuplicateDiffAccount
+    {
+        public DuplicateDiffAccountDetails AccountDetails { get; init; } = new DuplicateDiffAccountDetails();
+    }
+
+    public sealed class DuplicateDiffAccountDetails
+    {
+        public DuplicateDiffAccountGroup AccountGroupId { get; init; } = new DuplicateDiffAccountGroup();
+    }
+
+    public sealed class DuplicateDiffAccountGroup
+    {
+        public string? Id { get; init; }
     }
 }
 
