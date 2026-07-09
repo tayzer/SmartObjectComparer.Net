@@ -22,8 +22,11 @@ public static class ClientCustomerLookupExampleServiceCollectionExtensions
 
         services.Configure<ClientCustomerLookupTokenOptions>(
             configuration.GetSection(ConfigurationSectionName));
-        services.Configure<ClientCustomerLookupComparisonOptions>(
-            configuration.GetSection(ComparisonConfigurationSectionName));
+        services.Configure<ComparisonRuleDefaultsFileOptions>(options =>
+        {
+            configuration.GetSection(ComparisonConfigurationSectionName).Bind(options);
+            options.IgnoreXmlNamespacesOverride = true;
+        });
         services.AddSingleton(_ => ClientCustomerLookupMapsterConfig.CreateConfig());
         services.AddHttpClient<IClientCustomerLookupTokenProvider, ClientCustomerLookupTokenProvider>();
         return services;
@@ -47,8 +50,8 @@ public static class ClientCustomerLookupExampleServiceCollectionExtensions
             serviceProvider.GetRequiredService<IContractPayloadSerializer>(),
             serviceProvider.GetRequiredService<IClientCustomerLookupTokenProvider>(),
             serviceProvider.GetRequiredService<TypeAdapterConfig>(),
-            ClientCustomerLookupComparisonRuleDefaultsLoader.Load(
-                serviceProvider.GetRequiredService<IOptions<ClientCustomerLookupComparisonOptions>>().Value)));
+            ComparisonRuleDefaultsFileLoader.Load(
+                serviceProvider.GetRequiredService<IOptions<ComparisonRuleDefaultsFileOptions>>().Value)));
     }
 }
 

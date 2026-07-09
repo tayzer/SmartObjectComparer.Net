@@ -3,9 +3,9 @@ using System.Text.Json.Serialization;
 
 using ParityBench.NET.Domain.Comparison;
 
-namespace ParityBench.NET.ClientCustomerLookupExample;
+namespace ParityBench.NET.Infrastructure;
 
-public static class ClientCustomerLookupComparisonRuleDefaultsLoader
+public static class ComparisonRuleDefaultsFileLoader
 {
     private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
     {
@@ -14,11 +14,11 @@ public static class ClientCustomerLookupComparisonRuleDefaultsLoader
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    public static ComparisonRuleDefaults Load(ClientCustomerLookupComparisonOptions? options) =>
+    public static ComparisonRuleDefaults Load(ComparisonRuleDefaultsFileOptions? options) =>
         Load(options, AppContext.BaseDirectory);
 
     public static ComparisonRuleDefaults Load(
-        ClientCustomerLookupComparisonOptions? options,
+        ComparisonRuleDefaultsFileOptions? options,
         string baseDirectory)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(baseDirectory);
@@ -26,56 +26,72 @@ public static class ClientCustomerLookupComparisonRuleDefaultsLoader
         string? ignoreRulesFile = options?.IgnoreRulesFile;
         if (string.IsNullOrWhiteSpace(ignoreRulesFile))
         {
-            return new ComparisonRuleDefaults(ignoreXmlNamespaces: true);
+            return new ComparisonRuleDefaults(
+                ignoreXmlNamespaces: options?.IgnoreXmlNamespacesOverride
+                    ?? options?.IgnoreXmlNamespacesWhenFileMissing
+                    ?? true);
         }
 
         string resolvedPath = ResolvePath(ignoreRulesFile, baseDirectory);
         if (!File.Exists(resolvedPath))
         {
-            throw new InvalidOperationException($"Client customer lookup ignore rules file '{resolvedPath}' was not found.");
+            throw new InvalidOperationException($"Comparison ignore rules file '{resolvedPath}' was not found.");
         }
 
         try
         {
             string fileText = File.ReadAllText(resolvedPath);
-            return LooksLikeJson(fileText)
-                ? LoadJsonConfiguration(fileText)
-                : LoadTextIgnoreRules(fileText);
+            return Parse(fileText, options?.IgnoreXmlNamespacesOverride);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or JsonException)
         {
             throw new InvalidOperationException(
-                $"Client customer lookup ignore rules file '{resolvedPath}' could not be loaded.",
+                $"Comparison ignore rules file '{resolvedPath}' could not be loaded.",
                 ex);
         }
     }
 
-    private static ComparisonRuleDefaults LoadTextIgnoreRules(string fileText) =>
+    public static ComparisonRuleDefaults Parse(
+        string fileText,
+        bool? ignoreXmlNamespacesOverride = null)
+    {
+        ArgumentNullException.ThrowIfNull(fileText);
+
+        return LooksLikeJson(fileText)
+            ? ParseJsonConfiguration(fileText, ignoreXmlNamespacesOverride)
+            : ParseTextIgnoreRules(fileText, ignoreXmlNamespacesOverride ?? true);
+    }
+
+    private static ComparisonRuleDefaults ParseTextIgnoreRules(
+        string fileText,
+        bool ignoreXmlNamespaces) =>
         new ComparisonRuleDefaults(
-            ignoreXmlNamespaces: true,
+            ignoreXmlNamespaces: ignoreXmlNamespaces,
             ignoreRules: NormalizeIgnoreRules(fileText
                 .Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None)
                 .Select(line => line.Trim())
                 .Where(line => line.Length > 0 && !line.StartsWith("#", StringComparison.Ordinal))
                 .Select(line => new IgnoreRuleDefinition(line))));
 
-    private static ComparisonRuleDefaults LoadJsonConfiguration(string json)
+    private static ComparisonRuleDefaults ParseJsonConfiguration(
+        string json,
+        bool? ignoreXmlNamespacesOverride)
     {
-        ClientCustomerLookupComparisonConfigurationFile? configuration =
-            JsonSerializer.Deserialize<ClientCustomerLookupComparisonConfigurationFile>(json, JsonOptions);
+        ComparisonRuleDefaultsConfigurationFile? configuration =
+            JsonSerializer.Deserialize<ComparisonRuleDefaultsConfigurationFile>(json, JsonOptions);
 
         if (configuration is null)
         {
             throw new InvalidOperationException("File does not contain a supported comparison configuration.");
         }
 
-        ClientCustomerLookupComparisonGlobalSettings? globalSettings = configuration.GlobalSettings;
+        ComparisonRuleDefaultsGlobalSettings? globalSettings = configuration.GlobalSettings;
         return new ComparisonRuleDefaults(
             ignoreCollectionOrder: globalSettings?.IgnoreCollectionOrder ?? false,
             ignoreStringCase: globalSettings?.IgnoreStringCase ?? false,
             ignoreTrailingWhitespaceAtEnd: globalSettings?.IgnoreTrailingWhitespaceAtEnd ?? false,
             treatNullAndEmptyCollectionsAsEqual: globalSettings?.TreatNullAndEmptyCollectionsAsEqual ?? false,
-            ignoreXmlNamespaces: true,
+            ignoreXmlNamespaces: ignoreXmlNamespacesOverride ?? globalSettings?.IgnoreXmlNamespaces ?? false,
             ignoreRules: NormalizeIgnoreRules(configuration.IgnoreRules ?? Array.Empty<IgnoreRuleDefinition>()));
     }
 
@@ -101,12 +117,13 @@ public static class ClientCustomerLookupComparisonRuleDefaultsLoader
             : Path.GetFullPath(Path.Combine(baseDirectory, trimmedPath));
     }
 
-    private sealed record ClientCustomerLookupComparisonConfigurationFile(
+    private sealed record ComparisonRuleDefaultsConfigurationFile(
         int SchemaVersion,
-        ClientCustomerLookupComparisonGlobalSettings? GlobalSettings,
+        ComparisonRuleDefaultsGlobalSettings? GlobalSettings,
+        int MaxDifferences,
         IReadOnlyList<IgnoreRuleDefinition>? IgnoreRules);
 
-    private sealed record ClientCustomerLookupComparisonGlobalSettings(
+    private sealed record ComparisonRuleDefaultsGlobalSettings(
         bool IgnoreCollectionOrder,
         bool IgnoreStringCase,
         bool IgnoreTrailingWhitespaceAtEnd,
