@@ -226,6 +226,90 @@ public sealed class CompareNetObjectsResponseComparerTests
     }
 
     [TestMethod]
+    public async Task CompareAsync_WhenIgnoreRuleTargetsInterfaceCollection_SuppressesCollectionChildDifferences()
+    {
+        CompareNetObjectsResponseComparer comparer = CreateComparer(
+            ("a", () => new InterfaceCollectionResponse
+            {
+                Items = new List<ManyIgnoredItem> { new ManyIgnoredItem { Ignored = "a-1", Shared = 1 } },
+                Visible = "left",
+            }),
+            ("b", () => new InterfaceCollectionResponse
+            {
+                Items = new List<ManyIgnoredItem> { new ManyIgnoredItem { Ignored = "b-1", Shared = 1 } },
+                Visible = "right",
+            }));
+
+        RequestPairResult result = await comparer.CompareAsync(
+            CreateRequest(),
+            CreateOptions(comparisonOptions: new ComparisonOptions(
+                ignoreRules: new[] { new IgnoreRuleDefinition("Items[*].Ignored") })),
+            CreateResponse(EndpointSlot.A, "a"),
+            CreateResponse(EndpointSlot.B, "b"),
+            null);
+
+        Assert.AreEqual(RequestPairOutcome.Different, result.Outcome);
+        Assert.AreEqual(1, result.Differences.Count);
+        Assert.AreEqual("Visible", result.Differences.Single().PropertyPath);
+    }
+
+    [TestMethod]
+    public async Task CompareAsync_WhenIgnoreRuleTargetsCollectionParent_SuppressesChildDifferences()
+    {
+        CompareNetObjectsResponseComparer comparer = CreateComparer(
+            ("a", () => new ManyIgnoredResponse
+            {
+                Items = new List<ManyIgnoredItem>
+                {
+                    new ManyIgnoredItem { Ignored = "a-1", Shared = 1 },
+                    new ManyIgnoredItem { Ignored = "a-2", Shared = 2 },
+                },
+                Visible = "left",
+            }),
+            ("b", () => new ManyIgnoredResponse
+            {
+                Items = new List<ManyIgnoredItem>
+                {
+                    new ManyIgnoredItem { Ignored = "b-1", Shared = 11 },
+                    new ManyIgnoredItem { Ignored = "b-2", Shared = 22 },
+                },
+                Visible = "right",
+            }));
+
+        RequestPairResult result = await comparer.CompareAsync(
+            CreateRequest(),
+            CreateOptions(comparisonOptions: new ComparisonOptions(
+                ignoreRules: new[] { new IgnoreRuleDefinition("Items") })),
+            CreateResponse(EndpointSlot.A, "a"),
+            CreateResponse(EndpointSlot.B, "b"),
+            null);
+
+        Assert.AreEqual(RequestPairOutcome.Different, result.Outcome);
+        Assert.AreEqual(1, result.Differences.Count);
+        Assert.AreEqual("Visible", result.Differences.Single().PropertyPath);
+    }
+
+    [TestMethod]
+    public async Task CompareAsync_WhenIgnoreRuleIncludesExpectedPrefix_SuppressesMatchingDifference()
+    {
+        CompareNetObjectsResponseComparer comparer = CreateComparer(
+            ("a", () => new ComplexResponse { Detail = new ComplexDetail { Ignored = "ignore-a", Remaining = "left" } }),
+            ("b", () => new ComplexResponse { Detail = new ComplexDetail { Ignored = "ignore-b", Remaining = "right" } }));
+
+        RequestPairResult result = await comparer.CompareAsync(
+            CreateRequest(),
+            CreateOptions(comparisonOptions: new ComparisonOptions(
+                ignoreRules: new[] { new IgnoreRuleDefinition("Expected.Detail.Ignored") })),
+            CreateResponse(EndpointSlot.A, "a"),
+            CreateResponse(EndpointSlot.B, "b"),
+            null);
+
+        Assert.AreEqual(RequestPairOutcome.Different, result.Outcome);
+        Assert.AreEqual(1, result.Differences.Count);
+        Assert.AreEqual("Detail.Remaining", result.Differences.Single().PropertyPath);
+    }
+
+    [TestMethod]
     public async Task CompareAsync_WhenConcurrentRunsUseDifferentOptions_ProducesIsolatedResults()
     {
         CompareNetObjectsResponseComparer comparer = CreateComparer(
@@ -357,6 +441,13 @@ public sealed class CompareNetObjectsResponseComparerTests
         public string? Ignored { get; init; }
 
         public string? Remaining { get; init; }
+    }
+
+    public sealed class InterfaceCollectionResponse
+    {
+        public IList<ManyIgnoredItem> Items { get; init; } = new List<ManyIgnoredItem>();
+
+        public string? Visible { get; init; }
     }
 
     public sealed class ManyIgnoredResponse

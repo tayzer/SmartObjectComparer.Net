@@ -261,22 +261,24 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
 
     private static bool PathMatches(string rulePath, string? propertyPath)
     {
+        rulePath = NormalizeComparisonPath(rulePath);
         propertyPath = NormalizeComparisonPath(propertyPath);
 
-        if (string.IsNullOrWhiteSpace(propertyPath))
+        if (string.IsNullOrWhiteSpace(rulePath) || string.IsNullOrWhiteSpace(propertyPath))
         {
             return false;
         }
 
         if (string.Equals(rulePath, propertyPath, StringComparison.OrdinalIgnoreCase)
-            || propertyPath.StartsWith(rulePath + ".", StringComparison.OrdinalIgnoreCase))
+            || propertyPath.StartsWith(rulePath + ".", StringComparison.OrdinalIgnoreCase)
+            || propertyPath.StartsWith(rulePath + "[", StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
 
         string pattern = "^" + Regex.Escape(rulePath)
             .Replace("\\[\\*\\]", "\\[\\d+\\]", StringComparison.Ordinal)
-            .Replace("\\*", ".*", StringComparison.Ordinal) + "(\\..*)?$";
+            .Replace("\\*", ".*", StringComparison.Ordinal) + "(?:\\[\\d+\\])?(\\..*)?$";
 
         return Regex.IsMatch(propertyPath, pattern, RegexOptions.IgnoreCase, RegexTimeout);
     }
@@ -328,12 +330,21 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
             return string.Empty;
         }
 
-        return Regex.Replace(
+        string normalizedPath = Regex.Replace(
             propertyPath.Trim(),
-            @"\.System\.Collections(?:\.Generic)?\.(?:IList|ICollection|IEnumerable)\.Item\[(\d+)\]",
+            @"\.System\.Collections(?:\.Generic)?\.(?:IList|ICollection|IEnumerable)(?:`\d+)?\.Item\[(\d+)\]",
             "[$1]",
             RegexOptions.IgnoreCase,
             RegexTimeout);
+
+        normalizedPath = Regex.Replace(
+            normalizedPath,
+            @"^(?:Expected|Actual|Object1|Object2|Root)\.",
+            string.Empty,
+            RegexOptions.IgnoreCase,
+            RegexTimeout);
+
+        return normalizedPath;
     }
 
     private static bool IsSuccessStatusCode(int statusCode) => statusCode is >= 200 and <= 299;
