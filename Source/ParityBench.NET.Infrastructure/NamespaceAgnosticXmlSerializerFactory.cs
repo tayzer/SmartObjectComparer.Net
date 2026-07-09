@@ -85,13 +85,16 @@ internal sealed class NamespaceAgnosticXmlSerializerFactory
         List<XmlElementAttribute> sourceElementAttributes = member
             .GetCustomAttributes<XmlElementAttribute>()
             .ToList();
+        Type memberType = GetMemberType(member);
         List<XmlElementAttribute> elementAttributes = sourceElementAttributes
-            .Select(CloneWithoutNamespace)
+            .Select(attribute => CloneWithoutNamespace(attribute, memberType))
             .ToList();
         XmlArrayAttribute? arrayAttribute = member
             .GetCustomAttribute<XmlArrayAttribute>();
-        List<XmlArrayItemAttribute> arrayItemAttributes = member
+        List<XmlArrayItemAttribute> sourceArrayItemAttributes = member
             .GetCustomAttributes<XmlArrayItemAttribute>()
+            .ToList();
+        List<XmlArrayItemAttribute> arrayItemAttributes = sourceArrayItemAttributes
             .Select(CloneWithoutNamespace)
             .ToList();
         XmlAttributeAttribute? attributeAttribute = member
@@ -117,7 +120,7 @@ internal sealed class NamespaceAgnosticXmlSerializerFactory
 
         if (arrayAttribute is not null)
         {
-            attributes.XmlArray = CloneWithoutNamespace(arrayAttribute);
+            attributes.XmlArray = CloneWithoutNamespace(arrayAttribute, memberType);
         }
 
         foreach (XmlArrayItemAttribute arrayItemAttribute in arrayItemAttributes)
@@ -239,30 +242,40 @@ internal sealed class NamespaceAgnosticXmlSerializerFactory
             Namespace = string.Empty,
         };
 
-    private static XmlElementAttribute CloneWithoutNamespace(XmlElementAttribute source)
+    private static XmlElementAttribute CloneWithoutNamespace(XmlElementAttribute source, Type memberType)
     {
         XmlElementAttribute clone = source.Type is null
             ? new XmlElementAttribute(source.ElementName)
             : new XmlElementAttribute(source.ElementName, source.Type);
         clone.DataType = source.DataType;
         clone.Form = source.Form;
-        clone.IsNullable = source.IsNullable;
+        if (ShouldCopyIsNullable(source.IsNullable, memberType))
+        {
+            clone.IsNullable = source.IsNullable;
+        }
+
         clone.Namespace = string.IsNullOrEmpty(source.Namespace) ? source.Namespace : string.Empty;
 
         return clone;
     }
 
-    private static XmlArrayAttribute CloneWithoutNamespace(XmlArrayAttribute source)
+    private static XmlArrayAttribute CloneWithoutNamespace(XmlArrayAttribute source, Type memberType)
     {
         XmlArrayAttribute clone = new XmlArrayAttribute(source.ElementName)
         {
             Form = source.Form,
-            IsNullable = source.IsNullable,
             Namespace = string.IsNullOrEmpty(source.Namespace) ? source.Namespace : string.Empty,
         };
+        if (ShouldCopyIsNullable(source.IsNullable, memberType))
+        {
+            clone.IsNullable = source.IsNullable;
+        }
 
         return clone;
     }
+
+    private static bool ShouldCopyIsNullable(bool isNullable, Type memberType) =>
+        isNullable || Nullable.GetUnderlyingType(memberType) is null;
 
     private static XmlArrayItemAttribute CloneWithoutNamespace(XmlArrayItemAttribute source)
     {

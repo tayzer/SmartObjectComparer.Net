@@ -194,6 +194,24 @@ public sealed class ContractProfileInfrastructureTests
     }
 
     [TestMethod]
+    public async Task DeserializeAsync_WhenIgnoringNamespaces_DoesNotForceIsNullableFalseForNullableValues()
+    {
+        JsonXmlContractPayloadSerializer serializer = new JsonXmlContractPayloadSerializer();
+        const string xml = "<ns:GeneratedNullableResponse xmlns:ns=\"urn:nullable\"><ns:Score>42</ns:Score><ns:Label>Ready</ns:Label></ns:GeneratedNullableResponse>";
+        using MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
+
+        object result = await serializer.DeserializeAsync(
+            typeof(GeneratedNullableResponse),
+            stream,
+            PayloadFormat.Xml,
+            ignoreXmlNamespaces: true);
+
+        GeneratedNullableResponse response = (GeneratedNullableResponse)result;
+        Assert.AreEqual(42, response.Score);
+        Assert.AreEqual("Ready", response.Label);
+    }
+
+    [TestMethod]
     public async Task DeserializeAsync_WhenIgnoringNamespaces_DeserializesModelWithNamespacedXmlAttributes()
     {
         JsonXmlContractPayloadSerializer serializer = new JsonXmlContractPayloadSerializer();
@@ -399,6 +417,18 @@ public sealed class ContractProfileInfrastructureTests
 
         public string Message { get; set; } = string.Empty;
     }
+
+    [XmlRoot("GeneratedNullableResponse", Namespace = NullableNamespace)]
+    public sealed class GeneratedNullableResponse
+    {
+        [XmlElement("Score", Namespace = NullableNamespace)]
+        public int? Score { get; set; }
+
+        [XmlElement("Label", Namespace = NullableNamespace)]
+        public string Label { get; set; } = string.Empty;
+    }
+
+    private const string NullableNamespace = "urn:nullable";
 
     [XmlRoot("Envelope", Namespace = SoapNamespace)]
     public sealed class NamespacedSoapRequestEnvelope
