@@ -297,7 +297,7 @@ public sealed class RunResultsViewTests
     }
 
     [TestMethod]
-    public void RunResult_WhenFocusedContentExists_PrefersFocusedPreviewByDefault()
+    public void RunResult_WhenFocusedContentExists_DefaultsToStructuredPreview()
     {
         RunId runId = new RunId("run-1");
         RequestPairResult pair = CreateFocusedPair("one.json");
@@ -314,11 +314,14 @@ public sealed class RunResultsViewTests
 
         component.WaitForAssertion(() =>
         {
-            StringAssert.Contains(component.Markup, "Focused");
-            StringAssert.Contains(component.Markup, "focused-a");
-            StringAssert.Contains(component.Markup, "focused-b");
+            StringAssert.Contains(component.Markup, "Detailed Comparison");
+            StringAssert.Contains(component.Markup, "Name");
+            StringAssert.Contains(component.Markup, "Alice");
+            StringAssert.Contains(component.Markup, "Alicia");
         });
-        Assert.IsTrue(dataSource.PreviewReadCount >= 2);
+        Assert.AreEqual(0, dataSource.PreviewReadCount);
+        Assert.IsFalse(component.Markup.Contains("focused-a", StringComparison.Ordinal));
+        Assert.IsFalse(component.Markup.Contains("focused-b", StringComparison.Ordinal));
         Assert.IsFalse(component.Markup.Contains("full-a", StringComparison.Ordinal));
         Assert.IsFalse(component.Markup.Contains("full-b", StringComparison.Ordinal));
     }

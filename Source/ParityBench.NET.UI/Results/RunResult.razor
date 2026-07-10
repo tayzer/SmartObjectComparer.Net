@@ -674,11 +674,9 @@ else if (run is not null)
     {
         selectedPair = pair;
         contentA = null; contentB = null; contentErrorMessage = null;
-        detailViewMode = pair.HasFocusedRawContent
-            ? DetailViewMode.Focused
-            : pair.RawTextDifferences.Count > 0
-                ? DetailViewMode.Raw
-                : DetailViewMode.Structured;
+        detailViewMode = pair.RawTextDifferences.Count > 0
+            ? DetailViewMode.Raw
+            : DetailViewMode.Structured;
         structuredSearchFilter = string.Empty;
         showAllDifferences = false;
         collapsedStructuredGroups = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
