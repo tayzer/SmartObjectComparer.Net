@@ -107,8 +107,64 @@ public sealed class RetentionCleanupStageTests
         }
     }
 
-    private static ComparisonRun CreateRun(RunId runId) =>
-        ComparisonRun.Create(runId, CreateRunOptions());
+    [TestMethod]
+    public async Task CleanupAsync_WhenRetainedArtifactIsMissing_LabelsMissingUnexpectedly()
+    {
+        string workspaceRoot = CreateTempDirectory();
+        try
+        {
+            RunId runId = new RunId("run-missing");
+            FileSystemRunArtifactStore artifactStore = new FileSystemRunArtifactStore(workspaceRoot);
+            FileSystemRunDetailStore detailStore = new FileSystemRunDetailStore(workspaceRoot);
+
+            RequestItem request = new RequestItem("one.json", "application/json", 12);
+            ResponseArtifactMetadata responseA = await artifactStore.SaveResponseAsync(runId, EndpointSlot.A, request, 200, "application/json", CreateStream("same-a"));
+            ResponseArtifactMetadata responseB = await artifactStore.SaveResponseAsync(runId, EndpointSlot.B, request, 200, "application/json", CreateStream("same-b"));
+
+            string responseAPath = Path.Combine(workspaceRoot, responseA.Artifact.ArtifactId.Replace('/', Path.DirectorySeparatorChar));
+            File.Delete(responseAPath);
+
+            RequestPairResult persisted = new RequestPairResult(
+                "one.json",
+                RequestPairOutcome.Equal,
+                responseA,
+                responseB);
+
+            RunDetailReference detailReference = await detailStore.SaveDetailsAsync(runId, new[] { persisted });
+            CleanupStageContext context = new CleanupStageContext(
+                CreateRunOptions(),
+                detailReference,
+                new[] { new ComparedExecutionRecord(0, persisted) },
+                DurableAppendCompleted: true);
+
+            RetentionCleanupStage stage = new RetentionCleanupStage(
+                artifactStore,
+                detailStore,
+                new RetentionPolicyEvaluator(),
+                Options.Create(new RetentionConfiguration
+                {
+                    Mode = RetentionMode.None,
+                    NonSuccessOverride = NonSuccessRetentionOverride.KeepBounded,
+                }));
+
+            await stage.CleanupAsync(CreateRun(runId, RetentionMode.None), context);
+
+            IReadOnlyList<RequestPairResult> updated = await detailStore.LoadDetailsAsync(detailReference);
+            Assert.AreEqual(1, updated.Count);
+            Assert.AreEqual(ArtifactRetentionState.MissingUnexpectedly, updated[0].ArtifactRetentionState.RawResponseA);
+            Assert.AreEqual(ArtifactRetentionState.Retained, updated[0].ArtifactRetentionState.RawResponseB);
+        }
+        finally
+        {
+            if (Directory.Exists(workspaceRoot))
+            {
+                Directory.Delete(workspaceRoot, recursive: true);
+            }
+        }
+    }
+
+    private static ComparisonRun CreateRun(RunId runId, RetentionMode? runRetentionMode = null) =>
+        ComparisonRun.Create(runId, CreateRunOptions(), runRetentionMode: runRetentionMode);
 
     private static RunOptions CreateRunOptions() =>
         new RunOptions(

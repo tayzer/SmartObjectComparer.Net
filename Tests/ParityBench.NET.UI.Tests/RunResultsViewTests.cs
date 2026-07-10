@@ -297,6 +297,33 @@ public sealed class RunResultsViewTests
     }
 
     [TestMethod]
+    public void RunResult_WhenFocusedContentExists_PrefersFocusedPreviewByDefault()
+    {
+        RunId runId = new RunId("run-1");
+        RequestPairResult pair = CreateFocusedPair("one.json");
+        dataSource.Run = CreateCompletedRun(runId);
+        dataSource.Summary = dataSource.Run.Summary;
+        dataSource.Details = new[] { pair };
+        dataSource.Previews[pair.ResponseA!.Artifact.ArtifactId] = CreatePreview(pair.ResponseA.Artifact, "full-a");
+        dataSource.Previews[pair.ResponseB!.Artifact.ArtifactId] = CreatePreview(pair.ResponseB.Artifact, "full-b");
+        dataSource.Previews[pair.FocusedResponseA!.Artifact.ArtifactId] = CreatePreview(pair.FocusedResponseA.Artifact, "focused-a");
+        dataSource.Previews[pair.FocusedResponseB!.Artifact.ArtifactId] = CreatePreview(pair.FocusedResponseB.Artifact, "focused-b");
+
+        IRenderedComponent<RunResult> component = testContext.Render<RunResult>(parameters =>
+            parameters.Add(result => result.RunId, runId));
+
+        component.WaitForAssertion(() =>
+        {
+            StringAssert.Contains(component.Markup, "Focused");
+            StringAssert.Contains(component.Markup, "focused-a");
+            StringAssert.Contains(component.Markup, "focused-b");
+        });
+        Assert.IsTrue(dataSource.PreviewReadCount >= 2);
+        Assert.IsFalse(component.Markup.Contains("full-a", StringComparison.Ordinal));
+        Assert.IsFalse(component.Markup.Contains("full-b", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
     public void RunResult_WhenFullContentIsJson_FormatsSideBySideDisplay()
     {
         RunId runId = new RunId("run-1");

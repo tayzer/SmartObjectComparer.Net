@@ -102,6 +102,9 @@ public sealed class RequestCommandRunner
             await output.WriteLineAsync($"Request execution: {summary.ExecutionMetrics.RequestExecutionDuration.TotalMilliseconds:F0}ms").ConfigureAwait(false);
             await output.WriteLineAsync($"Comparison: {summary.ExecutionMetrics.ComparisonDuration.TotalMilliseconds:F0}ms").ConfigureAwait(false);
             await output.WriteLineAsync($"Finalization: {summary.ExecutionMetrics.FinalizationDuration.TotalMilliseconds:F0}ms").ConfigureAwait(false);
+            await output.WriteLineAsync($"Artifacts retained: {summary.ExecutionMetrics.RetainedArtifactCount}").ConfigureAwait(false);
+            await output.WriteLineAsync($"Artifacts trimmed by policy: {summary.ExecutionMetrics.TrimmedByPolicyArtifactCount}").ConfigureAwait(false);
+            await output.WriteLineAsync($"Artifacts missing unexpectedly: {summary.ExecutionMetrics.MissingUnexpectedlyArtifactCount}").ConfigureAwait(false);
         }
 
         if (run.Diagnostics is not null)

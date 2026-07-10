@@ -8,6 +8,7 @@ using ParityBench.NET.Application.Runs;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Results;
 using ParityBench.NET.Domain.Runs;
+using ParityBench.NET.Domain.Runs.Retention;
 
 namespace ParityBench.NET.Application.Tests;
 
@@ -100,6 +101,77 @@ public sealed class ComparisonRunResultServiceTests
 
         await AssertThrowsAsync<ArtifactNotFoundException>(() =>
             service.ReadArtifactPreviewAsync(new ArtifactReference("missing.txt")));
+    }
+
+    [TestMethod]
+    public async Task ExportRunDetailsJson_WhenArtifactsAreTrimmed_UsesMetadataWithoutArtifactReads()
+    {
+        RunDetailReference detailReference = new RunDetailReference("runs/run-1/details/index.json");
+        FakeRunStore runStore = new FakeRunStore();
+        await runStore.SaveAsync(ComparisonRun.Create(new RunId("run-1"), CreateOptions()).Start().Complete(CreateSummary(detailReference)));
+
+        RequestPairResult trimmed = new RequestPairResult(
+            "one.json",
+            RequestPairOutcome.Equal,
+            new ResponseArtifactMetadata(EndpointSlot.A, new ArtifactReference("runs/run-1/artifacts/A/one.json", "application/json"), 200, "application/json", 10, "a"),
+            new ResponseArtifactMetadata(EndpointSlot.B, new ArtifactReference("runs/run-1/artifacts/B/one.json", "application/json"), 200, "application/json", 10, "b"),
+            pairRetentionClass: PairRetentionClass.Equal,
+            artifactRetentionState: new PairArtifactRetentionState(
+                ArtifactRetentionState.TrimmedByPolicy,
+                ArtifactRetentionState.TrimmedByPolicy,
+                ArtifactRetentionState.TrimmedByPolicy,
+                ArtifactRetentionState.TrimmedByPolicy,
+                ArtifactRetentionState.TrimmedByPolicy,
+                ArtifactRetentionState.TrimmedByPolicy),
+            retentionAppliedAt: DateTimeOffset.UtcNow);
+
+        FakeRunArtifactStore artifactStore = new FakeRunArtifactStore();
+        ComparisonRunResultService service = CreateService(runStore, new FakeRunDetailStore(new[] { trimmed }), artifactStore);
+
+        using MemoryStream stream = new MemoryStream();
+        await service.ExportRunDetailsJsonAsync(new RunId("run-1"), stream);
+        string json = Encoding.UTF8.GetString(stream.ToArray());
+
+        StringAssert.Contains(json, "\"artifactRetentionState\"");
+        StringAssert.Contains(json, "TrimmedByPolicy");
+        Assert.AreEqual(0, artifactStore.OpenReadCalls);
+    }
+
+    [TestMethod]
+    public async Task ExportRunDetailsCsv_WhenArtifactsAreTrimmed_SucceedsWithoutArtifactReads()
+    {
+        RunDetailReference detailReference = new RunDetailReference("runs/run-1/details/index.json");
+        FakeRunStore runStore = new FakeRunStore();
+        await runStore.SaveAsync(ComparisonRun.Create(new RunId("run-1"), CreateOptions()).Start().Complete(CreateSummary(detailReference)));
+
+        RequestPairResult trimmed = new RequestPairResult(
+            "one.json",
+            RequestPairOutcome.Different,
+            new ResponseArtifactMetadata(EndpointSlot.A, new ArtifactReference("runs/run-1/artifacts/A/one.json", "application/json"), 200, "application/json", 10, "a"),
+            new ResponseArtifactMetadata(EndpointSlot.B, new ArtifactReference("runs/run-1/artifacts/B/one.json", "application/json"), 200, "application/json", 10, "b"),
+            areEqual: false,
+            differenceCount: 1,
+            outcomeMessage: "content differs",
+            pairRetentionClass: PairRetentionClass.Different,
+            artifactRetentionState: new PairArtifactRetentionState(
+                ArtifactRetentionState.TrimmedByPolicy,
+                ArtifactRetentionState.TrimmedByPolicy,
+                ArtifactRetentionState.TrimmedByPolicy,
+                ArtifactRetentionState.TrimmedByPolicy,
+                ArtifactRetentionState.Retained,
+                ArtifactRetentionState.Retained),
+            retentionAppliedAt: DateTimeOffset.UtcNow);
+
+        FakeRunArtifactStore artifactStore = new FakeRunArtifactStore();
+        ComparisonRunResultService service = CreateService(runStore, new FakeRunDetailStore(new[] { trimmed }), artifactStore);
+
+        using MemoryStream stream = new MemoryStream();
+        await service.ExportRunDetailsCsvAsync(new RunId("run-1"), stream);
+        string csv = Encoding.UTF8.GetString(stream.ToArray());
+
+        StringAssert.Contains(csv, "Request,Outcome,Differences,StatusA,StatusB,Error");
+        StringAssert.Contains(csv, "one.json,Different,1,200,200,content differs");
+        Assert.AreEqual(0, artifactStore.OpenReadCalls);
     }
 
     private static async Task AssertThrowsAsync<TException>(Func<Task> action)
@@ -211,6 +283,8 @@ public sealed class ComparisonRunResultServiceTests
     {
         private readonly Dictionary<string, byte[]> artifacts = new Dictionary<string, byte[]>(StringComparer.Ordinal);
 
+        public int OpenReadCalls { get; private set; }
+
         public void Save(ArtifactReference artifact, string content) =>
             artifacts[artifact.ArtifactId] = Encoding.UTF8.GetBytes(content);
 
@@ -226,6 +300,7 @@ public sealed class ComparisonRunResultServiceTests
 
         public Task<Stream> OpenReadAsync(ArtifactReference artifact, CancellationToken cancellationToken = default)
         {
+            OpenReadCalls++;
             if (!artifacts.TryGetValue(artifact.ArtifactId, out byte[]? content))
             {
                 throw new FileNotFoundException("Missing artifact.", artifact.ArtifactId);

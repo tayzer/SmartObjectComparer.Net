@@ -304,6 +304,9 @@ public sealed class FileSystemRunStore : IRunStore
             RequestCount = metrics.RequestCount,
             MaxConcurrency = metrics.MaxConcurrency,
             ResponseBytesWritten = metrics.ResponseBytesWritten,
+            RetainedArtifactCount = metrics.RetainedArtifactCount,
+            TrimmedByPolicyArtifactCount = metrics.TrimmedByPolicyArtifactCount,
+            MissingUnexpectedlyArtifactCount = metrics.MissingUnexpectedlyArtifactCount,
         };
 
     private RunDetailReferenceDto ToDto(RunDetailReference reference) =>
@@ -458,7 +461,10 @@ public sealed class FileSystemRunStore : IRunStore
             TimeSpan.FromMilliseconds(dto.FinalizationDurationMilliseconds),
             dto.RequestCount,
             dto.MaxConcurrency,
-            dto.ResponseBytesWritten);
+            dto.ResponseBytesWritten,
+            dto.RetainedArtifactCount,
+            dto.TrimmedByPolicyArtifactCount,
+            dto.MissingUnexpectedlyArtifactCount);
 
     private RunDetailReference FromDto(RunDetailReferenceDto dto) =>
         new RunDetailReference(
@@ -745,6 +751,12 @@ public sealed class FileSystemRunStore : IRunStore
         public int MaxConcurrency { get; init; }
 
         public long ResponseBytesWritten { get; init; }
+
+        public int RetainedArtifactCount { get; init; }
+
+        public int TrimmedByPolicyArtifactCount { get; init; }
+
+        public int MissingUnexpectedlyArtifactCount { get; init; }
     }
 
     private sealed class RunDetailReferenceDto

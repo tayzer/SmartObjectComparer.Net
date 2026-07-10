@@ -10,6 +10,7 @@ using ParityBench.NET.Domain.Reports;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Results;
 using ParityBench.NET.Domain.Runs;
+using ParityBench.NET.Domain.Runs.Retention;
 using ParityBench.NET.Infrastructure.Reports;
 
 namespace ParityBench.NET.Infrastructure.Tests;
@@ -214,6 +215,84 @@ public sealed class StaticReportBundleWriterTests
         Assert.IsTrue(File.Exists(Path.Combine(outputDirectory, rewritten.FocusedResponseB.Artifact.ArtifactId.Replace('/', Path.DirectorySeparatorChar))));
     }
 
+    [TestMethod]
+    public async Task WriteAsync_WhenRawArtifactsAreTrimmedByPolicy_CompletesUsingRetentionMetadata()
+    {
+        using TempFolder tempFolder = new TempFolder();
+        string assetsDirectory = CreateAssetsDirectory(tempFolder);
+        string outputDirectory = Path.Combine(tempFolder.Path, "report");
+        RequestPairResult pair = new RequestPairResult(
+            "one.json",
+            RequestPairOutcome.Different,
+            CreateResponse(EndpointSlot.A, "artifact-a", 200),
+            CreateResponse(EndpointSlot.B, "artifact-b", 200),
+            areEqual: false,
+            differenceCount: 1,
+            differences: new[] { new ComparisonDifference("Name", "Alice", "Alicia", "Name changed.") },
+            focusedResponseA: CreateResponse(EndpointSlot.A, "focused-a", 200),
+            focusedResponseB: CreateResponse(EndpointSlot.B, "focused-b", 200),
+            focusedRawContentIgnorePaths: new[] { "Customer.Token" },
+            artifactRetentionState: new PairArtifactRetentionState(
+                ArtifactRetentionState.TrimmedByPolicy,
+                ArtifactRetentionState.TrimmedByPolicy,
+                ArtifactRetentionState.TrimmedByPolicy,
+                ArtifactRetentionState.TrimmedByPolicy,
+                ArtifactRetentionState.Retained,
+                ArtifactRetentionState.Retained),
+            retentionAppliedAt: DateTimeOffset.Parse("2026-01-01T00:00:00Z"));
+        FakeRunResults results = CreateResults(pair);
+        FakeArtifactStore artifacts = new FakeArtifactStore();
+        artifacts.Add("focused-a", "focused-a-body");
+        artifacts.Add("focused-b", "focused-b-body");
+        StaticReportBundleWriter writer = new StaticReportBundleWriter(results, artifacts);
+
+        StaticReportBundleResult result = await writer.WriteAsync(results.Run.Id, outputDirectory, assetsDirectory);
+
+        StaticReportDetailPage page = await ReadJsonAsync<StaticReportDetailPage>(Path.Combine(outputDirectory, "details", "page-000000.json"));
+        RequestPairResult rewritten = page.Items[0];
+        Assert.AreEqual(2, result.RawArtifactCount);
+        Assert.IsNull(rewritten.ResponseA);
+        Assert.IsNull(rewritten.ResponseB);
+        Assert.AreEqual(ArtifactRetentionState.TrimmedByPolicy, rewritten.ArtifactRetentionState.RawResponseA);
+        Assert.AreEqual(ArtifactRetentionState.TrimmedByPolicy, rewritten.ArtifactRetentionState.RawResponseB);
+        Assert.IsNotNull(rewritten.FocusedResponseA);
+        Assert.IsNotNull(rewritten.FocusedResponseB);
+    }
+
+    [TestMethod]
+    public async Task WriteAsync_WhenRetainedArtifactIsMissing_LabelsMissingUnexpectedlyAndContinues()
+    {
+        using TempFolder tempFolder = new TempFolder();
+        string assetsDirectory = CreateAssetsDirectory(tempFolder);
+        string outputDirectory = Path.Combine(tempFolder.Path, "report");
+        RequestPairResult pair = new RequestPairResult(
+            "one.json",
+            RequestPairOutcome.Equal,
+            CreateResponse(EndpointSlot.A, "artifact-a", 200),
+            CreateResponse(EndpointSlot.B, "artifact-b", 200),
+            artifactRetentionState: new PairArtifactRetentionState(
+                ArtifactRetentionState.MissingUnexpectedly,
+                ArtifactRetentionState.Retained,
+                ArtifactRetentionState.Retained,
+                ArtifactRetentionState.Retained,
+                ArtifactRetentionState.Retained,
+                ArtifactRetentionState.Retained),
+            retentionAppliedAt: DateTimeOffset.Parse("2026-01-01T00:00:00Z"));
+        FakeRunResults results = CreateResults(pair);
+        FakeArtifactStore artifacts = new FakeArtifactStore();
+        artifacts.Add("artifact-b", "endpoint-b");
+        StaticReportBundleWriter writer = new StaticReportBundleWriter(results, artifacts);
+
+        await writer.WriteAsync(results.Run.Id, outputDirectory, assetsDirectory);
+
+        StaticReportDetailPage page = await ReadJsonAsync<StaticReportDetailPage>(Path.Combine(outputDirectory, "details", "page-000000.json"));
+        RequestPairResult rewritten = page.Items[0];
+        Assert.IsNull(rewritten.ResponseA);
+        Assert.IsNotNull(rewritten.ResponseB);
+        Assert.AreEqual(ArtifactRetentionState.MissingUnexpectedly, rewritten.ArtifactRetentionState.RawResponseA);
+        Assert.AreEqual(ArtifactRetentionState.Retained, rewritten.ArtifactRetentionState.RawResponseB);
+    }
+
 
 
 
@@ -395,7 +474,11 @@ public sealed class StaticReportBundleWriterTests
             ArtifactReference artifact,
             CancellationToken cancellationToken = default)
         {
-            byte[] bytes = artifacts[artifact.ArtifactId];
+            if (!artifacts.TryGetValue(artifact.ArtifactId, out byte[]? bytes))
+            {
+                throw new FileNotFoundException("Missing artifact.", artifact.ArtifactId);
+            }
+
             return Task.FromResult<Stream>(new MemoryStream(bytes, writable: false));
         }
     }

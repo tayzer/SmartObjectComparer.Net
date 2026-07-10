@@ -9,6 +9,7 @@ using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
+using ParityBench.NET.Domain.Runs.Retention;
 using ParityBench.NET.Engine.Pipeline;
 
 namespace ParityBench.NET.Engine;
@@ -200,6 +201,11 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         cleanupStopwatch.Stop();
         observabilityRecorder.RecordRunPhase(run.Id, "Cleanup", cleanupStopwatch.Elapsed);
 
+        IReadOnlyList<RequestPairResult> retentionResults = await runDetailStore
+            .LoadDetailsAsync(detailReference, cancellationToken)
+            .ConfigureAwait(false);
+        ArtifactRetentionCounters retentionCounters = SummarizeArtifactRetention(retentionResults);
+
         totalStopwatch.Stop();
         observabilityRecorder.RecordRunPhase(run.Id, "Total", totalStopwatch.Elapsed);
 
@@ -210,9 +216,61 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             persistenceDuration + cleanupStopwatch.Elapsed,
             totalRequests,
             run.Options.MaxConcurrency,
-            counters.ResponseBytesWritten);
+            counters.ResponseBytesWritten,
+            retentionCounters.RetainedArtifactCount,
+            retentionCounters.TrimmedByPolicyArtifactCount,
+            retentionCounters.MissingUnexpectedlyArtifactCount);
 
         return summaryAccumulator.ToSummary(detailReference, executionMetrics);
+    }
+
+    private static ArtifactRetentionCounters SummarizeArtifactRetention(IReadOnlyList<RequestPairResult> results)
+    {
+        int retained = 0;
+        int trimmedByPolicy = 0;
+        int missingUnexpectedly = 0;
+
+        foreach (RequestPairResult result in results)
+        {
+            CountIfPresent(result.ResponseA is not null, result.ArtifactRetentionState.RawResponseA, ref retained, ref trimmedByPolicy, ref missingUnexpectedly);
+            CountIfPresent(result.ResponseB is not null, result.ArtifactRetentionState.RawResponseB, ref retained, ref trimmedByPolicy, ref missingUnexpectedly);
+
+            bool hasCanonicalA = result.ResponseA?.Artifact.ArtifactId.Contains("/canonical/", StringComparison.OrdinalIgnoreCase) == true;
+            bool hasCanonicalB = result.ResponseB?.Artifact.ArtifactId.Contains("/canonical/", StringComparison.OrdinalIgnoreCase) == true;
+            CountIfPresent(hasCanonicalA, result.ArtifactRetentionState.CanonicalResponseA, ref retained, ref trimmedByPolicy, ref missingUnexpectedly);
+            CountIfPresent(hasCanonicalB, result.ArtifactRetentionState.CanonicalResponseB, ref retained, ref trimmedByPolicy, ref missingUnexpectedly);
+
+            CountIfPresent(result.FocusedResponseA is not null, result.ArtifactRetentionState.FocusedResponseA, ref retained, ref trimmedByPolicy, ref missingUnexpectedly);
+            CountIfPresent(result.FocusedResponseB is not null, result.ArtifactRetentionState.FocusedResponseB, ref retained, ref trimmedByPolicy, ref missingUnexpectedly);
+        }
+
+        return new ArtifactRetentionCounters(retained, trimmedByPolicy, missingUnexpectedly);
+    }
+
+    private static void CountIfPresent(
+        bool artifactPresent,
+        ArtifactRetentionState state,
+        ref int retained,
+        ref int trimmedByPolicy,
+        ref int missingUnexpectedly)
+    {
+        if (!artifactPresent)
+        {
+            return;
+        }
+
+        switch (state)
+        {
+            case ArtifactRetentionState.Retained:
+                retained++;
+                break;
+            case ArtifactRetentionState.TrimmedByPolicy:
+                trimmedByPolicy++;
+                break;
+            case ArtifactRetentionState.MissingUnexpectedly:
+                missingUnexpectedly++;
+                break;
+        }
     }
 
     private async Task<(RunOptions ComparisonOptions, IContractProfile? ContractProfile, IReadOnlyList<PlannedRequest> PlannedRequests)> PlanAsync(
@@ -837,6 +895,11 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                 detailReference,
                 executionMetrics);
     }
+
+    private sealed record ArtifactRetentionCounters(
+        int RetainedArtifactCount,
+        int TrimmedByPolicyArtifactCount,
+        int MissingUnexpectedlyArtifactCount);
 
     private sealed class RunExecutionCounters
     {

@@ -9,7 +9,10 @@ public sealed record RunExecutionMetrics
         TimeSpan finalizationDuration,
         int requestCount,
         int maxConcurrency,
-        long responseBytesWritten)
+        long responseBytesWritten,
+        int retainedArtifactCount = 0,
+        int trimmedByPolicyArtifactCount = 0,
+        int missingUnexpectedlyArtifactCount = 0)
     {
         EnsureNonNegative(totalDuration, nameof(totalDuration));
         EnsureNonNegative(requestExecutionDuration, nameof(requestExecutionDuration));
@@ -18,6 +21,9 @@ public sealed record RunExecutionMetrics
         EnsureNonNegative(requestCount, nameof(requestCount));
         EnsureNonNegative(maxConcurrency, nameof(maxConcurrency));
         EnsureNonNegative(responseBytesWritten, nameof(responseBytesWritten));
+        EnsureNonNegative(retainedArtifactCount, nameof(retainedArtifactCount));
+        EnsureNonNegative(trimmedByPolicyArtifactCount, nameof(trimmedByPolicyArtifactCount));
+        EnsureNonNegative(missingUnexpectedlyArtifactCount, nameof(missingUnexpectedlyArtifactCount));
 
         TotalDuration = totalDuration;
         RequestExecutionDuration = requestExecutionDuration;
@@ -26,6 +32,9 @@ public sealed record RunExecutionMetrics
         RequestCount = requestCount;
         MaxConcurrency = maxConcurrency;
         ResponseBytesWritten = responseBytesWritten;
+        RetainedArtifactCount = retainedArtifactCount;
+        TrimmedByPolicyArtifactCount = trimmedByPolicyArtifactCount;
+        MissingUnexpectedlyArtifactCount = missingUnexpectedlyArtifactCount;
     }
 
     public TimeSpan TotalDuration { get; }
@@ -41,6 +50,12 @@ public sealed record RunExecutionMetrics
     public int MaxConcurrency { get; }
 
     public long ResponseBytesWritten { get; }
+
+    public int RetainedArtifactCount { get; }
+
+    public int TrimmedByPolicyArtifactCount { get; }
+
+    public int MissingUnexpectedlyArtifactCount { get; }
 
     private static void EnsureNonNegative(TimeSpan value, string parameterName)
     {

@@ -7,6 +7,7 @@ using ParityBench.NET.Application.Results;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Results;
 using ParityBench.NET.Domain.Runs;
+using ParityBench.NET.Domain.Runs.Retention;
 using ParityBench.NET.Workspaces;
 
 namespace ParityBench.NET.Workspaces.Tests;
@@ -186,6 +187,37 @@ public sealed class FileSystemResultBrowsingTests
 
         Assert.AreEqual("artifact body", preview.Content);
         Assert.IsFalse(preview.IsTruncated);
+    }
+
+    [TestMethod]
+    public async Task LoadDetails_WhenRetentionStatesAreExplicit_PreservesRetainedTrimmedAndMissingLabels()
+    {
+        string workspaceRoot = CreateTempDirectory();
+        FileSystemRunDetailStore detailStore = new FileSystemRunDetailStore(workspaceRoot);
+        RequestPairResult item = new RequestPairResult(
+            "one.json",
+            RequestPairOutcome.Different,
+            CreateResponse(EndpointSlot.A, "one.json"),
+            CreateResponse(EndpointSlot.B, "one.json"),
+            areEqual: false,
+            differenceCount: 1,
+            artifactRetentionState: new PairArtifactRetentionState(
+                ArtifactRetentionState.Retained,
+                ArtifactRetentionState.TrimmedByPolicy,
+                ArtifactRetentionState.TrimmedByPolicy,
+                ArtifactRetentionState.Retained,
+                ArtifactRetentionState.MissingUnexpectedly,
+                ArtifactRetentionState.Retained),
+            retentionAppliedAt: DateTimeOffset.Parse("2026-01-01T00:00:00Z"));
+
+        RunDetailReference reference = await detailStore.SaveDetailsAsync(new RunId("run-1"), new[] { item });
+        IReadOnlyList<RequestPairResult> loaded = await detailStore.LoadDetailsAsync(reference);
+
+        Assert.AreEqual(1, loaded.Count);
+        Assert.AreEqual(ArtifactRetentionState.Retained, loaded[0].ArtifactRetentionState.RawResponseA);
+        Assert.AreEqual(ArtifactRetentionState.TrimmedByPolicy, loaded[0].ArtifactRetentionState.RawResponseB);
+        Assert.AreEqual(ArtifactRetentionState.MissingUnexpectedly, loaded[0].ArtifactRetentionState.FocusedResponseA);
+        Assert.IsNotNull(loaded[0].RetentionAppliedAt);
     }
 
     private static string CreateTempDirectory()

@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
+using ParityBench.NET.Domain.Runs.Retention;
 
 namespace ParityBench.NET.Domain.Reports;
 
@@ -29,6 +30,9 @@ internal sealed class StaticReportRequestPairResultJsonConverter : JsonConverter
         ResponseArtifactMetadata? focusedResponseA = ReadOptional<ResponseArtifactMetadata>(root, "focusedResponseA", options);
         ResponseArtifactMetadata? focusedResponseB = ReadOptional<ResponseArtifactMetadata>(root, "focusedResponseB", options);
         List<string>? focusedRawContentIgnorePaths = ReadOptional<List<string>>(root, "focusedRawContentIgnorePaths", options);
+        PairRetentionClass? pairRetentionClass = ReadOptional<PairRetentionClass>(root, "pairRetentionClass", options);
+        PairArtifactRetentionState? artifactRetentionState = ReadOptional<PairArtifactRetentionState>(root, "artifactRetentionState", options);
+        DateTimeOffset? retentionAppliedAt = ReadOptional<DateTimeOffset>(root, "retentionAppliedAt", options);
 
         return new RequestPairResult(
             relativePath,
@@ -43,7 +47,10 @@ internal sealed class StaticReportRequestPairResultJsonConverter : JsonConverter
             rawTextDifferences,
             focusedResponseA,
             focusedResponseB,
-            focusedRawContentIgnorePaths);
+            focusedRawContentIgnorePaths,
+            pairRetentionClass,
+            artifactRetentionState,
+            retentionAppliedAt);
     }
 
     public override void Write(
@@ -69,6 +76,11 @@ internal sealed class StaticReportRequestPairResultJsonConverter : JsonConverter
         WriteOptional(writer, "focusedResponseB", value.FocusedResponseB, options);
         writer.WritePropertyName("focusedRawContentIgnorePaths");
         JsonSerializer.Serialize(writer, value.FocusedRawContentIgnorePaths, options);
+        writer.WritePropertyName("pairRetentionClass");
+        JsonSerializer.Serialize(writer, value.PairRetentionClass, options);
+        writer.WritePropertyName("artifactRetentionState");
+        JsonSerializer.Serialize(writer, value.ArtifactRetentionState, options);
+        WriteOptional(writer, "retentionAppliedAt", value.RetentionAppliedAt, options);
         writer.WriteEndObject();
     }
 

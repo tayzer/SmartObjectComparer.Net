@@ -42,8 +42,8 @@ public sealed record RequestComparisonDefaults
 public sealed record RequestComparisonRunDefaults
 {
     public RequestComparisonRunDefaults()
+        : this(32, 30)
     {
-        
     }
 
     public RequestComparisonRunDefaults(int maxConcurrency = 32, int timeoutSeconds = 30)

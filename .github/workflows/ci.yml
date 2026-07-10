@@ -42,6 +42,29 @@ jobs:
       - name: Test
         run: dotnet test ComparisonTool.sln --configuration Release --no-build --logger "trx;LogFileName=test_results.trx" --collect:"XPlat Code Coverage"
 
+      - name: Generate Retention Matrix Report
+        if: always()
+        shell: pwsh
+        run: ./scripts/Generate-RetentionMatrixReport.ps1
+
+      - name: Append Retention Matrix Summary
+        if: always()
+        shell: pwsh
+        run: |
+          $report = 'artifacts/ci/retention-matrix/RetentionMatrixReport.md'
+          if (Test-Path $report) {
+            "## Retention Matrix Report" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            '' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            Get-Content -Path $report | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+
+      - name: Upload Retention Matrix Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: retention-matrix-report
+          path: artifacts/ci/retention-matrix/**
+
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
         if: always()

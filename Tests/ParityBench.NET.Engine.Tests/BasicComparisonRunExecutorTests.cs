@@ -44,6 +44,9 @@ public sealed class BasicComparisonRunExecutorTests
         Assert.AreEqual(1, summary.ExecutionMetrics.RequestCount);
         Assert.AreEqual(3, summary.ExecutionMetrics.MaxConcurrency);
         Assert.AreEqual(8, summary.ExecutionMetrics.ResponseBytesWritten);
+        Assert.IsTrue(summary.ExecutionMetrics.RetainedArtifactCount >= 2);
+        Assert.AreEqual(0, summary.ExecutionMetrics.TrimmedByPolicyArtifactCount);
+        Assert.AreEqual(0, summary.ExecutionMetrics.MissingUnexpectedlyArtifactCount);
         Assert.IsTrue(summary.ExecutionMetrics.TotalDuration >= TimeSpan.Zero);
     }
 

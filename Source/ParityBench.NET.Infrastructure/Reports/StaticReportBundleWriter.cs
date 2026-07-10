@@ -13,6 +13,7 @@ using ParityBench.NET.Domain.Reports;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Results;
 using ParityBench.NET.Domain.Runs;
+using ParityBench.NET.Domain.Runs.Retention;
 
 namespace ParityBench.NET.Infrastructure.Reports;
 
@@ -184,52 +185,73 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
         Dictionary<string, ArtifactReference> copiedArtifacts,
         CancellationToken cancellationToken)
     {
-        ResponseArtifactMetadata? responseA = await RewriteArtifactAsync(
+        RewrittenArtifact responseA = await RewriteArtifactAsync(
             item.ResponseA,
+            item.ArtifactRetentionState.RawResponseA,
             outputDirectory,
             copiedArtifacts,
             cancellationToken).ConfigureAwait(false);
-        ResponseArtifactMetadata? responseB = await RewriteArtifactAsync(
+        RewrittenArtifact responseB = await RewriteArtifactAsync(
             item.ResponseB,
+            item.ArtifactRetentionState.RawResponseB,
             outputDirectory,
             copiedArtifacts,
             cancellationToken).ConfigureAwait(false);
-        ResponseArtifactMetadata? focusedResponseA = await RewriteArtifactAsync(
+        RewrittenArtifact focusedResponseA = await RewriteArtifactAsync(
             item.FocusedResponseA,
+            item.ArtifactRetentionState.FocusedResponseA,
             outputDirectory,
             copiedArtifacts,
             cancellationToken).ConfigureAwait(false);
-        ResponseArtifactMetadata? focusedResponseB = await RewriteArtifactAsync(
+        RewrittenArtifact focusedResponseB = await RewriteArtifactAsync(
             item.FocusedResponseB,
+            item.ArtifactRetentionState.FocusedResponseB,
             outputDirectory,
             copiedArtifacts,
             cancellationToken).ConfigureAwait(false);
 
+        PairArtifactRetentionState rewrittenRetentionState = new PairArtifactRetentionState(
+            responseA.RetentionState,
+            responseB.RetentionState,
+            item.ArtifactRetentionState.CanonicalResponseA,
+            item.ArtifactRetentionState.CanonicalResponseB,
+            focusedResponseA.RetentionState,
+            focusedResponseB.RetentionState);
+
         return new RequestPairResult(
             item.RelativePath,
             item.Outcome,
-            responseA,
-            responseB,
+            responseA.Response,
+            responseB.Response,
             item.ErrorMessage,
             item.AreEqual,
             item.DifferenceCount,
             item.Differences,
             item.OutcomeMessage,
-            BuildRawTextDifferences(item, responseA, responseB),
-            focusedResponseA,
-            focusedResponseB,
-            item.FocusedRawContentIgnorePaths);
+            BuildRawTextDifferences(item, responseA.Response, responseB.Response),
+            focusedResponseA.Response,
+            focusedResponseB.Response,
+            item.FocusedRawContentIgnorePaths,
+            item.PairRetentionClass,
+            rewrittenRetentionState,
+            item.RetentionAppliedAt);
     }
 
-    private async Task<ResponseArtifactMetadata?> RewriteArtifactAsync(
+    private async Task<RewrittenArtifact> RewriteArtifactAsync(
         ResponseArtifactMetadata? response,
+        ArtifactRetentionState retentionState,
         string outputDirectory,
         Dictionary<string, ArtifactReference> copiedArtifacts,
         CancellationToken cancellationToken)
     {
         if (response is null)
         {
-            return null;
+            return new RewrittenArtifact(null, retentionState);
+        }
+
+        if (retentionState == ArtifactRetentionState.TrimmedByPolicy)
+        {
+            return new RewrittenArtifact(null, ArtifactRetentionState.TrimmedByPolicy);
         }
 
         if (!copiedArtifacts.TryGetValue(response.Artifact.ArtifactId, out ArtifactReference? rewrittenArtifact))
@@ -240,24 +262,39 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
 
             string destinationPath = Path.Combine(outputDirectory, sidecarPath.Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(Path.GetDirectoryName(destinationPath) ?? outputDirectory);
-            await using Stream source = await artifactStore.OpenReadAsync(response.Artifact, cancellationToken).ConfigureAwait(false);
-            await using FileStream destination = new FileStream(
-                destinationPath,
-                FileMode.Create,
-                FileAccess.Write,
-                FileShare.None,
-                81920,
-                FileOptions.Asynchronous | FileOptions.SequentialScan);
-            await source.CopyToAsync(destination, cancellationToken).ConfigureAwait(false);
+            Stream? source = null;
+            try
+            {
+                source = await artifactStore.OpenReadAsync(response.Artifact, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+            {
+                copiedArtifacts.Remove(response.Artifact.ArtifactId);
+                return new RewrittenArtifact(null, ArtifactRetentionState.MissingUnexpectedly);
+            }
+
+            await using (source)
+            {
+                await using FileStream destination = new FileStream(
+                    destinationPath,
+                    FileMode.Create,
+                    FileAccess.Write,
+                    FileShare.None,
+                    81920,
+                    FileOptions.Asynchronous | FileOptions.SequentialScan);
+                await source.CopyToAsync(destination, cancellationToken).ConfigureAwait(false);
+            }
         }
 
-        return new ResponseArtifactMetadata(
-            response.Endpoint,
-            rewrittenArtifact,
-            response.StatusCode,
-            response.ContentType,
-            response.ContentLength,
-            response.Sha256);
+        return new RewrittenArtifact(
+            new ResponseArtifactMetadata(
+                response.Endpoint,
+                rewrittenArtifact,
+                response.StatusCode,
+                response.ContentType,
+                response.ContentLength,
+                response.Sha256),
+            ArtifactRetentionState.Retained);
     }
 
     private static IReadOnlyList<StaticReportRawTextDifference> BuildRawTextDifferences(
@@ -552,5 +589,9 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
 
         public int AffectedPairCount { get; set; }
     }
+
+    private sealed record RewrittenArtifact(
+        ResponseArtifactMetadata? Response,
+        ArtifactRetentionState RetentionState);
 }
 
