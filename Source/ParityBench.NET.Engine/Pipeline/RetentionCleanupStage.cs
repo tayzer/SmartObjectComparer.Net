@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 using Microsoft.Extensions.Options;
 
 using ParityBench.NET.Application.Requests;
@@ -74,13 +76,16 @@ public sealed class RetentionCleanupStage : IRunCleanupStage
             .Evaluate(evaluationRequest)
             .ToDictionary(decision => decision.ManifestOrdinal);
 
-        List<RequestPairResult> retainedResults = new List<RequestPairResult>(orderedCandidates.Count);
-        foreach (RetentionCandidate candidate in orderedCandidates)
-        {
-            RetentionPolicyDecision decision = decisions[candidate.ManifestOrdinal];
-            RequestPairResult updatedResult = await ApplyRetentionDecisionAsync(run.Id, candidate.Result, decision, cancellationToken).ConfigureAwait(false);
-            retainedResults.Add(updatedResult);
-        }
+        RequestPairResult[] retainedResults = new RequestPairResult[orderedCandidates.Count];
+        await Parallel.ForEachAsync(
+            Enumerable.Range(0, orderedCandidates.Count),
+            new ParallelOptions { CancellationToken = cancellationToken, MaxDegreeOfParallelism = Environment.ProcessorCount * 4 },
+            async (index, token) =>
+            {
+                RetentionCandidate candidate = orderedCandidates[index];
+                RetentionPolicyDecision decision = decisions[candidate.ManifestOrdinal];
+                retainedResults[index] = await ApplyRetentionDecisionAsync(run.Id, candidate.Result, decision, token).ConfigureAwait(false);
+            }).ConfigureAwait(false);
 
         await runDetailStore.SaveDetailsAsync(run.Id, retainedResults, cancellationToken).ConfigureAwait(false);
     }
@@ -163,12 +168,15 @@ public sealed class RetentionCleanupStage : IRunCleanupStage
             AddArtifactIdIfPresent(uniqueArtifactIds, candidate.Result.FocusedResponseB?.Artifact);
         }
 
-        Dictionary<string, long> sizes = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
-        foreach (string artifactId in uniqueArtifactIds)
-        {
-            ArtifactReference reference = new ArtifactReference(artifactId, null);
-            sizes[artifactId] = await runArtifactStore.GetArtifactSizeAsync(reference, cancellationToken).ConfigureAwait(false);
-        }
+        ConcurrentDictionary<string, long> sizes = new ConcurrentDictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        await Parallel.ForEachAsync(
+            uniqueArtifactIds,
+            new ParallelOptions { CancellationToken = cancellationToken, MaxDegreeOfParallelism = Environment.ProcessorCount * 4 },
+            async (artifactId, token) =>
+            {
+                ArtifactReference reference = new ArtifactReference(artifactId, null);
+                sizes[artifactId] = await runArtifactStore.GetArtifactSizeAsync(reference, token).ConfigureAwait(false);
+            }).ConfigureAwait(false);
 
         return sizes;
     }

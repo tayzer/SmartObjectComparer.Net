@@ -41,7 +41,8 @@ public sealed class HttpClientEndpointRequestSender : IEndpointRequestSender
                 (int)response.StatusCode,
                 response.Content.Headers.ContentType?.ToString(),
                 body,
-                new IDisposable[] { response, timeoutSource });
+                new IDisposable[] { response, timeoutSource },
+                timeoutSource.Token);
         }
         catch
         {

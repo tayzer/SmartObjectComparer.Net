@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Threading;
 
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Domain.Requests;
@@ -125,18 +126,31 @@ public sealed class FileSystemRunArtifactStore : IRunArtifactStore
             return Task.FromResult(0L);
         }
 
-        long total = 0;
-        foreach (string filePath in Directory.EnumerateFiles(artifactsRoot, "*", SearchOption.AllDirectories))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (filePath.Contains(Path.DirectorySeparatorChar + "artifacts" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-                || filePath.EndsWith(Path.DirectorySeparatorChar + "artifacts", StringComparison.OrdinalIgnoreCase))
+        // Runs off the caller's thread and stats files in parallel: this walks every run
+        // in the workspace on every cleanup pass, so on a large workspace a sequential scan
+        // blocks the calling thread for the whole run count, not just the current run.
+        return Task.Run(
+            () =>
             {
-                total += new FileInfo(filePath).Length;
-            }
-        }
-
-        return Task.FromResult(total);
+                long total = 0;
+                Parallel.ForEach(
+                    Directory.EnumerateFiles(artifactsRoot, "*", SearchOption.AllDirectories),
+                    new ParallelOptions
+                    {
+                        CancellationToken = cancellationToken,
+                        MaxDegreeOfParallelism = Environment.ProcessorCount * 4,
+                    },
+                    filePath =>
+                    {
+                        if (filePath.Contains(Path.DirectorySeparatorChar + "artifacts" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                            || filePath.EndsWith(Path.DirectorySeparatorChar + "artifacts", StringComparison.OrdinalIgnoreCase))
+                        {
+                            Interlocked.Add(ref total, new FileInfo(filePath).Length);
+                        }
+                    });
+                return total;
+            },
+            cancellationToken);
     }
 
     public Task<bool> DeleteIfExistsAsync(

@@ -448,6 +448,9 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                     .SendAsync(endpointRequest, cancellationToken)
                     .ConfigureAwait(false);
 
+                using CancellationTokenSource bodyReadTimeoutSource = CancellationTokenSource
+                    .CreateLinkedTokenSource(cancellationToken, response.Timeout);
+
                 ResponseArtifactMetadata metadata = await PersistResponseAsync(
                     run.Id,
                     endpoint,
@@ -457,7 +460,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                     response.Body,
                     comparisonOptions.Comparison.MaskRules,
                     counters,
-                    cancellationToken)
+                    bodyReadTimeoutSource.Token)
                     .ConfigureAwait(false);
 
                 return EndpointExecutionRecord.Persisted(endpoint, metadata);
