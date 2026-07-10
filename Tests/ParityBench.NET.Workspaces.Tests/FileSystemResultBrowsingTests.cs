@@ -102,6 +102,31 @@ public sealed class FileSystemResultBrowsingTests
     }
 
     [TestMethod]
+    public async Task IncrementalWriter_WhenAppendedInManifestOrdinalOrder_PreservesDeterministicOrderAcrossPages()
+    {
+        string workspaceRoot = CreateTempDirectory();
+        FileSystemRunDetailStore detailStore = new FileSystemRunDetailStore(workspaceRoot);
+        RequestPairResult[] manifestOrdinalResults =
+        {
+            CreateResult("request-20.json", RequestPairOutcome.Equal),
+            CreateResult("request-03.json", RequestPairOutcome.Equal),
+            CreateResult("request-11.json", RequestPairOutcome.Equal),
+            CreateResult("request-01.json", RequestPairOutcome.Equal),
+        };
+
+        await using IRunDetailWriter writer = await detailStore.CreateWriterAsync(new RunId("run-1"), pageSize: 2);
+        await writer.AppendAsync(manifestOrdinalResults.Take(2).ToArray());
+        await writer.AppendAsync(manifestOrdinalResults.Skip(2).ToArray());
+        RunDetailReference reference = await writer.CompleteAsync();
+
+        IReadOnlyList<RequestPairResult> loaded = await detailStore.LoadDetailsAsync(reference);
+
+        CollectionAssert.AreEqual(
+            manifestOrdinalResults.Select(result => result.RelativePath).ToArray(),
+            loaded.Select(result => result.RelativePath).ToArray());
+    }
+
+    [TestMethod]
     public async Task IncrementalWriter_WhenCompleted_PersistsAnalysisAndDifferenceIndexSidecars()
     {
         string workspaceRoot = CreateTempDirectory();

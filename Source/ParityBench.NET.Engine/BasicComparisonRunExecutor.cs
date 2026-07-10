@@ -9,6 +9,7 @@ using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
+using ParityBench.NET.Engine.Pipeline;
 
 namespace ParityBench.NET.Engine;
 
@@ -21,6 +22,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
     private readonly IResponseComparer responseComparer;
     private readonly IContractProfileRegistry? contractProfileRegistry;
     private readonly IObservabilityRecorder observabilityRecorder;
+    private readonly IRunCleanupStage cleanupStage;
 
     public BasicComparisonRunExecutor(
         IRequestBatchStore requestBatchStore,
@@ -59,7 +61,8 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         IRunDetailStore runDetailStore,
         IResponseComparer responseComparer,
         IContractProfileRegistry? contractProfileRegistry,
-        IObservabilityRecorder? observabilityRecorder = null)
+        IObservabilityRecorder? observabilityRecorder = null,
+        IRunCleanupStage? cleanupStage = null)
     {
         this.requestBatchStore = requestBatchStore;
         this.endpointRequestSender = endpointRequestSender;
@@ -70,6 +73,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             : new RawTextResponseComparer(runArtifactStore, responseComparer);
         this.contractProfileRegistry = contractProfileRegistry;
         this.observabilityRecorder = observabilityRecorder ?? NoOpObservabilityRecorder.Instance;
+        this.cleanupStage = cleanupStage ?? NoOpRunCleanupStage.Instance;
     }
 
     public async Task<RunResultSummary> ExecuteAsync(
@@ -81,75 +85,78 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         ArgumentNullException.ThrowIfNull(progressReporter);
 
         Stopwatch totalStopwatch = Stopwatch.StartNew();
-        IContractProfile? contractProfile = ResolveContractProfile(run.Options);
-        RunOptions comparisonOptions = contractProfile is null
-            ? run.Options
-            : CreateRunOptionsWithProfileDefaults(run.Options, contractProfile);
 
         await progressReporter
             .ReportAsync(RunStatus.Parsing, new RunProgress(5, "Loading request batch."), cancellationToken, force: true)
             .ConfigureAwait(false);
 
-        RequestBatchManifest manifest = await requestBatchStore
-            .LoadManifestAsync(run.Options.RequestBatch, cancellationToken)
-            .ConfigureAwait(false);
+        Stopwatch planningStopwatch = Stopwatch.StartNew();
+        (RunOptions comparisonOptions, IContractProfile? contractProfile, IReadOnlyList<PlannedRequest> plannedRequests) =
+            await PlanAsync(run, cancellationToken).ConfigureAwait(false);
+        planningStopwatch.Stop();
+        observabilityRecorder.RecordRunPhase(run.Id, "Planning", planningStopwatch.Elapsed);
 
-        int totalRequests = manifest.Requests.Count;
+        int totalRequests = plannedRequests.Count;
         await progressReporter
             .ReportAsync(RunStatus.Executing, new RunProgress(10, "Executing requests.", 0, totalRequests), cancellationToken, force: true)
             .ConfigureAwait(false);
 
         RunExecutionCounters counters = new RunExecutionCounters();
         RunSummaryAccumulator summaryAccumulator = new RunSummaryAccumulator();
+        List<ComparedExecutionRecord> persistedRecords = new List<ComparedExecutionRecord>(totalRequests);
         int completedRequests = 0;
         int chunkSize = Math.Max(1, comparisonOptions.LargeRun.ChunkSize);
-        IReadOnlyList<IReadOnlyList<RequestItem>> chunks = Partition(manifest.Requests, chunkSize);
-        ParallelOptions parallelOptions = new ParallelOptions
-        {
-            CancellationToken = cancellationToken,
-            MaxDegreeOfParallelism = comparisonOptions.MaxConcurrency,
-        };
+        IReadOnlyList<IReadOnlyList<PlannedRequest>> chunks = Partition(plannedRequests, chunkSize);
+        TimeSpan executionDuration = TimeSpan.Zero;
+        TimeSpan comparisonDuration = TimeSpan.Zero;
+        TimeSpan persistenceDuration = TimeSpan.Zero;
 
-        Stopwatch requestExecutionStopwatch = Stopwatch.StartNew();
-        Stopwatch comparisonStopwatch = new Stopwatch();
-        Stopwatch finalizationStopwatch = new Stopwatch();
         await using IRunDetailWriter detailWriter = await runDetailStore
             .CreateWriterAsync(run.Id, comparisonOptions.LargeRun.DetailPageSize, cancellationToken)
             .ConfigureAwait(false);
 
         for (int chunkIndex = 0; chunkIndex < chunks.Count; chunkIndex++)
         {
-            IReadOnlyList<RequestItem> chunk = chunks[chunkIndex];
-            ConcurrentBag<RequestPairResult> chunkResults = new ConcurrentBag<RequestPairResult>();
-            await Parallel.ForEachAsync(chunk, parallelOptions, async (request, token) =>
-            {
-                Stopwatch requestPathStopwatch = Stopwatch.StartNew();
-                RequestPairResult result = await ExecutePairAsync(run, comparisonOptions, request, contractProfile, counters, token).ConfigureAwait(false);
-                requestPathStopwatch.Stop();
-                observabilityRecorder.RecordRequestPath(run.Id, request.RelativePath, requestPathStopwatch.Elapsed);
-                chunkResults.Add(result);
+            IReadOnlyList<PlannedRequest> chunk = chunks[chunkIndex];
 
-                int completed = Interlocked.Increment(ref completedRequests);
-                await progressReporter
-                    .ReportAsync(
-                        RunStatus.Executing,
-                        new RunProgress(
-                            CalculateExecutionPercent(completed, totalRequests),
-                            $"Executed {completed} of {totalRequests} requests.",
-                            completed,
-                            totalRequests),
-                        token)
-                    .ConfigureAwait(false);
-            }).ConfigureAwait(false);
+            Stopwatch executionStopwatch = Stopwatch.StartNew();
+            IReadOnlyList<ExecutionRecord> executionRecords = await ExecuteChunkAsync(
+                run,
+                comparisonOptions,
+                contractProfile,
+                chunk,
+                counters,
+                progressReporter,
+                totalRequests,
+                completedRequests,
+                cancellationToken).ConfigureAwait(false);
+            executionStopwatch.Stop();
+            executionDuration += executionStopwatch.Elapsed;
+            completedRequests += chunk.Count;
 
-            comparisonStopwatch.Start();
-            List<RequestPairResult> orderedChunkResults = chunkResults
-                .OrderBy(result => result.RelativePath, StringComparer.OrdinalIgnoreCase)
+            Stopwatch compareStopwatch = Stopwatch.StartNew();
+            IReadOnlyList<ComparedExecutionRecord> comparedRecords = await CompareChunkAsync(
+                run,
+                comparisonOptions,
+                contractProfile,
+                executionRecords,
+                counters,
+                cancellationToken).ConfigureAwait(false);
+            compareStopwatch.Stop();
+            comparisonDuration += compareStopwatch.Elapsed;
+
+            Stopwatch persistStopwatch = Stopwatch.StartNew();
+            IReadOnlyList<ComparedExecutionRecord> orderedComparedRecords = comparedRecords
+                .OrderBy(record => record.ManifestOrdinal)
                 .ToList();
-            comparisonStopwatch.Stop();
-
+            IReadOnlyList<RequestPairResult> orderedChunkResults = orderedComparedRecords
+                .Select(record => record.Result)
+                .ToList();
             summaryAccumulator.Add(orderedChunkResults);
+            persistedRecords.AddRange(orderedComparedRecords);
             await detailWriter.AppendAsync(orderedChunkResults, cancellationToken).ConfigureAwait(false);
+            persistStopwatch.Stop();
+            persistenceDuration += persistStopwatch.Elapsed;
 
             await progressReporter
                 .ReportAsync(
@@ -166,67 +173,182 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                 .ConfigureAwait(false);
         }
 
-        requestExecutionStopwatch.Stop();
+        observabilityRecorder.RecordRunPhase(run.Id, "Execution", executionDuration);
+        observabilityRecorder.RecordRunPhase(run.Id, "Compare", comparisonDuration);
 
-        finalizationStopwatch.Start();
         await progressReporter
             .ReportAsync(RunStatus.Finalizing, new RunProgress(95, "Saving result details.", totalRequests, totalRequests), cancellationToken, force: true)
             .ConfigureAwait(false);
 
+        Stopwatch finalizeStopwatch = Stopwatch.StartNew();
         RunDetailReference detailReference = await detailWriter.CompleteAsync(cancellationToken).ConfigureAwait(false);
-        finalizationStopwatch.Stop();
+        finalizeStopwatch.Stop();
+        persistenceDuration += finalizeStopwatch.Elapsed;
+        observabilityRecorder.RecordRunPhase(run.Id, "Persistence", persistenceDuration);
+
+        await progressReporter
+            .ReportAsync(RunStatus.Finalizing, new RunProgress(97, "Running cleanup stage.", totalRequests, totalRequests), cancellationToken, force: true)
+            .ConfigureAwait(false);
+
+        Stopwatch cleanupStopwatch = Stopwatch.StartNew();
+        CleanupStageContext cleanupContext = new CleanupStageContext(
+            comparisonOptions,
+            detailReference,
+            persistedRecords,
+            DurableAppendCompleted: true);
+        await cleanupStage.CleanupAsync(run, cleanupContext, cancellationToken).ConfigureAwait(false);
+        cleanupStopwatch.Stop();
+        observabilityRecorder.RecordRunPhase(run.Id, "Cleanup", cleanupStopwatch.Elapsed);
+
         totalStopwatch.Stop();
+        observabilityRecorder.RecordRunPhase(run.Id, "Total", totalStopwatch.Elapsed);
 
         RunExecutionMetrics executionMetrics = new RunExecutionMetrics(
             totalStopwatch.Elapsed,
-            requestExecutionStopwatch.Elapsed,
-            comparisonStopwatch.Elapsed,
-            finalizationStopwatch.Elapsed,
+            executionDuration,
+            comparisonDuration,
+            persistenceDuration + cleanupStopwatch.Elapsed,
             totalRequests,
             run.Options.MaxConcurrency,
             counters.ResponseBytesWritten);
 
-        RecordRunPhases(run.Id, executionMetrics);
         return summaryAccumulator.ToSummary(detailReference, executionMetrics);
     }
 
-    private async Task<RequestPairResult> ExecutePairAsync(
+    private async Task<(RunOptions ComparisonOptions, IContractProfile? ContractProfile, IReadOnlyList<PlannedRequest> PlannedRequests)> PlanAsync(
+        ComparisonRun run,
+        CancellationToken cancellationToken)
+    {
+        IContractProfile? contractProfile = ResolveContractProfile(run.Options);
+        RunOptions comparisonOptions = contractProfile is null
+            ? run.Options
+            : CreateRunOptionsWithProfileDefaults(run.Options, contractProfile);
+
+        RequestBatchManifest manifest = await requestBatchStore
+            .LoadManifestAsync(run.Options.RequestBatch, cancellationToken)
+            .ConfigureAwait(false);
+
+        IReadOnlyList<PlannedRequest> plannedRequests = manifest.Requests
+            .Select((request, index) => new PlannedRequest(index, request))
+            .ToList();
+
+        return (comparisonOptions, contractProfile, plannedRequests);
+    }
+
+    private async Task<IReadOnlyList<ExecutionRecord>> ExecuteChunkAsync(
         ComparisonRun run,
         RunOptions comparisonOptions,
-        RequestItem request,
+        IContractProfile? contractProfile,
+        IReadOnlyList<PlannedRequest> chunk,
+        RunExecutionCounters counters,
+        IRunProgressReporter progressReporter,
+        int totalRequests,
+        int completedRequestsAtChunkStart,
+        CancellationToken cancellationToken)
+    {
+        ConcurrentBag<ExecutionRecord> executionRecords = new ConcurrentBag<ExecutionRecord>();
+        int completedWithinChunk = 0;
+        ParallelOptions parallelOptions = new ParallelOptions
+        {
+            CancellationToken = cancellationToken,
+            MaxDegreeOfParallelism = comparisonOptions.MaxConcurrency,
+        };
+
+        await Parallel.ForEachAsync(chunk, parallelOptions, async (plannedRequest, token) =>
+        {
+            Stopwatch requestPathStopwatch = Stopwatch.StartNew();
+            ExecutionRecord record = await ExecutePairAsync(run, comparisonOptions, plannedRequest, contractProfile, counters, token).ConfigureAwait(false);
+            requestPathStopwatch.Stop();
+            observabilityRecorder.RecordRequestPath(run.Id, plannedRequest.Request.RelativePath, requestPathStopwatch.Elapsed);
+            executionRecords.Add(record);
+
+            int completed = completedRequestsAtChunkStart + Interlocked.Increment(ref completedWithinChunk);
+            await progressReporter
+                .ReportAsync(
+                    RunStatus.Executing,
+                    new RunProgress(
+                        CalculateExecutionPercent(completed, totalRequests),
+                        $"Executed {completed} of {totalRequests} requests.",
+                        completed,
+                        totalRequests),
+                    token)
+                .ConfigureAwait(false);
+        }).ConfigureAwait(false);
+
+        return executionRecords.ToList();
+    }
+
+    private async Task<IReadOnlyList<ComparedExecutionRecord>> CompareChunkAsync(
+        ComparisonRun run,
+        RunOptions comparisonOptions,
+        IContractProfile? contractProfile,
+        IReadOnlyList<ExecutionRecord> executionRecords,
+        RunExecutionCounters counters,
+        CancellationToken cancellationToken)
+    {
+        Task<ComparedExecutionRecord>[] comparisonTasks = executionRecords
+            .Select(record => CompareRecordAsync(run, comparisonOptions, contractProfile, record, counters, cancellationToken))
+            .ToArray();
+
+        return await Task.WhenAll(comparisonTasks).ConfigureAwait(false);
+    }
+
+    private async Task<ExecutionRecord> ExecutePairAsync(
+        ComparisonRun run,
+        RunOptions comparisonOptions,
+        PlannedRequest plannedRequest,
         IContractProfile? contractProfile,
         RunExecutionCounters counters,
         CancellationToken cancellationToken)
     {
-        Task<EndpointExecutionResult> endpointATask = ExecuteEndpointAsync(run, comparisonOptions, request, EndpointSlot.A, contractProfile, counters, cancellationToken);
-        Task<EndpointExecutionResult> endpointBTask = ExecuteEndpointAsync(run, comparisonOptions, request, EndpointSlot.B, contractProfile, counters, cancellationToken);
+        Task<EndpointExecutionRecord> endpointATask = ExecuteEndpointAsync(run, comparisonOptions, plannedRequest.Request, EndpointSlot.A, contractProfile, counters, cancellationToken);
+        Task<EndpointExecutionRecord> endpointBTask = ExecuteEndpointAsync(run, comparisonOptions, plannedRequest.Request, EndpointSlot.B, contractProfile, counters, cancellationToken);
 
         await Task.WhenAll(endpointATask, endpointBTask).ConfigureAwait(false);
 
-        EndpointExecutionResult endpointA = await endpointATask.ConfigureAwait(false);
-        EndpointExecutionResult endpointB = await endpointBTask.ConfigureAwait(false);
+        EndpointExecutionRecord endpointA = await endpointATask.ConfigureAwait(false);
+        EndpointExecutionRecord endpointB = await endpointBTask.ConfigureAwait(false);
 
-        if (contractProfile is not null)
-        {
-            return await CompleteContractProfilePairAsync(
+        return new ExecutionRecord(plannedRequest.ManifestOrdinal, plannedRequest.Request, endpointA, endpointB);
+    }
+
+    private async Task<ComparedExecutionRecord> CompareRecordAsync(
+        ComparisonRun run,
+        RunOptions comparisonOptions,
+        IContractProfile? contractProfile,
+        ExecutionRecord executionRecord,
+        RunExecutionCounters counters,
+        CancellationToken cancellationToken)
+    {
+        RequestPairResult pairResult = contractProfile is null
+            ? await CompleteRegularPairAsync(run, comparisonOptions, executionRecord, cancellationToken).ConfigureAwait(false)
+            : await CompleteContractProfilePairAsync(
                 run,
                 comparisonOptions,
-                request,
+                executionRecord.Request,
                 contractProfile,
-                endpointA,
-                endpointB,
+                executionRecord.EndpointA,
+                executionRecord.EndpointB,
                 counters,
                 cancellationToken)
                 .ConfigureAwait(false);
-        }
 
-        string? errorMessage = BuildErrorMessage(endpointA, endpointB);
+        return new ComparedExecutionRecord(executionRecord.ManifestOrdinal, pairResult);
+    }
+
+    private async Task<RequestPairResult> CompleteRegularPairAsync(
+        ComparisonRun run,
+        RunOptions comparisonOptions,
+        ExecutionRecord executionRecord,
+        CancellationToken cancellationToken)
+    {
+        string? errorMessage = BuildErrorMessage(executionRecord.EndpointA, executionRecord.EndpointB);
         RequestPairResult pairResult = await responseComparer
             .CompareAsync(
-                request,
+                executionRecord.Request,
                 comparisonOptions,
-                endpointA.Metadata,
-                endpointB.Metadata,
+                executionRecord.EndpointA.Metadata,
+                executionRecord.EndpointB.Metadata,
                 errorMessage,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -234,7 +356,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         return await AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<EndpointExecutionResult> ExecuteEndpointAsync(
+    private async Task<EndpointExecutionRecord> ExecuteEndpointAsync(
         ComparisonRun run,
         RunOptions comparisonOptions,
         RequestItem request,
@@ -280,13 +402,13 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                     cancellationToken)
                     .ConfigureAwait(false);
 
-                return EndpointExecutionResult.Persisted(endpoint, metadata);
+                return EndpointExecutionRecord.Persisted(endpoint, metadata);
             }
         }
         catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
             observabilityRecorder.RecordException(run.Id, "EndpointExecution", ex, request.RelativePath, endpoint);
-            return EndpointExecutionResult.Failure(endpoint, ex.Message);
+            return EndpointExecutionRecord.Failure(endpoint, ex.Message);
         }
         catch (OperationCanceledException)
         {
@@ -295,7 +417,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         catch (Exception ex)
         {
             observabilityRecorder.RecordException(run.Id, "EndpointExecution", ex, request.RelativePath, endpoint);
-            return EndpointExecutionResult.Failure(endpoint, ex.Message);
+            return EndpointExecutionRecord.Failure(endpoint, ex.Message);
         }
     }
 
@@ -304,8 +426,8 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         RunOptions comparisonOptions,
         RequestItem request,
         IContractProfile profile,
-        EndpointExecutionResult endpointA,
-        EndpointExecutionResult endpointB,
+        EndpointExecutionRecord endpointA,
+        EndpointExecutionRecord endpointB,
         RunExecutionCounters counters,
         CancellationToken cancellationToken)
     {
@@ -450,7 +572,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         ComparisonRun run,
         RequestItem request,
         IContractProfile profile,
-        EndpointExecutionResult endpointResult,
+        EndpointExecutionRecord endpointResult,
         IReadOnlyList<MaskRuleDefinition> maskRules,
         RunExecutionCounters counters,
         CancellationToken cancellationToken)
@@ -586,14 +708,6 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                 options.ComparisonRulesSnapshotHash);
     }
 
-    private void RecordRunPhases(RunId runId, RunExecutionMetrics executionMetrics)
-    {
-        observabilityRecorder.RecordRunPhase(runId, "Total", executionMetrics.TotalDuration);
-        observabilityRecorder.RecordRunPhase(runId, "RequestExecution", executionMetrics.RequestExecutionDuration);
-        observabilityRecorder.RecordRunPhase(runId, "Comparison", executionMetrics.ComparisonDuration);
-        observabilityRecorder.RecordRunPhase(runId, "Finalization", executionMetrics.FinalizationDuration);
-    }
-
     private int CalculateExecutionPercent(int completedRequests, int totalRequests)
     {
         if (totalRequests == 0)
@@ -620,8 +734,8 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
     }
 
     private string? BuildErrorMessage(
-        EndpointExecutionResult endpointA,
-        EndpointExecutionResult endpointB)
+        EndpointExecutionRecord endpointA,
+        EndpointExecutionRecord endpointB)
     {
         string[] errors = new[] { endpointA.ErrorMessage, endpointB.ErrorMessage }
             .Where(error => !string.IsNullOrWhiteSpace(error))
@@ -657,16 +771,16 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         return null;
     }
 
-    private static IReadOnlyList<IReadOnlyList<RequestItem>> Partition(
-        IReadOnlyList<RequestItem> requests,
+    private static IReadOnlyList<IReadOnlyList<T>> Partition<T>(
+        IReadOnlyList<T> requests,
         int chunkSize)
     {
         if (requests.Count == 0)
         {
-            return Array.Empty<IReadOnlyList<RequestItem>>();
+            return Array.Empty<IReadOnlyList<T>>();
         }
 
-        List<IReadOnlyList<RequestItem>> chunks = new List<IReadOnlyList<RequestItem>>((int)Math.Ceiling(requests.Count / (double)chunkSize));
+        List<IReadOnlyList<T>> chunks = new List<IReadOnlyList<T>>((int)Math.Ceiling(requests.Count / (double)chunkSize));
         for (int index = 0; index < requests.Count; index += chunkSize)
         {
             chunks.Add(requests.Skip(index).Take(Math.Min(chunkSize, requests.Count - index)).ToList());
@@ -767,34 +881,29 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         }
     }
 
-    private sealed class EndpointExecutionResult
+    private sealed class NoOpRunCleanupStage : IRunCleanupStage
     {
-        private EndpointExecutionResult(
-            EndpointSlot endpoint,
-            ResponseArtifactMetadata? metadata,
-            string? errorMessage)
+        public static NoOpRunCleanupStage Instance { get; } = new NoOpRunCleanupStage();
+
+        private NoOpRunCleanupStage()
         {
-            Endpoint = endpoint;
-            Metadata = metadata;
-            ErrorMessage = errorMessage;
         }
 
-        public EndpointSlot Endpoint { get; }
+        public Task CleanupAsync(
+            ComparisonRun run,
+            CleanupStageContext context,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(run);
+            ArgumentNullException.ThrowIfNull(context);
+            if (!context.DurableAppendCompleted)
+            {
+                throw new InvalidOperationException("Cleanup requires durable append completion.");
+            }
 
-        public ResponseArtifactMetadata? Metadata { get; }
-
-        public int? StatusCode => Metadata?.StatusCode;
-
-        public string? ContentType => Metadata?.ContentType;
-
-        public string? ErrorMessage { get; }
-
-        public bool IsSuccessStatusCode => StatusCode is >= 200 and <= 299;
-
-        public static EndpointExecutionResult Persisted(EndpointSlot endpoint, ResponseArtifactMetadata metadata) =>
-            new EndpointExecutionResult(endpoint, metadata, null);
-
-        public static EndpointExecutionResult Failure(EndpointSlot endpoint, string errorMessage) =>
-            new EndpointExecutionResult(endpoint, null, errorMessage);
+            // PR2 only wires append-before-delete flow. Retention policy actions are implemented in PR3.
+            return Task.CompletedTask;
+        }
     }
+
 }

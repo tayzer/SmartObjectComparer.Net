@@ -11,6 +11,7 @@ using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Results;
 using ParityBench.NET.Domain.Runs;
 using ParityBench.NET.Engine;
+using ParityBench.NET.Engine.Pipeline;
 
 namespace ParityBench.NET.Engine.Tests;
 
@@ -394,13 +395,81 @@ public sealed class BasicComparisonRunExecutorTests
         Assert.IsTrue(result.ErrorMessage?.Contains("Endpoint B failed", StringComparison.Ordinal) == true);
     }
 
+    [TestMethod]
+    public async Task ExecuteAsync_WhenRunCompletes_RecordsStagesInOrder()
+    {
+        CapturingObservabilityRecorder recorder = new CapturingObservabilityRecorder(TimeSpan.Zero);
+        BasicComparisonRunExecutor executor = CreateExecutor(
+            CreateBatch(new[] { new RequestItem("one.json", "application/json", 2) }),
+            FakeEndpointRequestSender.ForBody("same"),
+            observabilityRecorder: recorder);
+
+        await executor.ExecuteAsync(CreateRun(), new CapturingProgressReporter());
+
+        CollectionAssert.AreEqual(
+            new[] { "Planning", "Execution", "Compare", "Persistence", "Cleanup", "Total" },
+            recorder.RunPhases.Select(phase => phase.PhaseName).ToArray());
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_WhenCleanupRuns_InvokesCleanupOnlyAfterDurableAppendCompletion()
+    {
+        FakeRunDetailStore detailStore = new FakeRunDetailStore();
+        bool appendWasDurableWhenCleanupStarted = false;
+        IRunCleanupStage cleanupStage = new DelegateCleanupStage((_, context, _) =>
+        {
+            appendWasDurableWhenCleanupStarted = context.DurableAppendCompleted && detailStore.SaveCount == 1;
+            return Task.CompletedTask;
+        });
+        BasicComparisonRunExecutor executor = CreateExecutor(
+            CreateBatch(new[] { new RequestItem("one.json", "application/json", 2) }),
+            FakeEndpointRequestSender.ForBody("same"),
+            detailStore: detailStore,
+            cleanupStage: cleanupStage);
+
+        await executor.ExecuteAsync(CreateRun(), new CapturingProgressReporter());
+
+        Assert.IsTrue(appendWasDurableWhenCleanupStarted);
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_WhenParallelCompletionDiffers_AppendsDetailsByManifestOrdinal()
+    {
+        RequestItem[] requests =
+        {
+            new RequestItem("request-b.json", "application/json", 2),
+            new RequestItem("request-a.json", "application/json", 2),
+            new RequestItem("request-c.json", "application/json", 2),
+        };
+        FakeRunDetailStore detailStore = new FakeRunDetailStore();
+        FakeEndpointRequestSender sender = new FakeEndpointRequestSender(
+            _ => new EndpointResponse(200, "application/json", CreateStream("same")),
+            delaySelector: request => request.Request.RelativePath switch
+            {
+                "request-b.json" => TimeSpan.FromMilliseconds(40),
+                "request-a.json" => TimeSpan.FromMilliseconds(2),
+                _ => TimeSpan.FromMilliseconds(8),
+            });
+        BasicComparisonRunExecutor executor = CreateExecutor(
+            CreateBatch(requests),
+            sender,
+            detailStore: detailStore);
+
+        await executor.ExecuteAsync(CreateRun(maxConcurrency: 3), new CapturingProgressReporter());
+
+        CollectionAssert.AreEqual(
+            new[] { "request-b.json", "request-a.json", "request-c.json" },
+            detailStore.SavedResults.Select(result => result.RelativePath).ToArray());
+    }
+
     private static BasicComparisonRunExecutor CreateExecutor(
         RequestBatchManifest manifest,
         FakeEndpointRequestSender sender,
         FakeRunArtifactStore? artifactStore = null,
         IResponseComparer? responseComparer = null,
         FakeRunDetailStore? detailStore = null,
-        IObservabilityRecorder? observabilityRecorder = null)
+        IObservabilityRecorder? observabilityRecorder = null,
+        IRunCleanupStage? cleanupStage = null)
     {
         FakeRequestBatchStore requestBatchStore = new FakeRequestBatchStore(manifest);
         IRunArtifactStore resolvedArtifactStore = artifactStore ?? new FakeRunArtifactStore();
@@ -411,7 +480,8 @@ public sealed class BasicComparisonRunExecutorTests
             detailStore ?? new FakeRunDetailStore(),
             responseComparer ?? new RawTextResponseComparer(resolvedArtifactStore, new HashOnlyResponseComparer()),
             null,
-            observabilityRecorder);
+                observabilityRecorder,
+                cleanupStage);
     }
     private static async Task AssertThrowsAsync<TException>(Func<Task> action)
         where TException : Exception
@@ -537,8 +607,11 @@ public sealed class BasicComparisonRunExecutorTests
 
         public List<ExceptionDiagnostic> Exceptions { get; } = new List<ExceptionDiagnostic>();
 
+        public List<(string PhaseName, TimeSpan Duration)> RunPhases { get; } = new List<(string PhaseName, TimeSpan Duration)>();
+
         public void RecordRunPhase(RunId runId, string phaseName, TimeSpan duration)
         {
+            RunPhases.Add((phaseName, duration));
         }
 
         public void RecordRequestPath(RunId runId, string relativePath, TimeSpan duration)
@@ -598,15 +671,18 @@ public sealed class BasicComparisonRunExecutorTests
     {
         private readonly Func<EndpointRequest, EndpointResponse> send;
         private readonly TimeSpan delay;
+        private readonly Func<EndpointRequest, TimeSpan>? delaySelector;
         private readonly object gate = new object();
         private readonly Dictionary<string, int> activeRequestPathCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         public FakeEndpointRequestSender(
             Func<EndpointRequest, EndpointResponse> send,
-            TimeSpan? delay = null)
+            TimeSpan? delay = null,
+            Func<EndpointRequest, TimeSpan>? delaySelector = null)
         {
             this.send = send;
             this.delay = delay ?? TimeSpan.Zero;
+            this.delaySelector = delaySelector;
         }
 
         public List<EndpointRequest> SentRequests { get; } = new List<EndpointRequest>();
@@ -630,9 +706,10 @@ public sealed class BasicComparisonRunExecutorTests
                     SentRequests.Add(request);
                 }
 
-                if (delay > TimeSpan.Zero)
+                TimeSpan effectiveDelay = delaySelector?.Invoke(request) ?? delay;
+                if (effectiveDelay > TimeSpan.Zero)
                 {
-                    await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+                    await Task.Delay(effectiveDelay, cancellationToken).ConfigureAwait(false);
                 }
 
                 return send(request);
@@ -667,6 +744,22 @@ public sealed class BasicComparisonRunExecutorTests
                 activeRequestPathCounts[relativePath] = count;
             }
         }
+    }
+
+    private sealed class DelegateCleanupStage : IRunCleanupStage
+    {
+        private readonly Func<ComparisonRun, CleanupStageContext, CancellationToken, Task> cleanup;
+
+        public DelegateCleanupStage(Func<ComparisonRun, CleanupStageContext, CancellationToken, Task> cleanup)
+        {
+            this.cleanup = cleanup;
+        }
+
+        public Task CleanupAsync(
+            ComparisonRun run,
+            CleanupStageContext context,
+            CancellationToken cancellationToken = default) =>
+            cleanup(run, context, cancellationToken);
     }
 
     private sealed class FakeRunArtifactStore : IRunArtifactStore
