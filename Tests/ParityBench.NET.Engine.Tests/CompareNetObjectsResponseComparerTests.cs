@@ -226,6 +226,78 @@ public sealed class CompareNetObjectsResponseComparerTests
     }
 
     [TestMethod]
+    public async Task CompareAsync_WhenIgnoringCollectionOrder_ReordersArrayOfComplexObjectsWithNoIgnoreRules_SuppressesDifference()
+    {
+        CompareNetObjectsResponseComparer comparer = CreateComparer(
+            ("a", () => new ReportResponseModel
+            {
+                Details = new ReportDetails { ReportId = "r-1" },
+                Applicants = new[]
+                {
+                    new Applicant { Id = "1", Name = "Alice", Score = 100, Address = new ApplicantAddress { Line1 = "a", Postcode = "AA1" } },
+                    new Applicant { Id = "2", Name = "Bob", Score = 200, Address = new ApplicantAddress { Line1 = "b", Postcode = "BB1" } },
+                },
+            }),
+            ("b", () => new ReportResponseModel
+            {
+                Details = new ReportDetails { ReportId = "r-1" },
+                Applicants = new[]
+                {
+                    new Applicant { Id = "2", Name = "Bob", Score = 200, Address = new ApplicantAddress { Line1 = "b", Postcode = "BB1" } },
+                    new Applicant { Id = "1", Name = "Alice", Score = 100, Address = new ApplicantAddress { Line1 = "a", Postcode = "AA1" } },
+                },
+            }));
+
+        RequestPairResult result = await comparer.CompareAsync(
+            CreateRequest(),
+            CreateOptions(comparisonOptions: new ComparisonOptions(ignoreCollectionOrder: true)),
+            CreateResponse(EndpointSlot.A, "a"),
+            CreateResponse(EndpointSlot.B, "b"),
+            null);
+
+        string differences = string.Join(" | ", result.Differences.Select(difference => $"{difference.PropertyPath}:{difference.ValueA}->{difference.ValueB}"));
+        Assert.AreEqual(RequestPairOutcome.Equal, result.Outcome, differences);
+    }
+
+    [TestMethod]
+    public async Task CompareAsync_WhenIgnoringCollectionOrder_WithMixedCollectionTypes_SuppressesDifference()
+    {
+        CompareNetObjectsResponseComparer comparer = CreateComparer(
+            ("a", () => new MixedCollectionResponse
+            {
+                Numbers = new List<int> { 1, 2, 3 },
+                Codes = new[] { "x", "y", "z" },
+                Applicants = new List<Applicant>
+                {
+                    new Applicant { Id = "1", Name = "Alice", Score = 100 },
+                    new Applicant { Id = "2", Name = "Bob", Score = 200 },
+                },
+                Tags = new HashSet<string> { "alpha", "beta", "gamma" },
+            }),
+            ("b", () => new MixedCollectionResponse
+            {
+                Numbers = new List<int> { 3, 2, 1 },
+                Codes = new[] { "z", "y", "x" },
+                Applicants = new List<Applicant>
+                {
+                    new Applicant { Id = "2", Name = "Bob", Score = 200 },
+                    new Applicant { Id = "1", Name = "Alice", Score = 100 },
+                },
+                Tags = new HashSet<string> { "gamma", "alpha", "beta" },
+            }));
+
+        RequestPairResult result = await comparer.CompareAsync(
+            CreateRequest(),
+            CreateOptions(comparisonOptions: new ComparisonOptions(ignoreCollectionOrder: true)),
+            CreateResponse(EndpointSlot.A, "a"),
+            CreateResponse(EndpointSlot.B, "b"),
+            null);
+
+        string differences = string.Join(" | ", result.Differences.Select(difference => $"{difference.PropertyPath}:{difference.ValueA}->{difference.ValueB}"));
+        Assert.AreEqual(RequestPairOutcome.Equal, result.Outcome, differences + " | ERROR: " + result.ErrorMessage);
+    }
+
+    [TestMethod]
     public async Task CompareAsync_WhenSmartIgnoreMatchesPropertyName_SuppressesDifference()
     {
         CompareNetObjectsResponseComparer comparer = CreateComparer(
@@ -696,6 +768,17 @@ public sealed class CompareNetObjectsResponseComparerTests
         public string? CorrelationId { get; init; }
 
         public List<int>? Values { get; init; }
+    }
+
+    public sealed class MixedCollectionResponse
+    {
+        public List<int>? Numbers { get; init; }
+
+        public string[]? Codes { get; init; }
+
+        public List<Applicant>? Applicants { get; init; }
+
+        public HashSet<string>? Tags { get; init; }
     }
 
     public sealed class ComplexResponse

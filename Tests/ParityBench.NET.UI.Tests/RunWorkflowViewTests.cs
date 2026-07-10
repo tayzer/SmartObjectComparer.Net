@@ -322,6 +322,25 @@ public sealed class RunWorkflowViewTests
     }
 
     [TestMethod]
+    public void RunWorkflow_WhenProfileForcesCollectionOrderIgnore_TogglesTheSwitchOnAndDisablesIt()
+    {
+        IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();
+
+        SetAutocompleteValue(component, 0, "SampleSoapCustomerLookupResponseEnvelope");
+        SetAutocompleteValue(component, 1, "sample-soap-to-json");
+
+        component.WaitForAssertion(() =>
+        {
+            IElement collectionOrderSwitch = component.FindAll("label.mud-switch")
+                .Single(label => label.TextContent.Contains("Ignore Collection Order", StringComparison.Ordinal));
+            IElement input = collectionOrderSwitch.QuerySelector("input")!;
+
+            Assert.IsTrue(input.HasAttribute("checked"), "Badge says the profile forces collection-order ignoring, so the switch should show on, not off.");
+            Assert.IsTrue(input.HasAttribute("disabled"), "A profile-forced setting can't actually be turned off (the executor always ORs it back in), so the switch should be disabled rather than implying the user has control.");
+        });
+    }
+
+    [TestMethod]
     public void RunWorkflow_WhenCustomEndpointIsTyped_UsesCustomValue()
     {
         IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();

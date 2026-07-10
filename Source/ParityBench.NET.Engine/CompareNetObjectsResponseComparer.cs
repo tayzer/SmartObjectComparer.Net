@@ -474,7 +474,8 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
 
             if (value is IEnumerable enumerable && value is not string)
             {
-                IList items = CreateListClone(type, GetEnumerableElementType(type));
+                Type elementType = GetEnumerableElementType(type);
+                IList items = CreateListClone(type, elementType);
                 visited[value] = items;
                 foreach ((object? item, int index) in enumerable.Cast<object?>().Select((item, index) => (item, index)))
                 {
@@ -491,7 +492,7 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
                     }
                 }
 
-                return items;
+                return ConvertToOriginalCollectionType(type, elementType, items);
             }
 
             object? cloneObject = CreateObjectClone(type);
@@ -564,6 +565,31 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
 
             Type listType = typeof(List<>).MakeGenericType(elementType);
             return (IList)Activator.CreateInstance(listType)!;
+        }
+
+        /// <summary>
+        /// Collection types that aren't IList-constructible (HashSet, Queue, Stack, ImmutableList, etc.)
+        /// get built up as a temporary List during normalization/sorting. Convert back to the original
+        /// declared type here so reflection-based property assignment doesn't throw.
+        /// </summary>
+        private static object ConvertToOriginalCollectionType(Type sourceType, Type elementType, IList items)
+        {
+            if (sourceType.IsInstanceOfType(items))
+            {
+                return items;
+            }
+
+            if (!sourceType.IsInterface)
+            {
+                ConstructorInfo? enumerableConstructor = sourceType.GetConstructor(
+                    new[] { typeof(IEnumerable<>).MakeGenericType(elementType) });
+                if (enumerableConstructor is not null)
+                {
+                    return enumerableConstructor.Invoke(new object?[] { items })!;
+                }
+            }
+
+            return items;
         }
 
         private static IDictionary CreateDictionaryClone(Type sourceType)

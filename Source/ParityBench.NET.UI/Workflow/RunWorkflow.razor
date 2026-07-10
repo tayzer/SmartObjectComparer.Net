@@ -118,11 +118,11 @@
                                 </MudStack>
                             </MudStack>
                         }
-                        <MudSwitch @bind-Value="ignoreCollectionOrder" Label="Ignore Collection Order" Color="Color.Primary" />
-                        <MudSwitch @bind-Value="ignoreStringCase" Label="Ignore String Case" Color="Color.Primary" />
-                        <MudSwitch @bind-Value="ignoreTrailingWhitespace" Label="Ignore Trailing Spaces/Tabs at End of Strings" Color="Color.Primary" />
-                        <MudSwitch @bind-Value="treatNullAndEmptyCollectionsEqual" Label="Treat null and empty collections as equal" Color="Color.Primary" />
-                        <MudSwitch @bind-Value="ignoreXmlNamespaces" Label="Ignore XML Namespaces" Color="Color.Primary" />
+                        <MudSwitch @bind-Value="ignoreCollectionOrder" Label="Ignore Collection Order" Color="Color.Primary" Disabled="@IsIgnoreCollectionOrderForcedByProfile" />
+                        <MudSwitch @bind-Value="ignoreStringCase" Label="Ignore String Case" Color="Color.Primary" Disabled="@IsIgnoreStringCaseForcedByProfile" />
+                        <MudSwitch @bind-Value="ignoreTrailingWhitespace" Label="Ignore Trailing Spaces/Tabs at End of Strings" Color="Color.Primary" Disabled="@IsIgnoreTrailingWhitespaceForcedByProfile" />
+                        <MudSwitch @bind-Value="treatNullAndEmptyCollectionsEqual" Label="Treat null and empty collections as equal" Color="Color.Primary" Disabled="@IsTreatNullAndEmptyCollectionsForcedByProfile" />
+                        <MudSwitch @bind-Value="ignoreXmlNamespaces" Label="Ignore XML Namespaces" Color="Color.Primary" Disabled="@IsIgnoreXmlNamespacesForcedByProfile" />
                     </MudStack>
                 </MudExpansionPanel>
                 <MudExpansionPanel Text="Ignore Rules">
@@ -714,7 +714,31 @@
     {
         selectedProfileOption = availableProfileOptions.FirstOrDefault(profile =>
             string.Equals(profile.ProfileId, contractProfileId, StringComparison.OrdinalIgnoreCase));
+
+        if (selectedProfileOption is not null)
+        {
+            ApplyProfileForcedDefaults(selectedProfileOption.DefaultComparisonRules);
+        }
     }
+
+    // The executor always ORs profile defaults into the run's comparison options
+    // (see BasicComparisonRunExecutor.CreateRunOptionsWithProfileDefaults), so a
+    // profile-forced setting can never actually be switched off. Reflect that here
+    // instead of showing a toggle that silently has no effect.
+    private void ApplyProfileForcedDefaults(ComparisonRuleDefaults defaults)
+    {
+        ignoreCollectionOrder |= defaults.IgnoreCollectionOrder;
+        ignoreStringCase |= defaults.IgnoreStringCase;
+        ignoreTrailingWhitespace |= defaults.IgnoreTrailingWhitespaceAtEnd;
+        treatNullAndEmptyCollectionsEqual |= defaults.TreatNullAndEmptyCollectionsAsEqual;
+        ignoreXmlNamespaces |= defaults.IgnoreXmlNamespaces;
+    }
+
+    private bool IsIgnoreCollectionOrderForcedByProfile => selectedProfileOption?.DefaultComparisonRules.IgnoreCollectionOrder == true;
+    private bool IsIgnoreStringCaseForcedByProfile => selectedProfileOption?.DefaultComparisonRules.IgnoreStringCase == true;
+    private bool IsIgnoreTrailingWhitespaceForcedByProfile => selectedProfileOption?.DefaultComparisonRules.IgnoreTrailingWhitespaceAtEnd == true;
+    private bool IsTreatNullAndEmptyCollectionsForcedByProfile => selectedProfileOption?.DefaultComparisonRules.TreatNullAndEmptyCollectionsAsEqual == true;
+    private bool IsIgnoreXmlNamespacesForcedByProfile => selectedProfileOption?.DefaultComparisonRules.IgnoreXmlNamespaces == true;
 
     private void ApplyProfileEndpointSuggestions()
     {
