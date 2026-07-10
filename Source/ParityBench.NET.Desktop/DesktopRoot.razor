@@ -1,10 +1,13 @@
-<MudThemeProvider />
-<MudPopoverProvider />
-<MudDialogProvider />
-<MudSnackbarProvider />
+@using ParityBench.NET.UI.Theming
 
-<MudLayout>
-    <MudMainContent Class="pa-4">
-        <ParityBenchHome />
-    </MudMainContent>
-</MudLayout>
+<ParityBenchThemeProvider>
+    <MudPopoverProvider />
+    <MudDialogProvider />
+    <MudSnackbarProvider />
+
+    <MudLayout>
+        <MudMainContent Class="pa-4">
+            <ParityBenchHome />
+        </MudMainContent>
+    </MudLayout>
+</ParityBenchThemeProvider>

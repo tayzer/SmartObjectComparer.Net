@@ -14,6 +14,7 @@ using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
 using ParityBench.NET.UI.Workflow;
+using ParityBench.NET.UI.Theming;
 
 namespace ParityBench.NET.UI.Tests;
 
@@ -30,6 +31,7 @@ public sealed class RunWorkflowViewTests
         testContext = new BunitContext();
         testContext.JSInterop.Mode = JSRuntimeMode.Loose;
         testContext.Services.AddMudServices();
+        testContext.Services.AddScoped<ParityBenchThemeState>();
         testContext.RenderTree.Add<MudTestRoot>(parameters => { });
         dataSource = new FakeRunWorkflowViewDataSource();
         sourcePicker = new FakeRequestSourcePicker();
@@ -627,5 +629,3 @@ public sealed class RunWorkflowViewTests
                 2);
     }
 }
-
-

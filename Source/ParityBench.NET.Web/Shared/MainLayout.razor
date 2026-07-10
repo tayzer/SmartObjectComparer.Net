@@ -1,15 +1,23 @@
 @inherits LayoutComponentBase
+@using ParityBench.NET.UI.Theming
 
-<MudThemeProvider />
-<MudPopoverProvider />
-<MudDialogProvider />
-<MudSnackbarProvider />
+<ParityBenchThemeProvider>
+    <MudPopoverProvider />
+    <MudDialogProvider />
+    <MudSnackbarProvider />
 
-<MudLayout>
-    <MudAppBar Elevation="1" Dense="true">
-        <MudText Typo="Typo.h6">ParityBench.NET</MudText>
-    </MudAppBar>
-    <MudMainContent Class="pa-4">
-        @Body
-    </MudMainContent>
-</MudLayout>
+    <MudLayout>
+        <MudAppBar Elevation="0" Dense="true">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="w-100">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@Icons.Material.Filled.CompareArrows" Size="Size.Small" />
+                    <MudText Typo="Typo.subtitle1">ParityBench.NET</MudText>
+                </MudStack>
+                <ThemeModeToggle />
+            </MudStack>
+        </MudAppBar>
+        <MudMainContent Class="pa-4">
+            @Body
+        </MudMainContent>
+    </MudLayout>
+</ParityBenchThemeProvider>

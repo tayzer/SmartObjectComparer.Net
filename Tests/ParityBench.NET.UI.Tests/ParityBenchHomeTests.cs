@@ -18,6 +18,7 @@ using ParityBench.NET.Domain.Runs;
 using ParityBench.NET.UI.Results;
 using ParityBench.NET.UI.Shell;
 using ParityBench.NET.UI.Workflow;
+using ParityBench.NET.UI.Theming;
 
 namespace ParityBench.NET.UI.Tests;
 
@@ -32,6 +33,7 @@ public sealed class ParityBenchHomeTests
         testContext = new BunitContext();
         testContext.JSInterop.Mode = JSRuntimeMode.Loose;
         testContext.Services.AddMudServices();
+        testContext.Services.AddScoped<ParityBenchThemeState>();
         testContext.RenderTree.Add<MudTestRoot>(parameters => { });
         testContext.Services.AddSingleton<IRunWorkflowViewDataSource>(new FakeRunWorkflowViewDataSource());
         testContext.Services.AddSingleton<IRunResultsViewDataSource>(new FakeRunResultsViewDataSource());
@@ -46,12 +48,12 @@ public sealed class ParityBenchHomeTests
     }
 
     [TestMethod]
-    public void ParityBenchHome_WhenRendered_ShowsV1LikeHeaderAndTabs()
+    public void ParityBenchHome_WhenRendered_ShowsWorkspaceHeaderAndTabs()
     {
         IRenderedComponent<ParityBenchHome> component = testContext.Render<ParityBenchHome>();
 
-        StringAssert.Contains(component.Markup, "File Comparison Tool (XML &amp; JSON)");
-        StringAssert.Contains(component.Markup, "Request Comparison (A/B)");
+        StringAssert.Contains(component.Markup, "ParityBench.NET");
+        StringAssert.Contains(component.Markup, "Compare Requests");
         StringAssert.Contains(component.Markup, "Run History");
         StringAssert.Contains(component.Markup, "Step 1: Upload Request Files");
     }

@@ -21,6 +21,7 @@ using ParityBench.NET.Engine.Pipeline;
 using ParityBench.NET.Infrastructure;
 using ParityBench.NET.Infrastructure.Reports;
 using ParityBench.NET.UI.Results;
+using ParityBench.NET.UI.Theming;
 using ParityBench.NET.UI.Workflow;
 using ParityBench.NET.Workspaces;
 
@@ -44,6 +45,7 @@ public partial class App : System.Windows.Application
             {
                 services.AddWpfBlazorWebView();
                 services.AddMudServices();
+                services.AddScoped<ParityBenchThemeState>();
 
                 string workspaceRoot = context.Configuration["ParityBench:WorkspaceRoot"]
                     ?? System.IO.Path.Combine(

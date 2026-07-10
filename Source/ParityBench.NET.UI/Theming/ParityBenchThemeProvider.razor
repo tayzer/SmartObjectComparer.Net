@@ -1,0 +1,116 @@
+@implements IDisposable
+@inject IJSRuntime JS
+@inject ParityBenchThemeState ThemeState
+
+<MudThemeProvider Theme="theme" IsDarkMode="@ThemeState.IsDarkMode" />
+<CascadingValue Value="ThemeState" IsFixed="false">
+    @ChildContent
+</CascadingValue>
+
+@code {
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    private readonly MudTheme theme = new MudTheme
+    {
+        PaletteLight = new PaletteLight
+        {
+            Primary = "#2563eb",
+            Secondary = "#475569",
+            Tertiary = "#0f766e",
+            AppbarBackground = "#ffffff",
+            AppbarText = "#0f172a",
+            Background = "#f6f8fb",
+            BackgroundGray = "#eef2f7",
+            Surface = "#ffffff",
+            DrawerBackground = "#ffffff",
+            TextPrimary = "#0f172a",
+            TextSecondary = "#64748b",
+            LinesDefault = "#d7dee8",
+            TableHover = "#eef4ff",
+            ActionDefault = "#475569",
+        },
+        PaletteDark = new PaletteDark
+        {
+            Primary = "#7aa2ff",
+            Secondary = "#a8b3c7",
+            Tertiary = "#5eead4",
+            AppbarBackground = "#111827",
+            AppbarText = "#f8fafc",
+            Background = "#0b1120",
+            BackgroundGray = "#111827",
+            Surface = "#172033",
+            DrawerBackground = "#111827",
+            TextPrimary = "#f8fafc",
+            TextSecondary = "#bac6d8",
+            LinesDefault = "#2b364a",
+            TableHover = "#1f2a44",
+            ActionDefault = "#d5deed",
+        },
+        LayoutProperties = new LayoutProperties
+        {
+            DefaultBorderRadius = "6px",
+        },
+        Typography = new Typography
+        {
+            Default = new DefaultTypography
+            {
+                FontFamily = new[] { "Inter", "Segoe UI", "Roboto", "Arial", "sans-serif" },
+                LetterSpacing = "0",
+            },
+            H4 = new H4Typography
+            {
+                FontWeight = "650",
+                LetterSpacing = "0",
+            },
+            H5 = new H5Typography
+            {
+                FontWeight = "650",
+                LetterSpacing = "0",
+            },
+            H6 = new H6Typography
+            {
+                FontWeight = "650",
+                LetterSpacing = "0",
+            },
+        },
+    };
+
+    protected override void OnInitialized()
+    {
+        ThemeState.Changed += HandleThemeChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            string? storedMode = await JS.InvokeAsync<string?>("parityBenchTheme.getStoredMode");
+            bool systemPrefersDark = await JS.InvokeAsync<bool>("parityBenchTheme.getSystemPrefersDark");
+            ThemeState.Initialize(ParseThemeMode(storedMode), systemPrefersDark);
+        }
+        catch (InvalidOperationException)
+        {
+            ThemeState.Initialize(null, false);
+        }
+        catch (JSException)
+        {
+            ThemeState.Initialize(null, false);
+        }
+    }
+
+    private void HandleThemeChanged() => InvokeAsync(StateHasChanged);
+
+    private static ThemeMode? ParseThemeMode(string? storedMode) =>
+        Enum.TryParse(storedMode, ignoreCase: true, out ThemeMode parsed) ? parsed : null;
+
+    public void Dispose()
+    {
+        ThemeState.Changed -= HandleThemeChanged;
+    }
+}

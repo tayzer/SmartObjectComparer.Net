@@ -6,7 +6,14 @@
 @inject IRunWorkflowViewDataSource DataSource
 @inject IRequestSourcePicker SourcePicker
 
-<MudStack Spacing="3">
+<style>
+    .pb-workflow-root { color: var(--mud-palette-text-primary); }
+    .pb-workflow-section { border: 1px solid var(--mud-palette-lines-default); background: var(--mud-palette-surface); }
+    .pb-workflow-section .mud-input-control { margin-top: 0; }
+    .pb-workflow-heading { display: flex; align-items: center; gap: .45rem; }
+    .pb-workflow-muted-panel { background: var(--mud-palette-background-grey); border: 1px solid var(--mud-palette-lines-default); }
+</style>
+<MudStack Spacing="3" Class="pb-workflow-root">
     <MudStack Spacing="0">
         <MudText Typo="Typo.h6">Request Comparison</MudText>
         <MudText Typo="Typo.body2" Color="Color.Default">Upload request files and compare responses from two endpoints.</MudText>
@@ -21,9 +28,9 @@
         <MudAlert Severity="Severity.Success" Variant="Variant.Outlined">@successMessage</MudAlert>
     }
 
-    <MudPaper Elevation="1" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
+    <MudPaper Elevation="0" Class="pa-3 pb-workflow-section">
         <MudStack Spacing="2">
-            <MudText Typo="Typo.subtitle1">Step 1: Upload Request Files</MudText>
+            <MudText Typo="Typo.subtitle1" Class="pb-workflow-heading"><MudIcon Icon="@Icons.Material.Filled.UploadFile" Size="Size.Small" />Step 1: Upload Request Files</MudText>
             @if (defaults.Presets.Count > 0)
             {
                 <MudSelect T="string"
@@ -70,9 +77,9 @@
         </MudStack>
     </MudPaper>
 
-    <MudPaper Elevation="1" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
+    <MudPaper Elevation="0" Class="pa-3 pb-workflow-section">
         <MudStack Spacing="2">
-            <MudText Typo="Typo.subtitle1">Step 2: Model &amp; Configuration</MudText>
+            <MudText Typo="Typo.subtitle1" Class="pb-workflow-heading"><MudIcon Icon="@Icons.Material.Filled.Tune" Size="Size.Small" />Step 2: Model &amp; Configuration</MudText>
             <MudGrid Spacing="2">
                 <MudItem xs="12" md="4">
                     <MudAutocomplete T="string"
@@ -128,7 +135,7 @@
                 <MudExpansionPanel Text="Ignore Rules">
                     @if (selectedProfileOption?.DefaultComparisonRules.IgnoreRules.Count > 0)
                     {
-                        <MudPaper Outlined="true" Class="pa-3 mb-3">
+                        <MudPaper Outlined="true" Class="pa-3 mb-3 pb-workflow-muted-panel">
                             <MudStack Spacing="2">
                                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="flex-wrap">
                                     <MudStack Spacing="0">
@@ -227,9 +234,9 @@
         </MudStack>
     </MudPaper>
 
-    <MudPaper Elevation="1" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
+    <MudPaper Elevation="0" Class="pa-3 pb-workflow-section">
         <MudStack Spacing="2">
-            <MudText Typo="Typo.subtitle1">Step 3: Configure Endpoints</MudText>
+            <MudText Typo="Typo.subtitle1" Class="pb-workflow-heading"><MudIcon Icon="@Icons.Material.Filled.Hub" Size="Size.Small" />Step 3: Configure Endpoints</MudText>
             <MudGrid Spacing="2">
                 <MudItem xs="12" md="6">
                     <MudAutocomplete T="string"
@@ -288,9 +295,9 @@
         </MudStack>
     </MudPaper>
 
-    <MudPaper Elevation="1" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
+    <MudPaper Elevation="0" Class="pa-3 pb-workflow-section">
         <MudStack Spacing="2">
-            <MudText Typo="Typo.subtitle1">Step 4: Run Comparison</MudText>
+            <MudText Typo="Typo.subtitle1" Class="pb-workflow-heading"><MudIcon Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Small" />Step 4: Run Comparison</MudText>
             <MudStack Row="true" Spacing="2" Class="flex-wrap">
                 <MudButton Variant="Variant.Filled"
                            Color="Color.Success"
@@ -353,9 +360,9 @@
         </MudStack>
     </MudPaper>
 
-    <MudPaper Elevation="1" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
+    <MudPaper Elevation="0" Class="pa-3 pb-workflow-section">
         <MudStack Spacing="2">
-            <MudText Typo="Typo.subtitle1">Static Report</MudText>
+            <MudText Typo="Typo.subtitle1" Class="pb-workflow-heading"><MudIcon Icon="@Icons.Material.Filled.Article" Size="Size.Small" />Static Report</MudText>
             <MudGrid Spacing="2">
                 <MudItem xs="12" md="5">
                     <MudTextField T="string" Label="Report Output" @bind-Value="reportOutputDirectory" Immediate="true" Variant="Variant.Outlined" />

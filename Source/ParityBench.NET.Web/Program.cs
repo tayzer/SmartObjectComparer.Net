@@ -16,6 +16,7 @@ using ParityBench.NET.Engine.Pipeline;
 using ParityBench.NET.Infrastructure;
 using ParityBench.NET.Infrastructure.Reports;
 using ParityBench.NET.UI.Results;
+using ParityBench.NET.UI.Theming;
 using ParityBench.NET.UI.Workflow;
 using ParityBench.NET.Workspaces;
 
@@ -38,6 +39,7 @@ builder.Services
 builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
 builder.Services.AddMudServices();
+builder.Services.AddScoped<ParityBenchThemeState>();
 string fixtureBaseUrl = builder.Configuration["ParityBench:RequestDefaults:FixtureBaseUrl"]
     ?? RequestComparisonFixtureDefaults.DefaultFixtureBaseUrl;
 RegisterV2Services(builder.Services, workspaceRoot, fixtureBaseUrl, builder.Configuration["ParityBench:AcceptedDifferences:StorePath"], builder.Configuration);

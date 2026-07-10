@@ -1,24 +1,31 @@
 @inject IRunResultsViewDataSource DataSource
 
-<MudThemeProvider />
-<MudPopoverProvider />
-<MudDialogProvider />
-<MudSnackbarProvider />
+<ParityBenchThemeProvider>
+    <MudPopoverProvider />
+    <MudDialogProvider />
+    <MudSnackbarProvider />
 
-<MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
-    @if (isLoading)
-    {
-        <MudProgressCircular Indeterminate="true" Size="Size.Small" />
-    }
-    else if (errorMessage is not null)
-    {
-        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@errorMessage</MudAlert>
-    }
-    else
-    {
-        <RunResult RunId="runId" />
-    }
-</MudContainer>
+    <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+        <MudStack Spacing="3">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="flex-wrap">
+                <MudText Typo="Typo.h6">ParityBench.NET Report</MudText>
+                <ThemeModeToggle />
+            </MudStack>
+            @if (isLoading)
+            {
+                <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+            }
+            else if (errorMessage is not null)
+            {
+                <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@errorMessage</MudAlert>
+            }
+            else
+            {
+                <RunResult RunId="runId" />
+            }
+        </MudStack>
+    </MudContainer>
+</ParityBenchThemeProvider>
 
 @code {
     private RunId? runId;

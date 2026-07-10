@@ -1,30 +1,38 @@
-<MudStack Spacing="4">
-    <MudPaper Elevation="2" Class="pa-4">
-        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="flex-wrap">
+<style>
+    .pb-home-shell { color: var(--mud-palette-text-primary); }
+    .pb-workspace-header { border: 1px solid var(--mud-palette-lines-default); background: var(--mud-palette-surface); }
+    .pb-selected-run { max-width: 34rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pb-tab-panel { padding-top: 1rem; }
+</style>
+
+<MudStack Spacing="3" Class="pb-home-shell">
+    <MudPaper Elevation="0" Class="pa-3 pb-workspace-header">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="flex-wrap" Spacing="2">
             <MudStack Spacing="0">
-                <MudText Typo="Typo.h4">File Comparison Tool (XML &amp; JSON)</MudText>
-                <MudText Typo="Typo.caption" Color="Color.Secondary">ParityBench.NET V2 request comparison</MudText>
+                <MudText Typo="Typo.h5">ParityBench.NET</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Request comparison workspace</MudText>
             </MudStack>
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                <MudText Typo="Typo.caption" Color="Color.Default">@SelectedRunDisplay</MudText>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                <MudChip T="string" Size="Size.Small" Color="@SelectedRunColor" Variant="Variant.Outlined" Icon="@SelectedRunIcon" Class="pb-selected-run">@SelectedRunDisplay</MudChip>
+                <ThemeModeToggle />
             </MudStack>
         </MudStack>
     </MudPaper>
 
-    <MudTabs Rounded="true" Border="true" @bind-ActivePanelIndex="activeTabIndex">
-        <MudTabPanel Text="Request Comparison (A/B)">
-            <MudStack Spacing="4">
+    <MudTabs Rounded="false" Border="true" Elevation="0" PanelClass="pb-tab-panel" @bind-ActivePanelIndex="activeTabIndex">
+        <MudTabPanel Text="Compare Requests" Icon="@Icons.Material.Filled.CompareArrows">
+            <MudStack Spacing="3">
                 <RunWorkflow RunSelected="SelectRun" RunChanged="HandleRunChanged" />
                 @if (ShouldShowSelectedRunResults)
                 {
-                    <MudPaper Elevation="2" Class="pa-4">
+                    <MudPaper Elevation="0" Outlined="true" Class="pa-3">
                         <MudText Typo="Typo.h6" Class="mb-3">Request Comparison Results</MudText>
                         <RunResult RunId="selectedRunId" RefreshVersion="resultRefreshVersion" />
                     </MudPaper>
                 }
             </MudStack>
         </MudTabPanel>
-        <MudTabPanel Text="Run History">
+        <MudTabPanel Text="Run History" Icon="@Icons.Material.Filled.History">
             <MudGrid Spacing="3">
                 <MudItem xs="12" md="4" @key="historyVersion">
                     <RunHistory RunSelected="SelectHistoricalRun" />
@@ -51,6 +59,19 @@
         : $"Selected run: {selectedRunId.Value.Value}";
 
     private bool ShouldShowSelectedRunResults => selectedRunId is not null && selectedRun?.IsTerminal == true;
+
+    private Color SelectedRunColor => selectedRun?.Status switch
+    {
+        RunStatus.Completed => Color.Success,
+        RunStatus.Failed => Color.Error,
+        RunStatus.Cancelled => Color.Warning,
+        RunStatus.Executing or RunStatus.Comparing or RunStatus.Analyzing => Color.Primary,
+        _ => Color.Default,
+    };
+
+    private string SelectedRunIcon => selectedRunId is null
+        ? Icons.Material.Filled.RadioButtonUnchecked
+        : selectedRun?.IsTerminal == true ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.PlayCircle;
 
     private void SelectRun(RunId runId)
     {

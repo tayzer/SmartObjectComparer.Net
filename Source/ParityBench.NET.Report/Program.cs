@@ -8,12 +8,14 @@ using ParityBench.NET.Application.AcceptedDifferences;
 using ParityBench.NET.Report;
 using ParityBench.NET.Report.Results;
 using ParityBench.NET.UI.Results;
+using ParityBench.NET.UI.Theming;
 
 WebAssemblyHostBuilder builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<ReportRoot>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
 builder.Services.AddMudServices();
+builder.Services.AddScoped<ParityBenchThemeState>();
 builder.Services.AddScoped(_ => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
 builder.Services.AddScoped<IRunResultsViewDataSource, StaticReportRunResultsViewDataSource>();
 builder.Services.AddScoped<IAcceptedDifferenceUseCases, StaticReportAcceptedDifferenceUseCases>();

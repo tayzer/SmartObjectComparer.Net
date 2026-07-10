@@ -13,6 +13,7 @@ using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Results;
 using ParityBench.NET.Domain.Runs;
 using ParityBench.NET.UI.Results;
+using ParityBench.NET.UI.Theming;
 
 namespace ParityBench.NET.UI.Tests;
 
@@ -29,6 +30,7 @@ public sealed class RunResultsViewTests
         testContext = new BunitContext();
         testContext.JSInterop.Mode = JSRuntimeMode.Loose;
         testContext.Services.AddMudServices();
+        testContext.Services.AddScoped<ParityBenchThemeState>();
         testContext.RenderTree.Add<MudTestRoot>(parameters => { });
         dataSource = new FakeRunResultsViewDataSource();
         acceptedDifferences = new InMemoryAcceptedDifferenceUseCases(isReadOnly: false);
@@ -609,4 +611,3 @@ public sealed class RunResultsViewTests
         }
     }
 }
-

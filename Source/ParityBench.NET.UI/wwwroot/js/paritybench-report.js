@@ -10,7 +10,33 @@ window.parityBenchDownloadText = (fileName, contentType, content) => {
     anchor.remove();
     URL.revokeObjectURL(url);
 };
+window.parityBenchTheme = {
+    getStoredMode: () => {
+        try {
+            return window.localStorage.getItem("paritybench.themeMode");
+        } catch {
+            return null;
+        }
+    },
+    setStoredMode: (mode) => {
+        try {
+            if (!mode) {
+                window.localStorage.removeItem("paritybench.themeMode");
+                return;
+            }
 
+            window.localStorage.setItem("paritybench.themeMode", mode);
+        } catch {
+        }
+    },
+    getSystemPrefersDark: () => {
+        try {
+            return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+        } catch {
+            return false;
+        }
+    }
+};
 window.parityBenchScrollToElement = (id) => {
     const element = document.getElementById(id);
     if (element) {
