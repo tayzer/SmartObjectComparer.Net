@@ -22,8 +22,7 @@ internal static class ResponseMasker
 
         using MemoryStream original = new MemoryStream();
         await body.CopyToAsync(original, cancellationToken).ConfigureAwait(false);
-        byte[] originalBytes = original.ToArray();
-        string text = Encoding.UTF8.GetString(originalBytes);
+        string text = Encoding.UTF8.GetString(original.GetBuffer(), 0, (int)original.Length);
 
         string? maskedText = IsJson(contentType, text)
             ? TryMaskJson(text, maskRules)

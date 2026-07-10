@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -15,6 +16,12 @@ namespace ParityBench.NET.Engine;
 public sealed class CompareNetObjectsResponseComparer : IResponseComparer
 {
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+
+    // Rule patterns repeat across every difference in a response; compile once per
+    // distinct rule instead of rebuilding the pattern string and regex on each check.
+    private static readonly ConcurrentDictionary<string, Regex> PathRulePatternCache = new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, Regex> NameRulePatternCache = new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, Regex> WildcardRulePatternCache = new(StringComparer.Ordinal);
     private readonly IRunArtifactStore artifactStore;
     private readonly IResponseBodyDeserializer deserializer;
 
@@ -280,26 +287,38 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
             return true;
         }
 
-        string pattern = "^" + Regex.Escape(rulePath)
-            .Replace("\\[\\*\\]", "\\[\\d+\\]", StringComparison.Ordinal)
-            .Replace("\\*", ".*", StringComparison.Ordinal) + "(?:\\[\\d+\\])?(\\..*)?$";
+        Regex regex = PathRulePatternCache.GetOrAdd(rulePath, static key =>
+        {
+            string pattern = "^" + Regex.Escape(key)
+                .Replace("\\[\\*\\]", "\\[\\d+\\]", StringComparison.Ordinal)
+                .Replace("\\*", ".*", StringComparison.Ordinal) + "(?:\\[\\d+\\])?(\\..*)?$";
+            return new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout);
+        });
 
-        return Regex.IsMatch(propertyPath, pattern, RegexOptions.IgnoreCase, RegexTimeout);
+        return regex.IsMatch(propertyPath);
     }
 
     private static bool MatchesPattern(string propertyPath, string pattern)
     {
         try
         {
-            return Regex.IsMatch(propertyPath, pattern, RegexOptions.IgnoreCase, RegexTimeout);
+            Regex regex = NameRulePatternCache.GetOrAdd(
+                pattern,
+                static (key, timeout) => new Regex(key, RegexOptions.IgnoreCase | RegexOptions.Compiled, timeout),
+                RegexTimeout);
+            return regex.IsMatch(propertyPath);
         }
         catch (ArgumentException)
         {
-            string wildcardPattern = "^" + Regex.Escape(pattern)
-                .Replace("\\*", ".*", StringComparison.Ordinal)
-                .Replace("\\?", ".", StringComparison.Ordinal) + "$";
+            Regex wildcardRegex = WildcardRulePatternCache.GetOrAdd(pattern, static key =>
+            {
+                string wildcardPattern = "^" + Regex.Escape(key)
+                    .Replace("\\*", ".*", StringComparison.Ordinal)
+                    .Replace("\\?", ".", StringComparison.Ordinal) + "$";
+                return new Regex(wildcardPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled, RegexTimeout);
+            });
 
-            return Regex.IsMatch(propertyPath, wildcardPattern, RegexOptions.IgnoreCase, RegexTimeout);
+            return wildcardRegex.IsMatch(propertyPath);
         }
     }
 

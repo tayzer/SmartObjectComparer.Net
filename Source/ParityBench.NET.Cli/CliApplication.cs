@@ -20,6 +20,11 @@ namespace ParityBench.NET.Cli;
 
 public static class CliApplication
 {
+    // Bounded connection lifetime so a long-lived singleton HttpClient still
+    // picks up DNS changes for endpoints under test instead of pinning forever.
+    private static HttpClient CreateSharedHttpClient() =>
+        new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) });
+
     public static async Task<int> RunAsync(
         string[] args,
         TextWriter output,
@@ -93,7 +98,7 @@ public static class CliApplication
         });
         services.AddRetentionConfiguration(configuration);
         services.Configure<RequestComparisonRunDefaults>(configuration.GetSection("RequestComparison:Defaults"));
-        services.AddSingleton(new HttpClient());
+        services.AddSingleton(CreateSharedHttpClient());
         services.AddSingleton<IRequestBatchStore>(_ => new FileSystemRequestBatchStore(workspaceRoot));
         services.AddSingleton<IRunStore>(_ => new FileSystemRunStore(workspaceRoot));
         services.AddSingleton<IRunDetailStore>(_ => new FileSystemRunDetailStore(workspaceRoot));

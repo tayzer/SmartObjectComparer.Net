@@ -18,7 +18,9 @@ public sealed class FileSystemRunStore : IRunStore
 
     private readonly JsonSerializerOptions jsonOptions = new JsonSerializerOptions
     {
-        WriteIndented = true,
+        // Not indented: this snapshot is rewritten on every progress tick (up to
+        // dozens/sec across parallel workers), so skip the pretty-print cost.
+        WriteIndented = false,
         Converters = { new JsonStringEnumConverter() },
     };
 

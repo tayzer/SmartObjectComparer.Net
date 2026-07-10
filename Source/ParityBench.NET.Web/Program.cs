@@ -58,12 +58,17 @@ app.MapFallbackToPage("/_Host");
 
 app.Run();
 
+// Bounded connection lifetime so a long-lived singleton HttpClient still
+// picks up DNS changes for endpoints under test instead of pinning forever.
+static HttpClient CreateSharedHttpClient() =>
+    new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) });
+
 static void RegisterV2Services(IServiceCollection services, string workspaceRoot, string fixtureBaseUrl, string? acceptedDifferenceStorePath, IConfiguration configuration)
 {
     services.AddParityBenchObservability(configuration);
     services.AddRetentionConfiguration(configuration);
     services.Configure<RequestComparisonRunDefaults>(configuration.GetSection("RequestComparison:Defaults"));
-    services.AddSingleton(new HttpClient());
+    services.AddSingleton(CreateSharedHttpClient());
     services.AddSingleton<IRequestBatchStore>(_ => new FileSystemRequestBatchStore(workspaceRoot));
     services.AddSingleton<IRunStore>(_ => new FileSystemRunStore(workspaceRoot));
     services.AddSingleton<IRunDetailStore>(_ => new FileSystemRunDetailStore(workspaceRoot));

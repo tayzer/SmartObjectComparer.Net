@@ -488,6 +488,8 @@
             }
 
             isRunning = true;
+            isBusy = false;
+            await InvokeAsync(StateHasChanged);
             await PollUntilTerminalAsync(currentRun.Id);
         }
         catch (Exception ex)
