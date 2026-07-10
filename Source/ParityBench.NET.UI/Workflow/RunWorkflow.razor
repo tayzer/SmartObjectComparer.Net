@@ -128,9 +128,68 @@
                 <MudExpansionPanel Text="Ignore Rules">
                     @if (selectedProfileOption?.DefaultComparisonRules.IgnoreRules.Count > 0)
                     {
-                        <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true" Class="mb-3">
-                            @selectedProfileOption.DefaultComparisonRules.IgnoreRules.Count profile default ignore rule@(selectedProfileOption.DefaultComparisonRules.IgnoreRules.Count == 1 ? string.Empty : "s") will be applied automatically.
-                        </MudAlert>
+                        <MudPaper Outlined="true" Class="pa-3 mb-3">
+                            <MudStack Spacing="2">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="flex-wrap">
+                                    <MudStack Spacing="0">
+                                        <MudText Typo="Typo.subtitle2">Profile Default Ignore Rules</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            @GetProfileDefaultIgnoreRuleCountText(selectedProfileOption.DefaultComparisonRules.IgnoreRules.Count) will be applied automatically.
+                                        </MudText>
+                                    </MudStack>
+                                    <MudButton Variant="Variant.Text"
+                                               Size="Size.Small"
+                                               StartIcon="@(showProfileDefaultIgnoreRules ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                               OnClick="ToggleProfileDefaultIgnoreRules">
+                                        @(showProfileDefaultIgnoreRules ? "Hide Rules" : "View Rules")
+                                    </MudButton>
+                                </MudStack>
+
+                                @if (showProfileDefaultIgnoreRules)
+                                {
+                                    <MudTextField T="string"
+                                                  @bind-Value="profileDefaultIgnoreRuleSearchTerm"
+                                                  Label="Filter Profile Default Ignore Rules"
+                                                  Variant="Variant.Outlined"
+                                                  Margin="Margin.Dense"
+                                                  Immediate="true"
+                                                  Clearable="true"
+                                                  Adornment="Adornment.Start"
+                                                  AdornmentIcon="@Icons.Material.Filled.Search" />
+                                    @if (FilteredProfileDefaultIgnoreRules.Count == 0)
+                                    {
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">No profile default ignore rules match the current filter.</MudText>
+                                    }
+                                    else
+                                    {
+                                        <MudPaper Outlined="true" Style="max-height: 330px; overflow-y: auto;">
+                                            @foreach (IgnoreRuleDefinition rule in VisibleProfileDefaultIgnoreRules)
+                                            {
+                                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Class="pa-2">
+                                                    <MudStack Spacing="1">
+                                                        <MudText Typo="Typo.body2" Style="font-family: Consolas, monospace; word-break: break-all;">@rule.PropertyPath</MudText>
+                                                        <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                                                            @foreach (string summary in GetIgnoreRuleSummary(rule))
+                                                            {
+                                                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@summary</MudChip>
+                                                            }
+                                                        </MudStack>
+                                                    </MudStack>
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">Profile</MudChip>
+                                                </MudStack>
+                                                <MudDivider />
+                                            }
+                                        </MudPaper>
+                                        @if (FilteredProfileDefaultIgnoreRules.Count > ProfileDefaultRulePreviewLimit)
+                                        {
+                                            <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="ToggleShowAllProfileDefaultIgnoreRules">
+                                                @(showAllProfileDefaultIgnoreRules ? "Show fewer" : $"Show all {FilteredProfileDefaultIgnoreRules.Count} rules")
+                                            </MudButton>
+                                        }
+                                    }
+                                }
+                            </MudStack>
+                        </MudPaper>
                     }
                     <MudStack Spacing="3">
                         <IgnoreRulesStudio ModelType="selectedModelType"
@@ -314,6 +373,7 @@
 
 @code {
     private const int PollDelayMilliseconds = 750;
+    private const int ProfileDefaultRulePreviewLimit = 25;
     private RequestComparisonDefaults defaults = CreateEmptyDefaults();
     private IReadOnlyList<ContractProfileOption> availableProfileOptions = Array.Empty<ContractProfileOption>();
     private ContractProfileOption? selectedProfileOption;
@@ -343,6 +403,9 @@
     private bool treatNullAndEmptyCollectionsEqual;
     private bool ignoreXmlNamespaces = true;
     private Type? selectedModelType;
+    private string profileDefaultIgnoreRuleSearchTerm = string.Empty;
+    private bool showProfileDefaultIgnoreRules;
+    private bool showAllProfileDefaultIgnoreRules;
     private bool isBusy;
     private bool isRunning;
     private bool isPreparingRequestBatch;
@@ -404,6 +467,7 @@
         endpointAHeaders = FormatHeaders(preset.EndpointAHeaders);
         endpointBHeaders = FormatHeaders(preset.EndpointBHeaders);
         RefreshAvailableProfiles(clearInvalidSelection: false);
+        ResetProfileDefaultIgnoreRuleViewer();
         await Task.CompletedTask;
     }
 
@@ -412,6 +476,7 @@
         modelName = string.IsNullOrWhiteSpace(value) ? "Auto" : value.Trim();
         RefreshSelectedModelType();
         RefreshAvailableProfiles(clearInvalidSelection: true);
+        ResetProfileDefaultIgnoreRuleViewer();
         return Task.CompletedTask;
     }
 
@@ -420,6 +485,7 @@
         contractProfileId = value?.Trim() ?? string.Empty;
         RefreshSelectedProfile();
         ApplyProfileEndpointSuggestions();
+        ResetProfileDefaultIgnoreRuleViewer();
         return Task.CompletedTask;
     }
 
@@ -740,6 +806,37 @@
     private bool IsTreatNullAndEmptyCollectionsForcedByProfile => selectedProfileOption?.DefaultComparisonRules.TreatNullAndEmptyCollectionsAsEqual == true;
     private bool IsIgnoreXmlNamespacesForcedByProfile => selectedProfileOption?.DefaultComparisonRules.IgnoreXmlNamespaces == true;
 
+    private IReadOnlyList<IgnoreRuleDefinition> FilteredProfileDefaultIgnoreRules =>
+        (selectedProfileOption?.DefaultComparisonRules.IgnoreRules ?? Array.Empty<IgnoreRuleDefinition>())
+            .Where(rule => string.IsNullOrWhiteSpace(profileDefaultIgnoreRuleSearchTerm)
+                || rule.PropertyPath.Contains(profileDefaultIgnoreRuleSearchTerm.Trim(), StringComparison.OrdinalIgnoreCase))
+            .OrderBy(rule => rule.PropertyPath, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private IReadOnlyList<IgnoreRuleDefinition> VisibleProfileDefaultIgnoreRules =>
+        showAllProfileDefaultIgnoreRules
+            ? FilteredProfileDefaultIgnoreRules
+            : FilteredProfileDefaultIgnoreRules.Take(ProfileDefaultRulePreviewLimit).ToList();
+
+    private void ToggleProfileDefaultIgnoreRules()
+    {
+        showProfileDefaultIgnoreRules = !showProfileDefaultIgnoreRules;
+        if (!showProfileDefaultIgnoreRules)
+        {
+            showAllProfileDefaultIgnoreRules = false;
+        }
+    }
+
+    private void ToggleShowAllProfileDefaultIgnoreRules() =>
+        showAllProfileDefaultIgnoreRules = !showAllProfileDefaultIgnoreRules;
+
+    private void ResetProfileDefaultIgnoreRuleViewer()
+    {
+        profileDefaultIgnoreRuleSearchTerm = string.Empty;
+        showProfileDefaultIgnoreRules = false;
+        showAllProfileDefaultIgnoreRules = false;
+    }
+
     private void ApplyProfileEndpointSuggestions()
     {
         if (selectedProfileOption is null)
@@ -844,6 +941,28 @@
 
         return summaries;
     }
+
+    private static string GetProfileDefaultIgnoreRuleCountText(int count) =>
+        $"{count} profile default ignore rule{(count == 1 ? string.Empty : "s")}";
+
+    private static IEnumerable<string> GetIgnoreRuleSummary(IgnoreRuleDefinition rule)
+    {
+        if (rule.IgnoreCompletely)
+        {
+            yield return "Ignore completely";
+        }
+
+        if (rule.IgnoreCollectionOrder)
+        {
+            yield return "Ignore collection order";
+        }
+
+        if (rule.TreatNullAndEmptyCollectionsAsEqual)
+        {
+            yield return "Null and empty collections equal";
+        }
+    }
+
     private static string FormatIgnoreRules(IReadOnlyList<IgnoreRuleDefinition> rules) =>
         string.Join(Environment.NewLine, rules.Select(rule => rule.PropertyPath));
 

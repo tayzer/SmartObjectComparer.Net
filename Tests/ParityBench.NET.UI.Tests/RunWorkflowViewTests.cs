@@ -156,6 +156,7 @@ public sealed class RunWorkflowViewTests
             StringAssert.Contains(component.Markup, "ProviderTraceId");
         });
     }
+
     [TestMethod]
     public void IgnoreRulesStudio_WhenSearchRowIsClicked_PopulatesEditorPath()
     {
@@ -314,10 +315,46 @@ public sealed class RunWorkflowViewTests
             StringAssert.Contains(component.Markup, "Ignore paths: 1");
             StringAssert.Contains(component.Markup, "Smart ignores: 1");
             StringAssert.Contains(component.Markup, "Masks: 1");
+            StringAssert.Contains(component.Markup, "Profile Default Ignore Rules");
             StringAssert.Contains(component.Markup, "1 profile default ignore rule will be applied automatically.");
+            StringAssert.Contains(component.Markup, "View Rules");
             StringAssert.Contains(component.Markup, "1 profile default mask rule will be applied automatically.");
-            Assert.IsFalse(component.Markup.Contains("Profile default ignore rules", StringComparison.Ordinal));
             Assert.IsFalse(component.Markup.Contains("Profile default mask rules", StringComparison.Ordinal));
+        });
+    }
+
+    [TestMethod]
+    public void RunWorkflow_WhenProfileHasManyDefaultIgnoreRules_CapsAndFiltersVisibleRules()
+    {
+        IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();
+
+        SetAutocompleteValue(component, 0, "SampleSoapCustomerLookupResponseEnvelope");
+        SetAutocompleteValue(component, 1, "sample-soap-many-rules");
+
+        component.WaitForAssertion(() =>
+        {
+            StringAssert.Contains(component.Markup, "31 profile default ignore rules will be applied automatically.");
+            StringAssert.Contains(component.Markup, "View Rules");
+            Assert.IsFalse(component.Markup.Contains("Rule29", StringComparison.Ordinal));
+        });
+
+        FindButtonContaining(component, "View Rules").Click();
+
+        component.WaitForAssertion(() =>
+        {
+            StringAssert.Contains(component.Markup, "Filter Profile Default Ignore Rules");
+            StringAssert.Contains(component.Markup, "Rule00");
+            Assert.IsFalse(component.Markup.Contains("Rule29", StringComparison.Ordinal));
+            StringAssert.Contains(component.Markup, "Show all 31 rules");
+        });
+
+        ChangeTextField(component, "Filter Profile Default Ignore Rules", "Target");
+
+        component.WaitForAssertion(() =>
+        {
+            StringAssert.Contains(component.Markup, "Target.VisibleRule");
+            StringAssert.Contains(component.Markup, "Ignore collection order");
+            Assert.IsFalse(component.Markup.Contains("Rule00", StringComparison.Ordinal));
         });
     }
 
@@ -522,6 +559,13 @@ public sealed class RunWorkflowViewTests
                             ignoreRules: new[] { new IgnoreRuleDefinition("SourceSystem") },
                             smartIgnoreRules: new[] { new SmartIgnoreRuleDefinition(SmartIgnoreRuleKind.PropertyName, "TraceId") },
                             maskRules: new[] { new MaskRuleDefinition("SensitiveToken") })),
+                    new ContractProfileOption(
+                        "SampleSoapCustomerLookupResponseEnvelope",
+                        "sample-soap-many-rules",
+                        "1",
+                        "sample/customer-lookup/soap",
+                        "sample/customer-lookup/json",
+                        new ComparisonRuleDefaults(ignoreRules: CreateManyDefaultIgnoreRules())),
                 },
                 new[]
                 {
@@ -566,6 +610,13 @@ public sealed class RunWorkflowViewTests
             public string SourceSystem { get; set; } = string.Empty;
             public string SensitiveToken { get; set; } = string.Empty;
         }
+
+        private static IReadOnlyList<IgnoreRuleDefinition> CreateManyDefaultIgnoreRules() =>
+            Enumerable
+                .Range(0, 30)
+                .Select(index => new IgnoreRuleDefinition($"Rule{index:00}"))
+                .Append(new IgnoreRuleDefinition("Target.VisibleRule", ignoreCompletely: false, ignoreCollectionOrder: true))
+                .ToList();
 
         private static RunOptions CreateOptions() =>
             new RunOptions(
