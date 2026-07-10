@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -17,6 +18,15 @@ internal static class FocusedRawContentBuilder
 {
     private static readonly TimeSpan MatchRegexTimeout = TimeSpan.FromSeconds(1);
     private static readonly UTF8Encoding Utf8WithoutBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+
+    // The ignore-rule set is fixed for the whole run, but TryPrune used to rebuild an
+    // IgnorePathMatcher (and recompile every RegexOptions.Compiled pattern in it) on every
+    // call - twice per request, once per endpoint. Regex.Compiled construction uses
+    // Reflection.Emit; under dozens of concurrent compare workers doing that
+    // simultaneously, dynamic codegen contends heavily and construction cost dominates
+    // the whole compare phase. Build each distinct matcher once and reuse it.
+    private static readonly ConcurrentDictionary<string, IgnorePathMatcher> MatcherCache =
+        new ConcurrentDictionary<string, IgnorePathMatcher>(StringComparer.Ordinal);
 
     public static async Task<RequestPairResult> TryAttachFocusedRawContentAsync(
         RequestPairResult result,
@@ -134,7 +144,7 @@ internal static class FocusedRawContentBuilder
             return new FocusedContent(content, WasPruned: false);
         }
 
-        IgnorePathMatcher matcher = new IgnorePathMatcher(BuildMatchPatterns(ignorePaths));
+        IgnorePathMatcher matcher = GetOrCreateMatcher(ignorePaths);
         return DetectDocumentKind(contentType, fileName, content) switch
         {
             StructuredDocumentKind.Json => TryPruneJson(content, matcher),
@@ -320,6 +330,12 @@ internal static class FocusedRawContentBuilder
         {
             return text;
         }
+    }
+
+    private static IgnorePathMatcher GetOrCreateMatcher(IReadOnlyCollection<string> ignorePaths)
+    {
+        string cacheKey = string.Join('', ignorePaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase));
+        return MatcherCache.GetOrAdd(cacheKey, _ => new IgnorePathMatcher(BuildMatchPatterns(ignorePaths)));
     }
 
     private static IReadOnlyList<string> BuildMatchPatterns(IEnumerable<string> paths)
