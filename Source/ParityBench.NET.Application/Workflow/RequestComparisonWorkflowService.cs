@@ -1,6 +1,14 @@
+using System.Security.Cryptography;
+using System.Text.Json;
+
+using Microsoft.Extensions.Options;
+
 using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Runs;
+using ParityBench.NET.Application.Runs.Retention;
+using ParityBench.NET.Domain.ContractProfiles;
+using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Runs;
 
 namespace ParityBench.NET.Application.Workflow;
@@ -21,7 +29,8 @@ public sealed class RequestComparisonWorkflowService : IRequestComparisonWorkflo
         IRequestBatchReferenceGenerator requestBatchReferenceGenerator,
         IStaticReportBundleWriter reportBundleWriter,
         IReportAssetLocator reportAssetLocator,
-        IResponseModelRegistry responseModelRegistry)
+        IResponseModelRegistry responseModelRegistry,
+        IOptions<RetentionConfiguration>? retentionOptions = null)
     {
         this.requestBatchStore = requestBatchStore ?? throw new ArgumentNullException(nameof(requestBatchStore));
         this.runUseCases = runUseCases ?? throw new ArgumentNullException(nameof(runUseCases));
@@ -61,7 +70,9 @@ public sealed class RequestComparisonWorkflowService : IRequestComparisonWorkflo
             request.ModelName,
             request.ComparisonOptions,
             request.RequestExecutionOptions,
-            request.ContractProfileSelection);
+            request.ContractProfileSelection,
+            runRetentionModeOverride: request.RunRetentionModeOverride,
+            comparisonRulesSnapshotHash: ComputeComparisonRulesSnapshotHash(request.ComparisonOptions, request.ContractProfileSelection));
 
         return await runUseCases
             .CreateRunAsync(runOptions, cancellationToken)
@@ -116,6 +127,29 @@ public sealed class RequestComparisonWorkflowService : IRequestComparisonWorkflo
         }
 
         return headers;
+    }
+
+    private static string ComputeComparisonRulesSnapshotHash(
+        ComparisonOptions comparisonOptions,
+        ContractProfileSelection? contractProfileSelection)
+    {
+        object snapshot = new
+        {
+            comparisonOptions.IgnoreCollectionOrder,
+            comparisonOptions.IgnoreStringCase,
+            comparisonOptions.IgnoreTrailingWhitespaceAtEnd,
+            comparisonOptions.TreatNullAndEmptyCollectionsAsEqual,
+            comparisonOptions.IgnoreXmlNamespaces,
+            comparisonOptions.MaxDifferences,
+            IgnoreRules = comparisonOptions.IgnoreRules,
+            SmartIgnoreRules = comparisonOptions.SmartIgnoreRules,
+            MaskRules = comparisonOptions.MaskRules,
+            ContractProfile = contractProfileSelection,
+            RetentionPolicyVersion = RetentionConfiguration.PolicyVersionV1,
+        };
+
+        byte[] snapshotBytes = JsonSerializer.SerializeToUtf8Bytes(snapshot);
+        return Convert.ToHexString(SHA256.HashData(snapshotBytes)).ToLowerInvariant();
     }
 }
 

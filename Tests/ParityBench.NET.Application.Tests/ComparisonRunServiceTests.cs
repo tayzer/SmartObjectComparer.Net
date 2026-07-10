@@ -1,7 +1,10 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.Extensions.Options;
 
 using ParityBench.NET.Application.Runs;
+using ParityBench.NET.Application.Runs.Retention;
 using ParityBench.NET.Domain.Runs;
+using ParityBench.NET.Domain.Runs.Retention;
 
 namespace ParityBench.NET.Application.Tests;
 
@@ -20,6 +23,40 @@ public sealed class ComparisonRunServiceTests
         Assert.IsNotNull(storedRun);
         Assert.AreEqual(RunStatus.Created, storedRun.Status);
         Assert.AreEqual(run.Id, storedRun.Id);
+        Assert.AreEqual(RetentionMode.TrimmedEqualsAndIgnoredPaths, storedRun.RunRetentionMode);
+        Assert.AreEqual(RetentionConfiguration.PolicyVersionV1, storedRun.RunRetentionPolicyVersion);
+    }
+
+    [TestMethod]
+    public async Task CreateRun_WhenRetentionModeDefaultIsConfigured_UsesConfiguredRunRetentionMode()
+    {
+        FakeRunStore store = new FakeRunStore();
+        RetentionConfiguration retentionConfiguration = new RetentionConfiguration
+        {
+            Mode = RetentionMode.None,
+        };
+        ComparisonRunService service = CreateService(store, retentionConfiguration: retentionConfiguration);
+
+        ComparisonRun run = await service.CreateRunAsync(CreateOptions());
+
+        Assert.AreEqual(RetentionMode.None, run.RunRetentionMode);
+        Assert.AreEqual(RetentionConfiguration.PolicyVersionV1, run.RunRetentionPolicyVersion);
+    }
+
+    [TestMethod]
+    public async Task CreateRun_WhenRunOptionOverrideExists_UsesOverrideInsteadOfConfiguredDefault()
+    {
+        FakeRunStore store = new FakeRunStore();
+        RetentionConfiguration retentionConfiguration = new RetentionConfiguration
+        {
+            Mode = RetentionMode.TrimmedEquals,
+        };
+        ComparisonRunService service = CreateService(store, retentionConfiguration: retentionConfiguration);
+        RunOptions options = CreateOptions(runRetentionModeOverride: RetentionMode.None);
+
+        ComparisonRun run = await service.CreateRunAsync(options);
+
+        Assert.AreEqual(RetentionMode.None, run.RunRetentionMode);
     }
 
     [TestMethod]
@@ -298,21 +335,24 @@ public sealed class ComparisonRunServiceTests
         FakeComparisonRunExecutor? executor = null,
         FakeRunEventPublisher? eventPublisher = null,
         FakeRunIdGenerator? runIdGenerator = null,
-        FakeRunCancellationRegistry? runCancellationRegistry = null) =>
+        FakeRunCancellationRegistry? runCancellationRegistry = null,
+        RetentionConfiguration? retentionConfiguration = null) =>
         new ComparisonRunService(
             store,
             executor ?? new FakeComparisonRunExecutor(),
             eventPublisher ?? new FakeRunEventPublisher(),
             runIdGenerator ?? new FakeRunIdGenerator(new RunId("generated-run")),
-            runCancellationRegistry ?? new FakeRunCancellationRegistry());
+            runCancellationRegistry ?? new FakeRunCancellationRegistry(),
+            retentionConfigurationOptions: Options.Create(retentionConfiguration ?? new RetentionConfiguration()));
 
-    private static RunOptions CreateOptions() =>
+    private static RunOptions CreateOptions(RetentionMode? runRetentionModeOverride = null) =>
         new RunOptions(
             new RequestBatchReference("batch-1"),
             new EndpointDefinition(new Uri("https://service-a.example.test")),
             new EndpointDefinition(new Uri("https://service-b.example.test")),
             TimeSpan.FromSeconds(30),
-            8);
+            8,
+            runRetentionModeOverride: runRetentionModeOverride);
 
     private static RunResultSummary CreateSummary() =>
         new RunResultSummary(totalPairs: 2, equalPairs: 1, differentPairs: 1, errorPairs: 0);

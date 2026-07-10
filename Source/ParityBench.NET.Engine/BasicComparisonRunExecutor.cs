@@ -581,7 +581,9 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             comparisonOptions,
             options.RequestExecution,
             options.ContractProfile,
-            options.LargeRun);
+                options.LargeRun,
+                options.RunRetentionModeOverride,
+                options.ComparisonRulesSnapshotHash);
     }
 
     private void RecordRunPhases(RunId runId, RunExecutionMetrics executionMetrics)

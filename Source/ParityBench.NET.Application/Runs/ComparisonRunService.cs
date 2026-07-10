@@ -1,4 +1,7 @@
+using Microsoft.Extensions.Options;
+
 using ParityBench.NET.Application.Observability;
+using ParityBench.NET.Application.Runs.Retention;
 using ParityBench.NET.Domain.Runs;
 
 namespace ParityBench.NET.Application.Runs;
@@ -11,6 +14,7 @@ public sealed class ComparisonRunService : IComparisonRunUseCases
     private readonly IRunIdGenerator runIdGenerator;
     private readonly IRunCancellationRegistry runCancellationRegistry;
     private readonly IObservabilityRecorder observabilityRecorder;
+    private readonly RetentionConfiguration retentionConfiguration;
 
     public ComparisonRunService(
         IRunStore runStore,
@@ -18,7 +22,8 @@ public sealed class ComparisonRunService : IComparisonRunUseCases
         IRunEventPublisher eventPublisher,
         IRunIdGenerator runIdGenerator,
         IRunCancellationRegistry runCancellationRegistry,
-        IObservabilityRecorder? observabilityRecorder = null)
+        IObservabilityRecorder? observabilityRecorder = null,
+        IOptions<RetentionConfiguration>? retentionConfigurationOptions = null)
     {
         this.runStore = runStore;
         this.executor = executor;
@@ -26,6 +31,7 @@ public sealed class ComparisonRunService : IComparisonRunUseCases
         this.runIdGenerator = runIdGenerator;
         this.runCancellationRegistry = runCancellationRegistry;
         this.observabilityRecorder = observabilityRecorder ?? NoOpObservabilityRecorder.Instance;
+        retentionConfiguration = retentionConfigurationOptions?.Value ?? RetentionConfiguration.Default;
     }
 
     public async Task<ComparisonRun> CreateRunAsync(
@@ -33,7 +39,12 @@ public sealed class ComparisonRunService : IComparisonRunUseCases
         CancellationToken cancellationToken = default)
     {
         RunId runId = runIdGenerator.CreateId();
-        ComparisonRun run = ComparisonRun.Create(runId, options);
+        ComparisonRun run = ComparisonRun.Create(
+            runId,
+            options,
+            runRetentionMode: options.RunRetentionModeOverride ?? retentionConfiguration.Mode,
+            runRetentionPolicyVersion: RetentionConfiguration.PolicyVersionV1,
+            comparisonRulesSnapshotHash: options.ComparisonRulesSnapshotHash);
 
         await runStore.SaveAsync(run, cancellationToken).ConfigureAwait(false);
         return run;

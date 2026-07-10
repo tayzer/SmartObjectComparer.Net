@@ -7,6 +7,7 @@ using ParityBench.NET.Domain.Reports;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Results;
 using ParityBench.NET.Domain.Runs;
+using ParityBench.NET.Domain.Runs.Retention;
 
 namespace ParityBench.NET.Workspaces;
 
@@ -279,6 +280,20 @@ public sealed class FileSystemRunDetailStore : IRunDetailStore
             AreEqual = result.AreEqual,
             DifferenceCount = result.DifferenceCount,
             Differences = result.Differences.Select(ToDto).ToList(),
+            PairRetentionClass = result.PairRetentionClass,
+            ArtifactRetentionState = ToDto(result.ArtifactRetentionState),
+            RetentionAppliedAt = result.RetentionAppliedAt,
+        };
+
+    private PairArtifactRetentionStateDto ToDto(PairArtifactRetentionState state) =>
+        new PairArtifactRetentionStateDto
+        {
+            RawResponseA = state.RawResponseA,
+            RawResponseB = state.RawResponseB,
+            CanonicalResponseA = state.CanonicalResponseA,
+            CanonicalResponseB = state.CanonicalResponseB,
+            FocusedResponseA = state.FocusedResponseA,
+            FocusedResponseB = state.FocusedResponseB,
         };
 
     private ResponseArtifactMetadataDto ToDto(ResponseArtifactMetadata metadata) =>
@@ -315,7 +330,19 @@ public sealed class FileSystemRunDetailStore : IRunDetailStore
             dto.OutcomeMessage,
             focusedResponseA: dto.FocusedResponseA is null ? null : FromDto(dto.FocusedResponseA),
             focusedResponseB: dto.FocusedResponseB is null ? null : FromDto(dto.FocusedResponseB),
-            focusedRawContentIgnorePaths: dto.FocusedRawContentIgnorePaths);
+            focusedRawContentIgnorePaths: dto.FocusedRawContentIgnorePaths,
+            pairRetentionClass: dto.PairRetentionClass,
+            artifactRetentionState: dto.ArtifactRetentionState is null ? null : FromDto(dto.ArtifactRetentionState),
+            retentionAppliedAt: dto.RetentionAppliedAt);
+
+    private PairArtifactRetentionState FromDto(PairArtifactRetentionStateDto dto) =>
+        new PairArtifactRetentionState(
+            dto.RawResponseA,
+            dto.RawResponseB,
+            dto.CanonicalResponseA,
+            dto.CanonicalResponseB,
+            dto.FocusedResponseA,
+            dto.FocusedResponseB);
 
     private ResponseArtifactMetadata FromDto(ResponseArtifactMetadataDto dto) =>
         new ResponseArtifactMetadata(
@@ -508,6 +535,27 @@ public sealed class FileSystemRunDetailStore : IRunDetailStore
         public int? DifferenceCount { get; init; }
 
         public List<ComparisonDifferenceDto> Differences { get; init; } = new List<ComparisonDifferenceDto>();
+
+        public PairRetentionClass? PairRetentionClass { get; init; }
+
+        public PairArtifactRetentionStateDto? ArtifactRetentionState { get; init; }
+
+        public DateTimeOffset? RetentionAppliedAt { get; init; }
+    }
+
+    private sealed class PairArtifactRetentionStateDto
+    {
+        public ArtifactRetentionState RawResponseA { get; init; } = ArtifactRetentionState.Retained;
+
+        public ArtifactRetentionState RawResponseB { get; init; } = ArtifactRetentionState.Retained;
+
+        public ArtifactRetentionState CanonicalResponseA { get; init; } = ArtifactRetentionState.Retained;
+
+        public ArtifactRetentionState CanonicalResponseB { get; init; } = ArtifactRetentionState.Retained;
+
+        public ArtifactRetentionState FocusedResponseA { get; init; } = ArtifactRetentionState.Retained;
+
+        public ArtifactRetentionState FocusedResponseB { get; init; } = ArtifactRetentionState.Retained;
     }
 
     private sealed class ResponseArtifactMetadataDto

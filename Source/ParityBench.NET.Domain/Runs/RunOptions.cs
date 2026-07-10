@@ -1,6 +1,7 @@
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Requests;
+using ParityBench.NET.Domain.Runs.Retention;
 
 namespace ParityBench.NET.Domain.Runs;
 
@@ -16,7 +17,9 @@ public sealed record RunOptions
         ComparisonOptions? comparisonOptions = null,
         RequestExecutionOptions? requestExecutionOptions = null,
         ContractProfileSelection? contractProfileSelection = null,
-        LargeRunOptions? largeRunOptions = null)
+        LargeRunOptions? largeRunOptions = null,
+        RetentionMode? runRetentionModeOverride = null,
+        string? comparisonRulesSnapshotHash = null)
     {
         ArgumentNullException.ThrowIfNull(endpointA);
         ArgumentNullException.ThrowIfNull(endpointB);
@@ -41,6 +44,10 @@ public sealed record RunOptions
         RequestExecution = requestExecutionOptions ?? new RequestExecutionOptions();
         ContractProfile = contractProfileSelection;
         LargeRun = largeRunOptions ?? new LargeRunOptions();
+        RunRetentionModeOverride = runRetentionModeOverride;
+        ComparisonRulesSnapshotHash = string.IsNullOrWhiteSpace(comparisonRulesSnapshotHash)
+            ? null
+            : comparisonRulesSnapshotHash.Trim();
     }
 
     public RequestBatchReference RequestBatch { get; }
@@ -64,4 +71,8 @@ public sealed record RunOptions
     public ContractProfileSelection? ContractProfile { get; }
 
     public LargeRunOptions LargeRun { get; }
+
+    public RetentionMode? RunRetentionModeOverride { get; }
+
+    public string? ComparisonRulesSnapshotHash { get; }
 }

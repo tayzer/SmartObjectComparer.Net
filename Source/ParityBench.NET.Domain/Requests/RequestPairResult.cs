@@ -1,6 +1,7 @@
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Reports;
 using ParityBench.NET.Domain.Runs;
+using ParityBench.NET.Domain.Runs.Retention;
 
 namespace ParityBench.NET.Domain.Requests;
 
@@ -19,7 +20,10 @@ public sealed record RequestPairResult
         IEnumerable<StaticReportRawTextDifference>? rawTextDifferences = null,
         ResponseArtifactMetadata? focusedResponseA = null,
         ResponseArtifactMetadata? focusedResponseB = null,
-        IEnumerable<string>? focusedRawContentIgnorePaths = null)
+        IEnumerable<string>? focusedRawContentIgnorePaths = null,
+        PairRetentionClass? pairRetentionClass = null,
+        PairArtifactRetentionState? artifactRetentionState = null,
+        DateTimeOffset? retentionAppliedAt = null)
     {
         RelativePath = new RequestItem(relativePath).RelativePath;
         Outcome = outcome;
@@ -31,6 +35,9 @@ public sealed record RequestPairResult
         RawTextDifferences = (rawTextDifferences ?? Array.Empty<StaticReportRawTextDifference>()).ToList();
         FocusedResponseA = focusedResponseA;
         FocusedResponseB = focusedResponseB;
+        PairRetentionClass = pairRetentionClass ?? MapPairRetentionClass(outcome);
+        ArtifactRetentionState = artifactRetentionState ?? PairArtifactRetentionState.CreateDefaultRetained();
+        RetentionAppliedAt = retentionAppliedAt;
         FocusedRawContentIgnorePaths = (focusedRawContentIgnorePaths ?? Array.Empty<string>())
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Select(path => path.Trim())
@@ -71,6 +78,12 @@ public sealed record RequestPairResult
 
     public IReadOnlyList<string> FocusedRawContentIgnorePaths { get; }
 
+    public PairRetentionClass PairRetentionClass { get; }
+
+    public PairArtifactRetentionState ArtifactRetentionState { get; }
+
+    public DateTimeOffset? RetentionAppliedAt { get; }
+
     public bool HasFocusedRawContent =>
         FocusedRawContentIgnorePaths.Count > 0 &&
         (FocusedResponseA?.Artifact is not null || FocusedResponseB?.Artifact is not null);
@@ -92,7 +105,10 @@ public sealed record RequestPairResult
             RawTextDifferences,
             focusedResponseA,
             focusedResponseB,
-            focusedRawContentIgnorePaths);
+            focusedRawContentIgnorePaths,
+            PairRetentionClass,
+            ArtifactRetentionState,
+            RetentionAppliedAt);
 
     public static RequestPairResult Classify(
         RequestItem request,
@@ -217,6 +233,16 @@ public sealed record RequestPairResult
     }
 
     private static bool IsSuccessStatusCode(int statusCode) => statusCode is >= 200 and <= 299;
+
+    private static PairRetentionClass MapPairRetentionClass(RequestPairOutcome outcome) => outcome switch
+    {
+        RequestPairOutcome.Equal => PairRetentionClass.Equal,
+        RequestPairOutcome.Different => PairRetentionClass.Different,
+        RequestPairOutcome.ExecutionFailed => PairRetentionClass.ExecutionFailed,
+        RequestPairOutcome.StatusCodeMismatch => PairRetentionClass.StatusCodeMismatch,
+        RequestPairOutcome.BothNonSuccess => PairRetentionClass.BothNonSuccess,
+        _ => PairRetentionClass.ExecutionFailed,
+    };
 
     private static string BuildStatusOutcomeMessage(
         RequestPairOutcome outcome,

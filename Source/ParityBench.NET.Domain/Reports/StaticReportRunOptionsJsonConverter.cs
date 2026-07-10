@@ -5,6 +5,7 @@ using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
+using ParityBench.NET.Domain.Runs.Retention;
 
 namespace ParityBench.NET.Domain.Reports;
 
@@ -27,6 +28,8 @@ internal sealed class StaticReportRunOptionsJsonConverter : JsonConverter<RunOpt
         ComparisonOptions? comparison = ReadOptional<ComparisonOptions>(root, "comparison", options);
         RequestExecutionOptions? requestExecution = ReadOptional<RequestExecutionOptions>(root, "requestExecution", options);
         ContractProfileSelection? contractProfile = ReadOptional<ContractProfileSelection>(root, "contractProfile", options) ?? ReadOptional<ContractProfileSelection>(root, "alternateContract", options);
+        RetentionMode? runRetentionModeOverride = ReadOptional<RetentionMode>(root, "runRetentionModeOverride", options);
+        string? comparisonRulesSnapshotHash = ReadOptionalString(root, "comparisonRulesSnapshotHash");
 
         return new RunOptions(
             requestBatch,
@@ -37,7 +40,9 @@ internal sealed class StaticReportRunOptionsJsonConverter : JsonConverter<RunOpt
             responseModelName,
             comparison,
             requestExecution,
-            contractProfile);
+            contractProfile,
+            runRetentionModeOverride: runRetentionModeOverride,
+            comparisonRulesSnapshotHash: comparisonRulesSnapshotHash);
     }
 
     public override void Write(
@@ -63,6 +68,9 @@ internal sealed class StaticReportRunOptionsJsonConverter : JsonConverter<RunOpt
         JsonSerializer.Serialize(writer, value.RequestExecution, options);
         writer.WritePropertyName("contractProfile");
         JsonSerializer.Serialize(writer, value.ContractProfile, options);
+        writer.WritePropertyName("runRetentionModeOverride");
+        JsonSerializer.Serialize(writer, value.RunRetentionModeOverride, options);
+        writer.WriteString("comparisonRulesSnapshotHash", value.ComparisonRulesSnapshotHash);
         writer.WriteEndObject();
     }
 

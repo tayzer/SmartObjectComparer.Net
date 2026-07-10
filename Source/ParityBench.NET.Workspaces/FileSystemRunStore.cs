@@ -6,6 +6,7 @@ using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
+using ParityBench.NET.Domain.Runs.Retention;
 
 namespace ParityBench.NET.Workspaces;
 
@@ -186,6 +187,9 @@ public sealed class FileSystemRunStore : IRunStore
             Summary = run.Summary is null ? null : ToDto(run.Summary),
             ErrorMessage = run.ErrorMessage,
             Diagnostics = run.Diagnostics is null ? null : ToDto(run.Diagnostics),
+            RunRetentionMode = run.RunRetentionMode,
+            RunRetentionPolicyVersion = run.RunRetentionPolicyVersion,
+            ComparisonRulesSnapshotHash = run.ComparisonRulesSnapshotHash,
         };
 
     private RunOptionsDto ToDto(RunOptions options) =>
@@ -202,6 +206,8 @@ public sealed class FileSystemRunStore : IRunStore
             RequestExecution = ToDto(options.RequestExecution),
             ContractProfile = options.ContractProfile is null ? null : ToDto(options.ContractProfile),
             LargeRun = ToDto(options.LargeRun),
+            RunRetentionModeOverride = options.RunRetentionModeOverride,
+            ComparisonRulesSnapshotHash = options.ComparisonRulesSnapshotHash,
         };
 
     private EndpointDefinitionDto ToDto(EndpointDefinition endpoint) =>
@@ -331,7 +337,12 @@ public sealed class FileSystemRunStore : IRunStore
             dto.CompletedAt,
             dto.Summary is null ? null : FromDto(dto.Summary),
             dto.ErrorMessage,
-            dto.Diagnostics is null ? null : FromDto(dto.Diagnostics));
+            dto.Diagnostics is null ? null : FromDto(dto.Diagnostics),
+            dto.RunRetentionMode,
+            string.IsNullOrWhiteSpace(dto.RunRetentionPolicyVersion)
+                ? "v1"
+                : dto.RunRetentionPolicyVersion,
+            dto.ComparisonRulesSnapshotHash);
 
     private RunOptions FromDto(RunOptionsDto dto)
     {
@@ -350,7 +361,9 @@ public sealed class FileSystemRunStore : IRunStore
             dto.Comparison is null ? null : FromDto(dto.Comparison),
             dto.RequestExecution is null ? null : FromDto(dto.RequestExecution),
             contractProfile,
-            dto.LargeRun is null ? null : FromDto(dto.LargeRun));
+            dto.LargeRun is null ? null : FromDto(dto.LargeRun),
+            dto.RunRetentionModeOverride,
+            dto.ComparisonRulesSnapshotHash);
     }
 
     private EndpointDefinition FromDto(EndpointDefinitionDto dto) =>
@@ -554,6 +567,12 @@ public sealed class FileSystemRunStore : IRunStore
         public string? ErrorMessage { get; init; }
 
         public RunDiagnosticsSnapshotDto? Diagnostics { get; init; }
+
+        public RetentionMode RunRetentionMode { get; init; } = RetentionMode.TrimmedEqualsAndIgnoredPaths;
+
+        public string RunRetentionPolicyVersion { get; init; } = "v1";
+
+        public string? ComparisonRulesSnapshotHash { get; init; }
     }
 
     private sealed class RunOptionsDto
@@ -581,6 +600,10 @@ public sealed class FileSystemRunStore : IRunStore
         public LargeRunOptionsDto? LargeRun { get; init; }
 
         public AlternateContractOptionsDto? AlternateContract { get; init; }
+
+        public RetentionMode? RunRetentionModeOverride { get; init; }
+
+        public string? ComparisonRulesSnapshotHash { get; init; }
     }
 
     private sealed class EndpointDefinitionDto

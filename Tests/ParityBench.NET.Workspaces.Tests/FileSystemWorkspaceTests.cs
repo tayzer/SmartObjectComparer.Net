@@ -7,6 +7,7 @@ using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
+using ParityBench.NET.Domain.Runs.Retention;
 using ParityBench.NET.Workspaces;
 
 namespace ParityBench.NET.Workspaces.Tests;
@@ -370,6 +371,124 @@ public sealed class FileSystemWorkspaceTests
         Assert.AreEqual(runId.Value, loadedRun.Id.Value);
         Assert.AreEqual(RunStatus.Created, loadedRun.Status);
     }
+
+        [TestMethod]
+        public async Task LoadRun_WhenLegacySnapshotOmitsRetentionFields_UsesBackwardCompatibleDefaults()
+        {
+                string workspaceRoot = CreateTempDirectory();
+                string runPath = Path.Combine(workspaceRoot, "runs", "legacy-run", "run.json");
+                Directory.CreateDirectory(Path.GetDirectoryName(runPath)!);
+                await File.WriteAllTextAsync(
+                        runPath,
+                        """
+                        {
+                            "Id": "legacy-run",
+                            "Options": {
+                                "RequestBatch": "batch-1",
+                                "EndpointA": { "Uri": "https://service-a.example.test", "Headers": {} },
+                                "EndpointB": { "Uri": "https://service-b.example.test", "Headers": {} },
+                                "TimeoutMilliseconds": 30000,
+                                "MaxConcurrency": 2,
+                                "ResponseModelName": "Auto",
+                                "ModelName": "Auto",
+                                "Comparison": { "IgnoreRules": [], "SmartIgnoreRules": [], "MaskRules": [] },
+                                "RequestExecution": {},
+                                "LargeRun": {}
+                            },
+                            "Status": "Created",
+                            "Progress": { "PercentComplete": 0, "Message": "Run created." },
+                            "CreatedAt": "2026-01-01T00:00:00Z",
+                            "UpdatedAt": "2026-01-01T00:00:00Z"
+                        }
+                        """);
+
+                FileSystemRunStore store = new FileSystemRunStore(workspaceRoot);
+
+                ComparisonRun? loaded = await store.LoadAsync(new RunId("legacy-run"));
+
+                Assert.IsNotNull(loaded);
+                Assert.AreEqual(RetentionMode.TrimmedEqualsAndIgnoredPaths, loaded.RunRetentionMode);
+                Assert.AreEqual("v1", loaded.RunRetentionPolicyVersion);
+                Assert.IsNull(loaded.ComparisonRulesSnapshotHash);
+                Assert.IsNull(loaded.Options.RunRetentionModeOverride);
+        }
+
+        [TestMethod]
+        public async Task LoadDetails_WhenLegacyPageOmitsRetentionFields_UsesBackwardCompatibleDefaults()
+        {
+                string workspaceRoot = CreateTempDirectory();
+                string detailsRoot = Path.Combine(workspaceRoot, "runs", "run-1", "details");
+                string pagePath = Path.Combine(detailsRoot, "pages", "page-000000.json");
+                string manifestPath = Path.Combine(detailsRoot, "manifest.json");
+                Directory.CreateDirectory(Path.GetDirectoryName(pagePath)!);
+                await File.WriteAllTextAsync(
+                        pagePath,
+                        """
+                        [
+                            {
+                                "RelativePath": "one.json",
+                                "Outcome": "Different",
+                                "ResponseA": {
+                                    "Endpoint": "A",
+                                    "ArtifactId": "runs/run-1/artifacts/A/one.json",
+                                    "ArtifactContentType": "application/json",
+                                    "StatusCode": 200,
+                                    "ContentType": "application/json",
+                                    "ContentLength": 2,
+                                    "Sha256": "abc"
+                                },
+                                "ResponseB": {
+                                    "Endpoint": "B",
+                                    "ArtifactId": "runs/run-1/artifacts/B/one.json",
+                                    "ArtifactContentType": "application/json",
+                                    "StatusCode": 200,
+                                    "ContentType": "application/json",
+                                    "ContentLength": 2,
+                                    "Sha256": "def"
+                                },
+                                "FocusedRawContentIgnorePaths": [],
+                                "DifferenceCount": 1,
+                                "Differences": [
+                                    {
+                                        "PropertyPath": "Name",
+                                        "ValueA": "A",
+                                        "ValueB": "B",
+                                        "Message": "Changed"
+                                    }
+                                ]
+                            }
+                        ]
+                        """);
+                await File.WriteAllTextAsync(
+                        manifestPath,
+                        """
+                        {
+                            "SchemaVersion": 2,
+                            "RunId": "run-1",
+                            "PageSize": 250,
+                            "TotalCount": 1,
+                            "Pages": [
+                                {
+                                    "PageIndex": 0,
+                                    "Offset": 0,
+                                    "ItemCount": 1,
+                                    "Path": "runs/run-1/details/pages/page-000000.json"
+                                }
+                            ]
+                        }
+                        """);
+
+                FileSystemRunDetailStore store = new FileSystemRunDetailStore(workspaceRoot);
+                RunDetailReference reference = new RunDetailReference("runs/run-1/details/manifest.json");
+
+                IReadOnlyList<RequestPairResult> details = await store.LoadDetailsAsync(reference);
+
+                Assert.AreEqual(1, details.Count);
+                Assert.AreEqual(PairRetentionClass.Different, details[0].PairRetentionClass);
+                Assert.AreEqual(ArtifactRetentionState.Retained, details[0].ArtifactRetentionState.RawResponseA);
+                Assert.AreEqual(ArtifactRetentionState.Retained, details[0].ArtifactRetentionState.CanonicalResponseA);
+                Assert.IsNull(details[0].RetentionAppliedAt);
+        }
 
     private static string CreateTempDirectory()
     {

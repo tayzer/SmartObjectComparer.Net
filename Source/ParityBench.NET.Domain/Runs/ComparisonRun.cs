@@ -1,3 +1,5 @@
+using ParityBench.NET.Domain.Runs.Retention;
+
 namespace ParityBench.NET.Domain.Runs;
 
 public sealed record ComparisonRun
@@ -13,7 +15,10 @@ public sealed record ComparisonRun
         DateTimeOffset? completedAt,
         RunResultSummary? summary,
         string? errorMessage,
-        RunDiagnosticsSnapshot? diagnostics)
+        RunDiagnosticsSnapshot? diagnostics,
+        RetentionMode runRetentionMode,
+        string runRetentionPolicyVersion,
+        string? comparisonRulesSnapshotHash)
     {
         Id = id;
         Options = options;
@@ -26,6 +31,9 @@ public sealed record ComparisonRun
         Summary = summary;
         ErrorMessage = errorMessage;
         Diagnostics = diagnostics;
+        RunRetentionMode = runRetentionMode;
+        RunRetentionPolicyVersion = runRetentionPolicyVersion;
+        ComparisonRulesSnapshotHash = comparisonRulesSnapshotHash;
     }
 
     public RunId Id { get; init; }
@@ -50,9 +58,21 @@ public sealed record ComparisonRun
 
     public RunDiagnosticsSnapshot? Diagnostics { get; init; }
 
+    public RetentionMode RunRetentionMode { get; init; }
+
+    public string RunRetentionPolicyVersion { get; init; }
+
+    public string? ComparisonRulesSnapshotHash { get; init; }
+
     public bool IsTerminal => Status is RunStatus.Completed or RunStatus.Failed or RunStatus.Cancelled;
 
-    public static ComparisonRun Create(RunId id, RunOptions options, DateTimeOffset? createdAt = null)
+    public static ComparisonRun Create(
+        RunId id,
+        RunOptions options,
+        DateTimeOffset? createdAt = null,
+        RetentionMode? runRetentionMode = null,
+        string runRetentionPolicyVersion = "v1",
+        string? comparisonRulesSnapshotHash = null)
     {
         ArgumentNullException.ThrowIfNull(options);
 
@@ -68,7 +88,10 @@ public sealed record ComparisonRun
             null,
             null,
             null,
-            null);
+            null,
+            runRetentionMode ?? options.RunRetentionModeOverride ?? RetentionMode.TrimmedEqualsAndIgnoredPaths,
+            string.IsNullOrWhiteSpace(runRetentionPolicyVersion) ? "v1" : runRetentionPolicyVersion,
+            string.IsNullOrWhiteSpace(comparisonRulesSnapshotHash) ? options.ComparisonRulesSnapshotHash : comparisonRulesSnapshotHash);
     }
 
     public static ComparisonRun Rehydrate(
@@ -82,7 +105,10 @@ public sealed record ComparisonRun
         DateTimeOffset? completedAt,
         RunResultSummary? summary,
         string? errorMessage,
-        RunDiagnosticsSnapshot? diagnostics = null)
+        RunDiagnosticsSnapshot? diagnostics = null,
+        RetentionMode runRetentionMode = RetentionMode.TrimmedEqualsAndIgnoredPaths,
+        string runRetentionPolicyVersion = "v1",
+        string? comparisonRulesSnapshotHash = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(progress);
@@ -98,7 +124,10 @@ public sealed record ComparisonRun
             completedAt,
             summary,
             string.IsNullOrWhiteSpace(errorMessage) ? null : errorMessage,
-            diagnostics);
+            diagnostics,
+            runRetentionMode,
+            string.IsNullOrWhiteSpace(runRetentionPolicyVersion) ? "v1" : runRetentionPolicyVersion,
+            comparisonRulesSnapshotHash);
     }
 
     public ComparisonRun Start(DateTimeOffset? startedAt = null)

@@ -2,6 +2,7 @@ using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
+using ParityBench.NET.Domain.Runs.Retention;
 
 namespace ParityBench.NET.Application.Workflow;
 
@@ -22,7 +23,8 @@ public sealed record RequestComparisonRunRequest
         IReadOnlyDictionary<string, string>? endpointBHeaders = null,
         string? endpointALabel = null,
         string? endpointBLabel = null,
-        IReadOnlyList<string>? sourceFiles = null)
+        IReadOnlyList<string>? sourceFiles = null,
+        RetentionMode? runRetentionModeOverride = null)
     {
         if (string.IsNullOrWhiteSpace(sourceDirectory))
         {
@@ -57,6 +59,7 @@ public sealed record RequestComparisonRunRequest
         EndpointALabel = string.IsNullOrWhiteSpace(endpointALabel) ? null : endpointALabel.Trim();
         EndpointBLabel = string.IsNullOrWhiteSpace(endpointBLabel) ? null : endpointBLabel.Trim();
         SourceFiles = CopySourceFiles(sourceFiles);
+        RunRetentionModeOverride = runRetentionModeOverride;
     }
 
     public string SourceDirectory { get; }
@@ -88,6 +91,8 @@ public sealed record RequestComparisonRunRequest
     public string? EndpointALabel { get; }
 
     public string? EndpointBLabel { get; }
+
+    public RetentionMode? RunRetentionModeOverride { get; }
 
     private static IReadOnlyDictionary<string, string> CopyHeaders(IReadOnlyDictionary<string, string>? headers)
     {

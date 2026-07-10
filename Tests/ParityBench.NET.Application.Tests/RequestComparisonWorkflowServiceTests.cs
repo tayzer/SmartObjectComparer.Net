@@ -7,6 +7,7 @@ using ParityBench.NET.Application.Workflow;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
+using ParityBench.NET.Domain.Runs.Retention;
 
 namespace ParityBench.NET.Application.Tests;
 
@@ -38,6 +39,26 @@ public sealed class RequestComparisonWorkflowServiceTests
         Assert.AreEqual("a", run.Options.EndpointA.Headers["X-A"]);
         Assert.AreEqual("shared", run.Options.EndpointB.Headers["X-Common"]);
         Assert.IsFalse(run.Options.EndpointB.Headers.ContainsKey("X-A"));
+        Assert.IsFalse(string.IsNullOrWhiteSpace(run.Options.ComparisonRulesSnapshotHash));
+    }
+
+    [TestMethod]
+    public async Task CreateRunFromDirectory_WhenRunRetentionOverrideIsProvided_PersistsRunOptionsOverride()
+    {
+        FakeRunUseCases runUseCases = new FakeRunUseCases();
+        RequestComparisonWorkflowService service = CreateService(runUseCases: runUseCases);
+        RequestComparisonRunRequest request = new RequestComparisonRunRequest(
+            "requests",
+            new Uri("https://a.example.test"),
+            new Uri("https://b.example.test"),
+            TimeSpan.FromSeconds(30),
+            3,
+            runRetentionModeOverride: RetentionMode.None);
+
+        ComparisonRun run = await service.CreateRunFromDirectoryAsync(request).ConfigureAwait(false);
+
+        Assert.AreEqual(RetentionMode.None, run.Options.RunRetentionModeOverride);
+        Assert.AreEqual(RetentionMode.None, runUseCases.CreatedOptions?.RunRetentionModeOverride);
     }
 
     [TestMethod]

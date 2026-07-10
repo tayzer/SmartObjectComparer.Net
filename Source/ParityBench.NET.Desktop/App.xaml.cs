@@ -13,6 +13,7 @@ using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Results;
 using ParityBench.NET.Application.Runs;
+using ParityBench.NET.Application.Runs.Retention;
 using ParityBench.NET.Application.Workflow;
 using ParityBench.NET.Desktop.Services;
 using ParityBench.NET.Engine;
@@ -93,6 +94,7 @@ public partial class App : System.Windows.Application
     {
         Directory.CreateDirectory(workspaceRoot);
         services.AddParityBenchObservability(configuration);
+        services.AddRetentionConfiguration(configuration);
         services.Configure<RequestComparisonRunDefaults>(configuration.GetSection("RequestComparison:Defaults"));
         services.AddSingleton(new HttpClient());
         services.AddSingleton<IRequestBatchStore>(_ => new FileSystemRequestBatchStore(workspaceRoot));
