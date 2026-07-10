@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Threading.Channels;
 
 using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.Application.Observability;
@@ -105,77 +106,34 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         RunExecutionCounters counters = new RunExecutionCounters();
         RunSummaryAccumulator summaryAccumulator = new RunSummaryAccumulator();
         List<ComparedExecutionRecord> persistedRecords = new List<ComparedExecutionRecord>(totalRequests);
-        int completedRequests = 0;
-        int chunkSize = Math.Max(1, comparisonOptions.LargeRun.ChunkSize);
-        IReadOnlyList<IReadOnlyList<PlannedRequest>> chunks = Partition(plannedRequests, chunkSize);
-        TimeSpan executionDuration = TimeSpan.Zero;
-        TimeSpan comparisonDuration = TimeSpan.Zero;
-        TimeSpan persistenceDuration = TimeSpan.Zero;
 
         await using IRunDetailWriter detailWriter = await runDetailStore
             .CreateWriterAsync(run.Id, comparisonOptions.LargeRun.DetailPageSize, cancellationToken)
             .ConfigureAwait(false);
 
-        for (int chunkIndex = 0; chunkIndex < chunks.Count; chunkIndex++)
-        {
-            IReadOnlyList<PlannedRequest> chunk = chunks[chunkIndex];
+        // Two decoupled worker pools connected by a bounded channel: execute (network I/O,
+        // sized to MaxConcurrency) and compare (CPU-bound diffing/normalization, sized to
+        // the processor count) run continuously and independently instead of the whole
+        // batch executing, then the whole batch comparing. A record can be comparing while
+        // later records are still executing. Results land on disk in original request
+        // order via a small reorder buffer, since compare workers finish out of order but
+        // the paginated detail writer requires append order.
+        RunPipelineResult pipelineResult = await RunPipelineAsync(
+            run,
+            comparisonOptions,
+            contractProfile,
+            plannedRequests,
+            counters,
+            summaryAccumulator,
+            persistedRecords,
+            detailWriter,
+            progressReporter,
+            totalRequests,
+            cancellationToken).ConfigureAwait(false);
 
-            Stopwatch executionStopwatch = Stopwatch.StartNew();
-            IReadOnlyList<ExecutionRecord> executionRecords = await ExecuteChunkAsync(
-                run,
-                comparisonOptions,
-                contractProfile,
-                chunk,
-                counters,
-                progressReporter,
-                totalRequests,
-                completedRequests,
-                cancellationToken).ConfigureAwait(false);
-            executionStopwatch.Stop();
-            executionDuration += executionStopwatch.Elapsed;
-            completedRequests += chunk.Count;
-
-            Stopwatch compareStopwatch = Stopwatch.StartNew();
-            IReadOnlyList<ComparedExecutionRecord> comparedRecords = await CompareChunkAsync(
-                run,
-                comparisonOptions,
-                contractProfile,
-                executionRecords,
-                counters,
-                progressReporter,
-                totalRequests,
-                completedRequests - chunk.Count,
-                cancellationToken).ConfigureAwait(false);
-            compareStopwatch.Stop();
-            comparisonDuration += compareStopwatch.Elapsed;
-
-            Stopwatch persistStopwatch = Stopwatch.StartNew();
-            IReadOnlyList<ComparedExecutionRecord> orderedComparedRecords = comparedRecords
-                .OrderBy(record => record.ManifestOrdinal)
-                .ToList();
-            IReadOnlyList<RequestPairResult> orderedChunkResults = orderedComparedRecords
-                .Select(record => record.Result)
-                .ToList();
-            summaryAccumulator.Add(orderedChunkResults);
-            persistedRecords.AddRange(orderedComparedRecords);
-            await detailWriter.AppendAsync(orderedChunkResults, cancellationToken).ConfigureAwait(false);
-            persistStopwatch.Stop();
-            persistenceDuration += persistStopwatch.Elapsed;
-
-            await progressReporter
-                .ReportAsync(
-                    RunStatus.Comparing,
-                    new RunProgress(
-                        CalculateExecutionPercent(completedRequests, totalRequests),
-                        chunks.Count > 1
-                            ? $"Persisted chunk {chunkIndex + 1} of {chunks.Count}."
-                            : "Persisted comparison results.",
-                        completedRequests,
-                        totalRequests),
-                    cancellationToken,
-                    force: true)
-                .ConfigureAwait(false);
-        }
+        TimeSpan executionDuration = pipelineResult.ExecutionDuration;
+        TimeSpan comparisonDuration = pipelineResult.ComparisonDuration;
+        TimeSpan persistenceDuration = pipelineResult.PersistenceDuration;
 
         observabilityRecorder.RecordRunPhase(run.Id, "Execution", executionDuration);
         observabilityRecorder.RecordRunPhase(run.Id, "Compare", comparisonDuration);
@@ -296,101 +254,220 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         return (comparisonOptions, contractProfile, plannedRequests);
     }
 
-    private async Task<IReadOnlyList<ExecutionRecord>> ExecuteChunkAsync(
+    private sealed record RunPipelineResult(
+        TimeSpan ExecutionDuration,
+        TimeSpan ComparisonDuration,
+        TimeSpan PersistenceDuration);
+
+    private async Task<RunPipelineResult> RunPipelineAsync(
         ComparisonRun run,
         RunOptions comparisonOptions,
         IContractProfile? contractProfile,
-        IReadOnlyList<PlannedRequest> chunk,
+        IReadOnlyList<PlannedRequest> plannedRequests,
         RunExecutionCounters counters,
+        RunSummaryAccumulator summaryAccumulator,
+        List<ComparedExecutionRecord> persistedRecords,
+        IRunDetailWriter detailWriter,
         IRunProgressReporter progressReporter,
         int totalRequests,
-        int completedRequestsAtChunkStart,
         CancellationToken cancellationToken)
     {
-        ConcurrentBag<ExecutionRecord> executionRecords = new ConcurrentBag<ExecutionRecord>();
-        int completedWithinChunk = 0;
-        ParallelOptions parallelOptions = new ParallelOptions
+        if (totalRequests == 0)
         {
-            CancellationToken = cancellationToken,
-            MaxDegreeOfParallelism = comparisonOptions.MaxConcurrency,
-        };
+            return new RunPipelineResult(TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero);
+        }
 
-        await Parallel.ForEachAsync(chunk, parallelOptions, async (plannedRequest, token) =>
-        {
-            Stopwatch requestPathStopwatch = Stopwatch.StartNew();
-            ExecutionRecord record = await ExecutePairAsync(run, comparisonOptions, plannedRequest, contractProfile, counters, token).ConfigureAwait(false);
-            requestPathStopwatch.Stop();
-            observabilityRecorder.RecordRequestPath(run.Id, plannedRequest.Request.RelativePath, requestPathStopwatch.Elapsed);
-            executionRecords.Add(record);
+        int executeConcurrency = Math.Max(1, comparisonOptions.MaxConcurrency);
+        int compareConcurrency = Math.Max(1, Environment.ProcessorCount);
+        int channelCapacity = Math.Max(1, comparisonOptions.LargeRun.ChunkSize);
+        int flushBatchSize = Math.Max(1, comparisonOptions.LargeRun.DetailPageSize);
 
-            int completed = completedRequestsAtChunkStart + Interlocked.Increment(ref completedWithinChunk);
-            await progressReporter
-                .ReportAsync(
-                    RunStatus.Executing,
-                    new RunProgress(
-                        CalculateExecutionPercent(completed, totalRequests),
-                        $"Executed {completed} of {totalRequests} requests.",
-                        completed,
-                        totalRequests),
-                    token)
-                .ConfigureAwait(false);
-        }).ConfigureAwait(false);
+        Channel<ExecutionRecord> executedChannel = Channel.CreateBounded<ExecutionRecord>(
+            new BoundedChannelOptions(channelCapacity)
+            {
+                SingleWriter = false,
+                SingleReader = false,
+                FullMode = BoundedChannelFullMode.Wait,
+            });
 
-        return executionRecords.ToList();
+        long executionTicks = 0;
+        long comparisonTicks = 0;
+        long persistenceTicks = 0;
+        int completedCount = 0;
+        int nextRequestIndex = -1;
+
+        OrderedResultSequencer sequencer = new OrderedResultSequencer(
+            detailWriter,
+            summaryAccumulator,
+            persistedRecords,
+            flushBatchSize,
+            elapsed => Interlocked.Add(ref persistenceTicks, elapsed.Ticks));
+
+        Task[] executeWorkers = Enumerable.Range(0, executeConcurrency)
+            .Select(_ => Task.Run(
+                async () =>
+                {
+                    int index;
+                    while ((index = Interlocked.Increment(ref nextRequestIndex)) < plannedRequests.Count)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        PlannedRequest plannedRequest = plannedRequests[index];
+
+                        Stopwatch executionStopwatch = Stopwatch.StartNew();
+                        ExecutionRecord executionRecord = await ExecutePairAsync(run, comparisonOptions, plannedRequest, contractProfile, counters, cancellationToken).ConfigureAwait(false);
+                        executionStopwatch.Stop();
+                        Interlocked.Add(ref executionTicks, executionStopwatch.ElapsedTicks);
+                        observabilityRecorder.RecordRequestPath(run.Id, plannedRequest.Request.RelativePath, executionStopwatch.Elapsed);
+
+                        await executedChannel.Writer.WriteAsync(executionRecord, cancellationToken).ConfigureAwait(false);
+                    }
+                },
+                cancellationToken))
+            .ToArray();
+
+        Task executeStageTask = RunWorkerStageAsync(executeWorkers, executedChannel.Writer);
+
+        Task[] compareWorkers = Enumerable.Range(0, compareConcurrency)
+            .Select(_ => Task.Run(
+                async () =>
+                {
+                    await foreach (ExecutionRecord executionRecord in executedChannel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+                    {
+                        Stopwatch compareStopwatch = Stopwatch.StartNew();
+                        ComparedExecutionRecord comparedRecord = await CompareRecordAsync(run, comparisonOptions, contractProfile, executionRecord, counters, cancellationToken).ConfigureAwait(false);
+                        compareStopwatch.Stop();
+                        Interlocked.Add(ref comparisonTicks, compareStopwatch.ElapsedTicks);
+
+                        int completed = Interlocked.Increment(ref completedCount);
+                        await progressReporter
+                            .ReportAsync(
+                                RunStatus.Executing,
+                                new RunProgress(
+                                    CalculateExecutionPercent(completed, totalRequests),
+                                    $"Processed {completed} of {totalRequests} requests.",
+                                    completed,
+                                    totalRequests),
+                                cancellationToken)
+                            .ConfigureAwait(false);
+
+                        await sequencer.SubmitAsync(comparedRecord, cancellationToken).ConfigureAwait(false);
+                    }
+                },
+                cancellationToken))
+            .ToArray();
+
+        Task compareStageTask = Task.WhenAll(compareWorkers);
+
+        await Task.WhenAll(executeStageTask, compareStageTask).ConfigureAwait(false);
+        await sequencer.FlushRemainingAsync(cancellationToken).ConfigureAwait(false);
+
+        return new RunPipelineResult(
+            TimeSpan.FromTicks(executionTicks),
+            TimeSpan.FromTicks(comparisonTicks),
+            TimeSpan.FromTicks(persistenceTicks));
     }
 
-    private async Task<IReadOnlyList<ComparedExecutionRecord>> CompareChunkAsync(
-        ComparisonRun run,
-        RunOptions comparisonOptions,
-        IContractProfile? contractProfile,
-        IReadOnlyList<ExecutionRecord> executionRecords,
-        RunExecutionCounters counters,
-        IRunProgressReporter progressReporter,
-        int totalRequests,
-        int completedRequestsAtChunkStart,
-        CancellationToken cancellationToken)
+    private static async Task RunWorkerStageAsync(Task[] workers, ChannelWriter<ExecutionRecord> writer)
     {
-        // Comparison is CPU-bound (reflection-heavy diffing, normalization, disk reads
-        // for the response artifacts), unlike the network-bound execution phase. Firing
-        // every record in the chunk at once via Task.WhenAll floods the thread pool and
-        // stalls the whole chunk instead of giving steady progress, so this is bounded
-        // to the processor count like the execution phase is bounded to MaxConcurrency.
-        ComparedExecutionRecord[] comparedRecords = new ComparedExecutionRecord[executionRecords.Count];
-        int completedWithinChunk = 0;
-        ParallelOptions parallelOptions = new ParallelOptions
+        try
         {
-            CancellationToken = cancellationToken,
-            MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount),
-        };
+            await Task.WhenAll(workers).ConfigureAwait(false);
+            writer.TryComplete();
+        }
+        catch (Exception ex)
+        {
+            writer.TryComplete(ex);
+            throw;
+        }
+    }
 
-        await Parallel.ForEachAsync(
-            Enumerable.Range(0, executionRecords.Count),
-            parallelOptions,
-            async (index, token) =>
+    // Compare workers finish out of request order, but the paginated detail writer
+    // requires strictly increasing append order. This holds completed records until the
+    // next expected ManifestOrdinal is available, then flushes contiguous runs in batches
+    // so a single slow record only delays persistence of records after it, not the
+    // execute/compare throughput or the visible progress counter.
+    private sealed class OrderedResultSequencer
+    {
+        private readonly IRunDetailWriter detailWriter;
+        private readonly RunSummaryAccumulator summaryAccumulator;
+        private readonly List<ComparedExecutionRecord> persistedRecords;
+        private readonly int flushBatchSize;
+        private readonly Action<TimeSpan> recordPersistenceElapsed;
+        private readonly SemaphoreSlim gate = new SemaphoreSlim(1, 1);
+        private readonly Dictionary<int, ComparedExecutionRecord> pending = new Dictionary<int, ComparedExecutionRecord>();
+        private readonly List<ComparedExecutionRecord> readyBuffer = new List<ComparedExecutionRecord>();
+        private int nextOrdinal;
+
+        public OrderedResultSequencer(
+            IRunDetailWriter detailWriter,
+            RunSummaryAccumulator summaryAccumulator,
+            List<ComparedExecutionRecord> persistedRecords,
+            int flushBatchSize,
+            Action<TimeSpan> recordPersistenceElapsed)
+        {
+            this.detailWriter = detailWriter;
+            this.summaryAccumulator = summaryAccumulator;
+            this.persistedRecords = persistedRecords;
+            this.flushBatchSize = flushBatchSize;
+            this.recordPersistenceElapsed = recordPersistenceElapsed;
+        }
+
+        public async Task SubmitAsync(ComparedExecutionRecord record, CancellationToken cancellationToken)
+        {
+            await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
             {
-                comparedRecords[index] = await CompareRecordAsync(
-                    run,
-                    comparisonOptions,
-                    contractProfile,
-                    executionRecords[index],
-                    counters,
-                    token)
-                    .ConfigureAwait(false);
+                pending[record.ManifestOrdinal] = record;
+                while (pending.TryGetValue(nextOrdinal, out ComparedExecutionRecord? next))
+                {
+                    pending.Remove(nextOrdinal);
+                    readyBuffer.Add(next);
+                    nextOrdinal++;
+                }
 
-                int completed = completedRequestsAtChunkStart + Interlocked.Increment(ref completedWithinChunk);
-                await progressReporter
-                    .ReportAsync(
-                        RunStatus.Comparing,
-                        new RunProgress(
-                            CalculateExecutionPercent(completed, totalRequests),
-                            $"Compared {completed} of {totalRequests} requests.",
-                            completed,
-                            totalRequests),
-                        token)
-                    .ConfigureAwait(false);
-            }).ConfigureAwait(false);
+                if (readyBuffer.Count >= flushBatchSize)
+                {
+                    await FlushLockedAsync(cancellationToken).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
 
-        return comparedRecords;
+        public async Task FlushRemainingAsync(CancellationToken cancellationToken)
+        {
+            await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await FlushLockedAsync(cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+
+        private async Task FlushLockedAsync(CancellationToken cancellationToken)
+        {
+            if (readyBuffer.Count == 0)
+            {
+                return;
+            }
+
+            Stopwatch persistStopwatch = Stopwatch.StartNew();
+            IReadOnlyList<RequestPairResult> resultsToPersist = readyBuffer
+                .Select(record => record.Result)
+                .ToList();
+            summaryAccumulator.Add(resultsToPersist);
+            persistedRecords.AddRange(readyBuffer);
+            await detailWriter.AppendAsync(resultsToPersist, cancellationToken).ConfigureAwait(false);
+            persistStopwatch.Stop();
+            recordPersistenceElapsed(persistStopwatch.Elapsed);
+
+            readyBuffer.Clear();
+        }
     }
 
     private async Task<ExecutionRecord> ExecutePairAsync(
@@ -874,23 +951,6 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         return null;
     }
 
-    private static IReadOnlyList<IReadOnlyList<T>> Partition<T>(
-        IReadOnlyList<T> requests,
-        int chunkSize)
-    {
-        if (requests.Count == 0)
-        {
-            return Array.Empty<IReadOnlyList<T>>();
-        }
-
-        List<IReadOnlyList<T>> chunks = new List<IReadOnlyList<T>>((int)Math.Ceiling(requests.Count / (double)chunkSize));
-        for (int index = 0; index < requests.Count; index += chunkSize)
-        {
-            chunks.Add(requests.Skip(index).Take(Math.Min(chunkSize, requests.Count - index)).ToList());
-        }
-
-        return chunks;
-    }
 
     private sealed class RunSummaryAccumulator
     {
