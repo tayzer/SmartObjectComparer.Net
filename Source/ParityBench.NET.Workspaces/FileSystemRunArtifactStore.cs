@@ -89,4 +89,70 @@ public sealed class FileSystemRunArtifactStore : IRunArtifactStore
 
         return Task.FromResult(stream);
     }
+
+    public Task<bool> ExistsAsync(
+        ArtifactReference artifact,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(artifact);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        string artifactPath = FileSystemWorkspacePaths.GetSafePath(workspaceRoot, artifact.ArtifactId);
+        return Task.FromResult(File.Exists(artifactPath));
+    }
+
+    public Task<long> GetArtifactSizeAsync(
+        ArtifactReference artifact,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(artifact);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        string artifactPath = FileSystemWorkspacePaths.GetSafePath(workspaceRoot, artifact.ArtifactId);
+        if (!File.Exists(artifactPath))
+        {
+            return Task.FromResult(0L);
+        }
+
+        return Task.FromResult(new FileInfo(artifactPath).Length);
+    }
+
+    public Task<long> GetTotalArtifactBytesAsync(CancellationToken cancellationToken = default)
+    {
+        string artifactsRoot = FileSystemWorkspacePaths.GetSafePath(workspaceRoot, FileSystemWorkspacePaths.ToLogicalPath("runs"));
+        if (!Directory.Exists(artifactsRoot))
+        {
+            return Task.FromResult(0L);
+        }
+
+        long total = 0;
+        foreach (string filePath in Directory.EnumerateFiles(artifactsRoot, "*", SearchOption.AllDirectories))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (filePath.Contains(Path.DirectorySeparatorChar + "artifacts" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                || filePath.EndsWith(Path.DirectorySeparatorChar + "artifacts", StringComparison.OrdinalIgnoreCase))
+            {
+                total += new FileInfo(filePath).Length;
+            }
+        }
+
+        return Task.FromResult(total);
+    }
+
+    public Task<bool> DeleteIfExistsAsync(
+        ArtifactReference artifact,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(artifact);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        string artifactPath = FileSystemWorkspacePaths.GetSafePath(workspaceRoot, artifact.ArtifactId);
+        if (!File.Exists(artifactPath))
+        {
+            return Task.FromResult(false);
+        }
+
+        File.Delete(artifactPath);
+        return Task.FromResult(true);
+    }
 }

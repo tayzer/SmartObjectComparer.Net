@@ -11,6 +11,7 @@ using ParityBench.NET.Application.Runs;
 using ParityBench.NET.Application.Runs.Retention;
 using ParityBench.NET.Application.Workflow;
 using ParityBench.NET.Engine;
+using ParityBench.NET.Engine.Pipeline;
 using ParityBench.NET.Infrastructure;
 using ParityBench.NET.Infrastructure.Reports;
 using ParityBench.NET.Workspaces;
@@ -104,6 +105,8 @@ public static class CliApplication
         services.AddSingleton<IRunEventPublisher, NoOpRunEventPublisher>();
         services.AddSingleton<IResponseBodyDeserializer, JsonXmlResponseBodyDeserializer>();
         services.AddSingleton<IContractPayloadSerializer, JsonXmlContractPayloadSerializer>();
+        services.AddSingleton<RetentionPolicyEvaluator>();
+        services.AddSingleton<IRunCleanupStage, RetentionCleanupStage>();
         InMemoryRequestComparisonEndpointRegistry endpointDefaults = new InMemoryRequestComparisonEndpointRegistry();
         InMemoryRequestComparisonPresetRegistry presetDefaults = new InMemoryRequestComparisonPresetRegistry();
         RequestComparisonFixtureDefaults.Register(endpointDefaults, presetDefaults);
@@ -137,7 +140,8 @@ public static class CliApplication
                 serviceProvider.GetRequiredService<IRunDetailStore>(),
                 comparer,
                 serviceProvider.GetRequiredService<IContractProfileRegistry>(),
-                serviceProvider.GetRequiredService<IObservabilityRecorder>());
+                serviceProvider.GetRequiredService<IObservabilityRecorder>(),
+                serviceProvider.GetRequiredService<IRunCleanupStage>());
         });
         services.AddSingleton<IComparisonRunUseCases, ComparisonRunService>();
         services.AddSingleton<IComparisonRunResultUseCases, ComparisonRunResultService>();

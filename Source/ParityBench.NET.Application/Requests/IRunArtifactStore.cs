@@ -26,4 +26,34 @@ public interface IRunArtifactStore
     Task<Stream> OpenReadAsync(
         ArtifactReference artifact,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns true when the artifact exists in the backing store.
+    /// </summary>
+    Task<bool> ExistsAsync(
+        ArtifactReference artifact,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(false);
+
+    /// <summary>
+    /// Returns the artifact content length in bytes when present.
+    /// </summary>
+    Task<long> GetArtifactSizeAsync(
+        ArtifactReference artifact,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(0L);
+
+    /// <summary>
+    /// Returns the current total bytes used by persisted run artifacts.
+    /// </summary>
+    Task<long> GetTotalArtifactBytesAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(0L);
+
+    /// <summary>
+    /// Deletes an artifact if present.
+    /// </summary>
+    Task<bool> DeleteIfExistsAsync(
+        ArtifactReference artifact,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(false);
 }

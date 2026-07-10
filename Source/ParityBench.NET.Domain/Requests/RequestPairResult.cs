@@ -110,6 +110,28 @@ public sealed record RequestPairResult
             ArtifactRetentionState,
             RetentionAppliedAt);
 
+    public RequestPairResult WithRetention(
+        PairArtifactRetentionState artifactRetentionState,
+        DateTimeOffset retentionAppliedAt,
+        PairRetentionClass? pairRetentionClass = null) =>
+        new RequestPairResult(
+            RelativePath,
+            Outcome,
+            ResponseA,
+            ResponseB,
+            ErrorMessage,
+            AreEqual,
+            DifferenceCount,
+            Differences,
+            OutcomeMessage,
+            RawTextDifferences,
+            FocusedResponseA,
+            FocusedResponseB,
+            FocusedRawContentIgnorePaths,
+            pairRetentionClass ?? PairRetentionClass,
+            artifactRetentionState,
+            retentionAppliedAt);
+
     public static RequestPairResult Classify(
         RequestItem request,
         ResponseArtifactMetadata? responseA,
