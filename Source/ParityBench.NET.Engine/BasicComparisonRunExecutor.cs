@@ -142,6 +142,9 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                 contractProfile,
                 executionRecords,
                 counters,
+                progressReporter,
+                totalRequests,
+                completedRequests - chunk.Count,
                 cancellationToken).ConfigureAwait(false);
             compareStopwatch.Stop();
             comparisonDuration += compareStopwatch.Elapsed;
@@ -342,13 +345,52 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         IContractProfile? contractProfile,
         IReadOnlyList<ExecutionRecord> executionRecords,
         RunExecutionCounters counters,
+        IRunProgressReporter progressReporter,
+        int totalRequests,
+        int completedRequestsAtChunkStart,
         CancellationToken cancellationToken)
     {
-        Task<ComparedExecutionRecord>[] comparisonTasks = executionRecords
-            .Select(record => CompareRecordAsync(run, comparisonOptions, contractProfile, record, counters, cancellationToken))
-            .ToArray();
+        // Comparison is CPU-bound (reflection-heavy diffing, normalization, disk reads
+        // for the response artifacts), unlike the network-bound execution phase. Firing
+        // every record in the chunk at once via Task.WhenAll floods the thread pool and
+        // stalls the whole chunk instead of giving steady progress, so this is bounded
+        // to the processor count like the execution phase is bounded to MaxConcurrency.
+        ComparedExecutionRecord[] comparedRecords = new ComparedExecutionRecord[executionRecords.Count];
+        int completedWithinChunk = 0;
+        ParallelOptions parallelOptions = new ParallelOptions
+        {
+            CancellationToken = cancellationToken,
+            MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount),
+        };
 
-        return await Task.WhenAll(comparisonTasks).ConfigureAwait(false);
+        await Parallel.ForEachAsync(
+            Enumerable.Range(0, executionRecords.Count),
+            parallelOptions,
+            async (index, token) =>
+            {
+                comparedRecords[index] = await CompareRecordAsync(
+                    run,
+                    comparisonOptions,
+                    contractProfile,
+                    executionRecords[index],
+                    counters,
+                    token)
+                    .ConfigureAwait(false);
+
+                int completed = completedRequestsAtChunkStart + Interlocked.Increment(ref completedWithinChunk);
+                await progressReporter
+                    .ReportAsync(
+                        RunStatus.Comparing,
+                        new RunProgress(
+                            CalculateExecutionPercent(completed, totalRequests),
+                            $"Compared {completed} of {totalRequests} requests.",
+                            completed,
+                            totalRequests),
+                        token)
+                    .ConfigureAwait(false);
+            }).ConfigureAwait(false);
+
+        return comparedRecords;
     }
 
     private async Task<ExecutionRecord> ExecutePairAsync(
