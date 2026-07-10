@@ -106,6 +106,9 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         RunExecutionCounters counters = new RunExecutionCounters();
         RunSummaryAccumulator summaryAccumulator = new RunSummaryAccumulator();
         List<ComparedExecutionRecord> persistedRecords = new List<ComparedExecutionRecord>(totalRequests);
+        CompareSubPhaseCounters? compareSubPhaseCounters = observabilityRecorder.IsDetailedCompareTimingEnabled
+            ? new CompareSubPhaseCounters()
+            : null;
 
         await using IRunDetailWriter detailWriter = await runDetailStore
             .CreateWriterAsync(run.Id, comparisonOptions.LargeRun.DetailPageSize, cancellationToken)
@@ -129,6 +132,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             detailWriter,
             progressReporter,
             totalRequests,
+            compareSubPhaseCounters,
             cancellationToken).ConfigureAwait(false);
 
         TimeSpan executionDuration = pipelineResult.ExecutionDuration;
@@ -180,7 +184,8 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             counters.ResponseBytesWritten,
             retentionCounters.RetainedArtifactCount,
             retentionCounters.TrimmedByPolicyArtifactCount,
-            retentionCounters.MissingUnexpectedlyArtifactCount);
+            retentionCounters.MissingUnexpectedlyArtifactCount,
+            compareSubPhaseCounters?.ToMetrics());
 
         return summaryAccumulator.ToSummary(detailReference, executionMetrics);
     }
@@ -270,6 +275,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         IRunDetailWriter detailWriter,
         IRunProgressReporter progressReporter,
         int totalRequests,
+        CompareSubPhaseCounters? compareSubPhaseCounters,
         CancellationToken cancellationToken)
     {
         if (totalRequests == 0)
@@ -334,7 +340,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                     await foreach (ExecutionRecord executionRecord in executedChannel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
                     {
                         Stopwatch compareStopwatch = Stopwatch.StartNew();
-                        ComparedExecutionRecord comparedRecord = await CompareRecordAsync(run, comparisonOptions, contractProfile, executionRecord, counters, cancellationToken).ConfigureAwait(false);
+                        ComparedExecutionRecord comparedRecord = await CompareRecordAsync(run, comparisonOptions, contractProfile, executionRecord, counters, compareSubPhaseCounters, cancellationToken).ConfigureAwait(false);
                         compareStopwatch.Stop();
                         Interlocked.Add(ref comparisonTicks, compareStopwatch.ElapsedTicks);
 
@@ -495,10 +501,11 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         IContractProfile? contractProfile,
         ExecutionRecord executionRecord,
         RunExecutionCounters counters,
+        CompareSubPhaseCounters? subPhaseCounters,
         CancellationToken cancellationToken)
     {
         RequestPairResult pairResult = contractProfile is null
-            ? await CompleteRegularPairAsync(run, comparisonOptions, executionRecord, cancellationToken).ConfigureAwait(false)
+            ? await CompleteRegularPairAsync(run, comparisonOptions, executionRecord, subPhaseCounters, cancellationToken).ConfigureAwait(false)
             : await CompleteContractProfilePairAsync(
                 run,
                 comparisonOptions,
@@ -507,30 +514,55 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                 executionRecord.EndpointA,
                 executionRecord.EndpointB,
                 counters,
+                subPhaseCounters,
                 cancellationToken)
                 .ConfigureAwait(false);
 
         return new ComparedExecutionRecord(executionRecord.ManifestOrdinal, pairResult);
     }
 
+    // No-op pass-through when subPhaseCounters is null, so the toggle being off costs
+    // nothing beyond this null check - no Stopwatch is ever created.
+    private static async Task<T> TimeSubPhaseAsync<T>(
+        CompareSubPhaseCounters? subPhaseCounters,
+        Action<CompareSubPhaseCounters, TimeSpan> record,
+        Func<Task<T>> action)
+    {
+        if (subPhaseCounters is null)
+        {
+            return await action().ConfigureAwait(false);
+        }
+
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        T result = await action().ConfigureAwait(false);
+        stopwatch.Stop();
+        record(subPhaseCounters, stopwatch.Elapsed);
+        return result;
+    }
+
     private async Task<RequestPairResult> CompleteRegularPairAsync(
         ComparisonRun run,
         RunOptions comparisonOptions,
         ExecutionRecord executionRecord,
+        CompareSubPhaseCounters? subPhaseCounters,
         CancellationToken cancellationToken)
     {
         string? errorMessage = BuildErrorMessage(executionRecord.EndpointA, executionRecord.EndpointB);
-        RequestPairResult pairResult = await responseComparer
-            .CompareAsync(
+        RequestPairResult pairResult = await TimeSubPhaseAsync(
+            subPhaseCounters,
+            static (c, e) => c.AddDiff(e),
+            () => responseComparer.CompareAsync(
                 executionRecord.Request,
                 comparisonOptions,
                 executionRecord.EndpointA.Metadata,
                 executionRecord.EndpointB.Metadata,
                 errorMessage,
-                cancellationToken)
-            .ConfigureAwait(false);
+                cancellationToken)).ConfigureAwait(false);
 
-        return await AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, cancellationToken).ConfigureAwait(false);
+        return await TimeSubPhaseAsync(
+            subPhaseCounters,
+            static (c, e) => c.AddFocusedContent(e),
+            () => AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, cancellationToken)).ConfigureAwait(false);
     }
 
     private async Task<EndpointExecutionRecord> ExecuteEndpointAsync(
@@ -609,25 +641,34 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         EndpointExecutionRecord endpointA,
         EndpointExecutionRecord endpointB,
         RunExecutionCounters counters,
+        CompareSubPhaseCounters? subPhaseCounters,
         CancellationToken cancellationToken)
     {
         string? errorMessage = BuildErrorMessage(endpointA, endpointB);
         if (!string.IsNullOrWhiteSpace(errorMessage))
         {
-            RequestPairResult pairResult = await responseComparer
-                .CompareAsync(request, comparisonOptions, endpointA.Metadata, endpointB.Metadata, errorMessage, cancellationToken)
-                .ConfigureAwait(false);
+            RequestPairResult pairResult = await TimeSubPhaseAsync(
+                subPhaseCounters,
+                static (c, e) => c.AddDiff(e),
+                () => responseComparer.CompareAsync(request, comparisonOptions, endpointA.Metadata, endpointB.Metadata, errorMessage, cancellationToken)).ConfigureAwait(false);
 
-            return await AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, cancellationToken).ConfigureAwait(false);
+            return await TimeSubPhaseAsync(
+                subPhaseCounters,
+                static (c, e) => c.AddFocusedContent(e),
+                () => AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, cancellationToken)).ConfigureAwait(false);
         }
 
         if (!endpointA.IsSuccessStatusCode || !endpointB.IsSuccessStatusCode)
         {
-            RequestPairResult pairResult = await responseComparer
-                .CompareAsync(request, comparisonOptions, endpointA.Metadata, endpointB.Metadata, null, cancellationToken)
-                .ConfigureAwait(false);
+            RequestPairResult pairResult = await TimeSubPhaseAsync(
+                subPhaseCounters,
+                static (c, e) => c.AddDiff(e),
+                () => responseComparer.CompareAsync(request, comparisonOptions, endpointA.Metadata, endpointB.Metadata, null, cancellationToken)).ConfigureAwait(false);
 
-            return await AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, cancellationToken).ConfigureAwait(false);
+            return await TimeSubPhaseAsync(
+                subPhaseCounters,
+                static (c, e) => c.AddFocusedContent(e),
+                () => AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, cancellationToken)).ConfigureAwait(false);
         }
 
         try
@@ -639,6 +680,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                 endpointA,
                 comparisonOptions.Comparison.MaskRules,
                 counters,
+                subPhaseCounters,
                 cancellationToken)
                 .ConfigureAwait(false);
             ResponseArtifactMetadata canonicalB = await NormalizeAndPersistResponseAsync(
@@ -648,14 +690,19 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
                 endpointB,
                 comparisonOptions.Comparison.MaskRules,
                 counters,
+                subPhaseCounters,
                 cancellationToken)
                 .ConfigureAwait(false);
 
-            RequestPairResult pairResult = await responseComparer
-                .CompareAsync(request, comparisonOptions, canonicalA, canonicalB, null, cancellationToken)
-                .ConfigureAwait(false);
+            RequestPairResult pairResult = await TimeSubPhaseAsync(
+                subPhaseCounters,
+                static (c, e) => c.AddDiff(e),
+                () => responseComparer.CompareAsync(request, comparisonOptions, canonicalA, canonicalB, null, cancellationToken)).ConfigureAwait(false);
 
-            return await AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, cancellationToken).ConfigureAwait(false);
+            return await TimeSubPhaseAsync(
+                subPhaseCounters,
+                static (c, e) => c.AddFocusedContent(e),
+                () => AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, cancellationToken)).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -755,6 +802,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         EndpointExecutionRecord endpointResult,
         IReadOnlyList<MaskRuleDefinition> maskRules,
         RunExecutionCounters counters,
+        CompareSubPhaseCounters? subPhaseCounters,
         CancellationToken cancellationToken)
     {
         if (endpointResult.Metadata is null)
@@ -778,24 +826,27 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
             endpointResult.ContentType,
             sourceFormat);
 
-        NormalizedContractResponse normalized = await profile
-            .NormalizeResponseAsync(endpointResult.Endpoint, context, cancellationToken)
-            .ConfigureAwait(false);
+        NormalizedContractResponse normalized = await TimeSubPhaseAsync(
+            subPhaseCounters,
+            static (c, e) => c.AddNormalize(e),
+            () => profile.NormalizeResponseAsync(endpointResult.Endpoint, context, cancellationToken).AsTask()).ConfigureAwait(false);
 
         await using ContractPayload normalizedPayload = normalized.Body;
         await using Stream normalizedStream = await normalizedPayload.OpenReadAsync(cancellationToken).ConfigureAwait(false);
         RequestItem canonicalArtifactRequest = CreateCanonicalArtifactRequest(request, endpointResult.Endpoint, normalizedPayload.ContentType);
-        return await PersistResponseAsync(
-            run.Id,
-            endpointResult.Endpoint,
-            canonicalArtifactRequest,
-            endpointResult.StatusCode ?? 0,
-            normalizedPayload.ContentType,
-            normalizedStream,
-            maskRules,
-            counters,
-            cancellationToken)
-            .ConfigureAwait(false);
+        return await TimeSubPhaseAsync(
+            subPhaseCounters,
+            static (c, e) => c.AddPersistCanonical(e),
+            () => PersistResponseAsync(
+                run.Id,
+                endpointResult.Endpoint,
+                canonicalArtifactRequest,
+                endpointResult.StatusCode ?? 0,
+                normalizedPayload.ContentType,
+                normalizedStream,
+                maskRules,
+                counters,
+                cancellationToken)).ConfigureAwait(false);
     }
 
     private async Task<ResponseArtifactMetadata> PersistResponseAsync(
@@ -1014,6 +1065,31 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
 
         public void AddResponseBytes(long bytesWritten) =>
             Interlocked.Add(ref responseBytesWritten, bytesWritten);
+    }
+
+    // Only instantiated when ObservabilityOptions.EnableDetailedCompareTiming is on -
+    // otherwise CompareRecordAsync's TimeSubPhaseAsync helper never touches this and no
+    // Stopwatch is created, so the toggle being off has no measurable cost.
+    private sealed class CompareSubPhaseCounters
+    {
+        private long normalizeTicks;
+        private long persistCanonicalTicks;
+        private long diffTicks;
+        private long focusedContentTicks;
+
+        public void AddNormalize(TimeSpan elapsed) => Interlocked.Add(ref normalizeTicks, elapsed.Ticks);
+
+        public void AddPersistCanonical(TimeSpan elapsed) => Interlocked.Add(ref persistCanonicalTicks, elapsed.Ticks);
+
+        public void AddDiff(TimeSpan elapsed) => Interlocked.Add(ref diffTicks, elapsed.Ticks);
+
+        public void AddFocusedContent(TimeSpan elapsed) => Interlocked.Add(ref focusedContentTicks, elapsed.Ticks);
+
+        public CompareSubPhaseMetrics ToMetrics() => new CompareSubPhaseMetrics(
+            TimeSpan.FromTicks(Interlocked.Read(ref normalizeTicks)),
+            TimeSpan.FromTicks(Interlocked.Read(ref persistCanonicalTicks)),
+            TimeSpan.FromTicks(Interlocked.Read(ref diffTicks)),
+            TimeSpan.FromTicks(Interlocked.Read(ref focusedContentTicks)));
     }
 
     private sealed class PreparedRequest : IAsyncDisposable

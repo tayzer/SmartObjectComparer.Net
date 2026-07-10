@@ -1,5 +1,15 @@
 namespace ParityBench.NET.Domain.Runs;
 
+// Populated only when ObservabilityOptions.EnableDetailedCompareTiming is on: breaks the
+// aggregate ComparisonDuration down by sub-step so a slow compare phase can be attributed
+// to normalization, canonical artifact persistence, the actual diff, or focused-content
+// building instead of one opaque number. Null when the toggle is off.
+public sealed record CompareSubPhaseMetrics(
+    TimeSpan NormalizeDuration,
+    TimeSpan PersistCanonicalDuration,
+    TimeSpan DiffDuration,
+    TimeSpan FocusedContentDuration);
+
 public sealed record RunExecutionMetrics
 {
     public RunExecutionMetrics(
@@ -12,7 +22,8 @@ public sealed record RunExecutionMetrics
         long responseBytesWritten,
         int retainedArtifactCount = 0,
         int trimmedByPolicyArtifactCount = 0,
-        int missingUnexpectedlyArtifactCount = 0)
+        int missingUnexpectedlyArtifactCount = 0,
+        CompareSubPhaseMetrics? compareSubPhases = null)
     {
         EnsureNonNegative(totalDuration, nameof(totalDuration));
         EnsureNonNegative(requestExecutionDuration, nameof(requestExecutionDuration));
@@ -35,6 +46,7 @@ public sealed record RunExecutionMetrics
         RetainedArtifactCount = retainedArtifactCount;
         TrimmedByPolicyArtifactCount = trimmedByPolicyArtifactCount;
         MissingUnexpectedlyArtifactCount = missingUnexpectedlyArtifactCount;
+        CompareSubPhases = compareSubPhases;
     }
 
     public TimeSpan TotalDuration { get; }
@@ -56,6 +68,8 @@ public sealed record RunExecutionMetrics
     public int TrimmedByPolicyArtifactCount { get; }
 
     public int MissingUnexpectedlyArtifactCount { get; }
+
+    public CompareSubPhaseMetrics? CompareSubPhases { get; }
 
     private static void EnsureNonNegative(TimeSpan value, string parameterName)
     {

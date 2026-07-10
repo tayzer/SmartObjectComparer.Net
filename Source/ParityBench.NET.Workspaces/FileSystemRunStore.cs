@@ -309,6 +309,10 @@ public sealed class FileSystemRunStore : IRunStore
             RetainedArtifactCount = metrics.RetainedArtifactCount,
             TrimmedByPolicyArtifactCount = metrics.TrimmedByPolicyArtifactCount,
             MissingUnexpectedlyArtifactCount = metrics.MissingUnexpectedlyArtifactCount,
+            CompareNormalizeDurationMilliseconds = metrics.CompareSubPhases?.NormalizeDuration.TotalMilliseconds,
+            ComparePersistCanonicalDurationMilliseconds = metrics.CompareSubPhases?.PersistCanonicalDuration.TotalMilliseconds,
+            CompareDiffDurationMilliseconds = metrics.CompareSubPhases?.DiffDuration.TotalMilliseconds,
+            CompareFocusedContentDurationMilliseconds = metrics.CompareSubPhases?.FocusedContentDuration.TotalMilliseconds,
         };
 
     private RunDetailReferenceDto ToDto(RunDetailReference reference) =>
@@ -466,7 +470,14 @@ public sealed class FileSystemRunStore : IRunStore
             dto.ResponseBytesWritten,
             dto.RetainedArtifactCount,
             dto.TrimmedByPolicyArtifactCount,
-            dto.MissingUnexpectedlyArtifactCount);
+            dto.MissingUnexpectedlyArtifactCount,
+            dto.CompareNormalizeDurationMilliseconds is null
+                ? null
+                : new CompareSubPhaseMetrics(
+                    TimeSpan.FromMilliseconds(dto.CompareNormalizeDurationMilliseconds.Value),
+                    TimeSpan.FromMilliseconds(dto.ComparePersistCanonicalDurationMilliseconds ?? 0),
+                    TimeSpan.FromMilliseconds(dto.CompareDiffDurationMilliseconds ?? 0),
+                    TimeSpan.FromMilliseconds(dto.CompareFocusedContentDurationMilliseconds ?? 0)));
 
     private RunDetailReference FromDto(RunDetailReferenceDto dto) =>
         new RunDetailReference(
@@ -759,6 +770,14 @@ public sealed class FileSystemRunStore : IRunStore
         public int TrimmedByPolicyArtifactCount { get; init; }
 
         public int MissingUnexpectedlyArtifactCount { get; init; }
+
+        public double? CompareNormalizeDurationMilliseconds { get; init; }
+
+        public double? ComparePersistCanonicalDurationMilliseconds { get; init; }
+
+        public double? CompareDiffDurationMilliseconds { get; init; }
+
+        public double? CompareFocusedContentDurationMilliseconds { get; init; }
     }
 
     private sealed class RunDetailReferenceDto

@@ -604,6 +604,8 @@ public sealed class BasicComparisonRunExecutorTests
 
         public bool IsDiagnosticsPersistenceEnabled => true;
 
+        public bool IsDetailedCompareTimingEnabled { get; set; }
+
         public TimeSpan SlowPathThreshold { get; }
 
         public List<SlowRequestPathDiagnostic> SlowPaths { get; } = new List<SlowRequestPathDiagnostic>();

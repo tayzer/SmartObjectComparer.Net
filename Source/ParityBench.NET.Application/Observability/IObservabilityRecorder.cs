@@ -11,6 +11,8 @@ public interface IObservabilityRecorder
 
     bool IsDiagnosticsPersistenceEnabled { get; }
 
+    bool IsDetailedCompareTimingEnabled { get; }
+
     TimeSpan SlowPathThreshold { get; }
 
     void RecordRunPhase(RunId runId, string phaseName, TimeSpan duration);

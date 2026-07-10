@@ -28,6 +28,8 @@ public sealed class ObservabilityRecorder : IObservabilityRecorder
 
     public bool IsDiagnosticsPersistenceEnabled => options.PersistDiagnostics;
 
+    public bool IsDetailedCompareTimingEnabled => options.EnableDetailedCompareTiming;
+
     public TimeSpan SlowPathThreshold => TimeSpan.FromMilliseconds(Math.Max(0, options.SlowPathThresholdMs));
 
     public void RecordRunPhase(RunId runId, string phaseName, TimeSpan duration)

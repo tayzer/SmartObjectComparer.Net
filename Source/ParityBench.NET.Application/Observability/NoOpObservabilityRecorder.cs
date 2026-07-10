@@ -13,6 +13,8 @@ public sealed class NoOpObservabilityRecorder : IObservabilityRecorder
 
     public bool IsDiagnosticsPersistenceEnabled => false;
 
+    public bool IsDetailedCompareTimingEnabled => false;
+
     public TimeSpan SlowPathThreshold => TimeSpan.MaxValue;
 
     public void RecordRunPhase(RunId runId, string phaseName, TimeSpan duration)

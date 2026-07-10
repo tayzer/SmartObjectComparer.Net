@@ -13,4 +13,10 @@ public sealed class ObservabilityOptions
     public int MaxSlowPathEntries { get; set; } = 100;
 
     public int MaxExceptionEntries { get; set; } = 100;
+
+    // Off by default: breaks the compare-phase duration down by sub-step (normalize,
+    // persist canonical artifacts, diff, focused-content build) for diagnosing slow
+    // comparisons. Adds a few Stopwatch calls per request; switch off once the cause
+    // of a slowdown is found and the run is healthy again.
+    public bool EnableDetailedCompareTiming { get; set; }
 }
