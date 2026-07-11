@@ -1,0 +1,21 @@
+<Project Sdk="MSTest.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\ParityBench.NET.Application\ParityBench.NET.Application.csproj" />
+    <ProjectReference Include="..\..\Source\ParityBench.NET.Cli\ParityBench.NET.Cli.csproj" />
+    <ProjectReference Include="..\..\Source\ParityBench.NET.ClientCustomerLookupExample\ParityBench.NET.ClientCustomerLookupExample.csproj" />
+    <ProjectReference Include="..\..\Source\ParityBench.NET.Domain\ParityBench.NET.Domain.csproj" />
+    <ProjectReference Include="..\..\Source\ParityBench.NET.Engine\ParityBench.NET.Engine.csproj" />
+    <ProjectReference Include="..\..\Source\ParityBench.NET.Infrastructure\ParityBench.NET.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\Source\ParityBench.NET.Workspaces\ParityBench.NET.Workspaces.csproj" />
+  </ItemGroup>
+
+</Project>
