@@ -8,6 +8,7 @@ using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
 using ParityBench.NET.Engine;
+using ParityBench.NET.Engine.Comparers;
 using ParityBench.NET.Infrastructure;
 using ParityBench.NET.Workspaces;
 
@@ -30,7 +31,7 @@ public sealed class BasicRequestAbFlowIntegrationTests
         FileSystemRunStore runStore = new FileSystemRunStore(workspaceRoot);
         FileSystemRunArtifactStore artifactStore = new FileSystemRunArtifactStore(workspaceRoot);
         FileSystemRunDetailStore detailStore = new FileSystemRunDetailStore(workspaceRoot);
-        BasicComparisonRunExecutor executor = new BasicComparisonRunExecutor(
+        ComparisonRunExecutor executor = new ComparisonRunExecutor(
             requestBatchStore,
             new FixedEndpointRequestSender("response"),
             artifactStore,
@@ -73,7 +74,7 @@ public sealed class BasicRequestAbFlowIntegrationTests
         registry.Register<SampleResponse>("Sample");
         JsonXmlResponseBodyDeserializer deserializer = new JsonXmlResponseBodyDeserializer(registry);
         CompareNetObjectsResponseComparer comparer = new CompareNetObjectsResponseComparer(artifactStore, deserializer);
-        BasicComparisonRunExecutor executor = new BasicComparisonRunExecutor(
+        ComparisonRunExecutor executor = new ComparisonRunExecutor(
             requestBatchStore,
             new EndpointSwitchingRequestSender(
                 "{\"id\":1,\"name\":\"Alpha\",\"token\":\"secret-a\"}",

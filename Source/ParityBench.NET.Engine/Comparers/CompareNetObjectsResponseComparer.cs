@@ -4,14 +4,13 @@ using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
-
 using KellermanSoftware.CompareNetObjects;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
 
-namespace ParityBench.NET.Engine;
+namespace ParityBench.NET.Engine.Comparers;
 
 public sealed class CompareNetObjectsResponseComparer : IResponseComparer
 {

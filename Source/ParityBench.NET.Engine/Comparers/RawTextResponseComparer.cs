@@ -1,11 +1,10 @@
 ﻿using System.Text;
-
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
 
-namespace ParityBench.NET.Engine;
+namespace ParityBench.NET.Engine.Comparers;
 
 public sealed class RawTextResponseComparer : IResponseComparer
 {

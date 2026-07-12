@@ -4,6 +4,7 @@ using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
 using ParityBench.NET.Engine;
+using ParityBench.NET.Engine.Comparers;
 
 namespace ParityBench.NET.Engine.Tests;
 

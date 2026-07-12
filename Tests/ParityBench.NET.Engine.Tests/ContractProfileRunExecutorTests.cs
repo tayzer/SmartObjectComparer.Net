@@ -14,6 +14,7 @@ using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Results;
 using ParityBench.NET.Domain.Runs;
 using ParityBench.NET.Engine;
+using ParityBench.NET.Engine.Comparers;
 using ParityBench.NET.Infrastructure;
 
 namespace ParityBench.NET.Engine.Tests;
@@ -31,7 +32,7 @@ public sealed class ContractProfileRunExecutorTests
             new Dictionary<string, string> { ["SOAPAction"] = "urn:common", ["X-Override"] = "request" },
             headersB: new Dictionary<string, string> { ["X-Endpoint-B"] = "request-b" });
         CapturingEndpointRequestSender sender = new CapturingEndpointRequestSender(_ => "<ok />");
-        BasicComparisonRunExecutor executor = CreateExecutor(
+        ComparisonRunExecutor executor = CreateExecutor(
             CreateManifest(request),
             sender,
             new FakeContractProfile());
@@ -53,7 +54,7 @@ public sealed class ContractProfileRunExecutorTests
     public async Task ExecuteAsync_WhenSourceRequestFormatIsUnsupported_ReturnsExecutionFailedPair()
     {
         RequestItem request = new RequestItem("one.txt", "text/plain", 10);
-        BasicComparisonRunExecutor executor = CreateExecutor(
+        ComparisonRunExecutor executor = CreateExecutor(
             CreateManifest(request),
             new CapturingEndpointRequestSender(_ => "<ok />"),
             new FakeContractProfile());
@@ -67,7 +68,7 @@ public sealed class ContractProfileRunExecutorTests
     public async Task ExecuteAsync_WhenResponseNormalizationFails_ReturnsExecutionFailedPair()
     {
         RequestItem request = new RequestItem("one.xml", "application/xml", 10);
-        BasicComparisonRunExecutor executor = CreateExecutor(
+        ComparisonRunExecutor executor = CreateExecutor(
             CreateManifest(request),
             new CapturingEndpointRequestSender(_ => "<ok />"),
             new ThrowingNormalizationProfile());
@@ -86,7 +87,7 @@ public sealed class ContractProfileRunExecutorTests
             endpointRequest.Endpoint == EndpointSlot.A
                 ? new string('a', 128 * 1024)
                 : new string('b', 128 * 1024));
-        BasicComparisonRunExecutor executor = new BasicComparisonRunExecutor(
+        ComparisonRunExecutor executor = new ComparisonRunExecutor(
             new FakeRequestBatchStore(CreateManifest(request), "<request />"),
             sender,
             artifactStore,
@@ -114,7 +115,7 @@ public sealed class ContractProfileRunExecutorTests
         CompareNetObjectsResponseComparer comparer = new CompareNetObjectsResponseComparer(
             artifactStore,
             new JsonXmlResponseBodyDeserializer(modelRegistry));
-        BasicComparisonRunExecutor executor = new BasicComparisonRunExecutor(
+        ComparisonRunExecutor executor = new ComparisonRunExecutor(
             new FakeRequestBatchStore(CreateManifest(request), "<request />"),
             new CapturingEndpointRequestSender(_ => "<ok />"),
             artifactStore,
@@ -144,7 +145,7 @@ public sealed class ContractProfileRunExecutorTests
             request.Endpoint == EndpointSlot.A
                 ? "<Envelope><Body><CustomerLookupResponse><StatusCode>OK</StatusCode><CustomerName>Ada</CustomerName><SensitiveToken>tok</SensitiveToken></CustomerLookupResponse></Body></Envelope>"
                 : "{\"statusCode\":\"OK\",\"customerName\":\"Ada\",\"payload\":{\"raw_token\":\"tok\"}}");
-        BasicComparisonRunExecutor executor = new BasicComparisonRunExecutor(
+        ComparisonRunExecutor executor = new ComparisonRunExecutor(
             new FakeRequestBatchStore(CreateManifest(request), "<Envelope><Body><CustomerLookupRequest><CustomerId>123</CustomerId><SensitiveToken>tok</SensitiveToken></CustomerLookupRequest></Body></Envelope>"),
             sender,
             artifactStore,
@@ -213,7 +214,7 @@ public sealed class ContractProfileRunExecutorTests
                 ? "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:tns=\"urn:trended\"><soap:Body><tns:GetTrendedDataResponse><tns:Status>OK</tns:Status><tns:TraceId>trace-a</tns:TraceId></tns:GetTrendedDataResponse></soap:Body></soap:Envelope>"
                 : "{\"status\":\"OK\"}");
         const string requestBody = "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:tns=\"urn:trended\"><soap:Body><tns:GetTrendedData><tns:Request><tns:AccountId>abc</tns:AccountId></tns:Request></tns:GetTrendedData></soap:Body></soap:Envelope>";
-        BasicComparisonRunExecutor executor = new BasicComparisonRunExecutor(
+        ComparisonRunExecutor executor = new ComparisonRunExecutor(
             new FakeRequestBatchStore(CreateManifest(request), requestBody),
             sender,
             artifactStore,
@@ -230,13 +231,13 @@ public sealed class ContractProfileRunExecutorTests
         Assert.IsTrue(endpointBRequest.Body.Contains("\"accountId\":\"abc\"", StringComparison.Ordinal));
     }
 
-    private static BasicComparisonRunExecutor CreateExecutor(
+    private static ComparisonRunExecutor CreateExecutor(
         RequestBatchManifest manifest,
         CapturingEndpointRequestSender sender,
         IContractProfile profile)
     {
         InMemoryArtifactStore artifactStore = new InMemoryArtifactStore();
-        return new BasicComparisonRunExecutor(
+        return new ComparisonRunExecutor(
             new FakeRequestBatchStore(manifest, "<request />"),
             sender,
             artifactStore,

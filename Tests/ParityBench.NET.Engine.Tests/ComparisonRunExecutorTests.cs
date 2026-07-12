@@ -11,17 +11,18 @@ using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Results;
 using ParityBench.NET.Domain.Runs;
 using ParityBench.NET.Engine;
+using ParityBench.NET.Engine.Comparers;
 using ParityBench.NET.Engine.Pipeline;
 
 namespace ParityBench.NET.Engine.Tests;
 
 [TestClass]
-public sealed class BasicComparisonRunExecutorTests
+public sealed class ComparisonRunExecutorTests
 {
     [TestMethod]
     public async Task ExecuteAsync_WhenResponsesMatch_CompletesWithEqualSummary()
     {
-        BasicComparisonRunExecutor executor = CreateExecutor(
+        ComparisonRunExecutor executor = CreateExecutor(
             CreateBatch(new[] { new RequestItem("one.json", "application/json", 2) }),
             FakeEndpointRequestSender.ForBody("same"));
 
@@ -34,7 +35,7 @@ public sealed class BasicComparisonRunExecutorTests
     [TestMethod]
     public async Task ExecuteAsync_WhenRunCompletes_IncludesExecutionMetricsInSummary()
     {
-        BasicComparisonRunExecutor executor = CreateExecutor(
+        ComparisonRunExecutor executor = CreateExecutor(
             CreateBatch(new[] { new RequestItem("one.json", "application/json", 2) }),
             FakeEndpointRequestSender.ForBody("same"));
 
@@ -55,7 +56,7 @@ public sealed class BasicComparisonRunExecutorTests
     {
         RequestItem request = new RequestItem("one.json", "application/json", 2);
         CapturingObservabilityRecorder recorder = new CapturingObservabilityRecorder(TimeSpan.Zero);
-        BasicComparisonRunExecutor executor = CreateExecutor(
+        ComparisonRunExecutor executor = CreateExecutor(
             CreateBatch(new[] { request }),
             FakeEndpointRequestSender.ForBody("same"),
             observabilityRecorder: recorder);
@@ -79,7 +80,7 @@ public sealed class BasicComparisonRunExecutorTests
 
             return new EndpointResponse(200, "application/json", CreateStream("same"));
         });
-        BasicComparisonRunExecutor executor = CreateExecutor(
+        ComparisonRunExecutor executor = CreateExecutor(
             CreateBatch(new[] { new RequestItem("one.json", "application/json", 2) }),
             sender,
             observabilityRecorder: recorder);
@@ -97,7 +98,7 @@ public sealed class BasicComparisonRunExecutorTests
         FakeRunArtifactStore artifactStore = new FakeRunArtifactStore();
         FakeEndpointRequestSender sender = new FakeEndpointRequestSender(_ =>
             new EndpointResponse(200, "application/octet-stream", new TrackingReadStream(1024 * 1024)));
-        BasicComparisonRunExecutor executor = CreateExecutor(
+        ComparisonRunExecutor executor = CreateExecutor(
             CreateBatch(new[] { new RequestItem("large.bin", "application/octet-stream", 1024 * 1024) }),
             sender,
             artifactStore);
@@ -115,7 +116,7 @@ public sealed class BasicComparisonRunExecutorTests
             request.Endpoint == EndpointSlot.A
                 ? new EndpointResponse(200, "application/json", CreateStream("a"))
                 : new EndpointResponse(200, "application/json", CreateStream("b")));
-        BasicComparisonRunExecutor executor = CreateExecutor(
+        ComparisonRunExecutor executor = CreateExecutor(
             CreateBatch(new[] { new RequestItem("one.json", "application/json", 2) }),
             sender);
 
@@ -132,7 +133,7 @@ public sealed class BasicComparisonRunExecutorTests
             request.Endpoint == EndpointSlot.A
                 ? new EndpointResponse(200, "application/json", CreateStream("same"))
                 : new EndpointResponse(500, "application/json", CreateStream("same")));
-        BasicComparisonRunExecutor executor = CreateExecutor(
+        ComparisonRunExecutor executor = CreateExecutor(
             CreateBatch(new[] { new RequestItem("one.json", "application/json", 2) }),
             sender);
 
@@ -154,7 +155,7 @@ public sealed class BasicComparisonRunExecutorTests
 
             return new EndpointResponse(200, "application/json", CreateStream("same"));
         });
-        BasicComparisonRunExecutor executor = CreateExecutor(
+        ComparisonRunExecutor executor = CreateExecutor(
             CreateBatch(new[] { new RequestItem("one.json", "application/json", 2) }),
             sender);
 
@@ -173,7 +174,7 @@ public sealed class BasicComparisonRunExecutorTests
             .ToArray();
         FakeEndpointRequestSender sender = FakeEndpointRequestSender.ForBody("same", TimeSpan.FromMilliseconds(25));
         CapturingProgressReporter progressReporter = new CapturingProgressReporter();
-        BasicComparisonRunExecutor executor = CreateExecutor(CreateBatch(requests), sender);
+        ComparisonRunExecutor executor = CreateExecutor(CreateBatch(requests), sender);
 
         RunResultSummary summary = await executor.ExecuteAsync(CreateRun(maxConcurrency: 2), progressReporter);
 
@@ -195,7 +196,7 @@ public sealed class BasicComparisonRunExecutorTests
             .ToArray();
         FakeEndpointRequestSender sender = FakeEndpointRequestSender.ForBody("same", TimeSpan.FromMilliseconds(1));
         CapturingProgressReporter progressReporter = new CapturingProgressReporter();
-        BasicComparisonRunExecutor executor = CreateExecutor(CreateBatch(requests), sender);
+        ComparisonRunExecutor executor = CreateExecutor(CreateBatch(requests), sender);
 
         RunResultSummary summary = await executor.ExecuteAsync(CreateRun(maxConcurrency: 32), progressReporter);
 
@@ -218,7 +219,7 @@ public sealed class BasicComparisonRunExecutorTests
             new Dictionary<string, string> { ["X-Common"] = "request", ["X-Override"] = "request" },
             new Dictionary<string, string> { ["X-A"] = "request-a" });
         FakeEndpointRequestSender sender = FakeEndpointRequestSender.ForBody("same");
-        BasicComparisonRunExecutor executor = CreateExecutor(CreateBatch(new[] { request }), sender);
+        ComparisonRunExecutor executor = CreateExecutor(CreateBatch(new[] { request }), sender);
         ComparisonRun run = CreateRun(
             endpointAHeaders: new Dictionary<string, string> { ["X-Endpoint"] = "a", ["X-Override"] = "endpoint" });
 
@@ -236,7 +237,7 @@ public sealed class BasicComparisonRunExecutorTests
     {
         RequestItem request = new RequestItem("one.txt", "text/plain", 2);
         FakeEndpointRequestSender sender = FakeEndpointRequestSender.ForBody("same");
-        BasicComparisonRunExecutor executor = CreateExecutor(CreateBatch(new[] { request }), sender);
+        ComparisonRunExecutor executor = CreateExecutor(CreateBatch(new[] { request }), sender);
         ComparisonRun run = CreateRun(
             requestExecutionOptions: new RequestExecutionOptions("application/json"));
 
@@ -251,7 +252,7 @@ public sealed class BasicComparisonRunExecutorTests
         RequestItem request = new RequestItem("one.json", "application/json", 2);
         FakeEndpointRequestSender sender = FakeEndpointRequestSender.ForBody("{\"token\":\"secret-1234\"}");
         FakeRunArtifactStore artifactStore = new FakeRunArtifactStore();
-        BasicComparisonRunExecutor executor = CreateExecutor(CreateBatch(new[] { request }), sender, artifactStore);
+        ComparisonRunExecutor executor = CreateExecutor(CreateBatch(new[] { request }), sender, artifactStore);
         ComparisonRun run = CreateRun(
             comparisonOptions: new ComparisonOptions(
                 maskRules: new[] { new MaskRuleDefinition("token", preserveLastCharacters: 4) }));
@@ -273,7 +274,7 @@ public sealed class BasicComparisonRunExecutorTests
             endpointRequest.Endpoint == EndpointSlot.A
                 ? new EndpointResponse(200, "application/json", CreateStream(@"{""name"":""Alice"",""token"":""secret""}"))
                 : new EndpointResponse(200, "application/json", CreateStream(@"{""name"":""Alicia"",""token"":""other""}")));
-        BasicComparisonRunExecutor executor = CreateExecutor(
+        ComparisonRunExecutor executor = CreateExecutor(
             CreateBatch(new[] { request }),
             sender,
             artifactStore,
@@ -305,7 +306,7 @@ public sealed class BasicComparisonRunExecutorTests
             endpointRequest.Endpoint == EndpointSlot.A
                 ? new EndpointResponse(200, "application/json", CreateStream(@"{""name"":""Alice"",""ReportId"":""A-1""}"))
                 : new EndpointResponse(200, "application/json", CreateStream(@"{""name"":""Alicia"",""ReportId"":""B-1""}")));
-        BasicComparisonRunExecutor executor = CreateExecutor(
+        ComparisonRunExecutor executor = CreateExecutor(
             CreateBatch(new[] { request }),
             sender,
             artifactStore,
@@ -335,7 +336,7 @@ public sealed class BasicComparisonRunExecutorTests
             endpointRequest.Endpoint == EndpointSlot.A
                 ? new EndpointResponse(200, "application/json", CreateStream(@"{""name"":""Alice"",""meta"":{""ProviderTraceId"":""A-1""}}"))
                 : new EndpointResponse(200, "application/json", CreateStream(@"{""name"":""Alicia"",""meta"":{""ProviderTraceId"":""B-1""}}")));
-        BasicComparisonRunExecutor executor = CreateExecutor(
+        ComparisonRunExecutor executor = CreateExecutor(
             CreateBatch(new[] { request }),
             sender,
             artifactStore,
@@ -360,7 +361,7 @@ public sealed class BasicComparisonRunExecutorTests
     {
         RequestItem request = new RequestItem("one.json", "application/json", 2);
         FakeRunDetailStore detailStore = new FakeRunDetailStore();
-        BasicComparisonRunExecutor executor = CreateExecutor(
+        ComparisonRunExecutor executor = CreateExecutor(
             CreateBatch(new[] { request }),
             FakeEndpointRequestSender.ForBody("same"),
             detailStore: detailStore);
@@ -386,7 +387,7 @@ public sealed class BasicComparisonRunExecutorTests
 
             return new EndpointResponse(200, "application/json", CreateStream("same"));
         });
-        BasicComparisonRunExecutor executor = CreateExecutor(
+        ComparisonRunExecutor executor = CreateExecutor(
             CreateBatch(new[] { new RequestItem("one.json", "application/json", 2) }),
             sender,
             detailStore: detailStore);
@@ -402,7 +403,7 @@ public sealed class BasicComparisonRunExecutorTests
     public async Task ExecuteAsync_WhenRunCompletes_RecordsStagesInOrder()
     {
         CapturingObservabilityRecorder recorder = new CapturingObservabilityRecorder(TimeSpan.Zero);
-        BasicComparisonRunExecutor executor = CreateExecutor(
+        ComparisonRunExecutor executor = CreateExecutor(
             CreateBatch(new[] { new RequestItem("one.json", "application/json", 2) }),
             FakeEndpointRequestSender.ForBody("same"),
             observabilityRecorder: recorder);
@@ -424,7 +425,7 @@ public sealed class BasicComparisonRunExecutorTests
             appendWasDurableWhenCleanupStarted = context.DurableAppendCompleted && detailStore.SaveCount == 1;
             return Task.CompletedTask;
         });
-        BasicComparisonRunExecutor executor = CreateExecutor(
+        ComparisonRunExecutor executor = CreateExecutor(
             CreateBatch(new[] { new RequestItem("one.json", "application/json", 2) }),
             FakeEndpointRequestSender.ForBody("same"),
             detailStore: detailStore,
@@ -453,7 +454,7 @@ public sealed class BasicComparisonRunExecutorTests
                 "request-a.json" => TimeSpan.FromMilliseconds(2),
                 _ => TimeSpan.FromMilliseconds(8),
             });
-        BasicComparisonRunExecutor executor = CreateExecutor(
+        ComparisonRunExecutor executor = CreateExecutor(
             CreateBatch(requests),
             sender,
             detailStore: detailStore);
@@ -465,7 +466,7 @@ public sealed class BasicComparisonRunExecutorTests
             detailStore.SavedResults.Select(result => result.RelativePath).ToArray());
     }
 
-    private static BasicComparisonRunExecutor CreateExecutor(
+    private static ComparisonRunExecutor CreateExecutor(
         RequestBatchManifest manifest,
         FakeEndpointRequestSender sender,
         FakeRunArtifactStore? artifactStore = null,
@@ -476,7 +477,7 @@ public sealed class BasicComparisonRunExecutorTests
     {
         FakeRequestBatchStore requestBatchStore = new FakeRequestBatchStore(manifest);
         IRunArtifactStore resolvedArtifactStore = artifactStore ?? new FakeRunArtifactStore();
-        return new BasicComparisonRunExecutor(
+        return new ComparisonRunExecutor(
             requestBatchStore,
             sender,
             resolvedArtifactStore,

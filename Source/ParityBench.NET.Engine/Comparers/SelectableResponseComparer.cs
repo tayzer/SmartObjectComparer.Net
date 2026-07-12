@@ -2,7 +2,7 @@
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
 
-namespace ParityBench.NET.Engine;
+namespace ParityBench.NET.Engine.Comparers;
 
 public sealed class SelectableResponseComparer : IResponseComparer
 {

@@ -8,6 +8,7 @@ using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
 using ParityBench.NET.Engine;
+using ParityBench.NET.Engine.Comparers;
 
 namespace ParityBench.NET.Engine.Tests;
 

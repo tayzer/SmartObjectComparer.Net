@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-
 using ParityBench.NET.Application.Runs;
 using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Comparison;
@@ -535,6 +534,7 @@ public sealed class FileSystemRunStore : IRunStore
             dto.StackTrace,
             dto.RelativePath,
             dto.Endpoint);
+
     private sealed class RunDiagnosticsSnapshotDto
     {
         public List<SlowRequestPathDiagnosticDto> SlowRequestPaths { get; init; } = new List<SlowRequestPathDiagnosticDto>();

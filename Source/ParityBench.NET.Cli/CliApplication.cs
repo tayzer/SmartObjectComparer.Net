@@ -11,6 +11,7 @@ using ParityBench.NET.Application.Runs;
 using ParityBench.NET.Application.Runs.Retention;
 using ParityBench.NET.Application.Workflow;
 using ParityBench.NET.Engine;
+using ParityBench.NET.Engine.Comparers;
 using ParityBench.NET.Engine.Pipeline;
 using ParityBench.NET.Infrastructure;
 using ParityBench.NET.Infrastructure.Reports;
@@ -138,7 +139,7 @@ public static class CliApplication
                 new CompareNetObjectsResponseComparer(artifactStore, serviceProvider.GetRequiredService<IResponseBodyDeserializer>()),
                 serviceProvider.GetRequiredService<IResponseModelRegistry>());
 
-            return new BasicComparisonRunExecutor(
+            return new ComparisonRunExecutor(
                 serviceProvider.GetRequiredService<IRequestBatchStore>(),
                 serviceProvider.GetRequiredService<IEndpointRequestSender>(),
                 artifactStore,

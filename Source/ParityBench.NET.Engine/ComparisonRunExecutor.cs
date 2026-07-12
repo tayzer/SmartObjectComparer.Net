@@ -11,11 +11,12 @@ using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
 using ParityBench.NET.Domain.Runs.Retention;
+using ParityBench.NET.Engine.Comparers;
 using ParityBench.NET.Engine.Pipeline;
 
 namespace ParityBench.NET.Engine;
 
-public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
+public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
 {
     private readonly IRequestBatchStore requestBatchStore;
     private readonly IEndpointRequestSender endpointRequestSender;
@@ -26,7 +27,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
     private readonly IObservabilityRecorder observabilityRecorder;
     private readonly IRunCleanupStage cleanupStage;
 
-    public BasicComparisonRunExecutor(
+    public ComparisonRunExecutor(
         IRequestBatchStore requestBatchStore,
         IEndpointRequestSender endpointRequestSender,
         IRunArtifactStore runArtifactStore,
@@ -40,7 +41,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
     {
     }
 
-    public BasicComparisonRunExecutor(
+    public ComparisonRunExecutor(
         IRequestBatchStore requestBatchStore,
         IEndpointRequestSender endpointRequestSender,
         IRunArtifactStore runArtifactStore,
@@ -56,7 +57,7 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
     {
     }
 
-    public BasicComparisonRunExecutor(
+    public ComparisonRunExecutor(
         IRequestBatchStore requestBatchStore,
         IEndpointRequestSender endpointRequestSender,
         IRunArtifactStore runArtifactStore,
@@ -1002,55 +1003,6 @@ public sealed class BasicComparisonRunExecutor : IComparisonRunExecutor
         return null;
     }
 
-
-    private sealed class RunSummaryAccumulator
-    {
-        private int totalPairs;
-        private int equalPairs;
-        private int differentPairs;
-        private int errorPairs;
-        private int statusCodeMismatchPairs;
-        private int bothNonSuccessPairs;
-
-        public void Add(IEnumerable<RequestPairResult> results)
-        {
-            foreach (RequestPairResult result in results)
-            {
-                totalPairs++;
-                switch (result.Outcome)
-                {
-                    case RequestPairOutcome.Equal:
-                        equalPairs++;
-                        break;
-                    case RequestPairOutcome.Different:
-                        differentPairs++;
-                        break;
-                    case RequestPairOutcome.ExecutionFailed:
-                        errorPairs++;
-                        break;
-                    case RequestPairOutcome.StatusCodeMismatch:
-                        statusCodeMismatchPairs++;
-                        break;
-                    case RequestPairOutcome.BothNonSuccess:
-                        bothNonSuccessPairs++;
-                        break;
-                }
-            }
-        }
-
-        public RunResultSummary ToSummary(
-            RunDetailReference detailReference,
-            RunExecutionMetrics executionMetrics) =>
-            new RunResultSummary(
-                totalPairs,
-                equalPairs,
-                differentPairs,
-                errorPairs,
-                statusCodeMismatchPairs,
-                bothNonSuccessPairs,
-                detailReference,
-                executionMetrics);
-    }
 
     private sealed record ArtifactRetentionCounters(
         int RetainedArtifactCount,

@@ -13,6 +13,7 @@ using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
 using ParityBench.NET.Engine;
+using ParityBench.NET.Engine.Comparers;
 using ParityBench.NET.Infrastructure;
 
 namespace ParityBench.NET.Fitness.Tests;
