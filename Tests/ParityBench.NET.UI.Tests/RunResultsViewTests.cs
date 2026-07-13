@@ -206,6 +206,115 @@ public sealed class RunResultsViewTests
 
 
     [TestMethod]
+    public void RunResult_WhenTerminalStructuredNodeRenders_UsesCompactEndpointValueRow()
+    {
+        RunId runId = new RunId("run-1");
+        const string path = "Applicants[*].RuleEvaluations[*].Outcomes";
+        RequestPairResult pair = new RequestPairResult(
+            "one.json",
+            RequestPairOutcome.Different,
+            CreateResponse(EndpointSlot.A, "one.json"),
+            CreateResponse(EndpointSlot.B, "one.json"),
+            areEqual: false,
+            differenceCount: 1,
+            differences: new[] { new ComparisonDifference(path, "2", "1", "Outcome count changed.") });
+        dataSource.Run = CreateCompletedRun(runId);
+        dataSource.Summary = dataSource.Run.Summary;
+        dataSource.Details = new[] { pair };
+
+        IRenderedComponent<RunResult> component = testContext.Render<RunResult>(parameters =>
+            parameters.Add(result => result.RunId, runId));
+
+        component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "Structured Differences"));
+        var leaf = component.FindAll(".v1-structured-diff-row")
+            .Single(row => string.Equals(row.GetAttribute("title"), path, StringComparison.Ordinal));
+        var cells = leaf.QuerySelectorAll(".v1-structured-diff-cell");
+
+        Assert.AreEqual(4, cells.Length);
+        StringAssert.Contains(cells[0].TextContent, "Outcomes");
+        StringAssert.Contains(cells[1].TextContent, "2");
+        StringAssert.Contains(cells[2].TextContent, "1");
+        StringAssert.Contains(cells[3].TextContent, "New");
+        StringAssert.Contains(cells[3].TextContent, "Track");
+        StringAssert.Contains(component.Find(".v1-structured-grid-header").TextContent, "Expected");
+        StringAssert.Contains(component.Find(".v1-structured-grid-header").TextContent, "Actual");
+        Assert.IsFalse(component.FindAll(".v1-structured-node-header")
+            .Any(header => string.Equals(header.GetAttribute("title"), path, StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
+    public void RunResult_WhenStructuredValuesAreNullAndLong_RendersResponsiveExplicitValues()
+    {
+        RunId runId = new RunId("run-1");
+        const string path = "Applicants[*].LongValue";
+        string longValue = new string('x', 260);
+        RequestPairResult pair = new RequestPairResult(
+            "one.json",
+            RequestPairOutcome.Different,
+            CreateResponse(EndpointSlot.A, "one.json"),
+            CreateResponse(EndpointSlot.B, "one.json"),
+            areEqual: false,
+            differenceCount: 1,
+            differences: new[] { new ComparisonDifference(path, null, longValue, "Value changed.") });
+        dataSource.Run = CreateCompletedRun(runId);
+        dataSource.Summary = dataSource.Run.Summary;
+        dataSource.Details = new[] { pair };
+
+        IRenderedComponent<RunResult> component = testContext.Render<RunResult>(parameters =>
+            parameters.Add(result => result.RunId, runId));
+
+        component.WaitForAssertion(() => StringAssert.Contains(component.Markup, longValue));
+        var leaf = component.FindAll(".v1-structured-diff-row")
+            .Single(row => string.Equals(row.GetAttribute("title"), path, StringComparison.Ordinal));
+        var valueCells = leaf.QuerySelectorAll(".v1-structured-diff-value");
+
+        Assert.IsTrue(valueCells[0].QuerySelector("span")?.ClassList.Contains("v1-structured-null") == true);
+        Assert.AreEqual("Expected", valueCells[0].GetAttribute("data-label"));
+        Assert.AreEqual("Actual", valueCells[1].GetAttribute("data-label"));
+        StringAssert.Contains(valueCells[1].TextContent, longValue);
+    }
+
+    [TestMethod]
+    public void RunResult_WhenStructuredSearchMatchesCollapsedBranch_RevealsThenRestoresBranch()
+    {
+        RunId runId = new RunId("run-1");
+        RequestPairResult pair = CreateDifferentPair("one.json");
+        dataSource.Run = CreateCompletedRun(runId);
+        dataSource.Summary = dataSource.Run.Summary;
+        dataSource.Details = new[] { pair };
+
+        IRenderedComponent<RunResult> component = testContext.Render<RunResult>(parameters =>
+            parameters.Add(result => result.RunId, runId));
+        var notificationPreferenceHeader = component.FindAll(".v1-structured-node-header")
+            .First(header => string.Equals(
+                header.GetAttribute("title"),
+                "Subject.ContactProfile.NotificationPreference",
+                StringComparison.Ordinal));
+        notificationPreferenceHeader.Click();
+        component.WaitForAssertion(() => Assert.IsFalse(component.FindAll(".v1-structured-diff-row")
+            .Any(row => string.Equals(
+                row.GetAttribute("title"),
+                "Subject.ContactProfile.NotificationPreference.MarketingConsent",
+                StringComparison.Ordinal))));
+
+        var search = component.Find("input[placeholder='Search differences...']");
+        search.Input("MarketingConsent");
+
+        component.WaitForAssertion(() => Assert.IsTrue(component.FindAll(".v1-structured-diff-row")
+            .Any(row => string.Equals(
+                row.GetAttribute("title"),
+                "Subject.ContactProfile.NotificationPreference.MarketingConsent",
+                StringComparison.Ordinal))));
+
+        search.Input(string.Empty);
+        component.WaitForAssertion(() => Assert.IsFalse(component.FindAll(".v1-structured-diff-row")
+            .Any(row => string.Equals(
+                row.GetAttribute("title"),
+                "Subject.ContactProfile.NotificationPreference.MarketingConsent",
+                StringComparison.Ordinal))));
+    }
+
+    [TestMethod]
     public void RunResult_WhenAllDifferencesTabIsOpened_RendersPropertyTreeAndAffectedPairLink()
     {
         RunId runId = new RunId("run-1");
@@ -296,6 +405,10 @@ public sealed class RunResultsViewTests
         StringAssert.Contains(component.Markup, "focused-b");
         Assert.IsFalse(component.Markup.Contains("full-a", StringComparison.Ordinal));
         Assert.IsFalse(component.Markup.Contains("full-b", StringComparison.Ordinal));
+        component.WaitForAssertion(() => Assert.IsTrue(testContext.JSInterop.Invocations.Any(invocation =>
+            invocation.Identifier == "parityBenchSetSyncedScroll" &&
+            invocation.Arguments.Count == 3 &&
+            invocation.Arguments[2] is true)));
     }
 
     [TestMethod]
@@ -351,7 +464,7 @@ public sealed class RunResultsViewTests
         ((Task)task).GetAwaiter().GetResult();
         component.Render();
 
-        IReadOnlyList<string> renderedLines = component.FindAll(".v1-line-text").Select(line => line.TextContent).ToList();
+        IReadOnlyList<string> renderedLines = component.FindAll(".aligned-diff-line-text").Select(line => line.TextContent).ToList();
         CollectionAssert.Contains(renderedLines.ToList(), "  \"name\": \"Alice\",");
         CollectionAssert.Contains(renderedLines.ToList(), "  \"city\": \"London\"");
         component.WaitForAssertion(() => Assert.IsTrue(testContext.JSInterop.Invocations.Any(invocation =>

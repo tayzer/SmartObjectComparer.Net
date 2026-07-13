@@ -58,7 +58,7 @@ window.parityBenchSetSyncedScroll = (leftId, rightId, enabled) => {
         }
     };
 
-    const detach = (element) => {
+    const detach = element => {
         const state = element?.[stateKey];
         if (!state) {
             return;
@@ -80,6 +80,57 @@ window.parityBenchSetSyncedScroll = (leftId, rightId, enabled) => {
         }
 
         let isSyncing = false;
+        const getRows = element => Array.from(element.querySelectorAll("[data-diff-row]"));
+        const getHeaderHeight = element => element.querySelector(".aligned-diff-header")?.offsetHeight ?? 0;
+        const findTopRow = (element, rows) => {
+            if (rows.length === 0) {
+                return null;
+            }
+
+            const anchorTop = element.scrollTop + getHeaderHeight(element);
+            if (anchorTop < rows[0].offsetTop) {
+                return null;
+            }
+
+            let low = 0;
+            let high = rows.length - 1;
+            let result = rows[0];
+            while (low <= high) {
+                const middle = Math.floor((low + high) / 2);
+                const row = rows[middle];
+                if (row.offsetTop <= anchorTop) {
+                    result = row;
+                    low = middle + 1;
+                } else {
+                    high = middle - 1;
+                }
+            }
+
+            return result;
+        };
+        const syncVerticalPosition = (source, target) => {
+            const sourceRows = getRows(source);
+            const targetRows = getRows(target);
+            const sourceRow = findTopRow(source, sourceRows);
+            if (!sourceRow || targetRows.length === 0) {
+                const sourceRange = Math.max(1, source.scrollHeight - source.clientHeight);
+                const targetRange = Math.max(0, target.scrollHeight - target.clientHeight);
+                target.scrollTop = (source.scrollTop / sourceRange) * targetRange;
+                return;
+            }
+
+            const rowIndex = Number.parseInt(sourceRow.dataset.diffRow ?? "0", 10);
+            const targetRow = targetRows.find(row => Number.parseInt(row.dataset.diffRow ?? "-1", 10) === rowIndex);
+            if (!targetRow) {
+                return;
+            }
+
+            const sourceRowHeight = Math.max(1, sourceRow.offsetHeight);
+            const sourceAnchorTop = source.scrollTop + getHeaderHeight(source);
+            const progress = Math.max(0, Math.min(1, (sourceAnchorTop - sourceRow.offsetTop) / sourceRowHeight));
+            const targetTop = targetRow.offsetTop - getHeaderHeight(target) + (progress * Math.max(1, targetRow.offsetHeight));
+            target.scrollTop = Math.max(0, targetTop);
+        };
         const bind = (source, target) => {
             const handler = () => {
                 if (isSyncing) {
@@ -87,12 +138,10 @@ window.parityBenchSetSyncedScroll = (leftId, rightId, enabled) => {
                 }
 
                 isSyncing = true;
-                const topRange = Math.max(1, source.scrollHeight - source.clientHeight);
                 const leftRange = Math.max(1, source.scrollWidth - source.clientWidth);
-                const targetTopRange = Math.max(0, target.scrollHeight - target.clientHeight);
                 const targetLeftRange = Math.max(0, target.scrollWidth - target.clientWidth);
 
-                target.scrollTop = (source.scrollTop / topRange) * targetTopRange;
+                syncVerticalPosition(source, target);
                 target.scrollLeft = (source.scrollLeft / leftRange) * targetLeftRange;
                 window.requestAnimationFrame(() => { isSyncing = false; });
             };

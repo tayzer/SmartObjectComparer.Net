@@ -1,0 +1,231 @@
+@using DiffPlex
+@using DiffPlex.DiffBuilder
+@using DiffPlex.DiffBuilder.Model
+@using Microsoft.AspNetCore.Components
+@using Microsoft.JSInterop
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<style>
+    .aligned-diff-toolbar { margin-bottom: .5rem; }
+    .aligned-diff-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border: 1px solid var(--mud-palette-lines-default); max-height: 44rem; overflow: hidden; }
+    .aligned-diff-panel { min-width: 0; overflow: auto; max-height: 44rem; }
+    .aligned-diff-panel:first-child { border-right: 1px solid var(--mud-palette-lines-default); }
+    .aligned-diff-header { position: sticky; top: 0; z-index: 2; display: flex; gap: .4rem; align-items: center; min-height: 2.25rem; padding: .45rem .65rem; background: var(--mud-palette-surface); border-bottom: 1px solid var(--mud-palette-lines-default); }
+    .aligned-diff-header-a { border-left: 3px solid #2e7d32; }
+    .aligned-diff-header-b { border-left: 3px solid #d32f2f; }
+    .aligned-diff-file-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mud-palette-text-secondary); font-size: .75rem; }
+    .aligned-diff-line { display: flex; min-height: 1.45rem; font-family: Consolas, Monaco, 'Courier New', monospace; font-size: .8rem; line-height: 1.45rem; }
+    .aligned-diff-line:hover { background-color: var(--mud-palette-action-default-hover); }
+    .aligned-diff-line-number { width: 3.75rem; flex: 0 0 3.75rem; padding: 0 .5rem; text-align: right; color: var(--mud-palette-text-secondary); background: var(--mud-palette-background-grey); border-right: 1px solid var(--mud-palette-lines-default); user-select: none; }
+    .aligned-diff-line-text { flex: 1; min-width: 0; padding: 0 .5rem; }
+    .aligned-diff-nowrap .aligned-diff-line-text { white-space: pre; overflow-wrap: normal; }
+    .aligned-diff-wrap .aligned-diff-line-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+    .aligned-diff-line-deleted { background: rgba(211, 47, 47, .12); }
+    .aligned-diff-line-inserted { background: rgba(46, 125, 50, .12); }
+    .aligned-diff-line-modified { background: rgba(245, 124, 0, .10); }
+    .aligned-diff-line-imaginary { background: var(--mud-palette-background-grey); opacity: .58; }
+    .aligned-diff-char-deleted { background: rgba(211, 47, 47, .34); border-radius: 2px; }
+    .aligned-diff-char-inserted { background: rgba(46, 125, 50, .34); border-radius: 2px; }
+    .aligned-diff-truncated { padding: .35rem .65rem; border-bottom: 1px solid var(--mud-palette-lines-default); color: var(--mud-palette-warning); font-size: .75rem; }
+
+    @@media (max-width: 700px) {
+        .aligned-diff-grid { grid-template-columns: minmax(22rem, 1fr) minmax(22rem, 1fr); overflow-x: auto; }
+    }
+</style>
+
+<MudStack Row="true" Spacing="2" Class="aligned-diff-toolbar flex-wrap">
+    <MudSwitch T="bool" Value="@syncScroll" ValueChanged="OnSyncScrollChangedAsync" Label="Sync scroll" />
+    <MudSwitch T="bool" Value="@highlightDifferences" ValueChanged="OnHighlightChanged" Label="Highlight" />
+    <MudSwitch T="bool" Value="@wordWrap" ValueChanged="OnWordWrapChanged" Label="Wrap" />
+</MudStack>
+
+@if (string.IsNullOrEmpty(ContentA) && string.IsNullOrEmpty(ContentB))
+{
+    <MudAlert Severity="Severity.Info" Variant="Variant.Text">No file content available for side-by-side comparison.</MudAlert>
+}
+else
+{
+    SideBySideDiffModel diffModel = GetDiffModel();
+    <div class="aligned-diff-grid">
+        @RenderPanel(diffModel.OldText.Lines, LabelA, FileNameA, IsTruncatedA, true)
+        @RenderPanel(diffModel.NewText.Lines, LabelB, FileNameB, IsTruncatedB, false)
+    </div>
+}
+
+@code {
+    [Parameter] public string ContentA { get; set; } = string.Empty;
+    [Parameter] public string ContentB { get; set; } = string.Empty;
+    [Parameter] public string LabelA { get; set; } = "Endpoint A";
+    [Parameter] public string LabelB { get; set; } = "Endpoint B";
+    [Parameter] public string FileNameA { get; set; } = string.Empty;
+    [Parameter] public string FileNameB { get; set; } = string.Empty;
+    [Parameter] public bool IsTruncatedA { get; set; }
+    [Parameter] public bool IsTruncatedB { get; set; }
+
+    private readonly string leftPanelId = $"aligned-diff-left-{Guid.NewGuid():N}";
+    private readonly string rightPanelId = $"aligned-diff-right-{Guid.NewGuid():N}";
+    private bool syncScroll = true;
+    private bool highlightDifferences = true;
+    private bool wordWrap;
+    private bool syncScrollInitialized;
+    private bool syncScrollNeedsRefresh = true;
+    private string? lastSyncSignature;
+    private string? previousContentA;
+    private string? previousContentB;
+    private int contentVersion;
+    private SideBySideDiffModel? cachedDiffModel;
+
+    protected override void OnParametersSet()
+    {
+        if (string.Equals(previousContentA, ContentA, StringComparison.Ordinal) &&
+            string.Equals(previousContentB, ContentB, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        previousContentA = ContentA;
+        previousContentB = ContentB;
+        cachedDiffModel = null;
+        contentVersion++;
+        syncScrollNeedsRefresh = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!HasContent)
+        {
+            if (syncScrollInitialized)
+            {
+                await SetSyncedScrollAsync(false);
+            }
+
+            lastSyncSignature = null;
+            return;
+        }
+
+        string signature = BuildSyncSignature();
+        if (!firstRender && !syncScrollNeedsRefresh && string.Equals(lastSyncSignature, signature, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        await SetSyncedScrollAsync(syncScroll);
+        syncScrollNeedsRefresh = false;
+        lastSyncSignature = signature;
+    }
+
+    private SideBySideDiffModel GetDiffModel() =>
+        cachedDiffModel ??= new SideBySideDiffBuilder(new Differ()).BuildDiffModel(ContentA ?? string.Empty, ContentB ?? string.Empty);
+
+    private RenderFragment RenderPanel(IReadOnlyList<DiffPiece> lines, string label, string fileName, bool isTruncated, bool left) => @<div id="@(left ? leftPanelId : rightPanelId)" class="aligned-diff-panel @(wordWrap ? "aligned-diff-wrap" : "aligned-diff-nowrap")">
+        <div class="aligned-diff-header @(left ? "aligned-diff-header-a" : "aligned-diff-header-b")">
+            <strong>@label</strong>
+            <span class="aligned-diff-file-name" title="@fileName">@fileName</span>
+        </div>
+        @if (isTruncated)
+        {
+            <div class="aligned-diff-truncated">Content truncated for display.</div>
+        }
+        @for (int rowIndex = 0; rowIndex < lines.Count; rowIndex++)
+        {
+            DiffPiece line = lines[rowIndex];
+            <div class="aligned-diff-line @GetLineClass(line.Type)" data-diff-row="@rowIndex">
+                <span class="aligned-diff-line-number">@(line.Position?.ToString() ?? string.Empty)</span>
+                <span class="aligned-diff-line-text">@RenderLineText(line, left)</span>
+            </div>
+        }
+    </div>;
+
+    private RenderFragment RenderLineText(DiffPiece line, bool left) => builder =>
+    {
+        if (!highlightDifferences || line.SubPieces is null || line.SubPieces.Count == 0 || line.Type == ChangeType.Imaginary)
+        {
+            builder.AddContent(0, line.Text ?? string.Empty);
+            return;
+        }
+
+        int sequence = 0;
+        foreach (DiffPiece piece in line.SubPieces)
+        {
+            if (piece.Type == ChangeType.Unchanged)
+            {
+                builder.AddContent(sequence++, piece.Text ?? string.Empty);
+                continue;
+            }
+
+            builder.OpenElement(sequence++, "span");
+            builder.AddAttribute(sequence++, "class", left ? "aligned-diff-char-deleted" : "aligned-diff-char-inserted");
+            builder.AddContent(sequence++, piece.Text ?? string.Empty);
+            builder.CloseElement();
+        }
+    };
+
+    private string GetLineClass(ChangeType type)
+    {
+        if (!highlightDifferences)
+        {
+            return type == ChangeType.Imaginary ? "aligned-diff-line-imaginary" : string.Empty;
+        }
+
+        return type switch
+        {
+            ChangeType.Deleted => "aligned-diff-line-deleted",
+            ChangeType.Inserted => "aligned-diff-line-inserted",
+            ChangeType.Modified => "aligned-diff-line-modified",
+            ChangeType.Imaginary => "aligned-diff-line-imaginary",
+            _ => string.Empty,
+        };
+    }
+
+    private async Task OnSyncScrollChangedAsync(bool value)
+    {
+        syncScroll = value;
+        syncScrollNeedsRefresh = true;
+        if (HasContent)
+        {
+            await SetSyncedScrollAsync(value);
+            lastSyncSignature = BuildSyncSignature();
+            syncScrollNeedsRefresh = false;
+        }
+    }
+
+    private Task OnHighlightChanged(bool value)
+    {
+        highlightDifferences = value;
+        syncScrollNeedsRefresh = true;
+        return Task.CompletedTask;
+    }
+
+    private Task OnWordWrapChanged(bool value)
+    {
+        wordWrap = value;
+        syncScrollNeedsRefresh = true;
+        return Task.CompletedTask;
+    }
+
+    private async Task SetSyncedScrollAsync(bool enabled)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("parityBenchSetSyncedScroll", leftPanelId, rightPanelId, enabled);
+            syncScrollInitialized = enabled;
+        }
+        catch
+        {
+            syncScrollInitialized = false;
+        }
+    }
+
+    private bool HasContent => !string.IsNullOrEmpty(ContentA) || !string.IsNullOrEmpty(ContentB);
+
+    private string BuildSyncSignature() => string.Join('|', leftPanelId, rightPanelId, contentVersion, syncScroll, highlightDifferences, wordWrap);
+
+    public async ValueTask DisposeAsync()
+    {
+        if (syncScrollInitialized)
+        {
+            await SetSyncedScrollAsync(false);
+        }
+    }
+}

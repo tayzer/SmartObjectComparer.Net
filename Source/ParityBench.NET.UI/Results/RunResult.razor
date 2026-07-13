@@ -15,34 +15,39 @@
     .v1-code { font-family: Consolas, Monaco, 'Courier New', monospace; font-size: .825rem; white-space: pre-wrap; overflow-wrap: anywhere; }
     .v1-diff-a { background: rgba(46, 125, 50, .10); border-left: 3px solid #2e7d32; }
     .v1-diff-b { background: rgba(211, 47, 47, .10); border-left: 3px solid #d32f2f; }
-    .v1-file-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border: 1px solid var(--mud-palette-lines-default); max-height: 44rem; overflow: hidden; }
-    .v1-file-panel { min-width: 0; overflow: auto; max-height: 44rem; }
-    .v1-file-panel:first-child { border-right: 1px solid var(--mud-palette-lines-default); }
-    .v1-file-header { position: sticky; top: 0; z-index: 1; background: var(--mud-palette-surface); border-bottom: 1px solid var(--mud-palette-lines-default); padding: .5rem .75rem; }
-    .v1-line { display: flex; min-height: 1.45rem; }
-    .v1-line-number { width: 3.75rem; flex: 0 0 3.75rem; text-align: right; padding: 0 .5rem; color: var(--mud-palette-text-secondary); background: var(--mud-palette-background-grey); user-select: none; }
-    .v1-line-text { flex: 1; padding: 0 .5rem; white-space: pre-wrap; overflow-wrap: anywhere; }
-    .v1-nowrap .v1-line-text { white-space: pre; overflow-wrap: normal; }
-    .v1-line-changed { background: rgba(245, 124, 0, .10); }
     .v1-property-tree-container { max-height: 34rem; overflow: auto; border-right: 1px solid var(--mud-palette-lines-default); }
     .v1-property-detail-panel { max-height: 34rem; overflow: auto; }
     .v1-tree-node-content { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: .5rem; padding: .25rem .5rem; border-radius: 4px; cursor: pointer; }
     .v1-tree-node-content.selected { background: var(--mud-palette-primary); color: var(--mud-palette-primary-text); }
     .v1-tree-node-label { min-width: 0; display: inline-flex; align-items: center; gap: .35rem; overflow-wrap: anywhere; }
     .v1-diff-card { border: 1px solid var(--mud-palette-lines-default); }
-    .v1-structured-tree { border: 1px solid var(--mud-palette-lines-default); border-radius: 4px; overflow: hidden; }
+    .v1-structured-tree { max-height: min(65vh, 44rem); overflow: auto; border: 1px solid var(--mud-palette-lines-default); border-radius: 4px; background: var(--mud-palette-surface); }
+    .v1-structured-grid-header, .v1-structured-diff-row { display: grid; grid-template-columns: minmax(14rem, 1.4fr) minmax(8rem, 1fr) minmax(8rem, 1fr) minmax(11rem, auto); align-items: stretch; }
+    .v1-structured-grid-header { position: sticky; top: 0; z-index: 3; min-height: 2rem; background: var(--mud-palette-background-grey); border-bottom: 1px solid var(--mud-palette-lines-default); color: var(--mud-palette-text-secondary); font-size: .72rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+    .v1-structured-grid-header > div, .v1-structured-diff-cell { min-width: 0; padding: .38rem .55rem; border-right: 1px solid var(--mud-palette-lines-default); }
+    .v1-structured-grid-header > div:last-child, .v1-structured-diff-cell:last-child { border-right: 0; }
     .v1-structured-node { border: 0; }
-    .v1-structured-node-header { min-height: 2rem; width: 100%; justify-content: flex-start; border-bottom: 1px solid var(--mud-palette-lines-default); border-radius: 0; background: var(--mud-palette-surface); cursor: pointer; text-align: left; text-transform: none; }
+    .v1-structured-node-header { min-height: 1.95rem; width: 100%; justify-content: flex-start; border-bottom: 1px solid var(--mud-palette-lines-default); border-radius: 0; background: var(--mud-palette-surface); cursor: pointer; text-align: left; text-transform: none; }
     .v1-structured-node-header:hover { background: var(--mud-palette-action-default-hover); }
-    .v1-structured-node-toggle { margin: 0 .25rem 0 0; padding: 0; width: 1.5rem; height: 1.5rem; }
+    .v1-structured-node-toggle { margin: 0 .25rem 0 0; padding: 0; width: 1.4rem; height: 1.4rem; }
     .v1-structured-node-name { font-weight: 600; line-height: 1.2; }
-    .v1-structured-count { margin-left: .5rem; color: var(--mud-palette-error); font-size: .75rem; font-weight: 600; }
+    .v1-structured-count { margin-left: .5rem; color: var(--mud-palette-error); font-size: .72rem; font-weight: 600; }
     .v1-structured-node-children { display: block; }
-    .v1-structured-diff-list { border-bottom: 1px solid var(--mud-palette-lines-default); background: var(--mud-palette-background-grey); }
-    .v1-structured-diff-row { display: grid; grid-template-columns: minmax(18rem, 2fr) minmax(8rem, 1fr) minmax(8rem, 1fr); align-items: stretch; border-top: 1px solid var(--mud-palette-lines-default); }
-    .v1-structured-diff-row:first-child { border-top: 0; }
-    .v1-structured-diff-cell { padding: .35rem .55rem; min-width: 0; }
-    .v1-structured-diff-prop { font-family: Consolas, Monaco, 'Courier New', monospace; font-size: .78rem; overflow-wrap: anywhere; }
+    .v1-structured-diff-row { min-height: 2.3rem; border-bottom: 1px solid var(--mud-palette-lines-default); background: var(--mud-palette-surface); }
+    .v1-structured-diff-row:hover { background: var(--mud-palette-action-default-hover); }
+    .v1-structured-diff-prop { display: flex; align-items: center; font-family: Consolas, Monaco, 'Courier New', monospace; font-size: .8rem; font-weight: 600; overflow-wrap: anywhere; }
+    .v1-structured-diff-value { display: flex; align-items: center; font-family: Consolas, Monaco, 'Courier New', monospace; font-size: .8rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .v1-structured-diff-actions { display: flex; align-items: center; gap: .25rem; flex-wrap: wrap; }
+    .v1-structured-null { color: var(--mud-palette-text-secondary); font-style: italic; }
+    .v1-structured-limit { padding: .4rem .65rem; border-bottom: 1px solid var(--mud-palette-lines-default); color: var(--mud-palette-text-secondary); font-size: .75rem; }
+
+    @@media (max-width: 850px) {
+        .v1-structured-grid-header { display: none; }
+        .v1-structured-diff-row { grid-template-columns: 1fr 1fr; padding: .35rem 0; }
+        .v1-structured-diff-cell { border-right: 0; }
+        .v1-structured-diff-prop, .v1-structured-diff-actions { grid-column: 1 / -1; }
+        .v1-structured-diff-value::before { content: attr(data-label); display: block; margin-right: .4rem; color: var(--mud-palette-text-secondary); font-family: inherit; font-size: .68rem; font-weight: 700; text-transform: uppercase; }
+    }
 </style>
 
 @if (RunId is null)
@@ -398,27 +403,26 @@ else if (run is not null)
                     }
                     else if (IsSideBySideRawContentView)
                     {
-                        <MudStack Row="true" Spacing="2" Class="flex-wrap mb-2">
-                            <MudSwitch T="bool" Value="@syncScroll" ValueChanged="OnSyncScrollChangedAsync" Label="Sync scroll" />
-                            <MudSwitch T="bool" @bind-Value="highlightDifferences" Label="Highlight" />
-                            <MudSwitch T="bool" @bind-Value="wordWrap" Label="Wrap" />
-                        </MudStack>
                         @if (isLoadingContent) { <MudProgressCircular Indeterminate="true" Size="Size.Small" /> }
                         else if (!string.IsNullOrWhiteSpace(contentErrorMessage)) { <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">@contentErrorMessage</MudAlert> }
                         else
                         {
-                            <div class="v1-file-grid">
-                                @RenderFilePanel(LabelA, selectedPair.ResponseA?.Artifact.ArtifactId ?? selectedPair.RelativePath, contentA, true)
-                                @RenderFilePanel(LabelB, selectedPair.ResponseB?.Artifact.ArtifactId ?? selectedPair.RelativePath, contentB, false)
-                            </div>
+                            <AlignedSideBySideDiff ContentA="@(contentA?.Content ?? string.Empty)"
+                                                   ContentB="@(contentB?.Content ?? string.Empty)"
+                                                   LabelA="@LabelA"
+                                                   LabelB="@LabelB"
+                                                   FileNameA="@(selectedPair.ResponseA?.Artifact.ArtifactId ?? selectedPair.RelativePath)"
+                                                   FileNameB="@(selectedPair.ResponseB?.Artifact.ArtifactId ?? selectedPair.RelativePath)"
+                                                   IsTruncatedA="@(contentA?.IsTruncated == true)"
+                                                   IsTruncatedB="@(contentB?.IsTruncated == true)" />
                         }
                     }
                     else
                     {
                         <MudPaper Outlined="true" Class="pa-0">
                             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="pa-3 flex-wrap" Spacing="2">
-                                <MudText Typo="Typo.h6"><MudIcon Icon="@Icons.Material.Filled.List" Class="mr-2" />All Differences</MudText>
-                                <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="() => showAllDifferences = !showAllDifferences">@(showAllDifferences ? "Show Top 100 Per Group" : "Show All Differences")</MudButton>
+                                <MudText Typo="Typo.h6"><MudIcon Icon="@Icons.Material.Filled.List" Class="mr-2" />Structured Differences <MudChip T="string" Size="Size.Small">@selectedPair.Differences.Count</MudChip></MudText>
+                                <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="() => showAllDifferences = !showAllDifferences">@(showAllDifferences ? "Limit to 100 per branch" : "Show all differences")</MudButton>
                             </MudStack>
                             <MudDivider />
                             <div class="pa-4">
@@ -443,7 +447,13 @@ else if (run is not null)
                                 }
                                 else
                                 {
-                                    <div class="v1-structured-tree">
+                                    <div class="v1-structured-tree" role="treegrid" aria-label="Structured differences">
+                                        <div class="v1-structured-grid-header" role="row">
+                                            <div role="columnheader">Property</div>
+                                            <div role="columnheader">@LabelA</div>
+                                            <div role="columnheader">@LabelB</div>
+                                            <div role="columnheader">Status / Actions</div>
+                                        </div>
                                         @foreach (StructuredDifferenceNode node in structuredNodes)
                                         {
                                             @RenderStructuredDifferenceNode(node, 0)
@@ -511,10 +521,6 @@ else if (run is not null)
     private bool resultsCollapsed;
     private bool isLoadingDifferenceIndex;
     private int analysisTabIndex;
-    private readonly string filePanelPrefix = $"report-file-panels-{Guid.NewGuid():N}";
-    private bool syncScroll = true;
-    private bool highlightDifferences = true;
-    private bool wordWrap = true;
     private string searchFilter = string.Empty;
     private string statusFilter = AllFilter;
     private string categoryFilter = AllFilter;
@@ -526,9 +532,6 @@ else if (run is not null)
     private string? downloadErrorMessage;
     private string? differenceIndexErrorMessage;
     private string differenceTreeInfoMessage = string.Empty;
-    private bool shouldRefreshScrollSync;
-    private bool syncScrollInitialized;
-    private string? lastSyncSignature;
     private DetailViewMode detailViewMode = DetailViewMode.Structured;
     private Dictionary<string, AcceptedDifferenceProfile> acceptedDifferenceMatches = new Dictionary<string, AcceptedDifferenceProfile>(StringComparer.Ordinal);
     private bool hideAcceptedDifferences;
@@ -546,8 +549,6 @@ else if (run is not null)
     private string EndpointA => metadata?.EndpointA ?? run?.Options.EndpointA.Uri.ToString() ?? string.Empty;
     private string EndpointB => metadata?.EndpointB ?? run?.Options.EndpointB.Uri.ToString() ?? string.Empty;
     private string ModelName => metadata?.ModelName ?? run?.Options.ModelName ?? "Auto";
-    private string LeftPanelId => $"{filePanelPrefix}-left";
-    private string RightPanelId => $"{filePanelPrefix}-right";
     private IReadOnlyList<string> AvailableCategories => analysis?.AvailableCategories ?? Array.Empty<string>();
     private IReadOnlyList<RequestPairResult> VisiblePageItems => detailPage is null ? Array.Empty<RequestPairResult>() : detailPage.Items.Where(MatchesCategoryFilter).ToList();
     private IReadOnlyList<StaticReportPropertyDifferenceSummary> FilteredDifferenceProperties => GetFilteredDifferenceProperties();
@@ -680,7 +681,6 @@ else if (run is not null)
         structuredSearchFilter = string.Empty;
         showAllDifferences = false;
         collapsedStructuredGroups = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        shouldRefreshScrollSync = true;
         if (detailViewMode is DetailViewMode.Full or DetailViewMode.Focused)
         {
             await LoadContentAsync();
@@ -694,7 +694,6 @@ else if (run is not null)
     private async Task OnDetailViewModeChangedAsync(DetailViewMode mode)
     {
         detailViewMode = mode;
-        shouldRefreshScrollSync = true;
         if (mode is DetailViewMode.Full or DetailViewMode.Focused)
         {
             contentA = null;
@@ -724,7 +723,6 @@ else if (run is not null)
         finally
         {
             isLoadingContent = false;
-            shouldRefreshScrollSync = true;
         }
     }
 
@@ -1001,75 +999,6 @@ else if (run is not null)
         await JS.InvokeVoidAsync("parityBenchDownloadText", fileName, contentType, content);
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (!IsSideBySideVisible())
-        {
-            if (syncScrollInitialized)
-            {
-                await SetSyncedScrollAsync(false);
-            }
-
-            lastSyncSignature = null;
-            shouldRefreshScrollSync = false;
-            return;
-        }
-
-        string currentSignature = BuildSyncSignature();
-        if (!firstRender && !shouldRefreshScrollSync && string.Equals(lastSyncSignature, currentSignature, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        await SetSyncedScrollAsync(syncScroll);
-        shouldRefreshScrollSync = false;
-        lastSyncSignature = currentSignature;
-    }
-
-    private async Task OnSyncScrollChangedAsync(bool value)
-    {
-        syncScroll = value;
-        shouldRefreshScrollSync = true;
-        if (IsSideBySideVisible())
-        {
-            await SetSyncedScrollAsync(syncScroll);
-            lastSyncSignature = BuildSyncSignature();
-            shouldRefreshScrollSync = false;
-        }
-    }
-
-    private async Task SetSyncedScrollAsync(bool enabled)
-    {
-        try
-        {
-            await JS.InvokeVoidAsync("parityBenchSetSyncedScroll", LeftPanelId, RightPanelId, enabled);
-            syncScrollInitialized = enabled;
-        }
-        catch
-        {
-            syncScrollInitialized = false;
-        }
-    }
-
-    private string BuildSyncSignature() => string.Join('|',
-        LeftPanelId,
-        RightPanelId,
-        detailViewMode,
-        syncScroll,
-        contentA?.Artifact.ArtifactId ?? string.Empty,
-        contentB?.Artifact.ArtifactId ?? string.Empty,
-        contentA?.Content.Length ?? 0,
-        contentB?.Content.Length ?? 0,
-        wordWrap,
-        highlightDifferences,
-        contentErrorMessage ?? string.Empty);
-
-    private bool IsSideBySideVisible() =>
-        IsSideBySideRawContentView &&
-        !isLoadingContent &&
-        string.IsNullOrWhiteSpace(contentErrorMessage) &&
-        (contentA is not null || contentB is not null);
-
     private async Task ScrollToDetailAsync()
     {
         try { await JS.InvokeVoidAsync("parityBenchScrollToElement", "report-detailed-differences-section"); }
@@ -1077,22 +1006,6 @@ else if (run is not null)
     }
 
     private RenderFragment Stat(string label, int value, Color color) => @<MudPaper Outlined="true" Class="pa-3 v1-report-stat"><MudText Typo="Typo.h5" Color="@color">@value.ToString("N0", CultureInfo.InvariantCulture)</MudText><MudText Typo="Typo.caption" Color="Color.Secondary">@label</MudText></MudPaper>;
-
-    private RenderFragment RenderFilePanel(string label, string fileName, ArtifactContentPreview? content, bool left) => @<div id="@(left ? LeftPanelId : RightPanelId)" class="v1-file-panel"><div class="v1-file-header"><strong>@label</strong> - @fileName</div>@if (content?.IsTruncated == true) { <div class="pa-2"><MudText Typo="Typo.caption" Color="Color.Warning">Content truncated for display.</MudText></div> }@foreach (var line in BuildLineModels(left)) { <div class="@line.CssClass"><span class="v1-line-number">@line.LineNumber</span><span class="v1-line-text">@line.Text</span></div> }</div>;
-
-    private IEnumerable<LineModel> BuildLineModels(bool left)
-    {
-        string[] lines = SplitLines(left ? contentA?.Content : contentB?.Content);
-        string[] opposite = SplitLines(left ? contentB?.Content : contentA?.Content);
-        int count = Math.Max(lines.Length, 1);
-        for (int index = 0; index < count; index++)
-        {
-            string text = index < lines.Length ? lines[index] : string.Empty;
-            string other = index < opposite.Length ? opposite[index] : string.Empty;
-            bool changed = highlightDifferences && !string.Equals(text, other, StringComparison.Ordinal);
-            yield return new LineModel(index + 1, text, $"v1-line {(wordWrap ? string.Empty : "v1-nowrap")} {(changed ? "v1-line-changed" : string.Empty)}");
-        }
-    }
 
     private IReadOnlyList<StructuredDifferenceNode> GetStructuredDifferenceTree(RequestPairResult pair) =>
         BuildStructuredDifferenceTree(pair.Differences.Where(MatchesStructuredSearch).Where(MatchesAcceptedDifferenceVisibility));
@@ -1147,50 +1060,48 @@ else if (run is not null)
 
     private RenderFragment RenderStructuredDifferenceNode(StructuredDifferenceNode node, int depth) => @<div class="v1-structured-node">
         @{
-            bool isCollapsed = IsStructuredGroupCollapsed(node.FullPath);
+            bool isLeaf = node.Children.Count == 0;
+            bool isCollapsed = !string.IsNullOrWhiteSpace(structuredSearchFilter)
+                ? false
+                : IsStructuredGroupCollapsed(node.FullPath);
             List<ComparisonDifference> visibleDifferences = showAllDifferences
                 ? node.Differences.ToList()
                 : node.Differences.Take(100).ToList();
             string indent = $"padding-left: {Math.Min(depth * 1.1, 8):0.##}rem;";
         }
-        <MudButton Class="v1-structured-node-header" Style="@indent" title="@node.FullPath" Variant="Variant.Text" FullWidth="true" OnClick="@(() => ToggleStructuredGroup(node.FullPath))">
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0" Class="flex-wrap px-1 py-1">
-                <MudIcon Class="v1-structured-node-toggle" Icon="@(isCollapsed ? Icons.Material.Filled.ChevronRight : Icons.Material.Filled.ExpandMore)" Size="Size.Small" />
-                <span class="v1-structured-node-name">@node.Name</span>
-                <span class="v1-structured-count">@node.DifferenceCount diff@(node.DifferenceCount == 1 ? string.Empty : "s")</span>
-            </MudStack>
-        </MudButton>
-        @if (!isCollapsed)
+        @if (isLeaf)
         {
-            @if (visibleDifferences.Count > 0)
+            @foreach (ComparisonDifference difference in visibleDifferences)
             {
-                <div class="v1-structured-diff-list">
-                    @foreach (ComparisonDifference difference in visibleDifferences)
-                    {
-                        <div class="v1-structured-diff-row">
-                            <div class="v1-structured-diff-cell v1-structured-diff-prop">
-                                <MudStack Spacing="1">
-                                    <code>@difference.PropertyPath</code>
-                                    <MudStack Row="true" Spacing="1" Class="flex-wrap">
-                                        <MudChip T="string" Size="Size.Small" Color="@GetAcceptedDifferenceColor(difference)">@GetAcceptedDifferenceLabel(difference)</MudChip>
-                                        <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.BookmarkAdd" Disabled="@AcceptedDifferences.IsReadOnly" OnClick="@(() => OpenAcceptedDifferenceEditor(difference))">@(GetAcceptedDifferenceProfile(difference) is null ? "Track" : "Edit")</MudButton>
-                                        @if (GetAcceptedDifferenceProfile(difference) is not null && !AcceptedDifferences.IsReadOnly)
-                                        {
-                                            <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Error" OnClick="@(() => ClearAcceptedDifferenceAsync(difference))">Clear</MudButton>
-                                        }
-                                    </MudStack>
-                                </MudStack>
-                            </div>
-                            <div class="v1-structured-diff-cell v1-diff-a">@(difference.ValueA ?? "null")</div>
-                            <div class="v1-structured-diff-cell v1-diff-b">@(difference.ValueB ?? "null")</div>
-                        </div>
-                    }
-                </div>
-                @if (node.Differences.Count > visibleDifferences.Count) { <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true" Class="mx-2 my-1">And @(node.Differences.Count - visibleDifferences.Count) more differences in this branch...</MudAlert> }
+                @RenderStructuredDifferenceRow(difference, node.Name, depth)
             }
-            @if (node.Children.Count > 0)
+            @RenderStructuredDifferenceLimit(node.Differences.Count, visibleDifferences.Count)
+        }
+        else
+        {
+            <MudButton Class="v1-structured-node-header"
+                       Style="@indent"
+                       title="@node.FullPath"
+                       role="row"
+                       aria-level="@(depth + 1)"
+                       aria-expanded="@(!isCollapsed)"
+                       Variant="Variant.Text"
+                       FullWidth="true"
+                       OnClick="@(() => ToggleStructuredGroup(node.FullPath))">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0" Class="flex-wrap px-1 py-1">
+                    <MudIcon Class="v1-structured-node-toggle" Icon="@(isCollapsed ? Icons.Material.Filled.ChevronRight : Icons.Material.Filled.ExpandMore)" Size="Size.Small" />
+                    <span class="v1-structured-node-name">@node.Name</span>
+                    <span class="v1-structured-count">@node.DifferenceCount diff@(node.DifferenceCount == 1 ? string.Empty : "s")</span>
+                </MudStack>
+            </MudButton>
+            @if (!isCollapsed)
             {
-                <div class="v1-structured-node-children">
+                @foreach (ComparisonDifference difference in visibleDifferences)
+                {
+                    @RenderStructuredDifferenceRow(difference, node.Name, depth + 1)
+                }
+                @RenderStructuredDifferenceLimit(node.Differences.Count, visibleDifferences.Count)
+                <div class="v1-structured-node-children" role="group">
                     @foreach (StructuredDifferenceNode child in node.Children)
                     {
                         @RenderStructuredDifferenceNode(child, depth + 1)
@@ -1199,6 +1110,35 @@ else if (run is not null)
             }
         }
     </div>;
+
+    private RenderFragment RenderStructuredDifferenceRow(ComparisonDifference difference, string propertyLabel, int depth) => @<div class="v1-structured-diff-row" role="row" aria-level="@(depth + 1)" title="@difference.PropertyPath">
+        @{
+            AcceptedDifferenceProfile? profile = GetAcceptedDifferenceProfile(difference);
+            string propertyIndent = $"padding-left: {Math.Min((depth * 1.1) + .55, 8.55):0.##}rem;";
+        }
+        <div class="v1-structured-diff-cell v1-structured-diff-prop" style="@propertyIndent" role="gridcell">
+            <code>@propertyLabel</code>
+        </div>
+        <div class="v1-structured-diff-cell v1-structured-diff-value v1-diff-a" data-label="@LabelA" role="gridcell">
+            <span class="@(difference.ValueA is null ? "v1-structured-null" : string.Empty)">@(difference.ValueA ?? "null")</span>
+        </div>
+        <div class="v1-structured-diff-cell v1-structured-diff-value v1-diff-b" data-label="@LabelB" role="gridcell">
+            <span class="@(difference.ValueB is null ? "v1-structured-null" : string.Empty)">@(difference.ValueB ?? "null")</span>
+        </div>
+        <div class="v1-structured-diff-cell v1-structured-diff-actions" role="gridcell">
+            <MudChip T="string" Size="Size.Small" Color="@GetAcceptedDifferenceColor(difference)">@GetAcceptedDifferenceLabel(difference)</MudChip>
+            <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.BookmarkAdd" Disabled="@AcceptedDifferences.IsReadOnly" OnClick="@(() => OpenAcceptedDifferenceEditor(difference))">@(profile is null ? "Track" : "Edit")</MudButton>
+            @if (profile is not null && !AcceptedDifferences.IsReadOnly)
+            {
+                <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Error" OnClick="@(() => ClearAcceptedDifferenceAsync(difference))">Clear</MudButton>
+            }
+        </div>
+    </div>;
+
+    private static RenderFragment RenderStructuredDifferenceLimit(int totalCount, int visibleCount) =>
+        totalCount <= visibleCount
+            ? _ => { }
+            : @<div class="v1-structured-limit" role="row">And @(totalCount - visibleCount) more differences in this branch...</div>;
 
     private bool IsStructuredGroupCollapsed(string groupKey) => collapsedStructuredGroups.Contains(groupKey);
 
@@ -1342,7 +1282,6 @@ else if (run is not null)
     private static RequestPairOutcome? ParseStatusFilter(string value) => Enum.TryParse<RequestPairOutcome>(value, out var outcome) ? outcome : null;
     private bool IsSideBySideRawContentView => detailViewMode is DetailViewMode.Full or DetailViewMode.Focused;
     private static bool HasArtifactContent(RequestPairResult pair) => pair.ResponseA?.Artifact is not null || pair.ResponseB?.Artifact is not null;
-    private static string[] SplitLines(string? content) => string.IsNullOrEmpty(content) ? Array.Empty<string>() : content.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n').Split('\n');
     private static string FormatDate(DateTimeOffset value) => value.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
     private static string FormatDuration(TimeSpan value) => value.TotalMinutes >= 1 ? $"{(int)value.TotalMinutes}m {value.Seconds:D2}s" : value.TotalSeconds >= 1 ? $"{value.TotalSeconds:F2}s" : $"{value.TotalMilliseconds:F0} ms";
     private static string FormatBool(bool value) => value ? "on" : "off";
@@ -1383,6 +1322,5 @@ else if (run is not null)
 
     private enum DetailViewMode { Structured, Raw, Focused, Full }
     private enum StructuredDocumentKind { Unknown, Json, Xml }
-    private sealed record LineModel(int LineNumber, string Text, string CssClass);
 }
 
