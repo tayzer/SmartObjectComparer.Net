@@ -12,7 +12,9 @@ variables:
   targetRuntime: win-x64
   publishRoot: '$(Build.ArtifactStagingDirectory)\v2'
 
-  # Set publishRepoUrl in the pipeline, a variable group, or when queuing the run.
+  # Set publishRepoUrl to the complete clone URL, including the destination project.
+  # Azure DevOps Server example:
+  # https://ado.net/tfs/DefaultCollection/TargetProject/_git/SmarterObjectComparer.Net.jenkins.
   # The pipeline skips the commit step when this is blank.
   publishRepoUrl: ''
   publishRepoBranch: main
@@ -177,11 +179,12 @@ steps:
     TARGET_RUNTIME: $(targetRuntime)
     PUBLISH_ROOT: $(publishRoot)
 
-- task: PublishPipelineArtifact@1
+- task: PublishBuildArtifacts@1
   displayName: Publish V2 binaries as pipeline artifact
   inputs:
-    targetPath: '$(publishRoot)'
-    artifact: v2-published
+    PathtoPublish: '$(publishRoot)'
+    ArtifactName: v2-published
+    publishLocation: Container
 
 - powershell: |
     $ErrorActionPreference = 'Stop'
@@ -191,6 +194,9 @@ steps:
       exit 0
     }
 
+    if ($env:PUBLISH_REPO_URL -notmatch '(?i)/_git/') {
+      throw 'publishRepoUrl must be the complete Azure DevOps clone URL, including the target project, for example https://ado.net/tfs/DefaultCollection/Project/_git/Repository.'
+    }
     if ([string]::IsNullOrWhiteSpace($env:SYSTEM_ACCESSTOKEN)) {
       throw 'System.AccessToken is unavailable. Allow scripts to access the OAuth token for this pipeline.'
     }
