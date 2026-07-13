@@ -135,11 +135,14 @@ steps:
 - powershell: |
     $ErrorActionPreference = 'Stop'
 
-    $publishRoot = $env:PUBLISH_ROOT
-    $cliOutput = Join-Path $publishRoot 'cli'
-    $desktopOutput = Join-Path $publishRoot 'desktop'
+    $publishRoot = [IO.Path]::GetFullPath($env:PUBLISH_ROOT)
+    $publishWorkRoot = Join-Path $env:AGENT_TEMPDIRECTORY ("v2-publish-work-{0}" -f $env:BUILD_BUILDID)
+    $cliOutput = Join-Path $publishWorkRoot 'cli'
+    $desktopOutput = Join-Path $publishWorkRoot 'desktop'
+    $cliRelease = Join-Path $publishRoot 'cli'
+    $desktopRelease = Join-Path $publishRoot 'desktop'
 
-    New-Item -ItemType Directory -Force -Path $cliOutput, $desktopOutput | Out-Null
+    New-Item -ItemType Directory -Force -Path $cliOutput, $desktopOutput, $cliRelease, $desktopRelease | Out-Null
 
     $publishArguments = @(
       '--configuration', $env:BUILD_CONFIGURATION,
@@ -167,12 +170,51 @@ steps:
       throw 'dotnet publish failed for the V2 Desktop'
     }
 
-    foreach ($output in @($cliOutput, $desktopOutput)) {
-      if (-not (Get-ChildItem -LiteralPath $output -Filter *.exe -File)) {
-        throw "No executable was produced in $output"
+    $packages = @(
+      @{
+        Source = $cliOutput
+        PackageRoot = Join-Path $publishWorkRoot 'cli-package'
+        Executable = Join-Path $cliOutput 'ParityBench.NET.Cli.exe'
+        Destination = Join-Path $cliRelease ("ParityBench.NET.Cli-{0}.zip" -f $env:TARGET_RUNTIME)
+      },
+      @{
+        Source = $desktopOutput
+        PackageRoot = Join-Path $publishWorkRoot 'desktop-package'
+        Executable = Join-Path $desktopOutput 'ParityBench.NET.Desktop.exe'
+        Destination = Join-Path $desktopRelease ("ParityBench.NET.Desktop-{0}.zip" -f $env:TARGET_RUNTIME)
       }
+    )
+
+    foreach ($package in $packages) {
+      if (-not (Test-Path -LiteralPath $package.Executable -PathType Leaf)) {
+        throw "Expected executable was not produced: $($package.Executable)"
+      }
+
+      $reportAssetsSource = Join-Path $package.Source 'BlazorReportAssets\wwwroot'
+      if (-not (Test-Path -LiteralPath (Join-Path $reportAssetsSource 'index.html') -PathType Leaf) -or
+          -not (Test-Path -LiteralPath (Join-Path $reportAssetsSource '_framework') -PathType Container)) {
+        throw "Published Blazor report assets were not produced in $reportAssetsSource"
+      }
+
+      $packageReportAssets = Join-Path $package.PackageRoot 'BlazorReportAssets'
+      New-Item -ItemType Directory -Force -Path $package.PackageRoot, $packageReportAssets | Out-Null
+
+      Get-ChildItem -LiteralPath $package.Source -Force |
+        Where-Object Name -ne 'BlazorReportAssets' |
+        Copy-Item -Destination $package.PackageRoot -Recurse -Force
+      Get-ChildItem -LiteralPath $reportAssetsSource -Force |
+        Copy-Item -Destination $packageReportAssets -Recurse -Force
+
+      Compress-Archive -Path (Join-Path $package.PackageRoot '*') -DestinationPath $package.Destination -CompressionLevel Optimal -Force
     }
-  displayName: Publish V2 CLI and Desktop
+
+    $stagedFiles = @(Get-ChildItem -LiteralPath $publishRoot -Recurse -File)
+    if ($stagedFiles.Count -ne 2 -or @($stagedFiles | Where-Object Extension -ne '.zip').Count -ne 0) {
+      throw "Expected exactly two ZIP packages, but found $($stagedFiles.Count) files in $publishRoot"
+    }
+
+    Write-Host 'Staged V2 CLI and Desktop ZIP packages.'
+  displayName: Publish V2 CLI and Desktop packages
   workingDirectory: '$(Build.SourcesDirectory)'
   env:
     BUILD_CONFIGURATION: $(buildConfiguration)
@@ -206,7 +248,7 @@ steps:
     $authHeader = "AUTHORIZATION: bearer $env:SYSTEM_ACCESSTOKEN"
 
     Write-Host "Cloning destination repository branch '$env:PUBLISH_REPO_BRANCH'"
-    & git -c "http.extraheader=$authHeader" clone --branch $env:PUBLISH_REPO_BRANCH --single-branch $env:PUBLISH_REPO_URL $repoCheckout
+    & git -c "http.extraheader=$authHeader" clone --depth 1 --branch $env:PUBLISH_REPO_BRANCH --single-branch $env:PUBLISH_REPO_URL $repoCheckout
     if ($LASTEXITCODE -ne 0) {
       throw 'Could not clone the destination Azure DevOps repository.'
     }
@@ -271,7 +313,7 @@ steps:
     & git -C $repoCheckout config user.name 'Azure DevOps Build'
     & git -C $repoCheckout config user.email 'azure-devops-build@local'
     $commitMessage = "Publish V2 CLI and Desktop ($env:BUILD_BUILDNUMBER)"
-    & git -C $repoCheckout commit -m $commitMessage
+    & git -C $repoCheckout commit --quiet -m $commitMessage
     if ($LASTEXITCODE -ne 0) {
       throw 'Could not commit the published V2 files.'
     }
