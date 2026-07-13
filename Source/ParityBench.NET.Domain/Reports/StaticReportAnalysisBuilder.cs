@@ -99,18 +99,4 @@ public static class StaticReportAnalysisBuilder
             yield return StaticReportDifferenceIndexBuilder.CategorizeDifference(difference);
         }
     }
-
-    private sealed class CategoryAccumulator
-    {
-        public CategoryAccumulator(string category)
-        {
-            Category = category;
-        }
-
-        public string Category { get; }
-
-        public int OccurrenceCount { get; set; }
-
-        public int AffectedPairCount { get; set; }
-    }
 }

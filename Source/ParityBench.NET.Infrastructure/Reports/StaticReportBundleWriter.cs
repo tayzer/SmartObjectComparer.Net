@@ -575,21 +575,6 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
             CopyDirectory(sourceSubDirectory, destinationSubDirectory);
         }
     }
-
-    private sealed class CategoryAccumulator
-    {
-        public CategoryAccumulator(string category)
-        {
-            Category = category;
-        }
-
-        public string Category { get; }
-
-        public int OccurrenceCount { get; set; }
-
-        public int AffectedPairCount { get; set; }
-    }
-
     private sealed record RewrittenArtifact(
         ResponseArtifactMetadata? Response,
         ArtifactRetentionState RetentionState);

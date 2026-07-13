@@ -350,27 +350,4 @@ public sealed class FileSystemRequestBatchStore : IRequestBatchStore
         string RelativePath,
         string ContentType,
         long ContentLength);
-    private sealed class RequestBatchManifestDto
-    {
-        public string BatchReference { get; init; } = string.Empty;
-
-        public DateTimeOffset CreatedAt { get; init; }
-
-        public List<RequestItemDto> Requests { get; init; } = new List<RequestItemDto>();
-    }
-
-    private sealed class RequestItemDto
-    {
-        public string RelativePath { get; init; } = string.Empty;
-
-        public string ContentType { get; init; } = "text/plain";
-
-        public long ContentLength { get; init; }
-
-        public Dictionary<string, string> Headers { get; init; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        public Dictionary<string, string> HeadersA { get; init; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        public Dictionary<string, string> HeadersB { get; init; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-    }
 }

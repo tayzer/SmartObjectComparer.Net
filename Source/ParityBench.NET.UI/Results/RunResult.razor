@@ -1381,41 +1381,6 @@ else if (run is not null)
         return string.IsNullOrWhiteSpace(sanitized) ? "comparison-result" : sanitized;
     }
 
-    private sealed class StructuredDifferenceNode
-    {
-        public StructuredDifferenceNode(string name, string fullPath)
-        {
-            Name = name;
-            FullPath = fullPath;
-        }
-
-        public string Name { get; }
-
-        public string FullPath { get; }
-
-        public List<StructuredDifferenceNode> Children { get; } = new List<StructuredDifferenceNode>();
-
-        public List<ComparisonDifference> Differences { get; } = new List<ComparisonDifference>();
-
-        public int DifferenceCount => Differences.Count + Children.Sum(child => child.DifferenceCount);
-    }
-    private sealed class PropertyTreeNode : TreeItemData<string>
-    {
-        public PropertyTreeNode(string name, string fullPath) : base(fullPath)
-        {
-            Name = name;
-            FullPath = fullPath;
-            Text = name;
-        }
-
-        public string Name { get; }
-
-        public string FullPath { get; set; }
-
-        public bool IsLeaf { get; set; }
-
-        public int DifferenceCount { get; set; }
-    }
     private enum DetailViewMode { Structured, Raw, Focused, Full }
     private enum StructuredDocumentKind { Unknown, Json, Xml }
     private sealed record LineModel(int LineNumber, string Text, string CssClass);

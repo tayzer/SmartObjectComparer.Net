@@ -110,18 +110,6 @@ public sealed class ClientCustomerLookupTokenProvider : IClientCustomerLookupTok
         [property: JsonPropertyName("primaryToken")] string PrimaryToken,
         [property: JsonPropertyName("customerId")] string CustomerId,
         [property: JsonPropertyName("correlationId")] string CorrelationId);
-
-    private sealed class PrimaryTokenResponse
-    {
-        [JsonPropertyName("access_token")]
-        public string AccessToken { get; init; } = string.Empty;
-    }
-
-    private sealed class FinalTokenResponse
-    {
-        [JsonPropertyName("access_token")]
-        public string AccessToken { get; init; } = string.Empty;
-    }
 }
 
 public sealed record ClientCustomerLookupTokenResult(string AccessToken);
