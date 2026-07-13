@@ -91,6 +91,20 @@ steps:
 - powershell: |
     $ErrorActionPreference = 'Stop'
 
+    function Get-RelativePathCompat {
+      param(
+        [Parameter(Mandatory = $true)][string]$BasePath,
+        [Parameter(Mandatory = $true)][string]$TargetPath
+      )
+
+      $fullBasePath = ([IO.Path]::GetFullPath($BasePath)).TrimEnd('\') + '\'
+      $fullTargetPath = [IO.Path]::GetFullPath($TargetPath)
+      if (-not $fullTargetPath.StartsWith($fullBasePath, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Target path must be inside the base path: $TargetPath"
+      }
+
+      return $fullTargetPath.Substring($fullBasePath.Length)
+    }
     # Tests/global.json selects Microsoft Testing Platform. Keep this step in
     # the physical Tests directory and use --project rather than VSTest-style
     # discovery from the repository root.
@@ -100,7 +114,7 @@ steps:
     Push-Location $testsRoot
     try {
       foreach ($project in $testProjects) {
-        $relativeProject = [IO.Path]::GetRelativePath($testsRoot, $project.FullName)
+        $relativeProject = Get-RelativePathCompat $testsRoot $project.FullName
         Write-Host "Testing $relativeProject"
         dotnet test --project $relativeProject --configuration $env:BUILD_CONFIGURATION --no-build --no-restore -v:minimal
         if ($LASTEXITCODE -ne 0) {
@@ -192,7 +206,21 @@ steps:
 
     $repoCheckout = [IO.Path]::GetFullPath($repoCheckout)
     $destinationRoot = [IO.Path]::GetFullPath((Join-Path $repoCheckout $env:PUBLISH_REPO_ROOT))
-    $relativeDestination = [IO.Path]::GetRelativePath($repoCheckout, $destinationRoot)
+    function Get-RelativePathCompat {
+      param(
+        [Parameter(Mandatory = $true)][string]$BasePath,
+        [Parameter(Mandatory = $true)][string]$TargetPath
+      )
+
+      $fullBasePath = ([IO.Path]::GetFullPath($BasePath)).TrimEnd('\') + '\'
+      $fullTargetPath = [IO.Path]::GetFullPath($TargetPath)
+      if (-not $fullTargetPath.StartsWith($fullBasePath, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Target path must be inside the base path: $TargetPath"
+      }
+
+      return $fullTargetPath.Substring($fullBasePath.Length)
+    }
+    $relativeDestination = Get-RelativePathCompat $repoCheckout $destinationRoot
     if ($relativeDestination -eq '..' -or $relativeDestination.StartsWith("..$([IO.Path]::DirectorySeparatorChar)")) {
       throw 'publishRepoRoot must remain inside the cloned destination repository.'
     }
@@ -220,8 +248,8 @@ steps:
     Get-ChildItem -LiteralPath $cliSource -Force | Copy-Item -Destination $cliDestination -Recurse -Force
     Get-ChildItem -LiteralPath $desktopSource -Force | Copy-Item -Destination $desktopDestination -Recurse -Force
 
-    $relativeCli = [IO.Path]::GetRelativePath($repoCheckout, $cliDestination)
-    $relativeDesktop = [IO.Path]::GetRelativePath($repoCheckout, $desktopDestination)
+    $relativeCli = Get-RelativePathCompat $repoCheckout $cliDestination
+    $relativeDesktop = Get-RelativePathCompat $repoCheckout $desktopDestination
     & git -C $repoCheckout add -A -- $relativeCli $relativeDesktop
     if ($LASTEXITCODE -ne 0) {
       throw 'Could not stage the published V2 files.'
