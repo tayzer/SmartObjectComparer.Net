@@ -4,6 +4,14 @@ trigger:
 pr:
 - main
 
+resources:
+  repositories:
+  - repository: GitSource
+    type: git
+    # Replace name/ref with the destination Azure Repo and branch.
+    name: REPLACE_PROJECT/REPLACE_REPOSITORY
+    ref: refs/heads/main
+
 pool:
   vmImage: windows-latest
 
@@ -12,11 +20,6 @@ variables:
   targetRuntime: win-x64
   publishRoot: '$(Build.ArtifactStagingDirectory)\v2'
 
-  # Set publishRepoUrl to the complete clone URL, including the destination project.
-  # Azure DevOps Server example:
-  # https://ado.net/tfs/DefaultCollection/TargetProject/_git/SmarterObjectComparer.Net.jenkins.
-  # The pipeline skips the commit step when this is blank.
-  publishRepoUrl: ''
   publishRepoBranch: main
   publishRepoRoot: releases\v2
   publishRepoCliPath: cli
@@ -27,6 +30,13 @@ steps:
   clean: true
   fetchDepth: 1
   persistCredentials: true
+  path: s
+
+- checkout: GitSource
+  clean: false
+  fetchDepth: 1
+  persistCredentials: true
+  path: GitSource
 
 - task: UseDotNet@2
   displayName: Install .NET SDK
@@ -231,29 +241,14 @@ steps:
 - powershell: |
     $ErrorActionPreference = 'Stop'
 
-    if ([string]::IsNullOrWhiteSpace($env:PUBLISH_REPO_URL)) {
-      Write-Host 'publishRepoUrl is blank; skipping the destination-repository commit.'
-      exit 0
-    }
-
-    if ($env:PUBLISH_REPO_URL -notmatch '(?i)/_git/') {
-      throw 'publishRepoUrl must be the complete Azure DevOps clone URL, including the target project, for example https://ado.net/tfs/DefaultCollection/Project/_git/Repository.'
-    }
-    if ([string]::IsNullOrWhiteSpace($env:SYSTEM_ACCESSTOKEN)) {
-      throw 'System.AccessToken is unavailable. Allow scripts to access the OAuth token for this pipeline.'
-    }
-
     $publishRoot = [IO.Path]::GetFullPath($env:PUBLISH_ROOT)
-    $repoCheckout = Join-Path $env:AGENT_TEMPDIRECTORY ("v2-publish-repo-{0}" -f $env:BUILD_BUILDID)
-    $authHeader = "AUTHORIZATION: bearer $env:SYSTEM_ACCESSTOKEN"
+    $repoCheckout = [IO.Path]::GetFullPath($env:PUBLISH_REPO_CHECKOUT)
 
-    Write-Host "Cloning destination repository branch '$env:PUBLISH_REPO_BRANCH'"
-    & git -c "http.extraheader=$authHeader" clone --depth 1 --branch $env:PUBLISH_REPO_BRANCH --single-branch $env:PUBLISH_REPO_URL $repoCheckout
+    & git -C $repoCheckout rev-parse --is-inside-work-tree
     if ($LASTEXITCODE -ne 0) {
-      throw 'Could not clone the destination Azure DevOps repository.'
+      throw "GitSource checkout is unavailable: $repoCheckout"
     }
 
-    $repoCheckout = [IO.Path]::GetFullPath($repoCheckout)
     $destinationRoot = [IO.Path]::GetFullPath((Join-Path $repoCheckout $env:PUBLISH_REPO_ROOT))
     function Get-RelativePathCompat {
       param(
@@ -271,7 +266,7 @@ steps:
     }
     $relativeDestination = Get-RelativePathCompat $repoCheckout $destinationRoot
     if ($relativeDestination -eq '..' -or $relativeDestination.StartsWith("..$([IO.Path]::DirectorySeparatorChar)")) {
-      throw 'publishRepoRoot must remain inside the cloned destination repository.'
+      throw 'publishRepoRoot must remain inside the checked-out destination repository.'
     }
 
     $cliSource = Join-Path $publishRoot 'cli'
@@ -285,7 +280,7 @@ steps:
       }
     }
 
-    # Remove only the two validated release directories in the cloned repo so
+    # Remove only the two validated release directories in the checked-out repo so
     # deleted files from an older publish do not survive the copy.
     foreach ($target in @($cliDestination, $desktopDestination)) {
       if (Test-Path -LiteralPath $target) {
@@ -318,17 +313,16 @@ steps:
       throw 'Could not commit the published V2 files.'
     }
 
-    & git -C $repoCheckout -c "http.extraheader=$authHeader" push origin "HEAD:$env:PUBLISH_REPO_BRANCH"
+    & git -C $repoCheckout push origin "HEAD:$env:PUBLISH_REPO_BRANCH"
     if ($LASTEXITCODE -ne 0) {
       throw 'Could not push the published V2 files to the destination repository.'
     }
   displayName: Commit published V2 CLI and Desktop to Azure DevOps repo
-  condition: and(succeeded(), ne(variables['publishRepoUrl'], ''))
+  condition: succeeded()
   workingDirectory: '$(Build.SourcesDirectory)'
   env:
-    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
     PUBLISH_ROOT: $(publishRoot)
-    PUBLISH_REPO_URL: $(publishRepoUrl)
+    PUBLISH_REPO_CHECKOUT: $(Pipeline.Workspace)\GitSource
     PUBLISH_REPO_BRANCH: $(publishRepoBranch)
     PUBLISH_REPO_ROOT: $(publishRepoRoot)
     PUBLISH_REPO_CLI_PATH: $(publishRepoCliPath)
