@@ -22,7 +22,8 @@
   <Target Name="PublishParityBenchReportAssets" AfterTargets="Publish" Condition="'$(PublishParityBenchReportAssets)' != 'false'">
     <MSBuild Projects="..\ParityBench.NET.Report\ParityBench.NET.Report.csproj"
              Targets="Publish"
-             Properties="Configuration=$(Configuration);PublishDir=$(PublishDir)BlazorReportAssets\;PublishParityBenchReportAssets=false" />
+             Properties="Configuration=$(Configuration);PublishDir=$(PublishDir)BlazorReportAssets\;PublishParityBenchReportAssets=false"
+             RemoveProperties="RuntimeIdentifier;SelfContained;PublishSingleFile;PublishReadyToRun;IncludeNativeLibrariesForSelfExtract;IncludeAllContentForSelfExtract;UseAppHost" />
   </Target>
 
   <ItemGroup>

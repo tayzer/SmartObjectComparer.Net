@@ -145,6 +145,7 @@ steps:
       '--self-contained', 'true',
       '--nologo',
       '-p:PublishSingleFile=true',
+      '-p:UseAppHost=true',
       '-p:IncludeNativeLibrariesForSelfExtract=true',
       '-p:PublishTrimmed=false'
     )
