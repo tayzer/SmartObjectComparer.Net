@@ -19,6 +19,7 @@ using ParityBench.NET.Domain.Runs;
 using ParityBench.NET.Report;
 using ParityBench.NET.Report.Results;
 using ParityBench.NET.UI.Results;
+using ParityBench.NET.UI.Theming;
 
 namespace ParityBench.NET.Report.Tests;
 
@@ -95,6 +96,7 @@ public sealed class StaticReportRunResultsViewDataSourceTests
         {
             testContext.JSInterop.Mode = JSRuntimeMode.Loose;
             testContext.Services.AddMudServices();
+            testContext.Services.AddScoped<ParityBenchThemeState>();
             StaticReportRunResultsViewDataSource dataSource = CreateDataSource(CreateReportData(CreatePair("one.json", RequestPairOutcome.Equal)));
             testContext.Services.AddSingleton<IRunResultsViewDataSource>(dataSource);
             testContext.Services.AddSingleton<IAcceptedDifferenceUseCases>(new InMemoryAcceptedDifferenceUseCases(isReadOnly: false));
