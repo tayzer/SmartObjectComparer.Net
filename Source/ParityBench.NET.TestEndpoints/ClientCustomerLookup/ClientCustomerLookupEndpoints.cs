@@ -129,65 +129,101 @@ public static class ClientCustomerLookupEndpoints
 
     private static string ResolveEndpointACustomerName(string customerId) => "Riley Morgan";
 
-    private static string ResolveEndpointBCustomerName(string customerId) =>
-        string.Equals(customerId, "2002", StringComparison.Ordinal) ? "Riley Morgan Updated" : "Riley Morgan";
+    private static string ResolveEndpointBCustomerName(ClientCustomerLookupVariation variation) =>
+        variation is ClientCustomerLookupVariation.NameDiffOnly or ClientCustomerLookupVariation.CombinedDiff
+            ? "Riley Morgan Updated"
+            : "Riley Morgan";
 
-    private static ClientCustomerLookupApplicant CreateEndpointBApplicant(string customerId, string correlationId) =>
-        new ClientCustomerLookupApplicant
+    private static ClientCustomerLookupApplicant CreateEndpointBApplicant(string customerId, string correlationId)
+    {
+        ClientCustomerLookupVariation variation = ClientCustomerLookupVariationCatalog.Resolve(customerId);
+
+        return new ClientCustomerLookupApplicant
         {
             ApplicantId = correlationId,
             Profile = new ClientCustomerLookupApplicantProfile
             {
-                FullName = ResolveEndpointBCustomerName(customerId),
-                Addresses = new[]
-                {
-                    new ClientCustomerLookupAddress
-                    {
-                        Type = "HOME",
-                        City = "Seattle",
-                        Country = "US",
-                    },
-                    new ClientCustomerLookupAddress
-                    {
-                        Type = "MAILING",
-                        City = string.Equals(customerId, "2002", StringComparison.Ordinal) ? "Bellevue" : "Tacoma",
-                        Country = "US",
-                    },
-                },
+                FullName = ResolveEndpointBCustomerName(variation),
+                Addresses = BuildAddresses(variation),
             },
-            RuleEvaluations = new[]
-            {
-                new ClientCustomerLookupRuleEvaluation
-                {
-                    RuleSet = "identity",
-                    Outcomes = new[]
-                    {
-                        new ClientCustomerLookupRuleOutcome
-                        {
-                            Code = "ID_DOC_MATCH",
-                            Result = "PASS",
-                            TriggeredChecks = new[] { "name_match", "dob_match" },
-                        },
-                    },
-                },
-                new ClientCustomerLookupRuleEvaluation
-                {
-                    RuleSet = "fraud",
-                    Outcomes = new[]
-                    {
-                        new ClientCustomerLookupRuleOutcome
-                        {
-                            Code = "DEVICE_RISK",
-                            Result = string.Equals(customerId, "2002", StringComparison.Ordinal) ? "FAIL" : "REVIEW",
-                            TriggeredChecks = new[] { "ip_velocity", "device_reuse" },
-                        },
-                    },
-                },
-            },
-            Flags = string.Equals(customerId, "2002", StringComparison.Ordinal)
-                ? new[] { "KYC_COMPLETE", "FRAUD_ALERT" }
-                : new[] { "KYC_COMPLETE", "MANUAL_REVIEW_REQUIRED" },
+            RuleEvaluations = BuildRuleEvaluations(variation),
+            Flags = BuildFlags(variation),
         };
+    }
+
+    private static ClientCustomerLookupAddress[] BuildAddresses(ClientCustomerLookupVariation variation)
+    {
+        ClientCustomerLookupAddress home = new ClientCustomerLookupAddress
+        {
+            Type = "HOME",
+            City = "Seattle",
+            Country = "US",
+        };
+        ClientCustomerLookupAddress mailing = new ClientCustomerLookupAddress
+        {
+            Type = "MAILING",
+            City = variation is ClientCustomerLookupVariation.CityDiffOnly or ClientCustomerLookupVariation.CombinedDiff
+                ? "Bellevue"
+                : "Tacoma",
+            Country = "US",
+        };
+
+        return variation == ClientCustomerLookupVariation.AddressOrderOnly
+            ? new[] { mailing, home }
+            : new[] { home, mailing };
+    }
+
+    private static ClientCustomerLookupRuleEvaluation[] BuildRuleEvaluations(ClientCustomerLookupVariation variation)
+    {
+        string[] fraudChecks = variation == ClientCustomerLookupVariation.TriggeredChecksOrderOnly
+            ? new[] { "device_reuse", "ip_velocity" }
+            : new[] { "ip_velocity", "device_reuse" };
+
+        string fraudResult = variation is ClientCustomerLookupVariation.FraudResultDiffOnly or ClientCustomerLookupVariation.CombinedDiff
+            ? "FAIL"
+            : "REVIEW";
+
+        return new[]
+        {
+            new ClientCustomerLookupRuleEvaluation
+            {
+                RuleSet = "identity",
+                Outcomes = new[]
+                {
+                    new ClientCustomerLookupRuleOutcome
+                    {
+                        Code = "ID_DOC_MATCH",
+                        Result = "PASS",
+                        TriggeredChecks = new[] { "name_match", "dob_match" },
+                    },
+                    new ClientCustomerLookupRuleOutcome
+                    {
+                        Code = "SANCTIONS_SCREEN",
+                        Result = "PASS",
+                        TriggeredChecks = new[] { "ofac", "pep" },
+                    },
+                },
+            },
+            new ClientCustomerLookupRuleEvaluation
+            {
+                RuleSet = "fraud",
+                Outcomes = new[]
+                {
+                    new ClientCustomerLookupRuleOutcome
+                    {
+                        Code = "DEVICE_RISK",
+                        Result = fraudResult,
+                        TriggeredChecks = fraudChecks,
+                    },
+                },
+            },
+        };
+    }
+
+    private static string[] BuildFlags(ClientCustomerLookupVariation variation) =>
+        variation is ClientCustomerLookupVariation.FlagsDiffOnly or ClientCustomerLookupVariation.CombinedDiff
+            ? new[] { "KYC_COMPLETE", "FRAUD_ALERT" }
+            : new[] { "KYC_COMPLETE", "MANUAL_REVIEW_REQUIRED" };
 
     private static bool HasHeader(HttpContext context, string name, string expectedValue) =>
         context.Request.Headers.TryGetValue(name, out var value)

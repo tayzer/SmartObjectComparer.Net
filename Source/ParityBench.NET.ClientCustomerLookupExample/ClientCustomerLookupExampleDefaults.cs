@@ -9,6 +9,7 @@ namespace ParityBench.NET.ClientCustomerLookupExample;
 public static class ClientCustomerLookupExampleDefaults
 {
     public const string PresetId = "client-soap-json-token";
+    public const string VolumePresetId = "client-soap-json-token-volume";
 
     public static void Register(
         IRequestComparisonEndpointRegistry endpointRegistry,
@@ -53,11 +54,57 @@ public static class ClientCustomerLookupExampleDefaults
             endpointB.DefaultHeaders));
     }
 
+    public static void RegisterVolumePreset(
+        IRequestComparisonPresetRegistry presetRegistry,
+        IConfiguration configuration,
+        string manualRunRoot)
+    {
+        ArgumentNullException.ThrowIfNull(presetRegistry);
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        IReadOnlyDictionary<string, ConfiguredEndpoint> endpoints = LoadConfiguredEndpoints(configuration);
+        if (!endpoints.TryGetValue(ClientCustomerLookupProfileFactory.SuggestedEndpointAId, out ConfiguredEndpoint? endpointA))
+        {
+            throw new InvalidOperationException($"Client customer lookup Endpoint A '{ClientCustomerLookupProfileFactory.SuggestedEndpointAId}' is not configured.");
+        }
+
+        if (!endpoints.TryGetValue(ClientCustomerLookupProfileFactory.SuggestedEndpointBId, out ConfiguredEndpoint? endpointB))
+        {
+            throw new InvalidOperationException($"Client customer lookup Endpoint B '{ClientCustomerLookupProfileFactory.SuggestedEndpointBId}' is not configured.");
+        }
+
+        IConfigurationSection profileSection = configuration.GetSection("RequestComparison:Profiles:ClientCustomerLookupVolume");
+        string requestDirectory = ResolveVolumeRequestDirectory(profileSection["RequestDirectory"], manualRunRoot);
+
+        presetRegistry.Register(new RequestComparisonPresetOption(
+            profileSection["PresetId"] ?? VolumePresetId,
+            profileSection["Label"] ?? "Client SOAP/JSON token customer lookup (volume)",
+            requestDirectory,
+            endpointA.Url,
+            endpointB.Url,
+            profileSection["ResponseModel"] ?? ClientCustomerLookupProfileFactory.ResponseModelName,
+            profileSection["ProfileId"] ?? ClientCustomerLookupProfileFactory.ProfileId,
+            new ComparisonOptions(ignoreXmlNamespaces: true),
+            new RequestExecutionOptions(),
+            endpointA.DefaultHeaders,
+            endpointB.DefaultHeaders));
+    }
+
+    private static string ResolveVolumeRequestDirectory(string? configuredPath, string manualRunRoot)
+    {
+        if (string.IsNullOrWhiteSpace(configuredPath))
+        {
+            return Path.Combine(manualRunRoot, "client-soap-json-token", "volume");
+        }
+
+        return ResolveRequestDirectory(configuredPath, manualRunRoot);
+    }
+
     private static string ResolveRequestDirectory(string? configuredPath, string manualRunRoot)
     {
         if (string.IsNullOrWhiteSpace(configuredPath))
         {
-            return Path.Combine(manualRunRoot, "client-soap-json-token");
+            return Path.Combine(manualRunRoot, "client-soap-json-token", "behaviors");
         }
 
         string trimmed = configuredPath.Trim();

@@ -124,6 +124,7 @@ public partial class App : System.Windows.Application
         InMemoryRequestComparisonPresetRegistry presetDefaults = new InMemoryRequestComparisonPresetRegistry();
         RequestComparisonFixtureDefaults.Register(endpointDefaults, presetDefaults, fixtureBaseUrl);
         ClientCustomerLookupExampleDefaults.Register(endpointDefaults, presetDefaults, configuration, FindManualRunRoot());
+        ClientCustomerLookupExampleDefaults.RegisterVolumePreset(presetDefaults, configuration, FindManualRunRoot());
         services.AddSingleton<IRequestComparisonEndpointRegistry>(endpointDefaults);
         services.AddSingleton<IRequestComparisonPresetRegistry>(presetDefaults);
         services.AddSingleton<IResponseModelRegistry>(_ =>

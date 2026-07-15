@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ParityBench.NET.Application\ParityBench.NET.Application.csproj" />
+    <ProjectReference Include="..\ParityBench.NET.ClientCustomerLookupExample\ParityBench.NET.ClientCustomerLookupExample.csproj" />
     <ProjectReference Include="..\ParityBench.NET.Domain\ParityBench.NET.Domain.csproj" />
     <ProjectReference Include="..\ParityBench.NET.Engine\ParityBench.NET.Engine.csproj" />
     <ProjectReference Include="..\ParityBench.NET.Infrastructure\ParityBench.NET.Infrastructure.csproj" />

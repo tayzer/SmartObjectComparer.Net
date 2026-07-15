@@ -141,6 +141,101 @@ public sealed class ClientCustomerLookupEndpointTests
         Assert.AreEqual("Riley Morgan Updated", jsonBody?.Applicants.FirstOrDefault()?.Profile.FullName);
         Assert.AreEqual("FAIL", jsonBody?.Applicants.FirstOrDefault()?.RuleEvaluations.LastOrDefault()?.Outcomes.FirstOrDefault()?.Result);
     }
+    [TestMethod]
+    public async Task JsonEndpoint_WhenAddressOrderOnlyCategory_ReturnsSameAddressesInDifferentOrder()
+    {
+        using HttpRequestMessage request = CreateValidJsonRequest("3008", "trace-3008");
+
+        using HttpResponseMessage response = await client.SendAsync(request);
+        ClientCustomerLookupJsonResponse? body = await response.Content.ReadFromJsonAsync<ClientCustomerLookupJsonResponse>();
+
+        string[] cities = body!.Applicants.First().Profile.Addresses.Select(address => address.City).ToArray();
+        CollectionAssert.AreEquivalent(new[] { "Seattle", "Tacoma" }, cities);
+        CollectionAssert.AreNotEqual(new[] { "Seattle", "Tacoma" }, cities);
+    }
+
+    [TestMethod]
+    public async Task JsonEndpoint_WhenTriggeredChecksOrderOnlyCategory_ReturnsSameChecksInDifferentOrder()
+    {
+        using HttpRequestMessage request = CreateValidJsonRequest("3009", "trace-3009");
+
+        using HttpResponseMessage response = await client.SendAsync(request);
+        ClientCustomerLookupJsonResponse? body = await response.Content.ReadFromJsonAsync<ClientCustomerLookupJsonResponse>();
+
+        string[] fraudChecks = body!.Applicants.First().RuleEvaluations
+            .Single(evaluation => evaluation.RuleSet == "fraud")
+            .Outcomes.First().TriggeredChecks;
+        CollectionAssert.AreEquivalent(new[] { "ip_velocity", "device_reuse" }, fraudChecks);
+        CollectionAssert.AreNotEqual(new[] { "ip_velocity", "device_reuse" }, fraudChecks);
+    }
+
+    [TestMethod]
+    public async Task JsonEndpoint_WhenNameDiffOnlyCategory_ChangesOnlyFullName()
+    {
+        using HttpRequestMessage request = CreateValidJsonRequest("3001", "trace-3001");
+
+        using HttpResponseMessage response = await client.SendAsync(request);
+        ClientCustomerLookupJsonResponse? body = await response.Content.ReadFromJsonAsync<ClientCustomerLookupJsonResponse>();
+
+        Assert.AreEqual("Riley Morgan Updated", body?.Applicants.First().Profile.FullName);
+        Assert.AreEqual("Tacoma", body?.Applicants.First().Profile.Addresses.Last().City);
+        Assert.AreEqual("REVIEW", body?.Applicants.First().RuleEvaluations.Last().Outcomes.First().Result);
+        CollectionAssert.AreEqual(
+            new[] { "KYC_COMPLETE", "MANUAL_REVIEW_REQUIRED" },
+            body?.Applicants.First().Flags);
+    }
+
+    [TestMethod]
+    public async Task JsonEndpoint_WhenCityDiffOnlyCategory_ChangesOnlyMailingCity()
+    {
+        using HttpRequestMessage request = CreateValidJsonRequest("3002", "trace-3002");
+
+        using HttpResponseMessage response = await client.SendAsync(request);
+        ClientCustomerLookupJsonResponse? body = await response.Content.ReadFromJsonAsync<ClientCustomerLookupJsonResponse>();
+
+        Assert.AreEqual("Riley Morgan", body?.Applicants.First().Profile.FullName);
+        Assert.AreEqual("Bellevue", body?.Applicants.First().Profile.Addresses.Last().City);
+    }
+
+    [TestMethod]
+    public async Task JsonEndpoint_WhenFraudResultDiffOnlyCategory_ChangesOnlyFraudResult()
+    {
+        using HttpRequestMessage request = CreateValidJsonRequest("3003", "trace-3003");
+
+        using HttpResponseMessage response = await client.SendAsync(request);
+        ClientCustomerLookupJsonResponse? body = await response.Content.ReadFromJsonAsync<ClientCustomerLookupJsonResponse>();
+
+        Assert.AreEqual("Riley Morgan", body?.Applicants.First().Profile.FullName);
+        Assert.AreEqual("FAIL", body?.Applicants.First().RuleEvaluations.Last().Outcomes.First().Result);
+    }
+
+    [TestMethod]
+    public async Task JsonEndpoint_WhenFlagsDiffOnlyCategory_ChangesOnlyFlags()
+    {
+        using HttpRequestMessage request = CreateValidJsonRequest("3004", "trace-3004");
+
+        using HttpResponseMessage response = await client.SendAsync(request);
+        ClientCustomerLookupJsonResponse? body = await response.Content.ReadFromJsonAsync<ClientCustomerLookupJsonResponse>();
+
+        Assert.AreEqual("Riley Morgan", body?.Applicants.First().Profile.FullName);
+        CollectionAssert.AreEqual(new[] { "KYC_COMPLETE", "FRAUD_ALERT" }, body?.Applicants.First().Flags);
+    }
+
+    [TestMethod]
+    public async Task JsonEndpoint_WhenIgnoredFieldsOnlyCategory_MatchesBaselineApplicantData()
+    {
+        using HttpRequestMessage request = CreateValidJsonRequest("3007", "trace-3007");
+
+        using HttpResponseMessage response = await client.SendAsync(request);
+        ClientCustomerLookupJsonResponse? body = await response.Content.ReadFromJsonAsync<ClientCustomerLookupJsonResponse>();
+
+        Assert.AreEqual("trace-3007", body?.Details.TraceId);
+        Assert.AreEqual("Riley Morgan", body?.Applicants.First().Profile.FullName);
+        CollectionAssert.AreEqual(
+            new[] { "Seattle", "Tacoma" },
+            body?.Applicants.First().Profile.Addresses.Select(address => address.City).ToArray());
+    }
+
     private static string CreateSoapRequest() => CreateSoapRequest("2001", "trace-2001");
 
     private static string CreateSoapRequest(string customerId, string correlationId) =>

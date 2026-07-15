@@ -4,7 +4,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 using ParityBench.NET.Application.Requests;
+using ParityBench.NET.Application.Workflow;
 using ParityBench.NET.Cli;
+using ParityBench.NET.Domain.Comparison;
+using ParityBench.NET.Domain.Requests;
 
 namespace ParityBench.NET.Cli.Tests;
 
@@ -83,6 +86,36 @@ public sealed class RequestCommandTests
         Assert.AreEqual(0, result.Options.Observability.SlowPathThresholdMs);
     }
     [TestMethod]
+    public void Parse_WhenPresetIsProvidedWithoutDirectoryOrEndpoints_ReturnsOptions()
+    {
+        RequestCommandParseResult result = RequestCommandParser.Parse(new[]
+        {
+            "request",
+            "--preset",
+            "client-soap-json-token",
+        });
+
+        Assert.IsTrue(result.IsSuccess, string.Join(",", result.Errors));
+        Assert.IsNotNull(result.Options);
+        Assert.AreEqual("client-soap-json-token", result.Options.PresetId);
+        Assert.IsNull(result.Options.RequestDirectory);
+        Assert.IsNull(result.Options.EndpointA);
+        Assert.IsNull(result.Options.EndpointB);
+    }
+
+    [TestMethod]
+    public void Parse_WhenNeitherPresetNorEndpointsAreProvided_ReturnsValidationError()
+    {
+        RequestCommandParseResult result = RequestCommandParser.Parse(new[]
+        {
+            "request",
+        });
+
+        Assert.IsFalse(result.IsSuccess);
+        Assert.IsTrue(result.Errors.Any(error => error.Contains("Request directory", StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
     public void Parse_WhenEndpointUrlIsInvalid_ReturnsValidationError()
     {
         RequestCommandParseResult result = RequestCommandParser.Parse(new[]
@@ -153,6 +186,70 @@ public sealed class RequestCommandTests
         StringAssert.Contains(output.ToString(), "Total: 1");
         StringAssert.Contains(output.ToString(), "Equal: 1");
         Assert.AreEqual(2, sender.RequestCount);
+    }
+
+    [TestMethod]
+    public async Task RunAsync_WhenPresetSuppliesDirectoryAndEndpoints_ResolvesFromPreset()
+    {
+        string workspaceRoot = CreateTempDirectory();
+        string requestDirectory = CreateRequestDirectory("one.json", "{\"id\":1}");
+        FakeEndpointRequestSender sender = FakeEndpointRequestSender.ForBody("{\"ok\":true}");
+        InMemoryRequestComparisonPresetRegistry stubPresetRegistry = new InMemoryRequestComparisonPresetRegistry();
+        stubPresetRegistry.Register(new RequestComparisonPresetOption(
+            "test-preset",
+            "Test preset",
+            requestDirectory,
+            new Uri("https://a.example.test"),
+            new Uri("https://b.example.test"),
+            "Auto",
+            null,
+            new ComparisonOptions(),
+            new RequestExecutionOptions()));
+        using StringWriter output = new StringWriter();
+        using StringWriter error = new StringWriter();
+
+        int exitCode = await CliApplication.RunAsync(
+            new[]
+            {
+                "request",
+                "--preset",
+                "test-preset",
+            },
+            output,
+            error,
+            workspaceRoot,
+            services =>
+            {
+                services.AddSingleton<IEndpointRequestSender>(sender);
+                services.AddSingleton<IRequestComparisonPresetRegistry>(stubPresetRegistry);
+            }).ConfigureAwait(false);
+
+        Assert.AreEqual(0, exitCode, error.ToString());
+        StringAssert.Contains(output.ToString(), "Status: Completed");
+        StringAssert.Contains(output.ToString(), "Total: 1");
+        Assert.AreEqual(2, sender.RequestCount);
+    }
+
+    [TestMethod]
+    public async Task RunAsync_WhenPresetIdIsUnknown_ReturnsValidationFailure()
+    {
+        string workspaceRoot = CreateTempDirectory();
+        using StringWriter output = new StringWriter();
+        using StringWriter error = new StringWriter();
+
+        int exitCode = await CliApplication.RunAsync(
+            new[]
+            {
+                "request",
+                "--preset",
+                "does-not-exist",
+            },
+            output,
+            error,
+            workspaceRoot).ConfigureAwait(false);
+
+        Assert.AreEqual(2, exitCode);
+        StringAssert.Contains(error.ToString(), "Preset 'does-not-exist' was not found");
     }
 
     [TestMethod]

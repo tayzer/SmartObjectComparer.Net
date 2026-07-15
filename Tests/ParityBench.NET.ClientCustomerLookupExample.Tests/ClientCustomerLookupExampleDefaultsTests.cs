@@ -49,4 +49,34 @@ public sealed class ClientCustomerLookupExampleDefaultsTests
         Assert.AreEqual(ClientCustomerLookupProfileFactory.ProfileId, preset.ContractProfileId);
         Assert.AreEqual("endpoint-b-key", preset.EndpointBHeaders?["Ocp-Apim-Subscription-Key"]);
     }
+
+    [TestMethod]
+    public void RegisterVolumePreset_WhenConfigurationIsProvided_AddsSecondPresetWithVolumeDirectory()
+    {
+        IConfiguration configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["RequestComparison:EndpointOptions:Endpoints:0:Id"] = ClientCustomerLookupProfileFactory.SuggestedEndpointAId,
+                ["RequestComparison:EndpointOptions:Endpoints:0:Name"] = "Client SOAP",
+                ["RequestComparison:EndpointOptions:Endpoints:0:Url"] = "https://fixture.example.test/client/customer-lookup/soap",
+                ["RequestComparison:EndpointOptions:Endpoints:0:ContentType"] = "text/xml",
+                ["RequestComparison:EndpointOptions:Endpoints:1:Id"] = ClientCustomerLookupProfileFactory.SuggestedEndpointBId,
+                ["RequestComparison:EndpointOptions:Endpoints:1:Name"] = "Client JSON",
+                ["RequestComparison:EndpointOptions:Endpoints:1:Url"] = "https://fixture.example.test/client/customer-lookup/json",
+                ["RequestComparison:EndpointOptions:Endpoints:1:ContentType"] = "application/json",
+            })
+            .Build();
+        InMemoryRequestComparisonPresetRegistry presetRegistry = new InMemoryRequestComparisonPresetRegistry();
+
+        ClientCustomerLookupExampleDefaults.RegisterVolumePreset(
+            presetRegistry,
+            configuration,
+            "Examples/ParityBench.NET.ManualRuns");
+
+        RequestComparisonPresetOption preset = presetRegistry.ListPresets().Single();
+        Assert.AreEqual(ClientCustomerLookupExampleDefaults.VolumePresetId, preset.PresetId);
+        Assert.AreEqual(
+            Path.Combine("Examples/ParityBench.NET.ManualRuns", "client-soap-json-token", "volume"),
+            preset.RequestDirectory);
+    }
 }

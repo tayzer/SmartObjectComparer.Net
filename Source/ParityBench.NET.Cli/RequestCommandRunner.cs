@@ -10,10 +10,14 @@ namespace ParityBench.NET.Cli;
 public sealed class RequestCommandRunner
 {
     private readonly IRequestComparisonWorkflowUseCases workflowUseCases;
+    private readonly IRequestComparisonPresetRegistry presetRegistry;
 
-    public RequestCommandRunner(IRequestComparisonWorkflowUseCases workflowUseCases)
+    public RequestCommandRunner(
+        IRequestComparisonWorkflowUseCases workflowUseCases,
+        IRequestComparisonPresetRegistry presetRegistry)
     {
         this.workflowUseCases = workflowUseCases ?? throw new ArgumentNullException(nameof(workflowUseCases));
+        this.presetRegistry = presetRegistry ?? throw new ArgumentNullException(nameof(presetRegistry));
     }
 
     public async Task<int> RunAsync(
@@ -26,27 +30,53 @@ public sealed class RequestCommandRunner
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(error);
 
-        if (!Directory.Exists(options.RequestDirectory))
+        RequestComparisonPresetOption? preset = null;
+        if (!string.IsNullOrWhiteSpace(options.PresetId))
         {
-            await error.WriteLineAsync($"Request directory was not found: {Path.GetFullPath(options.RequestDirectory)}").ConfigureAwait(false);
+            preset = presetRegistry.ListPresets()
+                .FirstOrDefault(candidate => string.Equals(candidate.PresetId, options.PresetId, StringComparison.OrdinalIgnoreCase));
+            if (preset is null)
+            {
+                await error.WriteLineAsync($"Preset '{options.PresetId}' was not found.").ConfigureAwait(false);
+                return 2;
+            }
+        }
+
+        string? requestDirectory = options.RequestDirectory ?? preset?.RequestDirectory;
+        Uri? endpointA = options.EndpointA ?? preset?.EndpointA;
+        Uri? endpointB = options.EndpointB ?? preset?.EndpointB;
+        string modelName = options.ModelName ?? preset?.ModelName ?? "Auto";
+        string? contractProfileId = options.ContractProfileId ?? preset?.ContractProfileId;
+        ComparisonOptions comparisonOptions = preset?.ComparisonOptions ?? new ComparisonOptions();
+        string? contentTypeOverride = options.ContentTypeOverride ?? preset?.RequestExecutionOptions.ContentTypeOverride;
+
+        if (requestDirectory is null || endpointA is null || endpointB is null)
+        {
+            await error.WriteLineAsync("Request directory, --endpoint-a, and --endpoint-b are required (directly or via --preset).").ConfigureAwait(false);
+            return 2;
+        }
+
+        if (!Directory.Exists(requestDirectory))
+        {
+            await error.WriteLineAsync($"Request directory was not found: {Path.GetFullPath(requestDirectory)}").ConfigureAwait(false);
             return 2;
         }
 
         try
         {
             RequestComparisonRunRequest request = new RequestComparisonRunRequest(
-                options.RequestDirectory,
-                options.EndpointA,
-                options.EndpointB,
+                requestDirectory,
+                endpointA,
+                endpointB,
                 options.Timeout,
                 options.MaxConcurrency,
-                options.ModelName,
-                new ComparisonOptions(),
-                new RequestExecutionOptions(options.ContentTypeOverride),
-                string.IsNullOrWhiteSpace(options.ContractProfileId) ? null : new ContractProfileSelection(options.ContractProfileId),
+                modelName,
+                comparisonOptions,
+                new RequestExecutionOptions(contentTypeOverride),
+                string.IsNullOrWhiteSpace(contractProfileId) ? null : new ContractProfileSelection(contractProfileId),
                 commonHeaders: ParseHeaders(options.CommonHeaders),
-                endpointAHeaders: ParseHeaders(options.EndpointAHeaders),
-                endpointBHeaders: ParseHeaders(options.EndpointBHeaders));
+                endpointAHeaders: MergeHeaders(preset?.EndpointAHeaders, ParseHeaders(options.EndpointAHeaders)),
+                endpointBHeaders: MergeHeaders(preset?.EndpointBHeaders, ParseHeaders(options.EndpointBHeaders)));
 
             ComparisonRun run = await workflowUseCases
                 .CreateRunFromDirectoryAsync(request, cancellationToken)
@@ -112,6 +142,27 @@ public sealed class RequestCommandRunner
             await output.WriteLineAsync($"Slow paths: {run.Diagnostics.SlowRequestPaths.Count}").ConfigureAwait(false);
             await output.WriteLineAsync($"Exception diagnostics: {run.Diagnostics.Exceptions.Count}").ConfigureAwait(false);
         }
+    }
+
+    private static IReadOnlyDictionary<string, string> MergeHeaders(
+        IReadOnlyDictionary<string, string>? presetHeaders,
+        IReadOnlyDictionary<string, string> cliHeaders)
+    {
+        Dictionary<string, string> headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (presetHeaders is not null)
+        {
+            foreach (KeyValuePair<string, string> header in presetHeaders)
+            {
+                headers[header.Key] = header.Value;
+            }
+        }
+
+        foreach (KeyValuePair<string, string> header in cliHeaders)
+        {
+            headers[header.Key] = header.Value;
+        }
+
+        return headers;
     }
 
     private static IReadOnlyDictionary<string, string> ParseHeaders(IEnumerable<string> headerLines)

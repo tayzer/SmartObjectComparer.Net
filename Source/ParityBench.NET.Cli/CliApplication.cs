@@ -10,6 +10,7 @@ using ParityBench.NET.Application.Results;
 using ParityBench.NET.Application.Runs;
 using ParityBench.NET.Application.Runs.Retention;
 using ParityBench.NET.Application.Workflow;
+using ParityBench.NET.ClientCustomerLookupExample;
 using ParityBench.NET.Engine;
 using ParityBench.NET.Engine.Comparers;
 using ParityBench.NET.Engine.Pipeline;
@@ -113,9 +114,14 @@ public static class CliApplication
         services.AddSingleton<IContractPayloadSerializer, JsonXmlContractPayloadSerializer>();
         services.AddSingleton<RetentionPolicyEvaluator>();
         services.AddSingleton<IRunCleanupStage, RetentionCleanupStage>();
+        services.AddClientCustomerLookupExample(configuration);
+        string fixtureBaseUrl = configuration["ParityBench:RequestDefaults:FixtureBaseUrl"]
+            ?? RequestComparisonFixtureDefaults.DefaultFixtureBaseUrl;
         InMemoryRequestComparisonEndpointRegistry endpointDefaults = new InMemoryRequestComparisonEndpointRegistry();
         InMemoryRequestComparisonPresetRegistry presetDefaults = new InMemoryRequestComparisonPresetRegistry();
-        RequestComparisonFixtureDefaults.Register(endpointDefaults, presetDefaults);
+        RequestComparisonFixtureDefaults.Register(endpointDefaults, presetDefaults, fixtureBaseUrl);
+        ClientCustomerLookupExampleDefaults.Register(endpointDefaults, presetDefaults, configuration, FindManualRunRoot());
+        ClientCustomerLookupExampleDefaults.RegisterVolumePreset(presetDefaults, configuration, FindManualRunRoot());
         services.AddSingleton<IRequestComparisonEndpointRegistry>(endpointDefaults);
         services.AddSingleton<IRequestComparisonPresetRegistry>(presetDefaults);
         services.AddSingleton<IResponseModelRegistry>(_ =>
@@ -123,12 +129,14 @@ public static class CliApplication
             ResponseModelRegistry registry = new ResponseModelRegistry();
             BuiltInResponseModelRegistration.Register(registry);
             ConsumerReportFixtureResponseModelRegistration.Register(registry);
+            registry.RegisterClientCustomerLookupResponseModel();
             return registry;
         });
         services.AddSingleton<IContractProfileRegistry>(serviceProvider =>
         {
             ContractProfileRegistry registry = new ContractProfileRegistry();
             registry.Register(BuiltInContractProfiles.CreateSampleSoapToJson(serviceProvider.GetRequiredService<IContractPayloadSerializer>()));
+            registry.RegisterClientCustomerLookupProfile(serviceProvider);
             return registry;
         });
         services.AddSingleton<IComparisonRunExecutor>(serviceProvider =>
@@ -168,6 +176,26 @@ public static class CliApplication
             .AddJsonFile($"appsettings.{Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Production"}.json", optional: true)
             .AddEnvironmentVariables("PB_")
             .Build();
+
+    private static string FindManualRunRoot()
+    {
+        foreach (string candidateRoot in new[] { Environment.CurrentDirectory, AppContext.BaseDirectory })
+        {
+            DirectoryInfo? directory = new DirectoryInfo(candidateRoot);
+            while (directory is not null)
+            {
+                string manualRunRoot = Path.Combine(directory.FullName, "Examples", "ParityBench.NET.ManualRuns");
+                if (Directory.Exists(manualRunRoot))
+                {
+                    return manualRunRoot;
+                }
+
+                directory = directory.Parent;
+            }
+        }
+
+        return Path.Combine("Examples", "ParityBench.NET.ManualRuns");
+    }
 
     private static string GetDefaultWorkspaceRoot() =>
         Path.Combine(

@@ -10,6 +10,7 @@ public static class RequestCommandParser
         "--endpoint-b",
         "--model",
         "--profile",
+        "--preset",
         "--concurrency",
         "--timeout",
         "--content-type",
@@ -34,19 +35,22 @@ public static class RequestCommandParser
         List<string> errors = new List<string>();
         if (args.Count == 0 || !string.Equals(args[0], "request", StringComparison.OrdinalIgnoreCase))
         {
-            return Failure("Expected command: request <request-directory> --endpoint-a <url> --endpoint-b <url>.");
+            return Failure("Expected command: request [<request-directory>] --endpoint-a <url> --endpoint-b <url> | --preset <preset-id>.");
         }
 
-        if (args.Count < 2 || args[1].StartsWith("--", StringComparison.Ordinal))
+        int index = 1;
+        string? requestDirectory = null;
+        if (index < args.Count && !args[index].StartsWith("--", StringComparison.Ordinal))
         {
-            return Failure("Request directory is required.");
+            requestDirectory = args[index];
+            index++;
         }
 
-        string requestDirectory = args[1];
         string? endpointA = null;
         string? endpointB = null;
-        string modelName = "Auto";
+        string? modelName = null;
         string? contractProfileId = null;
+        string? presetId = null;
         int maxConcurrency = 4;
         TimeSpan timeout = TimeSpan.FromSeconds(30);
         string? contentTypeOverride = null;
@@ -61,7 +65,6 @@ public static class RequestCommandParser
         List<string> endpointAHeaders = new List<string>();
         List<string> endpointBHeaders = new List<string>();
 
-        int index = 2;
         while (index < args.Count)
         {
             string option = args[index];
@@ -112,6 +115,9 @@ public static class RequestCommandParser
                     break;
                 case "--profile":
                     contractProfileId = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+                    break;
+                case "--preset":
+                    presetId = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
                     break;
                 case "--concurrency":
                     if (!int.TryParse(value, out maxConcurrency) || maxConcurrency <= 0)
@@ -172,14 +178,29 @@ public static class RequestCommandParser
             index += 2;
         }
 
-        if (!TryCreateAbsoluteUri(endpointA, out Uri? endpointAUri))
+        bool hasPreset = !string.IsNullOrWhiteSpace(presetId);
+        Uri? endpointAUri = null;
+        Uri? endpointBUri = null;
+
+        if (endpointA is not null || !hasPreset)
         {
-            errors.Add("--endpoint-a must be an absolute URL.");
+            if (!TryCreateAbsoluteUri(endpointA, out endpointAUri))
+            {
+                errors.Add("--endpoint-a must be an absolute URL.");
+            }
         }
 
-        if (!TryCreateAbsoluteUri(endpointB, out Uri? endpointBUri))
+        if (endpointB is not null || !hasPreset)
         {
-            errors.Add("--endpoint-b must be an absolute URL.");
+            if (!TryCreateAbsoluteUri(endpointB, out endpointBUri))
+            {
+                errors.Add("--endpoint-b must be an absolute URL.");
+            }
+        }
+
+        if (requestDirectory is null && !hasPreset)
+        {
+            errors.Add("Request directory is required unless --preset is specified.");
         }
 
         if (errors.Count > 0)
@@ -190,8 +211,8 @@ public static class RequestCommandParser
         return new RequestCommandParseResult(
             new RequestCommandOptions(
                 requestDirectory,
-                endpointAUri!,
-                endpointBUri!,
+                endpointAUri,
+                endpointBUri,
                 modelName,
                 contractProfileId,
                 maxConcurrency,
@@ -202,12 +223,13 @@ public static class RequestCommandParser
                 endpointBHeaders,
                 reportOutputDirectory,
                 reportAssetsDirectory,
-                new ObservabilityCliOptions(logLevel, logDurations, logExceptions, persistDiagnostics, slowPathThresholdMs)),
+                new ObservabilityCliOptions(logLevel, logDurations, logExceptions, persistDiagnostics, slowPathThresholdMs),
+                presetId),
             Array.Empty<string>());
     }
 
     public static string Usage =>
-        "request <request-directory> --endpoint-a <url> --endpoint-b <url> [--model Auto] [--profile <profile-id>] [--concurrency <n>] [--timeout <seconds>] [--content-type <type>] [--header <Name: Value>] [--header-a <Name: Value>] [--header-b <Name: Value>] [--report-output <directory>] [--report-assets <directory>] [--log-level <level>] [--log-durations] [--log-exceptions] [--persist-diagnostics] [--slow-path-threshold-ms <n>]";
+        "request [<request-directory>] --endpoint-a <url> --endpoint-b <url> | --preset <preset-id> [--model Auto] [--profile <profile-id>] [--concurrency <n>] [--timeout <seconds>] [--content-type <type>] [--header <Name: Value>] [--header-a <Name: Value>] [--header-b <Name: Value>] [--report-output <directory>] [--report-assets <directory>] [--log-level <level>] [--log-durations] [--log-exceptions] [--persist-diagnostics] [--slow-path-threshold-ms <n>]";
 
     private static RequestCommandParseResult Failure(string error) =>
         new RequestCommandParseResult(null, new[] { error });

@@ -69,6 +69,48 @@
         "equal": 2,
         "different": 1
       }
+    },
+    {
+      "id": "client-soap-json-token-behaviors",
+      "name": "Client SOAP/JSON token customer lookup (behaviors)",
+      "requestDirectory": "Examples/ParityBench.NET.ManualRuns/client-soap-json-token/behaviors",
+      "endpointA": "{baseUrl}/client/customer-lookup/soap",
+      "endpointB": "{baseUrl}/client/customer-lookup/json",
+      "modelName": "ClientCustomerLookupResponse",
+      "contractProfileId": "client.customer-lookup.soap-json.tokens.v1",
+      "toggles": {
+        "ignoreCollectionOrder": false,
+        "ignoreStringCase": false,
+        "ignoreTrailingWhitespace": false,
+        "treatNullAndEmptyCollectionsEqual": false,
+        "ignoreXmlNamespaces": true
+      },
+      "expectedWithSuggestedRules": {
+        "total": 9,
+        "equal": 4,
+        "different": 5
+      }
+    },
+    {
+      "id": "client-soap-json-token-volume",
+      "name": "Client SOAP/JSON token customer lookup (volume)",
+      "requestDirectory": "Examples/ParityBench.NET.ManualRuns/client-soap-json-token/volume",
+      "endpointA": "{baseUrl}/client/customer-lookup/soap",
+      "endpointB": "{baseUrl}/client/customer-lookup/json",
+      "modelName": "ClientCustomerLookupResponse",
+      "contractProfileId": "client.customer-lookup.soap-json.tokens.v1",
+      "toggles": {
+        "ignoreCollectionOrder": false,
+        "ignoreStringCase": false,
+        "ignoreTrailingWhitespace": false,
+        "treatNullAndEmptyCollectionsEqual": false,
+        "ignoreXmlNamespaces": true
+      },
+      "expectedWithSuggestedRules": {
+        "total": 1000,
+        "equal": 445,
+        "different": 555
+      }
     }
   ]
 }

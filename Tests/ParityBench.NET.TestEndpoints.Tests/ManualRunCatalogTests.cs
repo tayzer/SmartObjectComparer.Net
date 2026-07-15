@@ -21,7 +21,7 @@ public sealed class ManualRunCatalogTests
         }) ?? throw new InvalidOperationException("Manual run catalog could not be read.");
 
         Assert.AreEqual(1, catalog.SchemaVersion);
-        Assert.IsTrue(catalog.Runs.Count >= 3);
+        Assert.IsTrue(catalog.Runs.Count >= 5);
 
         foreach (ManualRunCatalogEntry run in catalog.Runs)
         {

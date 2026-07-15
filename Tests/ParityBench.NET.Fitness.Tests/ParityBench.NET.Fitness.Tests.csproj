@@ -15,6 +15,7 @@
     <ProjectReference Include="..\..\Source\ParityBench.NET.Domain\ParityBench.NET.Domain.csproj" />
     <ProjectReference Include="..\..\Source\ParityBench.NET.Engine\ParityBench.NET.Engine.csproj" />
     <ProjectReference Include="..\..\Source\ParityBench.NET.Infrastructure\ParityBench.NET.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\Source\ParityBench.NET.ManualRunFixtureGenerator\ParityBench.NET.ManualRunFixtureGenerator.csproj" />
     <ProjectReference Include="..\..\Source\ParityBench.NET.Workspaces\ParityBench.NET.Workspaces.csproj" />
   </ItemGroup>
 
