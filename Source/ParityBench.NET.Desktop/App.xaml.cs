@@ -57,7 +57,6 @@ public partial class App : System.Windows.Application
                 string fixtureBaseUrl = context.Configuration["ParityBench:RequestDefaults:FixtureBaseUrl"]
                     ?? RequestComparisonFixtureDefaults.DefaultFixtureBaseUrl;
 
-                services.AddClientCustomerLookupExample(context.Configuration);
                 RegisterV2Services(services, workspaceRoot, fixtureBaseUrl, context.Configuration["ParityBench:AcceptedDifferences:StorePath"], context.Configuration);
             })
             .Build();
@@ -123,23 +122,30 @@ public partial class App : System.Windows.Application
         InMemoryRequestComparisonEndpointRegistry endpointDefaults = new InMemoryRequestComparisonEndpointRegistry();
         InMemoryRequestComparisonPresetRegistry presetDefaults = new InMemoryRequestComparisonPresetRegistry();
         RequestComparisonFixtureDefaults.Register(endpointDefaults, presetDefaults, fixtureBaseUrl);
-        ClientCustomerLookupExampleDefaults.Register(endpointDefaults, presetDefaults, configuration, FindManualRunRoot());
-        ClientCustomerLookupExampleDefaults.RegisterVolumePreset(presetDefaults, configuration, FindManualRunRoot());
+        services.AddClientCustomerLookupExample(configuration, endpointDefaults, presetDefaults, FindManualRunRoot());
         services.AddSingleton<IRequestComparisonEndpointRegistry>(endpointDefaults);
         services.AddSingleton<IRequestComparisonPresetRegistry>(presetDefaults);
-        services.AddSingleton<IResponseModelRegistry>(_ =>
+        services.AddSingleton<IResponseModelRegistry>(serviceProvider =>
         {
             ResponseModelRegistry registry = new ResponseModelRegistry();
             BuiltInResponseModelRegistration.Register(registry);
             ConsumerReportFixtureResponseModelRegistration.Register(registry);
-            registry.RegisterClientCustomerLookupResponseModel();
+            foreach (IResponseModelContributor contributor in serviceProvider.GetServices<IResponseModelContributor>())
+            {
+                contributor.Register(registry);
+            }
+
             return registry;
         });
         services.AddSingleton<IContractProfileRegistry>(serviceProvider =>
         {
             ContractProfileRegistry registry = new ContractProfileRegistry();
             registry.Register(BuiltInContractProfiles.CreateSampleSoapToJson(serviceProvider.GetRequiredService<IContractPayloadSerializer>()));
-            registry.RegisterClientCustomerLookupProfile(serviceProvider);
+            foreach (IContractProfileContributor contributor in serviceProvider.GetServices<IContractProfileContributor>())
+            {
+                contributor.Register(registry, serviceProvider);
+            }
+
             return registry;
         });
         services.AddSingleton<IComparisonRunExecutor>(serviceProvider =>
