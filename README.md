@@ -4,12 +4,6 @@ ParityBench.NET is an A/B request-comparison and Expected/Actual testing platfor
 
 Unlike text/XML diff tools, ParityBench.NET deserializes both sides into domain models before comparing, so it understands types, collections, and business-meaningful structure — not just line-by-line text drift.
 
-## Status
-
-This repository is mid-migration from an earlier prototype (V1, "ComparisonTool") to the current architecture (V2, "ParityBench.NET"). **V2 under [`Source/`](Source/) is the active, supported codebase.** V1 has been retired from active development and is frozen under [`archive/v1-comparisontool/`](archive/v1-comparisontool/) for reference.
-
-See [`Docs/NorthStar.md`](Docs/NorthStar.md) for the target V2 architecture and [`Docs/Architecture/V2-Strangler/`](Docs/Architecture/V2-Strangler/) for the migration plan.
-
 ## Prerequisites
 
 - .NET 10 SDK
@@ -63,7 +57,7 @@ See [`Source/ParityBench.NET.Cli/README.md`](Source/ParityBench.NET.Cli/README.m
 
 ## Architecture
 
-ParityBench.NET V2 is a staged, bounded, asynchronous pipeline: plan a run manifest, execute endpoint A/B concurrently with bounded concurrency, persist response artifacts immediately, compare persisted artifacts, append paged result metadata, then apply outcome-based retention cleanup. Hosts (Web, Desktop, CLI) are thin composition roots over shared application/engine/workspace services.
+ParityBench.NET is a staged, bounded, asynchronous pipeline: plan a run manifest, execute endpoint A/B concurrently with bounded concurrency, persist response artifacts immediately, compare persisted artifacts, append paged result metadata, then apply outcome-based retention cleanup. Hosts (Web, Desktop, CLI) are thin composition roots over shared application/engine/workspace services.
 
 Full design: [`Docs/NorthStar.md`](Docs/NorthStar.md).
 
