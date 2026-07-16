@@ -25,8 +25,8 @@ public sealed class ClientCustomerLookupExampleDefaultsTests
                 ["RequestComparison:EndpointOptions:Endpoints:1:Url"] = "https://fixture.example.test/client/customer-lookup/json",
                 ["RequestComparison:EndpointOptions:Endpoints:1:ContentType"] = "application/json",
                 ["RequestComparison:EndpointOptions:Endpoints:1:DefaultHeaders:Ocp-Apim-Subscription-Key"] = "endpoint-b-key",
-                ["RequestComparison:Profiles:ClientCustomerLookup:ResponseModel"] = ClientCustomerLookupProfileFactory.ResponseModelName,
-                ["RequestComparison:Profiles:ClientCustomerLookup:ProfileId"] = ClientCustomerLookupProfileFactory.ProfileId,
+                ["ClientCustomerLookup:Profile:ResponseModel"] = ClientCustomerLookupProfileFactory.ResponseModelName,
+                ["ClientCustomerLookup:Profile:ProfileId"] = ClientCustomerLookupProfileFactory.ProfileId,
             })
             .Build();
         InMemoryRequestComparisonEndpointRegistry endpointRegistry = new InMemoryRequestComparisonEndpointRegistry();

@@ -597,12 +597,16 @@ Keep secrets outside the profile and outside committed appsettings files. The ex
       "TokenClient1SubscriptionKey": "<from secret store>",
       "TokenClient2Url": "https://token-client-2.example.com/oauth/token",
       "TokenClient2SubscriptionKey": "<from secret store>"
+    },
+    "Profile": {
+      "ResponseModel": "ClientCustomerLookupResponse",
+      "ProfileId": "client.customer-lookup.soap-json.tokens.v1"
     }
   }
 }
 ```
 
-Endpoint configuration should carry endpoint-specific URLs and static headers. The profile's suggested endpoint IDs should match these configured endpoint IDs or names.
+Endpoint configuration should carry endpoint-specific URLs and static headers. The profile's suggested endpoint IDs (`client/customer-lookup/soap` and `client/customer-lookup/json`) should match these configured endpoint IDs or names. `EndpointOptions` stays under `RequestComparison` because it's a shared, app-wide endpoint registry — other examples and the "custom endpoint" picker read from the same list.
 
 ```json
 {
@@ -629,20 +633,12 @@ Endpoint configuration should carry endpoint-specific URLs and static headers. T
           }
         }
       ]
-    },
-    "Profiles": {
-      "ClientCustomerLookup": {
-        "ResponseModel": "ClientCustomerLookupResponse",
-        "ProfileId": "client.customer-lookup.soap-json.tokens.v1",
-        "EndpointAId": "client/customer-lookup/soap",
-        "EndpointBId": "client/customer-lookup/json"
-      }
     }
   }
 }
 ```
 
-The `Profiles` section is optional unless your host wants to preselect or validate a named client setup. The contract profile itself still needs to be registered in code so the tool has the Mapster mapping and token orchestration behavior.
+The `ClientCustomerLookup:Profile` section is optional unless your host wants to preselect or validate a named client setup. The contract profile itself still needs to be registered in code so the tool has the Mapster mapping and token orchestration behavior.
 
 ## Expected Runtime Flow
 

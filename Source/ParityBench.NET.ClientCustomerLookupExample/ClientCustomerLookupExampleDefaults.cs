@@ -35,7 +35,7 @@ public static class ClientCustomerLookupExampleDefaults
         RegisterEndpoint(endpointRegistry, endpointA);
         RegisterEndpoint(endpointRegistry, endpointB);
 
-        IConfigurationSection profileSection = configuration.GetSection("RequestComparison:Profiles:ClientCustomerLookup");
+        IConfigurationSection profileSection = configuration.GetSection("ClientCustomerLookup:Profile");
         string requestDirectory = ResolveRequestDirectory(
             profileSection["RequestDirectory"],
             manualRunRoot);
@@ -73,7 +73,7 @@ public static class ClientCustomerLookupExampleDefaults
             throw new InvalidOperationException($"Client customer lookup Endpoint B '{ClientCustomerLookupProfileFactory.SuggestedEndpointBId}' is not configured.");
         }
 
-        IConfigurationSection profileSection = configuration.GetSection("RequestComparison:Profiles:ClientCustomerLookupVolume");
+        IConfigurationSection profileSection = configuration.GetSection("ClientCustomerLookup:VolumeProfile");
         string requestDirectory = ResolveVolumeRequestDirectory(profileSection["RequestDirectory"], manualRunRoot);
 
         presetRegistry.Register(new RequestComparisonPresetOption(

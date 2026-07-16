@@ -143,10 +143,10 @@ public sealed class ClientScenarioFitnessTests
                 ["RequestComparison:EndpointOptions:Endpoints:1:Url"] = "https://client.example.test/json",
                 ["RequestComparison:EndpointOptions:Endpoints:1:ContentType"] = "application/json",
                 ["RequestComparison:EndpointOptions:Endpoints:1:DefaultHeaders:Ocp-Apim-Subscription-Key"] = "sub-key",
-                ["RequestComparison:Profiles:ClientCustomerLookup:PresetId"] = ClientCustomerLookupExampleDefaults.PresetId,
-                ["RequestComparison:Profiles:ClientCustomerLookup:RequestDirectory"] = "Examples/ParityBench.NET.ManualRuns/client-soap-json-token",
-                ["RequestComparison:Profiles:ClientCustomerLookup:ResponseModel"] = ClientCustomerLookupProfileFactory.ResponseModelName,
-                ["RequestComparison:Profiles:ClientCustomerLookup:ProfileId"] = ClientCustomerLookupProfileFactory.ProfileId,
+                ["ClientCustomerLookup:Profile:PresetId"] = ClientCustomerLookupExampleDefaults.PresetId,
+                ["ClientCustomerLookup:Profile:RequestDirectory"] = "Examples/ParityBench.NET.ManualRuns/client-soap-json-token",
+                ["ClientCustomerLookup:Profile:ResponseModel"] = ClientCustomerLookupProfileFactory.ResponseModelName,
+                ["ClientCustomerLookup:Profile:ProfileId"] = ClientCustomerLookupProfileFactory.ProfileId,
             })
             .Build();
 
