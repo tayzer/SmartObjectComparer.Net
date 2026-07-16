@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 
@@ -19,6 +20,17 @@ public sealed class ClientCustomerLookupTokenProvider : IClientCustomerLookupTok
     private readonly HttpClient httpClient;
     private readonly ClientCustomerLookupTokenOptions options;
 
+    // Volume runs fan hundreds of comparison requests out concurrently, each of which
+    // otherwise re-fetches a primary+final token pair. The token authenticates the caller
+    // (UserName/Password), not the customer being looked up, so it's cached by credential
+    // identity only -- CustomerId must NOT be part of the key, or every request in a volume
+    // batch misses (each fixture uses a distinct CustomerId) and the cache does nothing.
+    // Caching collapses hundreds of token round trips down to one per distinct credential
+    // set, which is what keeps the in-process test server from being overwhelmed (and
+    // requests from being aborted mid-flight) under load. A faulted fetch is evicted so
+    // later callers retry.
+    private readonly ConcurrentDictionary<string, Task<ClientCustomerLookupTokenResult>> tokenCache = new();
+
     public ClientCustomerLookupTokenProvider(
         HttpClient httpClient,
         IOptions<ClientCustomerLookupTokenOptions> options)
@@ -34,6 +46,26 @@ public sealed class ClientCustomerLookupTokenProvider : IClientCustomerLookupTok
         ArgumentNullException.ThrowIfNull(request);
         ValidateOptions();
 
+        string cacheKey = string.Join('␟', request.UserName, request.Password);
+        Task<ClientCustomerLookupTokenResult> tokenTask = tokenCache.GetOrAdd(
+            cacheKey,
+            _ => FetchFinalTokenAsync(request, CancellationToken.None));
+
+        try
+        {
+            return await tokenTask.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch when (tokenTask.IsFaulted)
+        {
+            tokenCache.TryRemove(cacheKey, out _);
+            throw;
+        }
+    }
+
+    private async Task<ClientCustomerLookupTokenResult> FetchFinalTokenAsync(
+        ClientCustomerLookupRequest request,
+        CancellationToken cancellationToken)
+    {
         using HttpRequestMessage primaryTokenRequest = new(HttpMethod.Post, options.PrimaryTokenUrl)
         {
             Content = JsonContent.Create(new PrimaryTokenRequest(

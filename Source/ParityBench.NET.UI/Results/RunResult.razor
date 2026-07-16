@@ -8,6 +8,8 @@
 @inject IRunResultsViewDataSource DataSource
 @inject IAcceptedDifferenceUseCases AcceptedDifferences
 @inject IJSRuntime JS
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
 
 <style>
     .v1-report-header { border-left: 4px solid var(--mud-palette-primary); }
@@ -17,6 +19,7 @@
     .v1-diff-b { background: rgba(211, 47, 47, .10); border-left: 3px solid #d32f2f; }
     .v1-property-tree-container { max-height: 34rem; overflow: auto; border-right: 1px solid var(--mud-palette-lines-default); }
     .v1-property-detail-panel { max-height: 34rem; overflow: auto; }
+    .v1-property-detail-header { position: sticky; top: 0; z-index: 2; background: var(--mud-palette-surface); margin: 0 -1rem; padding: 1rem 1rem .75rem; }
     .v1-tree-node-content { display: flex; align-items: center; justify-content: space-between; width: 100%; gap: .5rem; padding: .25rem .5rem; border-radius: 4px; cursor: pointer; }
     .v1-tree-node-content.selected { background: var(--mud-palette-primary); color: var(--mud-palette-primary-text); }
     .v1-tree-node-label { min-width: 0; display: inline-flex; align-items: center; gap: .35rem; overflow-wrap: anywhere; }
@@ -185,7 +188,7 @@ else if (run is not null)
                                 <MudItem xs="12" md="4">
                                     <div class="v1-property-tree-container">
                                         <MudStack Class="pa-3" Spacing="2">
-                                            <MudTextField T="string" @bind-Value="allDifferencesFilter" Placeholder="Filter by path or pair..." Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+                                            <MudTextField T="string" @bind-Value="allDifferencesFilter" Placeholder="Filter by path or pair..." Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" DebounceInterval="300" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
                                             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                                                 <MudText Typo="Typo.caption" Color="Color.Secondary">@FilteredDifferenceProperties.Count.ToString("N0", CultureInfo.InvariantCulture) properties</MudText>
                                                 <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
@@ -218,7 +221,10 @@ else if (run is not null)
                                                                         <MudIcon Icon="@(node.IsLeaf ? Icons.Material.Filled.Circle : Icons.Material.Filled.Folder)" Size="Size.Small" />
                                                                         <span>@node.Name</span>
                                                                     </span>
-                                                                    <MudChip T="string" Size="Size.Small" Color="@(node.IsLeaf ? Color.Info : Color.Default)" Variant="Variant.Text">@node.DifferenceCount.ToString("N0", CultureInfo.InvariantCulture)</MudChip>
+                                                                    <MudStack Row="true" Spacing="1">
+                                                                        <MudTooltip Text="Affected pairs"><MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Text">@node.AffectedPairCount.ToString("N0", CultureInfo.InvariantCulture)</MudChip></MudTooltip>
+                                                                        <MudTooltip Text="Total differences"><MudChip T="string" Size="Size.Small" Color="@(node.IsLeaf ? Color.Info : Color.Default)" Variant="Variant.Text">@node.DifferenceCount.ToString("N0", CultureInfo.InvariantCulture)</MudChip></MudTooltip>
+                                                                    </MudStack>
                                                                 </div>
                                                             </BodyContent>
                                                         </MudTreeViewItem>
@@ -229,7 +235,7 @@ else if (run is not null)
                                     </div>
                                 </MudItem>
                                 <MudItem xs="12" md="8">
-                                    <div class="v1-property-detail-panel pa-4" id="all-differences-property-detail-panel">
+                                    <div class="v1-property-detail-panel" id="all-differences-property-detail-panel">
                                         @if (SelectedPropertySummary is null)
                                         {
                                             <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="pa-8" Style="min-height: 20rem;">
@@ -240,8 +246,8 @@ else if (run is not null)
                                         }
                                         else
                                         {
-                                            <MudStack Spacing="3">
-                                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="flex-wrap">
+                                            <MudStack Spacing="3" Class="px-4 pb-4">
+                                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="flex-wrap v1-property-detail-header">
                                                     <MudText Typo="Typo.h6"><MudIcon Icon="@Icons.Material.Filled.Code" Class="mr-2" /><code>@SelectedPropertySummary.NormalizedPath</code></MudText>
                                                     <MudStack Row="true" Spacing="1" Class="flex-wrap">
                                                         <MudChip T="string" Size="Size.Small" Color="Color.Info">@SelectedPropertySummary.AffectedPairCount.ToString("N0", CultureInfo.InvariantCulture) pairs</MudChip>
@@ -399,6 +405,7 @@ else if (run is not null)
                         <MudTable T="StaticReportRawTextDifference" Items="selectedPair.RawTextDifferences" Dense="true" Hover="true" Elevation="0">
                             <HeaderContent><MudTh>Type</MudTh><MudTh>Line</MudTh><MudTh>@LabelA</MudTh><MudTh>@LabelB</MudTh></HeaderContent>
                             <RowTemplate><MudTd>@context.Type</MudTd><MudTd>@FormatRawLine(context)</MudTd><MudTd Class="v1-code v1-diff-a">@(context.TextA ?? string.Empty)</MudTd><MudTd Class="v1-code v1-diff-b">@(context.TextB ?? string.Empty)</MudTd></RowTemplate>
+                            <PagerContent><MudTablePager PageSizeOptions="new[] { 25, 50, 100 }" /></PagerContent>
                         </MudTable>
                     }
                     else if (IsSideBySideRawContentView)
@@ -427,7 +434,7 @@ else if (run is not null)
                             <MudDivider />
                             <div class="pa-4">
                                 <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="flex-wrap mb-3">
-                                    <MudTextField T="string" @bind-Value="structuredSearchFilter" Placeholder="Search differences..." Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Style="min-width: 16rem;" />
+                                    <MudTextField T="string" @bind-Value="structuredSearchFilter" Placeholder="Search differences..." Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" DebounceInterval="300" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Style="min-width: 16rem;" />
                                     <MudSwitch T="bool" @bind-Value="hideAcceptedDifferences" Color="Color.Primary" Label="Hide accepted / known bugs" />
                                     <MudChip T="string" Size="Size.Small" Color="Color.Default">@GetTrackingCount(null) New</MudChip>
                                     <MudChip T="string" Size="Size.Small" Color="Color.Success">@GetTrackingCount(AcceptedDifferenceStatus.AcceptedDifference) Accepted</MudChip>
@@ -447,6 +454,7 @@ else if (run is not null)
                                 }
                                 else
                                 {
+                                    structuredRenderedRowCount = 0;
                                     <div class="v1-structured-tree" role="treegrid" aria-label="Structured differences">
                                         <div class="v1-structured-grid-header" role="row">
                                             <div role="columnheader">Property</div>
@@ -459,6 +467,11 @@ else if (run is not null)
                                             @RenderStructuredDifferenceNode(node, 0)
                                         }
                                     </div>
+                                    int structuredTotalCount = CountStructuredDifferences(structuredNodes);
+                                    if (structuredRenderedRowCount < structuredTotalCount)
+                                    {
+                                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Class="mt-2">Showing @structuredRenderedRowCount.ToString("N0", CultureInfo.InvariantCulture) of @structuredTotalCount.ToString("N0", CultureInfo.InvariantCulture) differences. Refine your search to see the rest.</MudAlert>
+                                    }
                                 }
                             </div>
                         </MudPaper>
@@ -500,7 +513,9 @@ else if (run is not null)
 
 @code {
     private const string AllFilter = "All";
+    private const int StructuredGlobalRenderCap = 500;
     private static readonly int[] PageSizeOptions = { 25, 50, 100, 250 };
+    private int structuredRenderedRowCount;
     private RunId? loadedRunId;
     private int loadedRefreshVersion = -1;
     private ComparisonRun? run;
@@ -600,8 +615,10 @@ else if (run is not null)
 
             metadata = await DataSource.LoadReportMetadataAsync(runId);
             analysis = await DataSource.LoadReportAnalysisAsync(runId);
+            RestoreFiltersFromUrl();
             await LoadDetailPageAsync();
             if (detailPage?.Items.Count > 0) { await SelectPairAsync(detailPage.Items[0]); }
+            await RestoreSelectionFromUrlAsync();
         }
         catch (Exception ex)
         {
@@ -648,9 +665,9 @@ else if (run is not null)
             isLoadingDifferenceIndex = false;
         }
     }
-    private async Task OnSearchChangedAsync(string value) { searchFilter = value ?? string.Empty; detailOffset = 0; await LoadDetailPageAsync(); }
-    private async Task OnStatusFilterChangedAsync(string value) { statusFilter = value ?? AllFilter; detailOffset = 0; await LoadDetailPageAsync(); }
-    private Task OnCategoryFilterChanged(string value) { categoryFilter = value ?? AllFilter; return Task.CompletedTask; }
+    private async Task OnSearchChangedAsync(string value) { searchFilter = value ?? string.Empty; detailOffset = 0; await LoadDetailPageAsync(); PushViewStateToUrl(); }
+    private async Task OnStatusFilterChangedAsync(string value) { statusFilter = value ?? AllFilter; detailOffset = 0; await LoadDetailPageAsync(); PushViewStateToUrl(); }
+    private Task OnCategoryFilterChanged(string value) { categoryFilter = value ?? AllFilter; PushViewStateToUrl(); return Task.CompletedTask; }
     private async Task OnPageSizeChangedAsync(int value) { pageSize = value; detailOffset = 0; await LoadDetailPageAsync(); }
     private async Task PreviousPageAsync() { detailOffset = Math.Max(0, detailOffset - pageSize); await LoadDetailPageAsync(); }
     private async Task NextPageAsync() { if (detailPage?.HasMore == true) { detailOffset += pageSize; await LoadDetailPageAsync(); } }
@@ -686,6 +703,7 @@ else if (run is not null)
             await LoadContentAsync();
         }
 
+        PushViewStateToUrl();
         await ScrollToDetailAsync();
     }
 
@@ -888,6 +906,10 @@ else if (run is not null)
                     node.IsLeaf = true;
                     node.FullPath = property.NormalizedPath;
                     node.DifferenceCount += property.OccurrenceCount;
+                    foreach (StaticReportAffectedPairDifference pair in property.AffectedPairs)
+                    {
+                        node.AffectedPairKeys.Add(pair.RelativePath);
+                    }
                 }
 
                 parent = node;
@@ -908,16 +930,23 @@ else if (run is not null)
         foreach (PropertyTreeNode child in node.Children?.OfType<PropertyTreeNode>() ?? Enumerable.Empty<PropertyTreeNode>())
         {
             total += CalculateTreeNodeCount(child);
+            node.AffectedPairKeys.UnionWith(child.AffectedPairKeys);
         }
 
         node.DifferenceCount = total;
+        node.AffectedPairCount = node.AffectedPairKeys.Count;
         return total;
     }
 
-    private void SelectPropertyTreeNode(TreeItemData<string> treeItem)
+    private async Task SelectPropertyTreeNode(TreeItemData<string> treeItem)
     {
         if (treeItem is not PropertyTreeNode node) { return; }
-        if (node.IsLeaf) { selectedPropertyPath = node.FullPath; }
+        if (node.IsLeaf)
+        {
+            selectedPropertyPath = node.FullPath;
+            PushViewStateToUrl();
+            await ScrollToPropertyDetailAsync();
+        }
         else { node.Expanded = !node.Expanded; }
     }
 
@@ -997,12 +1026,97 @@ else if (run is not null)
     {
         downloadErrorMessage = null;
         await JS.InvokeVoidAsync("parityBenchDownloadText", fileName, contentType, content);
+        Snackbar.Add($"Downloaded {fileName}", Severity.Success);
     }
 
     private async Task ScrollToDetailAsync()
     {
         try { await JS.InvokeVoidAsync("parityBenchScrollToElement", "report-detailed-differences-section"); }
         catch { }
+    }
+
+    private async Task ScrollToPropertyDetailAsync()
+    {
+        try { await JS.InvokeVoidAsync("parityBenchScrollToElement", "all-differences-property-detail-panel"); }
+        catch { }
+    }
+
+    private void RestoreFiltersFromUrl()
+    {
+        try
+        {
+            Dictionary<string, string> query = ParseQueryString(new Uri(Nav.Uri).Query);
+            if (query.TryGetValue("q", out string? q)) { searchFilter = q; }
+            if (query.TryGetValue("status", out string? status) && !string.IsNullOrWhiteSpace(status)) { statusFilter = status; }
+            if (query.TryGetValue("category", out string? category) && !string.IsNullOrWhiteSpace(category)) { categoryFilter = category; }
+        }
+        catch { }
+    }
+
+    private async Task RestoreSelectionFromUrlAsync()
+    {
+        try
+        {
+            Dictionary<string, string> query = ParseQueryString(new Uri(Nav.Uri).Query);
+            if (query.TryGetValue("pair", out string? pairValue) && !string.IsNullOrWhiteSpace(pairValue))
+            {
+                RequestPairResult? pair = detailPage?.Items.FirstOrDefault(item => string.Equals(item.RelativePath, pairValue, StringComparison.Ordinal));
+                if (pair is not null) { await SelectPairAsync(pair); }
+            }
+
+            if (query.TryGetValue("prop", out string? propValue) && !string.IsNullOrWhiteSpace(propValue))
+            {
+                analysisTabIndex = 1;
+                if (differenceIndex is null) { await LoadDifferenceIndexAsync(); }
+                if (differenceIndex?.Properties.Any(property => string.Equals(property.NormalizedPath, propValue, StringComparison.OrdinalIgnoreCase)) == true)
+                {
+                    selectedPropertyPath = propValue;
+                }
+            }
+        }
+        catch { }
+    }
+
+    private void PushViewStateToUrl()
+    {
+        try
+        {
+            Dictionary<string, string?> query = new Dictionary<string, string?>();
+            if (!string.IsNullOrWhiteSpace(searchFilter)) { query["q"] = searchFilter; }
+            if (!string.Equals(statusFilter, AllFilter, StringComparison.Ordinal)) { query["status"] = statusFilter; }
+            if (!string.Equals(categoryFilter, AllFilter, StringComparison.Ordinal)) { query["category"] = categoryFilter; }
+            if (selectedPair is not null) { query["pair"] = selectedPair.RelativePath; }
+            if (!string.IsNullOrWhiteSpace(selectedPropertyPath)) { query["prop"] = selectedPropertyPath; }
+
+            string basePath = new Uri(Nav.Uri).GetLeftPart(UriPartial.Path);
+            Nav.NavigateTo(BuildQueryString(basePath, query), replace: true);
+        }
+        catch { }
+    }
+
+    private static Dictionary<string, string> ParseQueryString(string query)
+    {
+        Dictionary<string, string> values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(query)) { return values; }
+        string normalized = query.TrimStart('?');
+        foreach (string pair in normalized.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            string[] parts = pair.Split('=', 2);
+            string key = Uri.UnescapeDataString(parts[0]);
+            if (string.IsNullOrWhiteSpace(key)) { continue; }
+            values[key] = parts.Length == 2 ? Uri.UnescapeDataString(parts[1]) : string.Empty;
+        }
+
+        return values;
+    }
+
+    private static string BuildQueryString(string basePath, Dictionary<string, string?> query)
+    {
+        IEnumerable<string> pairs = query
+            .Where(entry => !string.IsNullOrEmpty(entry.Value))
+            .Select(entry => $"{Uri.EscapeDataString(entry.Key)}={Uri.EscapeDataString(entry.Value!)}");
+        string queryString = string.Join("&", pairs);
+        return queryString.Length == 0 ? basePath : $"{basePath}?{queryString}";
     }
 
     private RenderFragment Stat(string label, int value, Color color) => @<MudPaper Outlined="true" Class="pa-3 v1-report-stat"><MudText Typo="Typo.h5" Color="@color">@value.ToString("N0", CultureInfo.InvariantCulture)</MudText><MudText Typo="Typo.caption" Color="Color.Secondary">@label</MudText></MudPaper>;
@@ -1048,6 +1162,18 @@ else if (run is not null)
         return roots;
     }
 
+    private static int CountStructuredDifferences(IReadOnlyList<StructuredDifferenceNode> nodes)
+    {
+        int total = 0;
+        foreach (StructuredDifferenceNode node in nodes)
+        {
+            total += node.Differences.Count;
+            total += CountStructuredDifferences(node.Children);
+        }
+
+        return total;
+    }
+
     private static void SortStructuredDifferenceNodes(List<StructuredDifferenceNode> nodes)
     {
         nodes.Sort((left, right) => string.Compare(left.Name, right.Name, StringComparison.OrdinalIgnoreCase));
@@ -1064,9 +1190,10 @@ else if (run is not null)
             bool isCollapsed = !string.IsNullOrWhiteSpace(structuredSearchFilter)
                 ? false
                 : IsStructuredGroupCollapsed(node.FullPath);
-            List<ComparisonDifference> visibleDifferences = showAllDifferences
-                ? node.Differences.ToList()
-                : node.Differences.Take(100).ToList();
+            int perGroupCap = showAllDifferences ? node.Differences.Count : Math.Min(100, node.Differences.Count);
+            int remainingBudget = Math.Max(0, StructuredGlobalRenderCap - structuredRenderedRowCount);
+            List<ComparisonDifference> visibleDifferences = node.Differences.Take(Math.Min(perGroupCap, remainingBudget)).ToList();
+            structuredRenderedRowCount += visibleDifferences.Count;
             string indent = $"padding-left: {Math.Min(depth * 1.1, 8):0.##}rem;";
         }
         @if (isLeaf)

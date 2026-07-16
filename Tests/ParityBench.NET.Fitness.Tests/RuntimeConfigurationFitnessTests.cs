@@ -21,6 +21,12 @@ public sealed class RuntimeConfigurationFitnessTests
             {
                 ["RequestComparison:Defaults:MaxConcurrency"] = "35",
                 ["RequestComparison:Defaults:TimeoutSeconds"] = "45",
+                ["RequestComparison:EndpointOptions:Endpoints:0:Id"] = "client/customer-lookup/soap",
+                ["RequestComparison:EndpointOptions:Endpoints:0:Name"] = "Client Customer Lookup SOAP",
+                ["RequestComparison:EndpointOptions:Endpoints:0:Url"] = "http://localhost:5056/client/customer-lookup/soap",
+                ["RequestComparison:EndpointOptions:Endpoints:1:Id"] = "client/customer-lookup/json",
+                ["RequestComparison:EndpointOptions:Endpoints:1:Name"] = "Client Customer Lookup JSON",
+                ["RequestComparison:EndpointOptions:Endpoints:1:Url"] = "http://localhost:5056/client/customer-lookup/json",
             })
             .Build();
         ServiceCollection services = new ServiceCollection();

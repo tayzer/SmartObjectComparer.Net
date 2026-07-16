@@ -18,4 +18,8 @@ internal sealed class PropertyTreeNode : TreeItemData<string>
     public bool IsLeaf { get; set; }
 
     public int DifferenceCount { get; set; }
+
+    public int AffectedPairCount { get; set; }
+
+    internal HashSet<string> AffectedPairKeys { get; } = new(StringComparer.OrdinalIgnoreCase);
 }
