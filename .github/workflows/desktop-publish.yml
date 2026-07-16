@@ -1,11 +1,16 @@
+# DISABLED: this workflow published ComparisonTool.Desktop (V1), which has
+# been moved to archive/v1-comparisontool/ and is no longer built by CI.
+# ParityBench.NET.Desktop (V2, under Source/) is not yet wired up as a
+# replacement release target. Re-enable and repoint at
+# Source/ParityBench.NET.Desktop once V2 desktop is ready to ship.
 name: Publish Desktop
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - 'v*'
-      - 'desktop-v*'
+  # push:
+  #   tags:
+  #     - 'v*'
+  #     - 'desktop-v*'
 
 env:
   DOTNET_VERSION: '10.0.x'

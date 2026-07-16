@@ -1,0 +1,15 @@
+Operation,CallCount,TotalTimeMs,AverageTimeMs,MedianTimeMs,MinTimeMs,MaxTimeMs
+"CompareDirectoriesAsync",1,261,261.00,261.00,261,261
+"CompareFilesWithCachingAsPairResult",2,91,45.50,45.50,43,48
+"Compare_Objects",2,50,25.00,25.00,25,25
+"Deserialize_Old_ExpectedJsonCustomerLookupResponse_Json",2,5,2.50,2.50,2,3
+"Generate_File_Hash",4,5,1.25,1.00,0,3
+"Deserialize_New_ExpectedJsonCustomerLookupResponse_Json",2,0,0.00,0.00,0,0
+"Generate_Config_Fingerprint",2,0,0.00,0.00,0,0
+
+Metric,Value
+XmlDeserializationPrecheckMs,0
+XmlDeserializationFullDeserializeMs,0
+CollectionOrderDeterministicOrderingMs,0
+CollectionOrderFallbackMs,0
+CollectionOrderFallbackCount,0
