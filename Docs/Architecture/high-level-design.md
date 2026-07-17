@@ -1,102 +1,64 @@
-# High-Level Architecture Design Document
+# High-Level Architecture
 
-**Project:** Open-Source Local A/B Comparison Tool
+ParityBench.NET fires the same request at two endpoints (A and B), persists both responses as artifacts, compares them as domain objects, and appends paged results. Hosts (CLI, Web, Desktop) are thin composition roots over a shared set of application/engine/workspace services — none of them own comparison logic.
 
-**Stack:** .NET / Blazor (Hybrid or Local Server)
+## Component map
 
-**Storage Architecture:** Local Flat-File Workspace Pattern
+| Layer | Project | Owns |
+|---|---|---|
+| Domain | [`Source/ParityBench.NET.Domain`](../../Source/ParityBench.NET.Domain) | Core model types, no framework dependencies |
+| Application | [`Source/ParityBench.NET.Application`](../../Source/ParityBench.NET.Application) | Use-case contracts and orchestration: workflow, run lifecycle, results, contract-profile/response-model contracts |
+| Engine | [`Source/ParityBench.NET.Engine`](../../Source/ParityBench.NET.Engine) | Run execution: endpoint calls, comparison, retention cleanup |
+| Workspaces | [`Source/ParityBench.NET.Workspaces`](../../Source/ParityBench.NET.Workspaces) | File-system persistence: request batches, run/artifact/detail stores |
+| Infrastructure | [`Source/ParityBench.NET.Infrastructure`](../../Source/ParityBench.NET.Infrastructure) | Concrete implementations: serialization, contract-profile registry, built-in profiles |
+| Composition | [`Source/ParityBench.NET.Composition`](../../Source/ParityBench.NET.Composition) | Shared DI wiring (`WorkspaceServiceCollectionExtensions`) used by every host |
+| Hosts | [`Source/ParityBench.NET.Cli`](../../Source/ParityBench.NET.Cli), [`Source/ParityBench.NET.Web`](../../Source/ParityBench.NET.Web), [`Source/ParityBench.NET.Desktop`](../../Source/ParityBench.NET.Desktop) | Thin entry points: parse input, call composition root, present results |
+| Fixtures | [`Source/ParityBench.NET.TestEndpoints`](../../Source/ParityBench.NET.TestEndpoints) | Deterministic SOAP/XML/JSON endpoints for manual runs and E2E tests |
+| Example | [`Source/ParityBench.NET.ClientCustomerLookupExample`](../../Source/ParityBench.NET.ClientCustomerLookupExample) | Reference contract profile — see [Adding a Custom Domain Profile](../Guides/adding-a-custom-domain-profile.md) |
 
----
+Each project (other than Composition and the example) has its own `README.md` describing what it owns in more detail.
 
-## 1. System Overview & Objectives
+## Run flow (CLI `request` command)
 
-This document defines the high-level architecture for a local-first, open-source A/B comparison tool. The application is designed to run entirely on a user's local machine, executing concurrent HTTP requests against two target endpoints (A and B), evaluating response differences, and generating local reports.
+```mermaid
+sequenceDiagram
+    participant User
+    participant CLI as ParityBench.NET.Cli
+    participant Workflow as RequestComparisonWorkflowService
+    participant RunSvc as ComparisonRunService
+    participant Executor as ComparisonRunExecutor
+    participant Stores as Workspaces (FileSystem*Store)
 
-### Core Architectural Drivers
+    User->>CLI: request --endpoint-a --endpoint-b (or --preset)
+    CLI->>CLI: RequestCommandParser resolves options/preset
+    CLI->>Workflow: CreateRunFromDirectoryAsync(...)
+    Workflow->>Stores: IRequestBatchStore.StageDirectoryAsync
+    Workflow->>RunSvc: CreateRunAsync(RunOptions)
+    RunSvc->>Stores: IRunStore.Save (run created)
+    CLI->>Workflow: StartRunAsync(run.Id)
+    Workflow->>RunSvc: StartRunAsync
+    RunSvc->>Executor: ExecuteAsync(run, reporter)
 
-* **Zero Dependency:** No external database installations (e.g., SQL Server, PostgreSQL) or container runtimes (Docker) required.
-* **Git-Friendly:** Test configurations must be easily sharable and trackable via standard version control systems.
-* **Resource-Constrained Concurrency:** The system must maximize HTTP request/processing throughput without freezing the host machine's UI or crashing due to memory bloat.
+    par Execution pool
+        Executor->>Executor: IEndpointRequestSender calls Endpoint A + B
+        Executor->>Stores: IRunArtifactStore.Save (raw response artifacts)
+    and Compare pool
+        Executor->>Stores: IRunArtifactStore.Open (reopen persisted artifacts)
+        Executor->>Executor: IResponseComparer (CompareNetObjectsResponseComparer)
+        Executor->>Stores: IRunDetailStore (append paged pair results)
+    end
 
----
-
-## 2. Architectural Blueprint
-
-The application employs an **In-Process Decoupled Architecture**. Instead of physical microservices separated by networks, components are isolated logically using native .NET memory channels and dependency injection.
-
-### Component Breakdown
-
-#### A. Presentation Layer (Blazor Core)
-
-* **Role:** Manages user configuration input, state visualization during active runs, and interactive diff-reporting dashboards.
-* **State Management:** On startup, reads project files into an in-memory collection. UI components bind directly to these C# objects, eliminating database query overhead.
-
-#### B. In-Memory Pipeline (`System.Threading.Channels`)
-
-* **Role:** Acts as the internal asynchronous broker (replacing the need for a queue engine like RabbitMQ or Redis).
-* **Mechanism:** Provides a high-throughput, thread-safe Producer/Consumer channel. The Blazor UI produces "Request Tasks," and the worker pool consumes them.
-
-#### C. Execution & Comparison Engine (Background Workers)
-
-* **Role:** An array of `IHostedService` instances running on background threads.
-* **Network Engine:** Utilizes a centrally configured `SocketsHttpHandler` to execute concurrent outbound HTTP requests to Target A and Target B while mitigating local socket exhaustion.
-* **Diffing Engine:** Uses a stream-based parsing strategy (e.g., `System.Text.Json` or text-diffing algorithms) to calculate structural and value deltas instantly without loading massive strings into memory.
-
-#### D. Storage Layer (The File-System Workspace)
-
-* **Role:** Replaces traditional relational databases by using the host machine's native directory structure.
-
----
-
-## 3. Storage Hierarchy (Workspace Model)
-
-Data is written to a dedicated, user-selected workspace directory. The file system structure is organized deterministically:
-
-```text
-📂 [User_Selected_Workspace_Root]/
-├── 📄 .abproject                    # Workspace marker/metadata file
-├── 📂 Configs/                     # Version-controlled test specifications
-│   ├── production-api-audit.json    # Request parameters, headers, matching rules
-│   └── checkout-v2-smoke.json
-└── 📂 Runs/                        # Historical execution records
-    ├── 📂 Run_20260630_150000/      # Unique timestamped directory per test run
-    │   ├── 📄 summary.json          # Metrics: Aggregated latencies, success rates, diff counts
-    │   ├── 📄 diff_req_001.json     # Detailed comparison report for request #1
-    │   └── 📄 diff_req_002.json     # Detailed comparison report for request #2
-    └── 📂 Run_20260630_164500/
-        └── 📄 summary.json
-
+    Executor->>Executor: RetentionCleanupStage (trim artifacts per policy)
+    Executor-->>RunSvc: RunResultSummary
+    RunSvc->>Stores: IRunStore.Save (final summary)
+    RunSvc-->>CLI: RunResultSummary
+    CLI-->>User: console output / report
 ```
 
----
+Execution and comparison run as two bounded worker pools joined by a `System.Threading.Channels` channel inside `ComparisonRunExecutor` — execution persists a response artifact as soon as it lands, comparison reopens and diffs persisted artifacts rather than holding bodies in memory. This is what makes large runs (thousands of request pairs) bounded in memory rather than proportional to run size.
 
-## 4. Key Data Flows
+Web and Desktop hosts drive the same `RequestComparisonWorkflowService` / `ComparisonRunService` / `ComparisonRunExecutor` path — only the entry point (Blazor UI vs CLI args) and result presentation differ. All three hosts share one DI composition root: `Source/ParityBench.NET.Composition/WorkspaceServiceCollectionExtensions.cs`'s `AddParityBenchWorkspaceServices(...)`, with Web/Desktop additionally calling `AddParityBenchUiServices(...)` for UI-only concerns (accepted-differences store, job service, view-data adapters).
 
-### Execution Flow
+## Extending the system
 
-1. **Initiation:** The user selects a configuration file and clicks "Run" in the Blazor UI.
-2. **Initialization:** The Engine reads the configuration, provisions a new timestamped directory under `Runs/`, and generates a `CancellationToken`.
-3. **Queueing:** The Engine pushes individual target URLs/payloads into the `System.Threading.Channel`.
-4. **Processing:** Multiple background workers pull from the channel concurrently:
-* Fire HTTP request to Target A.
-* Fire HTTP request to Target B.
-* Stream both responses into the comparison logic.
-* Write individual `diff_req_XXX.json` files directly to disk.
-
-
-5. **Finalization:** Once the channel is empty, the engine aggregates total execution times, error rates, and delta tallies, writing the final `summary.json` file.
-
-### Reporting Flow
-
-1. **Dashboard Load:** On application boot or history navigation, the Blazor app scans the `Runs/` directory.
-2. **Lightweight Read:** The app reads **only** the `summary.json` files into memory.
-3. **Rendering:** Blazor lists historical runs using standard LINQ expressions (`.OrderBy()`) on the in-memory summary collection.
-4. **Lazy-Loading:** Detailed files (`diff_req_XXX.json`) are only opened and parsed if the user explicitly clicks a specific request row in the reporting UI.
-
----
-
-## 5. Technical Constraints & Design Rules
-
-* **Zero Memory Leaks:** Raw HTTP responses must never be saved as large strings (`string`). They must be evaluated directly via `Stream` contexts to protect local RAM during large test cycles.
-* **UI Fluidity:** All disk I/O and network operations *must* utilize asynchronous execution (`System.IO.File.WriteAllTextAsync`, `HttpClient.SendAsync`) to prevent thread-blocking on the Blazor rendering loop.
-* **Isolation:** The UI communicates with the core engine solely via events and channel triggers, allowing the core engine to be easily wrapped into a command-line interface (CLI) tool if needed in the future.
+To compare a new API pair with its own request/response shape, add a contract profile rather than modifying the engine — see [Adding a Custom Domain Profile](../Guides/adding-a-custom-domain-profile.md).

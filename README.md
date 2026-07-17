@@ -2,7 +2,7 @@
 
 ParityBench.NET is an A/B request-comparison and Expected/Actual testing platform. It fires the same requests at two endpoints (or compares two sets of result files), diffs the responses as domain objects rather than raw text, and surfaces the differences that actually matter.
 
-Unlike text/XML diff tools, ParityBench.NET deserializes both sides into domain models before comparing, so it understands types, collections, and business-meaningful structure — not just line-by-line text drift.
+Unlike text/XML diff tools, ParityBench.NET deserializes both sides into domain models before comparing, so it understands types, collections, and business-meaningful structure, not just line-by-line text drift.
 
 ## Prerequisites
 
@@ -23,7 +23,7 @@ dotnet build ComparisonTool.sln -c Release
 | [`Source/ParityBench.NET.Desktop`](Source/ParityBench.NET.Desktop) | WPF + BlazorWebView desktop host (Windows) |
 | [`Source/ParityBench.NET.Cli`](Source/ParityBench.NET.Cli) | Command-line host for request comparison |
 | [`Source/ParityBench.NET.TestEndpoints`](Source/ParityBench.NET.TestEndpoints) | Fixture server with deterministic SOAP/XML/JSON endpoints, used for manual runs and E2E tests |
-| [`Source/ParityBench.NET.ClientCustomerLookupExample`](Source/ParityBench.NET.ClientCustomerLookupExample) | Example client contract profile (SOAP + JSON with chained token auth) — see [`Docs/Features/ClientSoapJsonTokenProfileExample.md`](Docs/Features/ClientSoapJsonTokenProfileExample.md) |
+| [`Source/ParityBench.NET.ClientCustomerLookupExample`](Source/ParityBench.NET.ClientCustomerLookupExample) | Example client contract profile (SOAP + JSON with chained token auth) — see [Adding a Custom Domain Profile](Docs/Guides/adding-a-custom-domain-profile.md) |
 
 Each `Source/` project has its own `README.md` describing what it owns and its boundaries.
 
@@ -59,7 +59,9 @@ See [`Source/ParityBench.NET.Cli/README.md`](Source/ParityBench.NET.Cli/README.m
 
 ParityBench.NET is a staged, bounded, asynchronous pipeline: plan a run manifest, execute endpoint A/B concurrently with bounded concurrency, persist response artifacts immediately, compare persisted artifacts, append paged result metadata, then apply outcome-based retention cleanup. Hosts (Web, Desktop, CLI) are thin composition roots over shared application/engine/workspace services.
 
-Full design: [`Docs/NorthStar.md`](Docs/NorthStar.md).
+Full design and a run-flow diagram: [`Docs/Architecture/high-level-design.md`](Docs/Architecture/high-level-design.md).
+
+To compare a new API pair with its own request/response shape, see [Adding a Custom Domain Profile](Docs/Guides/adding-a-custom-domain-profile.md).
 
 ## Contributing
 

@@ -14,7 +14,7 @@ disclosure.
 
 ## Supported Versions
 
-This project is under active development (V2 migration, see
-[Docs/NorthStar.md](Docs/NorthStar.md)). Security fixes are applied to the
-latest code on the default branch; there is no separate long-term-support
-version at this time.
+This project is under active development — see
+[`Docs/Architecture/high-level-design.md`](Docs/Architecture/high-level-design.md).
+Security fixes are applied to the latest code on the default branch; there is
+no separate long-term-support version at this time.

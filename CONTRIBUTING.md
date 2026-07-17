@@ -40,6 +40,10 @@ are documented in [CODING_STANDARD.md](CODING_STANDARD.md).
 Each project under `Source/` has its own `README.md` describing what it owns
 and its boundaries — start there before making cross-project changes.
 
+For the system-level run flow, see [`Docs/Architecture/high-level-design.md`](Docs/Architecture/high-level-design.md).
+To add support for a new API pair (your own request/response models), see
+[Adding a Custom Domain Profile](Docs/Guides/adding-a-custom-domain-profile.md).
+
 ## Making a change
 
 1. Fork/branch from `master`.
