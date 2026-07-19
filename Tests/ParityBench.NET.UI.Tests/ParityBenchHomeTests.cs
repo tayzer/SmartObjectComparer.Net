@@ -52,10 +52,11 @@ public sealed class ParityBenchHomeTests
     {
         IRenderedComponent<ParityBenchHome> component = testContext.Render<ParityBenchHome>();
 
-        StringAssert.Contains(component.Markup, "ParityBench.NET");
+        StringAssert.Contains(component.Markup, "Request comparison workspace");
         StringAssert.Contains(component.Markup, "Compare Requests");
         StringAssert.Contains(component.Markup, "Run History");
         StringAssert.Contains(component.Markup, "Step 1: Upload Request Files");
+        Assert.IsFalse(component.Markup.Contains("Use light mode", StringComparison.Ordinal));
     }
 
     [TestMethod]

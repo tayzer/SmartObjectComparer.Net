@@ -120,8 +120,12 @@
                                                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
                                                     <MudText Typo="Typo.body2" Style="font-family: Consolas, monospace; word-break: break-all;">@rule.PropertyPath</MudText>
                                                     <MudStack Row="true" Spacing="0">
-                                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" OnClick="@(() => EditRule(rule))" />
-                                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => RemoveRuleAsync(rule.PropertyPath))" />
+                                                        <MudTooltip Text="Edit mask rule">
+                                                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" OnClick="@(() => EditRule(rule))" aria-label="Edit mask rule" />
+                                                        </MudTooltip>
+                                                        <MudTooltip Text="Delete mask rule">
+                                                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => RemoveRuleAsync(rule.PropertyPath))" aria-label="Delete mask rule" />
+                                                        </MudTooltip>
                                                     </MudStack>
                                                 </MudStack>
                                                 <MudStack Row="true" Spacing="1" Class="flex-wrap">

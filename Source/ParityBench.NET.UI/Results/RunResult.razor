@@ -14,9 +14,9 @@
 <style>
     .v1-report-header { border-left: 4px solid var(--mud-palette-primary); }
     .v1-report-stat { min-width: 8rem; border: 1px solid var(--mud-palette-lines-default); }
-    .v1-code { font-family: Consolas, Monaco, 'Courier New', monospace; font-size: .825rem; white-space: pre-wrap; overflow-wrap: anywhere; }
-    .v1-diff-a { background: rgba(46, 125, 50, .10); border-left: 3px solid #2e7d32; }
-    .v1-diff-b { background: rgba(211, 47, 47, .10); border-left: 3px solid #d32f2f; }
+    .v1-code { font-family: var(--pb-font-mono); font-size: .825rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .v1-diff-a { background: var(--pb-diff-a-background); border-left: 3px solid var(--pb-diff-a-border); }
+    .v1-diff-b { background: var(--pb-diff-b-background); border-left: 3px solid var(--pb-diff-b-border); }
     .v1-property-tree-container { max-height: 34rem; overflow: auto; border-right: 1px solid var(--mud-palette-lines-default); }
     .v1-property-detail-panel { max-height: 34rem; overflow: auto; }
     .v1-property-detail-header { position: sticky; top: 0; z-index: 2; background: var(--mud-palette-surface); margin: 0 -1rem; padding: 1rem 1rem .75rem; }
@@ -38,8 +38,8 @@
     .v1-structured-node-children { display: block; }
     .v1-structured-diff-row { min-height: 2.3rem; border-bottom: 1px solid var(--mud-palette-lines-default); background: var(--mud-palette-surface); }
     .v1-structured-diff-row:hover { background: var(--mud-palette-action-default-hover); }
-    .v1-structured-diff-prop { display: flex; align-items: center; font-family: Consolas, Monaco, 'Courier New', monospace; font-size: .8rem; font-weight: 600; overflow-wrap: anywhere; }
-    .v1-structured-diff-value { display: flex; align-items: center; font-family: Consolas, Monaco, 'Courier New', monospace; font-size: .8rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .v1-structured-diff-prop { display: flex; align-items: center; font-family: var(--pb-font-mono); font-size: .8rem; font-weight: 600; overflow-wrap: anywhere; }
+    .v1-structured-diff-value { display: flex; align-items: center; font-family: var(--pb-font-mono); font-size: .8rem; white-space: pre-wrap; overflow-wrap: anywhere; }
     .v1-structured-diff-actions { display: flex; align-items: center; gap: .25rem; flex-wrap: wrap; }
     .v1-structured-null { color: var(--mud-palette-text-secondary); font-style: italic; }
     .v1-structured-limit { padding: .4rem .65rem; border-bottom: 1px solid var(--mud-palette-lines-default); color: var(--mud-palette-text-secondary); font-size: .75rem; }
@@ -192,8 +192,12 @@ else if (run is not null)
                                             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                                                 <MudText Typo="Typo.caption" Color="Color.Secondary">@FilteredDifferenceProperties.Count.ToString("N0", CultureInfo.InvariantCulture) properties</MudText>
                                                 <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
-                                                    <MudIconButton Icon="@Icons.Material.Filled.UnfoldMore" Size="Size.Small" OnClick="ExpandAllDifferenceNodes" />
-                                                    <MudIconButton Icon="@Icons.Material.Filled.UnfoldLess" Size="Size.Small" OnClick="CollapseAllDifferenceNodes" />
+                                                    <MudTooltip Text="Expand all differences">
+                                                        <MudIconButton Icon="@Icons.Material.Filled.UnfoldMore" Size="Size.Small" OnClick="ExpandAllDifferenceNodes" aria-label="Expand all differences" />
+                                                    </MudTooltip>
+                                                    <MudTooltip Text="Collapse all differences">
+                                                        <MudIconButton Icon="@Icons.Material.Filled.UnfoldLess" Size="Size.Small" OnClick="CollapseAllDifferenceNodes" aria-label="Collapse all differences" />
+                                                    </MudTooltip>
                                                 </MudButtonGroup>
                                             </MudStack>
                                             @if (!string.IsNullOrWhiteSpace(differenceTreeInfoMessage))
@@ -266,7 +270,9 @@ else if (run is not null)
                                                                 <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@affectedPair.OccurrenceCount diffs</MudChip>
                                                                 @if (affectedPair.StatusCodeA.HasValue) { <MudChip T="string" Size="Size.Small" Color="@GetStatusCodeColor(affectedPair.StatusCodeA.Value)" Variant="Variant.Outlined">@LabelA: @affectedPair.StatusCodeA</MudChip> }
                                                                 @if (affectedPair.StatusCodeB.HasValue) { <MudChip T="string" Size="Size.Small" Color="@GetStatusCodeColor(affectedPair.StatusCodeB.Value)" Variant="Variant.Outlined">@LabelB: @affectedPair.StatusCodeB</MudChip> }
-                                                                <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Color="Color.Primary" OnClick="@(() => SelectPairByRelativePathAsync(affectedPair.RelativePath))" />
+                                                                <MudTooltip Text="Open request pair">
+                                                                    <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Color="Color.Primary" OnClick="@(() => SelectPairByRelativePathAsync(affectedPair.RelativePath))" aria-label="Open request pair" />
+                                                                </MudTooltip>
                                                             </MudStack>
                                                             <MudText Typo="Typo.caption" Color="Color.Secondary"><code>@affectedPair.PropertyPath</code></MudText>
                                                             <MudGrid Spacing="2">
@@ -665,9 +671,9 @@ else if (run is not null)
             isLoadingDifferenceIndex = false;
         }
     }
-    private async Task OnSearchChangedAsync(string value) { searchFilter = value ?? string.Empty; detailOffset = 0; await LoadDetailPageAsync(); PushViewStateToUrl(); }
-    private async Task OnStatusFilterChangedAsync(string value) { statusFilter = value ?? AllFilter; detailOffset = 0; await LoadDetailPageAsync(); PushViewStateToUrl(); }
-    private Task OnCategoryFilterChanged(string value) { categoryFilter = value ?? AllFilter; PushViewStateToUrl(); return Task.CompletedTask; }
+    private async Task OnSearchChangedAsync(string value) { searchFilter = value ?? string.Empty; detailOffset = 0; await LoadDetailPageAsync(); await PushViewStateToUrlAsync(); }
+    private async Task OnStatusFilterChangedAsync(string value) { statusFilter = value ?? AllFilter; detailOffset = 0; await LoadDetailPageAsync(); await PushViewStateToUrlAsync(); }
+    private async Task OnCategoryFilterChanged(string value) { categoryFilter = value ?? AllFilter; await PushViewStateToUrlAsync(); }
     private async Task OnPageSizeChangedAsync(int value) { pageSize = value; detailOffset = 0; await LoadDetailPageAsync(); }
     private async Task PreviousPageAsync() { detailOffset = Math.Max(0, detailOffset - pageSize); await LoadDetailPageAsync(); }
     private async Task NextPageAsync() { if (detailPage?.HasMore == true) { detailOffset += pageSize; await LoadDetailPageAsync(); } }
@@ -703,7 +709,7 @@ else if (run is not null)
             await LoadContentAsync();
         }
 
-        PushViewStateToUrl();
+        await PushViewStateToUrlAsync();
         await ScrollToDetailAsync();
     }
 
@@ -944,7 +950,7 @@ else if (run is not null)
         if (node.IsLeaf)
         {
             selectedPropertyPath = node.FullPath;
-            PushViewStateToUrl();
+            await PushViewStateToUrlAsync();
             await ScrollToPropertyDetailAsync();
         }
         else { node.Expanded = !node.Expanded; }
@@ -1077,7 +1083,7 @@ else if (run is not null)
         catch { }
     }
 
-    private void PushViewStateToUrl()
+    private async Task PushViewStateToUrlAsync()
     {
         try
         {
@@ -1089,7 +1095,14 @@ else if (run is not null)
             if (!string.IsNullOrWhiteSpace(selectedPropertyPath)) { query["prop"] = selectedPropertyPath; }
 
             string basePath = new Uri(Nav.Uri).GetLeftPart(UriPartial.Path);
-            Nav.NavigateTo(BuildQueryString(basePath, query), replace: true);
+
+            // Intentionally bypasses NavigationManager.NavigateTo here: Blazor's navigateTo
+            // resets scroll position to the top on every call (it's designed to mimic a real
+            // page navigation), which made the whole page jump to top on every keystroke/filter
+            // change/selection. This is pure URL bookkeeping (for copy/share/refresh), not a
+            // real navigation, so we update the address bar directly via history.replaceState
+            // instead, which doesn't touch scroll position.
+            await JS.InvokeVoidAsync("parityBenchReplaceUrl", BuildQueryString(basePath, query));
         }
         catch { }
     }

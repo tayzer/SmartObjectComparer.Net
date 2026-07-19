@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">ParityBench.NET</title>
+  <rect x="4" y="8" width="24" height="48" rx="7" fill="#7aa2ff"/>
+  <rect x="36" y="8" width="24" height="48" rx="7" fill="#5eead4"/>
+  <rect x="28" y="12" width="8" height="40" rx="4" fill="#f8fafc"/>
+  <path d="M12 25h11m18 0h11M12 39h11m18 0h11" stroke="#0b1120" stroke-width="4" stroke-linecap="round"/>
+</svg>

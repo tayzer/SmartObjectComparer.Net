@@ -148,8 +148,12 @@
                                                         </MudStack>
                                                     </MudStack>
                                                     <MudStack Row="true" Spacing="0">
-                                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" OnClick="@(() => EditRule(rule))" />
-                                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => RemoveRuleAsync(rule.PropertyPath))" />
+                                                        <MudTooltip Text="Edit ignore rule">
+                                                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Primary" OnClick="@(() => EditRule(rule))" aria-label="Edit ignore rule" />
+                                                        </MudTooltip>
+                                                        <MudTooltip Text="Delete ignore rule">
+                                                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => RemoveRuleAsync(rule.PropertyPath))" aria-label="Delete ignore rule" />
+                                                        </MudTooltip>
                                                     </MudStack>
                                                 </MudStack>
                                                 <MudDivider />

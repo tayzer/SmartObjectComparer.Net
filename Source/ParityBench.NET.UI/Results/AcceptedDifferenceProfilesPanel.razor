@@ -47,7 +47,11 @@
                         <MudTd><code>@context.NormalizedPropertyPath</code></MudTd>
                         <MudTd>@context.TicketId</MudTd>
                         <MudTd>@context.UpdatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</MudTd>
-                        <MudTd><MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" Disabled="@AcceptedDifferences.IsReadOnly" OnClick="@(() => RemoveAsync(context))" /></MudTd>
+                        <MudTd>
+                            <MudTooltip Text="Remove accepted difference">
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" Disabled="@AcceptedDifferences.IsReadOnly" OnClick="@(() => RemoveAsync(context))" aria-label="Remove accepted difference" />
+                            </MudTooltip>
+                        </MudTd>
                     </RowTemplate>
                 </MudTable>
             }

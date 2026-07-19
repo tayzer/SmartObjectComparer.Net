@@ -37,6 +37,13 @@ window.parityBenchTheme = {
         }
     }
 };
+window.parityBenchReplaceUrl = (url) => {
+    try {
+        window.history.replaceState(window.history.state, "", url);
+    } catch {
+    }
+};
+
 window.parityBenchScrollToElement = (id) => {
     const element = document.getElementById(id);
     if (element) {

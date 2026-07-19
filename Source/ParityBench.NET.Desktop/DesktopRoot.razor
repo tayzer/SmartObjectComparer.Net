@@ -6,8 +6,11 @@
     <MudSnackbarProvider />
 
     <MudLayout>
-        <MudMainContent Class="pa-4">
-            <ParityBenchHome />
+        <ParityBenchProductHeader ContextLabel="Request comparison workspace" />
+        <MudMainContent>
+            <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+                <ParityBenchHome />
+            </MudContainer>
         </MudMainContent>
     </MudLayout>
 </ParityBenchThemeProvider>

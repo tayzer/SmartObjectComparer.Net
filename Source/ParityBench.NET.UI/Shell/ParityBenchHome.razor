@@ -1,20 +1,12 @@
-<style>
-    .pb-home-shell { color: var(--mud-palette-text-primary); }
-    .pb-workspace-header { border: 1px solid var(--mud-palette-lines-default); background: var(--mud-palette-surface); }
-    .pb-selected-run { max-width: 34rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .pb-tab-panel { padding-top: 1rem; }
-</style>
-
 <MudStack Spacing="3" Class="pb-home-shell">
-    <MudPaper Elevation="0" Class="pa-3 pb-workspace-header">
+    <MudPaper Elevation="0" Class="pa-3 pb-workspace-context">
         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="flex-wrap" Spacing="2">
             <MudStack Spacing="0">
-                <MudText Typo="Typo.h5">ParityBench.NET</MudText>
-                <MudText Typo="Typo.caption" Color="Color.Secondary">Request comparison workspace</MudText>
+                <MudText Typo="Typo.subtitle1">Request comparison workspace</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Configure endpoints, run comparisons, inspect results.</MudText>
             </MudStack>
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
                 <MudChip T="string" Size="Size.Small" Color="@SelectedRunColor" Variant="Variant.Outlined" Icon="@SelectedRunIcon" Class="pb-selected-run">@SelectedRunDisplay</MudChip>
-                <ThemeModeToggle />
             </MudStack>
         </MudStack>
     </MudPaper>

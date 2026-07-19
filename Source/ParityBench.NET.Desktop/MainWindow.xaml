@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:blazor="clr-namespace:Microsoft.AspNetCore.Components.WebView.Wpf;assembly=Microsoft.AspNetCore.Components.WebView.Wpf"
         xmlns:local="clr-namespace:ParityBench.NET.Desktop"
-        Title="ParityBench.NET" Height="900" Width="1280">
+        Title="ParityBench.NET" Icon="Assets/ParityBench.ico" Height="900" Width="1280">
     <Grid>
         <blazor:BlazorWebView HostPage="wwwroot\index.html" Services="{StaticResource services}">
             <blazor:BlazorWebView.RootComponents>

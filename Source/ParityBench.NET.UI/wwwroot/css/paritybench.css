@@ -1,0 +1,112 @@
+:root {
+    color-scheme: light dark;
+    --pb-font-mono: "Cascadia Code", Consolas, "Courier New", monospace;
+    --pb-brand-cobalt: #2563eb;
+    --pb-brand-teal: #0f766e;
+}
+
+html,
+body,
+#app {
+    min-height: 100%;
+}
+
+body {
+    margin: 0;
+}
+
+.pb-theme-scope {
+    min-height: 100vh;
+    background: var(--mud-palette-background);
+}
+
+.pb-theme-light {
+    --pb-focus-ring: #1d4ed8;
+    --pb-diff-a-background: #eff6ff;
+    --pb-diff-a-border: #2563eb;
+    --pb-diff-b-background: #f0fdfa;
+    --pb-diff-b-border: #0f766e;
+    --pb-code-surface: #f8fafc;
+}
+
+.pb-theme-dark {
+    --pb-focus-ring: #93c5fd;
+    --pb-diff-a-background: #172554;
+    --pb-diff-a-border: #7aa2ff;
+    --pb-diff-b-background: #042f2e;
+    --pb-diff-b-border: #5eead4;
+    --pb-code-surface: #0f172a;
+}
+
+.pb-theme-scope :focus-visible {
+    outline: 3px solid var(--pb-focus-ring);
+    outline-offset: 2px;
+}
+
+.pb-product-header {
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+
+.pb-home-shell {
+    color: var(--mud-palette-text-primary);
+}
+
+.pb-selected-run {
+    max-width: 34rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pb-tab-panel {
+    padding-top: 1rem;
+}
+
+.pb-product-header .mud-toolbar-appbar {
+    min-height: 4rem;
+    padding-inline: 1rem;
+}
+
+.pb-product-brand {
+    min-width: 0;
+}
+
+.pb-brand-mark {
+    width: 1.9rem;
+    height: 1.9rem;
+    flex: 0 0 auto;
+}
+
+.pb-product-brand-copy {
+    min-width: 0;
+}
+
+.pb-brand-wordmark {
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    line-height: 1.1;
+}
+
+.pb-brand-context {
+    color: var(--mud-palette-text-secondary);
+    line-height: 1.15;
+}
+
+.pb-workspace-context {
+    border: 1px solid var(--mud-palette-lines-default);
+    background: var(--mud-palette-surface);
+}
+
+.pb-code-surface {
+    background: var(--pb-code-surface);
+}
+
+@media (max-width: 600px) {
+    .pb-product-header .mud-toolbar-appbar {
+        padding-inline: .75rem;
+    }
+
+    .pb-brand-context {
+        display: none;
+    }
+}
