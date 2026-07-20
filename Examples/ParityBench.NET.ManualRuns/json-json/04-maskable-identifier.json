@@ -1,0 +1,11 @@
+{
+  "reportRequestId": "CR-1004",
+  "correlationId": "manual-json-1004",
+  "consumer": {
+    "givenName": "Alex",
+    "familyName": "Morgan"
+  },
+  "consent": {
+    "consentReference": "CONSENT-1004"
+  }
+}

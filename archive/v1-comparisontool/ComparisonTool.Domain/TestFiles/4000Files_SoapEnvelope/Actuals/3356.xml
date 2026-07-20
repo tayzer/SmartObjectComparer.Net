@@ -1,0 +1,73 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<soapenv:Envelope xmlns:search="urn:soap.co.uk/soap:search1" xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+  <soapenv:Body>
+    <search:SearchResponse>
+      <search:ReportId>RPT-003356-A</search:ReportId>
+      <search:GeneratedOn>2026-04-15T15:16:25.1369513Z</search:GeneratedOn>
+      <search:Summary>
+        <search:TotalResults>12</search:TotalResults>
+        <search:SuccessCount>11</search:SuccessCount>
+        <search:FailureCount>1</search:FailureCount>
+      </search:Summary>
+      <search:Results>
+        <search:Result>
+          <search:Id>335600</search:Id>
+          <search:Name>Result-3356-0-Updated</search:Name>
+          <search:Score>8.7</search:Score>
+          <search:Details>
+            <search:Description>Updated description 0</search:Description>
+            <search:Status>WARN</search:Status>
+          </search:Details>
+          <search:Tags>
+            <search:Tag>core</search:Tag>
+            <search:Tag>search</search:Tag>
+            <search:Tag>tag-0</search:Tag>
+            <search:Tag>delta</search:Tag>
+          </search:Tags>
+        </search:Result>
+        <search:Result>
+          <search:Id>335601</search:Id>
+          <search:Name>Result-3356-1-Updated</search:Name>
+          <search:Score>64.66</search:Score>
+          <search:Details>
+            <search:Description>Updated description 1</search:Description>
+            <search:Status>OK</search:Status>
+          </search:Details>
+          <search:Tags>
+            <search:Tag>core</search:Tag>
+            <search:Tag>search</search:Tag>
+            <search:Tag>tag-1</search:Tag>
+            <search:Tag>delta</search:Tag>
+          </search:Tags>
+        </search:Result>
+        <search:Result>
+          <search:Id>335602</search:Id>
+          <search:Name>Result-3356-2-Updated</search:Name>
+          <search:Score>93.01</search:Score>
+          <search:Details>
+            <search:Description>Updated description 2</search:Description>
+            <search:Status>WARN</search:Status>
+          </search:Details>
+          <search:Tags>
+            <search:Tag>core</search:Tag>
+            <search:Tag>search</search:Tag>
+            <search:Tag>tag-2</search:Tag>
+            <search:Tag>delta</search:Tag>
+          </search:Tags>
+        </search:Result>
+      </search:Results>
+      <search:RelatedItems>
+        <search:Item>
+          <search:ItemId>33561</search:ItemId>
+          <search:ItemName>Related-3356-1-Alt</search:ItemName>
+          <search:Relevance>0.2356</search:Relevance>
+        </search:Item>
+        <search:Item>
+          <search:ItemId>33560</search:ItemId>
+          <search:ItemName>Related-3356-0-Alt</search:ItemName>
+          <search:Relevance>0.021</search:Relevance>
+        </search:Item>
+      </search:RelatedItems>
+    </search:SearchResponse>
+  </soapenv:Body>
+</soapenv:Envelope>

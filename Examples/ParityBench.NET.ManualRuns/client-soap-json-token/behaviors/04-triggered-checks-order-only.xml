@@ -1,0 +1,10 @@
+<Envelope>
+  <Body>
+    <LookupRequest>
+      <UserName>demo-user</UserName>
+      <Password>demo-password</Password>
+      <CustomerId>3009</CustomerId>
+      <CorrelationId>trace-3009</CorrelationId>
+    </LookupRequest>
+  </Body>
+</Envelope>

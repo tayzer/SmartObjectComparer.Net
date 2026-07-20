@@ -1,0 +1,12 @@
+<Project Sdk="MSTest.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="bunit" />
+    <PackageReference Include="MudBlazor" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\ParityBench.NET.UI\ParityBench.NET.UI.csproj" />
+  </ItemGroup>
+
+</Project>

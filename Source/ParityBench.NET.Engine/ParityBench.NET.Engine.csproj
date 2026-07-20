@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="CompareNETObjects" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ParityBench.NET.Application\ParityBench.NET.Application.csproj" />
+    <ProjectReference Include="..\ParityBench.NET.Domain\ParityBench.NET.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <ApplicationIcon>Assets\ParityBench.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\ParityBench.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Wpf" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="MudBlazor" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ParityBench.NET.Application\ParityBench.NET.Application.csproj" />
+    <ProjectReference Include="..\ParityBench.NET.ClientCustomerLookupExample\ParityBench.NET.ClientCustomerLookupExample.csproj" />
+    <ProjectReference Include="..\ParityBench.NET.Composition\ParityBench.NET.Composition.csproj" />
+    <ProjectReference Include="..\ParityBench.NET.Domain\ParityBench.NET.Domain.csproj" />
+    <ProjectReference Include="..\ParityBench.NET.UI\ParityBench.NET.UI.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <Target Name="PublishParityBenchReportAssets" AfterTargets="Publish" Condition="'$(PublishParityBenchReportAssets)' != 'false'">
+    <MSBuild Projects="..\ParityBench.NET.Report\ParityBench.NET.Report.csproj"
+             Targets="Publish"
+             Properties="Configuration=$(Configuration);PublishDir=$(PublishDir)BlazorReportAssets\;PublishParityBenchReportAssets=false"
+             RemoveProperties="RuntimeIdentifier;SelfContained;PublishSingleFile;PublishReadyToRun;IncludeNativeLibrariesForSelfExtract;IncludeAllContentForSelfExtract;UseAppHost" />
+  </Target>
+
+</Project>

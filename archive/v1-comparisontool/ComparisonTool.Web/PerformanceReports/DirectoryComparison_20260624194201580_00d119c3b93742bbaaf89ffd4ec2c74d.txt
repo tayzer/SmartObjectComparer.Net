@@ -1,0 +1,61 @@
+SYSTEM PERFORMANCE REPORT (DirectoryComparison_20260624194201580_00d119c3b93742bbaaf89ffd4ec2c74d)
+==================================================================================================
+
+Operation: CompareDirectoriesAsync
+  Calls:       1
+  Total Time:  281ms
+  Average:     281.00ms
+  Median:      281.00ms
+  Min/Max:     281ms / 281ms
+
+Operation: CompareFilesWithCachingAsPairResult
+  Calls:       2
+  Total Time:  114ms
+  Average:     57.00ms
+  Median:      57.00ms
+  Min/Max:     53ms / 61ms
+
+Operation: Compare_Objects
+  Calls:       2
+  Total Time:  67ms
+  Average:     33.50ms
+  Median:      33.50ms
+  Min/Max:     31ms / 36ms
+
+Operation: Generate_File_Hash
+  Calls:       4
+  Total Time:  6ms
+  Average:     1.50ms
+  Median:      1.50ms
+  Min/Max:     0ms / 3ms
+
+Operation: Deserialize_Old_ExpectedJsonCustomerLookupResponse_Json
+  Calls:       2
+  Total Time:  4ms
+  Average:     2.00ms
+  Median:      2.00ms
+  Min/Max:     2ms / 2ms
+
+Operation: Generate_Config_Fingerprint
+  Calls:       2
+  Total Time:  0ms
+  Average:     0.00ms
+  Median:      0.00ms
+  Min/Max:     0ms / 0ms
+
+Operation: Deserialize_New_ExpectedJsonCustomerLookupResponse_Json
+  Calls:       2
+  Total Time:  0ms
+  Average:     0.00ms
+  Median:      0.00ms
+  Min/Max:     0ms / 0ms
+
+
+SUPPLEMENTAL METRICS
+====================
+
+XmlDeserializationPrecheckMs: 0
+XmlDeserializationFullDeserializeMs: 0
+CollectionOrderDeterministicOrderingMs: 0
+CollectionOrderFallbackMs: 0
+CollectionOrderFallbackCount: 0

@@ -1,0 +1,73 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<soapenv:Envelope xmlns:search="urn:soap.co.uk/soap:search1" xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+  <soapenv:Body>
+    <search:SearchResponse>
+      <search:ReportId>RPT-002723-A</search:ReportId>
+      <search:GeneratedOn>2026-04-15T14:42:30.6444993Z</search:GeneratedOn>
+      <search:Summary>
+        <search:TotalResults>14</search:TotalResults>
+        <search:SuccessCount>12</search:SuccessCount>
+        <search:FailureCount>2</search:FailureCount>
+      </search:Summary>
+      <search:Results>
+        <search:Result>
+          <search:Id>272300</search:Id>
+          <search:Name>Result-2723-0-Updated</search:Name>
+          <search:Score>17.38</search:Score>
+          <search:Details>
+            <search:Description>Updated description 0</search:Description>
+            <search:Status>WARN</search:Status>
+          </search:Details>
+          <search:Tags>
+            <search:Tag>core</search:Tag>
+            <search:Tag>search</search:Tag>
+            <search:Tag>tag-0</search:Tag>
+            <search:Tag>delta</search:Tag>
+          </search:Tags>
+        </search:Result>
+        <search:Result>
+          <search:Id>272301</search:Id>
+          <search:Name>Result-2723-1-Updated</search:Name>
+          <search:Score>65.49</search:Score>
+          <search:Details>
+            <search:Description>Updated description 1</search:Description>
+            <search:Status>OK</search:Status>
+          </search:Details>
+          <search:Tags>
+            <search:Tag>core</search:Tag>
+            <search:Tag>search</search:Tag>
+            <search:Tag>tag-1</search:Tag>
+            <search:Tag>delta</search:Tag>
+          </search:Tags>
+        </search:Result>
+        <search:Result>
+          <search:Id>272302</search:Id>
+          <search:Name>Result-2723-2-Updated</search:Name>
+          <search:Score>89.88</search:Score>
+          <search:Details>
+            <search:Description>Updated description 2</search:Description>
+            <search:Status>WARN</search:Status>
+          </search:Details>
+          <search:Tags>
+            <search:Tag>core</search:Tag>
+            <search:Tag>search</search:Tag>
+            <search:Tag>tag-2</search:Tag>
+            <search:Tag>delta</search:Tag>
+          </search:Tags>
+        </search:Result>
+      </search:Results>
+      <search:RelatedItems>
+        <search:Item>
+          <search:ItemId>27231</search:ItemId>
+          <search:ItemName>Related-2723-1-Alt</search:ItemName>
+          <search:Relevance>0.395</search:Relevance>
+        </search:Item>
+        <search:Item>
+          <search:ItemId>27230</search:ItemId>
+          <search:ItemName>Related-2723-0-Alt</search:ItemName>
+          <search:Relevance>0.325</search:Relevance>
+        </search:Item>
+      </search:RelatedItems>
+    </search:SearchResponse>
+  </soapenv:Body>
+</soapenv:Envelope>

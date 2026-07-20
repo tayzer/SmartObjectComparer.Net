@@ -1,0 +1,11 @@
+<Project Sdk="MSTest.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\ParityBench.NET.Application\ParityBench.NET.Application.csproj" />
+  </ItemGroup>
+
+</Project>

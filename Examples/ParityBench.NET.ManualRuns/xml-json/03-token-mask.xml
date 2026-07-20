@@ -1,0 +1,8 @@
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <CustomerLookupRequest>
+      <CustomerId>1003</CustomerId>
+      <SensitiveToken>manual-token-9999</SensitiveToken>
+    </CustomerLookupRequest>
+  </soap:Body>
+</soap:Envelope>

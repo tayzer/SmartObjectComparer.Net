@@ -1,0 +1,133 @@
+@using System.Globalization
+@inject IRunResultsViewDataSource DataSource
+
+<style>
+    .pb-run-history { border: 1px solid var(--mud-palette-lines-default); background: var(--mud-palette-surface); }
+    .pb-run-id { font-family: var(--pb-font-mono); font-size: .82rem; overflow-wrap: anywhere; }
+</style>
+
+<MudPaper Elevation="0" Class="pa-3 pb-run-history">
+    <MudStack Spacing="2">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="flex-wrap" Spacing="1">
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.h6">Run History</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Recent request-comparison runs</MudText>
+            </MudStack>
+            <MudTooltip Text="Refresh runs">
+                <MudIconButton Icon="@Icons.Material.Filled.Refresh" Variant="Variant.Text" Size="Size.Small" OnClick="LoadRunsAsync" aria-label="Refresh runs" />
+            </MudTooltip>
+        </MudStack>
+
+        @if (errorMessage is not null)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@errorMessage</MudAlert>
+        }
+        else if (runs is null)
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="pa-2">
+                <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Loading runs...</MudText>
+            </MudStack>
+        }
+        else if (runs.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true">No runs found</MudAlert>
+        }
+        else
+        {
+            <MudTable T="RunListItem" Items="runs" Dense="true" Hover="true" Elevation="0">
+                <HeaderContent>
+                    <MudTh>Run</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Updated</MudTh>
+                    <MudTh>Summary</MudTh>
+                    <MudTh></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Run"><span class="pb-run-id">@context.Id.Value</span></MudTd>
+                    <MudTd DataLabel="Status"><MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)" Variant="Variant.Outlined" Icon="@GetStatusIcon(context.Status)">@context.Status</MudChip></MudTd>
+                    <MudTd DataLabel="Updated">
+                        <MudStack Spacing="0">
+                            <MudText Typo="Typo.body2">@FormatRelativeTime(context.UpdatedAt)</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@FormatTimestamp(context.UpdatedAt)</MudText>
+                        </MudStack>
+                    </MudTd>
+                    <MudTd DataLabel="Summary"><RunSummaryCounts Summary="context.Summary" /></MudTd>
+                    <MudTd DataLabel="Open">
+                        <MudTooltip Text="Open run">
+                            <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Variant="Variant.Text" Size="Size.Small" OnClick="@(() => SelectRunAsync(context.Id))" aria-label="Open run" />
+                        </MudTooltip>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    private IReadOnlyList<RunListItem>? runs;
+    private string? errorMessage;
+
+    [Parameter]
+    public EventCallback<RunId> RunSelected { get; set; }
+
+    protected override Task OnInitializedAsync() => LoadRunsAsync();
+
+    private async Task LoadRunsAsync()
+    {
+        try
+        {
+            errorMessage = null;
+            runs = await DataSource.ListRunsAsync();
+        }
+        catch (Exception ex)
+        {
+            runs = Array.Empty<RunListItem>();
+            errorMessage = ex.Message;
+        }
+    }
+
+    private Task SelectRunAsync(RunId runId) => RunSelected.InvokeAsync(runId);
+
+    private static Color GetStatusColor(RunStatus status) => status switch
+    {
+        RunStatus.Completed => Color.Success,
+        RunStatus.Failed => Color.Error,
+        RunStatus.Cancelled => Color.Warning,
+        RunStatus.Executing or RunStatus.Comparing or RunStatus.Analyzing => Color.Primary,
+        _ => Color.Default,
+    };
+
+    private static string GetStatusIcon(RunStatus status) => status switch
+    {
+        RunStatus.Completed => Icons.Material.Filled.CheckCircle,
+        RunStatus.Failed => Icons.Material.Filled.Error,
+        RunStatus.Cancelled => Icons.Material.Filled.Cancel,
+        RunStatus.Executing or RunStatus.Comparing or RunStatus.Analyzing => Icons.Material.Filled.PlayCircle,
+        _ => Icons.Material.Filled.Schedule,
+    };
+
+    private static string FormatTimestamp(DateTimeOffset value) =>
+        value.LocalDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+
+    private static string FormatRelativeTime(DateTimeOffset value)
+    {
+        TimeSpan elapsed = DateTimeOffset.Now - value;
+        if (elapsed.TotalMinutes < 1)
+        {
+            return "Just now";
+        }
+
+        if (elapsed.TotalHours < 1)
+        {
+            return $"{(int)elapsed.TotalMinutes}m ago";
+        }
+
+        if (elapsed.TotalDays < 1)
+        {
+            return $"{(int)elapsed.TotalHours}h ago";
+        }
+
+        return $"{(int)elapsed.TotalDays}d ago";
+    }
+}

@@ -1,0 +1,1516 @@
+@using System.Net.Http.Json
+@using ComparisonTool.Core.Comparison.Configuration
+@using ComparisonTool.Core.Comparison.Results
+@using ComparisonTool.Core.RequestComparison.Models
+@using ComparisonTool.Core.RequestComparison.Services
+@using ComparisonTool.Core.RequestComparison.AlternateContracts
+@using ComparisonTool.Core.Serialization
+@using ComparisonTool.Domain.Models
+@using ComparisonTool.Core.Abstractions
+@using Microsoft.Extensions.Options
+@using Microsoft.AspNetCore.Components.Forms
+@using MudBlazor
+@using System.Text.Json
+@inject IHttpClientFactory HttpClientFactory
+@inject ILogger<RequestComparisonPanel> Logger
+@inject NavigationManager NavigationManager
+@inject IConfiguration Configuration
+@inject IOptions<RequestComparisonEndpointOptions> EndpointOptions
+@inject IOptions<RequestComparisonLargeBatchOptions> LargeBatchOptions
+@inject IDeserializationService DeserializationService
+@inject IRequestComparisonAlternateContractProfileRegistry AlternateContractProfileRegistry
+@inject IComparisonConfigurationService ConfigService
+@inject RequestComparisonJobService JobService
+@inject IProgressSubscriber ProgressService
+@inject IRequestComparisonGateway RequestComparisonGateway
+@inject IFilePickerService FilePickerService
+@inject IFolderPickerService FolderPickerService
+@implements IAsyncDisposable
+
+<MudPaper Elevation="2" Class="pa-4">
+    <MudStack Spacing="3">
+        <MudText Typo="Typo.h6">Request Comparison</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Default">
+            Upload request files and compare responses from two endpoints.
+        </MudText>
+
+        @* Step 1: Upload Request Files *@
+        <MudPaper Elevation="1" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.subtitle1">Step 1: Upload Request Files</MudText>
+                @if (FilePickerService.IsAvailable)
+                {
+                    <MudStack Row="true" Spacing="2" Class="flex-wrap">
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.AttachFile"
+                                   OnClick="HandleNativeFileSelection">
+                            Add Request Files
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.FolderOpen"
+                                   OnClick="HandleNativeFolderSelection">
+                            Add Request Folder
+                        </MudButton>
+                    </MudStack>
+                }
+                else
+                {
+                    <InputFile OnChange="HandleFileSelection" multiple accept="*/*" />
+                }
+                @if (SelectedRequestFileCount > 0)
+                {
+                    <MudText Typo="Typo.caption">
+                        @SelectedRequestSelectionDescription
+                    </MudText>
+                }
+                @if (IsLargeBatchSelection)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                        Large run mode will process @SelectedRequestFileCount requests in chunks of up to @EffectiveLargeBatchChunkSize with default concurrency @EffectiveLargeBatchDefaultConcurrency.
+                    </MudAlert>
+                }
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.CloudUpload"
+                           OnClick="UploadFiles"
+                           Disabled="@(SelectedRequestFileCount == 0 || isUploading || cacheHit)">
+                    @if (isUploading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        <text>Uploading...</text>
+                    }
+                    else
+                    {
+                        <text>Upload Request Files</text>
+                    }
+                </MudButton>
+                @if (!string.IsNullOrEmpty(batchId))
+                {
+                    <MudAlert Severity="Severity.Success" Variant="Variant.Outlined">
+                        Uploaded @uploadedCount files. Batch ID: @batchId
+                    </MudAlert>
+                }
+                @if (cacheHit && !string.IsNullOrEmpty(batchId))
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                        Cache hit. Using cached batch ID: @batchId
+                    </MudAlert>
+                }
+            </MudStack>
+        </MudPaper>
+
+        @* Step 2: Model & Configuration *@
+        <MudPaper Elevation="1" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.subtitle1">Step 2: Model & Configuration</MudText>
+
+                <MudSelect T="string"
+                           Label="Select Domain Model"
+                           Value="selectedModelName"
+                           ValueChanged="HandleSelectedModelChanged"
+                           Variant="Variant.Outlined"
+                           AnchorOrigin="Origin.BottomCenter">
+                    @foreach (var modelName in availableModels)
+                    {
+                        <MudSelectItem Value="@modelName">@modelName</MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                    Mask rules configured in Mask Rules Studio: @MaskRules.Count
+                </MudAlert>
+
+                <MudSwitch T="bool"
+                           Label="Endpoint B uses alternate request/response contract"
+                           Value="endpointBUsesAlternateContract"
+                           ValueChanged="HandleAlternateContractToggleChanged"
+                           Color="Color.Primary" />
+
+                @if (endpointBUsesAlternateContract)
+                {
+                    @if (availableAlternateContractProfiles.Count == 0)
+                    {
+                        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                            No alternate contract profiles are registered for @selectedModelName.
+                        </MudAlert>
+                    }
+                    else if (availableAlternateContractProfiles.Count == 1)
+                    {
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                            Using alternate contract profile: @selectedAlternateContractProfileId
+                        </MudAlert>
+                    }
+                    else
+                    {
+                        <MudSelect T="string"
+                                   Label="Alternate Contract Profile"
+                                   Value="selectedAlternateContractProfileId"
+                                   ValueChanged="HandleAlternateContractProfileChanged"
+                                   Variant="Variant.Outlined"
+                                   AnchorOrigin="Origin.BottomCenter">
+                            @foreach (var profileId in availableAlternateContractProfiles)
+                            {
+                                <MudSelectItem Value="@profileId">@profileId</MudSelectItem>
+                            }
+                        </MudSelect>
+                    }
+                }
+
+                <MudExpansionPanels>
+                    <MudExpansionPanel Text="Comparison Options">
+                        <MudStack Spacing="2">
+                            <MudSwitch @bind-Value="ignoreCollectionOrder"
+                                       Label="Ignore Collection Order"
+                                       Color="Color.Primary" />
+                            <MudSwitch @bind-Value="ignoreStringCase"
+                                       Label="Ignore String Case"
+                                       Color="Color.Primary" />
+                            <MudSwitch @bind-Value="ignoreTrailingWhitespaceAtEnd"
+                                       Label="Ignore Trailing Spaces/Tabs at End of Strings"
+                                       Color="Color.Primary" />
+                            <MudSwitch @bind-Value="treatNullAndEmptyCollectionsAsEqual"
+                                       Label="Treat null and empty collections as equal"
+                                       Color="Color.Primary" />
+                            <MudSwitch @bind-Value="ignoreXmlNamespaces"
+                                       Label="Ignore XML Namespaces"
+                                       Color="Color.Primary" />
+                        </MudStack>
+                    </MudExpansionPanel>
+
+                    <MudExpansionPanel Text="Analysis Options">
+                        <MudStack Spacing="2">
+                            @if (IsLargeBatchSelection)
+                            {
+                                <MudAlert Severity="@(enableEnhancedStructuralAnalysis ? Severity.Warning : Severity.Info)" Variant="Variant.Outlined" Dense="true">
+                                    Enhanced structural analysis is off by default for large runs because it can add significant time and memory use. You can enable it manually here.
+                                </MudAlert>
+                            }
+                            <MudSwitch T="bool"
+                                       Value="enableSemanticAnalysis"
+                                       ValueChanged="@((bool value) => HandleSemanticAnalysisChanged(value))"
+                                       Label="Enable Semantic Analysis"
+                                       Color="Color.Success" />
+                            <MudSwitch T="bool"
+                                       Value="enableEnhancedStructuralAnalysis"
+                                       ValueChanged="@((bool value) => HandleEnhancedStructuralAnalysisChanged(value))"
+                                       Label="Enable Enhanced Structural Analysis"
+                                       Color="Color.Success" />
+                        </MudStack>
+                    </MudExpansionPanel>
+
+                    <MudExpansionPanel Text="@IgnoreRulesLabel">
+                        <MudStack Spacing="2">
+                            <MudText Typo="Typo.subtitle2">Tree Navigator (Visual Property Selection)</MudText>
+                            <MudStack Row="true" Spacing="2">
+                                <MudButton Variant="Variant.Outlined"
+                                           Size="Size.Small"
+                                           StartIcon="@Icons.Material.Filled.List"
+                                           OnClick="OpenPropertySelector"
+                                           Disabled="@(!IsModelSelected)">
+                                    Simple Property Selector
+                                </MudButton>
+                                <MudButton Variant="Variant.Outlined"
+                                           Size="Size.Small"
+                                           Color="Color.Success"
+                                           StartIcon="@Icons.Material.Filled.AccountTree"
+                                           OnClick="OpenTreePropertySelector"
+                                           Disabled="@(!IsModelSelected)">
+                                    Tree Navigator ?
+                                </MudButton>
+                            </MudStack>
+                            @if (!IsModelSelected)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Default">
+                                    Select a model first to browse and ignore properties.
+                                </MudText>
+                            }
+
+                            <MudDivider Class="my-2" />
+
+                            @if (IgnoreRules.Any())
+                            {
+                                <MudPaper Outlined="true" Style="max-height: 200px; overflow-y: auto;">
+                                    @foreach (var rule in IgnoreRules.OrderBy(r => r.PropertyPath))
+                                    {
+                                        <MudStack Row="true" Class="pa-2" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                            <MudText Typo="Typo.body2" Style="font-family: 'Consolas', 'Monaco', monospace; word-break: break-all;">
+                                                @rule.PropertyPath
+                                            </MudText>
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                @if (rule.IgnoreCompletely)
+                                                {
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.VisibilityOff">
+                                                        Ignore
+                                                    </MudChip>
+                                                }
+                                                @if (rule.IgnoreCollectionOrder)
+                                                {
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.SwapVert">
+                                                        Order
+                                                    </MudChip>
+                                                }
+                                                @if (rule.TreatNullAndEmptyCollectionsAsEqual)
+                                                {
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.DataArray">
+                                                        Null/Empty
+                                                    </MudChip>
+                                                }
+                                                <MudIconButton Icon="@Icons.Material.Filled.Close"
+                                                               Size="Size.Small"
+                                                               Color="Color.Error"
+                                                               OnClick="@(() => RemoveIgnoreRule(rule))" />
+                                            </MudStack>
+                                        </MudStack>
+                                        <MudDivider />
+                                    }
+                                </MudPaper>
+                                <MudButton Variant="Variant.Text"
+                                           Size="Size.Small"
+                                           Color="Color.Error"
+                                           StartIcon="@Icons.Material.Filled.DeleteSweep"
+                                           OnClick="ClearAllIgnoreRules">
+                                    Clear All Rules
+                                </MudButton>
+                            }
+                            else
+                            {
+                                <MudPaper Outlined="true" Class="pa-4" Style="text-align: center;">
+                                    <MudStack Row="true" Justify="Justify.Center" AlignItems="AlignItems.Center" Spacing="2">
+                                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Default" />
+                                        <MudText Typo="Typo.body2" Color="Color.Default">No ignore rules configured</MudText>
+                                    </MudStack>
+                                </MudPaper>
+                            }
+                        </MudStack>
+                    </MudExpansionPanel>
+
+                    <MudExpansionPanel Text="Accepted Difference Profiles">
+                        <AcceptedDifferenceProfilesPanel ShowHeader="false"
+                                                         StartCollapsed="false"
+                                                         OnProfilesChanged="OnAcceptedDifferenceProfilesChanged" />
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            </MudStack>
+        </MudPaper>
+
+        @* Step 3: Configure Endpoints *@
+        <MudPaper Elevation="1" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.subtitle1">Step 3: Configure Endpoints</MudText>
+                <MudSelect T="string" Label="Endpoint A" Variant="Variant.Outlined" Value="selectedEndpointA" ValueChanged="OnEndpointAChanged">
+                    @foreach (var option in availableEndpoints)
+                    {
+                        <MudSelectItem Value="@option.Url">@option.Name (@option.Url)</MudSelectItem>
+                    }
+                    @if (allowCustom)
+                    {
+                        <MudSelectItem Value="@CustomEndpointValue">Custom...</MudSelectItem>
+                    }
+                </MudSelect>
+                @if (allowCustom && selectedEndpointA == CustomEndpointValue)
+                {
+                    <MudTextField @bind-Value="endpointA"
+                                  Label="Endpoint A URL"
+                                  Placeholder="https://api-a.example.com/endpoint"
+                                  Variant="Variant.Outlined" />
+                }
+
+                <MudSelect T="string" Label="Endpoint B" Variant="Variant.Outlined" Value="selectedEndpointB" ValueChanged="OnEndpointBChanged">
+                    @foreach (var option in availableEndpoints)
+                    {
+                        <MudSelectItem Value="@option.Url">@option.Name (@option.Url)</MudSelectItem>
+                    }
+                    @if (allowCustom)
+                    {
+                        <MudSelectItem Value="@CustomEndpointValue">Custom...</MudSelectItem>
+                    }
+                </MudSelect>
+                @if (allowCustom && selectedEndpointB == CustomEndpointValue)
+                {
+                    <MudTextField @bind-Value="endpointB"
+                                  Label="Endpoint B URL"
+                                  Placeholder="https://api-b.example.com/endpoint"
+                                  Variant="Variant.Outlined" />
+                }
+
+                <MudExpansionPanels>
+                    <MudExpansionPanel Text="Custom Headers (Optional)">
+                        <MudStack Spacing="2">
+                            <MudText Typo="Typo.subtitle2">Headers for Endpoint A</MudText>
+                            @foreach (var header in headersA)
+                            {
+                                <MudStack Row="true" Spacing="2">
+                                    <MudTextField @bind-Value="header.Key" Label="Header Name" Variant="Variant.Outlined" />
+                                    <MudTextField @bind-Value="header.Value" Label="Header Value" Variant="Variant.Outlined" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="@(() => headersA.Remove(header))" />
+                                </MudStack>
+                            }
+                            <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => headersA.Add(new HeaderPair()))">
+                                Add Header
+                            </MudButton>
+
+                            <MudText Typo="Typo.subtitle2">Headers for Endpoint B</MudText>
+                            @foreach (var header in headersB)
+                            {
+                                <MudStack Row="true" Spacing="2">
+                                    <MudTextField @bind-Value="header.Key" Label="Header Name" Variant="Variant.Outlined" />
+                                    <MudTextField @bind-Value="header.Value" Label="Header Value" Variant="Variant.Outlined" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" OnClick="@(() => headersB.Remove(header))" />
+                                </MudStack>
+                            }
+                            <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => headersB.Add(new HeaderPair()))">
+                                Add Header
+                            </MudButton>
+                        </MudStack>
+                    </MudExpansionPanel>
+                    <MudExpansionPanel Text="Advanced Options">
+                        <MudStack Spacing="2">
+                            <MudTextField @bind-Value="contentTypeOverride"
+                                          Label="Content-Type Override"
+                                          Placeholder="application/json"
+                                          Variant="Variant.Outlined" />
+                            <MudText Typo="Typo.caption" Color="Color.Default">
+                                Optional. Overrides the request content type inferred from file extension.
+                            </MudText>
+                            <MudNumericField @bind-Value="timeoutMs"
+                                             Label="Request Timeout (ms)"
+                                             Min="1000" Max="300000"
+                                             Variant="Variant.Outlined" />
+                            <MudNumericField @bind-Value="maxConcurrency"
+                                             Label="Max Concurrency"
+                                             Min="1" Max="256"
+                                             Variant="Variant.Outlined" />
+                        </MudStack>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            </MudStack>
+        </MudPaper>
+
+        @* Step 4: Run Comparison *@
+        <MudPaper Elevation="1" Class="pa-3" Style="background-color: var(--mud-palette-background-grey);">
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.subtitle1">Step 4: Run Comparison</MudText>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Success"
+                           StartIcon="@Icons.Material.Filled.PlayArrow"
+                           OnClick="StartComparison"
+                           Disabled="@(!CanStartComparison)">
+                    Start Comparison
+                </MudButton>
+
+                @if (isRunning)
+                {
+                    <MudStack Spacing="2">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@GetPhaseIcon()" Color="@GetPhaseColor()" />
+                            <MudText Typo="Typo.subtitle2" Color="@GetPhaseColor()">@currentPhase</MudText>
+                        </MudStack>
+
+                        <MudProgressLinear Color="@GetPhaseColor()"
+                                           Value="@progressPercent"
+                                           Striped="true"
+                                           Size="Size.Large">
+                            <MudText Typo="Typo.caption">@progressPercent%</MudText>
+                        </MudProgressLinear>
+
+                        <MudText Typo="Typo.body2">@statusMessage</MudText>
+
+                        @if (progressLog.Count > 0)
+                        {
+                            <MudExpansionPanels>
+                                <MudExpansionPanel Text="@($"Activity Log ({progressLog.Count} events)")">
+                                    <MudList T="string" Dense="true" Style="max-height: 200px; overflow-y: auto;">
+                                        @foreach (var entry in progressLog.AsEnumerable().Reverse().Take(15))
+                                        {
+                                            <MudListItem T="string">
+                                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                                    <MudText Typo="Typo.caption" Color="Color.Default" Style="font-family: monospace; min-width: 70px;">
+                                                        @entry.Timestamp.ToLocalTime().ToString("HH:mm:ss")
+                                                    </MudText>
+                                                    <MudChip T="string" Size="Size.Small" Color="@GetPhaseChipColor(entry.Phase)" Variant="Variant.Outlined">
+                                                        @entry.Phase
+                                                    </MudChip>
+                                                    <MudText Typo="Typo.body2">@entry.Message</MudText>
+                                                </MudStack>
+                                            </MudListItem>
+                                        }
+                                    </MudList>
+                                </MudExpansionPanel>
+                            </MudExpansionPanels>
+                        }
+
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Warning"
+                                   StartIcon="@Icons.Material.Filled.Cancel"
+                                   OnClick="CancelJob">
+                            Cancel
+                        </MudButton>
+                    </MudStack>
+                }
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                        @errorMessage
+                    </MudAlert>
+                }
+            </MudStack>
+        </MudPaper>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter] public EventCallback<MultiFolderComparisonResult> OnComparisonComplete { get; set; }
+    [Parameter] public string? SharedSelectedModelName { get; set; }
+    [Parameter] public EventCallback<string> SharedSelectedModelNameChanged { get; set; }
+    [Parameter] public List<MaskRuleDto> MaskRules { get; set; } = new();
+    [Parameter] public EventCallback OnAcceptedDifferenceProfilesChanged { get; set; }
+    [Parameter] public bool EnableSemanticAnalysis { get; set; } = true;
+    [Parameter] public EventCallback<bool> OnEnableSemanticAnalysisChanged { get; set; }
+    [Parameter] public bool EnableEnhancedStructuralAnalysis { get; set; } = true;
+    [Parameter] public EventCallback<bool> OnEnableEnhancedStructuralAnalysisChanged { get; set; }
+    private const string CustomEndpointValue = "__custom__";
+
+    private List<IBrowserFile>? selectedFiles;
+    private List<string>? selectedFilePaths;
+    private string? selectedDirectoryPath;
+    private int selectedDirectoryRequestCount;
+    private bool largeBatchDefaultsApplied;
+    private bool isUploading = false;
+    private string? batchId;
+    private int uploadedCount = 0;
+
+    // Model & Configuration
+    private List<string> availableModels = new();
+    private string selectedModelName = "";
+    private bool ignoreCollectionOrder = false;
+    private bool ignoreStringCase = false;
+    private bool ignoreTrailingWhitespaceAtEnd = false;
+    private bool treatNullAndEmptyCollectionsAsEqual = false;
+    private bool ignoreXmlNamespaces = true;
+    private bool enableSemanticAnalysis = true;
+    private bool enableEnhancedStructuralAnalysis = true;
+    private bool endpointBUsesAlternateContract = false;
+    private List<string> availableAlternateContractProfiles = new();
+    private string? selectedAlternateContractProfileId;
+    public List<IgnoreRule> IgnoreRules { get; set; } = new();
+
+    // Event callbacks for property selectors
+    [Parameter] public EventCallback OnPropertySelectorOpened { get; set; }
+    [Parameter] public EventCallback OnTreePropertySelectorOpened { get; set; }
+
+    // Endpoints
+    private string endpointA = "";
+    private string endpointB = "";
+    private List<RequestComparisonEndpointOption> availableEndpoints = new();
+    private bool allowCustom = true;
+    private string selectedEndpointA = CustomEndpointValue;
+    private string selectedEndpointB = CustomEndpointValue;
+    private List<HeaderPair> headersA = new();
+    private List<HeaderPair> headersB = new();
+    private string? contentTypeOverride;
+    private int timeoutMs = 30000;
+    private int maxConcurrency = 64;
+
+    private bool isRunning = false;
+    private string? currentJobId;
+    private int progressPercent = 0;
+    private string? statusMessage;
+    private string? errorMessage;
+    private CancellationTokenSource? cts;
+    private string? cacheKey;
+    private bool cacheHit = false;
+
+    // Progress tracking
+    private string currentPhase = "Initializing";
+    private List<(DateTimeOffset Timestamp, string Phase, string Message)> progressLog = new();
+
+    private bool CanStartComparison =>
+        !string.IsNullOrEmpty(batchId) &&
+        !string.IsNullOrWhiteSpace(endpointA) &&
+        !string.IsNullOrWhiteSpace(endpointB) &&
+        !string.IsNullOrWhiteSpace(selectedModelName) &&
+        (!endpointBUsesAlternateContract || CanResolveAlternateContractProfile) &&
+        !isRunning;
+
+    private bool IsModelSelected => !string.IsNullOrEmpty(selectedModelName);
+    private string IgnoreRulesLabel => $"Ignore Rules ({IgnoreRules.Count} rules)";
+    private bool CanResolveAlternateContractProfile =>
+        availableAlternateContractProfiles.Count == 1 ||
+        !string.IsNullOrWhiteSpace(selectedAlternateContractProfileId);
+    private RequestComparisonLargeBatchOptions LargeBatchSettings => LargeBatchOptions.Value;
+    private int EffectiveLargeBatchThreshold => Math.Max(1, LargeBatchSettings.LargeBatchThreshold);
+    private int EffectiveLargeBatchChunkSize => Math.Max(1, LargeBatchSettings.LargeBatchChunkSize);
+    private int EffectiveLargeBatchDefaultConcurrency => Math.Max(1, LargeBatchSettings.LargeBatchDefaultConcurrency);
+    private int SelectedRequestFileCount => !string.IsNullOrWhiteSpace(selectedDirectoryPath)
+        ? selectedDirectoryRequestCount
+        : selectedFilePaths?.Count ?? selectedFiles?.Count ?? uploadedCount;
+    private bool IsLargeBatchSelection => SelectedRequestFileCount >= EffectiveLargeBatchThreshold;
+    private string SelectedRequestSelectionDescription => !string.IsNullOrWhiteSpace(selectedDirectoryPath)
+        ? $"{SelectedRequestFileCount} files selected from {selectedDirectoryPath}"
+        : $"{SelectedRequestFileCount} files selected";
+
+    private string importStatusMessage = string.Empty;
+    private bool importStatusIsError = false;
+
+    protected override void OnInitialized()
+    {
+        // Subscribe to progress updates
+        ProgressService.OnProgressUpdate += HandleProgressUpdate;
+
+        // Load available models
+        availableModels = DeserializationService.GetRegisteredModelNames().ToList();
+        if (availableModels.Count > 0)
+        {
+            selectedModelName = !string.IsNullOrWhiteSpace(SharedSelectedModelName)
+                ? SharedSelectedModelName
+                : availableModels[0];
+            RefreshAlternateContractProfiles();
+        }
+
+        var options = EndpointOptions.Value;
+        allowCustom = options.AllowCustom;
+        availableEndpoints = options.Endpoints ?? new List<RequestComparisonEndpointOption>();
+
+        if (availableEndpoints.Count > 0)
+        {
+            OnEndpointAChanged(availableEndpoints[0].Url);
+
+            var bUrl = availableEndpoints.Count > 1 ? availableEndpoints[1].Url : availableEndpoints[0].Url;
+            OnEndpointBChanged(bUrl);
+        }
+
+        timeoutMs = Configuration.GetValue("RequestComparison:DefaultTimeoutMs", 30000);
+        maxConcurrency = Configuration.GetValue("RequestComparison:MaxConcurrency", 64);
+
+        ApplyRequestBatchQueryPrefill();
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (enableSemanticAnalysis != EnableSemanticAnalysis)
+        {
+            enableSemanticAnalysis = EnableSemanticAnalysis;
+        }
+
+        if (enableEnhancedStructuralAnalysis != EnableEnhancedStructuralAnalysis)
+        {
+            enableEnhancedStructuralAnalysis = EnableEnhancedStructuralAnalysis;
+        }
+
+        if (!string.IsNullOrWhiteSpace(SharedSelectedModelName)
+            && !string.Equals(selectedModelName, SharedSelectedModelName, StringComparison.Ordinal))
+        {
+            selectedModelName = SharedSelectedModelName;
+            RefreshAlternateContractProfiles();
+        }
+    }
+
+    private Task HandleSemanticAnalysisChanged(bool value)
+    {
+        enableSemanticAnalysis = value;
+        return OnEnableSemanticAnalysisChanged.InvokeAsync(value);
+    }
+
+    private Task HandleEnhancedStructuralAnalysisChanged(bool value)
+    {
+        enableEnhancedStructuralAnalysis = value;
+        return OnEnableEnhancedStructuralAnalysisChanged.InvokeAsync(value);
+    }
+
+    private void SetEnableEnhancedStructuralAnalysis(bool value)
+    {
+        enableEnhancedStructuralAnalysis = value;
+        _ = OnEnableEnhancedStructuralAnalysisChanged.InvokeAsync(value);
+    }
+
+    private void ApplyRequestBatchQueryPrefill()
+    {
+        var queryValues = ParseQueryString(new Uri(NavigationManager.Uri).Query);
+        if (!queryValues.TryGetValue("requestBatchId", out var stagedBatchId) || string.IsNullOrWhiteSpace(stagedBatchId))
+        {
+            return;
+        }
+
+        batchId = stagedBatchId.Trim();
+        selectedFiles = null;
+        selectedFilePaths = null;
+        selectedDirectoryPath = null;
+        selectedDirectoryRequestCount = 0;
+        largeBatchDefaultsApplied = false;
+        cacheHit = false;
+        cacheKey = null;
+        errorMessage = null;
+        uploadedCount = queryValues.TryGetValue("requestBatchCount", out var stagedCount)
+            && int.TryParse(stagedCount, out var parsedCount)
+            ? parsedCount
+            : 0;
+
+        if (uploadedCount >= EffectiveLargeBatchThreshold)
+        {
+            maxConcurrency = EffectiveLargeBatchDefaultConcurrency;
+            SetEnableEnhancedStructuralAnalysis(false);
+            largeBatchDefaultsApplied = true;
+        }
+
+        if (queryValues.TryGetValue("requestModelName", out var stagedModelName)
+            && availableModels.Contains(stagedModelName, StringComparer.Ordinal))
+        {
+            selectedModelName = stagedModelName;
+            RefreshAlternateContractProfiles();
+        }
+
+        if (queryValues.TryGetValue("requestUseAlternateContract", out var stagedUseAlternateContract)
+            && bool.TryParse(stagedUseAlternateContract, out var useAlternateContract)
+            && useAlternateContract)
+        {
+            endpointBUsesAlternateContract = true;
+            RefreshAlternateContractProfiles();
+
+            if (queryValues.TryGetValue("requestAlternateContractProfileId", out var stagedProfileId)
+                && availableAlternateContractProfiles.Contains(stagedProfileId, StringComparer.Ordinal))
+            {
+                selectedAlternateContractProfileId = stagedProfileId;
+            }
+        }
+    }
+
+    private static Dictionary<string, string> ParseQueryString(string query)
+    {
+        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return values;
+        }
+
+        var normalized = query.TrimStart('?');
+        foreach (var pair in normalized.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = pair.Split('=', 2);
+            var key = DecodeQueryValue(parts[0]);
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                continue;
+            }
+
+            values[key] = parts.Length == 2 ? DecodeQueryValue(parts[1]) : string.Empty;
+        }
+
+        return values;
+    }
+
+    private static string DecodeQueryValue(string value)
+    {
+        return Uri.UnescapeDataString(value.Replace('+', ' '));
+    }
+
+    private async Task HandleSelectedModelChanged(string value)
+    {
+        selectedModelName = value;
+        RefreshAlternateContractProfiles();
+        await SharedSelectedModelNameChanged.InvokeAsync(value);
+    }
+
+    private Task HandleAlternateContractToggleChanged(bool value)
+    {
+        endpointBUsesAlternateContract = value;
+        RefreshAlternateContractProfiles();
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private Task HandleAlternateContractProfileChanged(string value)
+    {
+        selectedAlternateContractProfileId = value;
+
+        if (!string.IsNullOrWhiteSpace(value) && !string.IsNullOrWhiteSpace(selectedModelName))
+        {
+            if (AlternateContractProfileRegistry.TryResolve(selectedModelName, value, out var profile, out _))
+            {
+                if (TryFindSuggestedEndpoint(profile.SuggestEndpointA, out var matchA))
+                {
+                    OnEndpointAChanged(matchA.Url);
+                }
+
+                if (TryFindSuggestedEndpoint(profile.SuggestEndpointB, out var matchB))
+                {
+                    OnEndpointBChanged(matchB.Url);
+                }
+            }
+        }
+
+        StateHasChanged();
+
+        return Task.CompletedTask;
+    }
+
+    private bool TryFindSuggestedEndpoint(
+        string? suggestion,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out RequestComparisonEndpointOption? endpoint)
+    {
+        endpoint = null;
+        if (string.IsNullOrWhiteSpace(suggestion))
+        {
+            return false;
+        }
+
+        endpoint = availableEndpoints.FirstOrDefault(e => string.Equals(e.Url, suggestion, StringComparison.OrdinalIgnoreCase))
+            ?? availableEndpoints.FirstOrDefault(e => string.Equals(e.Name, suggestion, StringComparison.OrdinalIgnoreCase))
+            ?? availableEndpoints.FirstOrDefault(e => e.Url.Contains(suggestion, StringComparison.OrdinalIgnoreCase))
+            ?? availableEndpoints.FirstOrDefault(e => e.Name.Contains(suggestion, StringComparison.OrdinalIgnoreCase));
+
+        return endpoint != null;
+    }
+
+    private async Task HandleFileSelection(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            selectedFiles = e.GetMultipleFiles(10000).ToList();
+            selectedFilePaths = null;
+            selectedDirectoryPath = null;
+            selectedDirectoryRequestCount = 0;
+            largeBatchDefaultsApplied = false;
+            errorMessage = null;
+            cacheHit = false;
+            batchId = null;
+            uploadedCount = 0;
+
+            if (selectedFiles.Count > 0)
+            {
+                cacheKey = ComputeCacheKey(selectedFiles);
+                await TryResolveCachedBatchAsync();
+                ApplyLargeBatchDefaultsForSelection();
+            }
+        }
+        catch (Exception ex)
+        {
+            selectedFiles = null;
+            selectedFilePaths = null;
+            selectedDirectoryPath = null;
+            selectedDirectoryRequestCount = 0;
+            largeBatchDefaultsApplied = false;
+            cacheKey = null;
+            cacheHit = false;
+            batchId = null;
+            uploadedCount = 0;
+            errorMessage = $"Could not add request files: {ex.Message}";
+            Logger.LogError(ex, "Failed to add request files");
+        }
+    }
+
+    private async Task HandleNativeFileSelection()
+    {
+        try
+        {
+            var filePaths = await FilePickerService.PickFilesAsync(
+                "Select request files",
+                "Request files (*.xml;*.json;*.txt)|*.xml;*.json;*.txt|All files (*.*)|*.*");
+
+            selectedFiles = null;
+            selectedFilePaths = filePaths.ToList();
+            selectedDirectoryPath = null;
+            selectedDirectoryRequestCount = 0;
+            largeBatchDefaultsApplied = false;
+            errorMessage = null;
+            cacheHit = false;
+            batchId = null;
+            uploadedCount = 0;
+
+            if (selectedFilePaths.Count > 0)
+            {
+                cacheKey = ComputeFilePathCacheKey(selectedFilePaths);
+                await TryResolveCachedBatchAsync();
+                ApplyLargeBatchDefaultsForSelection();
+            }
+            else
+            {
+                selectedFilePaths = null;
+                cacheKey = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            selectedFiles = null;
+            selectedFilePaths = null;
+            selectedDirectoryPath = null;
+            selectedDirectoryRequestCount = 0;
+            largeBatchDefaultsApplied = false;
+            cacheKey = null;
+            cacheHit = false;
+            batchId = null;
+            uploadedCount = 0;
+            errorMessage = $"Could not add request files: {ex.Message}";
+            Logger.LogError(ex, "Failed to add request files through native picker");
+        }
+    }
+
+
+    private async Task HandleNativeFolderSelection()
+    {
+        try
+        {
+            var folderPath = await FolderPickerService.PickFolderAsync("Select request folder");
+            if (string.IsNullOrWhiteSpace(folderPath))
+            {
+                return;
+            }
+
+            var normalizedFolderPath = Path.GetFullPath(folderPath);
+            var requestFiles = EnumerateEligibleRequestFiles(normalizedFolderPath);
+
+            selectedFiles = null;
+            selectedFilePaths = null;
+            selectedDirectoryPath = normalizedFolderPath;
+            selectedDirectoryRequestCount = requestFiles.Count;
+            largeBatchDefaultsApplied = false;
+            errorMessage = requestFiles.Count == 0
+                ? "No eligible .xml, .json, or .txt request files were found in the selected folder."
+                : null;
+            cacheHit = false;
+            batchId = null;
+            uploadedCount = 0;
+
+            if (requestFiles.Count > 0)
+            {
+                cacheKey = ComputeDirectoryCacheKey(normalizedFolderPath, requestFiles);
+                await TryResolveCachedBatchAsync();
+                ApplyLargeBatchDefaultsForSelection();
+            }
+            else
+            {
+                cacheKey = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            selectedFiles = null;
+            selectedFilePaths = null;
+            selectedDirectoryPath = null;
+            selectedDirectoryRequestCount = 0;
+            largeBatchDefaultsApplied = false;
+            cacheKey = null;
+            cacheHit = false;
+            batchId = null;
+            uploadedCount = 0;
+            errorMessage = $"Could not add request folder: {ex.Message}";
+            Logger.LogError(ex, "Failed to add request folder through native picker");
+        }
+    }
+
+    private async Task UploadFiles()
+    {
+        if (SelectedRequestFileCount == 0) return;
+        if (cacheHit && !string.IsNullOrEmpty(batchId)) return;
+
+        isUploading = true;
+        errorMessage = null;
+
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(selectedDirectoryPath))
+            {
+                var result = await RequestComparisonGateway.StageRequestDirectoryAsync(selectedDirectoryPath, cacheKey);
+                batchId = result.BatchId;
+                uploadedCount = result.FileCount;
+                cacheHit = result.CacheHit;
+                return;
+            }
+
+            if (selectedFilePaths is { Count: > 0 })
+            {
+                var result = await RequestComparisonGateway.StageRequestFilesAsync(selectedFilePaths, cacheKey);
+                batchId = result.BatchId;
+                uploadedCount = result.FileCount;
+                cacheHit = result.CacheHit;
+                return;
+            }
+
+            if (selectedFiles == null || selectedFiles.Count == 0)
+            {
+                return;
+            }
+
+            var streams = new List<(string FileName, Stream Content)>();
+
+            try
+            {
+                foreach (var file in selectedFiles)
+                {
+                    var stream = file.OpenReadStream(10 * 1024 * 1024); // 10 MB limit per file
+                    streams.Add((file.Name, stream));
+                }
+
+                var result = await RequestComparisonGateway.StateRequestStreamsAsync(streams, cacheKey);
+                batchId = result.BatchId;
+                uploadedCount = result.FileCount;
+                cacheHit = result.CacheHit;
+            }
+            finally
+            {
+                foreach (var (_, stream) in streams)
+                {
+                    await stream.DisposeAsync();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Upload failed: {ex.Message}";
+            Logger.LogError(ex, "Failed to upload request files");
+        }
+        finally
+        {
+            isUploading = false;
+        }
+    }
+
+    private async Task StartComparison()
+    {
+        if (!CanStartComparison) return;
+
+        isRunning = true;
+        errorMessage = null;
+        progressPercent = 0;
+        statusMessage = "Starting comparison...";
+        currentPhase = "Initializing";
+        progressLog.Clear();
+        cts = new CancellationTokenSource();
+
+        try
+        {
+            using var http = HttpClientFactory.CreateClient();
+            http.BaseAddress = new Uri(NavigationManager.BaseUri);
+
+            var request = new CreateRequestComparisonJobRequest
+            {
+                RequestBatchId = batchId!,
+                EndpointA = endpointA,
+                EndpointALabel = GetEndpointDisplayLabel(selectedEndpointA, endpointA),
+                EndpointB = endpointB,
+                EndpointBLabel = GetEndpointDisplayLabel(selectedEndpointB, endpointB),
+                HeadersA = headersA.Where(h => !string.IsNullOrEmpty(h.Key))
+                    .ToDictionary(h => h.Key, h => h.Value ?? ""),
+                HeadersB = headersB.Where(h => !string.IsNullOrEmpty(h.Key))
+                    .ToDictionary(h => h.Key, h => h.Value ?? ""),
+                ContentTypeOverride = string.IsNullOrWhiteSpace(contentTypeOverride)
+                    ? null
+                    : contentTypeOverride,
+                TimeoutMs = timeoutMs,
+                MaxConcurrency = maxConcurrency,
+                UseAlternateContractForEndpointB = endpointBUsesAlternateContract,
+                AlternateContractProfileId = endpointBUsesAlternateContract
+                    ? selectedAlternateContractProfileId
+                    : null,
+                // Configuration parity with Home
+                ModelName = selectedModelName,
+                IgnoreCollectionOrder = ignoreCollectionOrder,
+                IgnoreStringCase = ignoreStringCase,
+                IgnoreTrailingWhitespaceAtEnd = ignoreTrailingWhitespaceAtEnd,
+                TreatNullAndEmptyCollectionsAsEqual = treatNullAndEmptyCollectionsAsEqual,
+                IgnoreXmlNamespaces = ignoreXmlNamespaces,
+                EnableSemanticAnalysis = enableSemanticAnalysis,
+                EnableEnhancedStructuralAnalysis = enableEnhancedStructuralAnalysis,
+                IgnoreRules = IgnoreRules.Where(r => !string.IsNullOrWhiteSpace(r.PropertyPath)).ToList(),
+                MaskRules = MaskRules.Where(r => !string.IsNullOrWhiteSpace(r.PropertyPath))
+                    .Select(r => new MaskRuleDto
+                    {
+                        PropertyPath = r.PropertyPath,
+                        PreserveLastCharacters = r.PreserveLastCharacters,
+                        MaskCharacter = string.IsNullOrWhiteSpace(r.MaskCharacter) ? "*" : r.MaskCharacter
+                    }).ToList(),
+                SmartIgnoreRules = new List<SmartIgnoreRuleDto>()
+            };
+
+            currentJobId = await RequestComparisonGateway.StartComparisonAsync(request, cts.Token);
+
+            // Subscribe to SignalR progress updates
+            if (!string.IsNullOrEmpty(currentJobId))
+            {
+                await ProgressService.SubscribeToJobAsync(currentJobId);
+            }
+
+            // Poll for status as fallback (reduced frequency since SignalR handles most updates)
+            while (!cts.Token.IsCancellationRequested)
+            {
+                await Task.Delay(2000, cts.Token);
+
+                var statusResponse = await RequestComparisonGateway.GetJobStatusAsync(currentJobId!);
+
+                if (statusResponse == null) continue;
+
+                if (statusResponse.Status == "Completed")
+                {
+                    var result = await RequestComparisonGateway.GetJobResultAsync(currentJobId!);
+                    if (result != null)
+                    {
+                        await OnComparisonComplete.InvokeAsync(result);
+                    }
+                    break;
+                }
+                else if (statusResponse.Status == "Failed")
+                {
+                    errorMessage = statusResponse.Error ?? "Job failed";
+                    break;
+                }
+                else if (statusResponse.Status == "Cancelled")
+                {
+                    statusMessage = "Job was cancelled";
+                    break;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            statusMessage = "Cancelled";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Comparison failed: {ex.Message}";
+            Logger.LogError(ex, "Request comparison failed");
+        }
+        finally
+        {
+            isRunning = false;
+            await ProgressService.UnsubscribeAsync();
+            cts?.Dispose();
+            cts = null;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                await ProgressService.StartAsync();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Failed to start request comparison progress subscriber");
+            }
+        }
+    }
+    private async Task CancelJob()
+    {
+        if (string.IsNullOrEmpty(currentJobId)) return;
+
+        cts?.Cancel();
+
+        try
+        {
+            await RequestComparisonGateway.CancelJobAsync(currentJobId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to cancel job");
+        }
+    }
+
+    private string GetEndpointDisplayLabel(string selectedEndpointValue, string endpointUrl)
+    {
+        if (!string.Equals(selectedEndpointValue, CustomEndpointValue, StringComparison.Ordinal))
+        {
+            var option = availableEndpoints.FirstOrDefault(e => string.Equals(e.Url, selectedEndpointValue, StringComparison.Ordinal));
+            if (!string.IsNullOrWhiteSpace(option?.Name))
+            {
+                return option.Name;
+            }
+        }
+
+        return BuildEndpointFallbackLabel(endpointUrl);
+    }
+
+    private static string BuildEndpointFallbackLabel(string endpointUrl)
+    {
+        if (Uri.TryCreate(endpointUrl, UriKind.Absolute, out var uri))
+        {
+            var path = uri.AbsolutePath.Trim('/');
+            return string.IsNullOrWhiteSpace(path)
+                ? uri.Host
+                : $"{uri.Host}/{path}";
+        }
+
+        return endpointUrl;
+    }
+
+    private void OnEndpointAChanged(string value)
+    {
+        selectedEndpointA = value;
+        if (string.Equals(value, CustomEndpointValue, StringComparison.Ordinal))
+        {
+            contentTypeOverride = null;
+            headersA.Clear();
+            return;
+        }
+
+        endpointA = value;
+        contentTypeOverride = null;
+        headersA.Clear();
+
+        var option = availableEndpoints.FirstOrDefault(e => string.Equals(e.Url, value, StringComparison.OrdinalIgnoreCase));
+        if (option == null)
+        {
+            return;
+        }
+
+        contentTypeOverride = string.IsNullOrWhiteSpace(option.ContentType)
+            ? null
+            : option.ContentType;
+
+        foreach (var header in option.DefaultHeaders ?? Enumerable.Empty<KeyValuePair<string, string>>())
+        {
+            headersA.Add(new HeaderPair { Key = header.Key, Value = header.Value });
+        }
+    }
+
+    private void OnEndpointBChanged(string value)
+    {
+        selectedEndpointB = value;
+        if (string.Equals(value, CustomEndpointValue, StringComparison.Ordinal))
+        {
+            headersB.Clear();
+            return;
+        }
+
+        endpointB = value;
+        headersB.Clear();
+
+        var option = availableEndpoints.FirstOrDefault(e => string.Equals(e.Url, value, StringComparison.OrdinalIgnoreCase));
+        if (option == null)
+        {
+            return;
+        }
+
+        foreach (var header in option.DefaultHeaders ?? Enumerable.Empty<KeyValuePair<string, string>>())
+        {
+            headersB.Add(new HeaderPair { Key = header.Key, Value = header.Value });
+        }
+    }
+
+    private async Task TryResolveCachedBatchAsync()
+    {
+        // TODO: Maybe revisit caching via gateway
+        await Task.CompletedTask;
+    }
+
+    private static string ComputeCacheKey(IEnumerable<IBrowserFile> files)
+    {
+        var ordered = files.OrderBy(f => f.Name, StringComparer.Ordinal);
+        var builder = new System.Text.StringBuilder();
+        foreach (var file in ordered)
+        {
+            builder.Append(file.Name)
+                .Append('|')
+                .Append(file.Size)
+                .Append('|')
+                .Append(file.LastModified.ToUnixTimeMilliseconds())
+                .Append(';');
+        }
+
+        var bytes = System.Text.Encoding.UTF8.GetBytes(builder.ToString());
+        var hash = System.Security.Cryptography.SHA256.HashData(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    private static string ComputeFilePathCacheKey(IEnumerable<string> filePaths)
+    {
+        var ordered = filePaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase);
+        var builder = new System.Text.StringBuilder();
+        foreach (var path in ordered)
+        {
+            var info = new FileInfo(path);
+            builder.Append(info.FullName)
+                .Append('|')
+                .Append(info.Exists ? info.Length : 0)
+                .Append('|')
+                .Append(info.Exists ? info.LastWriteTimeUtc.Ticks : 0)
+                .Append(';');
+        }
+
+        var bytes = System.Text.Encoding.UTF8.GetBytes(builder.ToString());
+        var hash = System.Security.Cryptography.SHA256.HashData(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+
+    private void ApplyLargeBatchDefaultsForSelection()
+    {
+        if (!IsLargeBatchSelection || largeBatchDefaultsApplied)
+        {
+            return;
+        }
+
+        maxConcurrency = EffectiveLargeBatchDefaultConcurrency;
+        SetEnableEnhancedStructuralAnalysis(false);
+        largeBatchDefaultsApplied = true;
+    }
+
+    private static IReadOnlyList<string> EnumerateEligibleRequestFiles(string directoryPath)
+    {
+        var eligibleExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".xml",
+            ".json",
+            ".txt",
+        };
+
+        return Directory.EnumerateFiles(directoryPath, "*", SearchOption.AllDirectories)
+            .Where(path => !path.EndsWith(".headers.json", StringComparison.OrdinalIgnoreCase))
+            .Where(path => !Path.GetFileName(path).StartsWith("_", StringComparison.Ordinal))
+            .Where(path => eligibleExtensions.Contains(Path.GetExtension(path)))
+            .OrderBy(path => Path.GetRelativePath(directoryPath, path), StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static string ComputeDirectoryCacheKey(string directoryPath, IReadOnlyList<string> requestFiles)
+    {
+        var root = Path.GetFullPath(directoryPath);
+        var builder = new System.Text.StringBuilder();
+
+        foreach (var requestPath in requestFiles)
+        {
+            AppendFileFingerprint(builder, root, requestPath);
+
+            var sidecarPath = requestPath + ".headers.json";
+            if (File.Exists(sidecarPath))
+            {
+                AppendFileFingerprint(builder, root, sidecarPath);
+            }
+        }
+
+        var bytes = System.Text.Encoding.UTF8.GetBytes(builder.ToString());
+        var hash = System.Security.Cryptography.SHA256.HashData(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    private static void AppendFileFingerprint(System.Text.StringBuilder builder, string root, string path)
+    {
+        var info = new FileInfo(path);
+        builder.Append(Path.GetRelativePath(root, info.FullName).Replace('\\', '/'))
+            .Append('|')
+            .Append(info.Exists ? info.Length : 0)
+            .Append('|')
+            .Append(info.Exists ? info.LastWriteTimeUtc.Ticks : 0)
+            .Append(';');
+    }
+
+    private async Task OpenPropertySelector()
+    {
+        await OnPropertySelectorOpened.InvokeAsync();
+    }
+
+    private void RefreshAlternateContractProfiles()
+    {
+        if (string.IsNullOrWhiteSpace(selectedModelName))
+        {
+            availableAlternateContractProfiles = new List<string>();
+            selectedAlternateContractProfileId = null;
+            return;
+        }
+
+        availableAlternateContractProfiles = AlternateContractProfileRegistry
+            .GetProfileIds(selectedModelName)
+            .ToList();
+
+        if (!endpointBUsesAlternateContract)
+        {
+            selectedAlternateContractProfileId = null;
+            return;
+        }
+
+        if (availableAlternateContractProfiles.Count == 1)
+        {
+            HandleAlternateContractProfileChanged(availableAlternateContractProfiles[0]);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(selectedAlternateContractProfileId) &&
+            availableAlternateContractProfiles.Contains(selectedAlternateContractProfileId, StringComparer.Ordinal))
+        {
+            HandleAlternateContractProfileChanged(selectedAlternateContractProfileId);
+            return;
+        }
+
+        selectedAlternateContractProfileId = null;
+    }
+
+    private async Task OpenTreePropertySelector()
+    {
+        await OnTreePropertySelectorOpened.InvokeAsync();
+    }
+
+    public void AddIgnoreRule(IgnoreRule rule)
+    {
+        var existingRule = IgnoreRules.FirstOrDefault(r => r.PropertyPath == rule.PropertyPath);
+        if (existingRule != null)
+        {
+            IgnoreRules.Remove(existingRule);
+        }
+        IgnoreRules.Add(rule);
+        StateHasChanged();
+    }
+
+    public void AddIgnoreRulesBatch(IEnumerable<IgnoreRule> rules)
+    {
+        foreach (var rule in rules)
+        {
+            var existingRule = IgnoreRules.FirstOrDefault(r => r.PropertyPath == rule.PropertyPath);
+            if (existingRule != null)
+            {
+                IgnoreRules.Remove(existingRule);
+            }
+            IgnoreRules.Add(rule);
+        }
+        StateHasChanged();
+    }
+
+    private void RemoveIgnoreRule(IgnoreRule rule)
+    {
+        IgnoreRules.Remove(rule);
+        StateHasChanged();
+    }
+
+    private void ClearAllIgnoreRules()
+    {
+        IgnoreRules.Clear();
+        StateHasChanged();
+    }
+
+    public Type? GetSelectedModelType()
+    {
+        if (string.IsNullOrEmpty(selectedModelName))
+            return null;
+        try
+        {
+            return DeserializationService.GetModelType(selectedModelName);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task HandleImportIgnoreRul(InputFileChangeEventArgs e)
+    {
+        importStatusMessage = string.Empty;
+        importStatusIsError = false;
+        var file = e.File;
+
+        if (file == null) return;
+
+        try
+        {
+            await using var stream = file.OpenReadStream(10 * 1024 * 1024); // 10 MB limit
+            var importedRules = await JsonSerializer.DeserializeAsync<List<IgnoreRule>>(stream, new JsonSerializerOptions(){PropertyNameCaseInsensitive = true});
+
+            if (importedRules != null && importedRules.Any())
+            {
+                AddIgnoreRulesBatch(importedRules);
+                importStatusMessage = $"Successfully imported {importedRules.Count} ignore rules.";
+                importStatusIsError = false;
+            }
+            else
+            {
+                importStatusMessage = "No ignore rules found in the file.";
+                importStatusIsError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            importStatusMessage = $"Failed to import ignore rules: {ex.Message}";
+            importStatusIsError = true;
+            Logger.LogError(ex, "Failed to import ignore rules from file");
+        }
+
+        StateHasChanged();
+    }
+
+    private void HandleProgressUpdate(ComparisonProgressUpdate update)
+    {
+        // Ignore updates that don't belong to the current job
+        if (update.JobId != currentJobId)
+        {
+            return;
+        }
+
+        InvokeAsync(() =>
+        {
+            // Only update if progress is moving forward (or it's a phase change)
+            if (update.PercentComplete >= progressPercent || update.Phase.ToString() != currentPhase)
+            {
+                currentPhase = update.Phase.ToString();
+                progressPercent = update.PercentComplete;
+                statusMessage = update.Message;
+
+                // Add to log
+                progressLog.Add((update.Timestamp, update.Phase.ToString(), update.Message));
+
+                // Keep only last 50 entries
+                if (progressLog.Count > 50)
+                {
+                    progressLog = progressLog.Skip(progressLog.Count - 50).ToList();
+                }
+
+                StateHasChanged();
+            }
+        });
+    }
+
+    private string GetPhaseIcon() => currentPhase switch
+    {
+        "Initializing" => Icons.Material.Filled.HourglassEmpty,
+        "Parsing" => Icons.Material.Filled.Description,
+        "Executing" => Icons.Material.Filled.Send,
+        "Comparing" => Icons.Material.Filled.CompareArrows,
+        "Analyzing" => Icons.Material.Filled.Analytics,
+        "Finalizing" => Icons.Material.Filled.Inventory,
+        "Completed" => Icons.Material.Filled.CheckCircle,
+        "Failed" => Icons.Material.Filled.Error,
+        "Cancelled" => Icons.Material.Filled.Cancel,
+        _ => Icons.Material.Filled.Info
+    };
+
+    private Color GetPhaseColor() => currentPhase switch
+    {
+        "Initializing" => Color.Default,
+        "Parsing" => Color.Info,
+        "Executing" => Color.Primary,
+        "Comparing" => Color.Secondary,
+        "Analyzing" => Color.Info,
+        "Finalizing" => Color.Warning,
+        "Completed" => Color.Success,
+        "Failed" => Color.Error,
+        "Cancelled" => Color.Warning,
+        _ => Color.Default
+    };
+
+    private Color GetPhaseChipColor(string phase) => phase switch
+    {
+        "Initializing" => Color.Default,
+        "Parsing" => Color.Info,
+        "Executing" => Color.Primary,
+        "Comparing" => Color.Secondary,
+        "Analyzing" => Color.Info,
+        "Finalizing" => Color.Warning,
+        "Completed" => Color.Success,
+        "Failed" => Color.Error,
+        "Cancelled" => Color.Warning,
+        _ => Color.Default
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        ProgressService.OnProgressUpdate -= HandleProgressUpdate;
+        await ProgressService.UnsubscribeAsync();
+    }
+
+    private class HeaderPair
+    {
+        public string Key { get; set; } = "";
+        public string? Value { get; set; }
+    }
+}

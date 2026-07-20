@@ -1,0 +1,329 @@
+trigger:
+- main
+
+pr:
+- main
+
+resources:
+  repositories:
+  - repository: GitSource
+    type: git
+    # Replace name/ref with the destination Azure Repo and branch.
+    name: REPLACE_PROJECT/REPLACE_REPOSITORY
+    ref: refs/heads/main
+
+pool:
+  vmImage: windows-latest
+
+variables:
+  buildConfiguration: Release
+  targetRuntime: win-x64
+  publishRoot: '$(Build.ArtifactStagingDirectory)\v2'
+
+  publishRepoBranch: main
+  publishRepoRoot: releases\v2
+  publishRepoCliPath: cli
+  publishRepoDesktopPath: desktop
+
+steps:
+- checkout: self
+  clean: true
+  fetchDepth: 1
+  persistCredentials: true
+  path: s
+
+- checkout: GitSource
+  clean: false
+  fetchDepth: 1
+  persistCredentials: true
+  path: GitSource
+
+- task: UseDotNet@2
+  displayName: Install .NET SDK
+  inputs:
+    packageType: sdk
+    version: 10.0.103
+    performMultiLevelLookup: true
+
+- powershell: |
+    $ErrorActionPreference = 'Stop'
+
+    $sourceRoot = Join-Path $env:BUILD_SOURCESDIRECTORY 'Source'
+    $testsRoot = Join-Path $env:BUILD_SOURCESDIRECTORY 'Tests'
+    $sourceProjects = @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -Filter *.csproj -File | Sort-Object FullName)
+    $testProjects = @(Get-ChildItem -LiteralPath $testsRoot -Recurse -Filter *.csproj -File | Sort-Object FullName)
+    $projects = @($sourceProjects + $testProjects)
+
+    foreach ($project in $projects) {
+      Write-Host "Restoring $($project.FullName)"
+      dotnet restore $project.FullName --nologo
+      if ($LASTEXITCODE -ne 0) {
+        throw "dotnet restore failed for $($project.FullName)"
+      }
+    }
+  displayName: Restore V2 projects
+  workingDirectory: '$(Build.SourcesDirectory)'
+
+- powershell: |
+    $ErrorActionPreference = 'Stop'
+
+    $sourceRoot = Join-Path $env:BUILD_SOURCESDIRECTORY 'Source'
+    $sourceProjects = @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -Filter *.csproj -File | Sort-Object FullName)
+
+    foreach ($project in $sourceProjects) {
+      Write-Host "Building $($project.FullName)"
+      dotnet build $project.FullName --configuration $env:BUILD_CONFIGURATION --no-restore --nologo
+      if ($LASTEXITCODE -ne 0) {
+        throw "dotnet build failed for $($project.FullName)"
+      }
+    }
+  displayName: Build V2 source projects
+  workingDirectory: '$(Build.SourcesDirectory)'
+  env:
+    BUILD_CONFIGURATION: $(buildConfiguration)
+
+- powershell: |
+    $ErrorActionPreference = 'Stop'
+
+    $testsRoot = Join-Path $env:BUILD_SOURCESDIRECTORY 'Tests'
+    $testProjects = @(Get-ChildItem -LiteralPath $testsRoot -Recurse -Filter *.csproj -File | Sort-Object FullName)
+
+    foreach ($project in $testProjects) {
+      Write-Host "Building $($project.FullName)"
+      dotnet build $project.FullName --configuration $env:BUILD_CONFIGURATION --no-restore --nologo
+      if ($LASTEXITCODE -ne 0) {
+        throw "dotnet build failed for $($project.FullName)"
+      }
+    }
+  displayName: Build V2 test projects
+  workingDirectory: '$(Build.SourcesDirectory)'
+  env:
+    BUILD_CONFIGURATION: $(buildConfiguration)
+
+- powershell: |
+    $ErrorActionPreference = 'Stop'
+
+    function Get-RelativePathCompat {
+      param(
+        [Parameter(Mandatory = $true)][string]$BasePath,
+        [Parameter(Mandatory = $true)][string]$TargetPath
+      )
+
+      $fullBasePath = ([IO.Path]::GetFullPath($BasePath)).TrimEnd('\') + '\'
+      $fullTargetPath = [IO.Path]::GetFullPath($TargetPath)
+      if (-not $fullTargetPath.StartsWith($fullBasePath, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Target path must be inside the base path: $TargetPath"
+      }
+
+      return $fullTargetPath.Substring($fullBasePath.Length)
+    }
+    # Tests/global.json selects Microsoft Testing Platform. Keep this step in
+    # the physical Tests directory and use --project rather than VSTest-style
+    # discovery from the repository root.
+    $testsRoot = Join-Path $env:BUILD_SOURCESDIRECTORY 'Tests'
+    $testProjects = @(Get-ChildItem -LiteralPath $testsRoot -Recurse -Filter *.csproj -File | Sort-Object FullName)
+
+    Push-Location $testsRoot
+    try {
+      foreach ($project in $testProjects) {
+        $relativeProject = Get-RelativePathCompat $testsRoot $project.FullName
+        Write-Host "Testing $relativeProject"
+        dotnet test --project $relativeProject --configuration $env:BUILD_CONFIGURATION --no-build --no-restore -v:minimal
+        if ($LASTEXITCODE -ne 0) {
+          throw "dotnet test failed for $relativeProject"
+        }
+      }
+    }
+    finally {
+      Pop-Location
+    }
+  displayName: Run V2 tests
+  workingDirectory: '$(Build.SourcesDirectory)'
+  env:
+    BUILD_CONFIGURATION: $(buildConfiguration)
+
+- powershell: |
+    $ErrorActionPreference = 'Stop'
+
+    $publishRoot = [IO.Path]::GetFullPath($env:PUBLISH_ROOT)
+    $publishWorkRoot = Join-Path $env:AGENT_TEMPDIRECTORY ("v2-publish-work-{0}" -f $env:BUILD_BUILDID)
+    $cliOutput = Join-Path $publishWorkRoot 'cli'
+    $desktopOutput = Join-Path $publishWorkRoot 'desktop'
+    $cliRelease = Join-Path $publishRoot 'cli'
+    $desktopRelease = Join-Path $publishRoot 'desktop'
+
+    New-Item -ItemType Directory -Force -Path $cliOutput, $desktopOutput, $cliRelease, $desktopRelease | Out-Null
+
+    $publishArguments = @(
+      '--configuration', $env:BUILD_CONFIGURATION,
+      '--runtime', $env:TARGET_RUNTIME,
+      '--self-contained', 'true',
+      '--nologo',
+      '-p:PublishSingleFile=true',
+      '-p:UseAppHost=true',
+      '-p:IncludeNativeLibrariesForSelfExtract=true',
+      '-p:PublishTrimmed=false'
+    )
+
+    $cliProject = Join-Path $env:BUILD_SOURCESDIRECTORY 'Source\ParityBench.NET.Cli\ParityBench.NET.Cli.csproj'
+    $desktopProject = Join-Path $env:BUILD_SOURCESDIRECTORY 'Source\ParityBench.NET.Desktop\ParityBench.NET.Desktop.csproj'
+
+    Write-Host 'Publishing V2 CLI'
+    dotnet publish $cliProject @publishArguments --output $cliOutput
+    if ($LASTEXITCODE -ne 0) {
+      throw 'dotnet publish failed for the V2 CLI'
+    }
+
+    Write-Host 'Publishing V2 Desktop'
+    dotnet publish $desktopProject @publishArguments --output $desktopOutput
+    if ($LASTEXITCODE -ne 0) {
+      throw 'dotnet publish failed for the V2 Desktop'
+    }
+
+    $packages = @(
+      @{
+        Source = $cliOutput
+        PackageRoot = Join-Path $publishWorkRoot 'cli-package'
+        Executable = Join-Path $cliOutput 'ParityBench.NET.Cli.exe'
+        Destination = Join-Path $cliRelease ("ParityBench.NET.Cli-{0}.zip" -f $env:TARGET_RUNTIME)
+      },
+      @{
+        Source = $desktopOutput
+        PackageRoot = Join-Path $publishWorkRoot 'desktop-package'
+        Executable = Join-Path $desktopOutput 'ParityBench.NET.Desktop.exe'
+        Destination = Join-Path $desktopRelease ("ParityBench.NET.Desktop-{0}.zip" -f $env:TARGET_RUNTIME)
+      }
+    )
+
+    foreach ($package in $packages) {
+      if (-not (Test-Path -LiteralPath $package.Executable -PathType Leaf)) {
+        throw "Expected executable was not produced: $($package.Executable)"
+      }
+
+      $reportAssetsSource = Join-Path $package.Source 'BlazorReportAssets\wwwroot'
+      if (-not (Test-Path -LiteralPath (Join-Path $reportAssetsSource 'index.html') -PathType Leaf) -or
+          -not (Test-Path -LiteralPath (Join-Path $reportAssetsSource '_framework') -PathType Container)) {
+        throw "Published Blazor report assets were not produced in $reportAssetsSource"
+      }
+
+      $packageReportAssets = Join-Path $package.PackageRoot 'BlazorReportAssets'
+      New-Item -ItemType Directory -Force -Path $package.PackageRoot, $packageReportAssets | Out-Null
+
+      Get-ChildItem -LiteralPath $package.Source -Force |
+        Where-Object Name -ne 'BlazorReportAssets' |
+        Copy-Item -Destination $package.PackageRoot -Recurse -Force
+      Get-ChildItem -LiteralPath $reportAssetsSource -Force |
+        Copy-Item -Destination $packageReportAssets -Recurse -Force
+
+      Compress-Archive -Path (Join-Path $package.PackageRoot '*') -DestinationPath $package.Destination -CompressionLevel Optimal -Force
+    }
+
+    $stagedFiles = @(Get-ChildItem -LiteralPath $publishRoot -Recurse -File)
+    if ($stagedFiles.Count -ne 2 -or @($stagedFiles | Where-Object Extension -ne '.zip').Count -ne 0) {
+      throw "Expected exactly two ZIP packages, but found $($stagedFiles.Count) files in $publishRoot"
+    }
+
+    Write-Host 'Staged V2 CLI and Desktop ZIP packages.'
+  displayName: Publish V2 CLI and Desktop packages
+  workingDirectory: '$(Build.SourcesDirectory)'
+  env:
+    BUILD_CONFIGURATION: $(buildConfiguration)
+    TARGET_RUNTIME: $(targetRuntime)
+    PUBLISH_ROOT: $(publishRoot)
+
+- task: PublishBuildArtifacts@1
+  displayName: Publish V2 binaries as pipeline artifact
+  inputs:
+    PathtoPublish: '$(publishRoot)'
+    ArtifactName: v2-published
+    publishLocation: Container
+
+- powershell: |
+    $ErrorActionPreference = 'Stop'
+
+    $publishRoot = [IO.Path]::GetFullPath($env:PUBLISH_ROOT)
+    $repoCheckout = [IO.Path]::GetFullPath($env:PUBLISH_REPO_CHECKOUT)
+
+    & git -C $repoCheckout rev-parse --is-inside-work-tree
+    if ($LASTEXITCODE -ne 0) {
+      throw "GitSource checkout is unavailable: $repoCheckout"
+    }
+
+    $destinationRoot = [IO.Path]::GetFullPath((Join-Path $repoCheckout $env:PUBLISH_REPO_ROOT))
+    function Get-RelativePathCompat {
+      param(
+        [Parameter(Mandatory = $true)][string]$BasePath,
+        [Parameter(Mandatory = $true)][string]$TargetPath
+      )
+
+      $fullBasePath = ([IO.Path]::GetFullPath($BasePath)).TrimEnd('\') + '\'
+      $fullTargetPath = [IO.Path]::GetFullPath($TargetPath)
+      if (-not $fullTargetPath.StartsWith($fullBasePath, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Target path must be inside the base path: $TargetPath"
+      }
+
+      return $fullTargetPath.Substring($fullBasePath.Length)
+    }
+    $relativeDestination = Get-RelativePathCompat $repoCheckout $destinationRoot
+    if ($relativeDestination -eq '..' -or $relativeDestination.StartsWith("..$([IO.Path]::DirectorySeparatorChar)")) {
+      throw 'publishRepoRoot must remain inside the checked-out destination repository.'
+    }
+
+    $cliSource = Join-Path $publishRoot 'cli'
+    $desktopSource = Join-Path $publishRoot 'desktop'
+    $cliDestination = Join-Path $destinationRoot $env:PUBLISH_REPO_CLI_PATH
+    $desktopDestination = Join-Path $destinationRoot $env:PUBLISH_REPO_DESKTOP_PATH
+
+    foreach ($path in @($cliSource, $desktopSource)) {
+      if (-not (Test-Path -LiteralPath $path -PathType Container)) {
+        throw "Published output directory does not exist: $path"
+      }
+    }
+
+    # Remove only the two validated release directories in the checked-out repo so
+    # deleted files from an older publish do not survive the copy.
+    foreach ($target in @($cliDestination, $desktopDestination)) {
+      if (Test-Path -LiteralPath $target) {
+        Remove-Item -LiteralPath $target -Recurse -Force
+      }
+      New-Item -ItemType Directory -Force -Path $target | Out-Null
+    }
+
+    Get-ChildItem -LiteralPath $cliSource -Force | Copy-Item -Destination $cliDestination -Recurse -Force
+    Get-ChildItem -LiteralPath $desktopSource -Force | Copy-Item -Destination $desktopDestination -Recurse -Force
+
+    $relativeCli = Get-RelativePathCompat $repoCheckout $cliDestination
+    $relativeDesktop = Get-RelativePathCompat $repoCheckout $desktopDestination
+    & git -C $repoCheckout add -A -- $relativeCli $relativeDesktop
+    if ($LASTEXITCODE -ne 0) {
+      throw 'Could not stage the published V2 files.'
+    }
+
+    & git -C $repoCheckout diff --cached --quiet
+    if ($LASTEXITCODE -eq 0) {
+      Write-Host 'The destination repository already contains these published binaries.'
+      exit 0
+    }
+
+    & git -C $repoCheckout config user.name 'Azure DevOps Build'
+    & git -C $repoCheckout config user.email 'azure-devops-build@local'
+    $commitMessage = "Publish V2 CLI and Desktop ($env:BUILD_BUILDNUMBER)"
+    & git -C $repoCheckout commit --quiet -m $commitMessage
+    if ($LASTEXITCODE -ne 0) {
+      throw 'Could not commit the published V2 files.'
+    }
+
+    & git -C $repoCheckout push origin "HEAD:$env:PUBLISH_REPO_BRANCH"
+    if ($LASTEXITCODE -ne 0) {
+      throw 'Could not push the published V2 files to the destination repository.'
+    }
+  displayName: Commit published V2 CLI and Desktop to Azure DevOps repo
+  condition: succeeded()
+  workingDirectory: '$(Build.SourcesDirectory)'
+  env:
+    PUBLISH_ROOT: $(publishRoot)
+    PUBLISH_REPO_CHECKOUT: $(Pipeline.Workspace)\GitSource
+    PUBLISH_REPO_BRANCH: $(publishRepoBranch)
+    PUBLISH_REPO_ROOT: $(publishRepoRoot)
+    PUBLISH_REPO_CLI_PATH: $(publishRepoCliPath)
+    PUBLISH_REPO_DESKTOP_PATH: $(publishRepoDesktopPath)

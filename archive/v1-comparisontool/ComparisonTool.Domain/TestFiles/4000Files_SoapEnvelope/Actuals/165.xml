@@ -1,0 +1,73 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<soapenv:Envelope xmlns:search="urn:soap.co.uk/soap:search1" xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+  <soapenv:Body>
+    <search:SearchResponse>
+      <search:ReportId>RPT-000165-A</search:ReportId>
+      <search:GeneratedOn>2026-04-15T12:53:24.4686595Z</search:GeneratedOn>
+      <search:Summary>
+        <search:TotalResults>13</search:TotalResults>
+        <search:SuccessCount>10</search:SuccessCount>
+        <search:FailureCount>3</search:FailureCount>
+      </search:Summary>
+      <search:Results>
+        <search:Result>
+          <search:Id>16500</search:Id>
+          <search:Name>Result-165-0-Updated</search:Name>
+          <search:Score>28.2</search:Score>
+          <search:Details>
+            <search:Description>Updated description 0</search:Description>
+            <search:Status>WARN</search:Status>
+          </search:Details>
+          <search:Tags>
+            <search:Tag>core</search:Tag>
+            <search:Tag>search</search:Tag>
+            <search:Tag>tag-0</search:Tag>
+            <search:Tag>delta</search:Tag>
+          </search:Tags>
+        </search:Result>
+        <search:Result>
+          <search:Id>16501</search:Id>
+          <search:Name>Result-165-1-Updated</search:Name>
+          <search:Score>40.09</search:Score>
+          <search:Details>
+            <search:Description>Updated description 1</search:Description>
+            <search:Status>OK</search:Status>
+          </search:Details>
+          <search:Tags>
+            <search:Tag>core</search:Tag>
+            <search:Tag>search</search:Tag>
+            <search:Tag>tag-1</search:Tag>
+            <search:Tag>delta</search:Tag>
+          </search:Tags>
+        </search:Result>
+        <search:Result>
+          <search:Id>16502</search:Id>
+          <search:Name>Result-165-2-Updated</search:Name>
+          <search:Score>78.98</search:Score>
+          <search:Details>
+            <search:Description>Updated description 2</search:Description>
+            <search:Status>WARN</search:Status>
+          </search:Details>
+          <search:Tags>
+            <search:Tag>core</search:Tag>
+            <search:Tag>search</search:Tag>
+            <search:Tag>tag-2</search:Tag>
+            <search:Tag>delta</search:Tag>
+          </search:Tags>
+        </search:Result>
+      </search:Results>
+      <search:RelatedItems>
+        <search:Item>
+          <search:ItemId>1651</search:ItemId>
+          <search:ItemName>Related-165-1-Alt</search:ItemName>
+          <search:Relevance>0.193</search:Relevance>
+        </search:Item>
+        <search:Item>
+          <search:ItemId>1650</search:ItemId>
+          <search:ItemName>Related-165-0-Alt</search:ItemName>
+          <search:Relevance>0.7598</search:Relevance>
+        </search:Item>
+      </search:RelatedItems>
+    </search:SearchResponse>
+  </soapenv:Body>
+</soapenv:Envelope>

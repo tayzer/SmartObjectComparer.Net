@@ -1,0 +1,75 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<soapenv:Envelope xmlns:search="urn:soap.co.uk/soap:search1" xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+  <soapenv:Body>
+    <search:SearchResponse>
+      <search:ReportId>RPT-001804</search:ReportId>
+      <search:GeneratedOn>2026-04-15T14:15:24.15679Z</search:GeneratedOn>
+      <search:Summary>
+        <search:TotalResults>13</search:TotalResults>
+        <search:SuccessCount>11</search:SuccessCount>
+        <search:FailureCount>2</search:FailureCount>
+      </search:Summary>
+      <search:Results>
+        <search:Result>
+          <search:Id>180400</search:Id>
+          <search:Name>Result-1804-0</search:Name>
+          <search:Score>64.48</search:Score>
+          <search:Details>
+            <search:Description>Description 0</search:Description>
+            <search:Status>OK</search:Status>
+          </search:Details>
+          <search:Tags>
+            <search:Tag>core</search:Tag>
+            <search:Tag>search</search:Tag>
+            <search:Tag>tag-0</search:Tag>
+          </search:Tags>
+        </search:Result>
+        <search:Result>
+          <search:Id>180401</search:Id>
+          <search:Name>Result-1804-1</search:Name>
+          <search:Score>96.93</search:Score>
+          <search:Details>
+            <search:Description>Description 1</search:Description>
+            <search:Status>OK</search:Status>
+          </search:Details>
+          <search:Tags>
+            <search:Tag>core</search:Tag>
+            <search:Tag>search</search:Tag>
+            <search:Tag>tag-1</search:Tag>
+          </search:Tags>
+        </search:Result>
+        <search:Result>
+          <search:Id>180402</search:Id>
+          <search:Name>Result-1804-2</search:Name>
+          <search:Score>4.24</search:Score>
+          <search:Details>
+            <search:Description>Description 2</search:Description>
+            <search:Status>OK</search:Status>
+          </search:Details>
+          <search:Tags>
+            <search:Tag>core</search:Tag>
+            <search:Tag>search</search:Tag>
+            <search:Tag>tag-2</search:Tag>
+          </search:Tags>
+        </search:Result>
+      </search:Results>
+      <search:RelatedItems>
+        <search:Item>
+          <search:ItemId>18040</search:ItemId>
+          <search:ItemName>Related-1804-0</search:ItemName>
+          <search:Relevance>0.5546</search:Relevance>
+        </search:Item>
+        <search:Item>
+          <search:ItemId>18041</search:ItemId>
+          <search:ItemName>Related-1804-1</search:ItemName>
+          <search:Relevance>0.4944</search:Relevance>
+        </search:Item>
+        <search:Item>
+          <search:ItemId>18042</search:ItemId>
+          <search:ItemName>Related-1804-2</search:ItemName>
+          <search:Relevance>0.0322</search:Relevance>
+        </search:Item>
+      </search:RelatedItems>
+    </search:SearchResponse>
+  </soapenv:Body>
+</soapenv:Envelope>

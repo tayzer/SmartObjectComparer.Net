@@ -1,0 +1,18 @@
+<Project Sdk="MSTest.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\ParityBench.NET.ClientCustomerLookupExample\ParityBench.NET.ClientCustomerLookupExample.csproj" />
+    <ProjectReference Include="..\..\Source\ParityBench.NET.ManualRunFixtureGenerator\ParityBench.NET.ManualRunFixtureGenerator.csproj" />
+    <ProjectReference Include="..\..\Source\ParityBench.NET.TestEndpoints\ParityBench.NET.TestEndpoints.csproj" />
+  </ItemGroup>
+
+</Project>

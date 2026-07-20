@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <PackageReference Include="MudBlazor" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ParityBench.NET.Application\ParityBench.NET.Application.csproj" />
+    <ProjectReference Include="..\ParityBench.NET.Composition\ParityBench.NET.Composition.csproj" />
+    <ProjectReference Include="..\ParityBench.NET.Domain\ParityBench.NET.Domain.csproj" />
+    <ProjectReference Include="..\ParityBench.NET.UI\ParityBench.NET.UI.csproj" />
+  </ItemGroup>
+
+  <Target Name="PublishParityBenchReportAssets" AfterTargets="Publish" Condition="'$(PublishParityBenchReportAssets)' != 'false'">
+    <MSBuild Projects="..\ParityBench.NET.Report\ParityBench.NET.Report.csproj"
+             Targets="Publish"
+             Properties="Configuration=$(Configuration);PublishDir=$(PublishDir)BlazorReportAssets\;PublishParityBenchReportAssets=false" />
+  </Target>
+
+</Project>

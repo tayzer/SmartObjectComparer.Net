@@ -1,0 +1,603 @@
+using System.Text;
+using System.Xml.Serialization;
+
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+using ParityBench.NET.Application.ContractProfiles;
+using ParityBench.NET.Domain.Comparison;
+using ParityBench.NET.Domain.ContractProfiles;
+using ParityBench.NET.Domain.Requests;
+using ParityBench.NET.Infrastructure;
+
+namespace ParityBench.NET.Infrastructure.Tests;
+
+[TestClass]
+public sealed class ContractProfileInfrastructureTests
+{
+    [TestMethod]
+    public void ComparisonRuleDefaultsFileLoader_WhenNoFileIsConfigured_KeepsNamespaceIgnoringDefault()
+    {
+        ComparisonRuleDefaults defaults = ComparisonRuleDefaultsFileLoader.Load(
+            new ComparisonRuleDefaultsFileOptions(),
+            AppContext.BaseDirectory);
+
+        Assert.IsTrue(defaults.IgnoreXmlNamespaces);
+        Assert.AreEqual(0, defaults.IgnoreRules.Count);
+    }
+
+    [TestMethod]
+    public void ComparisonRuleDefaultsFileLoader_WhenTextFileIsConfigured_LoadsIgnoreRulesAndSkipsComments()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), $"paritybench-client-rules-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        string rulesPath = Path.Combine(directory, "ignore-rules.txt");
+        File.WriteAllLines(rulesPath, new[]
+        {
+            "# client-specific ignores",
+            "",
+            " Item.AccountId ",
+            "Response.Metadata.Timestamp",
+        });
+
+        try
+        {
+            ComparisonRuleDefaults defaults = ComparisonRuleDefaultsFileLoader.Load(
+                new ComparisonRuleDefaultsFileOptions { IgnoreRulesFile = "ignore-rules.txt" },
+                directory);
+
+            Assert.IsTrue(defaults.IgnoreXmlNamespaces);
+            CollectionAssert.AreEqual(
+                new[] { "Item.AccountId", "Response.Metadata.Timestamp" },
+                defaults.IgnoreRules.Select(rule => rule.PropertyPath).ToArray());
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void ComparisonRuleDefaultsFileLoader_WhenJsonConfigurationIsConfigured_LoadsV1SettingsAndIgnoreRules()
+    {
+        string json = """
+            {
+              "schemaVersion": 1,
+              "globalSettings": {
+                "ignoreCollectionOrder": true,
+                "ignoreStringCase": true,
+                "ignoreTrailingWhitespaceAtEnd": true,
+                "treatNullAndEmptyCollectionsAsEqual": true,
+                "ignoreXmlNamespaces": false
+              },
+              "ignoreRules": [
+                {
+                  "propertyPath": "Item.AccountId",
+                  "ignoreCompletely": true,
+                  "ignoreCollectionOrder": false,
+                  "treatNullAndEmptyCollectionsAsEqual": true
+                },
+                {
+                  "propertyPath": "Response.Metadata.Timestamp",
+                  "ignoreCompletely": true,
+                  "ignoreCollectionOrder": true,
+                  "treatNullAndEmptyCollectionsAsEqual": false
+                }
+              ]
+            }
+            """;
+
+        ComparisonRuleDefaults defaults = ComparisonRuleDefaultsFileLoader.Parse(json);
+
+        Assert.IsTrue(defaults.IgnoreCollectionOrder);
+        Assert.IsTrue(defaults.IgnoreStringCase);
+        Assert.IsTrue(defaults.IgnoreTrailingWhitespaceAtEnd);
+        Assert.IsTrue(defaults.TreatNullAndEmptyCollectionsAsEqual);
+        Assert.IsFalse(defaults.IgnoreXmlNamespaces);
+        Assert.AreEqual(2, defaults.IgnoreRules.Count);
+        IgnoreRuleDefinition accountRule = defaults.IgnoreRules.Single(rule => rule.PropertyPath == "Item.AccountId");
+        Assert.IsTrue(accountRule.IgnoreCompletely);
+        Assert.IsFalse(accountRule.IgnoreCollectionOrder);
+        Assert.IsTrue(accountRule.TreatNullAndEmptyCollectionsAsEqual);
+        Assert.IsTrue(defaults.IgnoreRules.Single(rule => rule.PropertyPath == "Response.Metadata.Timestamp").IgnoreCollectionOrder);
+    }
+
+    [TestMethod]
+    public void ComparisonRuleDefaultsFileLoader_WhenNamespaceOverrideIsProvided_OverridesJsonSetting()
+    {
+        string json = """
+            {
+              "schemaVersion": 1,
+              "globalSettings": { "ignoreXmlNamespaces": false },
+              "ignoreRules": [ { "propertyPath": "Item.AccountId" } ]
+            }
+            """;
+
+        ComparisonRuleDefaults defaults = ComparisonRuleDefaultsFileLoader.Parse(
+            json,
+            ignoreXmlNamespacesOverride: true);
+
+        Assert.IsTrue(defaults.IgnoreXmlNamespaces);
+        Assert.AreEqual("Item.AccountId", defaults.IgnoreRules.Single().PropertyPath);
+    }
+
+    [TestMethod]
+    public void ComparisonRuleDefaultsFileLoader_WhenConfiguredFileIsMissing_ThrowsClearError()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), $"paritybench-client-rules-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+
+        try
+        {
+            AssertThrows<InvalidOperationException>(() =>
+                ComparisonRuleDefaultsFileLoader.Load(
+                    new ComparisonRuleDefaultsFileOptions { IgnoreRulesFile = "missing.txt" },
+                    directory));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+    [TestMethod]
+    public void Resolve_WhenProfileIsRegistered_ReturnsProfile()
+    {
+        ContractProfileRegistry registry = new ContractProfileRegistry();
+        IContractProfile profile = CreateSampleProfile();
+        registry.Register(profile);
+
+        IContractProfile resolved = registry.Resolve(
+            BuiltInContractProfiles.SampleModelName,
+            new ContractProfileSelection(BuiltInContractProfiles.SampleProfileId));
+
+        Assert.AreSame(profile, resolved);
+        CollectionAssert.AreEqual(
+            new[] { ContractProfileSelection.SameContractProfileId, BuiltInContractProfiles.SampleProfileId },
+            registry.GetProfileIds(BuiltInContractProfiles.SampleModelName).ToArray());
+    }
+
+    [TestMethod]
+    public void Resolve_WhenProfileIsUnknown_ThrowsInvalidOperationException()
+    {
+        ContractProfileRegistry registry = new ContractProfileRegistry();
+
+        AssertThrows<InvalidOperationException>(() => registry.Resolve("Missing", new ContractProfileSelection("profile-a")));
+    }
+
+    [TestMethod]
+    public void Resolve_WhenProfileTargetsDifferentModel_ThrowsInvalidOperationException()
+    {
+        ContractProfileRegistry registry = new ContractProfileRegistry();
+        registry.Register(CreateSampleProfile());
+
+        AssertThrows<InvalidOperationException>(() => registry.Resolve("DifferentModel", new ContractProfileSelection(BuiltInContractProfiles.SampleProfileId)));
+    }
+
+    [TestMethod]
+    public void Register_WhenProfileIdAlreadyExists_ThrowsInvalidOperationException()
+    {
+        ContractProfileRegistry registry = new ContractProfileRegistry();
+        registry.Register(CreateSampleProfile());
+
+        AssertThrows<InvalidOperationException>(() => registry.Register(CreateSampleProfile()));
+    }
+
+    [TestMethod]
+    public void Resolve_WhenProfileSelectionIsOmitted_ReturnsSameContractProfile()
+    {
+        ContractProfileRegistry registry = new ContractProfileRegistry();
+        registry.Register(CreateSimpleProfile("profile-a"));
+        registry.Register(CreateSimpleProfile("profile-b"));
+
+        IContractProfile profile = registry.Resolve("SimpleModel");
+
+        Assert.AreEqual(ContractProfileSelection.SameContractProfileId, profile.ProfileId);
+        Assert.AreEqual("SimpleModel", profile.ResponseModelName);
+    }
+
+    [TestMethod]
+    public void Create_WhenLegacyDefaultIgnoreRulesAreProvided_ProjectsThemIntoComparisonDefaults()
+    {
+        IContractProfile profile = new ContractProfile<
+            SampleSoapCustomerLookupRequestEnvelope,
+            SampleAlternateJsonCustomerLookupRequest,
+            SampleSoapCustomerLookupResponseEnvelope,
+            SampleAlternateJsonCustomerLookupResponse>(
+            new JsonXmlContractPayloadSerializer(),
+            "legacy-profile",
+            "SimpleModel",
+            _ => new SampleAlternateJsonCustomerLookupRequest(),
+            _ => new SampleSoapCustomerLookupResponseEnvelope(),
+            defaultIgnoreRules: new[] { new IgnoreRuleDefinition("TraceId") });
+
+        Assert.AreEqual("TraceId", profile.DefaultIgnoreRules.Single().PropertyPath);
+        Assert.AreSame(profile.DefaultIgnoreRules, profile.DefaultComparisonRules.IgnoreRules);
+    }
+
+    [TestMethod]
+    public void Create_WhenComparisonDefaultsAreProvided_ExposesGlobalAndRuleDefaults()
+    {
+        IContractProfile profile = new ContractProfile<
+            SampleSoapCustomerLookupRequestEnvelope,
+            SampleAlternateJsonCustomerLookupRequest,
+            SampleSoapCustomerLookupResponseEnvelope,
+            SampleAlternateJsonCustomerLookupResponse>(
+            new JsonXmlContractPayloadSerializer(),
+            "defaults-profile",
+            "SimpleModel",
+            _ => new SampleAlternateJsonCustomerLookupRequest(),
+            _ => new SampleSoapCustomerLookupResponseEnvelope(),
+            defaultComparisonRules: new ComparisonRuleDefaults(
+                ignoreCollectionOrder: true,
+                ignoreStringCase: true,
+                ignoreRules: new[] { new IgnoreRuleDefinition("SourceSystem") },
+                smartIgnoreRules: new[] { new SmartIgnoreRuleDefinition(SmartIgnoreRuleKind.PropertyName, "TraceId") },
+                maskRules: new[] { new MaskRuleDefinition("Token") }));
+
+        Assert.IsTrue(profile.DefaultComparisonRules.IgnoreCollectionOrder);
+        Assert.IsTrue(profile.DefaultComparisonRules.IgnoreStringCase);
+        Assert.AreEqual("SourceSystem", profile.DefaultIgnoreRules.Single().PropertyPath);
+        Assert.AreEqual("TraceId", profile.DefaultComparisonRules.SmartIgnoreRules.Single().Value);
+        Assert.AreEqual("Token", profile.DefaultComparisonRules.MaskRules.Single().PropertyPath);
+    }
+    [TestMethod]
+    public async Task SerializeAsync_WhenJsonPayloadIsWritten_WritesToDestinationStream()
+    {
+        JsonXmlContractPayloadSerializer serializer = new JsonXmlContractPayloadSerializer();
+        SampleAlternateJsonCustomerLookupRequest request = new SampleAlternateJsonCustomerLookupRequest
+        {
+            LookupId = "123",
+            RawToken = "tok",
+        };
+
+        using MemoryStream stream = new MemoryStream();
+        await serializer.SerializeAsync(request, typeof(SampleAlternateJsonCustomerLookupRequest), PayloadFormat.Json, stream);
+        stream.Position = 0;
+        object result = await serializer.DeserializeAsync(typeof(SampleAlternateJsonCustomerLookupRequest), stream, PayloadFormat.Json);
+
+        SampleAlternateJsonCustomerLookupRequest roundTripped = (SampleAlternateJsonCustomerLookupRequest)result;
+        Assert.AreEqual("123", roundTripped.LookupId);
+        Assert.AreEqual("tok", roundTripped.RawToken);
+    }
+
+    [TestMethod]
+    public async Task SerializeAsync_WhenXmlPayloadIsWritten_WritesToDestinationStream()
+    {
+        JsonXmlContractPayloadSerializer serializer = new JsonXmlContractPayloadSerializer();
+        SampleSoapCustomerLookupRequestEnvelope request = new SampleSoapCustomerLookupRequestEnvelope
+        {
+            Body = new SampleSoapCustomerLookupRequestBody
+            {
+                CustomerLookupRequest = new SampleSoapCustomerLookupRequest
+                {
+                    CustomerId = "123",
+                    SensitiveToken = "tok",
+                },
+            },
+        };
+
+        using MemoryStream stream = new MemoryStream();
+        await serializer.SerializeAsync(request, typeof(SampleSoapCustomerLookupRequestEnvelope), PayloadFormat.Xml, stream);
+        stream.Position = 0;
+        object result = await serializer.DeserializeAsync(typeof(SampleSoapCustomerLookupRequestEnvelope), stream, PayloadFormat.Xml);
+
+        SampleSoapCustomerLookupRequestEnvelope roundTripped = (SampleSoapCustomerLookupRequestEnvelope)result;
+        Assert.AreEqual("123", roundTripped.Body.CustomerLookupRequest.CustomerId);
+        Assert.AreEqual("tok", roundTripped.Body.CustomerLookupRequest.SensitiveToken);
+    }
+
+    [TestMethod]
+    public async Task DeserializeAsync_WhenIgnoringNamespaces_RemovesInconsistentOrderFromGeneratedModels()
+    {
+        JsonXmlContractPayloadSerializer serializer = new JsonXmlContractPayloadSerializer();
+        const string xml = "<GeneratedOrderedResponse><Status>OK</Status><Message>Ready</Message></GeneratedOrderedResponse>";
+        using MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
+
+        object result = await serializer.DeserializeAsync(
+            typeof(GeneratedOrderedResponse),
+            stream,
+            PayloadFormat.Xml,
+            ignoreXmlNamespaces: true);
+
+        GeneratedOrderedResponse response = (GeneratedOrderedResponse)result;
+        Assert.AreEqual("OK", response.Status);
+        Assert.AreEqual("Ready", response.Message);
+    }
+
+    [TestMethod]
+    public async Task DeserializeAsync_WhenNamespacesAreNotIgnored_PreservesInconsistentOrderFailure()
+    {
+        JsonXmlContractPayloadSerializer serializer = new JsonXmlContractPayloadSerializer();
+        const string xml = "<GeneratedOrderedResponse><Status>OK</Status><Message>Ready</Message></GeneratedOrderedResponse>";
+        using MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
+
+        await AssertThrowsAsync<InvalidOperationException>(() => serializer.DeserializeAsync(
+            typeof(GeneratedOrderedResponse),
+            stream,
+            PayloadFormat.Xml,
+            ignoreXmlNamespaces: false));
+    }
+
+    [TestMethod]
+    public async Task DeserializeAsync_WhenIgnoringNamespaces_DoesNotForceIsNullableFalseForNullableValues()
+    {
+        JsonXmlContractPayloadSerializer serializer = new JsonXmlContractPayloadSerializer();
+        const string xml = "<ns:GeneratedNullableResponse xmlns:ns=\"urn:nullable\"><ns:Score>42</ns:Score><ns:Label>Ready</ns:Label></ns:GeneratedNullableResponse>";
+        using MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
+
+        object result = await serializer.DeserializeAsync(
+            typeof(GeneratedNullableResponse),
+            stream,
+            PayloadFormat.Xml,
+            ignoreXmlNamespaces: true);
+
+        GeneratedNullableResponse response = (GeneratedNullableResponse)result;
+        Assert.AreEqual(42, response.Score);
+        Assert.AreEqual("Ready", response.Label);
+    }
+
+    [TestMethod]
+    public async Task DeserializeAsync_WhenIgnoringNamespaces_DeserializesModelWithNamespacedXmlAttributes()
+    {
+        JsonXmlContractPayloadSerializer serializer = new JsonXmlContractPayloadSerializer();
+        const string xml = "<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:tns=\"urn:trended\"><soap:Body><tns:GetTrendedData><tns:Request><tns:AccountId>abc</tns:AccountId><tns:Periods><tns:Period>2024</tns:Period><tns:Period>2025</tns:Period></tns:Periods></tns:Request></tns:GetTrendedData></soap:Body></soap:Envelope>";
+        using MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
+
+        object result = await serializer.DeserializeAsync(
+            typeof(NamespacedSoapRequestEnvelope),
+            stream,
+            PayloadFormat.Xml,
+            ignoreXmlNamespaces: true);
+
+        NamespacedSoapRequestEnvelope envelope = (NamespacedSoapRequestEnvelope)result;
+        Assert.AreEqual("abc", envelope.Body.GetTrendedData.Request.AccountId);
+        CollectionAssert.AreEqual(
+            new[] { "2024", "2025" },
+            envelope.Body.GetTrendedData.Request.Periods.ToArray());
+    }
+
+    [TestMethod]
+    public async Task DeserializeAsync_WhenNamespacesAreNotIgnored_RemainsStrictForNamespacedModels()
+    {
+        JsonXmlContractPayloadSerializer serializer = new JsonXmlContractPayloadSerializer();
+        const string xml = "<Envelope><Body><GetTrendedData><Request><AccountId>abc</AccountId></Request></GetTrendedData></Body></Envelope>";
+        using MemoryStream stream = new MemoryStream(Encoding.UTF8.GetBytes(xml));
+
+        await AssertThrowsAsync<InvalidOperationException>(() => serializer.DeserializeAsync(
+            typeof(NamespacedSoapRequestEnvelope),
+            stream,
+            PayloadFormat.Xml,
+            ignoreXmlNamespaces: false));
+    }
+    [TestMethod]
+    public async Task PrepareRequestAsync_WhenUsingSampleProfile_ProducesEndpointBJsonRequest()
+    {
+        IContractProfile profile = CreateSampleProfile();
+        byte[] requestBody = Encoding.UTF8.GetBytes(
+            "<Envelope><Body><CustomerLookupRequest><CustomerId>123</CustomerId><SensitiveToken>tok</SensitiveToken></CustomerLookupRequest></Body></Envelope>");
+
+        PreparedContractRequest prepared = await profile.PrepareRequestAsync(
+            EndpointSlot.B,
+            new ContractRequestPreparationContext(
+                new RequestItem("one.xml", "application/xml", requestBody.Length),
+                token => OpenBytesAsync(requestBody, token),
+                PayloadFormat.Xml,
+                "application/xml"));
+
+        string json = await ReadPayloadAsStringAsync(prepared.Body);
+        Assert.AreEqual("application/json", prepared.ContentType);
+        Assert.IsTrue(json.Contains("\"lookupId\":\"123\"", StringComparison.Ordinal));
+        Assert.IsTrue(json.Contains("\"raw_token\":\"tok\"", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public async Task NormalizeResponseAsync_WhenUsingSampleProfile_ProducesCanonicalXmlResponse()
+    {
+        IContractProfile profile = CreateSampleProfile();
+        byte[] responseBody = Encoding.UTF8.GetBytes(
+            "{\"statusCode\":\"OK\",\"customerName\":\"Ada\",\"payload\":{\"raw_token\":\"tok\"}}");
+
+        NormalizedContractResponse normalized = await profile.NormalizeResponseAsync(
+            EndpointSlot.B,
+            new ContractResponseNormalizationContext(
+                new RequestItem("one.xml", "application/xml", 1),
+                EndpointSlot.B,
+                token => OpenBytesAsync(responseBody, token),
+                "application/json",
+                PayloadFormat.Json));
+
+        string xml = await ReadPayloadAsStringAsync(normalized.Body);
+        Assert.AreEqual("application/xml", normalized.ContentType);
+        Assert.IsTrue(xml.Contains("<CustomerName>Ada</CustomerName>", StringComparison.Ordinal));
+        Assert.IsTrue(xml.Contains("<SensitiveToken>tok</SensitiveToken>", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public async Task PrepareRequestAsync_WhenUsingExpectedProfile_AddsAuthorizationHeader()
+    {
+        JsonXmlContractPayloadSerializer serializer = new JsonXmlContractPayloadSerializer();
+        IContractProfile profile = BuiltInContractProfiles.CreateExpectedJsonCustomerLookup(
+            serializer,
+            new FixedTokenProvider("auth-token"));
+        byte[] requestBody = Encoding.UTF8.GetBytes(
+            "<Envelope><Body><CustomerLookupRequest><CustomerId>123</CustomerId><AuthenticationToken>seed</AuthenticationToken></CustomerLookupRequest></Body></Envelope>");
+
+        PreparedContractRequest prepared = await profile.PrepareRequestAsync(
+            EndpointSlot.B,
+            new ContractRequestPreparationContext(
+                new RequestItem("one.xml", "application/xml", requestBody.Length),
+                token => OpenBytesAsync(requestBody, token),
+                PayloadFormat.Xml,
+                "application/xml"));
+
+        await prepared.Body.DisposeAsync();
+        Assert.AreEqual("auth-token", prepared.Headers?["AuthorizationToken"]);
+        Assert.AreEqual("SourceSystem", profile.DefaultIgnoreRules[0].PropertyPath);
+        Assert.AreEqual("customer-lookup/soap", profile.EndpointA.SuggestedEndpointId);
+        Assert.AreEqual("customer-lookup/json", profile.EndpointB.SuggestedEndpointId);
+    }
+
+    [TestMethod]
+    public async Task DisposeAsync_WhenPayloadIsFileBacked_RemovesTemporaryFile()
+    {
+        string tempRoot = Path.Combine(Path.GetTempPath(), $"paritybench-test-{Guid.NewGuid():N}");
+        try
+        {
+            ContractPayloadFactory factory = new ContractPayloadFactory(tempRoot);
+            ContractPayload payload = await factory.CreateAsync(
+                PayloadFormat.Json,
+                "application/json",
+                async (destination, cancellationToken) =>
+                {
+                    byte[] bytes = Encoding.UTF8.GetBytes("{\"ok\":true}");
+                    await destination.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+                });
+            string payloadPath = Directory.EnumerateFiles(tempRoot).Single();
+
+            await payload.DisposeAsync();
+
+            Assert.IsFalse(File.Exists(payloadPath));
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, recursive: true);
+            }
+        }
+    }
+
+    private static IContractProfile CreateSampleProfile() =>
+        BuiltInContractProfiles.CreateSampleSoapToJson(new JsonXmlContractPayloadSerializer());
+
+    private static IContractProfile CreateSimpleProfile(string profileId) =>
+        new ContractProfile<
+            SampleSoapCustomerLookupRequestEnvelope,
+            SampleAlternateJsonCustomerLookupRequest,
+            SampleSoapCustomerLookupResponseEnvelope,
+            SampleAlternateJsonCustomerLookupResponse>(
+            new JsonXmlContractPayloadSerializer(),
+            profileId,
+            "SimpleModel",
+            _ => new SampleAlternateJsonCustomerLookupRequest(),
+            _ => new SampleSoapCustomerLookupResponseEnvelope());
+
+    private static ValueTask<Stream> OpenBytesAsync(byte[] bytes, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult<Stream>(new MemoryStream(bytes, writable: false));
+    }
+
+    private static async Task<string> ReadPayloadAsStringAsync(ContractPayload payload)
+    {
+        await using (payload)
+        await using (Stream stream = await payload.OpenReadAsync().ConfigureAwait(false))
+        using (StreamReader reader = new StreamReader(stream, Encoding.UTF8))
+        {
+            return await reader.ReadToEndAsync().ConfigureAwait(false);
+        }
+    }
+
+    private static async Task AssertThrowsAsync<TException>(Func<Task> action)
+        where TException : Exception
+    {
+        try
+        {
+            await action().ConfigureAwait(false);
+        }
+        catch (TException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            Assert.Fail($"Expected {typeof(TException).Name}, but got {ex.GetType().Name}.");
+        }
+
+        Assert.Fail($"Expected {typeof(TException).Name}, but no exception was thrown.");
+    }
+    private static void AssertThrows<TException>(Action action)
+        where TException : Exception
+    {
+        try
+        {
+            action();
+        }
+        catch (TException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            Assert.Fail($"Expected {typeof(TException).Name}, but got {ex.GetType().Name}.");
+        }
+
+        Assert.Fail($"Expected {typeof(TException).Name}, but no exception was thrown.");
+    }
+
+    public sealed class GeneratedOrderedResponse
+    {
+        [XmlElement("Status", Order = 1)]
+        public string Status { get; set; } = string.Empty;
+
+        public string Message { get; set; } = string.Empty;
+    }
+
+    [XmlRoot("GeneratedNullableResponse", Namespace = NullableNamespace)]
+    public sealed class GeneratedNullableResponse
+    {
+        [XmlElement("Score", Namespace = NullableNamespace)]
+        public int? Score { get; set; }
+
+        [XmlElement("Label", Namespace = NullableNamespace)]
+        public string Label { get; set; } = string.Empty;
+    }
+
+    private const string NullableNamespace = "urn:nullable";
+
+    [XmlRoot("Envelope", Namespace = SoapNamespace)]
+    public sealed class NamespacedSoapRequestEnvelope
+    {
+        private const string SoapNamespace = "http://schemas.xmlsoap.org/soap/envelope/";
+
+        [XmlElement("Body", Namespace = SoapNamespace, Order = 1)]
+        public NamespacedSoapRequestBody Body { get; set; } = new NamespacedSoapRequestBody();
+    }
+
+    public sealed class NamespacedSoapRequestBody
+    {
+        [XmlElement("GetTrendedData", Namespace = TrendedNamespace)]
+        public NamespacedGetTrendedData GetTrendedData { get; set; } = new NamespacedGetTrendedData();
+    }
+
+    public sealed class NamespacedGetTrendedData
+    {
+        [XmlElement("Request", Namespace = TrendedNamespace)]
+        public NamespacedTrendedDataRequest Request { get; set; } = new NamespacedTrendedDataRequest();
+    }
+
+    public sealed class NamespacedTrendedDataRequest
+    {
+        [XmlElement("AccountId", Namespace = TrendedNamespace, Order = 1)]
+        public string AccountId { get; set; } = string.Empty;
+
+        [XmlArray("Periods", Namespace = TrendedNamespace)]
+        [XmlArrayItem("Period", Namespace = TrendedNamespace)]
+        public List<string> Periods { get; set; } = new List<string>();
+    }
+
+    private const string TrendedNamespace = "urn:trended";
+    private sealed class FixedTokenProvider : IExpectedJsonCustomerLookupAuthorizationTokenProvider
+    {
+        private readonly string token;
+
+        public FixedTokenProvider(string token)
+        {
+            this.token = token;
+        }
+
+        public Task<ExpectedJsonCustomerLookupAuthorizationTokenResponse> GetAuthorizationTokensAsync(
+            ExpectedJsonCustomerLookupAuthorizationTokenRequest request,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ExpectedJsonCustomerLookupAuthorizationTokenResponse { AuthorizationToken = token });
+    }
+}

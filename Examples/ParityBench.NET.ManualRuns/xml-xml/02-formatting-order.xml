@@ -1,0 +1,13 @@
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:cr="urn:paritybench:consumer-report">
+  <soap:Header>
+    <cr:CorrelationId>manual-xml-1002</cr:CorrelationId>
+  </soap:Header>
+  <soap:Body>
+    <cr:ConsumerReportRequest>
+      <cr:ReportRequestId>CR-1002</cr:ReportRequestId>
+      <cr:GivenName>Alex</cr:GivenName>
+      <cr:FamilyName>Morgan</cr:FamilyName>
+      <cr:ConsentReference>CONSENT-1002</cr:ConsentReference>
+    </cr:ConsumerReportRequest>
+  </soap:Body>
+</soap:Envelope>

@@ -1,0 +1,55 @@
+@implements IDisposable
+@inject IJSRuntime JS
+@inject ParityBenchThemeState ThemeState
+
+<MudThemeProvider Theme="theme" IsDarkMode="@ThemeState.IsDarkMode" />
+<CascadingValue Value="ThemeState" IsFixed="false">
+    <div class="pb-theme-scope @(ThemeState.IsDarkMode ? "pb-theme-dark" : "pb-theme-light")">
+        @ChildContent
+    </div>
+</CascadingValue>
+
+@code {
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    private readonly MudTheme theme = ParityBenchThemeDefinition.Create();
+
+    protected override void OnInitialized()
+    {
+        ThemeState.Changed += HandleThemeChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            string? storedMode = await JS.InvokeAsync<string?>("parityBenchTheme.getStoredMode");
+            bool systemPrefersDark = await JS.InvokeAsync<bool>("parityBenchTheme.getSystemPrefersDark");
+            ThemeState.Initialize(ParseThemeMode(storedMode), systemPrefersDark);
+        }
+        catch (InvalidOperationException)
+        {
+            ThemeState.Initialize(null, false);
+        }
+        catch (JSException)
+        {
+            ThemeState.Initialize(null, false);
+        }
+    }
+
+    private void HandleThemeChanged() => InvokeAsync(StateHasChanged);
+
+    private static ThemeMode? ParseThemeMode(string? storedMode) =>
+        Enum.TryParse(storedMode, ignoreCase: true, out ThemeMode parsed) ? parsed : null;
+
+    public void Dispose()
+    {
+        ThemeState.Changed -= HandleThemeChanged;
+    }
+}

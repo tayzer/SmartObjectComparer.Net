@@ -536,9 +536,9 @@ Implement Request Folder Comparison feature (RC-101 through RC-114) - COMPLETED
 - Rationale: Per-request custom headers without modifying payload files
 
 ## External Resources Referenced
-- docs/RequestComparisonFeatureSpec.md: API contracts and execution flow
-- docs/JiraTickets_RequestComparison.md: User stories and acceptance criteria
-- docs/RequestComparisonPlan.md: Delivery milestones
+- Docs/Archive/RequestComparisonFeatureSpec.md: API contracts and execution flow
+- Docs/Archive/JiraTickets_RequestComparison.md: User stories and acceptance criteria
+- Docs/Archive/RequestComparisonPlan.md: Delivery milestones
 
 ## Blockers & Issues
 - **[RESOLVED]** String interpolation issues in PowerShell here-strings - fixed by using replace operations

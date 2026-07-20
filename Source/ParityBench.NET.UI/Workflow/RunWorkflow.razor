@@ -1,0 +1,1106 @@
+@using System.IO
+@using ParityBench.NET.Application.Workflow
+@using ParityBench.NET.Domain.Comparison
+@using ParityBench.NET.Domain.ContractProfiles
+@using ParityBench.NET.Domain.Requests
+@inject IRunWorkflowViewDataSource DataSource
+@inject IRequestSourcePicker SourcePicker
+
+<style>
+    .pb-workflow-root { color: var(--mud-palette-text-primary); }
+    .pb-workflow-section { border: 1px solid var(--mud-palette-lines-default); background: var(--mud-palette-surface); }
+    .pb-workflow-section .mud-input-control { margin-top: 0; }
+    .pb-workflow-heading { display: flex; align-items: center; gap: .45rem; }
+    .pb-workflow-muted-panel { background: var(--mud-palette-background-grey); border: 1px solid var(--mud-palette-lines-default); }
+</style>
+<MudStack Spacing="3" Class="pb-workflow-root">
+    <MudStack Spacing="0">
+        <MudText Typo="Typo.h6">Request Comparison</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Default">Upload request files and compare responses from two endpoints.</MudText>
+    </MudStack>
+
+    @if (errorMessage is not null)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@errorMessage</MudAlert>
+    }
+    @if (successMessage is not null)
+    {
+        <MudAlert Severity="Severity.Success" Variant="Variant.Outlined">@successMessage</MudAlert>
+    }
+
+    <MudPaper Elevation="0" Class="pa-3 pb-workflow-section">
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.subtitle1" Class="pb-workflow-heading"><MudIcon Icon="@Icons.Material.Filled.UploadFile" Size="Size.Small" />Step 1: Upload Request Files</MudText>
+            @if (defaults.Presets.Count > 0)
+            {
+                <MudSelect T="string"
+                           Label="Example preset"
+                           Value="selectedPresetId"
+                           ValueChanged="HandlePresetChangedAsync"
+                           Variant="Variant.Outlined"
+                           Clearable="true">
+                    @foreach (RequestComparisonPresetOption preset in defaults.Presets)
+                    {
+                        <MudSelectItem T="string" Value="@preset.PresetId">@preset.Label</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+            @if (SourcePicker.IsAvailable)
+            {
+                <MudStack Row="true" Spacing="2" Class="flex-wrap">
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.AttachFile"
+                               Disabled="@isBusy"
+                               OnClick="PickRequestFilesAsync">
+                        Add Request Files
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.FolderOpen"
+                               Disabled="@isBusy"
+                               OnClick="PickRequestDirectoryAsync">
+                        Add Request Folder
+                    </MudButton>
+                </MudStack>
+            }
+            <MudTextField T="string"
+                          Label="Request Directory"
+                          Value="requestDirectory"
+                          ValueChanged="HandleRequestDirectoryChanged"
+                          Immediate="true"
+                          Variant="Variant.Outlined" />
+            @if (!string.IsNullOrWhiteSpace(requestSourceDescription))
+            {
+                <MudText Typo="Typo.caption">@requestSourceDescription</MudText>
+            }
+        </MudStack>
+    </MudPaper>
+
+    <MudPaper Elevation="0" Class="pa-3 pb-workflow-section">
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.subtitle1" Class="pb-workflow-heading"><MudIcon Icon="@Icons.Material.Filled.Tune" Size="Size.Small" />Step 2: Model &amp; Configuration</MudText>
+            <MudGrid Spacing="2">
+                <MudItem xs="12" md="4">
+                    <MudAutocomplete T="string"
+                                     Label="Select Domain Model"
+                                     Value="modelName"
+                                     ValueChanged="HandleModelChangedAsync"
+                                     SearchFunc="SearchModelNamesAsync"
+                                     Immediate="true"
+                                     CoerceValue="true"
+                                     ResetValueOnEmptyText="false"
+                                     MaxItems="50"
+                                     Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudAutocomplete T="string"
+                                     Label="Contract Profile"
+                                     Value="contractProfileId"
+                                     ValueChanged="HandleProfileChangedAsync"
+                                     SearchFunc="SearchProfileIdsAsync"
+                                     Immediate="true"
+                                     CoerceValue="true"
+                                     ResetValueOnEmptyText="false"
+                                     MaxItems="50"
+                                     Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudTextField T="string" Label="Max Differences" @bind-Value="maxDifferences" Immediate="true" Variant="Variant.Outlined" />
+                </MudItem>
+            </MudGrid>
+
+            <MudExpansionPanels Elevation="0" MultiExpansion="true">
+                <MudExpansionPanel Text="Comparison Options">
+                    <MudStack Spacing="2">
+                        @if (HasProfileDefaultComparisonRules(selectedProfileOption))
+                        {
+                            <MudStack Spacing="1" Class="mb-3">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Profile default comparison rules</MudText>
+                                <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                                    @foreach (string summary in GetProfileDefaultRuleSummary(selectedProfileOption!.DefaultComparisonRules))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@summary</MudChip>
+                                    }
+                                </MudStack>
+                            </MudStack>
+                        }
+                        <MudSwitch @bind-Value="ignoreCollectionOrder" Label="Ignore Collection Order" Color="Color.Primary" Disabled="@IsIgnoreCollectionOrderForcedByProfile" />
+                        <MudSwitch @bind-Value="ignoreStringCase" Label="Ignore String Case" Color="Color.Primary" Disabled="@IsIgnoreStringCaseForcedByProfile" />
+                        <MudSwitch @bind-Value="ignoreTrailingWhitespace" Label="Ignore Trailing Spaces/Tabs at End of Strings" Color="Color.Primary" Disabled="@IsIgnoreTrailingWhitespaceForcedByProfile" />
+                        <MudSwitch @bind-Value="treatNullAndEmptyCollectionsEqual" Label="Treat null and empty collections as equal" Color="Color.Primary" Disabled="@IsTreatNullAndEmptyCollectionsForcedByProfile" />
+                        <MudSwitch @bind-Value="ignoreXmlNamespaces" Label="Ignore XML Namespaces" Color="Color.Primary" Disabled="@IsIgnoreXmlNamespacesForcedByProfile" />
+                    </MudStack>
+                </MudExpansionPanel>
+                <MudExpansionPanel Text="Ignore Rules">
+                    @if (selectedProfileOption?.DefaultComparisonRules.IgnoreRules.Count > 0)
+                    {
+                        <MudPaper Outlined="true" Class="pa-3 mb-3 pb-workflow-muted-panel">
+                            <MudStack Spacing="2">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="flex-wrap">
+                                    <MudStack Spacing="0">
+                                        <MudText Typo="Typo.subtitle2">Profile Default Ignore Rules</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            @GetProfileDefaultIgnoreRuleCountText(selectedProfileOption.DefaultComparisonRules.IgnoreRules.Count) will be applied automatically.
+                                        </MudText>
+                                    </MudStack>
+                                    <MudButton Variant="Variant.Text"
+                                               Size="Size.Small"
+                                               StartIcon="@(showProfileDefaultIgnoreRules ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                               OnClick="ToggleProfileDefaultIgnoreRules">
+                                        @(showProfileDefaultIgnoreRules ? "Hide Rules" : "View Rules")
+                                    </MudButton>
+                                </MudStack>
+
+                                @if (showProfileDefaultIgnoreRules)
+                                {
+                                    <MudTextField T="string"
+                                                  @bind-Value="profileDefaultIgnoreRuleSearchTerm"
+                                                  Label="Filter Profile Default Ignore Rules"
+                                                  Variant="Variant.Outlined"
+                                                  Margin="Margin.Dense"
+                                                  Immediate="true"
+                                                  Clearable="true"
+                                                  Adornment="Adornment.Start"
+                                                  AdornmentIcon="@Icons.Material.Filled.Search" />
+                                    @if (FilteredProfileDefaultIgnoreRules.Count == 0)
+                                    {
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">No profile default ignore rules match the current filter.</MudText>
+                                    }
+                                    else
+                                    {
+                                        <MudPaper Outlined="true" Style="max-height: 330px; overflow-y: auto;">
+                                            @foreach (IgnoreRuleDefinition rule in VisibleProfileDefaultIgnoreRules)
+                                            {
+                                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Class="pa-2">
+                                                    <MudStack Spacing="1">
+                                                        <MudText Typo="Typo.body2" Style="font-family: Consolas, monospace; word-break: break-all;">@rule.PropertyPath</MudText>
+                                                        <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                                                            @foreach (string summary in GetIgnoreRuleSummary(rule))
+                                                            {
+                                                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@summary</MudChip>
+                                                            }
+                                                        </MudStack>
+                                                    </MudStack>
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">Profile</MudChip>
+                                                </MudStack>
+                                                <MudDivider />
+                                            }
+                                        </MudPaper>
+                                        @if (FilteredProfileDefaultIgnoreRules.Count > ProfileDefaultRulePreviewLimit)
+                                        {
+                                            <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="ToggleShowAllProfileDefaultIgnoreRules">
+                                                @(showAllProfileDefaultIgnoreRules ? "Show fewer" : $"Show all {FilteredProfileDefaultIgnoreRules.Count} rules")
+                                            </MudButton>
+                                        }
+                                    }
+                                }
+                            </MudStack>
+                        </MudPaper>
+                    }
+                    <MudStack Spacing="3">
+                        <IgnoreRulesStudio ModelType="selectedModelType"
+                                           ModelName="@modelName"
+                                           Rules="ignoreRuleDefinitions"
+                                           RulesChanged="HandleIgnoreRulesChanged"
+                                           IgnoreCollectionOrder="ignoreCollectionOrder"
+                                           IgnoreCollectionOrderChanged="HandleIgnoreCollectionOrderChanged"
+                                           IgnoreStringCase="ignoreStringCase"
+                                           IgnoreStringCaseChanged="HandleIgnoreStringCaseChanged"
+                                           IgnoreTrailingWhitespaceAtEnd="ignoreTrailingWhitespace"
+                                           IgnoreTrailingWhitespaceAtEndChanged="HandleIgnoreTrailingWhitespaceChanged"
+                                           TreatNullAndEmptyCollectionsAsEqual="treatNullAndEmptyCollectionsEqual"
+                                           TreatNullAndEmptyCollectionsAsEqualChanged="HandleTreatNullAndEmptyCollectionsChanged"
+                                           IgnoreXmlNamespaces="ignoreXmlNamespaces"
+                                           IgnoreXmlNamespacesChanged="HandleIgnoreXmlNamespacesChanged"
+                                           MaxDifferences="@MaxDifferencesValue"
+                                           MaxDifferencesChanged="HandleMaxDifferencesImported" />
+                        <MudTextField T="string" Label="Smart Ignores" Lines="4" @bind-Value="smartIgnoreRules" Variant="Variant.Outlined" />
+                    </MudStack>
+                </MudExpansionPanel>
+                <MudExpansionPanel Text="Mask Rules">
+                    @if (selectedProfileOption?.DefaultComparisonRules.MaskRules.Count > 0)
+                    {
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true" Class="mb-3">
+                            @selectedProfileOption.DefaultComparisonRules.MaskRules.Count profile default mask rule@(selectedProfileOption.DefaultComparisonRules.MaskRules.Count == 1 ? string.Empty : "s") will be applied automatically.
+                        </MudAlert>
+                    }
+                    <MaskRulesStudio ModelType="selectedModelType"
+                                     ModelName="@modelName"
+                                     Rules="maskRuleDefinitions"
+                                     RulesChanged="HandleMaskRulesChanged" />
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        </MudStack>
+    </MudPaper>
+
+    <MudPaper Elevation="0" Class="pa-3 pb-workflow-section">
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.subtitle1" Class="pb-workflow-heading"><MudIcon Icon="@Icons.Material.Filled.Hub" Size="Size.Small" />Step 3: Configure Endpoints</MudText>
+            <MudGrid Spacing="2">
+                <MudItem xs="12" md="6">
+                    <MudAutocomplete T="string"
+                                     Label="Endpoint A"
+                                     Value="endpointA"
+                                     ValueChanged="HandleEndpointAChanged"
+                                     SearchFunc="SearchEndpointUrlsAsync"
+                                     Immediate="true"
+                                     CoerceValue="true"
+                                     ResetValueOnEmptyText="false"
+                                     MaxItems="50"
+                                     Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudAutocomplete T="string"
+                                     Label="Endpoint B"
+                                     Value="endpointB"
+                                     ValueChanged="HandleEndpointBChanged"
+                                     SearchFunc="SearchEndpointUrlsAsync"
+                                     Immediate="true"
+                                     CoerceValue="true"
+                                     ResetValueOnEmptyText="false"
+                                     MaxItems="50"
+                                     Variant="Variant.Outlined" />
+                </MudItem>
+            </MudGrid>
+
+            <MudExpansionPanels Elevation="0" MultiExpansion="true">
+                <MudExpansionPanel Text="Custom Headers (Optional)">
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12" md="4">
+                            <MudTextField T="string" Label="Common Headers" Lines="4" @bind-Value="commonHeaders" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudTextField T="string" Label="Endpoint A Headers" Lines="4" @bind-Value="endpointAHeaders" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudTextField T="string" Label="Endpoint B Headers" Lines="4" @bind-Value="endpointBHeaders" Variant="Variant.Outlined" />
+                        </MudItem>
+                    </MudGrid>
+                </MudExpansionPanel>
+                <MudExpansionPanel Text="Advanced Options">
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12" md="4">
+                            <MudTextField T="string" Label="Content-Type Override" @bind-Value="contentTypeOverride" Immediate="true" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudTextField T="string" Label="Request Timeout (seconds)" @bind-Value="timeoutSeconds" Immediate="true" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" md="4">
+                            <MudTextField T="string" Label="Max Concurrency" @bind-Value="maxConcurrency" Immediate="true" Variant="Variant.Outlined" />
+                        </MudItem>
+                    </MudGrid>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        </MudStack>
+    </MudPaper>
+
+    <MudPaper Elevation="0" Class="pa-3 pb-workflow-section">
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.subtitle1" Class="pb-workflow-heading"><MudIcon Icon="@Icons.Material.Filled.PlayCircle" Size="Size.Small" />Step 4: Run Comparison</MudText>
+            <MudStack Row="true" Spacing="2" Class="flex-wrap">
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Success"
+                           StartIcon="@Icons.Material.Filled.PlayArrow"
+                           Disabled="@(!CanStartComparison)"
+                           OnClick="StartWorkflowAsync">
+                    Start Comparison
+                </MudButton>
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Warning"
+                           StartIcon="@Icons.Material.Filled.Cancel"
+                           Disabled="@(!CanCancel)"
+                           OnClick="CancelRunAsync">
+                    Cancel
+                </MudButton>
+            </MudStack>
+
+            @if (isPreparingRequestBatch)
+            {
+                <MudStack Spacing="2">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudProgressCircular Indeterminate="true" Size="Size.Small" />
+                        <MudText Typo="Typo.subtitle2" Color="Color.Primary">Preparing request batch...</MudText>
+                    </MudStack>
+                    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+                    <MudText Typo="Typo.body2">Copying request files into the run workspace.</MudText>
+                </MudStack>
+            }
+
+            @if (currentRun is not null)
+            {
+                <MudStack Spacing="2">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@GetPhaseIcon(currentRun.Status)" Color="@GetPhaseColor(currentRun.Status)" />
+                        <MudText Typo="Typo.subtitle2" Color="@GetPhaseColor(currentRun.Status)">@currentRun.Status</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Default">@currentRun.Id.Value</MudText>
+                    </MudStack>
+                    <MudProgressLinear Color="@GetPhaseColor(currentRun.Status)" Value="currentRun.Progress.PercentComplete" Striped="@isRunning" Size="Size.Large" />
+                    <MudText Typo="Typo.body2">@currentRun.Progress.Message</MudText>
+                    @if (currentRun.Progress.CompletedItems is not null && currentRun.Progress.TotalItems is not null)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@currentRun.Progress.CompletedItems of @currentRun.Progress.TotalItems</MudText>
+                    }
+                </MudStack>
+            }
+
+            @if (progressLog.Count > 0)
+            {
+                <MudExpansionPanels Elevation="0">
+                    <MudExpansionPanel Text="@($"Activity Log ({progressLog.Count} events)")">
+                        <MudList T="string" Dense="true" Style="max-height: 200px; overflow-y: auto;">
+                            @foreach (string entry in progressLog.AsEnumerable().Reverse().Take(15))
+                            {
+                                <MudListItem T="string">@entry</MudListItem>
+                            }
+                        </MudList>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            }
+        </MudStack>
+    </MudPaper>
+
+    <MudPaper Elevation="0" Class="pa-3 pb-workflow-section">
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.subtitle1" Class="pb-workflow-heading"><MudIcon Icon="@Icons.Material.Filled.Article" Size="Size.Small" />Static Report</MudText>
+            <MudGrid Spacing="2">
+                <MudItem xs="12" md="5">
+                    <MudTextField T="string" Label="Report Output" @bind-Value="reportOutputDirectory" Immediate="true" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="5">
+                    <MudTextField T="string" Label="Report Assets" @bind-Value="reportAssetsDirectory" Immediate="true" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" md="2" Class="d-flex align-end">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" Disabled="@(!CanGenerateReport)" OnClick="GenerateReportAsync">Generate</MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudStack>
+    </MudPaper>
+</MudStack>
+
+@code {
+    private const int PollDelayMilliseconds = 750;
+    private const int ProfileDefaultRulePreviewLimit = 25;
+    private RequestComparisonDefaults defaults = CreateEmptyDefaults();
+    private IReadOnlyList<ContractProfileOption> availableProfileOptions = Array.Empty<ContractProfileOption>();
+    private ContractProfileOption? selectedProfileOption;
+    private string selectedPresetId = string.Empty;
+    private string requestDirectory = string.Empty;
+    private IReadOnlyList<string> sourceFiles = Array.Empty<string>();
+    private string requestSourceDescription = string.Empty;
+    private string endpointA = string.Empty;
+    private string endpointB = string.Empty;
+    private string timeoutSeconds = "30";
+    private string maxConcurrency = "32";
+    private string modelName = "Auto";
+    private string contractProfileId = string.Empty;
+    private string contentTypeOverride = string.Empty;
+    private string maxDifferences = "100";
+    private List<IgnoreRuleDefinition> ignoreRuleDefinitions = new();
+    private string smartIgnoreRules = string.Empty;
+    private List<MaskRuleDefinition> maskRuleDefinitions = new();
+    private string commonHeaders = string.Empty;
+    private string endpointAHeaders = string.Empty;
+    private string endpointBHeaders = string.Empty;
+    private string reportOutputDirectory = string.Empty;
+    private string reportAssetsDirectory = string.Empty;
+    private bool ignoreCollectionOrder;
+    private bool ignoreStringCase;
+    private bool ignoreTrailingWhitespace;
+    private bool treatNullAndEmptyCollectionsEqual;
+    private bool ignoreXmlNamespaces = true;
+    private Type? selectedModelType;
+    private string profileDefaultIgnoreRuleSearchTerm = string.Empty;
+    private bool showProfileDefaultIgnoreRules;
+    private bool showAllProfileDefaultIgnoreRules;
+    private bool isBusy;
+    private bool isRunning;
+    private bool isPreparingRequestBatch;
+    private string? errorMessage;
+    private string? successMessage;
+    private ComparisonRun? currentRun;
+    private readonly List<string> progressLog = new List<string>();
+
+    [Parameter]
+    public EventCallback<RunId> RunSelected { get; set; }
+
+    [Parameter]
+    public EventCallback<ComparisonRun> RunChanged { get; set; }
+
+    private bool CanStartComparison => !isBusy && !isRunning;
+
+    private bool CanCancel => currentRun is not null && isRunning && !isBusy;
+
+    private bool CanGenerateReport => currentRun?.Status == RunStatus.Completed
+        && !isBusy
+        && !string.IsNullOrWhiteSpace(reportOutputDirectory);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            defaults = await DataSource.LoadDefaultsAsync();
+            timeoutSeconds = defaults.RunDefaults.TimeoutSeconds.ToString();
+            maxConcurrency = defaults.RunDefaults.MaxConcurrency.ToString();
+            RefreshSelectedModelType();
+            RefreshAvailableProfiles(clearInvalidSelection: false);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private async Task HandlePresetChangedAsync(string value)
+    {
+        selectedPresetId = value ?? string.Empty;
+        RequestComparisonPresetOption? preset = defaults.Presets.FirstOrDefault(candidate =>
+            string.Equals(candidate.PresetId, selectedPresetId, StringComparison.OrdinalIgnoreCase));
+        if (preset is null)
+        {
+            return;
+        }
+
+        sourceFiles = Array.Empty<string>();
+        requestDirectory = preset.RequestDirectory;
+        requestSourceDescription = $"Selected example preset: {preset.Label}";
+        endpointA = preset.EndpointA.ToString();
+        endpointB = preset.EndpointB.ToString();
+        modelName = preset.ModelName;
+        RefreshSelectedModelType();
+        contractProfileId = preset.ContractProfileId ?? string.Empty;
+        ApplyComparisonOptions(preset.ComparisonOptions);
+        contentTypeOverride = preset.RequestExecutionOptions.ContentTypeOverride ?? string.Empty;
+        endpointAHeaders = FormatHeaders(preset.EndpointAHeaders);
+        endpointBHeaders = FormatHeaders(preset.EndpointBHeaders);
+        RefreshAvailableProfiles(clearInvalidSelection: false);
+        ResetProfileDefaultIgnoreRuleViewer();
+        await Task.CompletedTask;
+    }
+
+    private Task HandleModelChangedAsync(string value)
+    {
+        modelName = string.IsNullOrWhiteSpace(value) ? "Auto" : value.Trim();
+        RefreshSelectedModelType();
+        RefreshAvailableProfiles(clearInvalidSelection: true);
+        ResetProfileDefaultIgnoreRuleViewer();
+        return Task.CompletedTask;
+    }
+
+    private Task HandleProfileChangedAsync(string value)
+    {
+        contractProfileId = value?.Trim() ?? string.Empty;
+        RefreshSelectedProfile();
+        ApplyProfileEndpointSuggestions();
+        ResetProfileDefaultIgnoreRuleViewer();
+        return Task.CompletedTask;
+    }
+
+    private void HandleEndpointAChanged(string value) => endpointA = value?.Trim() ?? string.Empty;
+
+    private void HandleEndpointBChanged(string value) => endpointB = value?.Trim() ?? string.Empty;
+    private void HandleRequestDirectoryChanged(string value)
+    {
+        selectedPresetId = string.Empty;
+        requestDirectory = value;
+        sourceFiles = Array.Empty<string>();
+        requestSourceDescription = string.IsNullOrWhiteSpace(value) ? string.Empty : $"Selected request folder: {value}";
+    }
+
+    private async Task PickRequestDirectoryAsync()
+    {
+        string? selectedDirectory = await SourcePicker.PickRequestDirectoryAsync();
+        if (string.IsNullOrWhiteSpace(selectedDirectory))
+        {
+            return;
+        }
+
+        selectedPresetId = string.Empty;
+        requestDirectory = selectedDirectory;
+        sourceFiles = Array.Empty<string>();
+        requestSourceDescription = $"Selected request folder: {selectedDirectory}";
+    }
+
+    private async Task PickRequestFilesAsync()
+    {
+        IReadOnlyList<string> selectedFiles = await SourcePicker.PickRequestFilesAsync();
+        if (selectedFiles.Count == 0)
+        {
+            return;
+        }
+
+        selectedPresetId = string.Empty;
+        sourceFiles = selectedFiles;
+        requestDirectory = GetCommonSourceDirectory(selectedFiles);
+        requestSourceDescription = $"Selected {selectedFiles.Count} request files from {requestDirectory}";
+    }
+
+    private async Task StartWorkflowAsync()
+    {
+        try
+        {
+            isBusy = true;
+            errorMessage = null;
+            successMessage = null;
+            progressLog.Clear();
+            currentRun = null;
+            isPreparingRequestBatch = true;
+            await InvokeAsync(StateHasChanged);
+
+            RequestComparisonRunRequest request = BuildRequest();
+            currentRun = await DataSource.CreateRunFromDirectoryAsync(request);
+            isPreparingRequestBatch = false;
+            RecordProgress(currentRun);
+            await NotifyRunChangedAsync(currentRun);
+
+            bool started = await DataSource.StartRunAsync(currentRun.Id);
+            if (!started)
+            {
+                errorMessage = "Run is already active.";
+                return;
+            }
+
+            isRunning = true;
+            isBusy = false;
+            await InvokeAsync(StateHasChanged);
+            await PollUntilTerminalAsync(currentRun.Id);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isBusy = false;
+            isPreparingRequestBatch = false;
+            isRunning = currentRun is not null && DataSource.IsRunning(currentRun.Id);
+        }
+    }
+
+    private async Task CancelRunAsync()
+    {
+        if (currentRun is null)
+        {
+            return;
+        }
+
+        try
+        {
+            errorMessage = null;
+            successMessage = null;
+            currentRun = await DataSource.CancelRunAsync(currentRun.Id);
+            RecordProgress(currentRun);
+            isRunning = false;
+            await NotifyRunChangedAsync(currentRun);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private async Task GenerateReportAsync()
+    {
+        if (currentRun is null)
+        {
+            return;
+        }
+
+        try
+        {
+            isBusy = true;
+            errorMessage = null;
+            successMessage = null;
+            StaticReportBundleWriteResult result = await DataSource
+                .GenerateReportAsync(currentRun.Id, reportOutputDirectory, string.IsNullOrWhiteSpace(reportAssetsDirectory) ? null : reportAssetsDirectory);
+            successMessage = $"Report written to {result.OutputDirectory}";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task PollUntilTerminalAsync(RunId runId)
+    {
+        while (true)
+        {
+            await Task.Delay(PollDelayMilliseconds);
+            currentRun = await DataSource.LoadRunAsync(runId);
+            RecordProgress(currentRun);
+            await NotifyRunChangedAsync(currentRun);
+            await InvokeAsync(StateHasChanged);
+
+            if (currentRun.IsTerminal)
+            {
+                isRunning = false;
+                return;
+            }
+        }
+    }
+
+    private async Task NotifyRunChangedAsync(ComparisonRun run)
+    {
+        await RunSelected.InvokeAsync(run.Id);
+        await RunChanged.InvokeAsync(run);
+    }
+
+    private RequestComparisonRunRequest BuildRequest()
+    {
+        if (!Uri.TryCreate(endpointA, UriKind.Absolute, out Uri? endpointAUri))
+        {
+            throw new InvalidOperationException("Endpoint A must be an absolute URL.");
+        }
+
+        if (!Uri.TryCreate(endpointB, UriKind.Absolute, out Uri? endpointBUri))
+        {
+            throw new InvalidOperationException("Endpoint B must be an absolute URL.");
+        }
+
+        int timeout = ParsePositiveInt(timeoutSeconds, "Timeout seconds");
+        int concurrency = ParsePositiveInt(maxConcurrency, "Concurrency");
+        int maxDifferenceCount = ParsePositiveInt(maxDifferences, "Max differences");
+
+        ComparisonOptions comparisonOptions = new ComparisonOptions(
+            ignoreCollectionOrder,
+            ignoreStringCase,
+            ignoreTrailingWhitespace,
+            treatNullAndEmptyCollectionsEqual,
+            ignoreXmlNamespaces,
+            maxDifferenceCount,
+            ignoreRuleDefinitions,
+            RunWorkflowRuleParser.ParseSmartIgnoreRules(smartIgnoreRules),
+            maskRuleDefinitions);
+        RequestExecutionOptions executionOptions = new RequestExecutionOptions(contentTypeOverride);
+
+        return new RequestComparisonRunRequest(
+            requestDirectory,
+            endpointAUri,
+            endpointBUri,
+            TimeSpan.FromSeconds(timeout),
+            concurrency,
+            modelName,
+            comparisonOptions,
+            executionOptions,
+            string.IsNullOrWhiteSpace(contractProfileId) ? null : new ContractProfileSelection(contractProfileId),
+            commonHeaders: ParseHeaders(commonHeaders),
+            endpointAHeaders: ParseHeaders(endpointAHeaders),
+            endpointBHeaders: ParseHeaders(endpointBHeaders),
+            endpointALabel: ResolveEndpointLabel(endpointA),
+            endpointBLabel: ResolveEndpointLabel(endpointB),
+            sourceFiles: sourceFiles.Count == 0 ? null : sourceFiles);
+    }
+
+    private void ApplyComparisonOptions(ComparisonOptions options)
+    {
+        ignoreCollectionOrder = options.IgnoreCollectionOrder;
+        ignoreStringCase = options.IgnoreStringCase;
+        ignoreTrailingWhitespace = options.IgnoreTrailingWhitespaceAtEnd;
+        treatNullAndEmptyCollectionsEqual = options.TreatNullAndEmptyCollectionsAsEqual;
+        ignoreXmlNamespaces = options.IgnoreXmlNamespaces;
+        maxDifferences = options.MaxDifferences.ToString();
+        ignoreRuleDefinitions = options.IgnoreRules.ToList();
+        smartIgnoreRules = FormatSmartIgnoreRules(options.SmartIgnoreRules);
+        maskRuleDefinitions = options.MaskRules.ToList();
+    }
+
+    private int MaxDifferencesValue => int.TryParse(maxDifferences, out int parsed) && parsed > 0 ? parsed : 100;
+
+    private Task HandleIgnoreRulesChanged(List<IgnoreRuleDefinition> rules)
+    {
+        ignoreRuleDefinitions = rules;
+        return Task.CompletedTask;
+    }
+
+    private Task HandleMaskRulesChanged(List<MaskRuleDefinition> rules)
+    {
+        maskRuleDefinitions = rules;
+        return Task.CompletedTask;
+    }
+
+    private Task HandleIgnoreCollectionOrderChanged(bool value)
+    {
+        ignoreCollectionOrder = value;
+        return Task.CompletedTask;
+    }
+
+    private Task HandleIgnoreStringCaseChanged(bool value)
+    {
+        ignoreStringCase = value;
+        return Task.CompletedTask;
+    }
+
+    private Task HandleIgnoreTrailingWhitespaceChanged(bool value)
+    {
+        ignoreTrailingWhitespace = value;
+        return Task.CompletedTask;
+    }
+
+    private Task HandleTreatNullAndEmptyCollectionsChanged(bool value)
+    {
+        treatNullAndEmptyCollectionsEqual = value;
+        return Task.CompletedTask;
+    }
+
+    private Task HandleIgnoreXmlNamespacesChanged(bool value)
+    {
+        ignoreXmlNamespaces = value;
+        return Task.CompletedTask;
+    }
+
+    private Task HandleMaxDifferencesImported(int value)
+    {
+        maxDifferences = Math.Max(1, value).ToString();
+        return Task.CompletedTask;
+    }
+
+    private void RefreshSelectedModelType()
+    {
+        try
+        {
+            selectedModelType = DataSource.ResolveResponseModelType(modelName);
+        }
+        catch
+        {
+            selectedModelType = null;
+        }
+    }
+    private void RefreshAvailableProfiles(bool clearInvalidSelection)
+    {
+        availableProfileOptions = defaults.ContractProfiles
+            .Where(profile => string.Equals(profile.ResponseModelName, modelName, StringComparison.Ordinal))
+            .ToArray();
+        RefreshSelectedProfile();
+
+        if (clearInvalidSelection && !string.IsNullOrWhiteSpace(contractProfileId) && selectedProfileOption is null)
+        {
+            contractProfileId = string.Empty;
+            RefreshSelectedProfile();
+        }
+    }
+
+    private void RefreshSelectedProfile()
+    {
+        selectedProfileOption = availableProfileOptions.FirstOrDefault(profile =>
+            string.Equals(profile.ProfileId, contractProfileId, StringComparison.OrdinalIgnoreCase));
+
+        if (selectedProfileOption is not null)
+        {
+            ApplyProfileForcedDefaults(selectedProfileOption.DefaultComparisonRules);
+        }
+    }
+
+    // The executor always ORs profile defaults into the run's comparison options
+    // (see BasicComparisonRunExecutor.CreateRunOptionsWithProfileDefaults), so a
+    // profile-forced setting can never actually be switched off. Reflect that here
+    // instead of showing a toggle that silently has no effect.
+    private void ApplyProfileForcedDefaults(ComparisonRuleDefaults defaults)
+    {
+        ignoreCollectionOrder |= defaults.IgnoreCollectionOrder;
+        ignoreStringCase |= defaults.IgnoreStringCase;
+        ignoreTrailingWhitespace |= defaults.IgnoreTrailingWhitespaceAtEnd;
+        treatNullAndEmptyCollectionsEqual |= defaults.TreatNullAndEmptyCollectionsAsEqual;
+        ignoreXmlNamespaces |= defaults.IgnoreXmlNamespaces;
+    }
+
+    private bool IsIgnoreCollectionOrderForcedByProfile => selectedProfileOption?.DefaultComparisonRules.IgnoreCollectionOrder == true;
+    private bool IsIgnoreStringCaseForcedByProfile => selectedProfileOption?.DefaultComparisonRules.IgnoreStringCase == true;
+    private bool IsIgnoreTrailingWhitespaceForcedByProfile => selectedProfileOption?.DefaultComparisonRules.IgnoreTrailingWhitespaceAtEnd == true;
+    private bool IsTreatNullAndEmptyCollectionsForcedByProfile => selectedProfileOption?.DefaultComparisonRules.TreatNullAndEmptyCollectionsAsEqual == true;
+    private bool IsIgnoreXmlNamespacesForcedByProfile => selectedProfileOption?.DefaultComparisonRules.IgnoreXmlNamespaces == true;
+
+    private IReadOnlyList<IgnoreRuleDefinition> FilteredProfileDefaultIgnoreRules =>
+        (selectedProfileOption?.DefaultComparisonRules.IgnoreRules ?? Array.Empty<IgnoreRuleDefinition>())
+            .Where(rule => string.IsNullOrWhiteSpace(profileDefaultIgnoreRuleSearchTerm)
+                || rule.PropertyPath.Contains(profileDefaultIgnoreRuleSearchTerm.Trim(), StringComparison.OrdinalIgnoreCase))
+            .OrderBy(rule => rule.PropertyPath, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private IReadOnlyList<IgnoreRuleDefinition> VisibleProfileDefaultIgnoreRules =>
+        showAllProfileDefaultIgnoreRules
+            ? FilteredProfileDefaultIgnoreRules
+            : FilteredProfileDefaultIgnoreRules.Take(ProfileDefaultRulePreviewLimit).ToList();
+
+    private void ToggleProfileDefaultIgnoreRules()
+    {
+        showProfileDefaultIgnoreRules = !showProfileDefaultIgnoreRules;
+        if (!showProfileDefaultIgnoreRules)
+        {
+            showAllProfileDefaultIgnoreRules = false;
+        }
+    }
+
+    private void ToggleShowAllProfileDefaultIgnoreRules() =>
+        showAllProfileDefaultIgnoreRules = !showAllProfileDefaultIgnoreRules;
+
+    private void ResetProfileDefaultIgnoreRuleViewer()
+    {
+        profileDefaultIgnoreRuleSearchTerm = string.Empty;
+        showProfileDefaultIgnoreRules = false;
+        showAllProfileDefaultIgnoreRules = false;
+    }
+
+    private void ApplyProfileEndpointSuggestions()
+    {
+        if (selectedProfileOption is null)
+        {
+            return;
+        }
+
+        EndpointOption? suggestedEndpointA = ResolveEndpoint(selectedProfileOption.EndpointASuggestedEndpointId);
+        EndpointOption? suggestedEndpointB = ResolveEndpoint(selectedProfileOption.EndpointBSuggestedEndpointId);
+        if (suggestedEndpointA is not null)
+        {
+            endpointA = suggestedEndpointA.Url.ToString();
+            endpointAHeaders = FormatHeaders(suggestedEndpointA.DefaultHeaders);
+        }
+
+        if (suggestedEndpointB is not null)
+        {
+            endpointB = suggestedEndpointB.Url.ToString();
+            endpointBHeaders = FormatHeaders(suggestedEndpointB.DefaultHeaders);
+        }
+    }
+
+    private EndpointOption? ResolveEndpoint(string? endpointId) =>
+        string.IsNullOrWhiteSpace(endpointId)
+            ? null
+            : defaults.Endpoints.FirstOrDefault(endpoint => string.Equals(endpoint.EndpointId, endpointId, StringComparison.OrdinalIgnoreCase));
+
+    private string? ResolveEndpointLabel(string endpointUrl) =>
+        defaults.Endpoints.FirstOrDefault(endpoint => string.Equals(endpoint.Url.ToString(), endpointUrl, StringComparison.OrdinalIgnoreCase))?.Label;
+
+    private Task<IEnumerable<string>> SearchModelNamesAsync(string value, CancellationToken cancellationToken) =>
+        Task.FromResult(FilterOptions(new[] { "Auto" }.Concat(defaults.ResponseModels.Select(model => model.ModelName)), value));
+
+    private Task<IEnumerable<string>> SearchProfileIdsAsync(string value, CancellationToken cancellationToken) =>
+        Task.FromResult(FilterOptions(availableProfileOptions.Select(profile => profile.ProfileId), value));
+
+    private Task<IEnumerable<string>> SearchEndpointUrlsAsync(string value, CancellationToken cancellationToken)
+    {
+        IEnumerable<string> matches = defaults.Endpoints
+            .Where(endpoint => MatchesSearch(endpoint.Label, value)
+                || MatchesSearch(endpoint.EndpointId, value)
+                || MatchesSearch(endpoint.Url.ToString(), value))
+            .Select(endpoint => endpoint.Url.ToString());
+
+        return Task.FromResult(matches);
+    }
+
+    private static IEnumerable<string> FilterOptions(IEnumerable<string> options, string search) =>
+        options
+            .Where(option => MatchesSearch(option, search))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(option => option, StringComparer.OrdinalIgnoreCase);
+
+    private static bool MatchesSearch(string value, string search) =>
+        string.IsNullOrWhiteSpace(search) || value.Contains(search, StringComparison.OrdinalIgnoreCase);
+
+    private static bool HasProfileDefaultComparisonRules(ContractProfileOption? profile) =>
+        profile?.DefaultComparisonRules.HasDefaults == true;
+
+    private static IReadOnlyList<string> GetProfileDefaultRuleSummary(ComparisonRuleDefaults defaults)
+    {
+        List<string> summaries = new List<string>();
+        if (defaults.IgnoreCollectionOrder)
+        {
+            summaries.Add("Ignore collection order");
+        }
+
+        if (defaults.IgnoreStringCase)
+        {
+            summaries.Add("Ignore string case");
+        }
+
+        if (defaults.IgnoreTrailingWhitespaceAtEnd)
+        {
+            summaries.Add("Ignore trailing whitespace");
+        }
+
+        if (defaults.TreatNullAndEmptyCollectionsAsEqual)
+        {
+            summaries.Add("Null and empty collections equal");
+        }
+
+        if (defaults.IgnoreXmlNamespaces)
+        {
+            summaries.Add("Ignore XML namespaces");
+        }
+
+        if (defaults.IgnoreRules.Count > 0)
+        {
+            summaries.Add($"Ignore paths: {defaults.IgnoreRules.Count}");
+        }
+
+        if (defaults.SmartIgnoreRules.Count > 0)
+        {
+            summaries.Add($"Smart ignores: {defaults.SmartIgnoreRules.Count}");
+        }
+
+        if (defaults.MaskRules.Count > 0)
+        {
+            summaries.Add($"Masks: {defaults.MaskRules.Count}");
+        }
+
+        return summaries;
+    }
+
+    private static string GetProfileDefaultIgnoreRuleCountText(int count) =>
+        $"{count} profile default ignore rule{(count == 1 ? string.Empty : "s")}";
+
+    private static IEnumerable<string> GetIgnoreRuleSummary(IgnoreRuleDefinition rule)
+    {
+        if (rule.IgnoreCompletely)
+        {
+            yield return "Ignore completely";
+        }
+
+        if (rule.IgnoreCollectionOrder)
+        {
+            yield return "Ignore collection order";
+        }
+
+        if (rule.TreatNullAndEmptyCollectionsAsEqual)
+        {
+            yield return "Null and empty collections equal";
+        }
+    }
+
+    private static string FormatIgnoreRules(IReadOnlyList<IgnoreRuleDefinition> rules) =>
+        string.Join(Environment.NewLine, rules.Select(rule => rule.PropertyPath));
+
+    private static string FormatSmartIgnoreRules(IReadOnlyList<SmartIgnoreRuleDefinition> rules) =>
+        string.Join(Environment.NewLine, rules.Select(rule => $"{rule.Kind}={rule.Value}"));
+
+    private static string FormatMaskRules(IReadOnlyList<MaskRuleDefinition> rules) =>
+        string.Join(Environment.NewLine, rules.Select(FormatMaskRule));
+
+    private static string FormatMaskRule(MaskRuleDefinition rule)
+    {
+        List<string> segments = new List<string> { rule.PropertyPath };
+        if (rule.PreserveLastCharacters > 0)
+        {
+            segments.Add($"preserveLast={rule.PreserveLastCharacters}");
+        }
+
+        if (!string.Equals(rule.MaskCharacter, "*", StringComparison.Ordinal))
+        {
+            segments.Add($"mask={rule.MaskCharacter}");
+        }
+
+        return string.Join("|", segments);
+    }
+    private void RecordProgress(ComparisonRun run)
+    {
+        string entry = $"{DateTimeOffset.Now:HH:mm:ss} {run.Status}: {run.Progress.Message}";
+        if (progressLog.Count == 0 || !string.Equals(progressLog[^1], entry, StringComparison.Ordinal))
+        {
+            progressLog.Add(entry);
+        }
+    }
+
+    private static string GetCommonSourceDirectory(IReadOnlyList<string> filePaths)
+    {
+        string? commonDirectory = null;
+        foreach (string filePath in filePaths)
+        {
+            string? directory = Path.GetDirectoryName(Path.GetFullPath(filePath));
+            if (string.IsNullOrWhiteSpace(directory))
+            {
+                continue;
+            }
+
+            commonDirectory = commonDirectory is null ? directory : GetCommonDirectory(commonDirectory, directory);
+        }
+
+        return commonDirectory ?? string.Empty;
+    }
+
+    private static string GetCommonDirectory(string firstDirectory, string secondDirectory)
+    {
+        string[] firstParts = firstDirectory.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string[] secondParts = secondDirectory.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        int sharedLength = 0;
+        while (sharedLength < firstParts.Length
+            && sharedLength < secondParts.Length
+            && string.Equals(firstParts[sharedLength], secondParts[sharedLength], StringComparison.OrdinalIgnoreCase))
+        {
+            sharedLength++;
+        }
+
+        return sharedLength == 0
+            ? Path.GetPathRoot(firstDirectory) ?? firstDirectory
+            : string.Join(Path.DirectorySeparatorChar, firstParts.Take(sharedLength));
+    }
+
+    private static string GetPhaseIcon(RunStatus status) =>
+        status switch
+        {
+            RunStatus.Completed => Icons.Material.Filled.CheckCircle,
+            RunStatus.Failed => Icons.Material.Filled.Error,
+            RunStatus.Cancelled => Icons.Material.Filled.Cancel,
+            RunStatus.Executing => Icons.Material.Filled.PlayArrow,
+            RunStatus.Comparing => Icons.Material.Filled.CompareArrows,
+            RunStatus.Analyzing => Icons.Material.Filled.Analytics,
+            _ => Icons.Material.Filled.Sync,
+        };
+
+    private static Color GetPhaseColor(RunStatus status) =>
+        status switch
+        {
+            RunStatus.Completed => Color.Success,
+            RunStatus.Failed => Color.Error,
+            RunStatus.Cancelled => Color.Warning,
+            _ => Color.Primary,
+        };
+
+    private static int ParsePositiveInt(string value, string label)
+    {
+        if (!int.TryParse(value, out int parsed) || parsed <= 0)
+        {
+            throw new InvalidOperationException($"{label} must be a positive whole number.");
+        }
+
+        return parsed;
+    }
+
+    private static string FormatHeaders(IReadOnlyDictionary<string, string>? headers) =>
+        headers is null || headers.Count == 0
+            ? string.Empty
+            : string.Join(Environment.NewLine, headers.Select(header => $"{header.Key}: {header.Value}"));
+
+    private static IReadOnlyDictionary<string, string> ParseHeaders(string text)
+    {
+        Dictionary<string, string> headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string rawLine in text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            string line = rawLine.Trim();
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
+            int separatorIndex = line.IndexOf(':', StringComparison.Ordinal);
+            if (separatorIndex <= 0)
+            {
+                throw new InvalidOperationException($"Header '{line}' must use Name: Value format.");
+            }
+
+            headers[line[..separatorIndex].Trim()] = line[(separatorIndex + 1)..].Trim();
+        }
+
+        return headers;
+    }
+
+    private static RequestComparisonDefaults CreateEmptyDefaults() =>
+        new RequestComparisonDefaults(
+            Array.Empty<ResponseModelOption>(),
+            Array.Empty<ContractProfileOption>(),
+            Array.Empty<EndpointOption>(),
+            Array.Empty<RequestComparisonPresetOption>());
+}
+

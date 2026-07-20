@@ -1,0 +1,144 @@
+@inject IAcceptedDifferenceUseCases AcceptedDifferences
+
+@if (Pair is null)
+{
+    <MudText Typo="Typo.body2" Color="Color.Secondary">Select a pair to inspect details</MudText>
+}
+else
+{
+    <MudStack Spacing="2">
+        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="flex-wrap">
+            <MudText Typo="Typo.subtitle1">@Pair.RelativePath</MudText>
+            <MudChip T="string" Size="Size.Small" Color="@OutcomeColor(Pair.Outcome)">@Pair.Outcome</MudChip>
+            <MudChip T="string" Size="Size.Small" Color="Color.Default">Differences @Pair.DifferenceCount</MudChip>
+        </MudStack>
+
+        @if (!string.IsNullOrWhiteSpace(Pair.ErrorMessage))
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@Pair.ErrorMessage</MudAlert>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Pair.OutcomeMessage))
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">@Pair.OutcomeMessage</MudAlert>
+        }
+
+        @if (Pair.Differences.Count > 0)
+        {
+            <MudPaper Outlined="true" Class="pa-3">
+                <MudText Typo="Typo.subtitle2">Differences</MudText>
+                <MudList T="ComparisonDifference" Dense="true">
+                    @foreach (var difference in Pair.Differences)
+                    {
+                        <MudListItem Value="difference">
+                            <MudStack Spacing="1">
+                                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="flex-wrap">
+                                    <MudText Typo="Typo.body2">@difference.PropertyPath</MudText>
+                                    @if (IsStructuredCandidate(difference))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="@GetTrackingColor(difference)">@GetTrackingLabel(difference)</MudChip>
+                                        <MudButton Variant="Variant.Text" Size="Size.Small" Disabled="@AcceptedDifferences.IsReadOnly" OnClick="@(() => SaveAcceptedAsync(difference, AcceptedDifferenceStatus.AcceptedDifference))">Accept</MudButton>
+                                        <MudButton Variant="Variant.Text" Size="Size.Small" Disabled="@AcceptedDifferences.IsReadOnly" OnClick="@(() => SaveAcceptedAsync(difference, AcceptedDifferenceStatus.FixedVerified))">Fixed</MudButton>
+                                        @if (GetProfile(difference) is not null && !AcceptedDifferences.IsReadOnly)
+                                        {
+                                            <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Error" OnClick="@(() => ClearAcceptedAsync(difference))">Clear</MudButton>
+                                        }
+                                    }
+                                </MudStack>
+                                <MudText Typo="Typo.caption">A: @difference.ValueA</MudText>
+                                <MudText Typo="Typo.caption">B: @difference.ValueB</MudText>
+                            </MudStack>
+                        </MudListItem>
+                    }
+                </MudList>
+            </MudPaper>
+        }
+
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <ArtifactPreviewPanel Title="Endpoint A" Preview="PreviewA" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <ArtifactPreviewPanel Title="Endpoint B" Preview="PreviewB" />
+            </MudItem>
+        </MudGrid>
+    </MudStack>
+}
+
+@code {
+    [Parameter]
+    public RequestPairResult? Pair { get; set; }
+
+    [Parameter]
+    public ArtifactContentPreview? PreviewA { get; set; }
+
+    [Parameter]
+    public ArtifactContentPreview? PreviewB { get; set; }
+
+    private Dictionary<string, AcceptedDifferenceProfile> matches = new Dictionary<string, AcceptedDifferenceProfile>(StringComparer.Ordinal);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        matches = Pair is null
+            ? new Dictionary<string, AcceptedDifferenceProfile>(StringComparer.Ordinal)
+            : new Dictionary<string, AcceptedDifferenceProfile>(
+                await AcceptedDifferences.MatchAsync(Pair.Differences.Where(IsStructuredCandidate)),
+                StringComparer.Ordinal);
+    }
+
+    private AcceptedDifferenceProfile? GetProfile(ComparisonDifference difference) =>
+        matches.GetValueOrDefault(AcceptedDifferences.CreateFingerprint(difference).Fingerprint);
+
+    private string GetTrackingLabel(ComparisonDifference difference) => GetProfile(difference)?.Status switch
+    {
+        AcceptedDifferenceStatus.AcceptedDifference => "Accepted",
+        AcceptedDifferenceStatus.KnownBug => "Known Bug",
+        AcceptedDifferenceStatus.FixedVerified => "Fixed / Verified",
+        _ => "New",
+    };
+
+    private Color GetTrackingColor(ComparisonDifference difference) => GetProfile(difference)?.Status switch
+    {
+        AcceptedDifferenceStatus.AcceptedDifference => Color.Success,
+        AcceptedDifferenceStatus.KnownBug => Color.Warning,
+        AcceptedDifferenceStatus.FixedVerified => Color.Info,
+        _ => Color.Default,
+    };
+
+    private async Task SaveAcceptedAsync(ComparisonDifference difference, AcceptedDifferenceStatus status)
+    {
+        await AcceptedDifferences.SaveAsync(difference, status);
+        await RefreshMatchesAsync();
+    }
+
+    private async Task ClearAcceptedAsync(ComparisonDifference difference)
+    {
+        await AcceptedDifferences.RemoveAsync(difference);
+        await RefreshMatchesAsync();
+    }
+
+    private async Task RefreshMatchesAsync()
+    {
+        matches = new Dictionary<string, AcceptedDifferenceProfile>(
+            await AcceptedDifferences.MatchAsync(Pair?.Differences.Where(IsStructuredCandidate) ?? Array.Empty<ComparisonDifference>()),
+            StringComparer.Ordinal);
+    }
+
+    private static bool IsStructuredCandidate(ComparisonDifference difference)
+    {
+        string path = difference.PropertyPath ?? string.Empty;
+        return !string.Equals(path, "HttpStatus", StringComparison.OrdinalIgnoreCase)
+            && !path.StartsWith("Body.", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(path, "BodyPreview", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static Color OutcomeColor(RequestPairOutcome outcome) => outcome switch
+    {
+        RequestPairOutcome.Equal => Color.Success,
+        RequestPairOutcome.Different => Color.Warning,
+        RequestPairOutcome.ExecutionFailed => Color.Error,
+        RequestPairOutcome.StatusCodeMismatch => Color.Info,
+        RequestPairOutcome.BothNonSuccess => Color.Secondary,
+        _ => Color.Default,
+    };
+}

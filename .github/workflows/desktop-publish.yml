@@ -1,0 +1,62 @@
+# DISABLED: this workflow published ComparisonTool.Desktop (V1), which has
+# been moved to archive/v1-comparisontool/ and is no longer built by CI.
+# ParityBench.NET.Desktop (V2, under Source/) is not yet wired up as a
+# replacement release target. Re-enable and repoint at
+# Source/ParityBench.NET.Desktop once V2 desktop is ready to ship.
+name: Publish Desktop
+
+on:
+  workflow_dispatch:
+  # push:
+  #   tags:
+  #     - 'v*'
+  #     - 'desktop-v*'
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  PUBLISH_DIR: artifacts/desktop/win-x64
+  ZIP_PATH: artifacts/desktop/comparison-tool-desktop-win-x64.zip
+
+jobs:
+  publish-desktop:
+    name: Publish Windows desktop app
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Publish desktop package
+        run: ./scripts/Publish-Desktop.ps1 -Runtime win-x64
+
+      - name: Verify publish output
+        shell: pwsh
+        run: |
+          $exePath = Join-Path $env:PUBLISH_DIR 'ComparisonTool.Desktop.exe'
+          $hostPage = Join-Path $env:PUBLISH_DIR 'wwwroot/index.html'
+
+          if (-not (Test-Path $exePath)) {
+            throw "Expected desktop exe was not published: $exePath"
+          }
+
+          if (-not (Test-Path $hostPage)) {
+            throw "Expected BlazorWebView host page was not published: $hostPage"
+          }
+
+          if (-not (Test-Path $env:ZIP_PATH)) {
+            throw "Expected desktop zip artifact was not published: $env:ZIP_PATH"
+          }
+
+          Get-ChildItem $env:PUBLISH_DIR -Recurse | Select-Object FullName, Length
+
+      - name: Upload desktop artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: comparison-tool-desktop-win-x64
+          path: ${{ env.ZIP_PATH }}
+          if-no-files-found: error

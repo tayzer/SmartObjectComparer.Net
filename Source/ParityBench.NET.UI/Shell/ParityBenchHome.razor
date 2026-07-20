@@ -1,0 +1,95 @@
+<MudStack Spacing="3" Class="pb-home-shell">
+    <MudPaper Elevation="0" Class="pa-3 pb-workspace-context">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="flex-wrap" Spacing="2">
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.subtitle1">Request comparison workspace</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Configure endpoints, run comparisons, inspect results.</MudText>
+            </MudStack>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="flex-wrap">
+                <MudChip T="string" Size="Size.Small" Color="@SelectedRunColor" Variant="Variant.Outlined" Icon="@SelectedRunIcon" Class="pb-selected-run">@SelectedRunDisplay</MudChip>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+
+    <MudTabs Rounded="false" Border="true" Elevation="0" PanelClass="pb-tab-panel" @bind-ActivePanelIndex="activeTabIndex">
+        <MudTabPanel Text="Compare Requests" Icon="@Icons.Material.Filled.CompareArrows">
+            <MudStack Spacing="3">
+                <RunWorkflow RunSelected="SelectRun" RunChanged="HandleRunChanged" />
+                @if (ShouldShowSelectedRunResults)
+                {
+                    <MudPaper Elevation="0" Outlined="true" Class="pa-3">
+                        <MudText Typo="Typo.h6" Class="mb-3">Request Comparison Results</MudText>
+                        <RunResult RunId="selectedRunId" RefreshVersion="resultRefreshVersion" />
+                    </MudPaper>
+                }
+            </MudStack>
+        </MudTabPanel>
+        <MudTabPanel Text="Run History" Icon="@Icons.Material.Filled.History">
+            <MudGrid Spacing="3">
+                <MudItem xs="12" md="4" @key="historyVersion">
+                    <RunHistory RunSelected="SelectHistoricalRun" />
+                </MudItem>
+                <MudItem xs="12" md="8">
+                    <RunResult RunId="selectedRunId" RefreshVersion="resultRefreshVersion" />
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+    </MudTabs>
+</MudStack>
+
+@code {
+    private const int RequestComparisonTabIndex = 0;
+    private const int RunHistoryTabIndex = 1;
+    private RunId? selectedRunId;
+    private ComparisonRun? selectedRun;
+    private int activeTabIndex = RequestComparisonTabIndex;
+    private int historyVersion;
+    private int resultRefreshVersion;
+
+    private string SelectedRunDisplay => selectedRunId is null
+        ? "No run selected"
+        : $"Selected run: {selectedRunId.Value.Value}";
+
+    private bool ShouldShowSelectedRunResults => selectedRunId is not null && selectedRun?.IsTerminal == true;
+
+    private Color SelectedRunColor => selectedRun?.Status switch
+    {
+        RunStatus.Completed => Color.Success,
+        RunStatus.Failed => Color.Error,
+        RunStatus.Cancelled => Color.Warning,
+        RunStatus.Executing or RunStatus.Comparing or RunStatus.Analyzing => Color.Primary,
+        _ => Color.Default,
+    };
+
+    private string SelectedRunIcon => selectedRunId is null
+        ? Icons.Material.Filled.RadioButtonUnchecked
+        : selectedRun?.IsTerminal == true ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.PlayCircle;
+
+    private void SelectRun(RunId runId)
+    {
+        if (selectedRunId != runId)
+        {
+            selectedRun = null;
+        }
+
+        selectedRunId = runId;
+        resultRefreshVersion++;
+    }
+
+    private void SelectHistoricalRun(RunId runId)
+    {
+        selectedRunId = runId;
+        selectedRun = null;
+        activeTabIndex = RunHistoryTabIndex;
+        resultRefreshVersion++;
+    }
+
+    private void HandleRunChanged(ComparisonRun run)
+    {
+        selectedRunId = run.Id;
+        selectedRun = run;
+        activeTabIndex = RequestComparisonTabIndex;
+        historyVersion++;
+        resultRefreshVersion++;
+    }
+}

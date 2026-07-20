@@ -1,237 +1,72 @@
-    # Comparison Tool
+# ParityBench.NET
 
-## Overview
+ParityBench.NET is an A/B request-comparison and Expected/Actual testing platform. It fires the same requests at two endpoints (or compares two sets of result files), diffs the responses as domain objects rather than raw text, and surfaces the differences that actually matter.
 
-The Comparison Tool is an advanced Expected/Actual testing platform designed to intelligently compare two sets of results, enabling testers to efficiently categorize, analyze, and identify common differences across large datasets. Unlike traditional JSON or XML comparison utilities, this tool leverages in-memory processing based on domain models, providing significantly more sophisticated analysis capabilities and actionable insights.
+Unlike text/XML diff tools, ParityBench.NET deserializes both sides into domain models before comparing, so it understands types, collections, and business-meaningful structure, not just line-by-line text drift.
 
-## Key Features
+## Prerequisites
 
-### 🔍 **Smart Domain-Model-Based Comparison**
-- **In-Memory Processing**: Operates directly on domain objects rather than raw text/XML, enabling semantic understanding of data structures
-- **Type-Aware Analysis**: Understands data types, relationships, and business logic embedded in your domain models
-- **Configurable Comparison Rules**: Define custom ignore rules, collection ordering preferences, and property-specific comparison logic
+- .NET 10 SDK
 
-### 📊 **Multi-Layered Analysis Engine**
+## Building
 
-#### **Pattern Analysis**
-- Identifies recurring differences across file pairs
-- Groups similar differences for easier review
-- Provides frequency analysis and consistency metrics
-
-#### **Semantic Analysis** 
-- Groups differences by business meaning and context
-- Identifies logical patterns beyond simple structural differences
-- Helps understand the business impact of changes
-
-#### **Structural Analysis**
-- Detects missing collection elements and properties
-- Identifies element ordering differences
-- Analyzes structural consistency across datasets
-
-#### **Enhanced Structural Analysis** ⭐
-- **Critical Element Detection**: Prioritizes business-critical missing elements
-- **Human-Readable Descriptions**: Provides plain-English explanations of differences
-- **Actionable Recommendations**: Suggests specific remediation steps
-- **Advanced Categorization**: Distinguishes between different types of structural changes
-
-### 🚀 **Performance & Scalability**
-- **Batch Processing**: Handle hundreds of file pairs efficiently
-- **Progress Tracking**: Real-time progress reporting for long-running comparisons
-- **Memory Optimization**: Intelligent memory management for large datasets
-- **Cancellable Operations**: Interrupt long-running processes when needed
-
-### 📁 **Flexible Input Methods**
-- **Directory Comparison**: Compare entire folders of files
-- **File Upload**: Upload specific file sets for comparison
-- **Multiple Formats**: Support for various file formats through configurable deserialization
-
-## Why Choose This Tool Over Simple Comparers?
-
-| Feature | Traditional JSON/XML Comparers | Comparison Tool |
-|---------|--------------------------------|-----------------|
-| **Understanding** | Text-based, syntax-aware only | Domain-model-aware, semantic understanding |
-| **Analysis Depth** | Shows what changed | Explains why it matters and what to do |
-| **Pattern Recognition** | Manual pattern identification | Automated pattern detection and grouping |
-| **Business Context** | Raw technical differences | Business-meaningful categorization |
-| **Scale Handling** | Limited to single file pairs | Batch processing with intelligent aggregation |
-| **Actionability** | Lists differences | Provides prioritized recommendations |
-
-## Use Cases
-
-### **Quality Assurance Testing**
-- Compare API response sets before and after code changes
-- Validate data migration results across large datasets
-- Expected/Actual test different algorithm implementations
-
-### **Release Validation**
-- Ensure system behavior consistency across versions
-- Identify unintended side effects in large system changes
-- Validate configuration changes across environments
-
-### **Data Analysis**
-- Compare dataset outputs from different processing pipelines
-- Analyze the impact of parameter changes on results
-- Identify systematic differences in data processing
-
-## Analysis Types
-
-### 1. **Critical Element Analysis**
-Identifies business-critical properties that are missing or changed, helping teams prioritize their review efforts on the most impactful differences.
-
-### 2. **Pattern Frequency Analysis**
-Groups similar differences together, showing how often specific patterns occur across your dataset, making it easy to spot systematic issues.
-
-### 3. **Semantic Grouping**
-Organizes differences by business meaning rather than technical structure, helping non-technical stakeholders understand the impact of changes.
-
-### 4. **Collection Analysis**
-Specialized analysis for collections and arrays, detecting missing elements, ordering changes, and structural modifications.
-
-### 5. **Value Difference Tracking**
-Tracks consistent value changes across properties, helping identify configuration differences or systematic data transformations.
-
-## Getting Started
-
-### Prerequisites
-- .NET 10.0 or later
-- Web browser (for the UI)
-- Domain model assemblies for your data types
-
-### **Basic Usage**
-
-#### Web UI
-
-1. **Configure Domain Models**: Register your domain models for deserialization
-2. **Set Comparison Rules**: Define ignore rules and comparison preferences
-3. **Load Data**: Upload files or specify directories to compare
-4. **Run Analysis**: Execute comparison with desired analysis types enabled
-5. **Review Results**: Use the interactive UI to explore patterns and differences
-
-#### CLI
-
-The ComparisonTool CLI lets you run folder and request comparisons from the command line without hosting the web UI.
-
-**Install / Build:**
 ```bash
-dotnet build ComparisonTool.Cli/ComparisonTool.Cli.csproj -c Release
+dotnet restore ComparisonTool.sln
+dotnet build ComparisonTool.sln -c Release
 ```
 
-**Folder comparison** — compare two directories of XML/JSON files:
+## Hosts
+
+| Project | Purpose |
+|---|---|
+| [`Source/ParityBench.NET.Web`](Source/ParityBench.NET.Web) | Blazor Server web host |
+| [`Source/ParityBench.NET.Desktop`](Source/ParityBench.NET.Desktop) | WPF + BlazorWebView desktop host (Windows) |
+| [`Source/ParityBench.NET.Cli`](Source/ParityBench.NET.Cli) | Command-line host for request comparison |
+| [`Source/ParityBench.NET.TestEndpoints`](Source/ParityBench.NET.TestEndpoints) | Fixture server with deterministic SOAP/XML/JSON endpoints, used for manual runs and E2E tests |
+| [`Source/ParityBench.NET.ClientCustomerLookupExample`](Source/ParityBench.NET.ClientCustomerLookupExample) | Example client contract profile (SOAP + JSON with chained token auth) — see [Adding a Custom Domain Profile](Docs/Guides/adding-a-custom-domain-profile.md) |
+
+Each `Source/` project has its own `README.md` describing what it owns and its boundaries.
+
+## CLI usage
+
 ```bash
-comparisontool folder <expected-dir> <actual-dir> -m ComplexOrderResponse \
-  --ignore-trailing-whitespace-end \
-  -f Console Json Markdown Html --html-mode SingleFile -o ./reports
+dotnet run --project Source/ParityBench.NET.Cli/ParityBench.NET.Cli.csproj -- request <request-directory> --endpoint-a <url> --endpoint-b <url>
 ```
 
-**Request comparison** — fire requests at two endpoints and diff the responses (with ignore rules, response masking, and content-type override):
+Or via a registered preset (resolves request directory, endpoints, model, profile, and headers):
+
 ```bash
-comparisontool request <request-dir> \
-  -a https://host-a/api/endpoint \
-  -b https://host-b/api/endpoint \
-  -m ComplexOrderResponse -c 32 --timeout 60000 \
-  --range 1-500 \
-  --soap-action "urn:YourSoapAction" \
-  --ignore-rules ./ignore-rules.json \
-  --mask-rules ./mask-rules.json \
-  --content-type application/json \
-  --disable-truncation \
-  --ignore-collection-order --ignore-trailing-whitespace-end --ignore-namespaces \
-  -f Console Json Html --html-mode StaticSite -o ./reports
+dotnet run --project Source/ParityBench.NET.Cli/ParityBench.NET.Cli.csproj -- request --preset client-soap-json-token
 ```
 
-`--soap-action` is optional. When provided, it sets the `SOAPAction` header for requests sent to both endpoints.
+Full option reference:
 
-`--range` is optional. It applies a 1-based inclusive ordinal slice after top-level eligible request files are sorted with ordinal filename ordering. For example, `--range 1-500` stages the first 500 eligible `xml`/`json`/`txt` request files, clamping the end when fewer files are available.
-
-`--mask-rules` is optional. It masks matched JSON/XML string properties in saved response files before comparison and report generation. This is intended for sensitive values such as payment-card fields. v1 masking is string-only and preserves the final `preserveLastCharacters` characters.
-
-For CI troubleshooting (for example Jenkins), use `--disable-truncation` to show full value bodies directly in generated reports and console output.
-
-`--html-mode` supports `SingleFile` (one self-contained `.html`) and `StaticSite` (index + per-pair pages).
-
-**Ignore rules JSON** (array of `IgnoreRuleDto`):
-```json
-[
-  {
-    "propertyPath": "Order.Id",
-    "ignoreCompletely": true,
-    "ignoreCollectionOrder": false
-  },
-  {
-    "propertyPath": "Order.Items",
-    "ignoreCompletely": false,
-    "ignoreCollectionOrder": true
-  }
-]
+```
+request [<request-directory>] --endpoint-a <url> --endpoint-b <url> | --preset <preset-id>
+  [--model Auto] [--profile <profile-id>] [--concurrency <n>] [--timeout <seconds>]
+  [--content-type <type>] [--header <Name: Value>] [--header-a <Name: Value>] [--header-b <Name: Value>]
+  [--report-output <directory>] [--report-assets <directory>] [--log-level <level>]
+  [--log-durations] [--log-exceptions] [--persist-diagnostics] [--slow-path-threshold-ms <n>]
 ```
 
-**Mask rules JSON** (array of `MaskRuleDto`):
-```json
-[
-  {
-    "propertyPath": "Order.Payments[*].CardNumber",
-    "preserveLastCharacters": 4,
-    "maskCharacter": "*"
-  },
-  {
-    "propertyPath": "Order.Customer.Email",
-    "preserveLastCharacters": 0,
-    "maskCharacter": "#"
-  }
-]
-```
+- `<request-directory>` is required unless `--preset` supplies one.
+- `--endpoint-a` / `--endpoint-b` are required (absolute URLs) unless `--preset` supplies them; explicit flags override preset values.
+- `--header` applies to both endpoints; `--header-a`/`--header-b` apply to one side only. All three are repeatable.
 
-Run `comparisontool --help`, `comparisontool folder --help`, or `comparisontool request --help` for full option details.
-
-**Exit codes:**
-| Code | Meaning |
-|------|---------|
-| 0 | All pairs are equal |
-| 1 | Error (bad input, runtime failure) |
-| 2 | Comparison completed with differences |
-
-**Configuration:** The CLI reads `appsettings.json` from its output directory (same sections as the web host: `ComparisonSettings`, `RequestComparison`). Override individual settings via environment variables prefixed with `CT_`.
-
-### Example Workflow
-```
-1. Enable Enhanced Structural Analysis
-2. Upload Expected and Actual result sets
-3. Configure ignore rules for timestamps/IDs
-4. Run comparison
-5. Review Critical Elements first
-6. Export detailed reports for documentation
-```
+See [`Source/ParityBench.NET.Cli/README.md`](Source/ParityBench.NET.Cli/README.md) for details.
 
 ## Architecture
 
-### **Core Components**
-- **Comparison Engine**: High-performance in-memory comparison logic
-- **Analysis Pipeline**: Pluggable analysis modules for different insight types
-- **Domain Model Integration**: Reflection-based model understanding
-- **Web UI**: Modern Blazor-based interface for interactive analysis
+ParityBench.NET is a staged, bounded, asynchronous pipeline: plan a run manifest, execute endpoint A/B concurrently with bounded concurrency, persist response artifacts immediately, compare persisted artifacts, append paged result metadata, then apply outcome-based retention cleanup. Hosts (Web, Desktop, CLI) are thin composition roots over shared application/engine/workspace services.
 
-### **Analysis Pipeline**
-1. **Deserialization**: Convert files to domain objects
-2. **Comparison**: Deep object comparison with configurable rules
-3. **Pattern Detection**: Identify recurring difference patterns
-4. **Semantic Analysis**: Group differences by business meaning
-5. **Report Generation**: Create actionable insights and recommendations
+Full design and a run-flow diagram: [`Docs/Architecture/high-level-design.md`](Docs/Architecture/high-level-design.md).
 
-## Benefits
+To compare a new API pair with its own request/response shape, see [Adding a Custom Domain Profile](Docs/Guides/adding-a-custom-domain-profile.md).
 
-- **Faster Reviews**: Automated pattern detection reduces manual analysis time
-- **Better Coverage**: Systematic analysis ensures no critical differences are missed
-- **Actionable Insights**: Clear recommendations for addressing identified issues
-- **Team Collaboration**: Shareable reports and exportable analysis results
-- **Confidence**: Comprehensive validation before production releases
+## Contributing
 
-## Technical Advantages
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [CODING_STANDARD.md](CODING_STANDARD.md).
 
-- **Type Safety**: Leverages C# type system for robust comparisons
-- **Extensibility**: Plugin architecture for custom analysis modules
-- **Performance**: Optimized for large-scale batch processing
-- **Reliability**: Comprehensive error handling and progress tracking
+## License
 
----
-
-*The Comparison Tool transforms the tedious process of Expected/Actual testing large datasets into an efficient, intelligent analysis workflow that provides actionable insights for development and QA teams.* 
+Apache-2.0 — see [LICENSE](LICENSE).

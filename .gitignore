@@ -3,6 +3,9 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
+# Rider / IntelliJ
+.idea/
+
 # User-specific files
 *.rsuser
 *.suo
@@ -371,3 +374,4 @@ ComparisonTool.Web/PerformanceReports/
 /reports
 /PerformanceReports
 /scripts/PerformanceReports
+/Examples/ParityBench.NET.ManualRuns/client-soap-json-token/volume

@@ -1,0 +1,40 @@
+<MudPaper Outlined="true" Class="pa-3">
+    <MudStack Spacing="1">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.subtitle2">@Title</MudText>
+            @if (Preview is not null)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Preview.IsTruncated ? Color.Warning : Color.Default">
+                    @(Preview.IsTruncated ? $"Preview {Preview.BytesRead} bytes" : $"{Preview.BytesRead} bytes")
+                </MudChip>
+            }
+        </MudStack>
+
+        @if (Preview is null)
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary">No preview available</MudText>
+        }
+        else
+        {
+            @if (!string.IsNullOrWhiteSpace(Preview.ContentType))
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@Preview.ContentType</MudText>
+            }
+
+            @if (Preview.IsTruncated)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">Preview truncated</MudAlert>
+            }
+
+            <pre style="white-space: pre-wrap; overflow-wrap: anywhere; max-height: 20rem; overflow: auto; margin: 0;">@Preview.Content</pre>
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter]
+    public string Title { get; set; } = "Artifact";
+
+    [Parameter]
+    public ArtifactContentPreview? Preview { get; set; }
+}

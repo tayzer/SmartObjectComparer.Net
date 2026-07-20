@@ -1,0 +1,166 @@
+using ComparisonTool.Core.Comparison.Analysis;
+using ComparisonTool.Core.RequestComparison.Models;
+using KellermanSoftware.CompareNetObjects;
+
+namespace ComparisonTool.Core.Comparison.Results;
+
+public class FilePairComparisonResult
+{
+    public string File1Name { get; set; } = string.Empty;
+
+    public string File2Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Gets or sets the full path to file 1. Used for raw file preview on error.
+    /// Null for request comparison results (which use response paths on the execution result).
+    /// </summary>
+    public string? File1Path { get; set; }
+
+    /// <summary>
+    /// Gets or sets the full path to file 2. Used for raw file preview on error.
+    /// </summary>
+    public string? File2Path { get; set; }
+
+    /// <summary>
+    /// Gets or sets the request relative path associated with this pair.
+    /// Used as a stable internal identity for request comparison results when file names are duplicated.
+    /// </summary>
+    public string? RequestRelativePath { get; set; }
+
+    public string GetDisplayIdentifier() => string.IsNullOrWhiteSpace(RequestRelativePath)
+        ? $"{File1Name} vs {File2Name}"
+        : RequestRelativePath;
+
+    public ComparisonResult? Result
+    {
+        get; set;
+    }
+
+    public DifferenceSummary? Summary
+    {
+        get; set;
+    }
+
+    /// <summary>
+    /// Gets or sets the HTTP status code from endpoint A (request comparison only).
+    /// </summary>
+    public int? HttpStatusCodeA { get; set; }
+
+    /// <summary>
+    /// Gets or sets the HTTP status code from endpoint B (request comparison only).
+    /// </summary>
+    public int? HttpStatusCodeB { get; set; }
+
+    /// <summary>
+    /// Gets or sets the response content type from endpoint A (request comparison only).
+    /// </summary>
+    public string? ContentTypeA { get; set; }
+
+    /// <summary>
+    /// Gets or sets the response content type from endpoint B (request comparison only).
+    /// </summary>
+    public string? ContentTypeB { get; set; }
+
+    /// <summary>
+    /// Gets or sets the classified pair outcome for request comparison results.
+    /// Null for non-request-comparison (file/folder) results.
+    /// </summary>
+    public RequestPairOutcome? PairOutcome { get; set; }
+
+    /// <summary>
+    /// Gets or sets the raw text differences when domain-model comparison was not applicable
+    /// (e.g. non-success HTTP responses).
+    /// </summary>
+    public List<RawTextDifference>? RawTextDifferences { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether report-bundled raw content is available for this pair.
+    /// Static HTML reports use this instead of trying to reopen host file-system paths from the browser.
+    /// </summary>
+    public bool HasEmbeddedRawContent { get; set; }
+
+    /// <summary>
+    /// Gets or sets report-bundled raw content for endpoint/file A when available.
+    /// </summary>
+    public string? EmbeddedRawContentA { get; set; }
+
+    /// <summary>
+    /// Gets or sets report-bundled raw content for endpoint/file B when available.
+    /// </summary>
+    public string? EmbeddedRawContentB { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether report-bundled raw content A was truncated.
+    /// </summary>
+    public bool EmbeddedRawContentTruncatedA { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether report-bundled raw content B was truncated.
+    /// </summary>
+    public bool EmbeddedRawContentTruncatedB { get; set; }
+
+    /// <summary>
+    /// Gets or sets the relative path to report-bundled raw content for this pair.
+    /// Static HTML reports use this to lazy-load Full File View content without embedding every body in the main bootstrap JSON.
+    /// </summary>
+    public string? BundledRawContentPath { get; set; }
+
+    /// <summary>
+    /// Gets or sets the full path to focused raw content for file 1.
+    /// Focused content is presentation-only content with ignore-complete fields removed.
+    /// </summary>
+    public string? FocusedFile1Path { get; set; }
+
+    /// <summary>
+    /// Gets or sets the full path to focused raw content for file 2.
+    /// </summary>
+    public string? FocusedFile2Path { get; set; }
+
+    /// <summary>
+    /// Gets or sets the relative path to report-bundled focused raw content for this pair.
+    /// </summary>
+    public string? FocusedBundledRawContentPath { get; set; }
+
+    /// <summary>
+    /// Gets or sets the number of ignore-complete rules used to build focused content.
+    /// </summary>
+    public int FocusedRawContentRuleCount { get; set; }
+
+    /// <summary>
+    /// Gets or sets the ignore-complete paths used to build focused raw content on demand.
+    /// </summary>
+    public List<string> FocusedRawContentIgnorePaths { get; set; } = new();
+
+    /// <summary>
+    /// Gets a value indicating whether focused raw content is available for this pair.
+    /// </summary>
+    public bool HasFocusedRawContent =>
+        FocusedRawContentRuleCount > 0 &&
+        (!string.IsNullOrWhiteSpace(FocusedFile1Path) ||
+         !string.IsNullOrWhiteSpace(FocusedFile2Path) ||
+         !string.IsNullOrWhiteSpace(FocusedBundledRawContentPath) ||
+         FocusedRawContentIgnorePaths.Count > 0);
+
+    /// <summary>
+    /// Gets or sets error information if the comparison failed.
+    /// When HasError is true, the files could not be compared (e.g., FileNotFound, deserialization errors).
+    /// </summary>
+    public string? ErrorMessage { get; set; }
+
+    /// <summary>
+    /// Gets or sets the exception type name if an error occurred.
+    /// </summary>
+    public string? ErrorType { get; set; }
+
+    /// <summary>
+    /// Gets a value indicating whether this file pair had an error during comparison.
+    /// Files with errors should NOT be counted as "Equal" - they are comparison failures.
+    /// </summary>
+    public bool HasError => !string.IsNullOrEmpty(this.ErrorMessage);
+
+    /// <summary>
+    /// Gets a value indicating whether the files are equal.
+    /// Returns false if there was an error, as we cannot determine equality without a successful comparison.
+    /// </summary>
+    public bool AreEqual => !this.HasError && (this.Summary?.AreEqual ?? false);
+}

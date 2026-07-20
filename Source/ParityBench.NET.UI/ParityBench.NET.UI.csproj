@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <ItemGroup>
+    <PackageReference Include="DiffPlex" />
+    <PackageReference Include="MudBlazor" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ParityBench.NET.Application\ParityBench.NET.Application.csproj" />
+    <ProjectReference Include="..\ParityBench.NET.Domain\ParityBench.NET.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

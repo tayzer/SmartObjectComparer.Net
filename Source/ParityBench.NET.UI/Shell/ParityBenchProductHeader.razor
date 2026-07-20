@@ -1,0 +1,39 @@
+@implements IDisposable
+@inject ParityBenchThemeState ThemeState
+
+<MudAppBar Elevation="0" Dense="false" Class="pb-product-header">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="w-100 flex-nowrap">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="pb-product-brand">
+            <img class="pb-brand-mark" src="@BrandMarkPath" alt="" aria-hidden="true" />
+            <MudStack Spacing="0" Class="pb-product-brand-copy">
+                <MudText Typo="Typo.subtitle1" Class="pb-brand-wordmark">ParityBench.NET</MudText>
+                @if (!string.IsNullOrWhiteSpace(ContextLabel))
+                {
+                    <MudText Typo="Typo.caption" Class="pb-brand-context">@ContextLabel</MudText>
+                }
+            </MudStack>
+        </MudStack>
+        <ThemeModeToggle />
+    </MudStack>
+</MudAppBar>
+
+@code {
+    [Parameter]
+    public string? ContextLabel { get; set; }
+
+    private string BrandMarkPath => ThemeState.IsDarkMode
+        ? "_content/ParityBench.NET.UI/branding/paritybench-mark-dark.svg"
+        : "_content/ParityBench.NET.UI/branding/paritybench-mark.svg";
+
+    protected override void OnInitialized()
+    {
+        ThemeState.Changed += HandleThemeChanged;
+    }
+
+    private void HandleThemeChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        ThemeState.Changed -= HandleThemeChanged;
+    }
+}

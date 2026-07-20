@@ -1,0 +1,16 @@
+@using ParityBench.NET.UI.Theming
+
+<ParityBenchThemeProvider>
+    <MudPopoverProvider />
+    <MudDialogProvider />
+    <MudSnackbarProvider />
+
+    <MudLayout>
+        <ParityBenchProductHeader ContextLabel="Request comparison workspace" />
+        <MudMainContent>
+            <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+                <ParityBenchHome />
+            </MudContainer>
+        </MudMainContent>
+    </MudLayout>
+</ParityBenchThemeProvider>

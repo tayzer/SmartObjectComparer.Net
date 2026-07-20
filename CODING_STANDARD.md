@@ -1,6 +1,6 @@
-# Coding Standard for ComparisonTool
+# Coding Standard
 
-This document defines the coding conventions, style guidelines, and recommended tooling for the ComparisonTool solution. The goal is consistent, readable, and maintainable C#/.NET code across the repository.
+This document defines the coding conventions, style guidelines, and recommended tooling for this solution. The goal is consistent, readable, and maintainable C#/.NET code across the repository.
 
 ## Table of contents
 - Purpose
@@ -55,7 +55,7 @@ Keep code consistent and easy to read across contributors, reduce churn in code 
 ## Files & Project Layout
 - One top-level public type per file (file name matches the type name) is preferred.
 - Keep small helper classes grouped logically in the same folder.
-- Tests mirror the main code namespace and structure under the `ComparisonTool.Tests` project.
+- Tests mirror the main code namespace and structure under the matching project in `Tests/`.
 
 ## Language features & patterns
 - Prefer pattern matching and expression-bodied members only when they remain obviously readable (avoid nested pattern complexity that obscures intent).
@@ -73,20 +73,13 @@ Keep code consistent and easy to read across contributors, reduce churn in code 
 - Use structured logging (e.g., Microsoft.Extensions.Logging) and avoid string concatenation for log messages. Use message templates and pass variables separately.
 
 ## Testing conventions
-- Framework: MSTest only (no xUnit / NUnit). Existing xUnit tests will be migrated incrementally.
+- Framework: MSTest only (no xUnit / NUnit).
 - Additional libraries: Moq + AutoFixture (+ AutoFixture.AutoMoq) + Shouldly. Prefer Shouldly for expressive assertions and native MSTest `Assert` when it is simpler.
 - Test naming pattern: `MethodUnderTest_StateUnderTest_ExpectedResult`.
-- Project structure: Use separate test project names with suffixes: `.UnitTests`, `.IntegrationTests`, `.EndToEndTests` as needed. Current `ComparisonTool.Tests` will be refactored into multiple projects if scope grows.
+- Project structure: one test project per `Source/` project, mirrored under `Tests/` (e.g. `Source/ParityBench.NET.Engine` -> `Tests/ParityBench.NET.Engine.Tests`).
 - Unit tests: small, fast, deterministic.
 - Integration / end-to-end tests: isolated environment setup; limit external dependencies.
 - Each test should arrange-act-assert with clear section separation (blank lines or comments) and minimize logic inside assertions.
-
-### Migration Note
-Current tests use xUnit attributes (`[Fact]`). Migration plan:
-1. Introduce MSTest packages alongside xUnit (transitional phase).
-2. Convert attributes: `[Fact]` -> `[TestMethod]`, remove xUnit-specific features.
-3. Replace xUnit `Assert` patterns with MSTest assertions or Shouldly based on clarity and intent.
-4. Remove xUnit packages once conversion complete.
 
 ## Pull requests & code review
 - Keep PRs focused and small where possible.
@@ -94,9 +87,9 @@ Current tests use xUnit attributes (`[Fact]`). Migration plan:
 - Resolve static analysis warnings or justify why they are suppressed.
 
 ## Tooling & enforcement
-- `.editorconfig` enforces indentation, brace style, using placement, namespace style, `var` usage, and naming patterns.
+- `.editorconfig` captures formatting defaults, keeps Microsoft/Roslyn style recommendations visible as suggestions, and enforces private-field naming without leading underscores.
 - `dotnet format` (verify in CI) ensures style compliance.
-- StyleCop.Analyzers applied to ALL projects (as PrivateAssets) — warnings should be addressed; suppressions require justification.
+- Built-in Microsoft SDK/Roslyn analyzers provide static analysis; StyleCop.Analyzers is not used for repository-wide style enforcement.
 - Roslyn IDE analyzers enabled by default (implicit in SDK). Consider raising severity for key rules over time.
 - Optional future: pre-commit hook running `dotnet format --verify-no-changes` + `dotnet test` (deferred).
 
