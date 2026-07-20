@@ -3,11 +3,28 @@ using System.Xml.Linq;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
+using ParityBench.NET.ManualRunFixtureGenerator;
+
 namespace ParityBench.NET.TestEndpoints.Tests;
 
 [TestClass]
 public sealed class ManualRunCatalogTests
 {
+    [ClassInitialize]
+    public static void ClassInitialize(TestContext context)
+    {
+        string outputDirectory = Path.Combine(
+            GetRepositoryRoot(),
+            "Examples",
+            "ParityBench.NET.ManualRuns",
+            "client-soap-json-token",
+            "volume");
+
+        IReadOnlyList<ClientCustomerLookupFixtureGenerator.GeneratedFixture> fixtures =
+            ClientCustomerLookupFixtureGenerator.Generate(count: 1000, startId: 10000);
+        ClientCustomerLookupFixtureGenerator.WriteToDirectory(outputDirectory, fixtures);
+    }
+
     [TestMethod]
     public async Task ManualRunCatalog_WhenLoaded_ReferencesExistingRequestDirectories()
     {
