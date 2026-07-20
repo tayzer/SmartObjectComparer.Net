@@ -42,10 +42,9 @@ public sealed class ProjectBoundaryTests
         string[] expectedReferences = new[]
         {
             @"..\ParityBench.NET.Application\ParityBench.NET.Application.csproj",
+            @"..\ParityBench.NET.ClientCustomerLookupExample\ParityBench.NET.ClientCustomerLookupExample.csproj",
+            @"..\ParityBench.NET.Composition\ParityBench.NET.Composition.csproj",
             @"..\ParityBench.NET.Domain\ParityBench.NET.Domain.csproj",
-            @"..\ParityBench.NET.Engine\ParityBench.NET.Engine.csproj",
-            @"..\ParityBench.NET.Infrastructure\ParityBench.NET.Infrastructure.csproj",
-            @"..\ParityBench.NET.Workspaces\ParityBench.NET.Workspaces.csproj",
         };
 
         AssertProjectReferences("ParityBench.NET.Cli", "ParityBench.NET.Cli.csproj", expectedReferences);
@@ -85,11 +84,9 @@ public sealed class ProjectBoundaryTests
         new[]
         {
             @"..\ParityBench.NET.Application\ParityBench.NET.Application.csproj",
+            @"..\ParityBench.NET.Composition\ParityBench.NET.Composition.csproj",
             @"..\ParityBench.NET.Domain\ParityBench.NET.Domain.csproj",
-            @"..\ParityBench.NET.Engine\ParityBench.NET.Engine.csproj",
-            @"..\ParityBench.NET.Infrastructure\ParityBench.NET.Infrastructure.csproj",
             @"..\ParityBench.NET.UI\ParityBench.NET.UI.csproj",
-            @"..\ParityBench.NET.Workspaces\ParityBench.NET.Workspaces.csproj",
         };
 
     private static void AssertProjectReferences(

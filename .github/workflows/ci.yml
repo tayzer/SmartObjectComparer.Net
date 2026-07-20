@@ -40,7 +40,7 @@ jobs:
         uses: github/codeql-action/analyze@v3
 
       - name: Test
-        run: dotnet test ComparisonTool.sln --configuration Release --no-build --logger "trx;LogFileName=test_results.trx" --collect:"XPlat Code Coverage"
+        run: dotnet test --solution ComparisonTool.sln --configuration Release --no-build --report-trx --coverage --coverage-output-format cobertura
 
       - name: Generate Retention Matrix Report
         if: always()
@@ -72,4 +72,4 @@ jobs:
           name: test-results
           path: |
             **/TestResults/*.trx
-            **/coverage.cobertura.xml
+            **/TestResults/*.cobertura.xml

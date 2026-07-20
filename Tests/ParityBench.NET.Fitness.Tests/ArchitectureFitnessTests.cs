@@ -55,17 +55,18 @@ public sealed class ArchitectureFitnessTests
     public void HostWiring_WhenV2HostsAreLoaded_BindsDefaultsAndObservability()
     {
         AssertSourceContains(
-            Path.Combine("Source", "ParityBench.NET.Cli", "CliApplication.cs"),
+            Path.Combine("Source", "ParityBench.NET.Composition", "WorkspaceServiceCollectionExtensions.cs"),
             "services.AddParityBenchObservability(configuration",
             "services.Configure<RequestComparisonRunDefaults>(configuration.GetSection(\"RequestComparison:Defaults\"))");
+        AssertSourceContains(
+            Path.Combine("Source", "ParityBench.NET.Cli", "CliApplication.cs"),
+            "services.AddParityBenchWorkspaceServices(");
         AssertSourceContains(
             Path.Combine("Source", "ParityBench.NET.Web", "Program.cs"),
-            "services.AddParityBenchObservability(configuration",
-            "services.Configure<RequestComparisonRunDefaults>(configuration.GetSection(\"RequestComparison:Defaults\"))");
+            "services.AddParityBenchWorkspaceServices(");
         AssertSourceContains(
             Path.Combine("Source", "ParityBench.NET.Desktop", "App.xaml.cs"),
-            "services.AddParityBenchObservability(configuration",
-            "services.Configure<RequestComparisonRunDefaults>(configuration.GetSection(\"RequestComparison:Defaults\"))");
+            "services.AddParityBenchWorkspaceServices(");
     }
 
     private static void AssertProjectReferences(string projectFolderName, params string[] expectedReferences)
