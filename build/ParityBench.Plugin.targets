@@ -1,0 +1,55 @@
+<Project>
+
+  <!--
+    Shared plugin-packaging targets. A plugin project imports this and sets
+    <PbPluginPackageId> (the folder the package installs into). After a Debug
+    build, the target copies the plugin's output into the shared workspace's
+    plugins directory, so a rebuild of the plugin is immediately picked up by any
+    host (CLI, Web, Desktop, Worker) without a manual copy.
+
+    Opt out with:  -p:PbInstallPluginToWorkspace=false
+    Retarget with: -p:PbWorkspaceRoot=<path>  or  -p:PbWorkspacePluginsDir=<path>
+  -->
+
+  <PropertyGroup>
+    <PbWorkspaceRoot Condition="'$(PbWorkspaceRoot)' == ''">$(LOCALAPPDATA)\ParityBench.NET\Workspace</PbWorkspaceRoot>
+    <PbWorkspacePluginsDir Condition="'$(PbWorkspacePluginsDir)' == ''">$(PbWorkspaceRoot)\plugins</PbWorkspacePluginsDir>
+
+    <!--
+      On by default for local Debug builds only. Off for Release, for CI
+      (ContinuousIntegrationBuild is set by the SDK on CI), and where LOCALAPPDATA
+      is unavailable (non-Windows), so a build never writes to a user profile
+      unexpectedly.
+    -->
+    <PbInstallPluginToWorkspace Condition="'$(PbInstallPluginToWorkspace)' == '' And '$(Configuration)' == 'Debug' And '$(ContinuousIntegrationBuild)' != 'true' And '$(LOCALAPPDATA)' != ''">true</PbInstallPluginToWorkspace>
+    <PbInstallPluginToWorkspace Condition="'$(PbInstallPluginToWorkspace)' == ''">false</PbInstallPluginToWorkspace>
+  </PropertyGroup>
+
+  <Target Name="InstallPluginToWorkspace"
+          AfterTargets="Build"
+          Condition="'$(PbInstallPluginToWorkspace)' == 'true' And '$(PbPluginPackageId)' != ''">
+
+    <PropertyGroup>
+      <_PbPluginDestination>$(PbWorkspacePluginsDir)\$(PbPluginPackageId)</_PbPluginDestination>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <!-- The build output IS the package: plugin dll, its third-party dependencies,
+           the deps.json, and parity-plugin.json. The SDK is excluded from output
+           (Private=false), so it is never shipped inside the package. -->
+      <_PbPluginFiles Include="$(OutDir)**\*" Exclude="$(OutDir)**\*.pdb" />
+    </ItemGroup>
+
+    <MakeDir Directories="$(_PbPluginDestination)" />
+
+    <!-- ContinueOnError: if a host is running and holding the plugin's assemblies,
+         the locked-file copy warns instead of failing the build. -->
+    <Copy SourceFiles="@(_PbPluginFiles)"
+          DestinationFiles="@(_PbPluginFiles->'$(_PbPluginDestination)\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true"
+          ContinueOnError="true" />
+
+    <Message Importance="high" Text="Installed plugin '$(PbPluginPackageId)' to $(_PbPluginDestination)" />
+  </Target>
+
+</Project>

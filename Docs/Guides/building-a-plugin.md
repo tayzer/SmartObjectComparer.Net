@@ -109,7 +109,20 @@ public void Configure(IPluginBuilder builder)
 
 ## 6. Install and run
 
-Build the package and drop its output folder into a `plugins/` directory (next to the app, or under the workspace). Then create a run profile that selects it and run:
+Build the package and drop its output folder into a `plugins/` directory (next to the app, or under the workspace).
+
+**During development**, automate that copy: set `<PbPluginPackageId>your.plugin.id</PbPluginPackageId>` and import the shared packaging target so every Debug build republishes the package into the shared workspace's `plugins/` folder — any host then picks up your latest build with no manual copy:
+
+```xml
+<PropertyGroup>
+  <PbPluginPackageId>client.customer-lookup</PbPluginPackageId>
+</PropertyGroup>
+<Import Project="..\..\build\ParityBench.Plugin.targets" />
+```
+
+It runs for Debug builds only (off for Release, CI, and non-Windows); opt out with `-p:PbInstallPluginToWorkspace=false`, or retarget with `-p:PbWorkspacePluginsDir=<path>`.
+
+Then create a run profile that selects the plugin and run:
 
 ```bash
 dotnet run --project Source/ParityBench.NET.Cli -- request --run-profile my-profile-qa

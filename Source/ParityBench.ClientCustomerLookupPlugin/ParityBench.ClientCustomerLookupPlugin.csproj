@@ -12,7 +12,14 @@
   <PropertyGroup>
     <RootNamespace>ParityBench.ClientCustomerLookupPlugin</RootNamespace>
     <EnableDynamicLoading>true</EnableDynamicLoading>
+    <!-- Folder this package installs into under the workspace plugins directory
+         (must match the manifest id). Drives the auto-install target below. -->
+    <PbPluginPackageId>client.customer-lookup</PbPluginPackageId>
   </PropertyGroup>
+
+  <!-- After a Debug build, copy the package into the shared workspace so any host
+       picks up the latest plugin without a manual copy. See build/ParityBench.Plugin.targets. -->
+  <Import Project="..\..\build\ParityBench.Plugin.targets" />
 
   <ItemGroup>
     <PackageReference Include="Mapster" />
