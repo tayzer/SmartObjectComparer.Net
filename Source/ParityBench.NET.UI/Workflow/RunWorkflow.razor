@@ -500,7 +500,21 @@
             }
 
             requestSourceDescription = $"Selected run profile: {runProfiles.FirstOrDefault(profile => profile.Id == selectedRunProfileId)?.DisplayName ?? selectedRunProfileId}";
-            RefreshSelectedModelType();
+
+            // Plugin comparisons aren't registered in the legacy response-model
+            // registry RefreshSelectedModelType() reads, so the property-path
+            // pickers (Ignore/Mask Rules Studio) would otherwise stay empty even
+            // though the plugin's comparison type is browsable. Use it directly.
+            if (resolved.ComparisonType is not null)
+            {
+                modelName = resolved.ComparisonType.Name;
+                selectedModelType = resolved.ComparisonType;
+            }
+            else
+            {
+                RefreshSelectedModelType();
+            }
+
             RefreshAvailableProfiles(clearInvalidSelection: false);
             ResetProfileDefaultIgnoreRuleViewer();
         }

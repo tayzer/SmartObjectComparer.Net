@@ -17,7 +17,11 @@ public sealed record ResolvedRunProfileView(
     Uri EndpointB,
     ComparisonOptions Comparison,
     string? RequestDirectory,
-    PluginComparisonSelection Selection);
+    PluginComparisonSelection Selection,
+    // The CLR type the plugin's comparison maps both endpoints to, so the workflow
+    // UI can browse its properties for ignore/mask rules the same way it does for
+    // built-in response models. Null when the plugin/comparison can't be resolved.
+    Type? ComparisonType);
 
 /// <summary>
 /// Supplies create/run/cancel/report actions to shared V2 workflow components without binding them to a host.

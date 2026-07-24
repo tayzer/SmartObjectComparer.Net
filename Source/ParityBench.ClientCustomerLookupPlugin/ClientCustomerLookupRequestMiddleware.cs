@@ -1,9 +1,7 @@
 using Mapster;
-
 using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Requests;
-
 using ParityBench.PluginSdk.Configuration;
 using ParityBench.PluginSdk.Pipeline;
 

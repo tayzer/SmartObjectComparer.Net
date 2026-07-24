@@ -129,6 +129,9 @@ public sealed class PluginPanelsTests
 
         public Task<InstalledPluginMetadata?> GetPluginAsync(string pluginId, string? version = null, CancellationToken cancellationToken = default) =>
             Task.FromResult<InstalledPluginMetadata?>(string.Equals(pluginId, Plugin.PluginId, StringComparison.OrdinalIgnoreCase) ? Plugin : null);
+
+        public Task<Type?> ResolveComparisonTypeAsync(string pluginId, string comparisonId, string? version = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult<Type?>(null);
     }
 
     private sealed class InMemoryRunProfileStore : IRunProfileStore

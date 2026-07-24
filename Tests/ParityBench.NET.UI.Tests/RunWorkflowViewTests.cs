@@ -314,7 +314,8 @@ public sealed class RunWorkflowViewTests
             new Uri("https://qa.example.test/json"),
             new ComparisonOptions(ignoreXmlNamespaces: true),
             "C:/runs/client",
-            new PluginComparisonSelection("client.customer-lookup", "client.customer-lookup.soap-vs-json"));
+            new PluginComparisonSelection("client.customer-lookup", "client.customer-lookup.soap-vs-json"),
+            null);
 
         IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();
 
@@ -331,6 +332,40 @@ public sealed class RunWorkflowViewTests
         Assert.AreEqual("client.customer-lookup.soap-vs-json", dataSource.LastRequest.PluginComparison.ComparisonId);
         Assert.AreEqual("https://qa.example.test/soap", dataSource.LastRequest.EndpointA.ToString().TrimEnd('/'));
         Assert.AreEqual("C:/runs/client", dataSource.LastRequest.SourceDirectory);
+    }
+
+    [TestMethod]
+    public void RunWorkflow_WhenRunProfileIsSelected_IgnoreRulesStudioBrowsesThePluginComparisonType()
+    {
+        dataSource.RunProfilesToReturn = new[]
+        {
+            new RunProfileSummary("client-customer-lookup-local", "Client Customer Lookup — Local"),
+        };
+        dataSource.ResolvedProfile = new ResolvedRunProfileView(
+            new Uri("https://qa.example.test/soap"),
+            new Uri("https://qa.example.test/json"),
+            new ComparisonOptions(ignoreXmlNamespaces: true),
+            "C:/runs/client",
+            new PluginComparisonSelection("client.customer-lookup", "client.customer-lookup.soap-vs-json"),
+            typeof(PluginComparisonFixture));
+
+        IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();
+
+        SelectFirstDropdown(component, "client-customer-lookup-local");
+
+        component.WaitForAssertion(() =>
+        {
+            // Selecting a plugin run profile must not fall back to the "no
+            // browsable model" placeholder — the plugin's comparison type is
+            // reflectable even though it isn't in the legacy response-model registry.
+            Assert.IsFalse(component.Markup.Contains("Select a registered domain model", StringComparison.Ordinal));
+            StringAssert.Contains(component.Markup, nameof(PluginComparisonFixture.CustomerId));
+        });
+    }
+
+    private sealed class PluginComparisonFixture
+    {
+        public string CustomerId { get; set; } = string.Empty;
     }
 
     [TestMethod]

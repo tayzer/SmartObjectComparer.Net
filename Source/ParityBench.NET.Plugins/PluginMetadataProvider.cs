@@ -62,6 +62,20 @@ public sealed class PluginMetadataProvider : IPluginMetadataProvider
         return Task.FromResult<InstalledPluginMetadata?>(ReadMetadata(package!));
     }
 
+    public Task<Type?> ResolveComparisonTypeAsync(string pluginId, string comparisonId, string? version = null, CancellationToken cancellationToken = default)
+    {
+        if (!catalog.TryGet(pluginId, version, out PluginPackage? package))
+        {
+            return Task.FromResult<Type?>(null);
+        }
+
+        LoadedPlugin loaded = loader.Load(package!);
+        IComparisonDefinition? definition = loaded.Registrations.Comparisons
+            .FirstOrDefault(comparison => string.Equals(comparison.ComparisonId, comparisonId, StringComparison.OrdinalIgnoreCase));
+
+        return Task.FromResult(definition?.ComparisonType);
+    }
+
     private InstalledPluginMetadata ReadMetadata(PluginPackage package)
     {
         LoadedPlugin loaded = loader.Load(package);

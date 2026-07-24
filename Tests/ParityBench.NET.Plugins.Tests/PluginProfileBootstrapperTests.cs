@@ -79,6 +79,9 @@ public sealed class PluginProfileBootstrapperTests
 
         public Task<InstalledPluginMetadata?> GetPluginAsync(string pluginId, string? version = null, CancellationToken cancellationToken = default) =>
             Task.FromResult<InstalledPluginMetadata?>(plugin);
+
+        public Task<Type?> ResolveComparisonTypeAsync(string pluginId, string comparisonId, string? version = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult<Type?>(null);
     }
 
     [TestMethod]

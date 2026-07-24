@@ -1,3 +1,4 @@
+using ParityBench.NET.Application.Plugins;
 using ParityBench.NET.Application.Profiles;
 using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Requests;
@@ -17,6 +18,7 @@ public sealed class ApplicationRunWorkflowViewDataSource : IRunWorkflowViewDataS
     private readonly IRunProfileStore runProfileStore;
     private readonly RunProfileResolver runProfileResolver;
     private readonly PluginProfileBootstrapper profileBootstrapper;
+    private readonly IPluginMetadataProvider pluginMetadataProvider;
 
     public ApplicationRunWorkflowViewDataSource(
         IRequestComparisonWorkflowUseCases workflowUseCases,
@@ -26,7 +28,8 @@ public sealed class ApplicationRunWorkflowViewDataSource : IRunWorkflowViewDataS
         IResponseModelRegistry responseModelRegistry,
         IRunProfileStore runProfileStore,
         RunProfileResolver runProfileResolver,
-        PluginProfileBootstrapper profileBootstrapper)
+        PluginProfileBootstrapper profileBootstrapper,
+        IPluginMetadataProvider pluginMetadataProvider)
     {
         this.workflowUseCases = workflowUseCases ?? throw new ArgumentNullException(nameof(workflowUseCases));
         this.jobUseCases = jobUseCases ?? throw new ArgumentNullException(nameof(jobUseCases));
@@ -36,6 +39,7 @@ public sealed class ApplicationRunWorkflowViewDataSource : IRunWorkflowViewDataS
         this.runProfileStore = runProfileStore ?? throw new ArgumentNullException(nameof(runProfileStore));
         this.runProfileResolver = runProfileResolver ?? throw new ArgumentNullException(nameof(runProfileResolver));
         this.profileBootstrapper = profileBootstrapper ?? throw new ArgumentNullException(nameof(profileBootstrapper));
+        this.pluginMetadataProvider = pluginMetadataProvider ?? throw new ArgumentNullException(nameof(pluginMetadataProvider));
     }
 
     public Task<RequestComparisonDefaults> LoadDefaultsAsync(CancellationToken cancellationToken = default) =>
@@ -53,12 +57,19 @@ public sealed class ApplicationRunWorkflowViewDataSource : IRunWorkflowViewDataS
     public async Task<ResolvedRunProfileView> ResolveRunProfileAsync(string profileId, CancellationToken cancellationToken = default)
     {
         ResolvedRunProfile resolved = await runProfileResolver.ResolveAsync(profileId, cancellationToken).ConfigureAwait(false);
+        Type? comparisonType = await pluginMetadataProvider.ResolveComparisonTypeAsync(
+            resolved.Selection.PluginId,
+            resolved.Selection.ComparisonId,
+            resolved.Selection.PluginVersion,
+            cancellationToken).ConfigureAwait(false);
+
         return new ResolvedRunProfileView(
             resolved.EndpointA.Uri,
             resolved.EndpointB.Uri,
             resolved.Profile.Comparison,
             resolved.Profile.RequestDirectory,
-            resolved.Selection);
+            resolved.Selection,
+            comparisonType);
     }
 
     public Type? ResolveResponseModelType(string modelName)
