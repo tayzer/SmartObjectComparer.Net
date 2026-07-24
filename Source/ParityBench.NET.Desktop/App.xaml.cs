@@ -87,6 +87,13 @@ public partial class App : System.Windows.Application
             fixtureBaseUrl,
             configureRequestComparisonFixtures: (svc, endpointDefaults, presetDefaults) =>
                 svc.AddClientCustomerLookupExample(configuration, endpointDefaults, presetDefaults, FindManualRunRoot()));
+        // Opt-in via Worker:Enabled=true: execute runs out of process so a plugin
+        // failure cannot take the desktop app down.
+        if (configuration.GetValue("Worker:Enabled", false))
+        {
+            services.UseWorkerProcessExecution(configuration, workspaceRoot, fixtureBaseUrl);
+        }
+
         services.AddParityBenchUiServices(workspaceRoot, acceptedDifferenceStorePath);
         services.AddScoped<IRequestSourcePicker, DesktopRequestSourcePicker>();
     }

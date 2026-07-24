@@ -34,6 +34,12 @@
                 </MudItem>
             </MudGrid>
         </MudTabPanel>
+        <MudTabPanel Text="Plugins & Profiles" Icon="@Icons.Material.Filled.Extension">
+            <MudStack Spacing="3">
+                <ParityBench.NET.UI.Plugins.PluginCatalogPanel />
+                <RunProfilePanel />
+            </MudStack>
+        </MudTabPanel>
     </MudTabs>
 </MudStack>
 

@@ -206,6 +206,7 @@ public sealed class FileSystemRunStore : IRunStore
             Comparison = ToDto(options.Comparison),
             RequestExecution = ToDto(options.RequestExecution),
             ContractProfile = options.ContractProfile is null ? null : ToDto(options.ContractProfile),
+            PluginComparison = options.PluginComparison is null ? null : ToDto(options.PluginComparison),
             LargeRun = ToDto(options.LargeRun),
             RunRetentionModeOverride = options.RunRetentionModeOverride,
             ComparisonRulesSnapshotHash = options.ComparisonRulesSnapshotHash,
@@ -246,6 +247,33 @@ public sealed class FileSystemRunStore : IRunStore
             ProfileVersion = selection.ProfileVersion,
             Options = selection.Options.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal),
         };
+
+    private PluginComparisonSelectionDto ToDto(PluginComparisonSelection selection) =>
+        new PluginComparisonSelectionDto
+        {
+            PluginId = selection.PluginId,
+            ComparisonId = selection.ComparisonId,
+            PluginVersion = selection.PluginVersion,
+            EnvironmentName = selection.EnvironmentName,
+            EnabledStepIds = selection.EnabledStepIds.ToList(),
+            StepConfiguration = (selection.StepConfiguration ?? new Dictionary<string, IReadOnlyDictionary<string, string>>())
+                .ToDictionary(
+                    entry => entry.Key,
+                    entry => entry.Value.ToDictionary(value => value.Key, value => value.Value, StringComparer.Ordinal),
+                    StringComparer.Ordinal),
+        };
+
+    private static PluginComparisonSelection FromDto(PluginComparisonSelectionDto dto) =>
+        new PluginComparisonSelection(
+            dto.PluginId,
+            dto.ComparisonId,
+            dto.PluginVersion,
+            dto.EnabledStepIds,
+            dto.StepConfiguration.ToDictionary(
+                entry => entry.Key,
+                entry => (IReadOnlyDictionary<string, string>)entry.Value,
+                StringComparer.Ordinal),
+            dto.EnvironmentName);
 
     private IgnoreRuleDefinitionDto ToDto(IgnoreRuleDefinition rule) =>
         new IgnoreRuleDefinitionDto
@@ -371,7 +399,8 @@ public sealed class FileSystemRunStore : IRunStore
             contractProfile,
             dto.LargeRun is null ? null : FromDto(dto.LargeRun),
             dto.RunRetentionModeOverride,
-            dto.ComparisonRulesSnapshotHash);
+            dto.ComparisonRulesSnapshotHash,
+            dto.PluginComparison is null ? null : FromDto(dto.PluginComparison));
     }
 
     private EndpointDefinition FromDto(EndpointDefinitionDto dto) =>

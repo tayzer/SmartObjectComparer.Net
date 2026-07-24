@@ -1,0 +1,14 @@
+<Project Sdk="MSTest.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\ParityBench.NET.Plugins\ParityBench.NET.Plugins.csproj" />
+    <!--
+      Referenced only so the fixture package is built before these tests run; the
+      tests load it from disk through the plugin loader, never as a reference.
+    -->
+    <ProjectReference Include="..\Fixtures\ParityBench.TestPlugin\ParityBench.TestPlugin.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+  </ItemGroup>
+
+</Project>

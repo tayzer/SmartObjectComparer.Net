@@ -1,4 +1,5 @@
 using ParityBench.NET.Domain.ContractProfiles;
+using ParityBench.NET.Application.Profiles;
 using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Workflow;
 using ParityBench.NET.Domain.Comparison;
@@ -11,13 +12,16 @@ public sealed class RequestCommandRunner
 {
     private readonly IRequestComparisonWorkflowUseCases workflowUseCases;
     private readonly IRequestComparisonPresetRegistry presetRegistry;
+    private readonly RunProfileResolver runProfileResolver;
 
     public RequestCommandRunner(
         IRequestComparisonWorkflowUseCases workflowUseCases,
-        IRequestComparisonPresetRegistry presetRegistry)
+        IRequestComparisonPresetRegistry presetRegistry,
+        RunProfileResolver runProfileResolver)
     {
         this.workflowUseCases = workflowUseCases ?? throw new ArgumentNullException(nameof(workflowUseCases));
         this.presetRegistry = presetRegistry ?? throw new ArgumentNullException(nameof(presetRegistry));
+        this.runProfileResolver = runProfileResolver ?? throw new ArgumentNullException(nameof(runProfileResolver));
     }
 
     public async Task<int> RunAsync(
@@ -29,6 +33,11 @@ public sealed class RequestCommandRunner
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(error);
+
+        if (!string.IsNullOrWhiteSpace(options.RunProfileId))
+        {
+            return await RunFromProfileAsync(options, output, error, cancellationToken).ConfigureAwait(false);
+        }
 
         RequestComparisonPresetOption? preset = null;
         if (!string.IsNullOrWhiteSpace(options.PresetId))
@@ -62,22 +71,80 @@ public sealed class RequestCommandRunner
             return 2;
         }
 
+        RequestComparisonRunRequest request = new RequestComparisonRunRequest(
+            requestDirectory,
+            endpointA,
+            endpointB,
+            options.Timeout,
+            options.MaxConcurrency,
+            modelName,
+            comparisonOptions,
+            new RequestExecutionOptions(contentTypeOverride),
+            string.IsNullOrWhiteSpace(contractProfileId) ? null : new ContractProfileSelection(contractProfileId),
+            commonHeaders: ParseHeaders(options.CommonHeaders),
+            endpointAHeaders: MergeHeaders(preset?.EndpointAHeaders, ParseHeaders(options.EndpointAHeaders)),
+            endpointBHeaders: MergeHeaders(preset?.EndpointBHeaders, ParseHeaders(options.EndpointBHeaders)));
+
+        return await SubmitAndReportAsync(request, options, output, error, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<int> RunFromProfileAsync(
+        RequestCommandOptions options,
+        TextWriter output,
+        TextWriter error,
+        CancellationToken cancellationToken)
+    {
+        ResolvedRunProfile resolved;
         try
         {
-            RequestComparisonRunRequest request = new RequestComparisonRunRequest(
-                requestDirectory,
-                endpointA,
-                endpointB,
-                options.Timeout,
-                options.MaxConcurrency,
-                modelName,
-                comparisonOptions,
-                new RequestExecutionOptions(contentTypeOverride),
-                string.IsNullOrWhiteSpace(contractProfileId) ? null : new ContractProfileSelection(contractProfileId),
-                commonHeaders: ParseHeaders(options.CommonHeaders),
-                endpointAHeaders: MergeHeaders(preset?.EndpointAHeaders, ParseHeaders(options.EndpointAHeaders)),
-                endpointBHeaders: MergeHeaders(preset?.EndpointBHeaders, ParseHeaders(options.EndpointBHeaders)));
+            // Resolving turns the profile's secret:// references into values right
+            // before the run; those values never touch the profile file.
+            resolved = await runProfileResolver.ResolveAsync(options.RunProfileId!, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            await error.WriteLineAsync(ex.Message).ConfigureAwait(false);
+            return 2;
+        }
 
+        string? requestDirectory = options.RequestDirectory ?? resolved.Profile.RequestDirectory;
+        if (string.IsNullOrWhiteSpace(requestDirectory))
+        {
+            await error.WriteLineAsync("The run profile does not set a request directory; pass one on the command line.").ConfigureAwait(false);
+            return 2;
+        }
+
+        if (!Directory.Exists(requestDirectory))
+        {
+            await error.WriteLineAsync($"Request directory was not found: {Path.GetFullPath(requestDirectory)}").ConfigureAwait(false);
+            return 2;
+        }
+
+        RequestComparisonRunRequest request = new RequestComparisonRunRequest(
+            requestDirectory,
+            options.EndpointA ?? resolved.EndpointA.Uri,
+            options.EndpointB ?? resolved.EndpointB.Uri,
+            options.Timeout,
+            options.MaxConcurrency,
+            comparisonOptions: resolved.Profile.Comparison,
+            requestExecutionOptions: new RequestExecutionOptions(options.ContentTypeOverride),
+            commonHeaders: ParseHeaders(options.CommonHeaders),
+            endpointAHeaders: ParseHeaders(options.EndpointAHeaders),
+            endpointBHeaders: ParseHeaders(options.EndpointBHeaders),
+            pluginComparison: resolved.Selection);
+
+        return await SubmitAndReportAsync(request, options, output, error, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<int> SubmitAndReportAsync(
+        RequestComparisonRunRequest request,
+        RequestCommandOptions options,
+        TextWriter output,
+        TextWriter error,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
             ComparisonRun run = await workflowUseCases
                 .CreateRunFromDirectoryAsync(request, cancellationToken)
                 .ConfigureAwait(false);

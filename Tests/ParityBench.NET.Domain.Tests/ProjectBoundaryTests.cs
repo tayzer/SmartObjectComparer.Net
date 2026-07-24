@@ -8,9 +8,11 @@ namespace ParityBench.NET.Domain.Tests;
 public sealed class ProjectBoundaryTests
 {
     [TestMethod]
-    public void ProjectBoundary_WhenProjectIsDomain_HasNoProjectReferences()
+    public void ProjectBoundary_WhenProjectIsDomain_ReferencesOnlyThePluginSdk()
     {
-        string[] expectedReferences = Array.Empty<string>();
+        // The SDK holds the neutral value types Domain shares with client plugins.
+        // It is the one assembly Domain is allowed to sit on top of.
+        string[] expectedReferences = new[] { @"..\ParityBench.PluginSdk\ParityBench.PluginSdk.csproj" };
 
         AssertProjectReferences("ParityBench.NET.Domain", "ParityBench.NET.Domain.csproj", expectedReferences);
     }

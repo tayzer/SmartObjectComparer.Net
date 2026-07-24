@@ -11,6 +11,7 @@ public static class RequestCommandParser
         "--model",
         "--profile",
         "--preset",
+        "--run-profile",
         "--concurrency",
         "--timeout",
         "--content-type",
@@ -51,6 +52,7 @@ public static class RequestCommandParser
         string? modelName = null;
         string? contractProfileId = null;
         string? presetId = null;
+        string? runProfileId = null;
         int maxConcurrency = 4;
         TimeSpan timeout = TimeSpan.FromSeconds(30);
         string? contentTypeOverride = null;
@@ -119,6 +121,9 @@ public static class RequestCommandParser
                 case "--preset":
                     presetId = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
                     break;
+                case "--run-profile":
+                    runProfileId = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+                    break;
                 case "--concurrency":
                     if (!int.TryParse(value, out maxConcurrency) || maxConcurrency <= 0)
                     {
@@ -179,10 +184,14 @@ public static class RequestCommandParser
         }
 
         bool hasPreset = !string.IsNullOrWhiteSpace(presetId);
+        bool hasRunProfile = !string.IsNullOrWhiteSpace(runProfileId);
+        // A preset or a saved run profile supplies endpoints and the request directory,
+        // so the corresponding options become optional overrides rather than required.
+        bool suppliesDefaults = hasPreset || hasRunProfile;
         Uri? endpointAUri = null;
         Uri? endpointBUri = null;
 
-        if (endpointA is not null || !hasPreset)
+        if (endpointA is not null || !suppliesDefaults)
         {
             if (!TryCreateAbsoluteUri(endpointA, out endpointAUri))
             {
@@ -190,7 +199,7 @@ public static class RequestCommandParser
             }
         }
 
-        if (endpointB is not null || !hasPreset)
+        if (endpointB is not null || !suppliesDefaults)
         {
             if (!TryCreateAbsoluteUri(endpointB, out endpointBUri))
             {
@@ -198,9 +207,14 @@ public static class RequestCommandParser
             }
         }
 
-        if (requestDirectory is null && !hasPreset)
+        if (requestDirectory is null && !suppliesDefaults)
         {
-            errors.Add("Request directory is required unless --preset is specified.");
+            errors.Add("Request directory is required unless --preset or --run-profile is specified.");
+        }
+
+        if (hasPreset && hasRunProfile)
+        {
+            errors.Add("Specify only one of --preset or --run-profile.");
         }
 
         if (errors.Count > 0)
@@ -224,12 +238,13 @@ public static class RequestCommandParser
                 reportOutputDirectory,
                 reportAssetsDirectory,
                 new ObservabilityCliOptions(logLevel, logDurations, logExceptions, persistDiagnostics, slowPathThresholdMs),
-                presetId),
+                presetId,
+                runProfileId),
             Array.Empty<string>());
     }
 
     public static string Usage =>
-        "request [<request-directory>] --endpoint-a <url> --endpoint-b <url> | --preset <preset-id> [--model Auto] [--profile <profile-id>] [--concurrency <n>] [--timeout <seconds>] [--content-type <type>] [--header <Name: Value>] [--header-a <Name: Value>] [--header-b <Name: Value>] [--report-output <directory>] [--report-assets <directory>] [--log-level <level>] [--log-durations] [--log-exceptions] [--persist-diagnostics] [--slow-path-threshold-ms <n>]";
+        "request [<request-directory>] --endpoint-a <url> --endpoint-b <url> | --preset <preset-id> | --run-profile <run-profile-id> [--model Auto] [--profile <profile-id>] [--concurrency <n>] [--timeout <seconds>] [--content-type <type>] [--header <Name: Value>] [--header-a <Name: Value>] [--header-b <Name: Value>] [--report-output <directory>] [--report-assets <directory>] [--log-level <level>] [--log-durations] [--log-exceptions] [--persist-diagnostics] [--slow-path-threshold-ms <n>]";
 
     private static RequestCommandParseResult Failure(string error) =>
         new RequestCommandParseResult(null, new[] { error });

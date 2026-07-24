@@ -1,5 +1,7 @@
 # Adding a Custom Domain Profile
 
+> **Deprecated.** Contract profiles are the compile-time extensibility model: a client project referenced by every host and rebuilt into the product. The current model is **plugins** — versioned packages loaded at run time, selected by a saved run profile, executed in isolation. Start with [Building a Plugin](building-a-plugin.md) and the [plugin-extensibility ADR](../Architecture/ADRs/2026-07-22-plugin-extensibility-and-worker-isolation.md). This document describes the legacy path, which still functions for existing in-box profiles while the migration completes.
+
 A **contract profile** tells ParityBench.NET how to prepare requests for Endpoint A and Endpoint B, and how to normalize both responses into one canonical model for comparison. This is how you plug in your own API pair (SOAP vs JSON, v1 vs v2, whatever) without touching the comparison engine.
 
 The reference implementation for everything below is [`Source/ParityBench.NET.ClientCustomerLookupExample`](../../Source/ParityBench.NET.ClientCustomerLookupExample) — a real, working profile (SOAP request to Endpoint A, JSON to Endpoint B, chained bearer-token auth). Read this guide alongside that project; it's the full version of every snippet here.

@@ -1,0 +1,9 @@
+{
+  "id": "parity.test-plugin",
+  "version": "1.0.0",
+  "sdkVersion": 1,
+  "entryAssembly": "ParityBench.TestPlugin.dll",
+  "displayName": "ParityBench test plugin",
+  "description": "Fixture package used by the plugin loader tests.",
+  "publisher": "ParityBench"
+}

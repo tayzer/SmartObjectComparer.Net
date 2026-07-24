@@ -94,6 +94,15 @@ public static class CliApplication
             configureRequestComparisonFixtures: (svc, endpointDefaults, presetDefaults) =>
                 svc.AddClientCustomerLookupExample(configuration, endpointDefaults, presetDefaults, FindManualRunRoot()));
 
+        // Opt-in, config-gated: with Worker:Enabled=true, runs execute in a separate
+        // worker process so client plugin code never loads into the host. Off by
+        // default so the CLI does not require the worker binary to be deployed
+        // alongside it for the built-in and raw comparison paths.
+        if (configuration.GetValue("Worker:Enabled", false))
+        {
+            services.UseWorkerProcessExecution(configuration, workspaceRoot, fixtureBaseUrl);
+        }
+
         services.AddSingleton<RequestCommandRunner>();
     }
 

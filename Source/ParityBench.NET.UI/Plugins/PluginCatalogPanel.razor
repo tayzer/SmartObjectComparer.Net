@@ -1,0 +1,84 @@
+@using ParityBench.NET.Application.Plugins
+
+@inject IPluginMetadataProvider PluginMetadata
+
+@* Read-only view of installed plugins and any packages that failed to load. *@
+
+<MudPaper Elevation="0" Outlined="true" Class="pa-4">
+    <MudStack Spacing="3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudText Typo="Typo.h6">Installed plugins</MudText>
+            <MudButton Variant="Variant.Text"
+                       StartIcon="@Icons.Material.Filled.Refresh"
+                       OnClick="ReloadAsync">Refresh</MudButton>
+        </MudStack>
+
+        @if (catalog is null)
+        {
+            <MudProgressLinear Indeterminate="true" />
+        }
+        else
+        {
+            @if (catalog.Plugins.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    No plugins installed. Drop a plugin package folder into the app's <code>plugins</code> directory.
+                </MudAlert>
+            }
+
+            @foreach (InstalledPluginMetadata plugin in catalog.Plugins)
+            {
+                <MudPaper Elevation="0" Outlined="true" Class="pa-3">
+                    <MudStack Spacing="1">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudText Typo="Typo.subtitle1">@plugin.DisplayName</MudText>
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">v@(plugin.Version)</MudChip>
+                            @if (!string.IsNullOrWhiteSpace(plugin.Publisher))
+                            {
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@plugin.Publisher</MudText>
+                            }
+                        </MudStack>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@plugin.PluginId</MudText>
+                        @if (!string.IsNullOrWhiteSpace(plugin.Description))
+                        {
+                            <MudText Typo="Typo.body2">@plugin.Description</MudText>
+                        }
+                        <MudText Typo="Typo.subtitle2" Class="mt-2">Comparisons</MudText>
+                        @foreach (PluginComparisonMetadata comparison in plugin.Comparisons)
+                        {
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudIcon Icon="@Icons.Material.Filled.CompareArrows" Size="Size.Small" />
+                                <MudText Typo="Typo.body2">@comparison.DisplayName</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@comparison.ComparisonId</MudText>
+                            </MudStack>
+                        }
+                    </MudStack>
+                </MudPaper>
+            }
+
+            @if (catalog.Failures.Count > 0)
+            {
+                <MudText Typo="Typo.subtitle2">Packages that could not be loaded</MudText>
+                @foreach (PluginInstallationFailure failure in catalog.Failures)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true">
+                        <strong>@failure.DirectoryPath</strong>: @failure.Reason
+                    </MudAlert>
+                }
+            }
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    private PluginCatalogView? catalog;
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        catalog = null;
+        catalog = await PluginMetadata.GetCatalogAsync().ConfigureAwait(true);
+        StateHasChanged();
+    }
+}

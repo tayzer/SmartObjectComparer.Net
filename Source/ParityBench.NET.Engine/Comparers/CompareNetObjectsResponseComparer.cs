@@ -66,22 +66,7 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
                 .DeserializeAsync(options.ResponseModelName, bodyB, responseB.ContentType, options.Comparison, cancellationToken)
                 .ConfigureAwait(false);
 
-            object comparisonModelA = ComparisonModelNormalizer.Normalize(modelA, options.Comparison);
-            object comparisonModelB = ComparisonModelNormalizer.Normalize(modelB, options.Comparison);
-
-            CompareLogic compareLogic = CreateCompareLogic(options.Comparison);
-            ComparisonResult comparisonResult = compareLogic.Compare(comparisonModelA, comparisonModelB);
-            List<Difference> filteredDifferences = comparisonResult
-                .Differences
-                .Where(difference => !ShouldFilterDifference(difference, options.Comparison))
-                .ToList();
-
-            List<Difference> deduplicatedDifferences = DeduplicateDifferences(filteredDifferences);
-
-            List<ComparisonDifference> differences = deduplicatedDifferences
-                .Take(options.Comparison.MaxDifferences)
-                .Select(ToDomainDifference)
-                .ToList();
+            IReadOnlyList<ComparisonDifference> differences = CompareModels(modelA, modelB, options.Comparison);
 
             return RequestPairResult.FromComparison(
                 request,
@@ -103,6 +88,36 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
                 responseB,
                 ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Compares two already-materialized models. The pipeline's comparison phase
+    /// works on objects the mapping phase produced rather than on persisted
+    /// artifacts, so the rule application lives here and both callers share it.
+    /// </summary>
+    public static IReadOnlyList<ComparisonDifference> CompareModels(
+        object modelA,
+        object modelB,
+        ComparisonOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(modelA);
+        ArgumentNullException.ThrowIfNull(modelB);
+        ArgumentNullException.ThrowIfNull(options);
+
+        object comparisonModelA = ComparisonModelNormalizer.Normalize(modelA, options);
+        object comparisonModelB = ComparisonModelNormalizer.Normalize(modelB, options);
+
+        CompareLogic compareLogic = CreateCompareLogic(options);
+        ComparisonResult comparisonResult = compareLogic.Compare(comparisonModelA, comparisonModelB);
+        List<Difference> filteredDifferences = comparisonResult
+            .Differences
+            .Where(difference => !ShouldFilterDifference(difference, options))
+            .ToList();
+
+        return DeduplicateDifferences(filteredDifferences)
+            .Take(options.MaxDifferences)
+            .Select(ToDomainDifference)
+            .ToList();
     }
 
     private static CompareLogic CreateCompareLogic(ComparisonOptions options)

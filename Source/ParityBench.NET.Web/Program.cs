@@ -51,6 +51,13 @@ app.Run();
 static void RegisterV2Services(IServiceCollection services, string workspaceRoot, string fixtureBaseUrl, string? acceptedDifferenceStorePath, IConfiguration configuration)
 {
     services.AddParityBenchWorkspaceServices(configuration, workspaceRoot, fixtureBaseUrl);
+    // Opt-in via Worker:Enabled=true: execute runs out of process so plugin code
+    // never loads into the host.
+    if (configuration.GetValue("Worker:Enabled", false))
+    {
+        services.UseWorkerProcessExecution(configuration, workspaceRoot, fixtureBaseUrl);
+    }
+
     services.AddParityBenchUiServices(workspaceRoot, acceptedDifferenceStorePath);
     services.AddScoped<IRequestSourcePicker, NoOpRequestSourcePicker>();
 }

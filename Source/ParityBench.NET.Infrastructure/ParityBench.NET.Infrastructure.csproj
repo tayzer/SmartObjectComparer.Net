@@ -1,6 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <!-- DPAPI-protected local secret store; Windows-only at run time, guarded in code. -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\ParityBench.NET.Application\ParityBench.NET.Application.csproj" />
     <ProjectReference Include="..\ParityBench.NET.Domain\ParityBench.NET.Domain.csproj" />
   </ItemGroup>

@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The reference client plugin. It is NOT referenced by any host: it builds to a
+    package folder and is loaded like any third-party plugin, which is the proof
+    that a client can extend ParityBench without rebuilding the product.
+
+    It compiles only against the SDK (marked non-runtime so the shared SDK assembly
+    is never copied into the package) and carries its own third-party dependency
+    (Mapster), which the plugin load context resolves in isolation.
+  -->
+  <PropertyGroup>
+    <RootNamespace>ParityBench.ClientCustomerLookupPlugin</RootNamespace>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mapster" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ParityBench.PluginSdk\ParityBench.PluginSdk.csproj">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </ProjectReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="parity-plugin.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

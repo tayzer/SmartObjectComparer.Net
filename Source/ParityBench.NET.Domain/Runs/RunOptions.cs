@@ -19,7 +19,8 @@ public sealed record RunOptions
         ContractProfileSelection? contractProfileSelection = null,
         LargeRunOptions? largeRunOptions = null,
         RetentionMode? runRetentionModeOverride = null,
-        string? comparisonRulesSnapshotHash = null)
+        string? comparisonRulesSnapshotHash = null,
+        PluginComparisonSelection? pluginComparison = null)
     {
         ArgumentNullException.ThrowIfNull(endpointA);
         ArgumentNullException.ThrowIfNull(endpointB);
@@ -48,6 +49,7 @@ public sealed record RunOptions
         ComparisonRulesSnapshotHash = string.IsNullOrWhiteSpace(comparisonRulesSnapshotHash)
             ? null
             : comparisonRulesSnapshotHash.Trim();
+        PluginComparison = pluginComparison;
     }
 
     public RequestBatchReference RequestBatch { get; }
@@ -75,4 +77,10 @@ public sealed record RunOptions
     public RetentionMode? RunRetentionModeOverride { get; }
 
     public string? ComparisonRulesSnapshotHash { get; }
+
+    /// <summary>
+    /// Gets the plugin comparison this run selected, if any. When null the run
+    /// compares raw responses without plugin involvement.
+    /// </summary>
+    public PluginComparisonSelection? PluginComparison { get; }
 }
