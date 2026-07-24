@@ -26,7 +26,10 @@ public sealed record InstalledPluginMetadata(
     IReadOnlyList<PluginComparisonMetadata> Comparisons,
     IReadOnlyList<PluginConfigurationSchema> ConfigurationSchemas,
     IReadOnlyList<PluginEnvironment> Environments,
-    IReadOnlyList<PluginProfileTemplate> ProfileTemplates);
+    IReadOnlyList<PluginProfileTemplate> ProfileTemplates,
+    // On-disk package directory, used to resolve package-relative paths (e.g. a
+    // template's sample request directory). Empty when not applicable.
+    string PackageDirectory = "");
 
 /// <summary>
 /// A package that was found but could not be used, with the reason — surfaced so a

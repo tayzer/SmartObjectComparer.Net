@@ -18,7 +18,11 @@ public static class RequestComparisonFixtureDefaults
 
         Uri baseUri = CreateBaseUri(fixtureBaseUrl);
         RegisterEndpoints(endpointRegistry, baseUri);
-        RegisterPresets(presetRegistry, baseUri);
+
+        // The built-in example presets (consumer report, sample customer lookup) are
+        // no longer registered: the preset dropdown is retired in favour of plugin
+        // run profiles. RegisterPresets is retained but unwired; the fixture endpoints
+        // above are kept for the manual endpoint picker.
     }
 
     private static void RegisterEndpoints(

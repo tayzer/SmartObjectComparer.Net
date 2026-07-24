@@ -4,7 +4,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using MudBlazor.Services;
-using ParityBench.NET.ClientCustomerLookupExample;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Composition;
 using ParityBench.NET.Desktop.Services;
@@ -81,12 +80,14 @@ public partial class App : System.Windows.Application
     }
     private static void RegisterV2Services(IServiceCollection services, string workspaceRoot, string fixtureBaseUrl, string? acceptedDifferenceStorePath, IConfiguration configuration)
     {
+        // The legacy ClientCustomerLookup contract-profile example is no longer wired
+        // into the host; its replacement is the ClientCustomerLookup plugin package
+        // loaded at run time and selected by a run profile. The example code remains in
+        // the tree but is not registered. See Docs/Guides/building-a-plugin.md.
         services.AddParityBenchWorkspaceServices(
             configuration,
             workspaceRoot,
-            fixtureBaseUrl,
-            configureRequestComparisonFixtures: (svc, endpointDefaults, presetDefaults) =>
-                svc.AddClientCustomerLookupExample(configuration, endpointDefaults, presetDefaults, FindManualRunRoot()));
+            fixtureBaseUrl);
         // Opt-in via Worker:Enabled=true: execute runs out of process so a plugin
         // failure cannot take the desktop app down.
         if (configuration.GetValue("Worker:Enabled", false))

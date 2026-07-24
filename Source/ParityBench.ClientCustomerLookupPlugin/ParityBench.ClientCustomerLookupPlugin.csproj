@@ -34,6 +34,9 @@
 
   <ItemGroup>
     <None Update="parity-plugin.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Sample requests ship inside the package so the seeded profile has input to
+         run against out of the box. The template points at this folder. -->
+    <None Update="samples\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

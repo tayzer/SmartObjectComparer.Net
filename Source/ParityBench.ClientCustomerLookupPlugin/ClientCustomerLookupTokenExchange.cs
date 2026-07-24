@@ -105,5 +105,5 @@ public sealed class ClientCustomerLookupTokenExchange
         [property: JsonPropertyName("customerId")] string CustomerId,
         [property: JsonPropertyName("correlationId")] string CorrelationId);
 
-    private sealed record TokenResponse([property: JsonPropertyName("accessToken")] string AccessToken);
+    private sealed record TokenResponse([property: JsonPropertyName("access_token")] string AccessToken);
 }

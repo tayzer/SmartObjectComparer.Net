@@ -477,7 +477,7 @@ public sealed class RequestCommandTests
                 : "mock-final-token";
             return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
             {
-                Content = new StringContent($"{{\"accessToken\":\"{token}\"}}", Encoding.UTF8, "application/json"),
+                Content = new StringContent($"{{\"access_token\":\"{token}\"}}", Encoding.UTF8, "application/json"),
             });
         }
     }

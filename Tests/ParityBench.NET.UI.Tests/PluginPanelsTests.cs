@@ -38,6 +38,7 @@ public sealed class PluginPanelsTests
         testContext.Services.AddSingleton<IPluginMetadataProvider>(metadata);
         testContext.Services.AddSingleton<IRunProfileStore>(profileStore);
         testContext.Services.AddSingleton<ISecretStore>(secretStore);
+        testContext.Services.AddSingleton(new PluginProfileBootstrapper(metadata, profileStore));
     }
 
     [TestCleanup]

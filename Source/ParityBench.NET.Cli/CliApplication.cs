@@ -3,9 +3,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 using ParityBench.NET.Application.Observability;
+using ParityBench.NET.Application.Profiles;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Workflow;
-using ParityBench.NET.ClientCustomerLookupExample;
 using ParityBench.NET.Composition;
 using ParityBench.NET.Infrastructure;
 
@@ -39,6 +39,14 @@ public static class CliApplication
         configureServices?.Invoke(services);
 
         await using ServiceProvider serviceProvider = services.BuildServiceProvider();
+
+        // Seed run profiles from any installed plugin's templates, so a freshly
+        // installed plugin is runnable via --run-profile with no manual setup.
+        await serviceProvider
+            .GetRequiredService<PluginProfileBootstrapper>()
+            .EnsureTemplateProfilesAsync(cancellationToken)
+            .ConfigureAwait(false);
+
         RequestCommandRunner runner = serviceProvider.GetRequiredService<RequestCommandRunner>();
         return await runner
             .RunAsync(parseResult.Options, output, error, cancellationToken)
@@ -90,9 +98,13 @@ public static class CliApplication
                 {
                     options.SlowPathThresholdMs = threshold;
                 }
-            },
-            configureRequestComparisonFixtures: (svc, endpointDefaults, presetDefaults) =>
-                svc.AddClientCustomerLookupExample(configuration, endpointDefaults, presetDefaults, FindManualRunRoot()));
+            });
+
+        // The legacy ClientCustomerLookup contract-profile example is no longer wired
+        // into the host. Its replacement is the ClientCustomerLookup plugin package,
+        // discovered at run time from the workspace `plugins` folder and selected by a
+        // run profile (`--run-profile`). The example code remains in the tree but is
+        // not registered; see Docs/Guides/building-a-plugin.md.
 
         // Opt-in, config-gated: with Worker:Enabled=true, runs execute in a separate
         // worker process so client plugin code never loads into the host. Off by

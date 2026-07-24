@@ -57,7 +57,25 @@ public sealed class ClientCustomerLookupPlugin : IParityBenchPlugin
                 "client-customer-lookup-local",
                 "Client Customer Lookup — Local",
                 ComparisonId,
-                environmentName: "Local"));
+                environmentName: "Local",
+                // Relative to the plugin package: the sample requests shipped in the
+                // package. The bootstrapper resolves this against the package directory
+                // so the seeded profile is runnable without picking input files.
+                requestDirectory: "samples",
+                // Seeds the token exchange against the local TestEndpoints host with the
+                // fixture's mock keys, so the materialised profile runs as-is. A real
+                // environment would use secret:// references for the keys instead.
+                stepConfiguration: new Dictionary<string, IReadOnlyDictionary<string, string>>
+                {
+                    [ClientCustomerLookupRequestMiddleware.Id] = new Dictionary<string, string>
+                    {
+                        ["primaryTokenUrl"] = "http://localhost:5056/client/token/primary",
+                        ["primaryTokenSubscriptionKey"] = "mock-primary-token-subscription-key",
+                        ["finalTokenUrl"] = "http://localhost:5056/client/token/final",
+                        ["finalTokenSubscriptionKey"] = "mock-final-token-subscription-key",
+                        ["endpointBSubscriptionKey"] = "mock-endpoint-b-subscription-key",
+                    },
+                }));
     }
 
     private sealed class ClientCustomerLookupComparisonDefinition : IComparisonDefinition<ClientCustomerLookupResponse>

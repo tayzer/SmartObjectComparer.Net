@@ -213,7 +213,7 @@ public sealed class ReferencePluginEndToEndTests
             await Task.Yield();
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
-                Content = JsonContent.Create(new { accessToken = token }),
+                Content = JsonContent.Create(new Dictionary<string, string> { ["access_token"] = token }),
             };
         }
 

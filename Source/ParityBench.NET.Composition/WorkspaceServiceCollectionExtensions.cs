@@ -116,6 +116,7 @@ public static class WorkspaceServiceCollectionExtensions
             new DpapiSecretStore(workspaceRoot)));
         services.AddSingleton<SecretResolver>();
         services.AddSingleton<RunProfileResolver>();
+        services.AddSingleton<PluginProfileBootstrapper>();
 
         services.AddSingleton(_ => new PluginCatalog(ResolvePluginDirectories(configuration, workspaceRoot)));
         services.AddSingleton<PluginLoader>();

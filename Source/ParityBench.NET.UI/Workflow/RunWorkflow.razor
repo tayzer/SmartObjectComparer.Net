@@ -31,6 +31,21 @@
     <MudPaper Elevation="0" Class="pa-3 pb-workflow-section">
         <MudStack Spacing="2">
             <MudText Typo="Typo.subtitle1" Class="pb-workflow-heading"><MudIcon Icon="@Icons.Material.Filled.UploadFile" Size="Size.Small" />Step 1: Upload Request Files</MudText>
+            @if (runProfiles.Count > 0)
+            {
+                <MudSelect T="string"
+                           Label="Run profile (plugin)"
+                           Value="selectedRunProfileId"
+                           ValueChanged="HandleRunProfileChangedAsync"
+                           Variant="Variant.Outlined"
+                           Clearable="true"
+                           HelperText="Select a plugin run profile, then choose your request files.">
+                    @foreach (RunProfileSummary profile in runProfiles)
+                    {
+                        <MudSelectItem T="string" Value="@profile.Id">@profile.DisplayName</MudSelectItem>
+                    }
+                </MudSelect>
+            }
             @if (defaults.Presets.Count > 0)
             {
                 <MudSelect T="string"
@@ -385,6 +400,9 @@
     private IReadOnlyList<ContractProfileOption> availableProfileOptions = Array.Empty<ContractProfileOption>();
     private ContractProfileOption? selectedProfileOption;
     private string selectedPresetId = string.Empty;
+    private IReadOnlyList<RunProfileSummary> runProfiles = Array.Empty<RunProfileSummary>();
+    private string selectedRunProfileId = string.Empty;
+    private PluginComparisonSelection? selectedPluginComparison;
     private string requestDirectory = string.Empty;
     private IReadOnlyList<string> sourceFiles = Array.Empty<string>();
     private string requestSourceDescription = string.Empty;
@@ -440,6 +458,7 @@
         try
         {
             defaults = await DataSource.LoadDefaultsAsync();
+            runProfiles = await DataSource.ListRunProfilesAsync();
             timeoutSeconds = defaults.RunDefaults.TimeoutSeconds.ToString();
             maxConcurrency = defaults.RunDefaults.MaxConcurrency.ToString();
             RefreshSelectedModelType();
@@ -451,8 +470,52 @@
         }
     }
 
+    private async Task HandleRunProfileChangedAsync(string value)
+    {
+        selectedRunProfileId = value ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(selectedRunProfileId))
+        {
+            // Cleared: drop the plugin selection so a subsequent run is a plain
+            // endpoint-to-endpoint comparison again.
+            selectedPluginComparison = null;
+            requestSourceDescription = string.Empty;
+            return;
+        }
+
+        try
+        {
+            ResolvedRunProfileView resolved = await DataSource.ResolveRunProfileAsync(selectedRunProfileId);
+            // A plugin profile supplies the endpoints, comparison settings and the
+            // plugin selection; the operator still provides the request files.
+            selectedPresetId = string.Empty;
+            contractProfileId = string.Empty;
+            selectedPluginComparison = resolved.Selection;
+            endpointA = resolved.EndpointA.ToString();
+            endpointB = resolved.EndpointB.ToString();
+            ApplyComparisonOptions(resolved.Comparison);
+            if (!string.IsNullOrWhiteSpace(resolved.RequestDirectory))
+            {
+                requestDirectory = resolved.RequestDirectory!;
+                sourceFiles = Array.Empty<string>();
+            }
+
+            requestSourceDescription = $"Selected run profile: {runProfiles.FirstOrDefault(profile => profile.Id == selectedRunProfileId)?.DisplayName ?? selectedRunProfileId}";
+            RefreshSelectedModelType();
+            RefreshAvailableProfiles(clearInvalidSelection: false);
+            ResetProfileDefaultIgnoreRuleViewer();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            selectedRunProfileId = string.Empty;
+            selectedPluginComparison = null;
+        }
+    }
+
     private async Task HandlePresetChangedAsync(string value)
     {
+        selectedRunProfileId = string.Empty;
+        selectedPluginComparison = null;
         selectedPresetId = value ?? string.Empty;
         RequestComparisonPresetOption? preset = defaults.Presets.FirstOrDefault(candidate =>
             string.Equals(candidate.PresetId, selectedPresetId, StringComparison.OrdinalIgnoreCase));
@@ -692,7 +755,8 @@
             endpointBHeaders: ParseHeaders(endpointBHeaders),
             endpointALabel: ResolveEndpointLabel(endpointA),
             endpointBLabel: ResolveEndpointLabel(endpointB),
-            sourceFiles: sourceFiles.Count == 0 ? null : sourceFiles);
+            sourceFiles: sourceFiles.Count == 0 ? null : sourceFiles,
+            pluginComparison: selectedPluginComparison);
     }
 
     private void ApplyComparisonOptions(ComparisonOptions options)

@@ -303,6 +303,37 @@ public sealed class RunWorkflowViewTests
     }
 
     [TestMethod]
+    public void RunWorkflow_WhenRunProfileIsSelected_PopulatesEndpointsAndRunCarriesPluginComparison()
+    {
+        dataSource.RunProfilesToReturn = new[]
+        {
+            new RunProfileSummary("client-customer-lookup-local", "Client Customer Lookup — Local"),
+        };
+        dataSource.ResolvedProfile = new ResolvedRunProfileView(
+            new Uri("https://qa.example.test/soap"),
+            new Uri("https://qa.example.test/json"),
+            new ComparisonOptions(ignoreXmlNamespaces: true),
+            "C:/runs/client",
+            new PluginComparisonSelection("client.customer-lookup", "client.customer-lookup.soap-vs-json"));
+
+        IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();
+
+        // The run-profile picker is the first select when profiles are present.
+        SelectFirstDropdown(component, "client-customer-lookup-local");
+        component.FindAll("button")
+            .Single(button => button.TextContent.Contains("Start Comparison", StringComparison.Ordinal))
+            .Click();
+
+        component.WaitForAssertion(() => Assert.IsNotNull(dataSource.LastRequest));
+        // The plugin selection from the resolved profile flows into the run.
+        Assert.IsNotNull(dataSource.LastRequest!.PluginComparison);
+        Assert.AreEqual("client.customer-lookup", dataSource.LastRequest.PluginComparison!.PluginId);
+        Assert.AreEqual("client.customer-lookup.soap-vs-json", dataSource.LastRequest.PluginComparison.ComparisonId);
+        Assert.AreEqual("https://qa.example.test/soap", dataSource.LastRequest.EndpointA.ToString().TrimEnd('/'));
+        Assert.AreEqual("C:/runs/client", dataSource.LastRequest.SourceDirectory);
+    }
+
+    [TestMethod]
     public void RunWorkflow_WhenProfileIsSelected_ShowsDefaultComparisonRules()
     {
         IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();
@@ -450,6 +481,12 @@ public sealed class RunWorkflowViewTests
         component.InvokeAsync(() => select.Instance.ValueChanged.InvokeAsync(presetId)).GetAwaiter().GetResult();
     }
 
+    private static void SelectFirstDropdown(IRenderedComponent<RunWorkflow> component, string value)
+    {
+        IRenderedComponent<MudSelect<string>> select = component.FindComponent<MudSelect<string>>();
+        component.InvokeAsync(() => select.Instance.ValueChanged.InvokeAsync(value)).GetAwaiter().GetResult();
+    }
+
     private static void SetAutocompleteValue(IRenderedComponent<RunWorkflow> component, int index, string value)
     {
         IRenderedComponent<MudAutocomplete<string>> autocomplete = component.FindComponents<MudAutocomplete<string>>()[index];
@@ -494,8 +531,18 @@ public sealed class RunWorkflowViewTests
 
         public RequestComparisonRunDefaults RunDefaults { get; set; } = new RequestComparisonRunDefaults();
 
+        public IReadOnlyList<RunProfileSummary> RunProfilesToReturn { get; set; } = Array.Empty<RunProfileSummary>();
+
+        public ResolvedRunProfileView? ResolvedProfile { get; set; }
+
         public Task<RequestComparisonDefaults> LoadDefaultsAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(CreateDefaults());
+
+        public Task<IReadOnlyList<RunProfileSummary>> ListRunProfilesAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(RunProfilesToReturn);
+
+        public Task<ResolvedRunProfileView> ResolveRunProfileAsync(string profileId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(ResolvedProfile ?? throw new InvalidOperationException("No resolved profile configured."));
 
         public bool StartWasCalled { get; private set; }
 

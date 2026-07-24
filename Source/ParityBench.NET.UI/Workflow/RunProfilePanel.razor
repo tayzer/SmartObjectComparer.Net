@@ -6,6 +6,7 @@
 
 @inject IRunProfileStore ProfileStore
 @inject IPluginMetadataProvider PluginMetadata
+@inject PluginProfileBootstrapper ProfileBootstrapper
 @inject ISecretStore SecretStore
 @inject ISnackbar Snackbar
 
@@ -106,6 +107,9 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Seed profiles from installed plugin templates so a freshly installed plugin
+        // shows a ready-made profile here without any manual step.
+        await ProfileBootstrapper.EnsureTemplateProfilesAsync().ConfigureAwait(true);
         await ReloadProfilesAsync().ConfigureAwait(true);
         await LoadTemplatesAsync().ConfigureAwait(true);
     }

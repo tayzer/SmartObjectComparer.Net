@@ -84,6 +84,7 @@ public sealed class PluginMetadataProvider : IPluginMetadataProvider
             comparisons,
             registrations.ConfigurationSchemas,
             registrations.Environments,
-            registrations.ProfileTemplates);
+            registrations.ProfileTemplates,
+            package.DirectoryPath);
     }
 }
