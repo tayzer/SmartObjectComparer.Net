@@ -128,12 +128,12 @@
             <MudExpansionPanels Elevation="0" MultiExpansion="true">
                 <MudExpansionPanel Text="Comparison Options">
                     <MudStack Spacing="2">
-                        @if (HasProfileDefaultComparisonRules(selectedProfileOption))
+                        @if (HasProfileDefaultComparisonRules(ActiveDefaultComparisonRules))
                         {
                             <MudStack Spacing="1" Class="mb-3">
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">Profile default comparison rules</MudText>
                                 <MudStack Row="true" Spacing="1" Class="flex-wrap">
-                                    @foreach (string summary in GetProfileDefaultRuleSummary(selectedProfileOption!.DefaultComparisonRules))
+                                    @foreach (string summary in GetProfileDefaultRuleSummary(ActiveDefaultComparisonRules!))
                                     {
                                         <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">@summary</MudChip>
                                     }
@@ -148,7 +148,7 @@
                     </MudStack>
                 </MudExpansionPanel>
                 <MudExpansionPanel Text="Ignore Rules">
-                    @if (selectedProfileOption?.DefaultComparisonRules.IgnoreRules.Count > 0)
+                    @if (ActiveDefaultComparisonRules?.IgnoreRules.Count > 0)
                     {
                         <MudPaper Outlined="true" Class="pa-3 mb-3 pb-workflow-muted-panel">
                             <MudStack Spacing="2">
@@ -156,7 +156,7 @@
                                     <MudStack Spacing="0">
                                         <MudText Typo="Typo.subtitle2">Profile Default Ignore Rules</MudText>
                                         <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                            @GetProfileDefaultIgnoreRuleCountText(selectedProfileOption.DefaultComparisonRules.IgnoreRules.Count) will be applied automatically.
+                                            @GetProfileDefaultIgnoreRuleCountText(ActiveDefaultComparisonRules.IgnoreRules.Count) will be applied automatically.
                                         </MudText>
                                     </MudStack>
                                     <MudButton Variant="Variant.Text"
@@ -234,10 +234,10 @@
                     </MudStack>
                 </MudExpansionPanel>
                 <MudExpansionPanel Text="Mask Rules">
-                    @if (selectedProfileOption?.DefaultComparisonRules.MaskRules.Count > 0)
+                    @if (ActiveDefaultComparisonRules?.MaskRules.Count > 0)
                     {
                         <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true" Class="mb-3">
-                            @selectedProfileOption.DefaultComparisonRules.MaskRules.Count profile default mask rule@(selectedProfileOption.DefaultComparisonRules.MaskRules.Count == 1 ? string.Empty : "s") will be applied automatically.
+                            @ActiveDefaultComparisonRules.MaskRules.Count profile default mask rule@(ActiveDefaultComparisonRules.MaskRules.Count == 1 ? string.Empty : "s") will be applied automatically.
                         </MudAlert>
                     }
                     <MaskRulesStudio ModelType="selectedModelType"
@@ -403,6 +403,7 @@
     private IReadOnlyList<RunProfileSummary> runProfiles = Array.Empty<RunProfileSummary>();
     private string selectedRunProfileId = string.Empty;
     private PluginComparisonSelection? selectedPluginComparison;
+    private ComparisonRuleDefaults? pluginDefaultComparisonRules;
     private string requestDirectory = string.Empty;
     private IReadOnlyList<string> sourceFiles = Array.Empty<string>();
     private string requestSourceDescription = string.Empty;
@@ -453,6 +454,13 @@
         && !isBusy
         && !string.IsNullOrWhiteSpace(reportOutputDirectory);
 
+    // The baseline comparison rules to preview and force-apply in the UI, from
+    // whichever source is active: a legacy contract profile, or a plugin run
+    // profile's comparison. The two are mutually exclusive (selecting one clears
+    // the other), so this never has to merge them.
+    private ComparisonRuleDefaults? ActiveDefaultComparisonRules =>
+        selectedProfileOption?.DefaultComparisonRules ?? pluginDefaultComparisonRules;
+
     protected override async Task OnInitializedAsync()
     {
         try
@@ -478,6 +486,7 @@
             // Cleared: drop the plugin selection so a subsequent run is a plain
             // endpoint-to-endpoint comparison again.
             selectedPluginComparison = null;
+            pluginDefaultComparisonRules = null;
             requestSourceDescription = string.Empty;
             return;
         }
@@ -515,6 +524,16 @@
                 RefreshSelectedModelType();
             }
 
+            // Mirrors what RefreshSelectedProfile() does for a legacy contract
+            // profile: preview the comparison's baseline rules and OR its forced
+            // switches into the UI toggles (the executor always ORs them in too, so
+            // a plugin-forced setting can never actually be switched off).
+            pluginDefaultComparisonRules = resolved.PluginDefaultComparisonRules;
+            if (pluginDefaultComparisonRules is not null)
+            {
+                ApplyProfileForcedDefaults(pluginDefaultComparisonRules);
+            }
+
             RefreshAvailableProfiles(clearInvalidSelection: false);
             ResetProfileDefaultIgnoreRuleViewer();
         }
@@ -530,6 +549,7 @@
     {
         selectedRunProfileId = string.Empty;
         selectedPluginComparison = null;
+        pluginDefaultComparisonRules = null;
         selectedPresetId = value ?? string.Empty;
         RequestComparisonPresetOption? preset = defaults.Presets.FirstOrDefault(candidate =>
             string.Equals(candidate.PresetId, selectedPresetId, StringComparison.OrdinalIgnoreCase));
@@ -885,14 +905,14 @@
         ignoreXmlNamespaces |= defaults.IgnoreXmlNamespaces;
     }
 
-    private bool IsIgnoreCollectionOrderForcedByProfile => selectedProfileOption?.DefaultComparisonRules.IgnoreCollectionOrder == true;
-    private bool IsIgnoreStringCaseForcedByProfile => selectedProfileOption?.DefaultComparisonRules.IgnoreStringCase == true;
-    private bool IsIgnoreTrailingWhitespaceForcedByProfile => selectedProfileOption?.DefaultComparisonRules.IgnoreTrailingWhitespaceAtEnd == true;
-    private bool IsTreatNullAndEmptyCollectionsForcedByProfile => selectedProfileOption?.DefaultComparisonRules.TreatNullAndEmptyCollectionsAsEqual == true;
-    private bool IsIgnoreXmlNamespacesForcedByProfile => selectedProfileOption?.DefaultComparisonRules.IgnoreXmlNamespaces == true;
+    private bool IsIgnoreCollectionOrderForcedByProfile => ActiveDefaultComparisonRules?.IgnoreCollectionOrder == true;
+    private bool IsIgnoreStringCaseForcedByProfile => ActiveDefaultComparisonRules?.IgnoreStringCase == true;
+    private bool IsIgnoreTrailingWhitespaceForcedByProfile => ActiveDefaultComparisonRules?.IgnoreTrailingWhitespaceAtEnd == true;
+    private bool IsTreatNullAndEmptyCollectionsForcedByProfile => ActiveDefaultComparisonRules?.TreatNullAndEmptyCollectionsAsEqual == true;
+    private bool IsIgnoreXmlNamespacesForcedByProfile => ActiveDefaultComparisonRules?.IgnoreXmlNamespaces == true;
 
     private IReadOnlyList<IgnoreRuleDefinition> FilteredProfileDefaultIgnoreRules =>
-        (selectedProfileOption?.DefaultComparisonRules.IgnoreRules ?? Array.Empty<IgnoreRuleDefinition>())
+        (ActiveDefaultComparisonRules?.IgnoreRules ?? Array.Empty<IgnoreRuleDefinition>())
             .Where(rule => string.IsNullOrWhiteSpace(profileDefaultIgnoreRuleSearchTerm)
                 || rule.PropertyPath.Contains(profileDefaultIgnoreRuleSearchTerm.Trim(), StringComparison.OrdinalIgnoreCase))
             .OrderBy(rule => rule.PropertyPath, StringComparer.OrdinalIgnoreCase)
@@ -978,8 +998,8 @@
     private static bool MatchesSearch(string value, string search) =>
         string.IsNullOrWhiteSpace(search) || value.Contains(search, StringComparison.OrdinalIgnoreCase);
 
-    private static bool HasProfileDefaultComparisonRules(ContractProfileOption? profile) =>
-        profile?.DefaultComparisonRules.HasDefaults == true;
+    private static bool HasProfileDefaultComparisonRules(ComparisonRuleDefaults? defaults) =>
+        defaults?.HasDefaults == true;
 
     private static IReadOnlyList<string> GetProfileDefaultRuleSummary(ComparisonRuleDefaults defaults)
     {

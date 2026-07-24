@@ -315,6 +315,7 @@ public sealed class RunWorkflowViewTests
             new ComparisonOptions(ignoreXmlNamespaces: true),
             "C:/runs/client",
             new PluginComparisonSelection("client.customer-lookup", "client.customer-lookup.soap-vs-json"),
+            null,
             null);
 
         IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();
@@ -347,7 +348,10 @@ public sealed class RunWorkflowViewTests
             new ComparisonOptions(ignoreXmlNamespaces: true),
             "C:/runs/client",
             new PluginComparisonSelection("client.customer-lookup", "client.customer-lookup.soap-vs-json"),
-            typeof(PluginComparisonFixture));
+            typeof(PluginComparisonFixture),
+            new ComparisonRuleDefaults(
+                ignoreXmlNamespaces: true,
+                ignoreRules: new[] { new IgnoreRuleDefinition("details.traceId") }));
 
         IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();
 
@@ -360,6 +364,10 @@ public sealed class RunWorkflowViewTests
             // reflectable even though it isn't in the legacy response-model registry.
             Assert.IsFalse(component.Markup.Contains("Select a registered domain model", StringComparison.Ordinal));
             StringAssert.Contains(component.Markup, nameof(PluginComparisonFixture.CustomerId));
+            // The plugin comparison's baseline ignore rules must surface the same
+            // way a legacy contract profile's defaults do.
+            StringAssert.Contains(component.Markup, "Profile default comparison rules");
+            StringAssert.Contains(component.Markup, "profile default ignore rule");
         });
     }
 

@@ -57,7 +57,7 @@ public sealed class ApplicationRunWorkflowViewDataSource : IRunWorkflowViewDataS
     public async Task<ResolvedRunProfileView> ResolveRunProfileAsync(string profileId, CancellationToken cancellationToken = default)
     {
         ResolvedRunProfile resolved = await runProfileResolver.ResolveAsync(profileId, cancellationToken).ConfigureAwait(false);
-        Type? comparisonType = await pluginMetadataProvider.ResolveComparisonTypeAsync(
+        PluginComparisonDefinitionInfo? comparisonDefinition = await pluginMetadataProvider.ResolveComparisonDefinitionAsync(
             resolved.Selection.PluginId,
             resolved.Selection.ComparisonId,
             resolved.Selection.PluginVersion,
@@ -69,7 +69,8 @@ public sealed class ApplicationRunWorkflowViewDataSource : IRunWorkflowViewDataS
             resolved.Profile.Comparison,
             resolved.Profile.RequestDirectory,
             resolved.Selection,
-            comparisonType);
+            comparisonDefinition?.ComparisonType,
+            comparisonDefinition?.DefaultComparisonRules);
     }
 
     public Type? ResolveResponseModelType(string modelName)

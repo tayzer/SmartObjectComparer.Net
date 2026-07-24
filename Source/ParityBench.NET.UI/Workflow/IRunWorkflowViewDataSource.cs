@@ -21,7 +21,13 @@ public sealed record ResolvedRunProfileView(
     // The CLR type the plugin's comparison maps both endpoints to, so the workflow
     // UI can browse its properties for ignore/mask rules the same way it does for
     // built-in response models. Null when the plugin/comparison can't be resolved.
-    Type? ComparisonType);
+    Type? ComparisonType,
+    // The plugin comparison's baseline rules (e.g. known-noisy fields it always
+    // ignores), mirroring ContractProfileOption.DefaultComparisonRules for the
+    // legacy path so the "Profile default ignore rules" preview and the forced
+    // toggle state work the same way for plugin profiles. Null alongside
+    // ComparisonType when unresolved.
+    ComparisonRuleDefaults? PluginDefaultComparisonRules);
 
 /// <summary>
 /// Supplies create/run/cancel/report actions to shared V2 workflow components without binding them to a host.

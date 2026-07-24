@@ -1,3 +1,5 @@
+using ParityBench.NET.Domain.Comparison;
+
 using ParityBench.PluginSdk.Configuration;
 using ParityBench.PluginSdk.Profiles;
 
@@ -61,12 +63,20 @@ public interface IPluginMetadataProvider
     Task<InstalledPluginMetadata?> GetPluginAsync(string pluginId, string? version = null, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Resolves the CLR type one of the plugin's comparisons maps both endpoints to
-    /// (<see cref="ParityBench.PluginSdk.Comparisons.IComparisonDefinition.ComparisonType"/>),
+    /// Resolves the CLR type and baseline comparison rules for one of the plugin's
+    /// comparisons (<see cref="ParityBench.PluginSdk.Comparisons.IComparisonDefinition.ComparisonType"/>
+    /// and <see cref="ParityBench.PluginSdk.Comparisons.IComparisonDefinition.DefaultComparisonRules"/>),
     /// or null when the plugin or comparison is not found. This is a narrow escape
     /// hatch from the otherwise type-free metadata above: the host UI needs a real
     /// <see cref="Type"/> to reflect over for property-path pickers (ignore/mask
-    /// rules), the same way it already does for the built-in response models.
+    /// rules) and the baseline rules to preview, the same way it already does for
+    /// the built-in response models and contract profiles.
     /// </summary>
-    Task<Type?> ResolveComparisonTypeAsync(string pluginId, string comparisonId, string? version = null, CancellationToken cancellationToken = default);
+    Task<PluginComparisonDefinitionInfo?> ResolveComparisonDefinitionAsync(string pluginId, string comparisonId, string? version = null, CancellationToken cancellationToken = default);
 }
+
+/// <summary>
+/// The CLR type and baseline comparison rules a plugin comparison declares. See
+/// <see cref="IPluginMetadataProvider.ResolveComparisonDefinitionAsync"/>.
+/// </summary>
+public sealed record PluginComparisonDefinitionInfo(Type ComparisonType, ComparisonRuleDefaults DefaultComparisonRules);
