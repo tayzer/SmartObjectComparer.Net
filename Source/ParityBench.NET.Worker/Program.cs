@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-
 using ParityBench.NET.Application.Runs;
 using ParityBench.NET.Application.Runs.Worker;
 using ParityBench.NET.Composition;

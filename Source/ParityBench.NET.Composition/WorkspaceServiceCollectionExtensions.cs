@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-
 using ParityBench.NET.Application.AcceptedDifferences;
 using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.Application.Observability;
@@ -62,7 +61,6 @@ public static class WorkspaceServiceCollectionExtensions
         services.AddParityBenchObservability(configuration, configureObservability);
         services.AddRetentionConfiguration(configuration);
         services.Configure<RequestComparisonRunDefaults>(configuration.GetSection("RequestComparison:Defaults"));
-
         services.AddSingleton(CreateSharedHttpClient());
         services.AddSingleton<IRequestBatchStore>(_ => new FileSystemRequestBatchStore(workspaceRoot));
         services.AddSingleton<IRunStore>(_ => new FileSystemRunStore(workspaceRoot));

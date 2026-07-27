@@ -774,13 +774,20 @@
             maskRuleDefinitions);
         RequestExecutionOptions executionOptions = new RequestExecutionOptions(contentTypeOverride);
 
+        // modelName mirrors the plugin's canonical type only for the Ignore/Mask Rules
+        // Studio property browser (see HandleRunProfileChangedAsync); it must not reach
+        // the wire as ResponseModelName, or a raw-comparison fallback (transport error,
+        // non-2xx status) will try to resolve it in the legacy response-model registry,
+        // where plugin comparisons are never registered.
+        string responseModelName = selectedPluginComparison is not null ? "Auto" : modelName;
+
         return new RequestComparisonRunRequest(
             requestDirectory,
             endpointAUri,
             endpointBUri,
             TimeSpan.FromSeconds(timeout),
             concurrency,
-            modelName,
+            responseModelName,
             comparisonOptions,
             executionOptions,
             string.IsNullOrWhiteSpace(contractProfileId) ? null : new ContractProfileSelection(contractProfileId),

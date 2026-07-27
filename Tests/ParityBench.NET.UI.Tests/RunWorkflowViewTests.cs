@@ -315,7 +315,7 @@ public sealed class RunWorkflowViewTests
             new ComparisonOptions(ignoreXmlNamespaces: true),
             "C:/runs/client",
             new PluginComparisonSelection("client.customer-lookup", "client.customer-lookup.soap-vs-json"),
-            null,
+            typeof(PluginComparisonFixture),
             null);
 
         IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();
@@ -333,6 +333,11 @@ public sealed class RunWorkflowViewTests
         Assert.AreEqual("client.customer-lookup.soap-vs-json", dataSource.LastRequest.PluginComparison.ComparisonId);
         Assert.AreEqual("https://qa.example.test/soap", dataSource.LastRequest.EndpointA.ToString().TrimEnd('/'));
         Assert.AreEqual("C:/runs/client", dataSource.LastRequest.SourceDirectory);
+        // A plugin run must never carry its canonical type name as the wire-level
+        // ResponseModelName: a raw-comparison fallback (transport error, non-2xx
+        // status) resolves that name against the legacy response-model registry,
+        // where plugin comparisons are never registered.
+        Assert.AreEqual("Auto", dataSource.LastRequest.ModelName);
     }
 
     [TestMethod]

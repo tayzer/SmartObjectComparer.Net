@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Threading.Channels;
-
 using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.Application.Observability;
 using ParityBench.NET.Application.Plugins;
@@ -14,7 +13,6 @@ using ParityBench.NET.Domain.Runs;
 using ParityBench.NET.Domain.Runs.Retention;
 using ParityBench.NET.Engine.Comparers;
 using ParityBench.NET.Engine.Pipeline;
-
 using ParityBench.PluginSdk.Pipeline;
 
 namespace ParityBench.NET.Engine;
