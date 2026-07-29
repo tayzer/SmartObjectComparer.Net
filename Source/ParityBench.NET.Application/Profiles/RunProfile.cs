@@ -32,7 +32,9 @@ public sealed record RunProfile
         string? requestDirectory = null,
         int schemaVersion = CurrentSchemaVersion,
         LargeRunOptions? largeRun = null,
-        RetentionMode? retentionModeOverride = null)
+        RetentionMode? retentionModeOverride = null,
+        IReadOnlyDictionary<string, string>? endpointAHeaders = null,
+        IReadOnlyDictionary<string, string>? endpointBHeaders = null)
     {
         if (string.IsNullOrWhiteSpace(id))
         {
@@ -67,6 +69,8 @@ public sealed record RunProfile
         SchemaVersion = schemaVersion <= 0 ? CurrentSchemaVersion : schemaVersion;
         LargeRun = largeRun ?? new LargeRunOptions();
         RetentionModeOverride = retentionModeOverride;
+        EndpointAHeaders = new Dictionary<string, string>(endpointAHeaders ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
+        EndpointBHeaders = new Dictionary<string, string>(endpointBHeaders ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
     }
 
     public int SchemaVersion { get; }
@@ -102,6 +106,10 @@ public sealed record RunProfile
     public LargeRunOptions LargeRun { get; }
 
     public RetentionMode? RetentionModeOverride { get; }
+
+    public IReadOnlyDictionary<string, string> EndpointAHeaders { get; }
+
+    public IReadOnlyDictionary<string, string> EndpointBHeaders { get; }
 
     /// <summary>
     /// Builds the run selection this profile describes. Secret references are

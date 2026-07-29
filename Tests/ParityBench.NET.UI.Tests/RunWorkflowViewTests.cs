@@ -316,7 +316,9 @@ public sealed class RunWorkflowViewTests
             "C:/runs/client",
             new PluginComparisonSelection("client.customer-lookup", "client.customer-lookup.soap-vs-json"),
             typeof(PluginComparisonFixture),
-            null);
+            null,
+            new Dictionary<string, string>(),
+            new Dictionary<string, string>());
 
         IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();
 
@@ -356,7 +358,9 @@ public sealed class RunWorkflowViewTests
             typeof(PluginComparisonFixture),
             new ComparisonRuleDefaults(
                 ignoreXmlNamespaces: true,
-                ignoreRules: new[] { new IgnoreRuleDefinition("details.traceId") }));
+                ignoreRules: new[] { new IgnoreRuleDefinition("details.traceId") }),
+            new Dictionary<string, string>(),
+            new Dictionary<string, string>());
 
         IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();
 

@@ -501,6 +501,8 @@
             selectedPluginComparison = resolved.Selection;
             endpointA = resolved.EndpointA.ToString();
             endpointB = resolved.EndpointB.ToString();
+            endpointAHeaders = FormatHeaders(resolved.EndpointAHeaders);
+            endpointBHeaders = FormatHeaders(resolved.EndpointBHeaders);
             ApplyComparisonOptions(resolved.Comparison);
             if (!string.IsNullOrWhiteSpace(resolved.RequestDirectory))
             {

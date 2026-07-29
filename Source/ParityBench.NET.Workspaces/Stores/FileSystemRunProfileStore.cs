@@ -200,6 +200,10 @@ public sealed class FileSystemRunProfileStore : IRunProfileStore
 
         public EndpointsDto Endpoints { get; set; } = new EndpointsDto();
 
+        public Dictionary<string, string> EndpointAHeaders { get; set; } = new Dictionary<string, string>();
+
+        public Dictionary<string, string> EndpointBHeaders { get; set; } = new Dictionary<string, string>();
+
         public List<string> EnabledSteps { get; set; } = new List<string>();
 
         public Dictionary<string, Dictionary<string, string>> StepConfiguration { get; set; } = new Dictionary<string, Dictionary<string, string>>();
@@ -219,6 +223,8 @@ public sealed class FileSystemRunProfileStore : IRunProfileStore
             ComparisonId = profile.ComparisonId,
             Environment = profile.EnvironmentName,
             Endpoints = new EndpointsDto { A = profile.EndpointA.ToString(), B = profile.EndpointB.ToString() },
+            EndpointAHeaders = new Dictionary<string, string>(profile.EndpointAHeaders, StringComparer.OrdinalIgnoreCase),
+            EndpointBHeaders = new Dictionary<string, string>(profile.EndpointBHeaders, StringComparer.OrdinalIgnoreCase),
             EnabledSteps = profile.EnabledStepIds.ToList(),
             StepConfiguration = profile.StepConfiguration.ToDictionary(
                 entry => entry.Key,
@@ -251,7 +257,9 @@ public sealed class FileSystemRunProfileStore : IRunProfileStore
             Input?.RequestDirectory,
             SchemaVersion,
             Report is null ? null : new LargeRunOptions(Report.ChunkSize, Report.DetailPageSize),
-            Report?.RetentionMode);
+            Report?.RetentionMode,
+            EndpointAHeaders,
+            EndpointBHeaders);
     }
 
     private sealed class PluginSelectionDto

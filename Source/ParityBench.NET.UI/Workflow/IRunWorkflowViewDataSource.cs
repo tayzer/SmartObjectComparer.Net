@@ -27,7 +27,9 @@ public sealed record ResolvedRunProfileView(
     // legacy path so the "Profile default ignore rules" preview and the forced
     // toggle state work the same way for plugin profiles. Null alongside
     // ComparisonType when unresolved.
-    ComparisonRuleDefaults? PluginDefaultComparisonRules);
+    ComparisonRuleDefaults? PluginDefaultComparisonRules,
+    IReadOnlyDictionary<string, string> EndpointAHeaders,
+    IReadOnlyDictionary<string, string> EndpointBHeaders);
 
 /// <summary>
 /// Supplies create/run/cancel/report actions to shared V2 workflow components without binding them to a host.

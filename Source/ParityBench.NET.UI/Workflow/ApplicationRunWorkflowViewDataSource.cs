@@ -70,7 +70,9 @@ public sealed class ApplicationRunWorkflowViewDataSource : IRunWorkflowViewDataS
             resolved.Profile.RequestDirectory,
             resolved.Selection,
             comparisonDefinition?.ComparisonType,
-            comparisonDefinition?.DefaultComparisonRules);
+            comparisonDefinition?.DefaultComparisonRules,
+            resolved.EndpointA.Headers,
+            resolved.EndpointB.Headers);
     }
 
     public Type? ResolveResponseModelType(string modelName)
