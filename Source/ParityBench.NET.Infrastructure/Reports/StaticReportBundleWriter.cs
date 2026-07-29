@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 
 using ParityBench.NET.Application.AcceptedDifferences;
+using ParityBench.NET.Application.Baselines;
 using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Results;
@@ -28,16 +29,19 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
     private readonly IComparisonRunResultUseCases resultUseCases;
     private readonly IRunArtifactStore artifactStore;
     private readonly IAcceptedDifferenceUseCases? acceptedDifferenceUseCases;
+    private readonly IBaselineStore? baselineStore;
     private readonly JsonSerializerOptions jsonOptions;
 
     public StaticReportBundleWriter(
         IComparisonRunResultUseCases resultUseCases,
         IRunArtifactStore artifactStore,
-        IAcceptedDifferenceUseCases? acceptedDifferenceUseCases = null)
+        IAcceptedDifferenceUseCases? acceptedDifferenceUseCases = null,
+        IBaselineStore? baselineStore = null)
     {
         this.resultUseCases = resultUseCases ?? throw new ArgumentNullException(nameof(resultUseCases));
         this.artifactStore = artifactStore ?? throw new ArgumentNullException(nameof(artifactStore));
         this.acceptedDifferenceUseCases = acceptedDifferenceUseCases;
+        this.baselineStore = baselineStore;
         jsonOptions = StaticReportJsonOptions.Create();
     }
 
@@ -131,6 +135,9 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
             };
 
         DateTimeOffset generatedAtValue = generatedAt ?? DateTimeOffset.UtcNow;
+        BaselineReportProvenance? baselineProvenance = await BaselineProvenanceFactory
+            .CreateAsync(baselineStore, run, cancellationToken)
+            .ConfigureAwait(false);
         StaticReportManifest manifest = new StaticReportManifest(
             StaticReportManifest.CurrentSchemaVersion,
             generatedAtValue,
@@ -138,7 +145,7 @@ public sealed class StaticReportBundleWriter : IStaticReportBundleWriter
             summary,
             detailPageSize,
             pageInfos,
-            StaticReportMetadata.FromRun(run, generatedAtValue),
+            StaticReportMetadata.FromRun(run, generatedAtValue, baselineProvenance),
             (await resultUseCases.LoadReportAnalysisAsync(runId, cancellationToken).ConfigureAwait(false)) ?? BuildAnalysisSnapshot(analysisItems, differenceIndexPath),
             acceptedDifferenceSnapshot);
 

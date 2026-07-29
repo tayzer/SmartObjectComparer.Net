@@ -1,4 +1,5 @@
-﻿using ParityBench.NET.Domain.Runs;
+﻿using ParityBench.NET.Domain.Baselines;
+using ParityBench.NET.Domain.Runs;
 
 namespace ParityBench.NET.Domain.Reports;
 
@@ -17,7 +18,8 @@ public sealed record StaticReportMetadata
         DateTimeOffset? startedAt = null,
         DateTimeOffset? completedAt = null,
         DateTimeOffset? updatedAt = null,
-        RunExecutionMetrics? executionMetrics = null)
+        RunExecutionMetrics? executionMetrics = null,
+        BaselineReportProvenance? baseline = null)
     {
         if (string.IsNullOrWhiteSpace(runId))
         {
@@ -37,6 +39,7 @@ public sealed record StaticReportMetadata
         CompletedAt = completedAt;
         UpdatedAt = updatedAt;
         ExecutionMetrics = executionMetrics;
+        Baseline = baseline;
     }
 
     public string ReportTitle { get; }
@@ -65,18 +68,27 @@ public sealed record StaticReportMetadata
 
     public RunExecutionMetrics? ExecutionMetrics { get; }
 
+    /// <summary>
+    /// Gets the baseline provenance for runs that captured or replayed one. Null on a
+    /// plain live-vs-live run, and on reports written before baselines existed.
+    /// </summary>
+    public BaselineReportProvenance? Baseline { get; }
+
     public TimeSpan? Elapsed =>
         ExecutionMetrics?.TotalDuration
         ?? (StartedAt.HasValue && CompletedAt.HasValue ? CompletedAt.Value - StartedAt.Value : null);
 
     public static StaticReportMetadata FromRun(
         ComparisonRun run,
-        DateTimeOffset generatedAt)
+        DateTimeOffset generatedAt,
+        BaselineReportProvenance? baseline = null)
     {
         ArgumentNullException.ThrowIfNull(run);
 
         return new StaticReportMetadata(
-            "Comparison Report",
+            baseline?.ModeLabel is { Length: > 0 } modeLabel && baseline.Mode != BaselineRunMode.LiveVsLive
+                ? $"{modeLabel} Report"
+                : "Comparison Report",
             run.Id.Value,
             generatedAt,
             run.Options.ModelName,
@@ -88,6 +100,7 @@ public sealed record StaticReportMetadata
             run.StartedAt,
             run.CompletedAt,
             run.UpdatedAt,
-            run.Summary?.ExecutionMetrics);
+            run.Summary?.ExecutionMetrics,
+            baseline);
     }
 }

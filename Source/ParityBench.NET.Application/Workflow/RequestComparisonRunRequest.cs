@@ -1,3 +1,5 @@
+using ParityBench.NET.Application.Baselines;
+using ParityBench.NET.Domain.Baselines;
 using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
@@ -25,9 +27,12 @@ public sealed record RequestComparisonRunRequest
         string? endpointBLabel = null,
         IReadOnlyList<string>? sourceFiles = null,
         RetentionMode? runRetentionModeOverride = null,
-        PluginComparisonSelection? pluginComparison = null)
+        PluginComparisonSelection? pluginComparison = null,
+        BaselineRunSelection? baseline = null)
     {
-        if (string.IsNullOrWhiteSpace(sourceDirectory))
+        // A replay run takes its requests from the baseline package, so it is the one
+        // case where a host has no source directory to offer.
+        if (string.IsNullOrWhiteSpace(sourceDirectory) && baseline?.Mode != BaselineRunMode.BaselineVsLive)
         {
             throw new ArgumentException("Source directory must not be empty.", nameof(sourceDirectory));
         }
@@ -45,7 +50,7 @@ public sealed record RequestComparisonRunRequest
             throw new ArgumentOutOfRangeException(nameof(maxConcurrency), "Maximum concurrency must be greater than zero.");
         }
 
-        SourceDirectory = sourceDirectory;
+        SourceDirectory = sourceDirectory ?? string.Empty;
         EndpointA = endpointA;
         EndpointB = endpointB;
         Timeout = timeout;
@@ -62,6 +67,7 @@ public sealed record RequestComparisonRunRequest
         SourceFiles = CopySourceFiles(sourceFiles);
         RunRetentionModeOverride = runRetentionModeOverride;
         PluginComparison = pluginComparison;
+        Baseline = baseline;
     }
 
     public string SourceDirectory { get; }
@@ -101,6 +107,12 @@ public sealed record RequestComparisonRunRequest
     /// must already have secret references resolved to values.
     /// </summary>
     public PluginComparisonSelection? PluginComparison { get; }
+
+    /// <summary>
+    /// Gets what this run does with baselines: capture one from endpoint A, replay
+    /// one as the expected side, or neither.
+    /// </summary>
+    public BaselineRunSelection? Baseline { get; }
 
     private static IReadOnlyDictionary<string, string> CopyHeaders(IReadOnlyDictionary<string, string>? headers)
     {

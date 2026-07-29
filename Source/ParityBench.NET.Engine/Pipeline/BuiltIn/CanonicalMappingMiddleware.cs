@@ -90,6 +90,9 @@ public sealed class CanonicalMappingMiddleware : IEndpointComparisonMiddleware
         }
         else
         {
+            // Keep a handle on the response as it arrived before repointing at the
+            // canonical projection: baseline capture stores both.
+            context.Items[BuiltInStepIds.RawResponseArtifactItem] = artifact;
             context.ResponseArtifact = await PersistCanonicalAsync(context, artifact, cancellationToken).ConfigureAwait(false);
         }
 

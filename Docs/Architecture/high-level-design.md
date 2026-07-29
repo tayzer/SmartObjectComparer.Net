@@ -10,7 +10,7 @@ ParityBench.NET fires the same request at two endpoints (A and B), persists both
 | Domain | [`Source/ParityBench.NET.Domain`](../../Source/ParityBench.NET.Domain) | Core model types, no framework dependencies (references the SDK for the shared value types) |
 | Application | [`Source/ParityBench.NET.Application`](../../Source/ParityBench.NET.Application) | Use-case contracts and orchestration: workflow, run lifecycle, results, run profiles, secrets, plugin-plan and worker contracts |
 | Engine | [`Source/ParityBench.NET.Engine`](../../Source/ParityBench.NET.Engine) | Run execution: the phased comparison pipeline, built-in middleware, endpoint calls, comparison, retention cleanup |
-| Workspaces | [`Source/ParityBench.NET.Workspaces`](../../Source/ParityBench.NET.Workspaces) | File-system persistence: request batches, run/artifact/detail stores, run-profile store |
+| Workspaces | [`Source/ParityBench.NET.Workspaces`](../../Source/ParityBench.NET.Workspaces) | File-system persistence: request batches, run/artifact/detail stores, run-profile store, baseline package store |
 | Infrastructure | [`Source/ParityBench.NET.Infrastructure`](../../Source/ParityBench.NET.Infrastructure) | Concrete implementations: serialization, DPAPI secret store, worker-process launcher, contract-profile registry (legacy) |
 | Plugins | [`Source/ParityBench.NET.Plugins`](../../Source/ParityBench.NET.Plugins) | Host-side plugin loading: manifest catalog, collectible `AssemblyLoadContext` per package, comparison-plan factory |
 | Worker | [`Source/ParityBench.NET.Worker`](../../Source/ParityBench.NET.Worker) | Out-of-process run executor: loads plugins in isolation, runs the pipeline, streams progress/result over a named pipe |
@@ -64,6 +64,20 @@ sequenceDiagram
     RunSvc-->>CLI: RunResultSummary
     CLI-->>User: console output / report
 ```
+
+## Comparison modes
+
+A run compares two sides; where each side comes from is decided by `RunOptions.Baseline` and affects endpoint execution only. The comparison, rules, masking, retention and report are identical in all three modes.
+
+| Mode | Slot A | Slot B |
+|---|---|---|
+| Live vs Live (default, `Baseline` is null) | called, then mapped | called, then mapped |
+| Capture baseline | called and mapped, then recorded into a versioned package | not called |
+| Baseline vs Live | comparison model read from the package — no request, no call | called, then mapped |
+
+A captured **baseline package** (`<workspace>/baselines/<id>/v<n>/`) holds each scenario's request, raw response, and mapped comparison model, plus provenance (captured-at, endpoint, plugin id/version, environment, originating run). Replay loads the stored model straight into the slot's comparison instance, so a decommissioned version can still take part in a comparison. Baselines require a plugin comparison, are never overwritten, and are exportable as a `.pbbaseline` archive. See [Baseline vs Live](../Guides/baseline-vs-live.md) and the [baseline ADR](ADRs/2026-07-27-baseline-vs-live-comparison.md).
+
+## Memory model
 
 Execution and comparison run as two bounded worker pools joined by a `System.Threading.Channels` channel inside `ComparisonRunExecutor` — execution persists a response artifact as soon as it lands, comparison reopens and diffs persisted artifacts rather than holding bodies in memory. This is what makes large runs (thousands of request pairs) bounded in memory rather than proportional to run size.
 

@@ -2,6 +2,7 @@
 @using System.Text.Json
 @using System.Xml
 @using System.Xml.Linq
+@using ParityBench.NET.Domain.Baselines
 @using ParityBench.NET.Domain.Reports
 @using Microsoft.AspNetCore.Components
 @using Microsoft.JSInterop
@@ -99,6 +100,10 @@ else if (run is not null)
                     </MudStack>
                 </MudStack>
                 <MudStack Row="true" Spacing="1" Class="flex-wrap">
+                    @if (Baseline is not null)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Tertiary" Icon="@Icons.Material.Filled.Inventory2">@Baseline.ModeLabel</MudChip>
+                    }
                     <MudChip T="string" Size="Size.Small" Color="Color.Primary">@ModelName</MudChip>
                     @if (metadata?.Elapsed is not null)
                     {
@@ -108,6 +113,53 @@ else if (run is not null)
                 </MudStack>
             </MudStack>
         </MudPaper>
+
+        @if (Baseline is { Mode: BaselineRunMode.BaselineVsLive })
+        {
+            @* A baseline is compared across time and often across environments, so the
+               report has to say so: an unexplained difference here is not automatically
+               a code regression. *@
+            <MudAlert Severity="@(Baseline.HasProvenanceWarning ? Severity.Warning : Severity.Info)" Variant="Variant.Outlined">
+                <MudStack Spacing="1">
+                    <MudText Typo="Typo.body2">
+                        <strong>Baseline vs Live.</strong>
+                        Expected results come from baseline <strong>@Baseline.DisplayName @Baseline.DisplayVersion</strong>,
+                        captured @FormatDate(Baseline.CapturedAt ?? DateTimeOffset.MinValue)@(string.IsNullOrWhiteSpace(Baseline.CaptureEndpoint) ? string.Empty : $" from {Baseline.CaptureEndpoint}")@(string.IsNullOrWhiteSpace(Baseline.CaptureEnvironment) ? string.Empty : $" in {Baseline.CaptureEnvironment}").
+                        The live side was called during this run.
+                    </MudText>
+                    <MudText Typo="Typo.body2">
+                        Data, configuration and external dependencies may have changed since the capture.
+                        A difference here is not automatically a software regression.
+                    </MudText>
+                    @if (Baseline.PluginVersionChanged)
+                    {
+                        <MudText Typo="Typo.body2">
+                            Mapping plugin differs: baseline captured with <strong>@Baseline.CapturePluginVersion</strong>, this run used <strong>@Baseline.LivePluginVersion</strong>.
+                        </MudText>
+                    }
+                    @if (Baseline.EnvironmentChanged)
+                    {
+                        <MudText Typo="Typo.body2">
+                            Environment differs: baseline captured in <strong>@Baseline.CaptureEnvironment</strong>, this run ran against <strong>@Baseline.LiveEnvironment</strong>.
+                        </MudText>
+                    }
+                    <MudText Typo="Typo.caption">
+                        @Baseline.ScenarioCount captured scenario@(Baseline.ScenarioCount == 1 ? string.Empty : "s") · comparison @Baseline.CapturePluginId/@Baseline.CaptureComparisonId · captured by run @Baseline.CapturedFromRunId
+                    </MudText>
+                </MudStack>
+            </MudAlert>
+        }
+        else if (Baseline is { Mode: BaselineRunMode.CaptureBaseline })
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                <MudText Typo="Typo.body2">
+                    <strong>Baseline capture.</strong>
+                    This run recorded @Baseline.ScenarioCount scenario@(Baseline.ScenarioCount == 1 ? string.Empty : "s") into baseline
+                    <strong>@Baseline.DisplayName @Baseline.DisplayVersion</strong>. Nothing was compared — one endpoint was called and its
+                    results stored for a later Baseline vs Live run.
+                </MudText>
+            </MudAlert>
+        }
 
         <MudStack Row="true" Spacing="2" Class="flex-wrap">
             @Stat("Total", summary?.TotalPairs ?? analysis?.TotalPairs ?? 0, Color.Default)
@@ -570,6 +622,7 @@ else if (run is not null)
     private string EndpointA => metadata?.EndpointA ?? run?.Options.EndpointA.Uri.ToString() ?? string.Empty;
     private string EndpointB => metadata?.EndpointB ?? run?.Options.EndpointB.Uri.ToString() ?? string.Empty;
     private string ModelName => metadata?.ModelName ?? run?.Options.ModelName ?? "Auto";
+    private BaselineReportProvenance? Baseline => metadata?.Baseline;
     private IReadOnlyList<string> AvailableCategories => analysis?.AvailableCategories ?? Array.Empty<string>();
     private IReadOnlyList<RequestPairResult> VisiblePageItems => detailPage is null ? Array.Empty<RequestPairResult>() : detailPage.Items.Where(MatchesCategoryFilter).ToList();
     private IReadOnlyList<StaticReportPropertyDifferenceSummary> FilteredDifferenceProperties => GetFilteredDifferenceProperties();

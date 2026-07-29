@@ -1,9 +1,11 @@
+using ParityBench.NET.Application.Baselines;
 using ParityBench.NET.Application.Plugins;
 using ParityBench.NET.Application.Profiles;
 using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Results;
 using ParityBench.NET.Application.Workflow;
+using ParityBench.NET.Domain.Baselines;
 using ParityBench.NET.Domain.Runs;
 
 namespace ParityBench.NET.UI.Workflow;
@@ -19,6 +21,7 @@ public sealed class ApplicationRunWorkflowViewDataSource : IRunWorkflowViewDataS
     private readonly RunProfileResolver runProfileResolver;
     private readonly PluginProfileBootstrapper profileBootstrapper;
     private readonly IPluginMetadataProvider pluginMetadataProvider;
+    private readonly IBaselineLibraryUseCases? baselineLibrary;
 
     public ApplicationRunWorkflowViewDataSource(
         IRequestComparisonWorkflowUseCases workflowUseCases,
@@ -29,8 +32,10 @@ public sealed class ApplicationRunWorkflowViewDataSource : IRunWorkflowViewDataS
         IRunProfileStore runProfileStore,
         RunProfileResolver runProfileResolver,
         PluginProfileBootstrapper profileBootstrapper,
-        IPluginMetadataProvider pluginMetadataProvider)
+        IPluginMetadataProvider pluginMetadataProvider,
+        IBaselineLibraryUseCases? baselineLibrary = null)
     {
+        this.baselineLibrary = baselineLibrary;
         this.workflowUseCases = workflowUseCases ?? throw new ArgumentNullException(nameof(workflowUseCases));
         this.jobUseCases = jobUseCases ?? throw new ArgumentNullException(nameof(jobUseCases));
         this.resultUseCases = resultUseCases ?? throw new ArgumentNullException(nameof(resultUseCases));
@@ -72,6 +77,19 @@ public sealed class ApplicationRunWorkflowViewDataSource : IRunWorkflowViewDataS
             comparisonDefinition?.ComparisonType,
             comparisonDefinition?.DefaultComparisonRules);
     }
+
+    public async Task<IReadOnlyList<BaselineSummary>> ListBaselinesAsync(CancellationToken cancellationToken = default) =>
+        baselineLibrary is null
+            ? Array.Empty<BaselineSummary>()
+            : await baselineLibrary.ListAsync(cancellationToken).ConfigureAwait(false);
+
+    public async Task<BaselinePackageManifest?> ResolveBaselineAsync(
+        BaselineId id,
+        int? version = null,
+        CancellationToken cancellationToken = default) =>
+        baselineLibrary is null
+            ? null
+            : await baselineLibrary.GetAsync(id, version, cancellationToken).ConfigureAwait(false);
 
     public Type? ResolveResponseModelType(string modelName)
     {

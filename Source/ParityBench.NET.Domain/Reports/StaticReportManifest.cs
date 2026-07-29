@@ -5,7 +5,9 @@ namespace ParityBench.NET.Domain.Reports;
 
 public sealed record StaticReportManifest
 {
-    public const int CurrentSchemaVersion = 2;
+    // 3 added baseline provenance to the metadata. Older bundles still load: the
+    // provenance is simply absent, which is exactly what a live-vs-live run means.
+    public const int CurrentSchemaVersion = 3;
 
     public const int MinimumSupportedSchemaVersion = 1;
 

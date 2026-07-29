@@ -18,7 +18,9 @@ public sealed record RequestCommandOptions(
     string? ReportAssetsDirectory,
     ObservabilityCliOptions Observability,
     string? PresetId = null,
-    string? RunProfileId = null);
+    string? RunProfileId = null,
+    string? CaptureBaselineName = null,
+    string? BaselineReference = null);
 
 public sealed record ObservabilityCliOptions(
     LogLevel? LogLevel = null,

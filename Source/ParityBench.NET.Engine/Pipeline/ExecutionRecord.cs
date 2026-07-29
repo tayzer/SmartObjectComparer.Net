@@ -11,6 +11,13 @@ public sealed record EndpointExecutionRecord(
     string? ErrorMessage,
     IEndpointPipelineContext? PipelineContext = null)
 {
+    /// <summary>
+    /// Gets a value indicating whether this slot was supplied from a stored baseline
+    /// rather than called. Such a slot already carries its comparison instance, so the
+    /// mapping phase must not run over it again.
+    /// </summary>
+    public bool IsBaselineReplay { get; init; }
+
     public int? StatusCode => Metadata?.StatusCode;
 
     public string? ContentType => Metadata?.ContentType;

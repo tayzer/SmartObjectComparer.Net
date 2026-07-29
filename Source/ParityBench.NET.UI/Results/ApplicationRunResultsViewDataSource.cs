@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 
+using ParityBench.NET.Application.Baselines;
 using ParityBench.NET.Application.Results;
 using ParityBench.NET.Domain.Reports;
 using ParityBench.NET.Domain.Results;
@@ -11,10 +12,14 @@ namespace ParityBench.NET.UI.Results;
 public sealed class ApplicationRunResultsViewDataSource : IRunResultsViewDataSource
 {
     private readonly IComparisonRunResultUseCases resultUseCases;
+    private readonly IBaselineStore? baselineStore;
 
-    public ApplicationRunResultsViewDataSource(IComparisonRunResultUseCases resultUseCases)
+    public ApplicationRunResultsViewDataSource(
+        IComparisonRunResultUseCases resultUseCases,
+        IBaselineStore? baselineStore = null)
     {
         this.resultUseCases = resultUseCases;
+        this.baselineStore = baselineStore;
     }
 
     public Task<IReadOnlyList<RunListItem>> ListRunsAsync(CancellationToken cancellationToken = default) =>
@@ -31,7 +36,11 @@ public sealed class ApplicationRunResultsViewDataSource : IRunResultsViewDataSou
         CancellationToken cancellationToken = default)
     {
         ComparisonRun run = await resultUseCases.LoadRunAsync(runId, cancellationToken).ConfigureAwait(false);
-        return StaticReportMetadata.FromRun(run, DateTimeOffset.UtcNow);
+        BaselineReportProvenance? baseline = await BaselineProvenanceFactory
+            .CreateAsync(baselineStore, run, cancellationToken)
+            .ConfigureAwait(false);
+
+        return StaticReportMetadata.FromRun(run, DateTimeOffset.UtcNow, baseline);
     }
 
     public Task<StaticReportAnalysisSnapshot?> LoadReportAnalysisAsync(

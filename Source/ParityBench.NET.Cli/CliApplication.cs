@@ -21,6 +21,17 @@ public static class CliApplication
         Action<IServiceCollection>? configureServices = null,
         CancellationToken cancellationToken = default)
     {
+        if (BaselineCommandParser.IsBaselineCommand(args))
+        {
+            return await RunBaselineCommandAsync(
+                args,
+                output,
+                error,
+                workspaceRoot,
+                configureServices,
+                cancellationToken).ConfigureAwait(false);
+        }
+
         RequestCommandParseResult parseResult = RequestCommandParser.Parse(args);
         if (!parseResult.IsSuccess)
         {
@@ -50,6 +61,38 @@ public static class CliApplication
         RequestCommandRunner runner = serviceProvider.GetRequiredService<RequestCommandRunner>();
         return await runner
             .RunAsync(parseResult.Options, output, error, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<int> RunBaselineCommandAsync(
+        string[] args,
+        TextWriter output,
+        TextWriter error,
+        string? workspaceRoot,
+        Action<IServiceCollection>? configureServices,
+        CancellationToken cancellationToken)
+    {
+        BaselineCommandParseResult parseResult = BaselineCommandParser.Parse(args);
+        if (!parseResult.IsSuccess)
+        {
+            foreach (string parseError in parseResult.Errors)
+            {
+                await error.WriteLineAsync(parseError).ConfigureAwait(false);
+            }
+
+            await error.WriteLineAsync(BaselineCommandParser.Usage).ConfigureAwait(false);
+            return 2;
+        }
+
+        IConfiguration configuration = CreateConfiguration();
+        ServiceCollection services = new ServiceCollection();
+        RegisterServices(services, workspaceRoot ?? GetDefaultWorkspaceRoot(), configuration);
+        configureServices?.Invoke(services);
+
+        await using ServiceProvider serviceProvider = services.BuildServiceProvider();
+        BaselineCommandRunner runner = serviceProvider.GetRequiredService<BaselineCommandRunner>();
+        return await runner
+            .RunAsync(parseResult.Options!, output, error, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -116,6 +159,7 @@ public static class CliApplication
         }
 
         services.AddSingleton<RequestCommandRunner>();
+        services.AddSingleton<BaselineCommandRunner>();
     }
 
     public static void RegisterServices(IServiceCollection services, string workspaceRoot) =>

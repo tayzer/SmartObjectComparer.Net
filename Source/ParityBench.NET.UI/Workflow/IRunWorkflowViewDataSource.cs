@@ -1,5 +1,6 @@
 using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Workflow;
+using ParityBench.NET.Domain.Baselines;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Runs;
 
@@ -48,6 +49,22 @@ public interface IRunWorkflowViewDataSource
     /// </summary>
     Task<ResolvedRunProfileView> ResolveRunProfileAsync(string profileId, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("Run profiles are not available in this context.");
+
+    /// <summary>
+    /// Lists captured baselines for the baseline picker, newest first. Defaults to
+    /// none where the baseline library is unavailable.
+    /// </summary>
+    Task<IReadOnlyList<BaselineSummary>> ListBaselinesAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<BaselineSummary>>(Array.Empty<BaselineSummary>());
+
+    /// <summary>
+    /// Loads a captured baseline's full provenance for the workflow's baseline panel.
+    /// </summary>
+    Task<BaselinePackageManifest?> ResolveBaselineAsync(
+        BaselineId id,
+        int? version = null,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<BaselinePackageManifest?>(null);
 
     Type? ResolveResponseModelType(string modelName);
 

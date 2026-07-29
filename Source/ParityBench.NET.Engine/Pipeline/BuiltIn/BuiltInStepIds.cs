@@ -15,4 +15,11 @@ public static class BuiltInStepIds
     public const string CanonicalMapping = "parity.mapping.canonical";
     public const string CompareNetObjects = "parity.comparison.compare-net-objects";
     public const string FocusedRawContent = "parity.result.focused-raw-content";
+
+    /// <summary>
+    /// Context item holding the pre-mapping response artifact. The mapping phase
+    /// repoints <c>ResponseArtifact</c> at the canonical projection, so this is the
+    /// only way a later step can still reach the response as it came off the wire.
+    /// </summary>
+    public const string RawResponseArtifactItem = "parity.response.raw-artifact";
 }
