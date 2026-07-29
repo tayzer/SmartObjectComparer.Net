@@ -60,6 +60,6 @@ public sealed class RunProfileResolver
             profile,
             selection,
             new EndpointDefinition(profile.EndpointA, $"{profile.DisplayName} (A)", profile.EndpointAHeaders),
-            new EndpointDefinition(profile.EndpointB, $"{profile.DisplayName} (B)"), profile.EndpointBHeaders);
+            new EndpointDefinition(profile.EndpointB, $"{profile.DisplayName} (B)", profile.EndpointBHeaders));
     }
 }
