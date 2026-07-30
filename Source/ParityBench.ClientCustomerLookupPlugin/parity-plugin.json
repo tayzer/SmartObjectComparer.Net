@@ -1,0 +1,9 @@
+{
+  "id": "client.customer-lookup",
+  "version": "1.0.0",
+  "sdkVersion": 1,
+  "entryAssembly": "ParityBench.ClientCustomerLookupPlugin.dll",
+  "displayName": "Client Customer Lookup",
+  "description": "Reference plugin: SOAP endpoint A vs JSON endpoint B with a chained bearer-token exchange, normalized to a shared canonical response.",
+  "publisher": "ParityBench"
+}

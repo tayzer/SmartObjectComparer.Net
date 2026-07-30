@@ -5,6 +5,7 @@
     <ProjectReference Include="..\ParityBench.NET.Domain\ParityBench.NET.Domain.csproj" />
     <ProjectReference Include="..\ParityBench.NET.Engine\ParityBench.NET.Engine.csproj" />
     <ProjectReference Include="..\ParityBench.NET.Infrastructure\ParityBench.NET.Infrastructure.csproj" />
+    <ProjectReference Include="..\ParityBench.NET.Plugins\ParityBench.NET.Plugins.csproj" />
     <ProjectReference Include="..\ParityBench.NET.UI\ParityBench.NET.UI.csproj" />
     <ProjectReference Include="..\ParityBench.NET.Workspaces\ParityBench.NET.Workspaces.csproj" />
   </ItemGroup>

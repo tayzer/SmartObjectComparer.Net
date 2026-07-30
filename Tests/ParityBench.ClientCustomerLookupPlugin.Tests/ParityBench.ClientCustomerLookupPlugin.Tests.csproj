@@ -1,0 +1,16 @@
+<Project Sdk="MSTest.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\ParityBench.NET.Engine\ParityBench.NET.Engine.csproj" />
+    <ProjectReference Include="..\..\Source\ParityBench.NET.Infrastructure\ParityBench.NET.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\Source\ParityBench.NET.Plugins\ParityBench.NET.Plugins.csproj" />
+    <!--
+      Built so the test can load the package from disk through the plugin loader,
+      exactly as the product would; never referenced as an assembly.
+    -->
+    <ProjectReference Include="..\..\Source\ParityBench.ClientCustomerLookupPlugin\ParityBench.ClientCustomerLookupPlugin.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+  </ItemGroup>
+
+</Project>

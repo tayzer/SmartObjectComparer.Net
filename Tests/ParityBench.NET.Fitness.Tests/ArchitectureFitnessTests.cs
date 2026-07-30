@@ -31,7 +31,8 @@ public sealed class ArchitectureFitnessTests
     [TestMethod]
     public void ProjectReferences_WhenCoreV2LayersAreLoaded_MatchApprovedDependencyDirection()
     {
-        AssertProjectReferences("ParityBench.NET.Domain", Array.Empty<string>());
+        AssertProjectReferences("ParityBench.PluginSdk", Array.Empty<string>());
+        AssertProjectReferences("ParityBench.NET.Domain", @"..\ParityBench.PluginSdk\ParityBench.PluginSdk.csproj");
         AssertProjectReferences("ParityBench.NET.Application", @"..\ParityBench.NET.Domain\ParityBench.NET.Domain.csproj");
         AssertProjectReferences(
             "ParityBench.NET.Engine",

@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The reference client plugin. It is NOT referenced by any host: it builds to a
+    package folder and is loaded like any third-party plugin, which is the proof
+    that a client can extend ParityBench without rebuilding the product.
+
+    It compiles only against the SDK (marked non-runtime so the shared SDK assembly
+    is never copied into the package) and carries its own third-party dependency
+    (Mapster), which the plugin load context resolves in isolation.
+  -->
+  <PropertyGroup>
+    <RootNamespace>ParityBench.ClientCustomerLookupPlugin</RootNamespace>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <!-- Folder this package installs into under the workspace plugins directory
+         (must match the manifest id). Drives the auto-install target below. -->
+    <PbPluginPackageId>client.customer-lookup</PbPluginPackageId>
+  </PropertyGroup>
+
+  <!-- After a Debug build, copy the package into the shared workspace so any host
+       picks up the latest plugin without a manual copy. See build/ParityBench.Plugin.targets. -->
+  <Import Project="..\..\build\ParityBench.Plugin.targets" />
+
+  <ItemGroup>
+    <PackageReference Include="Mapster" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ParityBench.PluginSdk\ParityBench.PluginSdk.csproj">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </ProjectReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="parity-plugin.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Sample requests ship inside the package so the seeded profile has input to
+         run against out of the box. The template points at this folder. -->
+    <None Update="samples\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

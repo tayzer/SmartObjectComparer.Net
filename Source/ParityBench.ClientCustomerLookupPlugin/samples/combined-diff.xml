@@ -1,0 +1,1 @@
+<Envelope><Body><LookupRequest><UserName>svc-user</UserName><Password>svc-pass</Password><CustomerId>2002</CustomerId><CorrelationId>corr-2002</CorrelationId></LookupRequest></Body></Envelope>

@@ -1,1 +1,12 @@
-<Project Sdk="Microsoft.NET.Sdk" />
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The plugin SDK holds the neutral value types shared with client plugins
+    (payload formats, comparison rules, request/endpoint models). Namespaces are
+    unchanged, so the split is invisible to every consumer of Domain.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\ParityBench.PluginSdk\ParityBench.PluginSdk.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,106 @@
+@using ParityBench.PluginSdk.Configuration
+
+@* Renders a plugin's configuration schema generically, so the app never contains
+   client-specific form code. Values are edited in place in the supplied dictionary;
+   Secret fields are masked, and the owner decides how to persist them. *@
+
+@if (Schema is null)
+{
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">No configuration.</MudText>
+}
+else
+{
+    <MudStack Spacing="2">
+        <MudText Typo="Typo.subtitle2">@Schema.DisplayName</MudText>
+        @foreach (PluginConfigurationField field in Schema.Fields)
+        {
+            @switch (field.Kind)
+            {
+                case PluginFieldKind.Boolean:
+                    <MudCheckBox T="bool"
+                                 Label="@field.Label"
+                                 Value="@GetBoolean(field)"
+                                 ValueChanged="@(value => SetValue(field, value ? "true" : "false"))" />
+                    break;
+
+                case PluginFieldKind.Enumeration:
+                    <MudSelect T="string"
+                               Label="@FieldLabel(field)"
+                               Value="@GetValue(field)"
+                               ValueChanged="@(value => SetValue(field, value))"
+                               HelperText="@field.Description">
+                        @foreach (string option in field.AllowedValues)
+                        {
+                            <MudSelectItem T="string" Value="@option">@option</MudSelectItem>
+                        }
+                    </MudSelect>
+                    break;
+
+                case PluginFieldKind.Secret:
+                    <MudTextField T="string"
+                                  Label="@FieldLabel(field)"
+                                  Value="@GetValue(field)"
+                                  ValueChanged="@(value => SetValue(field, value))"
+                                  InputType="InputType.Password"
+                                  HelperText="@SecretHelperText(field)"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Key" />
+                    break;
+
+                default:
+                    <MudTextField T="string"
+                                  Label="@FieldLabel(field)"
+                                  Value="@GetValue(field)"
+                                  ValueChanged="@(value => SetValue(field, value))"
+                                  Lines="@(field.Kind == PluginFieldKind.MultilineString ? 3 : 1)"
+                                  InputType="@(field.Kind == PluginFieldKind.Integer ? InputType.Number : InputType.Text)"
+                                  HelperText="@field.Description" />
+                    break;
+            }
+        }
+    </MudStack>
+}
+
+@code {
+    /// <summary>The schema to render.</summary>
+    [Parameter, EditorRequired]
+    public PluginConfigurationSchema? Schema { get; set; }
+
+    /// <summary>The value bag being edited, keyed by field key. Mutated in place.</summary>
+    [Parameter, EditorRequired]
+    public Dictionary<string, string> Values { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Raised after any field changes.</summary>
+    [Parameter]
+    public EventCallback ValuesChanged { get; set; }
+
+    private string GetValue(PluginConfigurationField field) =>
+        Values.TryGetValue(field.Key, out string? value) ? value : field.DefaultValue ?? string.Empty;
+
+    private bool GetBoolean(PluginConfigurationField field) =>
+        bool.TryParse(GetValue(field), out bool parsed) && parsed;
+
+    private async Task SetValue(PluginConfigurationField field, string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            Values.Remove(field.Key);
+        }
+        else
+        {
+            Values[field.Key] = value;
+        }
+
+        await ValuesChanged.InvokeAsync();
+    }
+
+    private static string FieldLabel(PluginConfigurationField field) =>
+        field.IsRequired ? $"{field.Label} *" : field.Label;
+
+    // A stored secret is shown as its reference, never its value, so the operator
+    // can see it is set without the value being rendered.
+    private static string SecretHelperText(PluginConfigurationField field) =>
+        field.Description is null
+            ? "Stored securely; only a reference is saved in the profile."
+            : $"{field.Description} — stored securely; only a reference is saved.";
+}

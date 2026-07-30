@@ -31,6 +31,8 @@ internal sealed class RunOptionsDto
 
     public ContractProfileSelectionDto? ContractProfile { get; init; }
 
+    public PluginComparisonSelectionDto? PluginComparison { get; init; }
+
     public LargeRunOptionsDto? LargeRun { get; init; }
 
     public AlternateContractOptionsDto? AlternateContract { get; init; }

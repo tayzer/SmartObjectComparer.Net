@@ -15,7 +15,10 @@ using ParityBench.NET.Engine.Pipeline;
 
 namespace ParityBench.NET.Engine;
 
-internal sealed class RunExecutionCounters
+/// <summary>
+/// Run-wide counters shared by the executor and the pipeline steps it builds.
+/// </summary>
+public sealed class RunExecutionCounters
 {
     private long responseBytesWritten;
 

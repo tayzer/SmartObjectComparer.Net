@@ -72,7 +72,8 @@ public sealed class RequestComparisonWorkflowService : IRequestComparisonWorkflo
             request.RequestExecutionOptions,
             request.ContractProfileSelection,
             runRetentionModeOverride: request.RunRetentionModeOverride,
-            comparisonRulesSnapshotHash: ComputeComparisonRulesSnapshotHash(request.ComparisonOptions, request.ContractProfileSelection));
+            comparisonRulesSnapshotHash: ComputeComparisonRulesSnapshotHash(request.ComparisonOptions, request.ContractProfileSelection),
+            pluginComparison: request.PluginComparison);
 
         return await runUseCases
             .CreateRunAsync(runOptions, cancellationToken)

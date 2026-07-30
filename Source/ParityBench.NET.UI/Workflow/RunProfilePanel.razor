@@ -1,0 +1,303 @@
+@using ParityBench.NET.Application.Plugins
+@using ParityBench.NET.Application.Profiles
+@using ParityBench.NET.Application.Secrets
+@using ParityBench.PluginSdk.Configuration
+@using ParityBench.PluginSdk.Profiles
+
+@inject IRunProfileStore ProfileStore
+@inject IPluginMetadataProvider PluginMetadata
+@inject PluginProfileBootstrapper ProfileBootstrapper
+@inject ISecretStore SecretStore
+@inject ISnackbar Snackbar
+
+@* Saved run profiles: list, create from an installed plugin's template, edit its
+   endpoints and step configuration, and save. Secret fields are written to the
+   secret store on save and stored in the profile as references only. *@
+
+<MudGrid Spacing="3">
+    <MudItem xs="12" md="4">
+        <MudPaper Elevation="0" Outlined="true" Class="pa-4">
+            <MudStack Spacing="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.h6">Run profiles</MudText>
+                    <MudMenu Icon="@Icons.Material.Filled.Add" Dense="true" AriaLabel="Create profile from template">
+                        @if (templates.Count == 0)
+                        {
+                            <MudMenuItem Disabled="true">No plugin templates installed</MudMenuItem>
+                        }
+                        @foreach (TemplateOption option in templates)
+                        {
+                            <MudMenuItem OnClick="@(() => CreateFromTemplateAsync(option))">@option.Label</MudMenuItem>
+                        }
+                    </MudMenu>
+                </MudStack>
+
+                @if (profiles.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">No saved profiles yet.</MudText>
+                }
+                <MudList T="string" SelectedValue="@editing?.Id" Dense="true">
+                    @foreach (RunProfile profile in profiles)
+                    {
+                        <MudListItem T="string" Value="@profile.Id" OnClick="@(() => EditAsync(profile))">
+                            <MudStack Spacing="0">
+                                <MudText Typo="Typo.body2">@profile.DisplayName</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@profile.ComparisonId</MudText>
+                            </MudStack>
+                        </MudListItem>
+                    }
+                </MudList>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="8">
+        @if (editing is null)
+        {
+            <MudPaper Elevation="0" Outlined="true" Class="pa-4">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Select a profile to edit, or create one from a plugin template.
+                </MudText>
+            </MudPaper>
+        }
+        else
+        {
+            <MudPaper Elevation="0" Outlined="true" Class="pa-4">
+                <MudStack Spacing="3">
+                    <MudText Typo="Typo.h6">Edit profile</MudText>
+                    <MudTextField T="string" Label="Id" Value="@editing.Id" ReadOnly="true" />
+                    <MudTextField T="string" Label="Display name" @bind-Value="editDisplayName" />
+                    <MudTextField T="string" Label="Endpoint A URL" @bind-Value="editEndpointA" />
+                    <MudTextField T="string" Label="Endpoint B URL" @bind-Value="editEndpointB" />
+                    <MudTextField T="string" Label="Request directory" @bind-Value="editRequestDirectory" />
+
+                    @foreach (PluginConfigurationSchema schema in editSchemas)
+                    {
+                        <MudDivider />
+                        <PluginConfigurationForm Schema="schema"
+                                                 Values="@StepValues(schema.OwnerId)"
+                                                 ValuesChanged="StateHasChanged" />
+                    }
+
+                    <MudStack Row="true" Spacing="2">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Save"
+                                   OnClick="SaveAsync">Save</MudButton>
+                        <MudButton Variant="Variant.Text" Color="Color.Error"
+                                   StartIcon="@Icons.Material.Filled.Delete"
+                                   OnClick="DeleteAsync">Delete</MudButton>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        }
+    </MudItem>
+</MudGrid>
+
+@code {
+    private readonly List<RunProfile> profiles = new List<RunProfile>();
+    private readonly List<TemplateOption> templates = new List<TemplateOption>();
+
+    private RunProfile? editing;
+    private string editDisplayName = string.Empty;
+    private string editEndpointA = string.Empty;
+    private string editEndpointB = string.Empty;
+    private string editRequestDirectory = string.Empty;
+    private List<PluginConfigurationSchema> editSchemas = new List<PluginConfigurationSchema>();
+    private Dictionary<string, Dictionary<string, string>> editStepConfiguration = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Seed profiles from installed plugin templates so a freshly installed plugin
+        // shows a ready-made profile here without any manual step.
+        await ProfileBootstrapper.EnsureTemplateProfilesAsync().ConfigureAwait(true);
+        await ReloadProfilesAsync().ConfigureAwait(true);
+        await LoadTemplatesAsync().ConfigureAwait(true);
+    }
+
+    private async Task ReloadProfilesAsync()
+    {
+        profiles.Clear();
+        profiles.AddRange(await ProfileStore.ListAsync().ConfigureAwait(true));
+    }
+
+    private async Task LoadTemplatesAsync()
+    {
+        templates.Clear();
+        PluginCatalogView catalog = await PluginMetadata.GetCatalogAsync().ConfigureAwait(true);
+        foreach (InstalledPluginMetadata plugin in catalog.Plugins)
+        {
+            foreach (PluginProfileTemplate template in plugin.ProfileTemplates)
+            {
+                templates.Add(new TemplateOption(plugin, template, $"{plugin.DisplayName}: {template.DisplayName}"));
+            }
+        }
+    }
+
+    private async Task CreateFromTemplateAsync(TemplateOption option)
+    {
+        // Materialise the template into a real, editable profile. Endpoints come
+        // from the named environment when the template selects one.
+        PluginEnvironment? environment = option.Plugin.Environments
+            .FirstOrDefault(candidate => string.Equals(candidate.Name, option.Template.EnvironmentName, StringComparison.OrdinalIgnoreCase));
+        Uri endpointA = environment?.EndpointA ?? new Uri("https://endpoint-a.example");
+        Uri endpointB = environment?.EndpointB ?? new Uri("https://endpoint-b.example");
+
+        string id = UniqueProfileId(option.Template.TemplateId);
+        RunProfile profile = new RunProfile(
+            id,
+            option.Template.DisplayName,
+            option.Plugin.PluginId,
+            option.Template.ComparisonId,
+            endpointA,
+            endpointB,
+            pluginVersion: option.Plugin.Version,
+            environmentName: option.Template.EnvironmentName,
+            enabledStepIds: option.Template.EnabledStepIds,
+            stepConfiguration: option.Template.StepConfiguration, 
+            requestDirectory: option.Template.RequestDirectory,
+            endpointAHeaders: environment?.EndpointAHeaders,
+            endpointBHeaders: environment?.EndpointBHeaders);
+
+        await EditAsync(profile).ConfigureAwait(true);
+    }
+
+    private async Task EditAsync(RunProfile profile)
+    {
+        editing = profile;
+        editDisplayName = profile.DisplayName;
+        editEndpointA = profile.EndpointA.ToString();
+        editEndpointB = profile.EndpointB.ToString();
+        editRequestDirectory = profile.RequestDirectory ?? string.Empty;
+        editStepConfiguration = profile.StepConfiguration.ToDictionary(
+            entry => entry.Key,
+            entry => new Dictionary<string, string>(entry.Value, StringComparer.OrdinalIgnoreCase),
+            StringComparer.OrdinalIgnoreCase);
+        editSchemas = await LoadSchemasFor(profile).ConfigureAwait(true);
+    }
+
+    private async Task<List<PluginConfigurationSchema>> LoadSchemasFor(RunProfile profile)
+    {
+        InstalledPluginMetadata? plugin = await PluginMetadata
+            .GetPluginAsync(profile.PluginId, profile.PluginVersion)
+            .ConfigureAwait(true);
+        return plugin?.ConfigurationSchemas.ToList() ?? new List<PluginConfigurationSchema>();
+    }
+
+    private Dictionary<string, string> StepValues(string stepId)
+    {
+        if (!editStepConfiguration.TryGetValue(stepId, out Dictionary<string, string>? values))
+        {
+            values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            editStepConfiguration[stepId] = values;
+        }
+
+        return values;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (editing is null)
+        {
+            return;
+        }
+
+        if (!Uri.TryCreate(editEndpointA, UriKind.Absolute, out Uri? endpointA)
+            || !Uri.TryCreate(editEndpointB, UriKind.Absolute, out Uri? endpointB))
+        {
+            Snackbar.Add("Both endpoint URLs must be absolute.", Severity.Error);
+            return;
+        }
+
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> persistedConfiguration =
+            await PersistSecretsAsync(editing, editSchemas, editStepConfiguration).ConfigureAwait(true);
+
+        RunProfile updated = new RunProfile(
+            editing.Id,
+            editDisplayName,
+            editing.PluginId,
+            editing.ComparisonId,
+            endpointA,
+            endpointB,
+            pluginVersion: editing.PluginVersion,
+            environmentName: editing.EnvironmentName,
+            enabledStepIds: editing.EnabledStepIds,
+            stepConfiguration: persistedConfiguration,
+            comparison: editing.Comparison,
+            requestDirectory: string.IsNullOrWhiteSpace(editRequestDirectory) ? null : editRequestDirectory,
+            endpointAHeaders: editing.EndpointAHeaders,
+            endpointBHeaders: editing.EndpointBHeaders);
+
+        await ProfileStore.SaveAsync(updated).ConfigureAwait(true);
+        await ReloadProfilesAsync().ConfigureAwait(true);
+        editing = updated;
+        Snackbar.Add($"Saved profile '{updated.DisplayName}'.", Severity.Success);
+    }
+
+    // For each Secret field with a freshly entered value, write it to the secret
+    // store and replace it with a reference so the profile file never holds the value.
+    private async Task<IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>> PersistSecretsAsync(
+        RunProfile profile,
+        IReadOnlyList<PluginConfigurationSchema> schemas,
+        IReadOnlyDictionary<string, Dictionary<string, string>> stepConfiguration)
+    {
+        Dictionary<string, HashSet<string>> secretKeysByStep = schemas.ToDictionary(
+            schema => schema.OwnerId,
+            schema => schema.Fields.Where(field => field.Kind == PluginFieldKind.Secret).Select(field => field.Key).ToHashSet(StringComparer.OrdinalIgnoreCase),
+            StringComparer.OrdinalIgnoreCase);
+
+        Dictionary<string, IReadOnlyDictionary<string, string>> result = new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+        foreach ((string stepId, Dictionary<string, string> values) in stepConfiguration)
+        {
+            Dictionary<string, string> persisted = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            secretKeysByStep.TryGetValue(stepId, out HashSet<string>? secretKeys);
+
+            foreach ((string key, string value) in values)
+            {
+                if (secretKeys?.Contains(key) == true
+                    && !SecretReference.TryParse(value, out _)
+                    && SecretStore.CanWrite)
+                {
+                    SecretReference reference = new SecretReference(profile.PluginId, $"{profile.Id}.{stepId}.{key}");
+                    await SecretStore.SetAsync(reference, value).ConfigureAwait(true);
+                    persisted[key] = reference.ToString();
+                }
+                else
+                {
+                    persisted[key] = value;
+                }
+            }
+
+            result[stepId] = persisted;
+        }
+
+        return result;
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (editing is null)
+        {
+            return;
+        }
+
+        await ProfileStore.DeleteAsync(editing.Id).ConfigureAwait(true);
+        await ReloadProfilesAsync().ConfigureAwait(true);
+        editing = null;
+        Snackbar.Add("Profile deleted.", Severity.Info);
+    }
+
+    private string UniqueProfileId(string templateId)
+    {
+        string baseId = templateId;
+        string candidate = baseId;
+        int suffix = 2;
+        while (profiles.Any(profile => string.Equals(profile.Id, candidate, StringComparison.OrdinalIgnoreCase)))
+        {
+            candidate = $"{baseId}-{suffix++}";
+        }
+
+        return candidate;
+    }
+
+    private sealed record TemplateOption(InstalledPluginMetadata Plugin, PluginProfileTemplate Template, string Label);
+}

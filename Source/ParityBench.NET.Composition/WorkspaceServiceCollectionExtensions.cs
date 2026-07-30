@@ -1,9 +1,12 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using ParityBench.NET.Application.AcceptedDifferences;
 using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.Application.Observability;
+using ParityBench.NET.Application.Plugins;
+using ParityBench.NET.Application.Profiles;
+using ParityBench.NET.Application.Secrets;
 using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Results;
@@ -14,7 +17,10 @@ using ParityBench.NET.Engine;
 using ParityBench.NET.Engine.Comparers;
 using ParityBench.NET.Engine.Pipeline;
 using ParityBench.NET.Infrastructure;
+using ParityBench.NET.Plugins;
 using ParityBench.NET.Infrastructure.Reports;
+using ParityBench.NET.Infrastructure.Secrets;
+using ParityBench.NET.Infrastructure.Worker;
 using ParityBench.NET.UI.Results;
 using ParityBench.NET.UI.Workflow;
 using ParityBench.NET.Workspaces;
@@ -55,7 +61,6 @@ public static class WorkspaceServiceCollectionExtensions
         services.AddParityBenchObservability(configuration, configureObservability);
         services.AddRetentionConfiguration(configuration);
         services.Configure<RequestComparisonRunDefaults>(configuration.GetSection("RequestComparison:Defaults"));
-
         services.AddSingleton(CreateSharedHttpClient());
         services.AddSingleton<IRequestBatchStore>(_ => new FileSystemRequestBatchStore(workspaceRoot));
         services.AddSingleton<IRunStore>(_ => new FileSystemRunStore(workspaceRoot));
@@ -101,6 +106,30 @@ public static class WorkspaceServiceCollectionExtensions
 
             return registry;
         });
+        services.AddSingleton<IRunProfileStore>(_ => new FileSystemRunProfileStore(workspaceRoot));
+        // Order is the policy: an environment variable beats the persisted store, so
+        // CI and tests can run any profile without touching an operator's machine.
+        services.AddSingleton<ISecretStore>(_ => new ChainedSecretStore(
+            new EnvironmentVariableSecretStore(),
+            new DpapiSecretStore(workspaceRoot)));
+        services.AddSingleton<SecretResolver>();
+        services.AddSingleton<RunProfileResolver>();
+        services.AddSingleton<PluginProfileBootstrapper>();
+
+        services.AddSingleton(_ => new PluginCatalog(ResolvePluginDirectories(configuration, workspaceRoot)));
+        services.AddSingleton<PluginLoader>();
+        services.AddSingleton<IPluginMetadataProvider, PluginMetadataProvider>();
+        services.AddSingleton<IComparisonPlanFactory>(serviceProvider => new PluginComparisonPlanFactory(
+            serviceProvider.GetRequiredService<PluginCatalog>(),
+            serviceProvider.GetRequiredService<PluginLoader>(),
+            // The host services a plugin's steps are allowed to resolve. Anything not
+            // registered here is simply not reachable from plugin code.
+            pluginServices =>
+            {
+                pluginServices.AddSingleton(serviceProvider.GetRequiredService<IContractPayloadSerializer>());
+                pluginServices.AddSingleton(serviceProvider.GetRequiredService<HttpClient>());
+            }));
+
         services.AddSingleton<IComparisonRunExecutor>(serviceProvider =>
         {
             IRunArtifactStore artifactStore = serviceProvider.GetRequiredService<IRunArtifactStore>();
@@ -115,9 +144,10 @@ public static class WorkspaceServiceCollectionExtensions
                 artifactStore,
                 serviceProvider.GetRequiredService<IRunDetailStore>(),
                 comparer,
-                serviceProvider.GetRequiredService<IContractProfileRegistry>(),
+                serviceProvider.GetRequiredService<IComparisonPlanFactory>(),
                 serviceProvider.GetRequiredService<IObservabilityRecorder>(),
-                serviceProvider.GetRequiredService<IRunCleanupStage>());
+                serviceProvider.GetRequiredService<IRunCleanupStage>(),
+                serviceProvider.GetRequiredService<IContractPayloadSerializer>());
         });
 
         services.AddSingleton<IComparisonRunUseCases, ComparisonRunService>();
@@ -128,6 +158,53 @@ public static class WorkspaceServiceCollectionExtensions
         services.AddSingleton<IRequestComparisonDefaultsUseCases, RequestComparisonDefaultsService>();
 
         return services;
+    }
+
+    /// <summary>
+    /// Swaps in-process run execution for out-of-process execution in a worker
+    /// process, so client plugin code never runs in the host. Opt-in per host:
+    /// call this after <see cref="AddParityBenchWorkspaceServices"/>. The worker
+    /// process itself must not call it, or it would try to spawn a worker of its own.
+    /// </summary>
+    public static IServiceCollection UseWorkerProcessExecution(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        string workspaceRoot,
+        string fixtureBaseUrl,
+        string? workerExecutablePath = null)
+    {
+        services.Configure<WorkerExecutionOptions>(options =>
+        {
+            options.WorkspaceRoot = workspaceRoot;
+            options.FixtureBaseUrl = fixtureBaseUrl;
+            options.WorkerExecutablePath = workerExecutablePath ?? configuration["Worker:ExecutablePath"];
+        });
+
+        // Replace the in-process executor registered by AddParityBenchWorkspaceServices.
+        services.RemoveAll<IComparisonRunExecutor>();
+        services.AddSingleton<IComparisonRunExecutor, WorkerComparisonRunExecutor>();
+        return services;
+    }
+
+    /// <summary>
+    /// Resolves where installed plugin packages are looked for: the configured
+    /// directories if any, otherwise the app's own <c>plugins</c> folder plus the
+    /// workspace's, so a client can drop a package next to their data without
+    /// touching the installation.
+    /// </summary>
+    private static IReadOnlyList<string> ResolvePluginDirectories(IConfiguration configuration, string workspaceRoot)
+    {
+        string[] configured = configuration
+            .GetSection("Plugins:Directories")
+            .Get<string[]>() ?? Array.Empty<string>();
+
+        return configured.Length > 0
+            ? configured
+            : new[]
+            {
+                Path.Combine(AppContext.BaseDirectory, "plugins"),
+                Path.Combine(workspaceRoot, "plugins"),
+            };
     }
 
     /// <summary>

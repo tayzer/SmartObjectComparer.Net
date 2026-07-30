@@ -1,9 +1,9 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Threading.Channels;
-
 using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.Application.Observability;
+using ParityBench.NET.Application.Plugins;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Runs;
 using ParityBench.NET.Domain.ContractProfiles;
@@ -13,6 +13,7 @@ using ParityBench.NET.Domain.Runs;
 using ParityBench.NET.Domain.Runs.Retention;
 using ParityBench.NET.Engine.Comparers;
 using ParityBench.NET.Engine.Pipeline;
+using ParityBench.PluginSdk.Pipeline;
 
 namespace ParityBench.NET.Engine;
 
@@ -23,7 +24,8 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
     private readonly IRunArtifactStore runArtifactStore;
     private readonly IRunDetailStore runDetailStore;
     private readonly IResponseComparer responseComparer;
-    private readonly IContractProfileRegistry? contractProfileRegistry;
+    private readonly IComparisonPlanFactory? comparisonPlanFactory;
+    private readonly IContractPayloadSerializer? contractPayloadSerializer;
     private readonly IObservabilityRecorder observabilityRecorder;
     private readonly IRunCleanupStage cleanupStage;
 
@@ -63,9 +65,10 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         IRunArtifactStore runArtifactStore,
         IRunDetailStore runDetailStore,
         IResponseComparer responseComparer,
-        IContractProfileRegistry? contractProfileRegistry,
+        IComparisonPlanFactory? comparisonPlanFactory,
         IObservabilityRecorder? observabilityRecorder = null,
-        IRunCleanupStage? cleanupStage = null)
+        IRunCleanupStage? cleanupStage = null,
+        IContractPayloadSerializer? contractPayloadSerializer = null)
     {
         this.requestBatchStore = requestBatchStore;
         this.endpointRequestSender = endpointRequestSender;
@@ -74,7 +77,8 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         this.responseComparer = responseComparer is RawTextResponseComparer
             ? responseComparer
             : new RawTextResponseComparer(runArtifactStore, responseComparer);
-        this.contractProfileRegistry = contractProfileRegistry;
+        this.comparisonPlanFactory = comparisonPlanFactory;
+        this.contractPayloadSerializer = contractPayloadSerializer;
         this.observabilityRecorder = observabilityRecorder ?? NoOpObservabilityRecorder.Instance;
         this.cleanupStage = cleanupStage ?? NoOpRunCleanupStage.Instance;
     }
@@ -94,8 +98,11 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
             .ConfigureAwait(false);
 
         Stopwatch planningStopwatch = Stopwatch.StartNew();
-        (RunOptions comparisonOptions, IContractProfile? contractProfile, IReadOnlyList<PlannedRequest> plannedRequests) =
+        (RunOptions comparisonOptions, ComparisonExecutionPlan? plan, IReadOnlyList<PlannedRequest> plannedRequests) =
             await PlanAsync(run, cancellationToken).ConfigureAwait(false);
+        // Disposing the plan tears down the run's plugin scope, so it is held for
+        // exactly as long as the run needs it and no longer.
+        await using ComparisonExecutionPlan? ownedPlan = plan;
         planningStopwatch.Stop();
         observabilityRecorder.RecordRunPhase(run.Id, "Planning", planningStopwatch.Elapsed);
 
@@ -122,10 +129,21 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         // later records are still executing. Results land on disk in original request
         // order via a small reorder buffer, since compare workers finish out of order but
         // the paginated detail writer requires append order.
+        RunPipelineExecution? pipelineExecution = plan is null
+            ? null
+            : RunPipelineExecution.Create(
+                plan,
+                run,
+                comparisonOptions,
+                endpointRequestSender,
+                runArtifactStore,
+                contractPayloadSerializer,
+                counters);
+
         RunPipelineResult pipelineResult = await RunPipelineAsync(
             run,
             comparisonOptions,
-            contractProfile,
+            pipelineExecution,
             plannedRequests,
             counters,
             summaryAccumulator,
@@ -240,14 +258,14 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         }
     }
 
-    private async Task<(RunOptions ComparisonOptions, IContractProfile? ContractProfile, IReadOnlyList<PlannedRequest> PlannedRequests)> PlanAsync(
+    private async Task<(RunOptions ComparisonOptions, ComparisonExecutionPlan? Plan, IReadOnlyList<PlannedRequest> PlannedRequests)> PlanAsync(
         ComparisonRun run,
         CancellationToken cancellationToken)
     {
-        IContractProfile? contractProfile = ResolveContractProfile(run.Options);
-        RunOptions comparisonOptions = contractProfile is null
+        ComparisonExecutionPlan? plan = await ResolvePlanAsync(run.Options, cancellationToken).ConfigureAwait(false);
+        RunOptions comparisonOptions = plan is null
             ? run.Options
-            : CreateRunOptionsWithProfileDefaults(run.Options, contractProfile);
+            : CreateRunOptionsWithComparisonDefaults(run.Options, plan.Definition.DefaultComparisonRules);
 
         RequestBatchManifest manifest = await requestBatchStore
             .LoadManifestAsync(run.Options.RequestBatch, cancellationToken)
@@ -257,7 +275,53 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
             .Select((request, index) => new PlannedRequest(index, request))
             .ToList();
 
-        return (comparisonOptions, contractProfile, plannedRequests);
+        return (comparisonOptions, plan, plannedRequests);
+    }
+
+    private Task<ComparisonExecutionPlan?> ResolvePlanAsync(RunOptions options, CancellationToken cancellationToken)
+    {
+        if (comparisonPlanFactory is null)
+        {
+            return options.PluginComparison is null
+                ? Task.FromResult<ComparisonExecutionPlan?>(null)
+                : throw new InvalidOperationException("A comparison plan factory is required when a run selects a plugin comparison.");
+        }
+
+        return comparisonPlanFactory.CreateAsync(options, cancellationToken);
+    }
+
+    // The comparison's own defaults are the floor, not a replacement: a run can
+    // switch a rule on but never silently switch off one the comparison relies on.
+    private static RunOptions CreateRunOptionsWithComparisonDefaults(
+        RunOptions options,
+        ComparisonRuleDefaults defaults)
+    {
+        ComparisonOptions current = options.Comparison;
+        ComparisonOptions comparisonOptions = new ComparisonOptions(
+            defaults.IgnoreCollectionOrder || current.IgnoreCollectionOrder,
+            defaults.IgnoreStringCase || current.IgnoreStringCase,
+            defaults.IgnoreTrailingWhitespaceAtEnd || current.IgnoreTrailingWhitespaceAtEnd,
+            defaults.TreatNullAndEmptyCollectionsAsEqual || current.TreatNullAndEmptyCollectionsAsEqual,
+            defaults.IgnoreXmlNamespaces || current.IgnoreXmlNamespaces,
+            current.MaxDifferences,
+            defaults.IgnoreRules.Concat(current.IgnoreRules),
+            defaults.SmartIgnoreRules.Concat(current.SmartIgnoreRules),
+            defaults.MaskRules.Concat(current.MaskRules));
+
+        return new RunOptions(
+            options.RequestBatch,
+            options.EndpointA,
+            options.EndpointB,
+            options.Timeout,
+            options.MaxConcurrency,
+            options.ResponseModelName,
+            comparisonOptions,
+            options.RequestExecution,
+            options.ContractProfile,
+            options.LargeRun,
+            options.RunRetentionModeOverride,
+            options.ComparisonRulesSnapshotHash,
+            options.PluginComparison);
     }
 
     private sealed record RunPipelineResult(
@@ -268,7 +332,7 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
     private async Task<RunPipelineResult> RunPipelineAsync(
         ComparisonRun run,
         RunOptions comparisonOptions,
-        IContractProfile? contractProfile,
+        RunPipelineExecution? pipelineExecution,
         IReadOnlyList<PlannedRequest> plannedRequests,
         RunExecutionCounters counters,
         RunSummaryAccumulator summaryAccumulator,
@@ -321,7 +385,7 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
                         PlannedRequest plannedRequest = plannedRequests[index];
 
                         Stopwatch executionStopwatch = Stopwatch.StartNew();
-                        ExecutionRecord executionRecord = await ExecutePairAsync(run, comparisonOptions, plannedRequest, contractProfile, counters, cancellationToken).ConfigureAwait(false);
+                        ExecutionRecord executionRecord = await ExecutePairAsync(run, comparisonOptions, plannedRequest, pipelineExecution, counters, cancellationToken).ConfigureAwait(false);
                         executionStopwatch.Stop();
                         Interlocked.Add(ref executionTicks, executionStopwatch.ElapsedTicks);
                         observabilityRecorder.RecordRequestPath(run.Id, plannedRequest.Request.RelativePath, executionStopwatch.Elapsed);
@@ -341,7 +405,7 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
                     await foreach (ExecutionRecord executionRecord in executedChannel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
                     {
                         Stopwatch compareStopwatch = Stopwatch.StartNew();
-                        ComparedExecutionRecord comparedRecord = await CompareRecordAsync(run, comparisonOptions, contractProfile, executionRecord, counters, compareSubPhaseCounters, cancellationToken).ConfigureAwait(false);
+                        ComparedExecutionRecord comparedRecord = await CompareRecordAsync(run, comparisonOptions, pipelineExecution, executionRecord, counters, compareSubPhaseCounters, cancellationToken).ConfigureAwait(false);
                         compareStopwatch.Stop();
                         Interlocked.Add(ref comparisonTicks, compareStopwatch.ElapsedTicks);
 
@@ -397,12 +461,12 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         ComparisonRun run,
         RunOptions comparisonOptions,
         PlannedRequest plannedRequest,
-        IContractProfile? contractProfile,
+        RunPipelineExecution? pipelineExecution,
         RunExecutionCounters counters,
         CancellationToken cancellationToken)
     {
-        Task<EndpointExecutionRecord> endpointATask = ExecuteEndpointAsync(run, comparisonOptions, plannedRequest.Request, EndpointSlot.A, contractProfile, counters, cancellationToken);
-        Task<EndpointExecutionRecord> endpointBTask = ExecuteEndpointAsync(run, comparisonOptions, plannedRequest.Request, EndpointSlot.B, contractProfile, counters, cancellationToken);
+        Task<EndpointExecutionRecord> endpointATask = ExecuteEndpointAsync(run, comparisonOptions, plannedRequest.Request, EndpointSlot.A, pipelineExecution, counters, cancellationToken);
+        Task<EndpointExecutionRecord> endpointBTask = ExecuteEndpointAsync(run, comparisonOptions, plannedRequest.Request, EndpointSlot.B, pipelineExecution, counters, cancellationToken);
 
         await Task.WhenAll(endpointATask, endpointBTask).ConfigureAwait(false);
 
@@ -415,22 +479,19 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
     private async Task<ComparedExecutionRecord> CompareRecordAsync(
         ComparisonRun run,
         RunOptions comparisonOptions,
-        IContractProfile? contractProfile,
+        RunPipelineExecution? pipelineExecution,
         ExecutionRecord executionRecord,
         RunExecutionCounters counters,
         CompareSubPhaseCounters? subPhaseCounters,
         CancellationToken cancellationToken)
     {
-        RequestPairResult pairResult = contractProfile is null
+        RequestPairResult pairResult = pipelineExecution is null
             ? await CompleteRegularPairAsync(run, comparisonOptions, executionRecord, subPhaseCounters, cancellationToken).ConfigureAwait(false)
-            : await CompleteContractProfilePairAsync(
+            : await CompletePipelinePairAsync(
                 run,
                 comparisonOptions,
-                executionRecord.Request,
-                contractProfile,
-                executionRecord.EndpointA,
-                executionRecord.EndpointB,
-                counters,
+                pipelineExecution,
+                executionRecord,
                 subPhaseCounters,
                 cancellationToken)
                 .ConfigureAwait(false);
@@ -487,7 +548,7 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         RunOptions comparisonOptions,
         RequestItem request,
         EndpointSlot endpoint,
-        IContractProfile? contractProfile,
+        RunPipelineExecution? pipelineExecution,
         RunExecutionCounters counters,
         CancellationToken cancellationToken)
     {
@@ -497,9 +558,18 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
                 ? run.Options.EndpointA
                 : run.Options.EndpointB;
 
-            PreparedRequest preparedRequest = contractProfile is not null
-                ? await PrepareContractRequestAsync(run, request, endpoint, endpointDefinition, contractProfile, cancellationToken).ConfigureAwait(false)
-                : await PrepareRegularRequestAsync(run, request, endpoint, endpointDefinition, cancellationToken).ConfigureAwait(false);
+            if (pipelineExecution is not null)
+            {
+                return await ExecuteEndpointPipelineAsync(
+                    run,
+                    request,
+                    endpoint,
+                    endpointDefinition,
+                    pipelineExecution,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            PreparedRequest preparedRequest = await PrepareRegularRequestAsync(run, request, endpoint, endpointDefinition, cancellationToken).ConfigureAwait(false);
 
             await using (preparedRequest)
             {
@@ -550,71 +620,106 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         }
     }
 
-    private async Task<RequestPairResult> CompleteContractProfilePairAsync(
+    // Input through Response only: the response stream is open for the duration of
+    // this call, so mapping is deliberately left to the compare pool, which reads
+    // the persisted artifact instead.
+    private async Task<EndpointExecutionRecord> ExecuteEndpointPipelineAsync(
+        ComparisonRun run,
+        RequestItem request,
+        EndpointSlot endpoint,
+        EndpointDefinition endpointDefinition,
+        RunPipelineExecution pipelineExecution,
+        CancellationToken cancellationToken)
+    {
+        EndpointPipelineContext context = pipelineExecution.CreateEndpointContext(
+            run,
+            request,
+            endpoint,
+            endpointDefinition,
+            token => requestBatchStore.OpenRequestBodyAsync(run.Options.RequestBatch, request, token));
+
+        await pipelineExecution.Pipeline
+            .ExecuteEndpointAsync(context, PipelinePhase.Input, PipelinePhase.Response, cancellationToken)
+            .ConfigureAwait(false);
+
+        return EndpointExecutionRecord.FromPipeline(context);
+    }
+
+    private async Task<RequestPairResult> CompletePipelinePairAsync(
         ComparisonRun run,
         RunOptions comparisonOptions,
-        RequestItem request,
-        IContractProfile profile,
-        EndpointExecutionRecord endpointA,
-        EndpointExecutionRecord endpointB,
-        RunExecutionCounters counters,
+        RunPipelineExecution pipelineExecution,
+        ExecutionRecord executionRecord,
         CompareSubPhaseCounters? subPhaseCounters,
         CancellationToken cancellationToken)
     {
+        RequestItem request = executionRecord.Request;
+        EndpointExecutionRecord endpointA = executionRecord.EndpointA;
+        EndpointExecutionRecord endpointB = executionRecord.EndpointB;
+
+        // A transport failure or a non-success status says nothing about the
+        // comparison type, so those pairs are still diffed as raw responses rather
+        // than pushed through mapping that would only fail on unexpected payloads.
         string? errorMessage = BuildErrorMessage(endpointA, endpointB);
-        if (!string.IsNullOrWhiteSpace(errorMessage))
+        if (!string.IsNullOrWhiteSpace(errorMessage) || !endpointA.IsSuccessStatusCode || !endpointB.IsSuccessStatusCode)
         {
-            RequestPairResult pairResult = await TimeSubPhaseAsync(
+            return await CompareRawPairAsync(
+                run,
+                comparisonOptions,
+                request,
+                endpointA.Metadata,
+                endpointB.Metadata,
+                errorMessage,
                 subPhaseCounters,
-                static (c, e) => c.AddDiff(e),
-                () => responseComparer.CompareAsync(request, comparisonOptions, endpointA.Metadata, endpointB.Metadata, errorMessage, cancellationToken)).ConfigureAwait(false);
-
-            return await TimeSubPhaseAsync(
-                subPhaseCounters,
-                static (c, e) => c.AddFocusedContent(e),
-                () => AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, cancellationToken)).ConfigureAwait(false);
-        }
-
-        if (!endpointA.IsSuccessStatusCode || !endpointB.IsSuccessStatusCode)
-        {
-            RequestPairResult pairResult = await TimeSubPhaseAsync(
-                subPhaseCounters,
-                static (c, e) => c.AddDiff(e),
-                () => responseComparer.CompareAsync(request, comparisonOptions, endpointA.Metadata, endpointB.Metadata, null, cancellationToken)).ConfigureAwait(false);
-
-            return await TimeSubPhaseAsync(
-                subPhaseCounters,
-                static (c, e) => c.AddFocusedContent(e),
-                () => AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, cancellationToken)).ConfigureAwait(false);
+                cancellationToken).ConfigureAwait(false);
         }
 
         try
         {
-            ResponseArtifactMetadata canonicalA = await NormalizeAndPersistResponseAsync(
-                run,
-                request,
-                profile,
-                endpointA,
-                comparisonOptions.Comparison.MaskRules,
-                counters,
-                subPhaseCounters,
-                cancellationToken)
-                .ConfigureAwait(false);
-            ResponseArtifactMetadata canonicalB = await NormalizeAndPersistResponseAsync(
-                run,
-                request,
-                profile,
-                endpointB,
-                comparisonOptions.Comparison.MaskRules,
-                counters,
-                subPhaseCounters,
-                cancellationToken)
-                .ConfigureAwait(false);
+            IEndpointPipelineContext contextA = RequirePipelineContext(endpointA);
+            IEndpointPipelineContext contextB = RequirePipelineContext(endpointB);
 
-            RequestPairResult pairResult = await TimeSubPhaseAsync(
+            await TimeSubPhaseAsync(
+                subPhaseCounters,
+                static (c, e) => c.AddNormalize(e),
+                async () =>
+                {
+                    await pipelineExecution.Pipeline
+                        .ExecuteEndpointAsync(contextA, PipelinePhase.Mapping, PipelinePhase.Mapping, cancellationToken)
+                        .ConfigureAwait(false);
+                    await pipelineExecution.Pipeline
+                        .ExecuteEndpointAsync(contextB, PipelinePhase.Mapping, PipelinePhase.Mapping, cancellationToken)
+                        .ConfigureAwait(false);
+                    return true;
+                }).ConfigureAwait(false);
+
+            if (contextA.IsFailed || contextB.IsFailed)
+            {
+                return new RequestPairResult(
+                    request.RelativePath,
+                    RequestPairOutcome.ExecutionFailed,
+                    contextA.ResponseArtifact,
+                    contextB.ResponseArtifact,
+                    contextA.FailureReason ?? contextB.FailureReason);
+            }
+
+            PairPipelineContext pairContext = pipelineExecution.CreatePairContext(
+                run,
+                request,
+                contextA,
+                contextB,
+                comparisonOptions.Comparison);
+
+            await TimeSubPhaseAsync(
                 subPhaseCounters,
                 static (c, e) => c.AddDiff(e),
-                () => responseComparer.CompareAsync(request, comparisonOptions, canonicalA, canonicalB, null, cancellationToken)).ConfigureAwait(false);
+                async () =>
+                {
+                    await pipelineExecution.Pipeline.ExecutePairAsync(pairContext, cancellationToken).ConfigureAwait(false);
+                    return true;
+                }).ConfigureAwait(false);
+
+            RequestPairResult pairResult = ToPairResult(request, pairContext);
 
             return await TimeSubPhaseAsync(
                 subPhaseCounters,
@@ -627,12 +732,58 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         }
         catch (Exception ex)
         {
-            observabilityRecorder.RecordException(run.Id, "ContractProfileComparison", ex, request.RelativePath);
+            observabilityRecorder.RecordException(run.Id, "PipelineComparison", ex, request.RelativePath);
             return new RequestPairResult(
                 request.RelativePath,
                 RequestPairOutcome.ExecutionFailed,
                 errorMessage: ex.Message);
         }
+    }
+
+    private async Task<RequestPairResult> CompareRawPairAsync(
+        ComparisonRun run,
+        RunOptions comparisonOptions,
+        RequestItem request,
+        ResponseArtifactMetadata? responseA,
+        ResponseArtifactMetadata? responseB,
+        string? errorMessage,
+        CompareSubPhaseCounters? subPhaseCounters,
+        CancellationToken cancellationToken)
+    {
+        RequestPairResult pairResult = await TimeSubPhaseAsync(
+            subPhaseCounters,
+            static (c, e) => c.AddDiff(e),
+            () => responseComparer.CompareAsync(request, comparisonOptions, responseA, responseB, errorMessage, cancellationToken)).ConfigureAwait(false);
+
+        return await TimeSubPhaseAsync(
+            subPhaseCounters,
+            static (c, e) => c.AddFocusedContent(e),
+            () => AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, cancellationToken)).ConfigureAwait(false);
+    }
+
+    private static IEndpointPipelineContext RequirePipelineContext(EndpointExecutionRecord record) =>
+        record.PipelineContext
+            ?? throw new InvalidOperationException($"Endpoint {record.Endpoint} did not carry a pipeline context.");
+
+    private static RequestPairResult ToPairResult(RequestItem request, PairPipelineContext context)
+    {
+        PairComparisonResult result = context.Result;
+        if (result.Outcome == RequestPairOutcome.ExecutionFailed)
+        {
+            return new RequestPairResult(
+                request.RelativePath,
+                RequestPairOutcome.ExecutionFailed,
+                context.ResponseArtifactA,
+                context.ResponseArtifactB,
+                result.ErrorMessage ?? context.FailureReason);
+        }
+
+        return RequestPairResult.FromComparison(
+            request,
+            context.ResponseArtifactA,
+            context.ResponseArtifactB,
+            result.Differences,
+            result.OutcomeMessage);
     }
 
     private Task<RequestPairResult> AttachFocusedRawContentAsync(
@@ -664,107 +815,6 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
             MergeHeaders(endpointDefinition.Headers, request.Headers, request.GetHeaders(endpoint)));
     }
 
-    private async Task<PreparedRequest> PrepareContractRequestAsync(
-        ComparisonRun run,
-        RequestItem request,
-        EndpointSlot endpoint,
-        EndpointDefinition endpointDefinition,
-        IContractProfile profile,
-        CancellationToken cancellationToken)
-    {
-        PayloadFormat sourceFormat = DetectPayloadFormat(request.ContentType, request.RelativePath)
-            ?? throw new InvalidOperationException(
-                $"Request '{request.RelativePath}' does not have a supported serialization format for contract profile processing.");
-
-        if (!profile.EndpointA.SupportedSourceRequestFormats.Contains(sourceFormat))
-        {
-            throw new InvalidOperationException(
-                $"Contract profile '{profile.ProfileId}' does not support source request format '{sourceFormat}' for request '{request.RelativePath}'.");
-        }
-
-        async ValueTask<Stream> OpenSourceRequestBodyAsync(CancellationToken token) =>
-            await requestBatchStore
-                .OpenRequestBodyAsync(run.Options.RequestBatch, request, token)
-                .ConfigureAwait(false);
-
-        string sourceContentType = run.Options.RequestExecution.ContentTypeOverride ?? request.ContentType;
-        PreparedContractRequest prepared = await profile
-            .PrepareRequestAsync(
-                endpoint,
-                new ContractRequestPreparationContext(request, OpenSourceRequestBodyAsync, sourceFormat, sourceContentType),
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        Dictionary<string, string> headers = MergeHeaders(endpointDefinition.Headers, request.Headers, request.GetHeaders(endpoint));
-        if (prepared.Headers is not null)
-        {
-            foreach (KeyValuePair<string, string> header in prepared.Headers)
-            {
-                headers[header.Key] = header.Value;
-            }
-        }
-
-        Stream preparedBody = await prepared.Body.OpenReadAsync(cancellationToken).ConfigureAwait(false);
-        return new PreparedRequest(
-            preparedBody,
-            prepared.ContentType,
-            headers,
-            prepared.Body);
-    }
-
-    private async Task<ResponseArtifactMetadata> NormalizeAndPersistResponseAsync(
-        ComparisonRun run,
-        RequestItem request,
-        IContractProfile profile,
-        EndpointExecutionRecord endpointResult,
-        IReadOnlyList<MaskRuleDefinition> maskRules,
-        RunExecutionCounters counters,
-        CompareSubPhaseCounters? subPhaseCounters,
-        CancellationToken cancellationToken)
-    {
-        if (endpointResult.Metadata is null)
-        {
-            throw new InvalidOperationException($"Endpoint {endpointResult.Endpoint} did not produce a response artifact to normalize.");
-        }
-
-        PayloadFormat sourceFormat = endpointResult.Endpoint == EndpointSlot.B
-            ? profile.EndpointB.ResponseFormat
-            : DetectPayloadFormat(endpointResult.ContentType, request.RelativePath) ?? profile.CanonicalResponseFormat;
-
-        async ValueTask<Stream> OpenSourceResponseBodyAsync(CancellationToken token) =>
-            await runArtifactStore
-                .OpenReadAsync(endpointResult.Metadata.Artifact, token)
-                .ConfigureAwait(false);
-
-        ContractResponseNormalizationContext context = new ContractResponseNormalizationContext(
-            request,
-            endpointResult.Endpoint,
-            OpenSourceResponseBodyAsync,
-            endpointResult.ContentType,
-            sourceFormat);
-
-        NormalizedContractResponse normalized = await TimeSubPhaseAsync(
-            subPhaseCounters,
-            static (c, e) => c.AddNormalize(e),
-            () => profile.NormalizeResponseAsync(endpointResult.Endpoint, context, cancellationToken).AsTask()).ConfigureAwait(false);
-
-        await using ContractPayload normalizedPayload = normalized.Body;
-        await using Stream normalizedStream = await normalizedPayload.OpenReadAsync(cancellationToken).ConfigureAwait(false);
-        RequestItem canonicalArtifactRequest = CreateCanonicalArtifactRequest(request, endpointResult.Endpoint, normalizedPayload.ContentType);
-        return await TimeSubPhaseAsync(
-            subPhaseCounters,
-            static (c, e) => c.AddPersistCanonical(e),
-            () => PersistResponseAsync(
-                run.Id,
-                endpointResult.Endpoint,
-                canonicalArtifactRequest,
-                endpointResult.StatusCode ?? 0,
-                normalizedPayload.ContentType,
-                normalizedStream,
-                maskRules,
-                counters,
-                cancellationToken)).ConfigureAwait(false);
-    }
 
     private async Task<ResponseArtifactMetadata> PersistResponseAsync(
         RunId runId,
@@ -795,65 +845,6 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
 
         counters.AddResponseBytes(metadata.ContentLength);
         return metadata;
-    }
-
-    private static RequestItem CreateCanonicalArtifactRequest(
-        RequestItem request,
-        EndpointSlot endpoint,
-        string contentType) =>
-        new RequestItem(
-            $"canonical/{endpoint}/{request.RelativePath}",
-            contentType,
-            request.ContentLength,
-            request.Headers,
-            request.HeadersA,
-            request.HeadersB);
-
-    private IContractProfile? ResolveContractProfile(RunOptions options)
-    {
-        if (contractProfileRegistry is null)
-        {
-            if (options.ContractProfile is null)
-            {
-                return null;
-            }
-
-            throw new InvalidOperationException("A contract profile registry is required when contract profile options are configured.");
-        }
-
-        return contractProfileRegistry.Resolve(options.ResponseModelName, options.ContractProfile);
-    }
-
-    private static RunOptions CreateRunOptionsWithProfileDefaults(
-        RunOptions options,
-        IContractProfile profile)
-    {
-        ComparisonOptions current = options.Comparison;
-        ComparisonRuleDefaults profileDefaults = profile.DefaultComparisonRules;
-        ComparisonOptions comparisonOptions = new ComparisonOptions(
-            profileDefaults.IgnoreCollectionOrder || current.IgnoreCollectionOrder,
-            profileDefaults.IgnoreStringCase || current.IgnoreStringCase,
-            profileDefaults.IgnoreTrailingWhitespaceAtEnd || current.IgnoreTrailingWhitespaceAtEnd,
-            profileDefaults.TreatNullAndEmptyCollectionsAsEqual || current.TreatNullAndEmptyCollectionsAsEqual,
-            profileDefaults.IgnoreXmlNamespaces || current.IgnoreXmlNamespaces,
-            current.MaxDifferences,
-            profileDefaults.IgnoreRules.Concat(current.IgnoreRules),
-            profileDefaults.SmartIgnoreRules.Concat(current.SmartIgnoreRules),
-            profileDefaults.MaskRules.Concat(current.MaskRules));
-
-        return new RunOptions(
-            options.RequestBatch,
-            options.EndpointA,
-            options.EndpointB,
-            options.Timeout,
-            options.MaxConcurrency,
-            options.ResponseModelName,
-            comparisonOptions,
-            options.RequestExecution,
-            options.ContractProfile,
-                options.LargeRun,
-                options.RunRetentionModeOverride,
-                options.ComparisonRulesSnapshotHash);
     }
 
     private int CalculateExecutionPercent(int completedRequests, int totalRequests)
@@ -891,32 +882,6 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
             .ToArray();
 
         return errors.Length == 0 ? null : string.Join("; ", errors);
-    }
-
-    private static PayloadFormat? DetectPayloadFormat(string? contentType, string relativePath)
-    {
-        if (contentType?.Contains("json", StringComparison.OrdinalIgnoreCase) == true)
-        {
-            return PayloadFormat.Json;
-        }
-
-        if (contentType?.Contains("xml", StringComparison.OrdinalIgnoreCase) == true)
-        {
-            return PayloadFormat.Xml;
-        }
-
-        string extension = Path.GetExtension(relativePath);
-        if (string.Equals(extension, ".json", StringComparison.OrdinalIgnoreCase))
-        {
-            return PayloadFormat.Json;
-        }
-
-        if (string.Equals(extension, ".xml", StringComparison.OrdinalIgnoreCase))
-        {
-            return PayloadFormat.Xml;
-        }
-
-        return null;
     }
 
 

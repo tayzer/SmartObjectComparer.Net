@@ -24,7 +24,8 @@ public sealed record RequestComparisonRunRequest
         string? endpointALabel = null,
         string? endpointBLabel = null,
         IReadOnlyList<string>? sourceFiles = null,
-        RetentionMode? runRetentionModeOverride = null)
+        RetentionMode? runRetentionModeOverride = null,
+        PluginComparisonSelection? pluginComparison = null)
     {
         if (string.IsNullOrWhiteSpace(sourceDirectory))
         {
@@ -60,6 +61,7 @@ public sealed record RequestComparisonRunRequest
         EndpointBLabel = string.IsNullOrWhiteSpace(endpointBLabel) ? null : endpointBLabel.Trim();
         SourceFiles = CopySourceFiles(sourceFiles);
         RunRetentionModeOverride = runRetentionModeOverride;
+        PluginComparison = pluginComparison;
     }
 
     public string SourceDirectory { get; }
@@ -93,6 +95,12 @@ public sealed record RequestComparisonRunRequest
     public string? EndpointBLabel { get; }
 
     public RetentionMode? RunRetentionModeOverride { get; }
+
+    /// <summary>
+    /// Gets the plugin comparison this run selected, if any. Its step configuration
+    /// must already have secret references resolved to values.
+    /// </summary>
+    public PluginComparisonSelection? PluginComparison { get; }
 
     private static IReadOnlyDictionary<string, string> CopyHeaders(IReadOnlyDictionary<string, string>? headers)
     {

@@ -1,0 +1,16 @@
+<Project Sdk="MSTest.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\ParityBench.NET.Composition\ParityBench.NET.Composition.csproj" />
+    <ProjectReference Include="..\..\Source\ParityBench.NET.Infrastructure\ParityBench.NET.Infrastructure.csproj" />
+    <!-- Built so the integration tests can launch the real worker executable. -->
+    <ProjectReference Include="..\..\Source\ParityBench.NET.Worker\ParityBench.NET.Worker.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
+  </ItemGroup>
+
+</Project>
