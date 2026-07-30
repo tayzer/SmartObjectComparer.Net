@@ -30,7 +30,7 @@ In the desktop app:
 From the CLI:
 
 ```bash
-paritybench request ./requests --run-profile client-lookup --capture-baseline "orders-v4-pre-upgrade"
+ParityBench.NET.Cli request ./requests --run-profile client-lookup --capture-baseline "orders-v4-pre-upgrade"
 ```
 
 Every scenario that returned a success status is written to the package. A scenario
@@ -58,7 +58,7 @@ responses/canonical/<path>.json           the comparison model — the expected 
 From the CLI:
 
 ```bash
-paritybench request --run-profile client-lookup --baseline orders-v4-pre-upgrade@1 --endpoint-b https://new.example.test/lookup
+ParityBench.NET.Cli request --run-profile client-lookup --baseline orders-v4-pre-upgrade@1 --endpoint-b https://new.example.test/lookup
 ```
 
 Omit `@1` to use the latest version.
@@ -94,19 +94,19 @@ list, and offers export, import and delete.
 The same operations from the CLI:
 
 ```bash
-paritybench baseline list
+ParityBench.NET.Cli baseline list
 ```
 
 ```bash
-paritybench baseline export orders-v4-pre-upgrade@1 ./orders-v4.pbbaseline
+ParityBench.NET.Cli baseline export orders-v4-pre-upgrade@1 ./orders-v4.pbbaseline
 ```
 
 ```bash
-paritybench baseline import ./orders-v4.pbbaseline
+ParityBench.NET.Cli baseline import ./orders-v4.pbbaseline
 ```
 
 ```bash
-paritybench baseline delete orders-v4-pre-upgrade@1
+ParityBench.NET.Cli baseline delete orders-v4-pre-upgrade@1
 ```
 
 ## What a baseline does and does not freeze

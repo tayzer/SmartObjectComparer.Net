@@ -2,6 +2,67 @@
 
 ParityBench.NET fires the same request at two endpoints (A and B), persists both responses as artifacts, compares them as domain objects, and appends paged results. Hosts (CLI, Web, Desktop) are thin composition roots over a shared set of application/engine/workspace services — none of them own comparison logic.
 
+## System flow at a glance
+
+Start here. Everything below is a detail view of one box in this diagram.
+
+```mermaid
+flowchart TB
+    subgraph Inputs
+        Req[Request files<br/>directory or batch]
+        Prof[Run profile JSON<br/>workspace/config/profiles]
+        Plug[Plugin package<br/>plugins/*/parity-plugin.json]
+        Sec[(Secret store<br/>env / DPAPI)]
+    end
+
+    subgraph Hosts["Hosts — thin composition roots"]
+        Cli[CLI<br/>request / baseline]
+        Web[Web<br/>Blazor Server]
+        Desk[Desktop<br/>WPF + BlazorWebView]
+    end
+
+    Wf[RequestComparisonWorkflowService<br/>stage batch, build RunOptions]
+    RunSvc[ComparisonRunService<br/>run lifecycle + progress]
+
+    subgraph Exec["Execution — ComparisonRunExecutor"]
+        direction TB
+        PoolA[Execution pool<br/>bounded concurrency]
+        Chan{{Channel}}
+        PoolB[Compare pool]
+        PoolA -->|persist artifact, hand off| Chan --> PoolB
+    end
+
+    subgraph Pipe["Phased comparison pipeline (per pair)"]
+        direction LR
+        P1[Input] --> P2[Request] --> P3[Send] --> P4[Response] --> P5[Mapping] --> P6[Comparison] --> P7[ResultProcessing]
+    end
+
+    Store[(Workspace stores<br/>runs · artifacts · details · baselines)]
+    Out[Results: paged pair details,<br/>summary, static Blazor report]
+
+    Req --> Wf
+    Prof --> Wf
+    Plug -.->|loaded into isolated ALC| Pipe
+    Sec -.->|resolved at run start| Pipe
+
+    Cli --> Wf
+    Web --> Wf
+    Desk --> Wf
+    Wf --> RunSvc --> Exec
+    Exec -.->|Worker:Enabled=true<br/>same path, separate process,<br/>named-pipe progress| Worker[ParityBench.NET.Worker]
+    PoolA --> Pipe
+    PoolB --> Pipe
+    Pipe --> Store
+    Exec --> Ret[RetentionCleanupStage] --> Store
+    Store --> Out
+```
+
+Three things this diagram is meant to make obvious:
+
+- **Hosts are interchangeable.** CLI, Web and Desktop all enter at `RequestComparisonWorkflowService`; nothing host-specific reaches the engine.
+- **Nothing is held in memory across the run.** Execution persists a response artifact and hands off a reference; comparison reopens it. Run size does not drive memory.
+- **Client-specific behaviour is all inside the pipeline.** Plugins contribute middleware to the phases; the surrounding machinery never changes per client.
+
 ## Component map
 
 | Layer | Project | Owns |

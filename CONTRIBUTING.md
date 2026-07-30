@@ -31,18 +31,22 @@ are documented in [CODING_STANDARD.md](CODING_STANDARD.md).
 
 ## Project layout
 
-- `Source/` — active V2 code (application services, engine, hosts: Web, Desktop, CLI, TestEndpoints)
-- `Tests/` — V2 tests, one project per `Source/` project
+- `Source/` — product code: SDK, domain, application, engine, workspaces, plugins, worker, and the Web/Desktop/CLI/TestEndpoints hosts
+- `Tests/` — one test project per `Source/` project, plus `ParityBench.NET.Fitness.Tests` for cross-boundary rules
 - `Examples/` — manual-run fixtures used by CLI presets and E2E tests
-- `Docs/` — architecture, feature, and planning documentation
+- `Docs/` — guides, architecture, and decision records (see [`Docs/README.md`](Docs/README.md))
+- `build/` — shared MSBuild targets, including plugin packaging
+- `scripts/` — publishing and reporting helpers
 - `archive/v1-comparisontool/` — frozen V1 predecessor, not built by CI
 
-Each project under `Source/` has its own `README.md` describing what it owns
+Each project under `Source/` and `Tests/` has its own `README.md` describing what it owns
 and its boundaries — start there before making cross-project changes.
 
-For the system-level run flow, see [`Docs/Architecture/high-level-design.md`](Docs/Architecture/high-level-design.md).
+For the system-level run flow and the architecture diagram, see
+[`Docs/Architecture/high-level-design.md`](Docs/Architecture/high-level-design.md).
 To add support for a new API pair (your own request/response models), see
-[Adding a Custom Domain Profile](Docs/Guides/adding-a-custom-domain-profile.md).
+[Building a Plugin](Docs/Guides/building-a-plugin.md).
+[`Docs/README.md`](Docs/README.md) indexes everything else.
 
 ## Making a change
 
