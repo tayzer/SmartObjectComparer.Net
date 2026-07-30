@@ -59,7 +59,7 @@ public sealed class RunProfileResolver
         return new ResolvedRunProfile(
             profile,
             selection,
-            new EndpointDefinition(profile.EndpointA, $"{profile.DisplayName} (A)"),
-            new EndpointDefinition(profile.EndpointB, $"{profile.DisplayName} (B)"));
+            new EndpointDefinition(profile.EndpointA, $"{profile.DisplayName} (A)", profile.EndpointAHeaders),
+            new EndpointDefinition(profile.EndpointB, $"{profile.DisplayName} (B)", profile.EndpointBHeaders));
     }
 }

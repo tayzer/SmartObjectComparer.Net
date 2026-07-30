@@ -86,7 +86,9 @@ public sealed class PluginProfileBootstrapper
             environmentName: template.EnvironmentName,
             enabledStepIds: template.EnabledStepIds,
             stepConfiguration: template.StepConfiguration,
-            requestDirectory: ResolveRequestDirectory(plugin, template));
+            requestDirectory: ResolveRequestDirectory(plugin, template),
+            endpointAHeaders: environment.EndpointAHeaders,
+            endpointBHeaders: environment.EndpointBHeaders);
     }
 
     // A template's request directory may be package-relative (sample requests shipped

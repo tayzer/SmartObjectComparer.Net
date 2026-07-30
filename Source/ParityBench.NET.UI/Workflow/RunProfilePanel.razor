@@ -153,7 +153,10 @@
             pluginVersion: option.Plugin.Version,
             environmentName: option.Template.EnvironmentName,
             enabledStepIds: option.Template.EnabledStepIds,
-            requestDirectory: option.Template.RequestDirectory);
+            stepConfiguration: option.Template.StepConfiguration, 
+            requestDirectory: option.Template.RequestDirectory,
+            endpointAHeaders: environment?.EndpointAHeaders,
+            endpointBHeaders: environment?.EndpointBHeaders);
 
         await EditAsync(profile).ConfigureAwait(true);
     }
@@ -220,7 +223,9 @@
             enabledStepIds: editing.EnabledStepIds,
             stepConfiguration: persistedConfiguration,
             comparison: editing.Comparison,
-            requestDirectory: string.IsNullOrWhiteSpace(editRequestDirectory) ? null : editRequestDirectory);
+            requestDirectory: string.IsNullOrWhiteSpace(editRequestDirectory) ? null : editRequestDirectory,
+            endpointAHeaders: editing.EndpointAHeaders,
+            endpointBHeaders: editing.EndpointBHeaders);
 
         await ProfileStore.SaveAsync(updated).ConfigureAwait(true);
         await ReloadProfilesAsync().ConfigureAwait(true);

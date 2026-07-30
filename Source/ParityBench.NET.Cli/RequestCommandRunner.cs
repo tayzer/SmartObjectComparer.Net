@@ -139,8 +139,8 @@ public sealed class RequestCommandRunner
             comparisonOptions: resolved.Profile.Comparison,
             requestExecutionOptions: new RequestExecutionOptions(options.ContentTypeOverride),
             commonHeaders: ParseHeaders(options.CommonHeaders),
-            endpointAHeaders: ParseHeaders(options.EndpointAHeaders),
-            endpointBHeaders: ParseHeaders(options.EndpointBHeaders),
+            endpointAHeaders: MergeHeaders(resolved.EndpointA.Headers, ParseHeaders(options.EndpointAHeaders)),
+            endpointBHeaders: MergeHeaders(resolved.EndpointB.Headers, ParseHeaders(options.EndpointBHeaders)),
             pluginComparison: resolved.Selection,
             baseline: baselineSelection);
 
