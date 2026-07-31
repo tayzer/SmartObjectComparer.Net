@@ -117,30 +117,135 @@ public sealed class OrderLine
 `OrderLookupResponse` **is** the canonical type Compare-Net-Objects diffs. There is no
 `Adapt<T>()` step and nothing to translate.
 
-## 4. Write the pipeline steps
+## 4. Declare the comparison
 
-Behaviour lives in **middleware**. Each step declares a `StepId`, a `Phase`, and an
-`Order` (which only sorts steps *within* a phase). Endpoint-scoped steps
-(`Input`…`Mapping`) implement `IEndpointComparisonMiddleware` and run once per endpoint
-slot; pair-scoped steps (`Comparison`, `ResultProcessing`) implement
-`IPairComparisonMiddleware`. To fail a pair deliberately, a step calls
-`context.Fail(reason)` and doesn't call `next`.
+One contract means one declaration. `SameContractComparison<TResponse>` takes it and
+serves both endpoint slots from it, so there is no `EndpointA`/`EndpointB` pair to
+keep in sync:
 
-**Request middleware** builds the outbound request. If both endpoints take the same
-request body, the simplest version does nothing to `context.RequestBody` at all — the
-source request the operator supplied goes out unchanged to both slots. You only need a
-request step if the two versions need different auth:
+```csharp
+using ParityBench.NET.Application.ContractProfiles;
+using ParityBench.NET.Domain.Comparison;
+using ParityBench.NET.Domain.ContractProfiles;
+using ParityBench.PluginSdk.Comparisons;
+
+new SameContractComparison<OrderLookupResponse>(
+    "acme.order-lookup.v1-vs-v2",
+    "Order Lookup — v1 vs v2",
+    new ContractEndpointProfile(
+        PayloadFormat.Json,
+        "application/json",
+        PayloadFormat.Json,
+        requestHeaders: new Dictionary<string, string> { ["Accept"] = "application/json" }),
+    new ComparisonRuleDefaults(
+        ignoreRules: new[]
+        {
+            new IgnoreRuleDefinition("traceId"),
+            new IgnoreRuleDefinition("lines", ignoreCompletely: false, ignoreCollectionOrder: true),
+        }));
+```
+
+**`requestContentType`** (the second argument) is what goes out as `Content-Type`. It
+matters more than it looks: without it, the content type is inferred from the request
+file's extension — `.xml` becomes `application/xml`, `.txt` becomes `text/plain` — and
+an endpoint that wants `text/xml` answers a inferred `application/xml` with **415
+Unsupported Media Type**. Declare what the endpoint actually accepts. Leave it `null`
+to keep each request file's own, which is what a batch of mixed formats wants.
+
+**`requestHeaders`** are the headers this contract always sends — a `SOAPAction`, an
+`Accept`. They sit at the bottom of the header precedence, so environment, profile and
+CLI headers still override them, as does any request middleware. Declare a
+`Content-Type` here and the constructor throws: that is `requestContentType`'s job.
+
+Put version-drift-prone fields — trace ids, timestamps, anything that legitimately
+differs release to release — into `ComparisonRuleDefaults` so every run using this
+comparison starts clean.
+
+## 5. Write the entry point
+
+Implement `IParityBenchPlugin`, register the comparison, and ship a `PluginEnvironment`
+per version pair you test against. For a same-contract comparison **that is the entire
+plugin** — no middleware, no step ids, no configuration schema:
+
+```csharp
+using ParityBench.NET.Application.ContractProfiles;
+using ParityBench.NET.Domain.Comparison;
+using ParityBench.NET.Domain.ContractProfiles;
+using ParityBench.PluginSdk.Comparisons;
+using ParityBench.PluginSdk.Plugin;
+using ParityBench.PluginSdk.Profiles;
+
+namespace Acme.OrderLookupPlugin;
+
+public sealed class OrderLookupPlugin : IParityBenchPlugin
+{
+    public const string Id = "acme.order-lookup";
+    public const string ComparisonId = "acme.order-lookup.v1-vs-v2";
+
+    public string PluginId => Id;
+
+    public void Configure(IPluginBuilder builder) => builder
+        .AddComparison(new SameContractComparison<OrderLookupResponse>(
+            ComparisonId,
+            "Order Lookup — v1 vs v2",
+            new ContractEndpointProfile(
+                PayloadFormat.Json,
+                "application/json",
+                PayloadFormat.Json,
+                requestHeaders: new Dictionary<string, string> { ["Accept"] = "application/json" }),
+            new ComparisonRuleDefaults(
+                ignoreRules: new[] { new IgnoreRuleDefinition("traceId") })))
+        .AddEnvironment(new PluginEnvironment(
+            "QA",
+            new Uri("https://qa-v1.example.test/orders"),
+            new Uri("https://qa-v2.example.test/orders")))
+        .AddProfileTemplate(new PluginProfileTemplate(
+            "order-lookup-qa",
+            "Order Lookup — QA (v1 vs v2)",
+            ComparisonId,
+            environmentName: "QA"));
+}
+```
+
+No mapping step is needed: when nothing has produced a comparison instance, the
+built-in mapping phase deserializes each persisted response straight into
+`OrderLookupResponse`. A translating plugin needs a mapping step because its two slots
+genuinely produce different shapes; yours don't.
+
+Because both endpoints share one contract, you typically ship **one environment per
+comparison target** (QA, ST, pre-prod) rather than a request/response-format split.
+
+### Per-environment headers
+
+If the two deployments need different *static* headers — a gateway key that varies by
+environment rather than by contract — put them on the environment, not in code:
+
+```csharp
+.AddEnvironment(new PluginEnvironment(
+    "QA",
+    new Uri("https://qa-v1.example.test/orders"),
+    new Uri("https://qa-v2.example.test/orders"),
+    endpointAHeaders: new Dictionary<string, string> { ["X-Api-Version"] = "1" },
+    endpointBHeaders: new Dictionary<string, string> { ["X-Api-Version"] = "2" }))
+```
+
+These seed the materialised run profile's `endpointAHeaders`/`endpointBHeaders`, which
+the operator can then edit — the plugin suggests, the saved profile decides.
+
+### When you still need middleware
+
+Reach for a request step only when a header's **value has to be computed at run time**
+— a token exchange, a request signature — or when it comes from a secret:
 
 ```csharp
 using ParityBench.PluginSdk.Configuration;
 using ParityBench.PluginSdk.Pipeline;
-using ParityBench.PluginSdk.Requests;
 
 namespace Acme.OrderLookupPlugin;
 
-public sealed class OrderLookupRequestMiddleware : IEndpointComparisonMiddleware
+public sealed class OrderLookupAuthMiddleware : IEndpointComparisonMiddleware
 {
-    public const string Id = "acme.order-lookup.request";
+    public const string Id = "acme.order-lookup.auth";
 
     public string StepId => Id;
     public PipelinePhase Phase => PipelinePhase.Request;
@@ -159,164 +264,18 @@ public sealed class OrderLookupRequestMiddleware : IEndpointComparisonMiddleware
 }
 ```
 
-If both versions sit behind the same gateway and take identical auth too, you don't
-need a request middleware at all — omit it, and don't list its id in `DefaultStepIds`.
+Register it with `.AddMiddleware<OrderLookupAuthMiddleware>()`, an
+`.AddConfigurationSchema(...)` describing its fields, and pass its id in the
+comparison's `defaultStepIds`. Request steps run after the declarative header merge, so
+they override anything declared above.
 
-**Mapping middleware** projects the persisted response onto the comparison type. Both
-slots produce the same CLR type, so this is a straight deserialize with no
-per-endpoint branch — the same code path runs for `EndpointSlot.A` and
-`EndpointSlot.B`, unlike a translating plugin's mapping step, which genuinely does two
-different things per slot. It reads the response through
-`context.OpenResponseArtifactAsync(...)` — a plugin never touches the artifact store
-directly — and sets `context.ComparisonInstance`:
+**Secrets.** A `PluginFieldKind.Secret` field is captured masked and stored as a
+`secret://` reference in the profile; the value is resolved from the secret store only
+at run start and arrives already-resolved in `IStepConfiguration.GetRequiredString(...)`.
+Your plugin never sees the reference and never handles the value at rest. This is the
+main reason a same-contract plugin ends up with a request step at all.
 
-```csharp
-using ParityBench.NET.Application.ContractProfiles;
-using ParityBench.NET.Domain.ContractProfiles;
-using ParityBench.PluginSdk.Pipeline;
-
-namespace Acme.OrderLookupPlugin;
-
-public sealed class OrderLookupMappingMiddleware : IEndpointComparisonMiddleware
-{
-    public const string Id = "acme.order-lookup.mapping";
-
-    private readonly IContractPayloadSerializer serializer;
-
-    public OrderLookupMappingMiddleware(IContractPayloadSerializer serializer) => this.serializer = serializer;
-
-    public string StepId => Id;
-    public PipelinePhase Phase => PipelinePhase.Mapping;
-    public int Order => 0;
-
-    public async ValueTask InvokeAsync(
-        IEndpointPipelineContext context,
-        PipelineDelegate next,
-        CancellationToken cancellationToken)
-    {
-        await using Stream body = await context.OpenResponseArtifactAsync(cancellationToken).ConfigureAwait(false);
-        context.ComparisonInstance = await serializer
-            .DeserializeAsync(typeof(OrderLookupResponse), body, PayloadFormat.Json, ignoreXmlNamespaces: false, cancellationToken)
-            .ConfigureAwait(false);
-        await next(cancellationToken).ConfigureAwait(false);
-    }
-}
-```
-
-## 5. Comparison definition
-
-`EndpointA` and `EndpointB` use the same `ContractEndpointProfile` shape (same format
-both sides). Put your version-drift-prone fields — trace ids, timestamps, anything
-that legitimately differs release to release — into `DefaultComparisonRules` so every
-run using this comparison starts clean:
-
-```csharp
-using ParityBench.NET.Application.ContractProfiles;
-using ParityBench.NET.Domain.Comparison;
-using ParityBench.NET.Domain.ContractProfiles;
-using ParityBench.PluginSdk.Comparisons;
-
-namespace Acme.OrderLookupPlugin;
-
-public sealed class OrderLookupComparisonDefinition : IComparisonDefinition<OrderLookupResponse>
-{
-    private static readonly ComparisonRuleDefaults Defaults = new ComparisonRuleDefaults(
-        ignoreRules: new[]
-        {
-            new IgnoreRuleDefinition("traceId"),
-            new IgnoreRuleDefinition("lines", ignoreCompletely: false, ignoreCollectionOrder: true),
-        });
-
-    public string ComparisonId => "acme.order-lookup.v1-vs-v2";
-    public string DisplayName => "Order Lookup — v1 vs v2";
-    public Type ComparisonType => typeof(OrderLookupResponse);
-
-    public ContractEndpointProfile EndpointA { get; } = new ContractEndpointProfile(
-        PayloadFormat.Json, "application/json", PayloadFormat.Json);
-
-    public ContractEndpointProfile EndpointB { get; } = new ContractEndpointProfile(
-        PayloadFormat.Json, "application/json", PayloadFormat.Json);
-
-    public IReadOnlyList<string> DefaultStepIds { get; } = new[]
-    {
-        OrderLookupRequestMiddleware.Id,
-        OrderLookupMappingMiddleware.Id,
-    };
-
-    public IReadOnlyList<string> RequiredStepIds { get; } = new[] { OrderLookupMappingMiddleware.Id };
-
-    public ComparisonRuleDefaults DefaultComparisonRules => Defaults;
-}
-```
-
-`IComparisonDefinition<TComparison>` names the comparison, its canonical CLR type, the
-endpoint contracts, the default/required step ids, and the `ComparisonRuleDefaults`
-every run using it should start from. `RequiredStepIds` lists only the mapping step
-here — a profile is free to disable the request middleware (e.g. if a given
-environment pair needs no per-slot auth), but it can never disable the step that
-produces `ComparisonInstance`.
-
-## 6. Write the entry point
-
-Implement `IParityBenchPlugin`. Register run-scoped services on `builder.Services`
-(they can inject the host services a plugin is allowed to see —
-`IContractPayloadSerializer`, `HttpClient`), then register the comparison, middleware,
-configuration schema, environments, and profile templates — one `PluginEnvironment`
-per version pair you test against:
-
-```csharp
-using Microsoft.Extensions.DependencyInjection;
-
-using ParityBench.PluginSdk.Configuration;
-using ParityBench.PluginSdk.Plugin;
-using ParityBench.PluginSdk.Profiles;
-
-namespace Acme.OrderLookupPlugin;
-
-public sealed class OrderLookupPlugin : IParityBenchPlugin
-{
-    public const string Id = "acme.order-lookup";
-    public const string ComparisonId = "acme.order-lookup.v1-vs-v2";
-
-    public string PluginId => Id;
-
-    public void Configure(IPluginBuilder builder)
-    {
-        builder
-            .AddComparison(new OrderLookupComparisonDefinition())
-            .AddMiddleware<OrderLookupRequestMiddleware>()
-            .AddMiddleware<OrderLookupMappingMiddleware>()
-            .AddConfigurationSchema(new PluginConfigurationSchema(
-                OrderLookupRequestMiddleware.Id,
-                "API keys",
-                new[]
-                {
-                    new PluginConfigurationField("endpointAApiKey", "Endpoint A API key", PluginFieldKind.Secret, isRequired: true),
-                    new PluginConfigurationField("endpointBApiKey", "Endpoint B API key", PluginFieldKind.Secret, isRequired: true),
-                }))
-            .AddEnvironment(new PluginEnvironment(
-                "QA",
-                new Uri("https://qa-v1.example.test/orders"),
-                new Uri("https://qa-v2.example.test/orders")))
-            .AddProfileTemplate(new PluginProfileTemplate(
-                "order-lookup-qa",
-                "Order Lookup — QA (v1 vs v2)",
-                ComparisonId,
-                environmentName: "QA"));
-    }
-}
-```
-
-Because both endpoints share one contract, you typically ship **one environment per
-comparison target** (QA, ST, pre-prod) rather than a request/response-format split.
-
-**Secrets.** A `PluginFieldKind.Secret` field, like the two API keys above, is captured
-masked and stored as a `secret://` reference in the profile; the value is resolved
-from the secret store only at run start and arrives already-resolved in
-`IStepConfiguration.GetRequiredString(...)`. Your plugin never sees the reference and
-never handles the value at rest.
-
-## 7. Install and run
+## 6. Install and run
 
 Build the package and drop its output folder into a `plugins/` directory (next to the
 app, or under the workspace).
@@ -352,13 +311,20 @@ A run profile is JSON under `<workspace>/config/profiles/`:
   "comparisonId": "acme.order-lookup.v1-vs-v2",
   "environment": "QA",
   "endpoints": { "a": "https://qa-v1…/orders", "b": "https://qa-v2…/orders" },
+  "endpointAHeaders": { "X-Api-Version": "1" },
+  "endpointBHeaders": { "X-Api-Version": "2" },
   "stepConfiguration": {
-    "acme.order-lookup.request": { "endpointBApiKey": "secret://acme/qa-v2-api-key" }
+    // Only present if you registered a middleware that reads configuration.
+    "acme.order-lookup.auth": { "endpointBApiKey": "secret://acme/qa-v2-api-key" }
   },
   "comparison": { /* ignore/mask rules, maxDifferences */ },
   "input": { "requestDirectory": "…" }
 }
 ```
+
+`endpointAHeaders`/`endpointBHeaders` override whatever the comparison declares in
+`requestHeaders`, so an operator can adjust headers per profile without a plugin
+rebuild.
 
 Profiles reference **stable logical ids only** — plugin id, comparison id, step ids,
 `secret://` names — never .NET type names, so a profile keeps working across plugin
@@ -371,7 +337,7 @@ contract shape; see
 [Building a Plugin for Different Contracts §7](building-a-different-contract-plugin.md#7-run-out-of-process-optional)
 for detail.
 
-## 8. Pairing with Baseline vs Live
+## 7. Pairing with Baseline vs Live
 
 Same-contract comparisons are the common case for
 [Baseline vs Live](baseline-vs-live.md): because both sides already produce the same

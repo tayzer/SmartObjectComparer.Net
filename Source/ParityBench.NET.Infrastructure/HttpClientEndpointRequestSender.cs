@@ -51,8 +51,13 @@ public sealed class HttpClientEndpointRequestSender : IEndpointRequestSender
         }
     }
 
-    private void ApplyContentType(HttpContentHeaders headers, string contentType)
+    private static void ApplyContentType(HttpContentHeaders headers, string contentType)
     {
+        // Drop whatever is there first — parsed and unparsed values alike. Without
+        // this, two unparseable values (the payload's, then a Content-Type header's)
+        // both get appended and two Content-Type headers go on the wire.
+        headers.Remove("Content-Type");
+
         if (MediaTypeHeaderValue.TryParse(contentType, out MediaTypeHeaderValue? parsedContentType))
         {
             headers.ContentType = parsedContentType;
@@ -62,7 +67,7 @@ public sealed class HttpClientEndpointRequestSender : IEndpointRequestSender
         headers.TryAddWithoutValidation("Content-Type", contentType);
     }
 
-    private void ApplyHeaders(HttpRequestMessage message, IReadOnlyDictionary<string, string> headers)
+    private static void ApplyHeaders(HttpRequestMessage message, IReadOnlyDictionary<string, string> headers)
     {
         foreach (KeyValuePair<string, string> header in headers)
         {

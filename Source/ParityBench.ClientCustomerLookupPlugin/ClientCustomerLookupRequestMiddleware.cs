@@ -8,9 +8,10 @@ using ParityBench.PluginSdk.Pipeline;
 namespace ParityBench.ClientCustomerLookupPlugin;
 
 /// <summary>
-/// Request phase. Endpoint A keeps the source SOAP and just gains its SOAPAction
-/// header; endpoint B exchanges a bearer token, maps the SOAP request to the
-/// endpoint's JSON contract, and attaches the auth headers it requires.
+/// Request phase. Endpoint A keeps the source SOAP untouched — its content type and
+/// SOAPAction header are declared on the comparison, so there is nothing to do here;
+/// endpoint B exchanges a bearer token, maps the SOAP request to the endpoint's JSON
+/// contract, and attaches the auth headers it requires.
 /// </summary>
 public sealed class ClientCustomerLookupRequestMiddleware : IEndpointComparisonMiddleware
 {
@@ -45,7 +46,8 @@ public sealed class ClientCustomerLookupRequestMiddleware : IEndpointComparisonM
 
         if (context.Endpoint == EndpointSlot.A)
         {
-            context.RequestHeaders["SOAPAction"] = configuration.GetString("soapAction", "urn:ClientCustomerLookup")!;
+            // Nothing to add: endpoint A posts the source SOAP as-is, and the token
+            // exchange below is endpoint B's requirement alone.
             await next(cancellationToken).ConfigureAwait(false);
             return;
         }

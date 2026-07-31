@@ -155,6 +155,34 @@ public void Configure(IPluginBuilder builder)
 endpoint contracts, the default/required step ids, and the `ComparisonRuleDefaults`
 (known-noisy fields to ignore) every run using it should start from.
 
+**Declare each side's contract rather than coding it.** Because the two slots differ,
+each gets its own `ContractEndpointProfile` — and that profile is where the outbound
+`Content-Type` and the contract's fixed headers belong:
+
+```csharp
+public ContractEndpointProfile EndpointA { get; } = new ContractEndpointProfile(
+    PayloadFormat.Xml,
+    "text/xml",
+    PayloadFormat.Xml,
+    supportedSourceRequestFormats: new[] { PayloadFormat.Xml },
+    requestHeaders: new Dictionary<string, string> { ["SOAPAction"] = "urn:CustomerLookup" });
+
+public ContractEndpointProfile EndpointB { get; } = new ContractEndpointProfile(
+    PayloadFormat.Json,
+    "application/json",
+    PayloadFormat.Json);
+```
+
+Declaring `"text/xml"` matters: otherwise the content type is inferred from the request
+file's extension (`.xml` → `application/xml`), and a SOAP endpoint that wants `text/xml`
+answers that with **415 Unsupported Media Type**. Pass `null` to keep each request
+file's own content type.
+
+A request step is then only for what has to be computed at run time — the token
+exchange and the body mapping above — not for static headers. Steps run after the
+declarative merge, so they still override anything declared here. A `Content-Type` key
+in `requestHeaders` throws; use `requestContentType`.
+
 **Secrets.** A `PluginFieldKind.Secret` field is captured masked and stored as a
 `secret://` reference in the profile; the value is resolved from the secret store only
 at run start and arrives already-resolved in `IStepConfiguration.GetRequiredString(...)`.

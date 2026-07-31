@@ -78,8 +78,10 @@ public sealed class ReferencePluginEndToEndTests
         Assert.AreEqual($"Bearer {FinalToken}", endpointB.Headers["Authorization"]);
         Assert.AreEqual(EndpointBSubscriptionKey, endpointB.Headers[SubscriptionKeyHeader]);
 
-        // Endpoint A kept the source SOAP and gained its SOAPAction header.
+        // Endpoint A kept the source SOAP and picked up the content type and
+        // SOAPAction header the comparison declares — neither is set by a step.
         CapturedRequest endpointA = sender.Captured.Single(request => request.Endpoint == EndpointSlot.A);
+        Assert.AreEqual("text/xml", endpointA.ContentType, "The comparison's declared content type should beat the staged guess.");
         Assert.AreEqual("urn:ClientCustomerLookup", endpointA.Headers["SOAPAction"]);
 
         // Both sides persisted a canonical projection, which is what got compared.
@@ -319,7 +321,10 @@ public sealed class ReferencePluginEndToEndTests
             this.body = body;
             manifest = new RequestBatchManifest(
                 new RequestBatchReference("batch-1"),
-                new[] { new RequestItem("one.xml", "text/xml", body.Length) });
+                // What real staging produces for a .xml file — an extension-derived
+                // guess. The SOAP endpoint needs text/xml, which the comparison
+                // declares, so the two must differ here for that to mean anything.
+                new[] { new RequestItem("one.xml", "application/xml", body.Length) });
         }
 
         public Task<RequestBatchManifest> StageDirectoryAsync(string sourceDirectory, RequestBatchReference batchReference, CancellationToken cancellationToken = default) =>

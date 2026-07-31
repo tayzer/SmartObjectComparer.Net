@@ -51,8 +51,8 @@ public sealed class RunPipelineExecution
         IReadOnlyList<MaskRuleDefinition> maskRules = comparisonOptions.Comparison.MaskRules;
 
         ComparisonPipeline pipeline = new ComparisonPipelineBuilder()
-            .Add(new SourceRequestLoaderMiddleware())
-            .Add(new HeaderMergeMiddleware())
+            .Add(new SourceRequestLoaderMiddleware(plan.Definition, comparisonOptions.RequestExecution.ContentTypeOverride))
+            .Add(new HeaderMergeMiddleware(plan.Definition))
             .Add(new HttpTransportMiddleware(endpointRequestSender, comparisonOptions.Timeout))
             .Add(new ResponsePersistenceMiddleware(runArtifactStore, run.Id, maskRules, counters))
             .Add(new CanonicalMappingMiddleware(plan.Definition, serializer, runArtifactStore, run.Id, maskRules, counters))

@@ -156,12 +156,136 @@ public sealed class PluginPipelineRunExecutorTests
         Assert.AreEqual(2, artifactStore.SaveCalls.Count);
     }
 
+    [TestMethod]
+    public async Task ExecuteAsync_WhenComparisonDeclaresContentType_SendsItInsteadOfTheStagedGuess()
+    {
+        CapturingEndpointRequestSender sender = new CapturingEndpointRequestSender(_ => "{\"status\":\"OK\"}");
+        ComparisonRunExecutor executor = CreateExecutor(
+            // Staging infers application/xml from the extension; the comparison says
+            // the endpoints actually want text/xml.
+            CreateManifest(new RequestItem("one.xml", "application/xml", 10)),
+            sender,
+            new InMemoryArtifactStore(),
+            pluginStep: null,
+            definition: new ConfigurableComparisonDefinition(contentType: "text/xml"));
+
+        await executor.ExecuteAsync(CreateRun(), new CapturingProgressReporter());
+
+        Assert.AreEqual("text/xml", sender.CapturedRequests.Single(sent => sent.Endpoint == EndpointSlot.A).ContentType);
+        Assert.AreEqual("text/xml", sender.CapturedRequests.Single(sent => sent.Endpoint == EndpointSlot.B).ContentType);
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_WhenContentTypeOverrideIsSet_BeatsTheComparisonsDeclaredContentType()
+    {
+        CapturingEndpointRequestSender sender = new CapturingEndpointRequestSender(_ => "{\"status\":\"OK\"}");
+        ComparisonRunExecutor executor = CreateExecutor(
+            CreateManifest(new RequestItem("one.xml", "application/xml", 10)),
+            sender,
+            new InMemoryArtifactStore(),
+            pluginStep: null,
+            definition: new ConfigurableComparisonDefinition(contentType: "text/xml"));
+
+        // The operator's run-level override is the most specific statement there is.
+        await executor.ExecuteAsync(CreateRun(contentTypeOverride: "application/soap+xml"), new CapturingProgressReporter());
+
+        Assert.AreEqual("application/soap+xml", sender.CapturedRequests.Single(sent => sent.Endpoint == EndpointSlot.A).ContentType);
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_WhenComparisonDeclaresNoContentType_KeepsEachRequestsOwn()
+    {
+        CapturingEndpointRequestSender sender = new CapturingEndpointRequestSender(_ => "{\"status\":\"OK\"}");
+        ComparisonRunExecutor executor = CreateExecutor(
+            CreateManifest(
+                new RequestItem("one.xml", "application/xml", 10),
+                new RequestItem("two.json", "application/json", 10)),
+            sender,
+            new InMemoryArtifactStore(),
+            pluginStep: null,
+            // Declaring nothing opts a mixed-format batch out: each file keeps its own.
+            definition: new ConfigurableComparisonDefinition(contentType: null));
+
+        await executor.ExecuteAsync(CreateRun(), new CapturingProgressReporter());
+
+        CollectionAssert.AreEquivalent(
+            new[] { "application/xml", "application/json" },
+            sender.CapturedRequests.Where(sent => sent.Endpoint == EndpointSlot.A).Select(sent => sent.ContentType).ToArray());
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_WhenHeadersCollide_AppliesTheComparisonsHeadersAtTheBottom()
+    {
+        CapturingEndpointRequestSender sender = new CapturingEndpointRequestSender(_ => "{\"status\":\"OK\"}");
+        ComparisonRunExecutor executor = CreateExecutor(
+            CreateManifest(new RequestItem(
+                "one.json",
+                "application/json",
+                10,
+                new Dictionary<string, string> { ["X-Request"] = "request" },
+                headersA: new Dictionary<string, string> { ["X-Slot"] = "slot-a" })),
+            sender,
+            new InMemoryArtifactStore(),
+            pluginStep: null,
+            definition: new ConfigurableComparisonDefinition(
+                contentType: "application/json",
+                headers: new Dictionary<string, string>
+                {
+                    ["SOAPAction"] = "urn:from-comparison",
+                    ["X-Endpoint"] = "from-comparison",
+                    ["X-Request"] = "from-comparison",
+                    ["X-Slot"] = "from-comparison",
+                }));
+
+        await executor.ExecuteAsync(
+            CreateRun(endpointAHeaders: new Dictionary<string, string> { ["X-Endpoint"] = "endpoint" }),
+            new CapturingProgressReporter());
+
+        CapturedRequest endpointA = sender.CapturedRequests.Single(sent => sent.Endpoint == EndpointSlot.A);
+        // Uncontested: the comparison's own header reaches the wire.
+        Assert.AreEqual("urn:from-comparison", endpointA.Headers["SOAPAction"]);
+        // Everything else outranks it, in order.
+        Assert.AreEqual("endpoint", endpointA.Headers["X-Endpoint"]);
+        Assert.AreEqual("request", endpointA.Headers["X-Request"]);
+        Assert.AreEqual("slot-a", endpointA.Headers["X-Slot"]);
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_WhenComparisonIsSameContractWithNoSteps_ComparesWithoutAnyMiddleware()
+    {
+        CapturingEndpointRequestSender sender = new CapturingEndpointRequestSender(_ => "{\"status\":\"OK\"}");
+        ComparisonRunExecutor executor = CreateExecutor(
+            CreateManifest(new RequestItem("one.json", "application/json", 10)),
+            sender,
+            new InMemoryArtifactStore(),
+            pluginStep: null,
+            // The whole comparison: one contract, zero plugin steps.
+            definition: new SameContractComparison<CanonicalResponse>(
+                "test.plugin.comparison",
+                "Same contract",
+                new ContractEndpointProfile(
+                    PayloadFormat.Json,
+                    "application/json",
+                    PayloadFormat.Json,
+                    requestHeaders: new Dictionary<string, string> { ["Accept"] = "application/json" })));
+
+        RunResultSummary summary = await executor.ExecuteAsync(CreateRun(), new CapturingProgressReporter());
+
+        Assert.AreEqual(1, summary.TotalPairs);
+        Assert.AreEqual(0, summary.ErrorPairs);
+        Assert.AreEqual(1, summary.EqualPairs);
+        CapturedRequest endpointA = sender.CapturedRequests.Single(sent => sent.Endpoint == EndpointSlot.A);
+        Assert.AreEqual("application/json", endpointA.ContentType);
+        Assert.AreEqual("application/json", endpointA.Headers["Accept"]);
+    }
+
     private static ComparisonRunExecutor CreateExecutor(
         RequestBatchManifest manifest,
         CapturingEndpointRequestSender sender,
         InMemoryArtifactStore artifactStore,
         IComparisonMiddleware? pluginStep,
-        ComparisonRuleDefaults? defaults = null) =>
+        ComparisonRuleDefaults? defaults = null,
+        IComparisonDefinition? definition = null) =>
         new ComparisonRunExecutor(
             new FakeRequestBatchStore(manifest, "{\"source\":true}"),
             sender,
@@ -169,23 +293,26 @@ public sealed class PluginPipelineRunExecutorTests
             new FakeRunDetailStore(),
             new HashOnlyResponseComparer(),
             new StubComparisonPlanFactory(
-                new StubComparisonDefinition(defaults ?? new ComparisonRuleDefaults()),
+                definition ?? new StubComparisonDefinition(defaults ?? new ComparisonRuleDefaults()),
                 pluginStep is null ? Array.Empty<IComparisonMiddleware>() : new[] { pluginStep }),
             contractPayloadSerializer: new JsonXmlContractPayloadSerializer());
 
-    private static RequestBatchManifest CreateManifest(RequestItem request) =>
-        new RequestBatchManifest(new RequestBatchReference("batch-1"), new[] { request });
+    private static RequestBatchManifest CreateManifest(params RequestItem[] requests) =>
+        new RequestBatchManifest(new RequestBatchReference("batch-1"), requests);
 
-    private static ComparisonRun CreateRun() =>
+    private static ComparisonRun CreateRun(
+        string? contentTypeOverride = null,
+        IReadOnlyDictionary<string, string>? endpointAHeaders = null) =>
         ComparisonRun.Create(
             new RunId("run-1"),
             new RunOptions(
                 new RequestBatchReference("batch-1"),
-                new EndpointDefinition(new Uri("https://service-a.example.test")),
+                new EndpointDefinition(new Uri("https://service-a.example.test"), headers: endpointAHeaders),
                 new EndpointDefinition(new Uri("https://service-b.example.test")),
                 TimeSpan.FromSeconds(30),
                 2,
-                pluginComparison: new PluginComparisonSelection("test.plugin", "test.plugin.comparison")))
+                pluginComparison: new PluginComparisonSelection("test.plugin", "test.plugin.comparison"),
+                requestExecutionOptions: new RequestExecutionOptions(contentTypeOverride)))
             .Start();
 
     private static string ToSha256(byte[] content) =>
@@ -240,6 +367,42 @@ public sealed class PluginPipelineRunExecutorTests
         public IReadOnlyList<string> RequiredStepIds { get; } = Array.Empty<string>();
 
         public ComparisonRuleDefaults DefaultComparisonRules { get; }
+    }
+
+    /// <summary>
+    /// A comparison whose endpoint contract the test dictates, for covering what the
+    /// declared content type and headers do to the outbound request.
+    /// </summary>
+    private sealed class ConfigurableComparisonDefinition : IComparisonDefinition<CanonicalResponse>
+    {
+        public ConfigurableComparisonDefinition(
+            string? contentType,
+            IReadOnlyDictionary<string, string>? headers = null)
+        {
+            ContractEndpointProfile endpoint = new ContractEndpointProfile(
+                PayloadFormat.Json,
+                contentType,
+                PayloadFormat.Json,
+                requestHeaders: headers);
+            EndpointA = endpoint;
+            EndpointB = endpoint;
+        }
+
+        public string ComparisonId => "test.plugin.comparison";
+
+        public string DisplayName => "Configurable comparison";
+
+        public Type ComparisonType => typeof(CanonicalResponse);
+
+        public ContractEndpointProfile EndpointA { get; }
+
+        public ContractEndpointProfile EndpointB { get; }
+
+        public IReadOnlyList<string> DefaultStepIds { get; } = Array.Empty<string>();
+
+        public IReadOnlyList<string> RequiredStepIds { get; } = Array.Empty<string>();
+
+        public ComparisonRuleDefaults DefaultComparisonRules { get; } = new ComparisonRuleDefaults();
     }
 
     private sealed class RewritingRequestStep : IEndpointComparisonMiddleware
