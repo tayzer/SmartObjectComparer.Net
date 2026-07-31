@@ -19,4 +19,4 @@ A Debug build auto-installs the package into the shared workspace (`%LOCALAPPDAT
 
 ## Guide and tests
 
-See [Building a Plugin](../../Docs/Guides/building-a-plugin.md). End-to-end coverage in `Tests/ParityBench.ClientCustomerLookupPlugin.Tests` and `Tests/ParityBench.NET.Cli.Tests`.
+See [Building a Plugin for Different Contracts](../../Docs/Guides/building-a-different-contract-plugin.md). End-to-end coverage in `Tests/ParityBench.ClientCustomerLookupPlugin.Tests` and `Tests/ParityBench.NET.Cli.Tests`.

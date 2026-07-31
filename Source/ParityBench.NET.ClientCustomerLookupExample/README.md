@@ -15,7 +15,7 @@ A worked example of one API pair: a SOAP request to Endpoint A, a JSON request t
 ## Boundaries
 
 - Not wired into any host. The `AddClientCustomerLookupExample(...)` extension exists but no host calls it; the `ProjectReference` from Cli, Desktop, TestEndpoints and ManualRunFixtureGenerator is retained for the tests and fixture generator that build the profile directly.
-- Must not be extended. New client work belongs in a plugin — see [Building a Plugin](../../Docs/Guides/building-a-plugin.md).
+- Must not be extended. New client work belongs in a plugin — this project's SOAP-vs-JSON pattern is the differing-contract case, see [Building a Plugin for Different Contracts](../../Docs/Guides/building-a-different-contract-plugin.md).
 
 ## Tests
 

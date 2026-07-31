@@ -78,7 +78,7 @@ Three things this diagram is meant to make obvious:
 | Composition | [`Source/ParityBench.NET.Composition`](../../Source/ParityBench.NET.Composition) | Shared DI wiring (`WorkspaceServiceCollectionExtensions`) used by every host; `UseWorkerProcessExecution` opt-in |
 | Hosts | [`Source/ParityBench.NET.Cli`](../../Source/ParityBench.NET.Cli), [`Source/ParityBench.NET.Web`](../../Source/ParityBench.NET.Web), [`Source/ParityBench.NET.Desktop`](../../Source/ParityBench.NET.Desktop) | Thin entry points: parse input, call composition root, present results |
 | Fixtures | [`Source/ParityBench.NET.TestEndpoints`](../../Source/ParityBench.NET.TestEndpoints) | Deterministic SOAP/XML/JSON endpoints for manual runs and E2E tests |
-| Reference plugin | [`Source/ParityBench.ClientCustomerLookupPlugin`](../../Source/ParityBench.ClientCustomerLookupPlugin) | Reference plugin package (no host reference) — see [Building a Plugin](../Guides/building-a-plugin.md) |
+| Reference plugin | [`Source/ParityBench.ClientCustomerLookupPlugin`](../../Source/ParityBench.ClientCustomerLookupPlugin) | Reference plugin package (no host reference) — see [Building a Plugin for Different Contracts](../Guides/building-a-different-contract-plugin.md) |
 | Example (legacy) | [`Source/ParityBench.NET.ClientCustomerLookupExample`](../../Source/ParityBench.NET.ClientCustomerLookupExample) | Legacy compile-time contract profile, retained during migration — see [Adding a Custom Domain Profile](../Guides/adding-a-custom-domain-profile.md) |
 
 Each project (other than Composition and the examples) has its own `README.md` describing what it owns in more detail.

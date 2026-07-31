@@ -12,7 +12,8 @@ Everything current lives in `Guides/` and `Architecture/`. Anything under `Archi
 | Read and share results | [Reports and Results](Guides/reports-and-results.md) |
 | Know where data lives and what gets deleted | [Retention and Workspace](Guides/retention-and-workspace.md) |
 | Compare against a version that no longer runs | [Baseline vs Live](Guides/baseline-vs-live.md) |
-| Add support for your own API pair | [Building a Plugin](Guides/building-a-plugin.md) |
+| Compare two versions of your own API | [Building a Plugin](Guides/building-a-plugin.md) |
+| Compare two endpoints with different contracts | [Building a Plugin for Different Contracts](Guides/building-a-different-contract-plugin.md) |
 | Contribute code | [CONTRIBUTING.md](../CONTRIBUTING.md), [CODING_STANDARD.md](../CODING_STANDARD.md) |
 
 ## Guides
@@ -26,7 +27,8 @@ Task-oriented, one per feature area.
 | [Reports and Results](Guides/reports-and-results.md) | Run summaries, paged pair details, difference analysis, run history, the static Blazor report |
 | [Retention and Workspace](Guides/retention-and-workspace.md) | Workspace layout, retention modes, non-success diagnostics overrides, configuration keys |
 | [Baseline vs Live](Guides/baseline-vs-live.md) | Capturing a baseline package and replaying it against a new version |
-| [Building a Plugin](Guides/building-a-plugin.md) | The current extensibility model: SDK, manifest, middleware, run profiles, secrets, worker isolation |
+| [Building a Plugin](Guides/building-a-plugin.md) | Two deployments of the same API: SDK, manifest, middleware, run profiles, secrets, worker isolation |
+| [Building a Plugin for Different Contracts](Guides/building-a-different-contract-plugin.md) | When Endpoint A and Endpoint B don't share one contract and one side needs translating onto the other |
 | [Adding a Custom Domain Profile](Guides/adding-a-custom-domain-profile.md) | **Deprecated** — the superseded compile-time contract-profile model |
 
 ## Architecture
