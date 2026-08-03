@@ -105,13 +105,37 @@
     private List<PluginConfigurationSchema> editSchemas = new List<PluginConfigurationSchema>();
     private Dictionary<string, Dictionary<string, string>> editStepConfiguration = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
 
-    protected override async Task OnInitializedAsync()
+    /// <summary>
+    /// Bumped by the catalog panel after it rescans, so this panel picks up a plugin
+    /// that was installed or rebuilt while the app was running.
+    /// </summary>
+    [Parameter] public int CatalogVersion { get; set; }
+
+    private int loadedCatalogVersion = -1;
+
+    protected override async Task OnParametersSetAsync()
     {
+        if (CatalogVersion == loadedCatalogVersion)
+        {
+            return;
+        }
+
+        loadedCatalogVersion = CatalogVersion;
+
         // Seed profiles from installed plugin templates so a freshly installed plugin
-        // shows a ready-made profile here without any manual step.
+        // shows a ready-made profile here without any manual step. This runs on a
+        // rescan too, since a plugin discovered just now has never been seeded.
         await ProfileBootstrapper.EnsureTemplateProfilesAsync().ConfigureAwait(true);
         await ReloadProfilesAsync().ConfigureAwait(true);
         await LoadTemplatesAsync().ConfigureAwait(true);
+
+        // A profile being edited is left alone: its fields may hold unsaved work,
+        // including a secret that has not reached the secret store yet. Only the
+        // schemas driving the form are re-read, in case the plugin changed them.
+        if (editing is not null)
+        {
+            editSchemas = await LoadSchemasFor(editing).ConfigureAwait(true);
+        }
     }
 
     private async Task ReloadProfilesAsync()

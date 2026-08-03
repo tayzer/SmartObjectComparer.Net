@@ -9,6 +9,13 @@
     <ProjectReference Include="..\Fixtures\ParityBench.TestPlugin\ParityBench.TestPlugin.csproj">
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
     </ProjectReference>
+    <!--
+      A second build of the same fixture source, so the reload tests can overwrite an
+      installed package with different bytes under an unchanged version.
+    -->
+    <ProjectReference Include="..\Fixtures\ParityBench.TestPlugin.Rebuilt\ParityBench.TestPlugin.Rebuilt.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+    </ProjectReference>
   </ItemGroup>
 
 </Project>

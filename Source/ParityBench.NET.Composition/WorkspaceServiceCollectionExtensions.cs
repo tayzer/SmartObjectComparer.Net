@@ -120,7 +120,9 @@ public static class WorkspaceServiceCollectionExtensions
         services.AddSingleton<PluginProfileBootstrapper>();
 
         services.AddSingleton(_ => new PluginCatalog(ResolvePluginDirectories(configuration, workspaceRoot)));
-        services.AddSingleton<PluginLoader>();
+        // Built by hand because the loader takes an optional shadow-copy root that the
+        // container would otherwise try to satisfy as a service.
+        services.AddSingleton(_ => new PluginLoader());
         services.AddSingleton<IPluginMetadataProvider, PluginMetadataProvider>();
         services.AddSingleton<IComparisonPlanFactory>(serviceProvider => new PluginComparisonPlanFactory(
             serviceProvider.GetRequiredService<PluginCatalog>(),

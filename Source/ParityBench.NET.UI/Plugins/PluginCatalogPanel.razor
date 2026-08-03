@@ -8,9 +8,16 @@
     <MudStack Spacing="3">
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
             <MudText Typo="Typo.h6">Installed plugins</MudText>
-            <MudButton Variant="Variant.Text"
-                       StartIcon="@Icons.Material.Filled.Refresh"
-                       OnClick="ReloadAsync">Refresh</MudButton>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                @if (lastRefreshedAt is DateTimeOffset refreshedAt)
+                {
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Last refreshed @refreshedAt.ToString("HH:mm:ss")</MudText>
+                }
+                <MudButton Variant="Variant.Text"
+                           Class="pb-plugin-refresh"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="RefreshAsync">Refresh</MudButton>
+            </MudStack>
         </MudStack>
 
         @if (catalog is null)
@@ -33,12 +40,25 @@
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                             <MudText Typo="Typo.subtitle1">@plugin.DisplayName</MudText>
                             <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">v@(plugin.Version)</MudChip>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">SDK v@(plugin.SdkVersion)</MudChip>
+                            @* Only worth saying which version wins when more than one is installed. *@
+                            @if (IsInstalledMoreThanOnce(plugin))
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                         Color="@(plugin.IsActive ? Color.Success : Color.Default)">
+                                    @(plugin.IsActive ? "Active" : "Superseded")
+                                </MudChip>
+                            }
                             @if (!string.IsNullOrWhiteSpace(plugin.Publisher))
                             {
                                 <MudText Typo="Typo.caption" Class="mud-text-secondary">@plugin.Publisher</MudText>
                             }
                         </MudStack>
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">@plugin.PluginId</MudText>
+                        @if (!string.IsNullOrWhiteSpace(plugin.PackageDirectory))
+                        {
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@plugin.PackageDirectory</MudText>
+                        }
                         @if (!string.IsNullOrWhiteSpace(plugin.Description))
                         {
                             <MudText Typo="Typo.body2">@plugin.Description</MudText>
@@ -71,14 +91,38 @@
 </MudPaper>
 
 @code {
+    /// <summary>
+    /// Raised after a refresh re-read the plugin directories, so sibling panels built
+    /// from the same catalog can reload.
+    /// </summary>
+    [Parameter] public EventCallback CatalogRefreshed { get; set; }
+
     private PluginCatalogView? catalog;
+    private DateTimeOffset? lastRefreshedAt;
 
-    protected override Task OnInitializedAsync() => ReloadAsync();
+    protected override Task OnInitializedAsync() => LoadAsync();
 
-    private async Task ReloadAsync()
+    // The catalog scanned disk when it was built, so first render just reads it.
+    private async Task LoadAsync()
     {
         catalog = null;
         catalog = await PluginMetadata.GetCatalogAsync().ConfigureAwait(true);
         StateHasChanged();
     }
+
+    // Refresh is the only thing that goes back to disk. That is what picks up a plugin
+    // installed, removed or rebuilt since the app started.
+    private async Task RefreshAsync()
+    {
+        catalog = null;
+        catalog = await PluginMetadata.RefreshCatalogAsync().ConfigureAwait(true);
+        lastRefreshedAt = DateTimeOffset.Now;
+        StateHasChanged();
+
+        await CatalogRefreshed.InvokeAsync().ConfigureAwait(true);
+    }
+
+    private bool IsInstalledMoreThanOnce(InstalledPluginMetadata plugin) =>
+        catalog is not null
+        && catalog.Plugins.Count(candidate => string.Equals(candidate.PluginId, plugin.PluginId, StringComparison.OrdinalIgnoreCase)) > 1;
 }

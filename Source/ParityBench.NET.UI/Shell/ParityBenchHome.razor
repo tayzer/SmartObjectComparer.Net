@@ -39,8 +39,8 @@
         </MudTabPanel>
         <MudTabPanel Text="Plugins & Profiles" Icon="@Icons.Material.Filled.Extension">
             <MudStack Spacing="3">
-                <ParityBench.NET.UI.Plugins.PluginCatalogPanel />
-                <RunProfilePanel />
+                <ParityBench.NET.UI.Plugins.PluginCatalogPanel CatalogRefreshed="HandlePluginCatalogRefreshed" />
+                <RunProfilePanel CatalogVersion="pluginCatalogVersion" />
             </MudStack>
         </MudTabPanel>
     </MudTabs>
@@ -54,6 +54,7 @@
     private int activeTabIndex = RequestComparisonTabIndex;
     private int historyVersion;
     private int resultRefreshVersion;
+    private int pluginCatalogVersion;
 
     private string SelectedRunDisplay => selectedRunId is null
         ? "No run selected"
@@ -73,6 +74,9 @@
     private string SelectedRunIcon => selectedRunId is null
         ? Icons.Material.Filled.RadioButtonUnchecked
         : selectedRun?.IsTerminal == true ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.PlayCircle;
+
+    // The profile panel is built from the same catalog, so a rescan has to reach it too.
+    private void HandlePluginCatalogRefreshed() => pluginCatalogVersion++;
 
     private void SelectRun(RunId runId)
     {

@@ -56,6 +56,90 @@ public sealed class PluginPanelsTests
     }
 
     [TestMethod]
+    public async Task PluginCatalogPanel_WhenRefreshIsClicked_RescansAndRendersTheNewPackage()
+    {
+        IRenderedComponent<PluginCatalogPanel> component = testContext.Render<PluginCatalogPanel>();
+        Assert.IsFalse(component.Markup.Contains("Contoso Compare", StringComparison.Ordinal));
+
+        // A plugin installed after the app started is only visible once disk is re-read.
+        metadata.Plugins.Add(FakePluginMetadataProvider.CreatePlugin("1.0.0", "Contoso Compare", "contoso.compare"));
+        await component.InvokeAsync(() => component.Find("button.pb-plugin-refresh").Click());
+
+        Assert.AreEqual(1, metadata.RefreshCount);
+        StringAssert.Contains(component.Markup, "Contoso Compare");
+        StringAssert.Contains(component.Markup, "Last refreshed");
+    }
+
+    [TestMethod]
+    public void PluginCatalogPanel_ShowsTheSdkVersionAndPackagePath()
+    {
+        IRenderedComponent<PluginCatalogPanel> component = testContext.Render<PluginCatalogPanel>();
+
+        StringAssert.Contains(component.Markup, "SDK v1");
+        StringAssert.Contains(component.Markup, @"C:\plugins\acme.lookup.1.0.0");
+    }
+
+    [TestMethod]
+    public void PluginCatalogPanel_WhenTwoVersionsOfOnePluginAreInstalled_MarksOneActiveAndTheOtherSuperseded()
+    {
+        metadata.Plugins.Clear();
+        metadata.Plugins.Add(FakePluginMetadataProvider.CreatePlugin("2.0.0", isActive: true));
+        metadata.Plugins.Add(FakePluginMetadataProvider.CreatePlugin("1.0.0", isActive: false));
+
+        IRenderedComponent<PluginCatalogPanel> component = testContext.Render<PluginCatalogPanel>();
+
+        StringAssert.Contains(component.Markup, "Active");
+        StringAssert.Contains(component.Markup, "Superseded");
+    }
+
+    [TestMethod]
+    public void PluginCatalogPanel_WhenOnlyOneVersionIsInstalled_DoesNotLabelIt()
+    {
+        IRenderedComponent<PluginCatalogPanel> component = testContext.Render<PluginCatalogPanel>();
+
+        // Saying "Active" when there is nothing to be active against is just noise.
+        Assert.IsFalse(component.Markup.Contains("Superseded", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void RunProfilePanel_WhenTheCatalogVersionChanges_SeedsProfilesForNewlyDiscoveredPlugins()
+    {
+        IRenderedComponent<RunProfilePanel> component = testContext.Render<RunProfilePanel>(parameters => parameters
+            .Add(p => p.CatalogVersion, 0));
+        Assert.IsFalse(component.Markup.Contains("Acme QA 3.0.0", StringComparison.Ordinal));
+
+        metadata.Plugins.Add(FakePluginMetadataProvider.CreatePlugin("3.0.0", "Contoso", "contoso.compare"));
+        component.Render(parameters => parameters.Add(p => p.CatalogVersion, 1));
+
+        // A plugin found by the refresh has never been seeded, so the invalidation has
+        // to run the bootstrapper again rather than only reloading what already exists.
+        StringAssert.Contains(component.Markup, "Acme QA 3.0.0");
+    }
+
+    [TestMethod]
+    public async Task RunProfilePanel_WhenTheCatalogVersionChanges_KeepsTheProfileBeingEdited()
+    {
+        await profileStore.SaveAsync(new RunProfile(
+            "acme-qa",
+            "Acme QA",
+            "acme.lookup",
+            "acme.lookup.soap-vs-json",
+            new Uri("https://qa/soap"),
+            new Uri("https://qa/json")));
+
+        IRenderedComponent<RunProfilePanel> component = testContext.Render<RunProfilePanel>(parameters => parameters
+            .Add(p => p.CatalogVersion, 0));
+        component.Find("div.mud-list-item").Click();
+        StringAssert.Contains(component.Markup, "https://qa/soap");
+
+        component.Render(parameters => parameters.Add(p => p.CatalogVersion, 1));
+
+        // A refresh must not throw away half-finished editing — the form may hold a
+        // secret that has not reached the secret store yet.
+        StringAssert.Contains(component.Markup, "https://qa/soap");
+    }
+
+    [TestMethod]
     public void PluginConfigurationForm_RendersFieldsAndMasksSecrets()
     {
         Dictionary<string, string> values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -111,24 +195,52 @@ public sealed class PluginPanelsTests
                 new PluginConfigurationField("apiKey", "API key", PluginFieldKind.Secret, isRequired: true),
             });
 
-        private static readonly InstalledPluginMetadata Plugin = new InstalledPluginMetadata(
-            "acme.lookup",
-            "1.0.0",
-            "Acme Lookup",
-            "Reference",
-            "Acme",
-            new[] { new PluginComparisonMetadata("acme.lookup.soap-vs-json", "Acme SOAP vs JSON", new[] { "acme.request" }, new[] { "acme.request" }) },
-            new[] { Schema },
-            new[] { new PluginEnvironment("QA", new Uri("https://qa/soap"), new Uri("https://qa/json")) },
-            new[] { new PluginProfileTemplate("acme-qa", "Acme QA", "acme.lookup.soap-vs-json", environmentName: "QA") });
+        // Mutable, so a test can change what disk "holds" between two calls — which is
+        // the whole thing a refresh has to pick up.
+        public List<InstalledPluginMetadata> Plugins { get; } = new List<InstalledPluginMetadata>
+        {
+            CreatePlugin("1.0.0", packageDirectory: @"C:\plugins\acme.lookup.1.0.0"),
+        };
+
+        public List<PluginInstallationFailure> Failures { get; } = new List<PluginInstallationFailure>
+        {
+            new PluginInstallationFailure("broken-package", "Plugin 'x' targets SDK version 999; this app supports 1."),
+        };
+
+        public int RefreshCount { get; private set; }
+
+        public static InstalledPluginMetadata CreatePlugin(
+            string version,
+            string displayName = "Acme Lookup",
+            string pluginId = "acme.lookup",
+            string packageDirectory = "",
+            bool isActive = true) =>
+            new InstalledPluginMetadata(
+                pluginId,
+                version,
+                displayName,
+                "Reference",
+                "Acme",
+                new[] { new PluginComparisonMetadata("acme.lookup.soap-vs-json", "Acme SOAP vs JSON", new[] { "acme.request" }, new[] { "acme.request" }) },
+                new[] { Schema },
+                new[] { new PluginEnvironment("QA", new Uri("https://qa/soap"), new Uri("https://qa/json")) },
+                new[] { new PluginProfileTemplate($"acme-qa-{version}", $"Acme QA {version}", "acme.lookup.soap-vs-json", environmentName: "QA") },
+                packageDirectory,
+                IsActive: isActive);
 
         public Task<PluginCatalogView> GetCatalogAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(new PluginCatalogView(
-                new[] { Plugin },
-                new[] { new PluginInstallationFailure("broken-package", "Plugin 'x' targets SDK version 999; this app supports 1.") }));
+            Task.FromResult(new PluginCatalogView(Plugins.ToArray(), Failures.ToArray()));
+
+        public Task<PluginCatalogView> RefreshCatalogAsync(CancellationToken cancellationToken = default)
+        {
+            RefreshCount++;
+            return GetCatalogAsync(cancellationToken);
+        }
 
         public Task<InstalledPluginMetadata?> GetPluginAsync(string pluginId, string? version = null, CancellationToken cancellationToken = default) =>
-            Task.FromResult<InstalledPluginMetadata?>(string.Equals(pluginId, Plugin.PluginId, StringComparison.OrdinalIgnoreCase) ? Plugin : null);
+            Task.FromResult(Plugins.FirstOrDefault(plugin =>
+                string.Equals(plugin.PluginId, pluginId, StringComparison.OrdinalIgnoreCase)
+                && (version is null || string.Equals(plugin.Version, version, StringComparison.OrdinalIgnoreCase))));
 
         public Task<PluginComparisonDefinitionInfo?> ResolveComparisonDefinitionAsync(string pluginId, string comparisonId, string? version = null, CancellationToken cancellationToken = default) =>
             Task.FromResult<PluginComparisonDefinitionInfo?>(null);

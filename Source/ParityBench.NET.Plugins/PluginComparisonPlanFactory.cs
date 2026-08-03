@@ -44,10 +44,10 @@ public sealed class PluginComparisonPlanFactory : IComparisonPlanFactory
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (!catalog.TryGet(selection.PluginId, selection.PluginVersion, out PluginPackage? package))
+        PluginCatalogSnapshot snapshot = catalog.Current;
+        if (!snapshot.TryGet(selection.PluginId, selection.PluginVersion, out PluginPackage? package))
         {
-            throw new InvalidOperationException(
-                $"Plugin '{selection.PluginId}'{(selection.PluginVersion is null ? string.Empty : $" version {selection.PluginVersion}")} is not installed.");
+            throw new InvalidOperationException(BuildNotInstalledMessage(snapshot, selection));
         }
 
         LoadedPlugin loaded = loader.Load(package!);
@@ -79,6 +79,24 @@ public sealed class PluginComparisonPlanFactory : IComparisonPlanFactory
             provider.Dispose();
             throw;
         }
+    }
+
+    /// <summary>
+    /// Names the versions that <em>are</em> installed when a profile pinned one that is
+    /// not, which is the usual shape of this failure after a client upgrades a plugin.
+    /// </summary>
+    private static string BuildNotInstalledMessage(PluginCatalogSnapshot snapshot, PluginComparisonSelection selection)
+    {
+        if (selection.PluginVersion is null)
+        {
+            return $"Plugin '{selection.PluginId}' is not installed.";
+        }
+
+        IReadOnlyList<string> installedVersions = snapshot.InstalledVersions(selection.PluginId);
+
+        return installedVersions.Count == 0
+            ? $"Plugin '{selection.PluginId}' version {selection.PluginVersion} is not installed."
+            : $"Plugin '{selection.PluginId}' version {selection.PluginVersion} is not installed. Installed version(s): {string.Join(", ", installedVersions)}.";
     }
 
     private ServiceProvider BuildProvider(LoadedPlugin loaded)
