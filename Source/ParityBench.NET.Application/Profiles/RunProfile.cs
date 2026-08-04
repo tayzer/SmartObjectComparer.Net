@@ -15,7 +15,15 @@ namespace ParityBench.NET.Application.Profiles;
 /// </remarks>
 public sealed record RunProfile
 {
-    public const int CurrentSchemaVersion = 1;
+    /// <summary>
+    /// Version 2 changed what an unset <see cref="PluginVersion"/> means in practice:
+    /// version 1 profiles were seeded with the installed version already written in,
+    /// which pinned them to a build that stopped existing the moment the plugin was
+    /// upgraded. From version 2 the version is left unset — meaning "the highest
+    /// installed" — and pinning is a deliberate choice. See the reader in
+    /// <c>FileSystemRunProfileStore</c> for how version 1 files are migrated.
+    /// </summary>
+    public const int CurrentSchemaVersion = 2;
 
     public RunProfile(
         string id,

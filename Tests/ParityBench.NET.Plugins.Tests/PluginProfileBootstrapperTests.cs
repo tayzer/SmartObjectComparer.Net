@@ -33,6 +33,10 @@ public sealed class PluginProfileBootstrapperTests
         Assert.AreEqual("QA", profile.EnvironmentName);
         Assert.AreEqual(new Uri("https://qa.example.test/a"), profile.EndpointA);
 
+        // Left unpinned on purpose: the profile follows the highest installed version,
+        // so upgrading the plugin package does not strand it on a version that is gone.
+        Assert.IsNull(profile.PluginVersion);
+
         // Running it again is idempotent — the seeded profile is not recreated.
         IReadOnlyList<string> secondRun = await bootstrapper.EnsureTemplateProfilesAsync();
         Assert.AreEqual(0, secondRun.Count);

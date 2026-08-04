@@ -140,6 +140,81 @@ public sealed class PluginPanelsTests
     }
 
     [TestMethod]
+    public async Task RunProfilePanel_WhenAProfilePinsAVersionThatIsGone_ShowsThePinAsNotInstalled()
+    {
+        // The shape of the upgrade failure: the profile names 0.9.0, only 1.0.0 is
+        // installed. The pin has to stay visible and selected, or there is nothing
+        // telling the operator why the run fails and no way off it.
+        await profileStore.SaveAsync(new RunProfile(
+            "acme-qa",
+            "Acme QA",
+            "acme.lookup",
+            "acme.lookup.soap-vs-json",
+            new Uri("https://qa/soap"),
+            new Uri("https://qa/json"),
+            pluginVersion: "0.9.0"));
+
+        IRenderedComponent<RunProfilePanel> component = testContext.Render<RunProfilePanel>();
+        component.Find("div.mud-list-item").Click();
+
+        StringAssert.Contains(component.Markup, "0.9.0 (not installed)");
+        StringAssert.Contains(component.Markup, "Pinned: this profile fails to run if the version is not installed.");
+    }
+
+    [TestMethod]
+    public async Task RunProfilePanel_WhenAProfilePinsTheInstalledVersion_MarksItAsTheLatest()
+    {
+        await profileStore.SaveAsync(new RunProfile(
+            "acme-qa",
+            "Acme QA",
+            "acme.lookup",
+            "acme.lookup.soap-vs-json",
+            new Uri("https://qa/soap"),
+            new Uri("https://qa/json"),
+            pluginVersion: "1.0.0"));
+
+        IRenderedComponent<RunProfilePanel> component = testContext.Render<RunProfilePanel>();
+        component.Find("div.mud-list-item").Click();
+
+        StringAssert.Contains(component.Markup, "1.0.0 (latest)");
+    }
+
+    [TestMethod]
+    public async Task RunProfilePanel_WhenSavingAnUnpinnedProfile_LeavesItUnpinned()
+    {
+        await profileStore.SaveAsync(new RunProfile(
+            "acme-qa",
+            "Acme QA",
+            "acme.lookup",
+            "acme.lookup.soap-vs-json",
+            new Uri("https://qa/soap"),
+            new Uri("https://qa/json")));
+
+        IRenderedComponent<RunProfilePanel> component = testContext.Render<RunProfilePanel>();
+        component.Find("div.mud-list-item").Click();
+        StringAssert.Contains(component.Markup, "Latest installed (1.0.0)");
+
+        await component.InvokeAsync(() => component.Find("button.mud-button-filled").Click());
+
+        RunProfile? saved = await profileStore.GetAsync("acme-qa");
+        Assert.IsNotNull(saved);
+        // Saving must not quietly stamp the installed version back in — that is what
+        // made every profile break on the next plugin upgrade.
+        Assert.IsNull(saved.PluginVersion);
+    }
+
+    [TestMethod]
+    public async Task RunProfilePanel_WhenAProfileIsSeededFromATemplate_ItIsNotPinnedToAVersion()
+    {
+        IRenderedComponent<RunProfilePanel> component = testContext.Render<RunProfilePanel>(parameters => parameters
+            .Add(p => p.CatalogVersion, 0));
+
+        RunProfile seeded = (await profileStore.ListAsync()).Single();
+        Assert.IsNull(seeded.PluginVersion);
+        StringAssert.Contains(component.Markup, "Acme QA 1.0.0");
+    }
+
+    [TestMethod]
     public void PluginConfigurationForm_RendersFieldsAndMasksSecrets()
     {
         Dictionary<string, string> values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

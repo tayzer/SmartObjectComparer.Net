@@ -305,9 +305,12 @@ A run profile is JSON under `<workspace>/config/profiles/`:
 
 ```jsonc
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "order-lookup-qa",
-  "plugin": { "id": "acme.order-lookup", "version": "1.0.0" },
+  // Omit "version" (the default) to run the highest installed version of the plugin,
+  // so an upgraded package is picked up with no profile change. Set it only to pin
+  // the profile to one build — a pinned version that is not installed fails the run.
+  "plugin": { "id": "acme.order-lookup" },
   "comparisonId": "acme.order-lookup.v1-vs-v2",
   "environment": "QA",
   "endpoints": { "a": "https://qa-v1…/orders", "b": "https://qa-v2…/orders" },
@@ -329,6 +332,13 @@ rebuild.
 Profiles reference **stable logical ids only** — plugin id, comparison id, step ids,
 `secret://` names — never .NET type names, so a profile keeps working across plugin
 rebuilds and versions.
+
+Version pinning follows the same rule: a profile names no version by default and runs
+the highest installed one. Pin a version (in the Plugin version picker on the Profiles
+tab, or by adding `"version"` above) only when a profile must stay on one build; the
+run fails with `version X is not installed` once that package is replaced. Profiles
+written under `schemaVersion: 1` are read as unpinned, because that schema stamped the
+installed version into every seeded profile.
 
 **Running out of process (optional).** To execute runs in a separate worker process —
 so a plugin crash, hang, or dependency conflict fails the run instead of the app — set

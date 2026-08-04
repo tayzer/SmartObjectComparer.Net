@@ -68,6 +68,50 @@ public sealed class FileSystemRunProfileStoreTests
     }
 
     [TestMethod]
+    public async Task GetAsync_WhenProfileIsSchema1_DropsTheAutomaticVersionPin()
+    {
+        using TempWorkspace workspace = TempWorkspace.Create();
+        FileSystemRunProfileStore store = new FileSystemRunProfileStore(workspace.Path);
+        string profilesDirectory = Path.Combine(workspace.Path, "config", "profiles");
+        Directory.CreateDirectory(profilesDirectory);
+
+        // A profile written before the pin became a choice: seeding stamped the
+        // installed version into it, which broke the profile once that version was
+        // replaced by a newer package.
+        await File.WriteAllTextAsync(
+            Path.Combine(profilesDirectory, "legacy.json"),
+            """
+            {
+              "schemaVersion": 1,
+              "id": "legacy",
+              "displayName": "Legacy",
+              "plugin": { "id": "compare-a-b", "version": "1.0.0" },
+              "comparisonId": "compare-a-b.default",
+              "endpoints": { "a": "https://qa.example.test/a", "b": "https://qa.example.test/b" }
+            }
+            """);
+
+        RunProfile? loaded = await store.GetAsync("legacy");
+
+        Assert.IsNotNull(loaded);
+        Assert.IsNull(loaded.PluginVersion);
+        Assert.AreEqual(RunProfile.CurrentSchemaVersion, loaded.SchemaVersion);
+    }
+
+    [TestMethod]
+    public async Task GetAsync_WhenProfileIsSchema2_KeepsAnExplicitVersionPin()
+    {
+        using TempWorkspace workspace = TempWorkspace.Create();
+        FileSystemRunProfileStore store = new FileSystemRunProfileStore(workspace.Path);
+
+        await store.SaveAsync(CreateProfile());
+        RunProfile? loaded = await store.GetAsync("client-lookup-qa");
+
+        Assert.IsNotNull(loaded);
+        Assert.AreEqual("1.2.0", loaded.PluginVersion);
+    }
+
+    [TestMethod]
     public async Task DeleteAsync_WhenProfileExists_RemovesIt()
     {
         using TempWorkspace workspace = TempWorkspace.Create();

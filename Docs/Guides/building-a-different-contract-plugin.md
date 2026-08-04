@@ -218,9 +218,10 @@ A run profile is JSON under `<workspace>/config/profiles/`:
 
 ```jsonc
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "my-profile-qa",
-  "plugin": { "id": "client.customer-lookup", "version": "1.0.0" },
+  // No "version" means the highest installed one; add it only to pin a build.
+  "plugin": { "id": "client.customer-lookup" },
   "comparisonId": "client.customer-lookup.soap-vs-json",
   "environment": "QA",
   "endpoints": { "a": "https://qa…/soap", "b": "https://qa…/json" },
