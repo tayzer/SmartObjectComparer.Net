@@ -55,6 +55,22 @@ The default is the aggressive one, and it is the right default: a pair that came
 
 Use `None` when you are debugging the comparison itself and need the original bytes regardless of outcome.
 
+### Per profile and per run
+
+The configured mode is the default, not the only say. Three levels, most specific wins:
+
+| Level | Where | Scope |
+|---|---|---|
+| Run | **Response retention** in the workflow's Advanced Options; `--retention <mode>` on the CLI | That run only |
+| Profile | **Response retention** in the profile editor (`report.retentionMode` in the profile JSON) | Every run launched from that profile |
+| Application | `ParityBench:Retention:Mode` | Everything else |
+
+Selecting a profile seeds the run picker with the profile's mode; changing it there affects the run and leaves the profile alone. Leaving either at *Use configured default* means no override is recorded, so the run follows whatever the application setting says at the time it runs.
+
+Keeping full raw responses for one plugin's runs, without loosening retention everywhere, is the profile-level setting: set that profile to `None` or `TrimmedEquals`.
+
+Retention travels with the run — the mode is stored in the run's options, so an out-of-process worker run applies the same decision the host asked for.
+
 ### Non-success pairs
 
 Pairs that failed to execute, mismatched on status code, or returned non-2xx on both sides are handled separately, because those are exactly the ones you need the raw response for. Configured at `ParityBench:Retention:NonSuccessOverride`:

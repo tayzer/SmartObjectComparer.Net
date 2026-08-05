@@ -1,6 +1,7 @@
 @using ParityBench.NET.Application.Plugins
 @using ParityBench.NET.Application.Profiles
 @using ParityBench.NET.Application.Secrets
+@using ParityBench.NET.Domain.Runs.Retention
 @using ParityBench.PluginSdk.Configuration
 @using ParityBench.PluginSdk.Profiles
 
@@ -80,6 +81,16 @@
                     <MudTextField T="string" Label="Endpoint A URL" @bind-Value="editEndpointA" />
                     <MudTextField T="string" Label="Endpoint B URL" @bind-Value="editEndpointB" />
                     <MudTextField T="string" Label="Request directory" @bind-Value="editRequestDirectory" />
+                    <MudSelect T="string" Label="Response retention"
+                               Value="@editRetentionMode"
+                               ValueChanged="@(value => editRetentionMode = value ?? string.Empty)"
+                               HelperText="@RetentionHelperText">
+                        <MudSelectItem T="string" Value="@string.Empty">Use configured default</MudSelectItem>
+                        @foreach (RetentionMode mode in RetentionModePresentation.Modes)
+                        {
+                            <MudSelectItem T="string" Value="@mode.ToString()">@RetentionModePresentation.Label(mode)</MudSelectItem>
+                        }
+                    </MudSelect>
 
                     @foreach (PluginConfigurationSchema schema in editSchemas)
                     {
@@ -121,6 +132,13 @@
 
     private readonly List<VersionOption> editPluginVersions = new List<VersionOption>();
     private string? latestInstalledVersion;
+
+    /// <summary>
+    /// The retention mode runs from this profile start with, empty for the configured
+    /// default. It is a default, not a lock — the run workflow's picker can override
+    /// it for a single run.
+    /// </summary>
+    private string editRetentionMode = string.Empty;
     private List<PluginConfigurationSchema> editSchemas = new List<PluginConfigurationSchema>();
     private Dictionary<string, Dictionary<string, string>> editStepConfiguration = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
 
@@ -216,6 +234,7 @@
         editEndpointB = profile.EndpointB.ToString();
         editRequestDirectory = profile.RequestDirectory ?? string.Empty;
         editPluginVersion = profile.PluginVersion ?? string.Empty;
+        editRetentionMode = profile.RetentionModeOverride?.ToString() ?? string.Empty;
         editStepConfiguration = profile.StepConfiguration.ToDictionary(
             entry => entry.Key,
             entry => new Dictionary<string, string>(entry.Value, StringComparer.OrdinalIgnoreCase),
@@ -276,6 +295,11 @@
     private string LatestOptionLabel =>
         latestInstalledVersion is null ? "Latest installed" : $"Latest installed ({latestInstalledVersion})";
 
+    private string RetentionHelperText =>
+        RetentionModePresentation.Parse(editRetentionMode) is null
+            ? "Runs from this profile follow the app-wide ParityBench:Retention:Mode setting."
+            : "Runs from this profile start with this mode; the run workflow can still override it.";
+
     private string PluginVersionHelperText =>
         SelectedPluginVersion is null
             ? "Follows the highest installed version, so plugin upgrades apply automatically."
@@ -322,6 +346,8 @@
             stepConfiguration: persistedConfiguration,
             comparison: editing.Comparison,
             requestDirectory: string.IsNullOrWhiteSpace(editRequestDirectory) ? null : editRequestDirectory,
+            largeRun: editing.LargeRun,
+            retentionModeOverride: RetentionModePresentation.Parse(editRetentionMode),
             endpointAHeaders: editing.EndpointAHeaders,
             endpointBHeaders: editing.EndpointBHeaders);
 
@@ -383,6 +409,7 @@
         editing = null;
         editPluginVersion = string.Empty;
         editPluginVersions.Clear();
+        editRetentionMode = string.Empty;
         Snackbar.Add("Profile deleted.", Severity.Info);
     }
 

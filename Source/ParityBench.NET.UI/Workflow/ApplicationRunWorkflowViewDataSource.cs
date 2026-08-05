@@ -77,7 +77,8 @@ public sealed class ApplicationRunWorkflowViewDataSource : IRunWorkflowViewDataS
             comparisonDefinition?.ComparisonType,
             comparisonDefinition?.DefaultComparisonRules,
             resolved.EndpointA.Headers,
-            resolved.EndpointB.Headers);
+            resolved.EndpointB.Headers,
+            resolved.Profile.RetentionModeOverride);
     }
 
     public async Task<IReadOnlyList<BaselineSummary>> ListBaselinesAsync(CancellationToken cancellationToken = default) =>

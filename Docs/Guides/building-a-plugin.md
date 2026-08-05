@@ -321,7 +321,10 @@ A run profile is JSON under `<workspace>/config/profiles/`:
     "acme.order-lookup.auth": { "endpointBApiKey": "secret://acme/qa-v2-api-key" }
   },
   "comparison": { /* ignore/mask rules, maxDifferences */ },
-  "input": { "requestDirectory": "…" }
+  "input": { "requestDirectory": "…" },
+  // Optional. Omit to follow ParityBench:Retention:Mode; set it to keep full raw
+  // responses for this profile's runs only. See Retention and Workspace.
+  "report": { "retentionMode": "TrimmedEquals" }
 }
 ```
 

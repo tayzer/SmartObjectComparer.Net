@@ -3,6 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ParityBench.NET.Application.Profiles;
 using ParityBench.NET.Application.Secrets;
 using ParityBench.NET.Domain.Comparison;
+using ParityBench.NET.Domain.Runs.Retention;
 using ParityBench.NET.Workspaces;
 
 namespace ParityBench.NET.Workspaces.Tests;
@@ -32,6 +33,7 @@ public sealed class FileSystemRunProfileStoreTests
         CollectionAssert.AreEqual(profile.EnabledStepIds.ToArray(), loaded.EnabledStepIds.ToArray());
         Assert.AreEqual("secret://acme/qa-key", loaded.StepConfiguration["acme.token"]["apiKey"]);
         Assert.AreEqual(profile.RequestDirectory, loaded.RequestDirectory);
+        Assert.AreEqual(profile.RetentionModeOverride, loaded.RetentionModeOverride);
         Assert.IsTrue(loaded.Comparison.IgnoreCollectionOrder);
         Assert.AreEqual("trace.id", loaded.Comparison.IgnoreRules.Single().PropertyPath);
     }
@@ -181,7 +183,8 @@ public sealed class FileSystemRunProfileStoreTests
             comparison: new ComparisonOptions(
                 ignoreCollectionOrder: true,
                 ignoreRules: new[] { new IgnoreRuleDefinition("trace.id") }),
-            requestDirectory: @"C:\runs\client-lookup");
+            requestDirectory: @"C:\runs\client-lookup",
+            retentionModeOverride: RetentionMode.None);
 
     private sealed class TempWorkspace : IDisposable
     {

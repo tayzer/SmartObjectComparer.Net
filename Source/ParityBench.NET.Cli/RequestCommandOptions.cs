@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging;
 
+using ParityBench.NET.Domain.Runs.Retention;
+
 namespace ParityBench.NET.Cli;
 
 public sealed record RequestCommandOptions(
@@ -20,7 +22,9 @@ public sealed record RequestCommandOptions(
     string? PresetId = null,
     string? RunProfileId = null,
     string? CaptureBaselineName = null,
-    string? BaselineReference = null);
+    string? BaselineReference = null,
+    // Null leaves retention to the run profile, and then to the configured default.
+    RetentionMode? RetentionModeOverride = null);
 
 public sealed record ObservabilityCliOptions(
     LogLevel? LogLevel = null,

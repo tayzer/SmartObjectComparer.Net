@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Logging;
 
+using ParityBench.NET.Domain.Runs.Retention;
+
 namespace ParityBench.NET.Cli;
 
 public static class RequestCommandParser
@@ -17,6 +19,7 @@ public static class RequestCommandParser
         "--concurrency",
         "--timeout",
         "--content-type",
+        "--retention",
         "--header",
         "--header-a",
         "--header-b",
@@ -60,6 +63,7 @@ public static class RequestCommandParser
         int maxConcurrency = 4;
         TimeSpan timeout = TimeSpan.FromSeconds(30);
         string? contentTypeOverride = null;
+        RetentionMode? retentionModeOverride = null;
         string? reportOutputDirectory = null;
         string? reportAssetsDirectory = null;
         LogLevel? logLevel = null;
@@ -152,6 +156,16 @@ public static class RequestCommandParser
                     break;
                 case "--content-type":
                     contentTypeOverride = value;
+                    break;
+                case "--retention":
+                    if (Enum.TryParse(value, ignoreCase: true, out RetentionMode parsedRetentionMode) && Enum.IsDefined(parsedRetentionMode))
+                    {
+                        retentionModeOverride = parsedRetentionMode;
+                    }
+                    else
+                    {
+                        errors.Add($"--retention must be one of {string.Join(", ", Enum.GetNames<RetentionMode>())}.");
+                    }
                     break;
                 case "--header":
                     commonHeaders.Add(value);
@@ -277,12 +291,13 @@ public static class RequestCommandParser
                 presetId,
                 runProfileId,
                 captureBaselineName,
-                baselineReference),
+                baselineReference,
+                retentionModeOverride),
             Array.Empty<string>());
     }
 
     public static string Usage =>
-        "request [<request-directory>] --endpoint-a <url> --endpoint-b <url> | --preset <preset-id> | --run-profile <run-profile-id> [--capture-baseline <name>] [--baseline <id>[@<version>]] [--model Auto] [--profile <profile-id>] [--concurrency <n>] [--timeout <seconds>] [--content-type <type>] [--header <Name: Value>] [--header-a <Name: Value>] [--header-b <Name: Value>] [--report-output <directory>] [--report-assets <directory>] [--log-level <level>] [--log-durations] [--log-exceptions] [--persist-diagnostics] [--slow-path-threshold-ms <n>]";
+        "request [<request-directory>] --endpoint-a <url> --endpoint-b <url> | --preset <preset-id> | --run-profile <run-profile-id> [--capture-baseline <name>] [--baseline <id>[@<version>]] [--model Auto] [--profile <profile-id>] [--concurrency <n>] [--timeout <seconds>] [--content-type <type>] [--retention <mode>] [--header <Name: Value>] [--header-a <Name: Value>] [--header-b <Name: Value>] [--report-output <directory>] [--report-assets <directory>] [--log-level <level>] [--log-durations] [--log-exceptions] [--persist-diagnostics] [--slow-path-threshold-ms <n>]";
 
     private static RequestCommandParseResult Failure(string error) =>
         new RequestCommandParseResult(null, new[] { error });

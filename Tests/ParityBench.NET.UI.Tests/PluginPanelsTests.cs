@@ -8,6 +8,7 @@ using MudBlazor.Services;
 using ParityBench.NET.Application.Plugins;
 using ParityBench.NET.Application.Profiles;
 using ParityBench.NET.Application.Secrets;
+using ParityBench.NET.Domain.Runs.Retention;
 using ParityBench.NET.UI.Plugins;
 using ParityBench.NET.UI.Workflow;
 
@@ -201,6 +202,30 @@ public sealed class PluginPanelsTests
         // Saving must not quietly stamp the installed version back in — that is what
         // made every profile break on the next plugin upgrade.
         Assert.IsNull(saved.PluginVersion);
+    }
+
+    [TestMethod]
+    public async Task RunProfilePanel_WhenSavingAProfileWithARetentionMode_KeepsIt()
+    {
+        await profileStore.SaveAsync(new RunProfile(
+            "acme-qa",
+            "Acme QA",
+            "acme.lookup",
+            "acme.lookup.soap-vs-json",
+            new Uri("https://qa/soap"),
+            new Uri("https://qa/json"),
+            retentionModeOverride: RetentionMode.None));
+
+        IRenderedComponent<RunProfilePanel> component = testContext.Render<RunProfilePanel>();
+        component.Find("div.mud-list-item").Click();
+        StringAssert.Contains(component.Markup, "Keep everything");
+
+        await component.InvokeAsync(() => component.Find("button.mud-button-filled").Click());
+
+        RunProfile? saved = await profileStore.GetAsync("acme-qa");
+        Assert.IsNotNull(saved);
+        // Editing anything else must not silently drop the retention choice.
+        Assert.AreEqual(RetentionMode.None, saved.RetentionModeOverride);
     }
 
     [TestMethod]

@@ -85,7 +85,8 @@ public sealed class RequestCommandRunner
             string.IsNullOrWhiteSpace(contractProfileId) ? null : new ContractProfileSelection(contractProfileId),
             commonHeaders: ParseHeaders(options.CommonHeaders),
             endpointAHeaders: MergeHeaders(preset?.EndpointAHeaders, ParseHeaders(options.EndpointAHeaders)),
-            endpointBHeaders: MergeHeaders(preset?.EndpointBHeaders, ParseHeaders(options.EndpointBHeaders)));
+            endpointBHeaders: MergeHeaders(preset?.EndpointBHeaders, ParseHeaders(options.EndpointBHeaders)),
+            runRetentionModeOverride: options.RetentionModeOverride);
 
         return await SubmitAndReportAsync(request, options, output, error, cancellationToken).ConfigureAwait(false);
     }
@@ -141,6 +142,9 @@ public sealed class RequestCommandRunner
             commonHeaders: ParseHeaders(options.CommonHeaders),
             endpointAHeaders: MergeHeaders(resolved.EndpointA.Headers, ParseHeaders(options.EndpointAHeaders)),
             endpointBHeaders: MergeHeaders(resolved.EndpointB.Headers, ParseHeaders(options.EndpointBHeaders)),
+            // --retention beats the profile's own retention mode, which beats the
+            // configured default; the profile is not rewritten either way.
+            runRetentionModeOverride: options.RetentionModeOverride ?? resolved.Profile.RetentionModeOverride,
             pluginComparison: resolved.Selection,
             baseline: baselineSelection);
 

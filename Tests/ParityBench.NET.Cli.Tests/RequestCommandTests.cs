@@ -9,6 +9,7 @@ using ParityBench.NET.Application.Workflow;
 using ParityBench.NET.Cli;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
+using ParityBench.NET.Domain.Runs.Retention;
 using ParityBench.NET.Workspaces;
 
 namespace ParityBench.NET.Cli.Tests;
@@ -126,6 +127,52 @@ public sealed class RequestCommandTests
         Assert.IsTrue(result.IsSuccess, string.Join(",", result.Errors));
         Assert.AreEqual("client-customer-lookup-local", result.Options!.RunProfileId);
         Assert.IsNull(result.Options.RequestDirectory);
+    }
+
+    [TestMethod]
+    public void Parse_WhenRetentionModeIsProvided_ReturnsTheOverride()
+    {
+        RequestCommandParseResult result = RequestCommandParser.Parse(new[]
+        {
+            "request",
+            "--run-profile",
+            "client-customer-lookup-local",
+            "--retention",
+            "none",
+        });
+
+        Assert.IsTrue(result.IsSuccess, string.Join(",", result.Errors));
+        Assert.AreEqual(RetentionMode.None, result.Options!.RetentionModeOverride);
+    }
+
+    [TestMethod]
+    public void Parse_WhenRetentionModeIsUnknown_ReturnsValidationErrorNamingTheModes()
+    {
+        RequestCommandParseResult result = RequestCommandParser.Parse(new[]
+        {
+            "request",
+            "--run-profile",
+            "client-customer-lookup-local",
+            "--retention",
+            "KeepAbsolutelyEverything",
+        });
+
+        Assert.IsFalse(result.IsSuccess);
+        StringAssert.Contains(string.Join(",", result.Errors), nameof(RetentionMode.TrimmedEquals));
+    }
+
+    [TestMethod]
+    public void Parse_WhenNoRetentionModeIsProvided_LeavesItToTheProfileAndConfiguration()
+    {
+        RequestCommandParseResult result = RequestCommandParser.Parse(new[]
+        {
+            "request",
+            "--run-profile",
+            "client-customer-lookup-local",
+        });
+
+        Assert.IsTrue(result.IsSuccess, string.Join(",", result.Errors));
+        Assert.IsNull(result.Options!.RetentionModeOverride);
     }
 
     [TestMethod]

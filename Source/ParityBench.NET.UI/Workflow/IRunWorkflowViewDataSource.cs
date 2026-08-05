@@ -3,6 +3,7 @@ using ParityBench.NET.Application.Workflow;
 using ParityBench.NET.Domain.Baselines;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Runs;
+using ParityBench.NET.Domain.Runs.Retention;
 
 namespace ParityBench.NET.UI.Workflow;
 
@@ -30,7 +31,11 @@ public sealed record ResolvedRunProfileView(
     // ComparisonType when unresolved.
     ComparisonRuleDefaults? PluginDefaultComparisonRules,
     IReadOnlyDictionary<string, string> EndpointAHeaders,
-    IReadOnlyDictionary<string, string> EndpointBHeaders);
+    IReadOnlyDictionary<string, string> EndpointBHeaders,
+    // The retention mode the profile asks for, or null to use the configured
+    // default. It seeds the workflow's retention picker, which is what actually
+    // travels with the run.
+    RetentionMode? RetentionModeOverride = null);
 
 /// <summary>
 /// Supplies create/run/cancel/report actions to shared V2 workflow components without binding them to a host.

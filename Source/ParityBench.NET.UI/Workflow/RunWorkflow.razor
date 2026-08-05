@@ -5,6 +5,7 @@
 @using ParityBench.NET.Domain.Comparison
 @using ParityBench.NET.Domain.ContractProfiles
 @using ParityBench.NET.Domain.Requests
+@using ParityBench.NET.Domain.Runs.Retention
 @inject IRunWorkflowViewDataSource DataSource
 @inject IRequestSourcePicker SourcePicker
 
@@ -402,6 +403,22 @@
                         <MudItem xs="12" md="4">
                             <MudTextField T="string" Label="Max Concurrency" @bind-Value="maxConcurrency" Immediate="true" Variant="Variant.Outlined" />
                         </MudItem>
+                        <MudItem xs="12" md="8">
+                            @* What survives on disk once the run finishes. Empty means
+                               the app-wide ParityBench:Retention:Mode setting decides. *@
+                            <MudSelect T="string"
+                                       Label="Response retention"
+                                       Value="retentionModeOverride"
+                                       ValueChanged="HandleRetentionModeChanged"
+                                       Variant="Variant.Outlined"
+                                       HelperText="@RetentionHelperText">
+                                <MudSelectItem T="string" Value="@string.Empty">Use configured default</MudSelectItem>
+                                @foreach (RetentionMode mode in RetentionModePresentation.Modes)
+                                {
+                                    <MudSelectItem T="string" Value="@mode.ToString()">@RetentionModePresentation.Label(mode)</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
                     </MudGrid>
                 </MudExpansionPanel>
             </MudExpansionPanels>
@@ -517,6 +534,13 @@
     private string modelName = "Auto";
     private string contractProfileId = string.Empty;
     private string contentTypeOverride = string.Empty;
+
+    /// <summary>
+    /// The retention mode this run asks for, empty for the configured default. A
+    /// selected run profile seeds it; the operator can still change it for one run
+    /// without editing the profile.
+    /// </summary>
+    private string retentionModeOverride = string.Empty;
     private string maxDifferences = "100";
     private List<IgnoreRuleDefinition> ignoreRuleDefinitions = new();
     private string smartIgnoreRules = string.Empty;
@@ -664,6 +688,15 @@
         }
     }
 
+    private RetentionMode? SelectedRetentionMode => RetentionModePresentation.Parse(retentionModeOverride);
+
+    private void HandleRetentionModeChanged(string value) => retentionModeOverride = value ?? string.Empty;
+
+    private string RetentionHelperText =>
+        SelectedRetentionMode is null
+            ? "Falls back to ParityBench:Retention:Mode. Applies to this run only; retention runs once the run finishes."
+            : "Applies to this run only — the saved profile is unchanged.";
+
     private async Task HandleRunProfileChangedAsync(string value)
     {
         selectedRunProfileId = value ?? string.Empty;
@@ -674,6 +707,7 @@
             selectedPluginComparison = null;
             pluginDefaultComparisonRules = null;
             requestSourceDescription = string.Empty;
+            retentionModeOverride = string.Empty;
             return;
         }
 
@@ -689,6 +723,9 @@
             endpointB = resolved.EndpointB.ToString();
             endpointAHeaders = FormatHeaders(resolved.EndpointAHeaders);
             endpointBHeaders = FormatHeaders(resolved.EndpointBHeaders);
+            // The profile's retention mode is a starting point, not a lock: it seeds
+            // the picker, and clearing it there falls back to the configured default.
+            retentionModeOverride = resolved.RetentionModeOverride?.ToString() ?? string.Empty;
             ApplyComparisonOptions(resolved.Comparison);
             if (!string.IsNullOrWhiteSpace(resolved.RequestDirectory))
             {
@@ -1001,7 +1038,8 @@
             endpointBLabel: ResolveEndpointLabel(endpointB),
             sourceFiles: sourceFiles.Count == 0 ? null : sourceFiles,
             pluginComparison: selectedPluginComparison,
-            baseline: baselineSelection);
+            baseline: baselineSelection,
+            runRetentionModeOverride: SelectedRetentionMode);
     }
 
     private BaselineRunSelection? BuildBaselineSelection()
