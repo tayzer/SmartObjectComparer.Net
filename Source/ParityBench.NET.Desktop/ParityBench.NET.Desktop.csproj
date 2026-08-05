@@ -34,6 +34,22 @@
     </Content>
   </ItemGroup>
 
+  <!--
+    Plugins shipped inside the published app, under "plugins\<PackageId>\" — one of
+    the directories the catalog scans, so a tester who copies the published output
+    has them installed already. Add your own plugin as another PbBundledPlugin item.
+    See build/ParityBench.BundledPlugins.targets.
+  -->
+  <Import Project="..\..\build\ParityBench.BundledPlugins.targets" />
+
+  <ItemGroup>
+    <!-- The reference plugin is a sample, so it ships only when asked for:
+         dotnet publish ... -p:PbBundleReferencePlugin=true -->
+    <PbBundledPlugin Condition="'$(PbBundleReferencePlugin)' == 'true'"
+                     Include="..\ParityBench.ClientCustomerLookupPlugin\ParityBench.ClientCustomerLookupPlugin.csproj"
+                     PackageId="client.customer-lookup" />
+  </ItemGroup>
+
   <Target Name="PublishParityBenchReportAssets" AfterTargets="Publish" Condition="'$(PublishParityBenchReportAssets)' != 'false'">
     <MSBuild Projects="..\ParityBench.NET.Report\ParityBench.NET.Report.csproj"
              Targets="Publish"

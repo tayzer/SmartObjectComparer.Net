@@ -208,6 +208,10 @@ build with no manual copy:
 It runs for Debug builds only (off for Release, CI, and non-Windows); opt out with
 `-p:PbInstallPluginToWorkspace=false`, or retarget with `-p:PbWorkspacePluginsDir=<path>`.
 
+**To ship the plugin inside a published app** — so testers get it installed by copying
+the build — list it as a `PbBundledPlugin` in the host project; see
+[Building a Plugin §6](building-a-plugin.md#6-install-and-run).
+
 Then create a run profile that selects the plugin and run:
 
 ```bash

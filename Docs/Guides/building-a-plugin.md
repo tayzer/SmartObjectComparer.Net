@@ -295,6 +295,29 @@ build with no manual copy:
 It runs for Debug builds only (off for Release, CI, and non-Windows); opt out with
 `-p:PbInstallPluginToWorkspace=false`, or retarget with `-p:PbWorkspacePluginsDir=<path>`.
 
+**Shipping the plugin with the app.** To hand testers a build that already has the
+plugin installed, bundle it into the host's publish output instead of asking each of
+them to copy a folder. The host imports `build/ParityBench.BundledPlugins.targets` and
+lists the packages it ships (see `Source/ParityBench.NET.Desktop/ParityBench.NET.Desktop.csproj`):
+
+```xml
+<Import Project="..\..\build\ParityBench.BundledPlugins.targets" />
+
+<ItemGroup>
+  <PbBundledPlugin Include="..\..\Plugins\Acme.OrderLookup\Acme.OrderLookup.csproj"
+                   PackageId="acme.order-lookup" />
+</ItemGroup>
+```
+
+`dotnet publish` then publishes each listed plugin into `plugins\<PackageId>\` beneath
+the app, which is one of the scanned directories, so the plugin is installed for anyone
+who copies the published output. `PackageId` must match the manifest `id`. Opt out for
+one publish with `-p:PbBundlePlugins=false`.
+
+A bundled plugin and a workspace copy of the same plugin are both discovered, and the
+**higher version wins** — so bump the plugin version when you ship a new build, or have
+testers delete stale copies under `<workspace>\plugins\`.
+
 Then run the seeded profile:
 
 ```bash
