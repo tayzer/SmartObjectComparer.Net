@@ -461,12 +461,23 @@ public sealed class FileSystemBaselineStore : IBaselineStore
                 }
 
                 // Archives are untrusted input: an entry naming ..\..\ must not be able
-                // to write outside the package directory.
-                string destinationPath = Path.GetFullPath(Path.Combine(versionRoot, entry.FullName));
+                // to write outside the package directory.  Reject any entry whose name
+                // contains a rooted component or a parent-directory reference before
+                // constructing a path, then double-check the resolved path stays inside
+                // the target directory.
+                string entryName = entry.FullName;
+                if (Path.IsPathRooted(entryName)
+                    || entryName.Split('/', '\\').Any(part => part == ".."))
+                {
+                    throw new InvalidOperationException(
+                        $"'{fullArchivePath}' contains an entry with an invalid path: '{entryName}'.");
+                }
+
+                string destinationPath = Path.GetFullPath(Path.Combine(versionRoot, entryName));
                 if (!FileSystemWorkspacePaths.IsPathInsideDirectory(destinationPath, versionRoot))
                 {
                     throw new InvalidOperationException(
-                        $"'{fullArchivePath}' contains an entry that resolves outside the package: '{entry.FullName}'.");
+                        $"'{fullArchivePath}' contains an entry that resolves outside the package: '{entryName}'.");
                 }
 
                 Directory.CreateDirectory(Path.GetDirectoryName(destinationPath) ?? versionRoot);
