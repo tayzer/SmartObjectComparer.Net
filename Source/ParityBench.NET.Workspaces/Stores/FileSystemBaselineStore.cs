@@ -461,15 +461,18 @@ public sealed class FileSystemBaselineStore : IBaselineStore
                 }
 
                 // Archives are untrusted input: an entry naming ..\..\ must not be able
-                // to write outside the package directory.  Reject any entry whose name
-                // contains a rooted component or a parent-directory reference before
-                // constructing a path, then double-check the resolved path stays inside
-                // the target directory.
+                // to write outside the package directory.
+                //
+                // Defence-in-depth:
+                //   1. Reject the entry name up-front if it is rooted or contains any
+                //      component that is or normalises to ".." (including Windows variants
+                //      such as ".. " or "...") or is empty (double-slash).
+                //   2. Resolve the full destination path and confirm it remains inside the
+                //      expected directory, guarding against any OS-level normalisation that
+                //      slipped past the name check.
+                //   3. Extract via a FileStream to the pre-validated, fully-resolved path
+                //      so that no tainted entry name is passed to a file-system API.
                 string entryName = entry.FullName;
-                // Reject rooted paths (e.g. "/etc/passwd", "C:\...", "\\server\share") and
-                // any path component that is or normalises to ".." (including Windows variants
-                // like ".. " or "...").  Empty components (double-slash) are also rejected as
-                // they can have OS-dependent meanings.
                 if (Path.IsPathRooted(entryName)
                     || entryName.Split('/', '\\').Any(
                         part => string.IsNullOrEmpty(part)
@@ -487,7 +490,19 @@ public sealed class FileSystemBaselineStore : IBaselineStore
                 }
 
                 Directory.CreateDirectory(Path.GetDirectoryName(destinationPath) ?? versionRoot);
-                entry.ExtractToFile(destinationPath, overwrite: true);
+
+                // Use a FileStream with the pre-validated path rather than
+                // entry.ExtractToFile so that no tainted entry name reaches a
+                // file-system API after the guards above.
+                using (Stream source = entry.Open())
+                using (FileStream destination = new FileStream(
+                    destinationPath,
+                    FileMode.Create,
+                    FileAccess.Write,
+                    FileShare.None))
+                {
+                    await source.CopyToAsync(destination, cancellationToken).ConfigureAwait(false);
+                }
             }
 
             dto.Id = id.Value;
