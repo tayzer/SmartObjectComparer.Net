@@ -443,6 +443,7 @@ public sealed class FileSystemBaselineStore : IBaselineStore
             int version = GetNextVersion(packageRoot);
             versionRoot = GetVersionRoot(id, version);
             Directory.CreateDirectory(versionRoot);
+            string fullVersionRoot = Path.GetFullPath(versionRoot + Path.DirectorySeparatorChar);
 
             foreach (ZipArchiveEntry entry in archive.Entries)
             {
@@ -483,7 +484,7 @@ public sealed class FileSystemBaselineStore : IBaselineStore
                 }
 
                 string destinationPath = Path.GetFullPath(Path.Combine(versionRoot, entryName));
-                if (!FileSystemWorkspacePaths.IsPathInsideDirectory(destinationPath, versionRoot))
+                if (!destinationPath.StartsWith(fullVersionRoot, StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidOperationException(
                         $"'{fullArchivePath}' contains an entry that resolves outside the package: '{entryName}'.");

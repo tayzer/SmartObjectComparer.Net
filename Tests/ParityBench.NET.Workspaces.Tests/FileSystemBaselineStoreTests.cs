@@ -197,6 +197,41 @@ public sealed class FileSystemBaselineStoreTests
     }
 
     [TestMethod]
+    public async Task ImportAsync_WhenAnEntryUsesASiblingPrefix_RefusesTheArchive()
+    {
+        string archivePath = Path.Combine(workspaceRoot, "sibling-prefix.pbbaseline");
+        BaselinePackageManifest exported = await CaptureAsync("Orders upgrade");
+        await store.ExportAsync(exported.Id, exported.Version, archivePath);
+
+        using (ZipArchive archive = ZipFile.Open(archivePath, ZipArchiveMode.Update))
+        {
+            ZipArchiveEntry entry = archive.CreateEntry("../v20/escaped.txt");
+            await using Stream entryStream = entry.Open();
+            await entryStream.WriteAsync(Encoding.UTF8.GetBytes("escaped"));
+        }
+
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => store.ImportAsync(archivePath));
+        Assert.IsFalse(File.Exists(Path.Combine(workspaceRoot, "baselines", exported.Id.Value, "v20", "escaped.txt")));
+    }
+
+    [TestMethod]
+    public async Task ImportAsync_WhenAnEntryIsRooted_RefusesTheArchive()
+    {
+        string archivePath = Path.Combine(workspaceRoot, "rooted.pbbaseline");
+        BaselinePackageManifest exported = await CaptureAsync("Orders upgrade");
+        await store.ExportAsync(exported.Id, exported.Version, archivePath);
+
+        using (ZipArchive archive = ZipFile.Open(archivePath, ZipArchiveMode.Update))
+        {
+            ZipArchiveEntry entry = archive.CreateEntry("/escaped.txt");
+            await using Stream entryStream = entry.Open();
+            await entryStream.WriteAsync(Encoding.UTF8.GetBytes("escaped"));
+        }
+
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() => store.ImportAsync(archivePath));
+    }
+
+    [TestMethod]
     public async Task ImportAsync_WhenTheArchiveIsNotAPackage_Fails()
     {
         string archivePath = Path.Combine(workspaceRoot, "not-a-package.pbbaseline");
