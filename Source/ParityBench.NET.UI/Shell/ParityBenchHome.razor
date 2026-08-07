@@ -11,7 +11,11 @@
         </MudStack>
     </MudPaper>
 
-    <MudTabs Rounded="false" Border="true" Elevation="0" PanelClass="pb-tab-panel" @bind-ActivePanelIndex="activeTabIndex">
+    <!-- KeepPanelsAlive keeps all four tab panels resident so RunWorkflow (Compare Requests)
+         doesn't lose in-progress selections when the operator checks another tab. It also
+         means all four panels now init together instead of lazily on first visit; the
+         other three each do one cheap async fetch on init, so that's an acceptable trade. -->
+    <MudTabs Rounded="false" Border="true" Elevation="0" PanelClass="pb-tab-panel" KeepPanelsAlive="true" @bind-ActivePanelIndex="activeTabIndex">
         <MudTabPanel Text="Compare Requests" Icon="@Icons.Material.Filled.CompareArrows">
             <MudStack Spacing="3">
                 <RunWorkflow RunSelected="SelectRun" RunChanged="HandleRunChanged" />
