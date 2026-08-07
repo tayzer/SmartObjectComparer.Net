@@ -466,8 +466,14 @@ public sealed class FileSystemBaselineStore : IBaselineStore
                 // constructing a path, then double-check the resolved path stays inside
                 // the target directory.
                 string entryName = entry.FullName;
+                // Reject rooted paths (e.g. "/etc/passwd", "C:\...", "\\server\share") and
+                // any path component that is or normalises to ".." (including Windows variants
+                // like ".. " or "...").  Empty components (double-slash) are also rejected as
+                // they can have OS-dependent meanings.
                 if (Path.IsPathRooted(entryName)
-                    || entryName.Split('/', '\\').Any(part => part == ".."))
+                    || entryName.Split('/', '\\').Any(
+                        part => string.IsNullOrEmpty(part)
+                            || part.TrimEnd('.', ' ') is "" or "."))
                 {
                     throw new InvalidOperationException(
                         $"'{fullArchivePath}' contains an entry with an invalid path: '{entryName}'.");
