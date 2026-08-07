@@ -176,12 +176,23 @@ else if (run is not null)
             <MudPaper Outlined="true" Class="pa-3">
                 <MudStack Row="true" Spacing="1" Class="flex-wrap" AlignItems="AlignItems.Center">
                     <MudText Typo="Typo.subtitle2">Request Comparison Timings</MudText>
-                    <MudChip T="string" Size="Size.Small" Color="Color.Primary">Total: @FormatDuration(metadata.ExecutionMetrics.TotalDuration)</MudChip>
-                    <MudChip T="string" Size="Size.Small" Color="Color.Info">Execution: @FormatDuration(metadata.ExecutionMetrics.RequestExecutionDuration)</MudChip>
-                    <MudChip T="string" Size="Size.Small" Color="Color.Info">Comparison: @FormatDuration(metadata.ExecutionMetrics.ComparisonDuration)</MudChip>
-                    <MudChip T="string" Size="Size.Small" Color="Color.Info">Finalization: @FormatDuration(metadata.ExecutionMetrics.FinalizationDuration)</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary">Wall clock: @FormatDuration(metadata.ExecutionMetrics.TotalDuration)</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info">Request worker time (aggregate): @FormatDuration(metadata.ExecutionMetrics.RequestExecutionDuration)</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info">Compare worker time (aggregate): @FormatDuration(metadata.ExecutionMetrics.ComparisonDuration)</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info">Finalization wall time: @FormatDuration(metadata.ExecutionMetrics.FinalizationDuration)</MudChip>
                     <MudChip T="string" Size="Size.Small">Requests: @metadata.ExecutionMetrics.RequestCount</MudChip>
-                    <MudChip T="string" Size="Size.Small">Concurrency: @metadata.ExecutionMetrics.MaxConcurrency</MudChip>
+                    <MudChip T="string" Size="Size.Small">HTTP workers: @metadata.ExecutionMetrics.MaxConcurrency</MudChip>
+                    <MudChip T="string" Size="Size.Small">Compare workers: @metadata.ExecutionMetrics.ComparisonConcurrency</MudChip>
+                    <MudChip T="string" Size="Size.Small">@FormatRate(metadata.ExecutionMetrics.RequestCount, metadata.ExecutionMetrics.TotalDuration) requests/s</MudChip>
+                    <MudChip T="string" Size="Size.Small">@FormatRate(metadata.ExecutionMetrics.RequestCount, metadata.ExecutionMetrics.ComparisonDuration) compare pairs/worker-s</MudChip>
+                    <MudChip T="string" Size="Size.Small">@FormatMiBRate(metadata.ExecutionMetrics.ResponseBytesWritten, metadata.ExecutionMetrics.TotalDuration) MiB/s written</MudChip>
+                    @if (metadata.ExecutionMetrics.CompareSubPhases is { } phases)
+                    {
+                        <MudChip T="string" Size="Size.Small">Normalize: @FormatDuration(phases.NormalizeDuration)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Canonical persistence: @FormatDuration(phases.PersistCanonicalDuration)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Diff/body read: @FormatDuration(phases.DiffDuration)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Focused content: @FormatDuration(phases.FocusedContentDuration)</MudChip>
+                    }
                 </MudStack>
             </MudPaper>
         }
@@ -1477,6 +1488,8 @@ else if (run is not null)
     private static bool HasArtifactContent(RequestPairResult pair) => pair.ResponseA?.Artifact is not null || pair.ResponseB?.Artifact is not null;
     private static string FormatDate(DateTimeOffset value) => value.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
     private static string FormatDuration(TimeSpan value) => value.TotalMinutes >= 1 ? $"{(int)value.TotalMinutes}m {value.Seconds:D2}s" : value.TotalSeconds >= 1 ? $"{value.TotalSeconds:F2}s" : $"{value.TotalMilliseconds:F0} ms";
+    private static string FormatRate(long count, TimeSpan duration) => duration <= TimeSpan.Zero ? "0.00" : (count / duration.TotalSeconds).ToString("F2", CultureInfo.InvariantCulture);
+    private static string FormatMiBRate(long bytes, TimeSpan duration) => duration <= TimeSpan.Zero ? "0.00" : (bytes / 1024d / 1024d / duration.TotalSeconds).ToString("F2", CultureInfo.InvariantCulture);
     private static string FormatBool(bool value) => value ? "on" : "off";
     private static string FormatRawLine(StaticReportRawTextDifference difference) => difference.LineNumberA.HasValue && difference.LineNumberB.HasValue ? $"{difference.LineNumberA}/{difference.LineNumberB}" : difference.LineNumberA?.ToString(CultureInfo.InvariantCulture) ?? difference.LineNumberB?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
     private string GetPairRowClass(RequestPairResult pair, int index) => selectedPair is not null && string.Equals(selectedPair.RelativePath, pair.RelativePath, StringComparison.OrdinalIgnoreCase) ? "v1-selected-pair" : string.Empty;

@@ -334,6 +334,7 @@ public sealed class FileSystemRunStore : IRunStore
             RequestCount = metrics.RequestCount,
             MaxConcurrency = metrics.MaxConcurrency,
             ResponseBytesWritten = metrics.ResponseBytesWritten,
+            ComparisonConcurrency = metrics.ComparisonConcurrency,
             RetainedArtifactCount = metrics.RetainedArtifactCount,
             TrimmedByPolicyArtifactCount = metrics.TrimmedByPolicyArtifactCount,
             MissingUnexpectedlyArtifactCount = metrics.MissingUnexpectedlyArtifactCount,
@@ -507,7 +508,8 @@ public sealed class FileSystemRunStore : IRunStore
                     TimeSpan.FromMilliseconds(dto.CompareNormalizeDurationMilliseconds.Value),
                     TimeSpan.FromMilliseconds(dto.ComparePersistCanonicalDurationMilliseconds ?? 0),
                     TimeSpan.FromMilliseconds(dto.CompareDiffDurationMilliseconds ?? 0),
-                    TimeSpan.FromMilliseconds(dto.CompareFocusedContentDurationMilliseconds ?? 0)));
+                    TimeSpan.FromMilliseconds(dto.CompareFocusedContentDurationMilliseconds ?? 0)),
+            dto.ComparisonConcurrency);
 
     private RunDetailReference FromDto(RunDetailReferenceDto dto) =>
         new RunDetailReference(

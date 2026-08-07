@@ -25,6 +25,8 @@ internal sealed class RunExecutionMetricsDto
 
     public long ResponseBytesWritten { get; init; }
 
+    public int ComparisonConcurrency { get; init; }
+
     public int RetainedArtifactCount { get; init; }
 
     public int TrimmedByPolicyArtifactCount { get; init; }

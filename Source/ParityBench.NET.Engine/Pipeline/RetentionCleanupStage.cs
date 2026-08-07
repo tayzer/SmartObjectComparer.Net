@@ -29,7 +29,7 @@ public sealed class RetentionCleanupStage : IRunCleanupStage
         this.retentionConfiguration = retentionConfiguration.Value;
     }
 
-    public async Task CleanupAsync(
+    public async Task<CleanupStageResult> CleanupAsync(
         ComparisonRun run,
         CleanupStageContext context,
         CancellationToken cancellationToken = default)
@@ -79,7 +79,7 @@ public sealed class RetentionCleanupStage : IRunCleanupStage
         RequestPairResult[] retainedResults = new RequestPairResult[orderedCandidates.Count];
         await Parallel.ForEachAsync(
             Enumerable.Range(0, orderedCandidates.Count),
-            new ParallelOptions { CancellationToken = cancellationToken, MaxDegreeOfParallelism = Environment.ProcessorCount * 4 },
+            new ParallelOptions { CancellationToken = cancellationToken, MaxDegreeOfParallelism = GetArtifactOperationConcurrency() },
             async (index, token) =>
             {
                 RetentionCandidate candidate = orderedCandidates[index];
@@ -88,6 +88,7 @@ public sealed class RetentionCleanupStage : IRunCleanupStage
             }).ConfigureAwait(false);
 
         await runDetailStore.SaveDetailsAsync(run.Id, retainedResults, cancellationToken).ConfigureAwait(false);
+        return Summarize(retainedResults);
     }
 
     private async Task<RequestPairResult> ApplyRetentionDecisionAsync(
@@ -171,7 +172,7 @@ public sealed class RetentionCleanupStage : IRunCleanupStage
         ConcurrentDictionary<string, long> sizes = new ConcurrentDictionary<string, long>(StringComparer.OrdinalIgnoreCase);
         await Parallel.ForEachAsync(
             uniqueArtifactIds,
-            new ParallelOptions { CancellationToken = cancellationToken, MaxDegreeOfParallelism = Environment.ProcessorCount * 4 },
+            new ParallelOptions { CancellationToken = cancellationToken, MaxDegreeOfParallelism = GetArtifactOperationConcurrency() },
             async (artifactId, token) =>
             {
                 ArtifactReference reference = new ArtifactReference(artifactId, null);
@@ -258,4 +259,34 @@ public sealed class RetentionCleanupStage : IRunCleanupStage
     private sealed record RetentionCandidate(
         int ManifestOrdinal,
         RequestPairResult Result);
+
+    private static int GetArtifactOperationConcurrency() => Math.Clamp(Environment.ProcessorCount, 2, 8);
+
+    private static CleanupStageResult Summarize(IEnumerable<RequestPairResult> results)
+    {
+        int retained = 0;
+        int trimmed = 0;
+        int missing = 0;
+        foreach (RequestPairResult result in results)
+        {
+            Count(result.ArtifactRetentionState.RawResponseA, ref retained, ref trimmed, ref missing);
+            Count(result.ArtifactRetentionState.RawResponseB, ref retained, ref trimmed, ref missing);
+            Count(result.ArtifactRetentionState.CanonicalResponseA, ref retained, ref trimmed, ref missing);
+            Count(result.ArtifactRetentionState.CanonicalResponseB, ref retained, ref trimmed, ref missing);
+            Count(result.ArtifactRetentionState.FocusedResponseA, ref retained, ref trimmed, ref missing);
+            Count(result.ArtifactRetentionState.FocusedResponseB, ref retained, ref trimmed, ref missing);
+        }
+
+        return new CleanupStageResult(retained, trimmed, missing);
+    }
+
+    private static void Count(ArtifactRetentionState state, ref int retained, ref int trimmed, ref int missing)
+    {
+        switch (state)
+        {
+            case ArtifactRetentionState.Retained: retained++; break;
+            case ArtifactRetentionState.TrimmedByPolicy: trimmed++; break;
+            case ArtifactRetentionState.MissingUnexpectedly: missing++; break;
+        }
+    }
 }

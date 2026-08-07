@@ -52,6 +52,21 @@ public sealed class ComparisonRunExecutorTests
     }
 
     [TestMethod]
+    public async Task ExecuteAsync_WhenComparisonConcurrencyIsConfigured_UsesConfiguredWorkerCount()
+    {
+        RequestItem[] requests = Enumerable.Range(1, 5)
+            .Select(index => new RequestItem($"request-{index}.json", "application/json", 2))
+            .ToArray();
+        ComparisonRunExecutor executor = CreateExecutor(CreateBatch(requests), FakeEndpointRequestSender.ForBody("same"));
+
+        RunResultSummary summary = await executor.ExecuteAsync(
+            CreateRun(largeRunOptions: new LargeRunOptions(comparisonConcurrency: 2)),
+            new CapturingProgressReporter());
+
+        Assert.AreEqual(2, summary.ExecutionMetrics!.ComparisonConcurrency);
+    }
+
+    [TestMethod]
     public async Task ExecuteAsync_WhenRequestPathExceedsThreshold_RecordsSlowPath()
     {
         RequestItem request = new RequestItem("one.json", "application/json", 2);
@@ -512,7 +527,8 @@ public sealed class ComparisonRunExecutorTests
         int maxConcurrency = 4,
         IReadOnlyDictionary<string, string>? endpointAHeaders = null,
         ComparisonOptions? comparisonOptions = null,
-        RequestExecutionOptions? requestExecutionOptions = null) =>
+        RequestExecutionOptions? requestExecutionOptions = null,
+        LargeRunOptions? largeRunOptions = null) =>
         ComparisonRun
             .Create(
                 new RunId("run-1"),
@@ -523,7 +539,8 @@ public sealed class ComparisonRunExecutorTests
                     TimeSpan.FromSeconds(30),
                     maxConcurrency,
                     comparisonOptions: comparisonOptions,
-                    requestExecutionOptions: requestExecutionOptions))
+                    requestExecutionOptions: requestExecutionOptions,
+                    largeRunOptions: largeRunOptions))
             .Start();
 
     private static MemoryStream CreateStream(string value) =>
@@ -761,11 +778,14 @@ public sealed class ComparisonRunExecutorTests
             this.cleanup = cleanup;
         }
 
-        public Task CleanupAsync(
+        public async Task<CleanupStageResult> CleanupAsync(
             ComparisonRun run,
             CleanupStageContext context,
-            CancellationToken cancellationToken = default) =>
-            cleanup(run, context, cancellationToken);
+            CancellationToken cancellationToken = default)
+        {
+            await cleanup(run, context, cancellationToken);
+            return CleanupStageResult.Empty;
+        }
     }
 
     private sealed class FakeRunArtifactStore : IRunArtifactStore

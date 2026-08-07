@@ -241,14 +241,9 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
             detailReference,
             persistedRecords,
             DurableAppendCompleted: true);
-        await cleanupStage.CleanupAsync(run, cleanupContext, cancellationToken).ConfigureAwait(false);
+        CleanupStageResult cleanupResult = await cleanupStage.CleanupAsync(run, cleanupContext, cancellationToken).ConfigureAwait(false);
         cleanupStopwatch.Stop();
         observabilityRecorder.RecordRunPhase(run.Id, "Cleanup", cleanupStopwatch.Elapsed);
-
-        IReadOnlyList<RequestPairResult> retentionResults = await runDetailStore
-            .LoadDetailsAsync(detailReference, cancellationToken)
-            .ConfigureAwait(false);
-        ArtifactRetentionCounters retentionCounters = SummarizeArtifactRetention(retentionResults);
 
         totalStopwatch.Stop();
         observabilityRecorder.RecordRunPhase(run.Id, "Total", totalStopwatch.Elapsed);
@@ -261,10 +256,11 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
             totalRequests,
             run.Options.MaxConcurrency,
             counters.ResponseBytesWritten,
-            retentionCounters.RetainedArtifactCount,
-            retentionCounters.TrimmedByPolicyArtifactCount,
-            retentionCounters.MissingUnexpectedlyArtifactCount,
-            compareSubPhaseCounters?.ToMetrics());
+            cleanupResult.RetainedArtifactCount,
+            cleanupResult.TrimmedByPolicyArtifactCount,
+            cleanupResult.MissingUnexpectedlyArtifactCount,
+            compareSubPhaseCounters?.ToMetrics(),
+            pipelineResult.ComparisonConcurrency);
 
         // Sealed last: a package only becomes usable once the run that produced it
         // finished, so a run that failed while finalizing leaves nothing behind.
@@ -395,7 +391,8 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
     private sealed record RunPipelineResult(
         TimeSpan ExecutionDuration,
         TimeSpan ComparisonDuration,
-        TimeSpan PersistenceDuration);
+        TimeSpan PersistenceDuration,
+        int ComparisonConcurrency);
 
     /// <summary>
     /// The baseline work a run has attached to it. Both are null for the ordinary
@@ -471,11 +468,13 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
     {
         if (totalRequests == 0)
         {
-            return new RunPipelineResult(TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero);
+            return new RunPipelineResult(TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, 0);
         }
 
         int executeConcurrency = Math.Max(1, comparisonOptions.MaxConcurrency);
-        int compareConcurrency = Math.Max(1, Environment.ProcessorCount);
+        int compareConcurrency = Math.Min(
+            totalRequests,
+            Math.Max(1, comparisonOptions.LargeRun.ComparisonConcurrency ?? Environment.ProcessorCount));
         int channelCapacity = Math.Max(1, comparisonOptions.LargeRun.ChunkSize);
         int flushBatchSize = Math.Max(1, comparisonOptions.LargeRun.DetailPageSize);
 
@@ -561,7 +560,8 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         return new RunPipelineResult(
             TimeSpan.FromTicks(executionTicks),
             TimeSpan.FromTicks(comparisonTicks),
-            TimeSpan.FromTicks(persistenceTicks));
+            TimeSpan.FromTicks(persistenceTicks),
+            compareConcurrency);
     }
 
     private static async Task RunWorkerStageAsync(Task[] workers, ChannelWriter<ExecutionRecord> writer)

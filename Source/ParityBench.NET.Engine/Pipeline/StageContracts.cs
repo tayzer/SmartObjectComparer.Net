@@ -17,9 +17,17 @@ public sealed record CleanupStageContext(
     IReadOnlyList<ComparedExecutionRecord> PersistedRecords,
     bool DurableAppendCompleted);
 
+public sealed record CleanupStageResult(
+    int RetainedArtifactCount,
+    int TrimmedByPolicyArtifactCount,
+    int MissingUnexpectedlyArtifactCount)
+{
+    public static readonly CleanupStageResult Empty = new(0, 0, 0);
+}
+
 public interface IRunCleanupStage
 {
-    Task CleanupAsync(
+    Task<CleanupStageResult> CleanupAsync(
         ComparisonRun run,
         CleanupStageContext context,
         CancellationToken cancellationToken = default);

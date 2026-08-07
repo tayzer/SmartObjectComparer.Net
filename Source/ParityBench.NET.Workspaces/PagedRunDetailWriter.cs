@@ -18,7 +18,8 @@ internal sealed class PagedRunDetailWriter : IRunDetailWriter
     private readonly string detailRootPath;
     private readonly int pageSize;
     private readonly List<RequestPairResult> pageBuffer;
-    private readonly List<RequestPairResult> analysisItems = new List<RequestPairResult>();
+    private readonly IncrementalRunAnalysisBuilder analysisBuilder = new IncrementalRunAnalysisBuilder();
+    private readonly StaticReportDifferenceIndexAccumulator differenceIndexBuilder = new StaticReportDifferenceIndexAccumulator();
     private readonly List<DetailPageInfoDto> pages = new List<DetailPageInfoDto>();
     private bool completed;
     private int totalCount;
@@ -52,7 +53,8 @@ internal sealed class PagedRunDetailWriter : IRunDetailWriter
         {
             cancellationToken.ThrowIfCancellationRequested();
             pageBuffer.Add(result);
-            analysisItems.Add(result);
+            analysisBuilder.Add(result);
+            differenceIndexBuilder.Add(result);
             if (pageBuffer.Count >= pageSize)
             {
                 await FlushPageAsync(cancellationToken).ConfigureAwait(false);
@@ -74,8 +76,8 @@ internal sealed class PagedRunDetailWriter : IRunDetailWriter
 
         string differenceIndexId = FileSystemWorkspacePaths.ToLogicalPath(detailRootId, "difference-index.json");
         string analysisId = FileSystemWorkspacePaths.ToLogicalPath(detailRootId, "analysis.json");
-        StaticReportDifferenceIndex differenceIndex = StaticReportDifferenceIndexBuilder.Build(analysisItems);
-        StaticReportAnalysisSnapshot analysis = StaticReportAnalysisBuilder.Build(analysisItems, differenceIndexId);
+        StaticReportDifferenceIndex differenceIndex = differenceIndexBuilder.Build();
+        StaticReportAnalysisSnapshot analysis = analysisBuilder.Build(differenceIndexId);
         await owner.WriteJsonAsync(FileSystemWorkspacePaths.GetSafePath(owner.workspaceRoot, differenceIndexId), differenceIndex, cancellationToken).ConfigureAwait(false);
         await owner.WriteJsonAsync(FileSystemWorkspacePaths.GetSafePath(owner.workspaceRoot, analysisId), analysis, cancellationToken).ConfigureAwait(false);
 

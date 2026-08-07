@@ -110,11 +110,11 @@ public sealed class ObservabilityRecorder : IObservabilityRecorder
             return null;
         }
 
-        return builder.CreateSnapshot(
-            Math.Max(0, options.MaxSlowPathEntries),
-            Math.Max(0, options.MaxExceptionEntries));
+        return builder.CreateSnapshot();
     }
 
     private RunDiagnosticsBuilder GetDiagnostics(RunId runId) =>
-        diagnostics.GetOrAdd(runId, _ => new RunDiagnosticsBuilder());
+        diagnostics.GetOrAdd(runId, _ => new RunDiagnosticsBuilder(
+            options.MaxSlowPathEntries,
+            options.MaxExceptionEntries));
 }

@@ -10,10 +10,12 @@ namespace ParityBench.NET.Workspaces;
 public sealed class FileSystemRunArtifactStore : IRunArtifactStore
 {
     private readonly string workspaceRoot;
+    private readonly WorkspaceArtifactUsageTracker usageTracker;
 
-    public FileSystemRunArtifactStore(string workspaceRoot)
+    public FileSystemRunArtifactStore(string workspaceRoot, WorkspaceArtifactUsageTracker? usageTracker = null)
     {
         this.workspaceRoot = FileSystemWorkspacePaths.NormalizeRoot(workspaceRoot);
+        this.usageTracker = usageTracker ?? new WorkspaceArtifactUsageTracker();
     }
 
     public async Task<ResponseArtifactMetadata> SaveResponseAsync(
@@ -64,6 +66,7 @@ public sealed class FileSystemRunArtifactStore : IRunArtifactStore
         }
 
         string sha256 = Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+        usageTracker.RecordDelta(contentLength);
         return new ResponseArtifactMetadata(
             endpoint,
             new ArtifactReference(artifactId, contentType),
@@ -119,6 +122,9 @@ public sealed class FileSystemRunArtifactStore : IRunArtifactStore
     }
 
     public Task<long> GetTotalArtifactBytesAsync(CancellationToken cancellationToken = default)
+        => usageTracker.GetTotalAsync(ReconcileTotalArtifactBytesAsync, cancellationToken);
+
+    private Task<long> ReconcileTotalArtifactBytesAsync(CancellationToken cancellationToken)
     {
         string artifactsRoot = FileSystemWorkspacePaths.GetSafePath(workspaceRoot, FileSystemWorkspacePaths.ToLogicalPath("runs"));
         if (!Directory.Exists(artifactsRoot))
@@ -166,7 +172,9 @@ public sealed class FileSystemRunArtifactStore : IRunArtifactStore
             return Task.FromResult(false);
         }
 
+        long length = new FileInfo(artifactPath).Length;
         File.Delete(artifactPath);
+        usageTracker.RecordDelta(-length);
         return Task.FromResult(true);
     }
 }

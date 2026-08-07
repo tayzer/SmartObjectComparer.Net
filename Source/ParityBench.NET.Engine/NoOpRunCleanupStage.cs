@@ -23,7 +23,7 @@ internal sealed class NoOpRunCleanupStage : IRunCleanupStage
     {
     }
 
-    public Task CleanupAsync(
+    public Task<CleanupStageResult> CleanupAsync(
         ComparisonRun run,
         CleanupStageContext context,
         CancellationToken cancellationToken = default)
@@ -35,7 +35,15 @@ internal sealed class NoOpRunCleanupStage : IRunCleanupStage
             throw new InvalidOperationException("Cleanup requires durable append completion.");
         }
 
-        // PR2 only wires append-before-delete flow. Retention policy actions are implemented in PR3.
-        return Task.CompletedTask;
+        int retained = context.PersistedRecords.Sum(record => CountArtifacts(record.Result));
+        return Task.FromResult(new CleanupStageResult(retained, 0, 0));
     }
+
+    private static int CountArtifacts(RequestPairResult result) =>
+        (result.ResponseA is null ? 0 : 1)
+        + (result.ResponseB is null ? 0 : 1)
+        + (result.FocusedResponseA is null ? 0 : 1)
+        + (result.FocusedResponseB is null ? 0 : 1)
+        + (result.ResponseA?.Artifact.ArtifactId.Contains("/canonical/", StringComparison.OrdinalIgnoreCase) == true ? 1 : 0)
+        + (result.ResponseB?.Artifact.ArtifactId.Contains("/canonical/", StringComparison.OrdinalIgnoreCase) == true ? 1 : 0);
 }

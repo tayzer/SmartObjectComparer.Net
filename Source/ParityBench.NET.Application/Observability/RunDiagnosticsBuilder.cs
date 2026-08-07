@@ -11,12 +11,43 @@ internal sealed class RunDiagnosticsBuilder
     private readonly object gate = new object();
     private readonly List<SlowRequestPathDiagnostic> slowPaths = new List<SlowRequestPathDiagnostic>();
     private readonly List<ExceptionDiagnostic> exceptions = new List<ExceptionDiagnostic>();
+    private readonly int maxSlowPathEntries;
+    private readonly int maxExceptionEntries;
+
+    public RunDiagnosticsBuilder(int maxSlowPathEntries, int maxExceptionEntries)
+    {
+        this.maxSlowPathEntries = Math.Max(0, maxSlowPathEntries);
+        this.maxExceptionEntries = Math.Max(0, maxExceptionEntries);
+    }
 
     public void AddSlowPath(SlowRequestPathDiagnostic slowPath)
     {
         lock (gate)
         {
-            slowPaths.Add(slowPath);
+            if (maxSlowPathEntries == 0)
+            {
+                return;
+            }
+
+            if (slowPaths.Count < maxSlowPathEntries)
+            {
+                slowPaths.Add(slowPath);
+                return;
+            }
+
+            int slowestIndex = 0;
+            for (int index = 1; index < slowPaths.Count; index++)
+            {
+                if (slowPaths[index].Duration < slowPaths[slowestIndex].Duration)
+                {
+                    slowestIndex = index;
+                }
+            }
+
+            if (slowPath.Duration > slowPaths[slowestIndex].Duration)
+            {
+                slowPaths[slowestIndex] = slowPath;
+            }
         }
     }
 
@@ -24,20 +55,21 @@ internal sealed class RunDiagnosticsBuilder
     {
         lock (gate)
         {
-            exceptions.Add(exception);
+            if (exceptions.Count < maxExceptionEntries)
+            {
+                exceptions.Add(exception);
+            }
         }
     }
 
-    public RunDiagnosticsSnapshot? CreateSnapshot(int maxSlowPathEntries, int maxExceptionEntries)
+    public RunDiagnosticsSnapshot? CreateSnapshot()
     {
         lock (gate)
         {
             List<SlowRequestPathDiagnostic> selectedSlowPaths = slowPaths
                 .OrderByDescending(path => path.Duration)
-                .Take(maxSlowPathEntries)
                 .ToList();
             List<ExceptionDiagnostic> selectedExceptions = exceptions
-                .Take(maxExceptionEntries)
                 .ToList();
 
             if (selectedSlowPaths.Count == 0 && selectedExceptions.Count == 0)

@@ -23,7 +23,8 @@ public sealed record RunExecutionMetrics
         int retainedArtifactCount = 0,
         int trimmedByPolicyArtifactCount = 0,
         int missingUnexpectedlyArtifactCount = 0,
-        CompareSubPhaseMetrics? compareSubPhases = null)
+        CompareSubPhaseMetrics? compareSubPhases = null,
+        int comparisonConcurrency = 0)
     {
         EnsureNonNegative(totalDuration, nameof(totalDuration));
         EnsureNonNegative(requestExecutionDuration, nameof(requestExecutionDuration));
@@ -32,6 +33,7 @@ public sealed record RunExecutionMetrics
         EnsureNonNegative(requestCount, nameof(requestCount));
         EnsureNonNegative(maxConcurrency, nameof(maxConcurrency));
         EnsureNonNegative(responseBytesWritten, nameof(responseBytesWritten));
+        EnsureNonNegative(comparisonConcurrency, nameof(comparisonConcurrency));
         EnsureNonNegative(retainedArtifactCount, nameof(retainedArtifactCount));
         EnsureNonNegative(trimmedByPolicyArtifactCount, nameof(trimmedByPolicyArtifactCount));
         EnsureNonNegative(missingUnexpectedlyArtifactCount, nameof(missingUnexpectedlyArtifactCount));
@@ -43,6 +45,7 @@ public sealed record RunExecutionMetrics
         RequestCount = requestCount;
         MaxConcurrency = maxConcurrency;
         ResponseBytesWritten = responseBytesWritten;
+        ComparisonConcurrency = comparisonConcurrency;
         RetainedArtifactCount = retainedArtifactCount;
         TrimmedByPolicyArtifactCount = trimmedByPolicyArtifactCount;
         MissingUnexpectedlyArtifactCount = missingUnexpectedlyArtifactCount;
@@ -62,6 +65,9 @@ public sealed record RunExecutionMetrics
     public int MaxConcurrency { get; }
 
     public long ResponseBytesWritten { get; }
+
+    /// <summary>Actual number of workers used by the CPU-bound comparison stage.</summary>
+    public int ComparisonConcurrency { get; }
 
     public int RetainedArtifactCount { get; }
 
