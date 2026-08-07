@@ -16,7 +16,7 @@ public sealed class PluginProfileBootstrapperTests
     [TestMethod]
     public async Task EnsureTemplateProfilesAsync_CreatesAProfileFromEachTemplateOnce()
     {
-        using PluginTestPackage package = PluginTestPackage.InstallFixture("parity.test-plugin", "1.0.0");
+        using PluginTestPackage package = PluginTestPackage.WithFixture("parity.test-plugin", "1.0.0");
         InMemoryRunProfileStore store = new InMemoryRunProfileStore();
         PluginProfileBootstrapper bootstrapper = new PluginProfileBootstrapper(
             new PluginMetadataProvider(new PluginCatalog(new[] { package.RootPath }), new PluginLoader()),
@@ -32,6 +32,10 @@ public sealed class PluginProfileBootstrapperTests
         Assert.AreEqual("parity.test-plugin.comparison", profile.ComparisonId);
         Assert.AreEqual("QA", profile.EnvironmentName);
         Assert.AreEqual(new Uri("https://qa.example.test/a"), profile.EndpointA);
+
+        // Left unpinned on purpose: the profile follows the highest installed version,
+        // so upgrading the plugin package does not strand it on a version that is gone.
+        Assert.IsNull(profile.PluginVersion);
 
         // Running it again is idempotent — the seeded profile is not recreated.
         IReadOnlyList<string> secondRun = await bootstrapper.EnsureTemplateProfilesAsync();
@@ -77,6 +81,9 @@ public sealed class PluginProfileBootstrapperTests
         public Task<PluginCatalogView> GetCatalogAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(new PluginCatalogView(new[] { plugin }, Array.Empty<PluginInstallationFailure>()));
 
+        public Task<PluginCatalogView> RefreshCatalogAsync(CancellationToken cancellationToken = default) =>
+            GetCatalogAsync(cancellationToken);
+
         public Task<InstalledPluginMetadata?> GetPluginAsync(string pluginId, string? version = null, CancellationToken cancellationToken = default) =>
             Task.FromResult<InstalledPluginMetadata?>(plugin);
 
@@ -87,7 +94,7 @@ public sealed class PluginProfileBootstrapperTests
     [TestMethod]
     public async Task EnsureTemplateProfilesAsync_DoesNotOverwriteAnEditedProfile()
     {
-        using PluginTestPackage package = PluginTestPackage.InstallFixture("parity.test-plugin", "1.0.0");
+        using PluginTestPackage package = PluginTestPackage.WithFixture("parity.test-plugin", "1.0.0");
         InMemoryRunProfileStore store = new InMemoryRunProfileStore();
         // An operator already edited this profile's endpoints.
         await store.SaveAsync(new RunProfile(

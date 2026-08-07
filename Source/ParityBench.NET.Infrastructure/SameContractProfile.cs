@@ -11,8 +11,10 @@ public sealed class SameContractProfile : IContractProfile
     {
         ResponseModelName = string.IsNullOrWhiteSpace(responseModelName) ? "Auto" : responseModelName.Trim();
         PayloadFormat[] supportedFormats = new[] { PayloadFormat.Json, PayloadFormat.Xml, PayloadFormat.Text };
-        EndpointA = new ContractEndpointProfile(PayloadFormat.Text, "text/plain", PayloadFormat.Text, supportedSourceRequestFormats: supportedFormats);
-        EndpointB = new ContractEndpointProfile(PayloadFormat.Text, "text/plain", PayloadFormat.Text, supportedSourceRequestFormats: supportedFormats);
+        // Null content type: this profile is pass-through by definition, and it accepts
+        // all three source formats, so pinning one content type would be wrong.
+        EndpointA = new ContractEndpointProfile(PayloadFormat.Text, null, PayloadFormat.Text, supportedSourceRequestFormats: supportedFormats);
+        EndpointB = new ContractEndpointProfile(PayloadFormat.Text, null, PayloadFormat.Text, supportedSourceRequestFormats: supportedFormats);
     }
 
     public string ProfileId => ContractProfileSelection.SameContractProfileId;

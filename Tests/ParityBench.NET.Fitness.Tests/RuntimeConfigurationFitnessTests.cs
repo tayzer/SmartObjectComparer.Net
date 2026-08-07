@@ -3,8 +3,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
+using ParityBench.NET.Application.Plugins;
 using ParityBench.NET.Application.Workflow;
 using ParityBench.NET.Cli;
+using ParityBench.NET.Plugins;
 
 namespace ParityBench.NET.Fitness.Tests;
 
@@ -12,6 +14,31 @@ namespace ParityBench.NET.Fitness.Tests;
 [TestCategory("Fitness")]
 public sealed class RuntimeConfigurationFitnessTests
 {
+    [TestMethod]
+    public void HostServices_ResolveThePluginCatalogLoaderAndMetadataProvider()
+    {
+        string workspaceRoot = CreateTempDirectory();
+        ServiceCollection services = new ServiceCollection();
+
+        try
+        {
+            CliApplication.RegisterServices(services, workspaceRoot, new ConfigurationBuilder().Build());
+            using ServiceProvider provider = services.BuildServiceProvider();
+
+            // The loader is registered through a factory because it has an optional
+            // shadow-root parameter the container cannot satisfy; this is what proves
+            // the registration still resolves.
+            Assert.IsNotNull(provider.GetRequiredService<PluginLoader>());
+            Assert.IsNotNull(provider.GetRequiredService<PluginCatalog>());
+            Assert.IsNotNull(provider.GetRequiredService<IPluginMetadataProvider>());
+            Assert.IsNotNull(provider.GetRequiredService<IComparisonPlanFactory>());
+        }
+        finally
+        {
+            Directory.Delete(workspaceRoot, recursive: true);
+        }
+    }
+
     [TestMethod]
     public void CliServices_WhenRunDefaultsAreConfigured_BindRequestComparisonDefaults()
     {

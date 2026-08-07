@@ -1,5 +1,3 @@
-using System.Text.Json;
-
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 using ParityBench.NET.Application.Plugins;
@@ -15,15 +13,12 @@ namespace ParityBench.NET.Plugins.Tests;
 [TestClass]
 public sealed class PluginLoadingTests
 {
-    private static readonly string FixturePluginDirectory = ResolveFixturePluginDirectory();
-
     [TestMethod]
     public void Catalog_WhenPackageIsInstalled_DiscoversItFromTheManifestAlone()
     {
-        using TempPluginRoot root = TempPluginRoot.Create();
-        root.InstallFixture("parity.test-plugin", "1.0.0");
+        using PluginTestPackage root = PluginTestPackage.WithFixture("parity.test-plugin", "1.0.0");
 
-        PluginCatalog catalog = new PluginCatalog(new[] { root.Path });
+        PluginCatalog catalog = new PluginCatalog(new[] { root.RootPath });
 
         Assert.AreEqual(1, catalog.Packages.Count);
         Assert.AreEqual("parity.test-plugin", catalog.Packages[0].Manifest.Id);
@@ -33,10 +28,12 @@ public sealed class PluginLoadingTests
     [TestMethod]
     public void Catalog_WhenPackageTargetsAnotherSdkVersion_ReportsItAsAFailureInsteadOfLoadingIt()
     {
-        using TempPluginRoot root = TempPluginRoot.Create();
-        root.InstallFixture("parity.test-plugin", "1.0.0", sdkVersion: PluginManifest.CurrentSdkVersion + 1);
+        using PluginTestPackage root = PluginTestPackage.WithFixture(
+            "parity.test-plugin",
+            "1.0.0",
+            sdkVersion: PluginManifest.CurrentSdkVersion + 1);
 
-        PluginCatalog catalog = new PluginCatalog(new[] { root.Path });
+        PluginCatalog catalog = new PluginCatalog(new[] { root.RootPath });
 
         Assert.AreEqual(0, catalog.Packages.Count);
         StringAssert.Contains(catalog.Failures.Single().Reason, "SDK version");
@@ -45,14 +42,14 @@ public sealed class PluginLoadingTests
     [TestMethod]
     public void Load_WhenTwoPackagesAreInstalled_IsolatesThemButSharesTheSdkTypes()
     {
-        using TempPluginRoot root = TempPluginRoot.Create();
+        using PluginTestPackage root = PluginTestPackage.CreateEmptyRoot();
         // Same package installed at two versions: the loader must treat them as
         // separate plugins rather than unifying them.
         root.InstallFixture("parity.test-plugin", "1.0.0");
         root.InstallFixture("parity.test-plugin", "2.0.0");
 
-        PluginCatalog catalog = new PluginCatalog(new[] { root.Path });
-        PluginLoader loader = new PluginLoader();
+        PluginCatalog catalog = new PluginCatalog(new[] { root.RootPath });
+        using PluginLoader loader = new PluginLoader(root.ShadowRootPath);
 
         LoadedPlugin first = loader.Load(catalog.Packages.Single(package => package.Manifest.Version == "1.0.0"));
         LoadedPlugin second = loader.Load(catalog.Packages.Single(package => package.Manifest.Version == "2.0.0"));
@@ -76,12 +73,12 @@ public sealed class PluginLoadingTests
     [TestMethod]
     public async Task CreateAsync_WhenRunSelectsAComparison_BuildsAPlanWithTheEnabledSteps()
     {
-        using TempPluginRoot root = TempPluginRoot.Create();
-        root.InstallFixture("parity.test-plugin", "1.0.0");
+        using PluginTestPackage root = PluginTestPackage.WithFixture("parity.test-plugin", "1.0.0");
+        using PluginLoader loader = new PluginLoader(root.ShadowRootPath);
 
         PluginComparisonPlanFactory factory = new PluginComparisonPlanFactory(
-            new PluginCatalog(new[] { root.Path }),
-            new PluginLoader());
+            new PluginCatalog(new[] { root.RootPath }),
+            loader);
 
         await using ComparisonExecutionPlan? plan = await factory.CreateAsync(CreateRunOptions(
             new PluginComparisonSelection(
@@ -99,13 +96,36 @@ public sealed class PluginLoadingTests
     }
 
     [TestMethod]
+    public async Task CreateAsync_WhenTwoVersionsAreInstalledAndTheProfileNamesNoVersion_UsesTheHighest()
+    {
+        using PluginTestPackage root = PluginTestPackage.CreateEmptyRoot();
+        root.InstallFixture("parity.test-plugin", "1.0.0");
+        root.InstallFixture("parity.test-plugin", "2.0.0", variant: FixtureVariant.Rebuilt);
+
+        using PluginLoader loader = new PluginLoader(root.ShadowRootPath);
+        PluginComparisonPlanFactory factory = new PluginComparisonPlanFactory(
+            new PluginCatalog(new[] { root.RootPath }),
+            loader);
+
+        await using ComparisonExecutionPlan? plan = await factory.CreateAsync(CreateRunOptions(
+            new PluginComparisonSelection("parity.test-plugin", "parity.test-plugin.comparison")));
+
+        Assert.IsNotNull(plan);
+
+        // Only the 2.0.0 package carries the rebuilt build, so the display name proves
+        // which of the two was resolved.
+        Assert.AreEqual("Test comparison (rebuilt)", plan.Definition.DisplayName);
+    }
+
+    [TestMethod]
     public async Task CreateAsync_WhenRunSelectsAnUninstalledPlugin_Throws()
     {
-        using TempPluginRoot root = TempPluginRoot.Create();
+        using PluginTestPackage root = PluginTestPackage.CreateEmptyRoot();
+        using PluginLoader loader = new PluginLoader(root.ShadowRootPath);
 
         PluginComparisonPlanFactory factory = new PluginComparisonPlanFactory(
-            new PluginCatalog(new[] { root.Path }),
-            new PluginLoader());
+            new PluginCatalog(new[] { root.RootPath }),
+            loader);
 
         InvalidOperationException exception = await Assert.ThrowsExactlyAsync<InvalidOperationException>(() =>
             factory.CreateAsync(CreateRunOptions(new PluginComparisonSelection("missing.plugin", "missing.comparison"))));
@@ -114,13 +134,33 @@ public sealed class PluginLoadingTests
     }
 
     [TestMethod]
-    public async Task CreateAsync_WhenRunSelectsNoPlugin_ReturnsNull()
+    public async Task CreateAsync_WhenTheProfilePinsAVersionThatIsNotInstalled_NamesTheInstalledVersions()
     {
-        using TempPluginRoot root = TempPluginRoot.Create();
+        using PluginTestPackage root = PluginTestPackage.WithFixture("parity.test-plugin", "2.0.0");
+        using PluginLoader loader = new PluginLoader(root.ShadowRootPath);
 
         PluginComparisonPlanFactory factory = new PluginComparisonPlanFactory(
-            new PluginCatalog(new[] { root.Path }),
-            new PluginLoader());
+            new PluginCatalog(new[] { root.RootPath }),
+            loader);
+
+        InvalidOperationException exception = await Assert.ThrowsExactlyAsync<InvalidOperationException>(() =>
+            factory.CreateAsync(CreateRunOptions(new PluginComparisonSelection(
+                "parity.test-plugin",
+                "parity.test-plugin.comparison",
+                pluginVersion: "1.0.0"))));
+
+        StringAssert.Contains(exception.Message, "2.0.0");
+    }
+
+    [TestMethod]
+    public async Task CreateAsync_WhenRunSelectsNoPlugin_ReturnsNull()
+    {
+        using PluginTestPackage root = PluginTestPackage.CreateEmptyRoot();
+        using PluginLoader loader = new PluginLoader(root.ShadowRootPath);
+
+        PluginComparisonPlanFactory factory = new PluginComparisonPlanFactory(
+            new PluginCatalog(new[] { root.RootPath }),
+            loader);
 
         Assert.IsNull(await factory.CreateAsync(CreateRunOptions(null)));
     }
@@ -133,73 +173,4 @@ public sealed class PluginLoadingTests
             TimeSpan.FromSeconds(30),
             2,
             pluginComparison: selection);
-
-    private static string ResolveFixturePluginDirectory()
-    {
-        // The fixture package is built alongside these tests; walk up to the repo
-        // root rather than hard-coding a relative depth from the test binary.
-        DirectoryInfo? directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "ComparisonTool.sln")))
-        {
-            directory = directory.Parent;
-        }
-
-        string repositoryRoot = directory?.FullName
-            ?? throw new InvalidOperationException("Could not locate the repository root from the test output directory.");
-
-        string configuration = Path.GetFileName(Path.GetDirectoryName(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar)))!;
-        return Path.Combine(repositoryRoot, "Tests", "Fixtures", "ParityBench.TestPlugin", "bin", configuration, "net10.0");
-    }
-
-    private sealed class TempPluginRoot : IDisposable
-    {
-        private TempPluginRoot(string path) => Path = path;
-
-        public string Path { get; }
-
-        public static TempPluginRoot Create()
-        {
-            string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "paritybench-plugins", Guid.NewGuid().ToString("n"));
-            Directory.CreateDirectory(path);
-            return new TempPluginRoot(path);
-        }
-
-        /// <summary>
-        /// Copies the fixture package into the root under a given id and version, so
-        /// two "different" plugins can be installed from one built fixture.
-        /// </summary>
-        public void InstallFixture(string pluginId, string version, int sdkVersion = PluginManifest.CurrentSdkVersion)
-        {
-            string packageDirectory = System.IO.Path.Combine(Path, $"{pluginId}.{version}");
-            Directory.CreateDirectory(packageDirectory);
-
-            foreach (string file in Directory.EnumerateFiles(FixturePluginDirectory))
-            {
-                File.Copy(file, System.IO.Path.Combine(packageDirectory, System.IO.Path.GetFileName(file)), overwrite: true);
-            }
-
-            PluginManifest manifest = new PluginManifest(
-                pluginId,
-                version,
-                "ParityBench.TestPlugin.dll",
-                sdkVersion,
-                displayName: pluginId);
-            File.WriteAllText(
-                System.IO.Path.Combine(packageDirectory, PluginManifest.FileName),
-                JsonSerializer.Serialize(manifest, PluginManifest.JsonOptions));
-        }
-
-        public void Dispose()
-        {
-            try
-            {
-                Directory.Delete(Path, recursive: true);
-            }
-            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-            {
-                // Loaded plugin assemblies can keep files locked; a leftover temp
-                // directory is not worth failing a test over.
-            }
-        }
-    }
 }

@@ -47,7 +47,6 @@ public sealed class ClientCustomerLookupPlugin : IParityBenchPlugin
                     new PluginConfigurationField("finalTokenUrl", "Final token URL", PluginFieldKind.Uri, isRequired: true),
                     new PluginConfigurationField("finalTokenSubscriptionKey", "Final token subscription key", PluginFieldKind.Secret, isRequired: true),
                     new PluginConfigurationField("endpointBSubscriptionKey", "Endpoint B subscription key", PluginFieldKind.Secret, isRequired: true),
-                    new PluginConfigurationField("soapAction", "SOAPAction header", PluginFieldKind.String, defaultValue: "urn:ClientCustomerLookup"),
                 }))
             .AddEnvironment(new PluginEnvironment(
                 "Local",
@@ -98,11 +97,16 @@ public sealed class ClientCustomerLookupPlugin : IParityBenchPlugin
 
         public Type ComparisonType => typeof(ClientCustomerLookupResponse);
 
+        // The SOAP endpoint accepts text/xml and requires a SOAPAction — both are
+        // properties of the contract, so they are declared here rather than set by a
+        // request step. Staging would otherwise infer application/xml from the file
+        // extension, which this endpoint rejects with a 415.
         public ContractEndpointProfile EndpointA { get; } = new ContractEndpointProfile(
             PayloadFormat.Xml,
             "text/xml",
             PayloadFormat.Xml,
-            supportedSourceRequestFormats: new[] { PayloadFormat.Xml });
+            supportedSourceRequestFormats: new[] { PayloadFormat.Xml },
+            requestHeaders: new Dictionary<string, string> { ["SOAPAction"] = "urn:ClientCustomerLookup" });
 
         public ContractEndpointProfile EndpointB { get; } = new ContractEndpointProfile(
             PayloadFormat.Json,

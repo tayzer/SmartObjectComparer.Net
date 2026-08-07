@@ -207,6 +207,7 @@ public sealed class FileSystemRunStore : IRunStore
             RequestExecution = ToDto(options.RequestExecution),
             ContractProfile = options.ContractProfile is null ? null : ToDto(options.ContractProfile),
             PluginComparison = options.PluginComparison is null ? null : ToDto(options.PluginComparison),
+            Baseline = BaselineBindingDto.FromBinding(options.Baseline),
             LargeRun = ToDto(options.LargeRun),
             RunRetentionModeOverride = options.RunRetentionModeOverride,
             ComparisonRulesSnapshotHash = options.ComparisonRulesSnapshotHash,
@@ -400,7 +401,8 @@ public sealed class FileSystemRunStore : IRunStore
             dto.LargeRun is null ? null : FromDto(dto.LargeRun),
             dto.RunRetentionModeOverride,
             dto.ComparisonRulesSnapshotHash,
-            dto.PluginComparison is null ? null : FromDto(dto.PluginComparison));
+            dto.PluginComparison is null ? null : FromDto(dto.PluginComparison),
+            dto.Baseline?.ToBinding());
     }
 
     private EndpointDefinition FromDto(EndpointDefinitionDto dto) =>

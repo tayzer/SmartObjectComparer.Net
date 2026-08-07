@@ -1,6 +1,5 @@
 using System.Text.Json.Serialization;
 using System.Xml.Serialization;
-
 using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Comparison;

@@ -1,0 +1,53 @@
+<Project>
+
+  <!--
+    Shared host-side plugin-bundling target. A host project (Desktop, Web, Cli)
+    imports this and lists the plugin packages it ships with:
+
+      <ItemGroup>
+        <PbBundledPlugin Include="..\..\Plugins\Acme.OrderLookup\Acme.OrderLookup.csproj"
+                         PackageId="acme.order-lookup" />
+      </ItemGroup>
+
+    On Publish, each listed plugin is published into "plugins\<PackageId>\" beneath
+    the host's publish output, which is one of the directories the catalog scans
+    (AppContext.BaseDirectory\plugins). A tester therefore gets the plugin already
+    installed by copying the published app, with no manual copy into the workspace.
+
+    PackageId must match the "id" in the plugin's parity-plugin.json, so the folder
+    on disk, the manifest, and any run profile that names the plugin all agree.
+
+    Opt out with: -p:PbBundlePlugins=false
+  -->
+
+  <Target Name="ValidateBundledParityBenchPlugins"
+          Condition="'$(PbBundlePlugins)' != 'false' And '@(PbBundledPlugin)' != ''">
+
+    <!-- Caught here rather than at copy time: an empty PackageId would otherwise
+         publish the package straight into "plugins\", where the catalog looks for
+         package directories and not for manifests. -->
+    <Error Condition="'%(PbBundledPlugin.PackageId)' == ''"
+           Text="PbBundledPlugin '%(PbBundledPlugin.Identity)' has no PackageId metadata. Set it to the plugin's manifest id." />
+  </Target>
+
+  <Target Name="PublishBundledParityBenchPlugins"
+          AfterTargets="Publish"
+          DependsOnTargets="ValidateBundledParityBenchPlugins"
+          Condition="'$(PbBundlePlugins)' != 'false' And '@(PbBundledPlugin)' != ''">
+
+    <!--
+      RemoveProperties mirrors the report-asset publish: the host may be published
+      self-contained, single-file, or for a specific RID, none of which apply to a
+      plugin class library. PbInstallPluginToWorkspace=false keeps the plugin's own
+      Debug-time workspace copy from firing as a side effect of publishing the host.
+    -->
+    <MSBuild Projects="@(PbBundledPlugin)"
+             Targets="Publish"
+             Properties="Configuration=$(Configuration);PublishDir=$(PublishDir)plugins\%(PbBundledPlugin.PackageId)\;PbInstallPluginToWorkspace=false"
+             RemoveProperties="RuntimeIdentifier;SelfContained;PublishSingleFile;PublishReadyToRun;IncludeNativeLibrariesForSelfExtract;IncludeAllContentForSelfExtract;UseAppHost;TargetFramework" />
+
+    <Message Importance="high"
+             Text="Bundled plugin '%(PbBundledPlugin.PackageId)' into $(PublishDir)plugins\%(PbBundledPlugin.PackageId)\" />
+  </Target>
+
+</Project>

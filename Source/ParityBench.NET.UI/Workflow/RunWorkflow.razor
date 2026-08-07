@@ -1,8 +1,11 @@
 @using System.IO
+@using ParityBench.NET.Application.Baselines
 @using ParityBench.NET.Application.Workflow
+@using ParityBench.NET.Domain.Baselines
 @using ParityBench.NET.Domain.Comparison
 @using ParityBench.NET.Domain.ContractProfiles
 @using ParityBench.NET.Domain.Requests
+@using ParityBench.NET.Domain.Runs.Retention
 @inject IRunWorkflowViewDataSource DataSource
 @inject IRequestSourcePicker SourcePicker
 
@@ -27,6 +30,74 @@
     {
         <MudAlert Severity="Severity.Success" Variant="Variant.Outlined">@successMessage</MudAlert>
     }
+
+    <MudPaper Elevation="0" Class="pa-3 pb-workflow-section">
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.subtitle1" Class="pb-workflow-heading"><MudIcon Icon="@Icons.Material.Filled.CompareArrows" Size="Size.Small" />Comparison Mode</MudText>
+            <MudSelect T="BaselineRunMode"
+                       Label="Mode"
+                       Value="baselineMode"
+                       ValueChanged="HandleBaselineModeChangedAsync"
+                       Variant="Variant.Outlined"
+                       HelperText="Capture records one endpoint's behaviour for later. Baseline vs Live replays a capture, so the recorded version does not have to be running.">
+                <MudSelectItem T="BaselineRunMode" Value="@BaselineRunMode.LiveVsLive">Live vs Live</MudSelectItem>
+                <MudSelectItem T="BaselineRunMode" Value="@BaselineRunMode.CaptureBaseline">Capture baseline</MudSelectItem>
+                <MudSelectItem T="BaselineRunMode" Value="@BaselineRunMode.BaselineVsLive">Baseline vs Live</MudSelectItem>
+            </MudSelect>
+
+            @if (baselineMode != BaselineRunMode.LiveVsLive && selectedPluginComparison is null)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true">
+                    Select a plugin run profile below: baselines store the comparison model a plugin comparison defines.
+                </MudAlert>
+            }
+
+            @if (baselineMode == BaselineRunMode.CaptureBaseline)
+            {
+                <MudTextField T="string"
+                              Label="Baseline name"
+                              @bind-Value="captureBaselineName"
+                              Immediate="true"
+                              Variant="Variant.Outlined"
+                              HelperText="@CaptureNameHelperText" />
+            }
+
+            @if (baselineMode == BaselineRunMode.BaselineVsLive)
+            {
+                @if (baselines.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                        No baselines have been captured yet. Run this workflow in "Capture baseline" mode first, or import a package from the Baselines tab.
+                    </MudAlert>
+                }
+                else
+                {
+                    <MudSelect T="string"
+                               Label="Baseline"
+                               Value="selectedBaselineKey"
+                               ValueChanged="HandleBaselineChangedAsync"
+                               Variant="Variant.Outlined"
+                               Clearable="true">
+                        @foreach (BaselineSummary baseline in baselines)
+                        {
+                            <MudSelectItem T="string" Value="@ToBaselineKey(baseline)">@($"{baseline.Name} {baseline.DisplayVersion} — captured {baseline.CapturedAt:yyyy-MM-dd HH:mm}")</MudSelectItem>
+                        }
+                    </MudSelect>
+                }
+
+                @if (selectedBaseline is not null)
+                {
+                    <MudPaper Elevation="0" Class="pa-3 pb-workflow-muted-panel">
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.body2"><b>@selectedBaseline.Scenarios.Count</b> scenario@(selectedBaseline.Scenarios.Count == 1 ? string.Empty : "s") captured from @selectedBaseline.CaptureEndpoint</MudText>
+                            <MudText Typo="Typo.caption">Captured @selectedBaseline.CapturedAt.ToString("yyyy-MM-dd HH:mm") with @selectedBaseline.PluginId@(string.IsNullOrWhiteSpace(selectedBaseline.PluginVersion) ? string.Empty : $" {selectedBaseline.PluginVersion}")@(string.IsNullOrWhiteSpace(selectedBaseline.EnvironmentName) ? string.Empty : $" in {selectedBaseline.EnvironmentName}")</MudText>
+                            <MudText Typo="Typo.caption">The requests come from the package, so the captured version does not need to be running.</MudText>
+                        </MudStack>
+                    </MudPaper>
+                }
+            }
+        </MudStack>
+    </MudPaper>
 
     <MudPaper Elevation="0" Class="pa-3 pb-workflow-section">
         <MudStack Spacing="2">
@@ -60,31 +131,42 @@
                     }
                 </MudSelect>
             }
-            @if (SourcePicker.IsAvailable)
+            @if (baselineMode == BaselineRunMode.BaselineVsLive)
             {
-                <MudStack Row="true" Spacing="2" Class="flex-wrap">
-                    <MudButton Variant="Variant.Outlined"
-                               Color="Color.Primary"
-                               StartIcon="@Icons.Material.Filled.AttachFile"
-                               Disabled="@isBusy"
-                               OnClick="PickRequestFilesAsync">
-                        Add Request Files
-                    </MudButton>
-                    <MudButton Variant="Variant.Outlined"
-                               Color="Color.Primary"
-                               StartIcon="@Icons.Material.Filled.FolderOpen"
-                               Disabled="@isBusy"
-                               OnClick="PickRequestDirectoryAsync">
-                        Add Request Folder
-                    </MudButton>
-                </MudStack>
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                    @(selectedBaseline is null
+                        ? "Requests will come from the baseline you select above."
+                        : $"Requests come from baseline '{selectedBaseline.Name}' {selectedBaseline.DisplayVersion} ({selectedBaseline.Scenarios.Count} scenarios).")
+                </MudAlert>
             }
-            <MudTextField T="string"
-                          Label="Request Directory"
-                          Value="requestDirectory"
-                          ValueChanged="HandleRequestDirectoryChanged"
-                          Immediate="true"
-                          Variant="Variant.Outlined" />
+            else
+            {
+                @if (SourcePicker.IsAvailable)
+                {
+                    <MudStack Row="true" Spacing="2" Class="flex-wrap">
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.AttachFile"
+                                   Disabled="@isBusy"
+                                   OnClick="PickRequestFilesAsync">
+                            Add Request Files
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.FolderOpen"
+                                   Disabled="@isBusy"
+                                   OnClick="PickRequestDirectoryAsync">
+                            Add Request Folder
+                        </MudButton>
+                    </MudStack>
+                }
+                <MudTextField T="string"
+                              Label="Request Directory"
+                              Value="requestDirectory"
+                              ValueChanged="HandleRequestDirectoryChanged"
+                              Immediate="true"
+                              Variant="Variant.Outlined" />
+            }
             @if (!string.IsNullOrWhiteSpace(requestSourceDescription))
             {
                 <MudText Typo="Typo.caption">@requestSourceDescription</MudText>
@@ -253,30 +335,47 @@
         <MudStack Spacing="2">
             <MudText Typo="Typo.subtitle1" Class="pb-workflow-heading"><MudIcon Icon="@Icons.Material.Filled.Hub" Size="Size.Small" />Step 3: Configure Endpoints</MudText>
             <MudGrid Spacing="2">
-                <MudItem xs="12" md="6">
-                    <MudAutocomplete T="string"
-                                     Label="Endpoint A"
-                                     Value="endpointA"
-                                     ValueChanged="HandleEndpointAChanged"
-                                     SearchFunc="SearchEndpointUrlsAsync"
-                                     Immediate="true"
-                                     CoerceValue="true"
-                                     ResetValueOnEmptyText="false"
-                                     MaxItems="50"
-                                     Variant="Variant.Outlined" />
-                </MudItem>
-                <MudItem xs="12" md="6">
-                    <MudAutocomplete T="string"
-                                     Label="Endpoint B"
-                                     Value="endpointB"
-                                     ValueChanged="HandleEndpointBChanged"
-                                     SearchFunc="SearchEndpointUrlsAsync"
-                                     Immediate="true"
-                                     CoerceValue="true"
-                                     ResetValueOnEmptyText="false"
-                                     MaxItems="50"
-                                     Variant="Variant.Outlined" />
-                </MudItem>
+                @if (baselineMode == BaselineRunMode.BaselineVsLive)
+                {
+                    <MudItem xs="12" md="6">
+                        <MudTextField T="string"
+                                      Label="Endpoint A (baseline)"
+                                      Value="@(selectedBaseline is null ? string.Empty : selectedBaseline.CaptureEndpoint.ToString())"
+                                      ReadOnly="true"
+                                      Variant="Variant.Outlined"
+                                      HelperText="Served from the captured package. Nothing is sent to this endpoint." />
+                    </MudItem>
+                }
+                else
+                {
+                    <MudItem xs="12" md="6">
+                        <MudAutocomplete T="string"
+                                         Label="@(baselineMode == BaselineRunMode.CaptureBaseline ? "Endpoint A (captured)" : "Endpoint A")"
+                                         Value="endpointA"
+                                         ValueChanged="HandleEndpointAChanged"
+                                         SearchFunc="SearchEndpointUrlsAsync"
+                                         Immediate="true"
+                                         CoerceValue="true"
+                                         ResetValueOnEmptyText="false"
+                                         MaxItems="50"
+                                         Variant="Variant.Outlined" />
+                    </MudItem>
+                }
+                @if (baselineMode != BaselineRunMode.CaptureBaseline)
+                {
+                    <MudItem xs="12" md="6">
+                        <MudAutocomplete T="string"
+                                         Label="@(baselineMode == BaselineRunMode.BaselineVsLive ? "Endpoint B (live)" : "Endpoint B")"
+                                         Value="endpointB"
+                                         ValueChanged="HandleEndpointBChanged"
+                                         SearchFunc="SearchEndpointUrlsAsync"
+                                         Immediate="true"
+                                         CoerceValue="true"
+                                         ResetValueOnEmptyText="false"
+                                         MaxItems="50"
+                                         Variant="Variant.Outlined" />
+                    </MudItem>
+                }
             </MudGrid>
 
             <MudExpansionPanels Elevation="0" MultiExpansion="true">
@@ -303,6 +402,22 @@
                         </MudItem>
                         <MudItem xs="12" md="4">
                             <MudTextField T="string" Label="Max Concurrency" @bind-Value="maxConcurrency" Immediate="true" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" md="8">
+                            @* What survives on disk once the run finishes. Empty means
+                               the app-wide ParityBench:Retention:Mode setting decides. *@
+                            <MudSelect T="string"
+                                       Label="Response retention"
+                                       Value="retentionModeOverride"
+                                       ValueChanged="HandleRetentionModeChanged"
+                                       Variant="Variant.Outlined"
+                                       HelperText="@RetentionHelperText">
+                                <MudSelectItem T="string" Value="@string.Empty">Use configured default</MudSelectItem>
+                                @foreach (RetentionMode mode in RetentionModePresentation.Modes)
+                                {
+                                    <MudSelectItem T="string" Value="@mode.ToString()">@RetentionModePresentation.Label(mode)</MudSelectItem>
+                                }
+                            </MudSelect>
                         </MudItem>
                     </MudGrid>
                 </MudExpansionPanel>
@@ -404,6 +519,11 @@
     private string selectedRunProfileId = string.Empty;
     private PluginComparisonSelection? selectedPluginComparison;
     private ComparisonRuleDefaults? pluginDefaultComparisonRules;
+    private BaselineRunMode baselineMode = BaselineRunMode.LiveVsLive;
+    private IReadOnlyList<BaselineSummary> baselines = Array.Empty<BaselineSummary>();
+    private string selectedBaselineKey = string.Empty;
+    private BaselinePackageManifest? selectedBaseline;
+    private string captureBaselineName = string.Empty;
     private string requestDirectory = string.Empty;
     private IReadOnlyList<string> sourceFiles = Array.Empty<string>();
     private string requestSourceDescription = string.Empty;
@@ -414,6 +534,13 @@
     private string modelName = "Auto";
     private string contractProfileId = string.Empty;
     private string contentTypeOverride = string.Empty;
+
+    /// <summary>
+    /// The retention mode this run asks for, empty for the configured default. A
+    /// selected run profile seeds it; the operator can still change it for one run
+    /// without editing the profile.
+    /// </summary>
+    private string retentionModeOverride = string.Empty;
     private string maxDifferences = "100";
     private List<IgnoreRuleDefinition> ignoreRuleDefinitions = new();
     private string smartIgnoreRules = string.Empty;
@@ -461,12 +588,45 @@
     private ComparisonRuleDefaults? ActiveDefaultComparisonRules =>
         selectedProfileOption?.DefaultComparisonRules ?? pluginDefaultComparisonRules;
 
+    // Capture never overwrites: the store assigns the next version, so the operator is
+    // told up front which one this run will write.
+    private string CaptureNameHelperText
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(captureBaselineName))
+            {
+                return "Name this baseline, for example \"orders-v4-pre-upgrade\".";
+            }
+
+            int nextVersion = 1;
+            try
+            {
+                BaselineId id = BaselineId.FromName(captureBaselineName);
+                nextVersion = baselines
+                    .Where(baseline => string.Equals(baseline.Id.Value, id.Value, StringComparison.OrdinalIgnoreCase))
+                    .Select(baseline => baseline.Version)
+                    .DefaultIfEmpty(0)
+                    .Max() + 1;
+            }
+            catch (ArgumentException)
+            {
+                return "Name must contain at least one letter or digit.";
+            }
+
+            return nextVersion == 1
+                ? "Will be saved as v1."
+                : $"Will be saved as v{nextVersion}; existing versions are kept.";
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         try
         {
             defaults = await DataSource.LoadDefaultsAsync();
             runProfiles = await DataSource.ListRunProfilesAsync();
+            baselines = await DataSource.ListBaselinesAsync();
             timeoutSeconds = defaults.RunDefaults.TimeoutSeconds.ToString();
             maxConcurrency = defaults.RunDefaults.MaxConcurrency.ToString();
             RefreshSelectedModelType();
@@ -478,6 +638,65 @@
         }
     }
 
+    private static string ToBaselineKey(BaselineSummary baseline) => $"{baseline.Id.Value}@{baseline.Version}";
+
+    private async Task HandleBaselineModeChangedAsync(BaselineRunMode value)
+    {
+        baselineMode = value;
+        if (value != BaselineRunMode.BaselineVsLive)
+        {
+            selectedBaselineKey = string.Empty;
+            selectedBaseline = null;
+        }
+
+        if (value != BaselineRunMode.LiveVsLive)
+        {
+            // The library may have gained a package since the page loaded — most often
+            // the capture this operator just ran.
+            baselines = await DataSource.ListBaselinesAsync();
+        }
+    }
+
+    private async Task HandleBaselineChangedAsync(string value)
+    {
+        selectedBaselineKey = value ?? string.Empty;
+        selectedBaseline = null;
+        if (string.IsNullOrWhiteSpace(selectedBaselineKey))
+        {
+            return;
+        }
+
+        BaselineSummary? summary = baselines.FirstOrDefault(baseline => ToBaselineKey(baseline) == selectedBaselineKey);
+        if (summary is null)
+        {
+            return;
+        }
+
+        try
+        {
+            selectedBaseline = await DataSource.ResolveBaselineAsync(summary.Id, summary.Version);
+            if (selectedBaseline is not null)
+            {
+                // The captured endpoint is what the report names as the expected side,
+                // even though this run will never call it.
+                endpointA = selectedBaseline.CaptureEndpoint.ToString();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private RetentionMode? SelectedRetentionMode => RetentionModePresentation.Parse(retentionModeOverride);
+
+    private void HandleRetentionModeChanged(string value) => retentionModeOverride = value ?? string.Empty;
+
+    private string RetentionHelperText =>
+        SelectedRetentionMode is null
+            ? "Falls back to ParityBench:Retention:Mode. Applies to this run only; retention runs once the run finishes."
+            : "Applies to this run only — the saved profile is unchanged.";
+
     private async Task HandleRunProfileChangedAsync(string value)
     {
         selectedRunProfileId = value ?? string.Empty;
@@ -488,6 +707,7 @@
             selectedPluginComparison = null;
             pluginDefaultComparisonRules = null;
             requestSourceDescription = string.Empty;
+            retentionModeOverride = string.Empty;
             return;
         }
 
@@ -503,6 +723,9 @@
             endpointB = resolved.EndpointB.ToString();
             endpointAHeaders = FormatHeaders(resolved.EndpointAHeaders);
             endpointBHeaders = FormatHeaders(resolved.EndpointBHeaders);
+            // The profile's retention mode is a starting point, not a lock: it seeds
+            // the picker, and clearing it there falls back to the configured default.
+            retentionModeOverride = resolved.RetentionModeOverride?.ToString() ?? string.Empty;
             ApplyComparisonOptions(resolved.Comparison);
             if (!string.IsNullOrWhiteSpace(resolved.RequestDirectory))
             {
@@ -663,6 +886,12 @@
             isBusy = false;
             await InvokeAsync(StateHasChanged);
             await PollUntilTerminalAsync(currentRun.Id);
+
+            if (baselineMode == BaselineRunMode.CaptureBaseline && currentRun?.Status == RunStatus.Completed)
+            {
+                baselines = await DataSource.ListBaselinesAsync();
+                successMessage = $"Captured baseline '{captureBaselineName}'.";
+            }
         }
         catch (Exception ex)
         {
@@ -750,9 +979,18 @@
 
     private RequestComparisonRunRequest BuildRequest()
     {
+        BaselineRunSelection? baselineSelection = BuildBaselineSelection();
+
         if (!Uri.TryCreate(endpointA, UriKind.Absolute, out Uri? endpointAUri))
         {
             throw new InvalidOperationException("Endpoint A must be an absolute URL.");
+        }
+
+        // A capture run calls one endpoint only. The second slot still needs a value
+        // because a run always has two; it is the same endpoint and is never called.
+        if (baselineMode == BaselineRunMode.CaptureBaseline)
+        {
+            endpointB = endpointA;
         }
 
         if (!Uri.TryCreate(endpointB, UriKind.Absolute, out Uri? endpointBUri))
@@ -799,7 +1037,40 @@
             endpointALabel: ResolveEndpointLabel(endpointA),
             endpointBLabel: ResolveEndpointLabel(endpointB),
             sourceFiles: sourceFiles.Count == 0 ? null : sourceFiles,
-            pluginComparison: selectedPluginComparison);
+            pluginComparison: selectedPluginComparison,
+            baseline: baselineSelection,
+            runRetentionModeOverride: SelectedRetentionMode);
+    }
+
+    private BaselineRunSelection? BuildBaselineSelection()
+    {
+        if (baselineMode == BaselineRunMode.LiveVsLive)
+        {
+            return null;
+        }
+
+        if (selectedPluginComparison is null)
+        {
+            throw new InvalidOperationException(
+                "Baseline capture and replay need a plugin run profile: the package stores the comparison model that plugin's comparison defines.");
+        }
+
+        if (baselineMode == BaselineRunMode.CaptureBaseline)
+        {
+            if (string.IsNullOrWhiteSpace(captureBaselineName))
+            {
+                throw new InvalidOperationException("Name the baseline this run will capture.");
+            }
+
+            return BaselineRunSelection.Capture(captureBaselineName);
+        }
+
+        if (selectedBaseline is null)
+        {
+            throw new InvalidOperationException("Select the baseline to compare against.");
+        }
+
+        return BaselineRunSelection.Replay(selectedBaseline.Id, selectedBaseline.Version);
     }
 
     private void ApplyComparisonOptions(ComparisonOptions options)

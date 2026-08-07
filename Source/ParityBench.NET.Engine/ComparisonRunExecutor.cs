@@ -1,16 +1,19 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Threading.Channels;
+using ParityBench.NET.Application.Baselines;
 using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.Application.Observability;
 using ParityBench.NET.Application.Plugins;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Runs;
 using ParityBench.NET.Domain.ContractProfiles;
+using ParityBench.NET.Domain.Baselines;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
 using ParityBench.NET.Domain.Runs.Retention;
+using ParityBench.NET.Engine.Baselines;
 using ParityBench.NET.Engine.Comparers;
 using ParityBench.NET.Engine.Pipeline;
 using ParityBench.PluginSdk.Pipeline;
@@ -28,6 +31,7 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
     private readonly IContractPayloadSerializer? contractPayloadSerializer;
     private readonly IObservabilityRecorder observabilityRecorder;
     private readonly IRunCleanupStage cleanupStage;
+    private readonly IBaselineStore? baselineStore;
 
     public ComparisonRunExecutor(
         IRequestBatchStore requestBatchStore,
@@ -68,8 +72,10 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         IComparisonPlanFactory? comparisonPlanFactory,
         IObservabilityRecorder? observabilityRecorder = null,
         IRunCleanupStage? cleanupStage = null,
-        IContractPayloadSerializer? contractPayloadSerializer = null)
+        IContractPayloadSerializer? contractPayloadSerializer = null,
+        IBaselineStore? baselineStore = null)
     {
+        this.baselineStore = baselineStore;
         this.requestBatchStore = requestBatchStore;
         this.endpointRequestSender = endpointRequestSender;
         this.runArtifactStore = runArtifactStore;
@@ -140,10 +146,64 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
                 contractPayloadSerializer,
                 counters);
 
+        BaselineRunSessions baselineSessions = await OpenBaselineSessionsAsync(
+            run,
+            comparisonOptions,
+            plan,
+            cancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            return await RunAndFinalizeAsync(
+                run,
+                comparisonOptions,
+                pipelineExecution,
+                baselineSessions,
+                plannedRequests,
+                counters,
+                summaryAccumulator,
+                persistedRecords,
+                detailWriter,
+                progressReporter,
+                totalRequests,
+                compareSubPhaseCounters,
+                totalStopwatch,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            // A capture that did not finish leaves no usable package behind: a partial
+            // baseline would silently become someone's expected result.
+            if (baselineSessions.Capture is not null)
+            {
+                await baselineSessions.Capture.AbandonAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+
+            throw;
+        }
+    }
+
+    private async Task<RunResultSummary> RunAndFinalizeAsync(
+        ComparisonRun run,
+        RunOptions comparisonOptions,
+        RunPipelineExecution? pipelineExecution,
+        BaselineRunSessions baselineSessions,
+        IReadOnlyList<PlannedRequest> plannedRequests,
+        RunExecutionCounters counters,
+        RunSummaryAccumulator summaryAccumulator,
+        List<ComparedExecutionRecord> persistedRecords,
+        IRunDetailWriter detailWriter,
+        IRunProgressReporter progressReporter,
+        int totalRequests,
+        CompareSubPhaseCounters? compareSubPhaseCounters,
+        Stopwatch totalStopwatch,
+        CancellationToken cancellationToken)
+    {
         RunPipelineResult pipelineResult = await RunPipelineAsync(
             run,
             comparisonOptions,
             pipelineExecution,
+            baselineSessions,
             plannedRequests,
             counters,
             summaryAccumulator,
@@ -205,6 +265,13 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
             retentionCounters.TrimmedByPolicyArtifactCount,
             retentionCounters.MissingUnexpectedlyArtifactCount,
             compareSubPhaseCounters?.ToMetrics());
+
+        // Sealed last: a package only becomes usable once the run that produced it
+        // finished, so a run that failed while finalizing leaves nothing behind.
+        if (baselineSessions.Capture is not null)
+        {
+            await baselineSessions.Capture.CompleteAsync(cancellationToken).ConfigureAwait(false);
+        }
 
         return summaryAccumulator.ToSummary(detailReference, executionMetrics);
     }
@@ -321,7 +388,8 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
             options.LargeRun,
             options.RunRetentionModeOverride,
             options.ComparisonRulesSnapshotHash,
-            options.PluginComparison);
+            options.PluginComparison,
+            options.Baseline);
     }
 
     private sealed record RunPipelineResult(
@@ -329,10 +397,68 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         TimeSpan ComparisonDuration,
         TimeSpan PersistenceDuration);
 
+    /// <summary>
+    /// The baseline work a run has attached to it. Both are null for the ordinary
+    /// live-vs-live run, which is what keeps that path unchanged.
+    /// </summary>
+    private sealed record BaselineRunSessions(
+        BaselineCaptureSession? Capture,
+        BaselineReplaySession? Replay)
+    {
+        public static readonly BaselineRunSessions None = new BaselineRunSessions(null, null);
+    }
+
+    private async Task<BaselineRunSessions> OpenBaselineSessionsAsync(
+        ComparisonRun run,
+        RunOptions comparisonOptions,
+        ComparisonExecutionPlan? plan,
+        CancellationToken cancellationToken)
+    {
+        if (comparisonOptions.Baseline is not { } binding || binding.Mode == BaselineRunMode.LiveVsLive)
+        {
+            return BaselineRunSessions.None;
+        }
+
+        if (baselineStore is null)
+        {
+            throw new InvalidOperationException("A baseline store is required to capture or replay baselines.");
+        }
+
+        // The stored side is a comparison model, which only has a meaning while a
+        // plugin comparison defines the type it belongs to.
+        if (plan is null)
+        {
+            throw new InvalidOperationException("Baseline capture and replay require a plugin comparison.");
+        }
+
+        if (binding.Mode == BaselineRunMode.BaselineVsLive)
+        {
+            BaselineReplaySession replay = await BaselineReplaySession
+                .OpenAsync(baselineStore, runArtifactStore, contractPayloadSerializer, plan, binding, cancellationToken)
+                .ConfigureAwait(false);
+            return new BaselineRunSessions(null, replay);
+        }
+
+        BaselineCaptureSession capture = await BaselineCaptureSession
+            .BeginAsync(
+                baselineStore,
+                requestBatchStore,
+                runArtifactStore,
+                contractPayloadSerializer,
+                run,
+                comparisonOptions,
+                plan,
+                binding,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return new BaselineRunSessions(capture, null);
+    }
+
     private async Task<RunPipelineResult> RunPipelineAsync(
         ComparisonRun run,
         RunOptions comparisonOptions,
         RunPipelineExecution? pipelineExecution,
+        BaselineRunSessions baselineSessions,
         IReadOnlyList<PlannedRequest> plannedRequests,
         RunExecutionCounters counters,
         RunSummaryAccumulator summaryAccumulator,
@@ -385,7 +511,7 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
                         PlannedRequest plannedRequest = plannedRequests[index];
 
                         Stopwatch executionStopwatch = Stopwatch.StartNew();
-                        ExecutionRecord executionRecord = await ExecutePairAsync(run, comparisonOptions, plannedRequest, pipelineExecution, counters, cancellationToken).ConfigureAwait(false);
+                        ExecutionRecord executionRecord = await ExecutePairAsync(run, comparisonOptions, plannedRequest, pipelineExecution, baselineSessions, counters, cancellationToken).ConfigureAwait(false);
                         executionStopwatch.Stop();
                         Interlocked.Add(ref executionTicks, executionStopwatch.ElapsedTicks);
                         observabilityRecorder.RecordRequestPath(run.Id, plannedRequest.Request.RelativePath, executionStopwatch.Elapsed);
@@ -405,7 +531,7 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
                     await foreach (ExecutionRecord executionRecord in executedChannel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
                     {
                         Stopwatch compareStopwatch = Stopwatch.StartNew();
-                        ComparedExecutionRecord comparedRecord = await CompareRecordAsync(run, comparisonOptions, pipelineExecution, executionRecord, counters, compareSubPhaseCounters, cancellationToken).ConfigureAwait(false);
+                        ComparedExecutionRecord comparedRecord = await CompareRecordAsync(run, comparisonOptions, pipelineExecution, baselineSessions, executionRecord, counters, compareSubPhaseCounters, cancellationToken).ConfigureAwait(false);
                         compareStopwatch.Stop();
                         Interlocked.Add(ref comparisonTicks, compareStopwatch.ElapsedTicks);
 
@@ -462,11 +588,29 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         RunOptions comparisonOptions,
         PlannedRequest plannedRequest,
         RunPipelineExecution? pipelineExecution,
+        BaselineRunSessions baselineSessions,
         RunExecutionCounters counters,
         CancellationToken cancellationToken)
     {
-        Task<EndpointExecutionRecord> endpointATask = ExecuteEndpointAsync(run, comparisonOptions, plannedRequest.Request, EndpointSlot.A, pipelineExecution, counters, cancellationToken);
-        Task<EndpointExecutionRecord> endpointBTask = ExecuteEndpointAsync(run, comparisonOptions, plannedRequest.Request, EndpointSlot.B, pipelineExecution, counters, cancellationToken);
+        // A capture run has only one side to execute: the version being recorded. The
+        // second slot carries the same record so the rest of the pipeline shape holds.
+        if (baselineSessions.Capture is { } captureSession)
+        {
+            EndpointExecutionRecord captured = await ExecuteEndpointAsync(
+                run,
+                comparisonOptions,
+                plannedRequest.Request,
+                captureSession.Binding.BaselineSlot,
+                pipelineExecution,
+                baselineSessions,
+                counters,
+                cancellationToken).ConfigureAwait(false);
+
+            return new ExecutionRecord(plannedRequest.ManifestOrdinal, plannedRequest.Request, captured, captured);
+        }
+
+        Task<EndpointExecutionRecord> endpointATask = ExecuteEndpointAsync(run, comparisonOptions, plannedRequest.Request, EndpointSlot.A, pipelineExecution, baselineSessions, counters, cancellationToken);
+        Task<EndpointExecutionRecord> endpointBTask = ExecuteEndpointAsync(run, comparisonOptions, plannedRequest.Request, EndpointSlot.B, pipelineExecution, baselineSessions, counters, cancellationToken);
 
         await Task.WhenAll(endpointATask, endpointBTask).ConfigureAwait(false);
 
@@ -480,23 +624,109 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         ComparisonRun run,
         RunOptions comparisonOptions,
         RunPipelineExecution? pipelineExecution,
+        BaselineRunSessions baselineSessions,
         ExecutionRecord executionRecord,
         RunExecutionCounters counters,
         CompareSubPhaseCounters? subPhaseCounters,
         CancellationToken cancellationToken)
     {
-        RequestPairResult pairResult = pipelineExecution is null
-            ? await CompleteRegularPairAsync(run, comparisonOptions, executionRecord, subPhaseCounters, cancellationToken).ConfigureAwait(false)
-            : await CompletePipelinePairAsync(
+        RequestPairResult pairResult;
+        if (baselineSessions.Capture is { } captureSession)
+        {
+            pairResult = await CompleteCapturePairAsync(
                 run,
                 comparisonOptions,
-                pipelineExecution,
+                pipelineExecution!,
+                captureSession,
                 executionRecord,
                 subPhaseCounters,
-                cancellationToken)
-                .ConfigureAwait(false);
+                cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            pairResult = pipelineExecution is null
+                ? await CompleteRegularPairAsync(run, comparisonOptions, executionRecord, subPhaseCounters, cancellationToken).ConfigureAwait(false)
+                : await CompletePipelinePairAsync(
+                    run,
+                    comparisonOptions,
+                    pipelineExecution,
+                    executionRecord,
+                    subPhaseCounters,
+                    cancellationToken)
+                    .ConfigureAwait(false);
+        }
 
         return new ComparedExecutionRecord(executionRecord.ManifestOrdinal, pairResult);
+    }
+
+    /// <summary>
+    /// Finishes a capture-run scenario: map it, store it, and record it as a captured
+    /// pair. Nothing is compared — there is only one side — so the pair is reported
+    /// equal with the capture named as its outcome.
+    /// </summary>
+    private async Task<RequestPairResult> CompleteCapturePairAsync(
+        ComparisonRun run,
+        RunOptions comparisonOptions,
+        RunPipelineExecution pipelineExecution,
+        BaselineCaptureSession captureSession,
+        ExecutionRecord executionRecord,
+        CompareSubPhaseCounters? subPhaseCounters,
+        CancellationToken cancellationToken)
+    {
+        RequestItem request = executionRecord.Request;
+        EndpointExecutionRecord endpoint = executionRecord.EndpointA;
+
+        // A failed or non-success scenario says nothing about how the version behaves,
+        // so it is reported but deliberately not written into the package.
+        if (!string.IsNullOrWhiteSpace(endpoint.ErrorMessage) || !endpoint.IsSuccessStatusCode)
+        {
+            return await CompareRawPairAsync(
+                run,
+                comparisonOptions,
+                request,
+                endpoint.Metadata,
+                endpoint.Metadata,
+                endpoint.ErrorMessage,
+                subPhaseCounters,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        IEndpointPipelineContext context = RequirePipelineContext(endpoint);
+
+        await TimeSubPhaseAsync(
+            subPhaseCounters,
+            static (c, e) => c.AddNormalize(e),
+            async () =>
+            {
+                await pipelineExecution.Pipeline
+                    .ExecuteEndpointAsync(context, PipelinePhase.Mapping, PipelinePhase.Mapping, cancellationToken)
+                    .ConfigureAwait(false);
+                return true;
+            }).ConfigureAwait(false);
+
+        if (context.IsFailed)
+        {
+            return new RequestPairResult(
+                request.RelativePath,
+                RequestPairOutcome.ExecutionFailed,
+                context.ResponseArtifact,
+                context.ResponseArtifact,
+                context.FailureReason);
+        }
+
+        await captureSession.CaptureAsync(request, context, cancellationToken).ConfigureAwait(false);
+
+        RequestPairResult pairResult = RequestPairResult.FromComparison(
+            request,
+            context.ResponseArtifact!,
+            context.ResponseArtifact!,
+            Array.Empty<ComparisonDifference>(),
+            $"Captured into baseline '{captureSession.Manifest.Name}' {captureSession.Manifest.DisplayVersion}.");
+
+        return await TimeSubPhaseAsync(
+            subPhaseCounters,
+            static (c, e) => c.AddFocusedContent(e),
+            () => AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, cancellationToken)).ConfigureAwait(false);
     }
 
     // No-op pass-through when subPhaseCounters is null, so the toggle being off costs
@@ -549,6 +779,7 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         RequestItem request,
         EndpointSlot endpoint,
         RunPipelineExecution? pipelineExecution,
+        BaselineRunSessions baselineSessions,
         RunExecutionCounters counters,
         CancellationToken cancellationToken)
     {
@@ -557,6 +788,28 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
             EndpointDefinition endpointDefinition = endpoint == EndpointSlot.A
                 ? run.Options.EndpointA
                 : run.Options.EndpointB;
+
+            // The replayed slot is served from storage: no request is built, no token is
+            // exchanged and nothing is called, which is what lets a decommissioned
+            // version still take part in a comparison.
+            if (baselineSessions.Replay is { } replaySession && replaySession.Binding.IsBaselineSlot(endpoint))
+            {
+                if (pipelineExecution is null)
+                {
+                    throw new InvalidOperationException("Replaying a baseline requires a plugin comparison.");
+                }
+
+                return await replaySession.ExecuteAsync(
+                    run,
+                    comparisonOptions,
+                    request,
+                    endpoint,
+                    endpointDefinition,
+                    pipelineExecution,
+                    token => requestBatchStore.OpenRequestBodyAsync(run.Options.RequestBatch, request, token),
+                    counters,
+                    cancellationToken).ConfigureAwait(false);
+            }
 
             if (pipelineExecution is not null)
             {
@@ -684,12 +937,23 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
                 static (c, e) => c.AddNormalize(e),
                 async () =>
                 {
-                    await pipelineExecution.Pipeline
-                        .ExecuteEndpointAsync(contextA, PipelinePhase.Mapping, PipelinePhase.Mapping, cancellationToken)
-                        .ConfigureAwait(false);
-                    await pipelineExecution.Pipeline
-                        .ExecuteEndpointAsync(contextB, PipelinePhase.Mapping, PipelinePhase.Mapping, cancellationToken)
-                        .ConfigureAwait(false);
+                    // A replayed slot already holds the comparison model that was
+                    // captured; running mapping over it again would try to map an
+                    // already-mapped payload.
+                    if (!endpointA.IsBaselineReplay)
+                    {
+                        await pipelineExecution.Pipeline
+                            .ExecuteEndpointAsync(contextA, PipelinePhase.Mapping, PipelinePhase.Mapping, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+
+                    if (!endpointB.IsBaselineReplay)
+                    {
+                        await pipelineExecution.Pipeline
+                            .ExecuteEndpointAsync(contextB, PipelinePhase.Mapping, PipelinePhase.Mapping, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+
                     return true;
                 }).ConfigureAwait(false);
 

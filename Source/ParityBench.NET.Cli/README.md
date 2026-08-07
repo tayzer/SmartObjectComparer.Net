@@ -29,4 +29,12 @@ dotnet run --project Source\ParityBench.NET.Cli\ParityBench.NET.Cli.csproj -- re
 dotnet run --project Source\ParityBench.NET.Cli\ParityBench.NET.Cli.csproj -- request --preset client-soap-json-token
 ```
 
+### Response retention
+
+`--retention <mode>` decides what survives on disk once the run finishes: `None`, `TrimmedEquals`, `TrimmedIgnoredPaths`, or `TrimmedEqualsAndIgnoredPaths`. It beats the run profile's own mode, which beats `ParityBench:Retention:Mode`. Use `None` or `TrimmedEquals` to keep full raw responses. See [Retention and Workspace](../../Docs/Guides/retention-and-workspace.md).
+
+```powershell
+dotnet run --project Source\ParityBench.NET.Cli\ParityBench.NET.Cli.csproj -- request --run-profile order-lookup-qa --retention None
+```
+
 `client-soap-json-token` is the ClientCustomerLookup example preset (SOAP endpoint A / JSON endpoint B, token auth, masked sensitive fields). Requires the test fixture host running at the configured `ParityBench:RequestDefaults:FixtureBaseUrl` (default `http://localhost:5056`, see `ParityBench.NET.TestEndpoints`).

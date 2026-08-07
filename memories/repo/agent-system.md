@@ -1,6 +1,0 @@
-- ComparisonTool uses a coordinator-first Copilot agent suite with one main entry point: `Coding-Coordinator`.
-- Specialist agents are `ComparisonTool-Implementation`, `ComparisonTool-Architecture`, `ComparisonTool-UIUX`, `ComparisonTool-Docs`, `ComparisonTool-Quality`, `ComparisonTool-Performance`, and `ComparisonTool-Testing`.
-- Specialists are hidden by default; cross-agent collaboration is coordinator-mediated.
-- Architecture, design, standards, and process changes require an explicit proposal with rationale, trade-offs, affected artifacts, and approval before implementation.
-- Durable project memory lives in repo docs; `memories/repo/` stores concise operational summaries.
-- The authoritative system description is `Docs/Architecture/copilot-agent-system.md`.

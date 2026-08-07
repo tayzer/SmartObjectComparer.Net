@@ -1,6 +1,7 @@
 @using ParityBench.NET.Application.Plugins
 @using ParityBench.NET.Application.Profiles
 @using ParityBench.NET.Application.Secrets
+@using ParityBench.NET.Domain.Runs.Retention
 @using ParityBench.PluginSdk.Configuration
 @using ParityBench.PluginSdk.Profiles
 
@@ -67,9 +68,29 @@
                     <MudText Typo="Typo.h6">Edit profile</MudText>
                     <MudTextField T="string" Label="Id" Value="@editing.Id" ReadOnly="true" />
                     <MudTextField T="string" Label="Display name" @bind-Value="editDisplayName" />
+                    <MudSelect T="string" Label="Plugin version"
+                               Value="@editPluginVersion"
+                               ValueChanged="OnPluginVersionChangedAsync"
+                               HelperText="@PluginVersionHelperText">
+                        <MudSelectItem T="string" Value="@string.Empty">@LatestOptionLabel</MudSelectItem>
+                        @foreach (VersionOption option in editPluginVersions)
+                        {
+                            <MudSelectItem T="string" Value="@option.Version">@option.Label</MudSelectItem>
+                        }
+                    </MudSelect>
                     <MudTextField T="string" Label="Endpoint A URL" @bind-Value="editEndpointA" />
                     <MudTextField T="string" Label="Endpoint B URL" @bind-Value="editEndpointB" />
                     <MudTextField T="string" Label="Request directory" @bind-Value="editRequestDirectory" />
+                    <MudSelect T="string" Label="Response retention"
+                               Value="@editRetentionMode"
+                               ValueChanged="@(value => editRetentionMode = value ?? string.Empty)"
+                               HelperText="@RetentionHelperText">
+                        <MudSelectItem T="string" Value="@string.Empty">Use configured default</MudSelectItem>
+                        @foreach (RetentionMode mode in RetentionModePresentation.Modes)
+                        {
+                            <MudSelectItem T="string" Value="@mode.ToString()">@RetentionModePresentation.Label(mode)</MudSelectItem>
+                        }
+                    </MudSelect>
 
                     @foreach (PluginConfigurationSchema schema in editSchemas)
                     {
@@ -102,16 +123,58 @@
     private string editEndpointA = string.Empty;
     private string editEndpointB = string.Empty;
     private string editRequestDirectory = string.Empty;
+
+    /// <summary>
+    /// The version the profile pins, or empty for "highest installed". Empty is the
+    /// default: a profile that names no version keeps working across plugin upgrades.
+    /// </summary>
+    private string editPluginVersion = string.Empty;
+
+    private readonly List<VersionOption> editPluginVersions = new List<VersionOption>();
+    private string? latestInstalledVersion;
+
+    /// <summary>
+    /// The retention mode runs from this profile start with, empty for the configured
+    /// default. It is a default, not a lock — the run workflow's picker can override
+    /// it for a single run.
+    /// </summary>
+    private string editRetentionMode = string.Empty;
     private List<PluginConfigurationSchema> editSchemas = new List<PluginConfigurationSchema>();
     private Dictionary<string, Dictionary<string, string>> editStepConfiguration = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
 
-    protected override async Task OnInitializedAsync()
+    /// <summary>
+    /// Bumped by the catalog panel after it rescans, so this panel picks up a plugin
+    /// that was installed or rebuilt while the app was running.
+    /// </summary>
+    [Parameter] public int CatalogVersion { get; set; }
+
+    private int loadedCatalogVersion = -1;
+
+    protected override async Task OnParametersSetAsync()
     {
+        if (CatalogVersion == loadedCatalogVersion)
+        {
+            return;
+        }
+
+        loadedCatalogVersion = CatalogVersion;
+
         // Seed profiles from installed plugin templates so a freshly installed plugin
-        // shows a ready-made profile here without any manual step.
+        // shows a ready-made profile here without any manual step. This runs on a
+        // rescan too, since a plugin discovered just now has never been seeded.
         await ProfileBootstrapper.EnsureTemplateProfilesAsync().ConfigureAwait(true);
         await ReloadProfilesAsync().ConfigureAwait(true);
         await LoadTemplatesAsync().ConfigureAwait(true);
+
+        // A profile being edited is left alone: its fields may hold unsaved work,
+        // including a secret that has not reached the secret store yet. Only the
+        // schemas driving the form and the installed versions are re-read, in case
+        // the plugin changed them.
+        if (editing is not null)
+        {
+            await LoadPluginVersionsAsync(editing.PluginId).ConfigureAwait(true);
+            editSchemas = await LoadSchemasFor(editing.PluginId, SelectedPluginVersion).ConfigureAwait(true);
+        }
     }
 
     private async Task ReloadProfilesAsync()
@@ -150,7 +213,9 @@
             option.Template.ComparisonId,
             endpointA,
             endpointB,
-            pluginVersion: option.Plugin.Version,
+            // Unpinned, so the profile follows the highest installed version of the
+            // plugin. The version picker below is how a specific build is pinned.
+            pluginVersion: null,
             environmentName: option.Template.EnvironmentName,
             enabledStepIds: option.Template.EnabledStepIds,
             stepConfiguration: option.Template.StepConfiguration, 
@@ -168,20 +233,77 @@
         editEndpointA = profile.EndpointA.ToString();
         editEndpointB = profile.EndpointB.ToString();
         editRequestDirectory = profile.RequestDirectory ?? string.Empty;
+        editPluginVersion = profile.PluginVersion ?? string.Empty;
+        editRetentionMode = profile.RetentionModeOverride?.ToString() ?? string.Empty;
         editStepConfiguration = profile.StepConfiguration.ToDictionary(
             entry => entry.Key,
             entry => new Dictionary<string, string>(entry.Value, StringComparer.OrdinalIgnoreCase),
             StringComparer.OrdinalIgnoreCase);
-        editSchemas = await LoadSchemasFor(profile).ConfigureAwait(true);
+        await LoadPluginVersionsAsync(profile.PluginId).ConfigureAwait(true);
+        editSchemas = await LoadSchemasFor(profile.PluginId, SelectedPluginVersion).ConfigureAwait(true);
     }
 
-    private async Task<List<PluginConfigurationSchema>> LoadSchemasFor(RunProfile profile)
+    private async Task<List<PluginConfigurationSchema>> LoadSchemasFor(string pluginId, string? version)
     {
         InstalledPluginMetadata? plugin = await PluginMetadata
-            .GetPluginAsync(profile.PluginId, profile.PluginVersion)
+            .GetPluginAsync(pluginId, version)
             .ConfigureAwait(true);
         return plugin?.ConfigurationSchemas.ToList() ?? new List<PluginConfigurationSchema>();
     }
+
+    /// <summary>
+    /// Lists the versions of this plugin that are installed, plus the version the
+    /// profile pins when that is no longer installed — so a profile left pointing at
+    /// a removed build shows what it names and can be moved off it, rather than the
+    /// pin silently disappearing from the picker.
+    /// </summary>
+    private async Task LoadPluginVersionsAsync(string pluginId)
+    {
+        PluginCatalogView catalog = await PluginMetadata.GetCatalogAsync().ConfigureAwait(true);
+        List<InstalledPluginMetadata> installed = catalog.Plugins
+            .Where(plugin => string.Equals(plugin.PluginId, pluginId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        latestInstalledVersion = installed.FirstOrDefault(plugin => plugin.IsActive)?.Version;
+
+        editPluginVersions.Clear();
+        editPluginVersions.AddRange(installed.Select(plugin => new VersionOption(
+            plugin.Version,
+            plugin.IsActive ? $"{plugin.Version} (latest)" : plugin.Version)));
+
+        if (!string.IsNullOrWhiteSpace(editPluginVersion)
+            && !installed.Any(plugin => string.Equals(plugin.Version, editPluginVersion, StringComparison.OrdinalIgnoreCase)))
+        {
+            editPluginVersions.Add(new VersionOption(editPluginVersion, $"{editPluginVersion} (not installed)"));
+        }
+    }
+
+    private async Task OnPluginVersionChangedAsync(string? version)
+    {
+        editPluginVersion = version ?? string.Empty;
+        if (editing is not null)
+        {
+            // The picked version decides which package's configuration schema drives
+            // the form, so the fields below follow the selection.
+            editSchemas = await LoadSchemasFor(editing.PluginId, SelectedPluginVersion).ConfigureAwait(true);
+        }
+    }
+
+    private string? SelectedPluginVersion =>
+        string.IsNullOrWhiteSpace(editPluginVersion) ? null : editPluginVersion;
+
+    private string LatestOptionLabel =>
+        latestInstalledVersion is null ? "Latest installed" : $"Latest installed ({latestInstalledVersion})";
+
+    private string RetentionHelperText =>
+        RetentionModePresentation.Parse(editRetentionMode) is null
+            ? "Runs from this profile follow the app-wide ParityBench:Retention:Mode setting."
+            : "Runs from this profile start with this mode; the run workflow can still override it.";
+
+    private string PluginVersionHelperText =>
+        SelectedPluginVersion is null
+            ? "Follows the highest installed version, so plugin upgrades apply automatically."
+            : "Pinned: this profile fails to run if the version is not installed.";
 
     private Dictionary<string, string> StepValues(string stepId)
     {
@@ -218,12 +340,14 @@
             editing.ComparisonId,
             endpointA,
             endpointB,
-            pluginVersion: editing.PluginVersion,
+            pluginVersion: SelectedPluginVersion,
             environmentName: editing.EnvironmentName,
             enabledStepIds: editing.EnabledStepIds,
             stepConfiguration: persistedConfiguration,
             comparison: editing.Comparison,
             requestDirectory: string.IsNullOrWhiteSpace(editRequestDirectory) ? null : editRequestDirectory,
+            largeRun: editing.LargeRun,
+            retentionModeOverride: RetentionModePresentation.Parse(editRetentionMode),
             endpointAHeaders: editing.EndpointAHeaders,
             endpointBHeaders: editing.EndpointBHeaders);
 
@@ -283,6 +407,9 @@
         await ProfileStore.DeleteAsync(editing.Id).ConfigureAwait(true);
         await ReloadProfilesAsync().ConfigureAwait(true);
         editing = null;
+        editPluginVersion = string.Empty;
+        editPluginVersions.Clear();
+        editRetentionMode = string.Empty;
         Snackbar.Add("Profile deleted.", Severity.Info);
     }
 
@@ -300,4 +427,6 @@
     }
 
     private sealed record TemplateOption(InstalledPluginMetadata Plugin, PluginProfileTemplate Template, string Label);
+
+    private sealed record VersionOption(string Version, string Label);
 }

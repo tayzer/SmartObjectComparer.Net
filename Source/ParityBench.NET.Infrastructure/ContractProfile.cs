@@ -51,7 +51,9 @@ public sealed class ContractProfile<TEndpointARequest, TEndpointBRequest, TCanon
         ResponseModelName = string.IsNullOrWhiteSpace(responseModelName) ? throw new ArgumentException("Response model name must not be empty.", nameof(responseModelName)) : responseModelName.Trim();
         ProfileVersion = "1";
         IReadOnlyCollection<PayloadFormat> sourceFormats = (supportedSourceRequestFormats ?? new[] { PayloadFormat.Xml }).ToArray();
-        EndpointA = new ContractEndpointProfile(sourceFormats.First(), canonicalResponseContentType, canonicalResponseFormat, suggestedEndpointAId, sourceFormats);
+        // Endpoint A forwards the source request untouched, so its request content type
+        // is the source's own — not the canonical *response* content type.
+        EndpointA = new ContractEndpointProfile(sourceFormats.First(), null, canonicalResponseFormat, suggestedEndpointAId, sourceFormats);
         EndpointB = new ContractEndpointProfile(endpointBRequestFormat, endpointBRequestContentType, endpointBResponseFormat, suggestedEndpointBId);
         CanonicalResponseFormat = canonicalResponseFormat;
         CanonicalResponseContentType = string.IsNullOrWhiteSpace(canonicalResponseContentType) ? "application/xml" : canonicalResponseContentType.Trim();
@@ -129,7 +131,7 @@ public sealed class ContractProfile<TEndpointARequest, TEndpointBRequest, TCanon
             endpointBRequest,
             typeof(TEndpointBRequest),
             EndpointB.RequestFormat,
-            EndpointB.RequestContentType,
+            EndpointB.RequestContentType ?? context.SourceContentType,
             cancellationToken).ConfigureAwait(false);
 
         return new PreparedContractRequest(body, ProfileId);

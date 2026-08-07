@@ -1,6 +1,7 @@
 using ParityBench.NET.Domain.Comparison;
 
 using ParityBench.PluginSdk.Configuration;
+using ParityBench.PluginSdk.Plugin;
 using ParityBench.PluginSdk.Profiles;
 
 namespace ParityBench.NET.Application.Plugins;
@@ -31,7 +32,13 @@ public sealed record InstalledPluginMetadata(
     IReadOnlyList<PluginProfileTemplate> ProfileTemplates,
     // On-disk package directory, used to resolve package-relative paths (e.g. a
     // template's sample request directory). Empty when not applicable.
-    string PackageDirectory = "");
+    string PackageDirectory = "",
+    // The SDK contract version the package's manifest declares, shown in the catalog
+    // so a client can see what their package was built against.
+    int SdkVersion = PluginManifest.CurrentSdkVersion,
+    // False when a higher version of the same plugin id is also installed, and so
+    // this one is not what runs unless a profile names its version explicitly.
+    bool IsActive = true);
 
 /// <summary>
 /// A package that was found but could not be used, with the reason — surfaced so a
@@ -56,6 +63,13 @@ public interface IPluginMetadataProvider
     /// Lists installed plugins and the packages that failed discovery.
     /// </summary>
     Task<PluginCatalogView> GetCatalogAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Re-reads the plugin directories from disk and then lists what they now hold.
+    /// This is what picks up a plugin a client installed, removed or rebuilt while the
+    /// app was running; <see cref="GetCatalogAsync"/> reports the last scan.
+    /// </summary>
+    Task<PluginCatalogView> RefreshCatalogAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Gets one installed plugin's metadata, or null when it is not installed.

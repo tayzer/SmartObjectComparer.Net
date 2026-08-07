@@ -1,3 +1,4 @@
+using ParityBench.NET.Domain.Baselines;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Requests;
@@ -20,7 +21,8 @@ public sealed record RunOptions
         LargeRunOptions? largeRunOptions = null,
         RetentionMode? runRetentionModeOverride = null,
         string? comparisonRulesSnapshotHash = null,
-        PluginComparisonSelection? pluginComparison = null)
+        PluginComparisonSelection? pluginComparison = null,
+        BaselineBinding? baseline = null)
     {
         ArgumentNullException.ThrowIfNull(endpointA);
         ArgumentNullException.ThrowIfNull(endpointB);
@@ -50,6 +52,7 @@ public sealed record RunOptions
             ? null
             : comparisonRulesSnapshotHash.Trim();
         PluginComparison = pluginComparison;
+        Baseline = baseline;
     }
 
     public RequestBatchReference RequestBatch { get; }
@@ -83,4 +86,12 @@ public sealed record RunOptions
     /// compares raw responses without plugin involvement.
     /// </summary>
     public PluginComparisonSelection? PluginComparison { get; }
+
+    /// <summary>
+    /// Gets what this run does with baselines. Null means the original behaviour:
+    /// both endpoints are called live.
+    /// </summary>
+    public BaselineBinding? Baseline { get; }
+
+    public BaselineRunMode BaselineMode => Baseline?.Mode ?? BaselineRunMode.LiveVsLive;
 }

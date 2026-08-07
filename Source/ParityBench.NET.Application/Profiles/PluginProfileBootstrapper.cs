@@ -82,7 +82,10 @@ public sealed class PluginProfileBootstrapper
             template.ComparisonId,
             environment.EndpointA,
             environment.EndpointB,
-            pluginVersion: plugin.Version,
+            // Deliberately unpinned: a seeded profile follows the highest installed
+            // version of its plugin, so upgrading the package keeps the profile
+            // working. Pinning a version is an operator choice made in the editor.
+            pluginVersion: null,
             environmentName: template.EnvironmentName,
             enabledStepIds: template.EnabledStepIds,
             stepConfiguration: template.StepConfiguration,

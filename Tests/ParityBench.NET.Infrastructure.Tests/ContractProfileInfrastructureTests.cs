@@ -195,6 +195,17 @@ public sealed class ContractProfileInfrastructureTests
     }
 
     [TestMethod]
+    public void Create_WhenProfileIsBuilt_LeavesEndpointARequestContentTypeUnset()
+    {
+        // Endpoint A forwards the source request untouched, so it declares no content
+        // type of its own — it used to be silently handed the canonical *response* one.
+        IContractProfile profile = CreateSampleProfile();
+
+        Assert.IsNull(profile.EndpointA.RequestContentType);
+        Assert.AreEqual("application/json", profile.EndpointB.RequestContentType);
+    }
+
+    [TestMethod]
     public void Create_WhenLegacyDefaultIgnoreRulesAreProvided_ProjectsThemIntoComparisonDefaults()
     {
         IContractProfile profile = new ContractProfile<

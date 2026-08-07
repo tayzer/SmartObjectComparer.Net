@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using ParityBench.NET.Application.AcceptedDifferences;
+using ParityBench.NET.Application.Baselines;
 using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.Application.Observability;
 using ParityBench.NET.Application.Plugins;
@@ -107,6 +108,8 @@ public static class WorkspaceServiceCollectionExtensions
             return registry;
         });
         services.AddSingleton<IRunProfileStore>(_ => new FileSystemRunProfileStore(workspaceRoot));
+        services.AddSingleton<IBaselineStore>(_ => new FileSystemBaselineStore(workspaceRoot));
+        services.AddSingleton<IBaselineLibraryUseCases, BaselineLibraryService>();
         // Order is the policy: an environment variable beats the persisted store, so
         // CI and tests can run any profile without touching an operator's machine.
         services.AddSingleton<ISecretStore>(_ => new ChainedSecretStore(
@@ -117,7 +120,9 @@ public static class WorkspaceServiceCollectionExtensions
         services.AddSingleton<PluginProfileBootstrapper>();
 
         services.AddSingleton(_ => new PluginCatalog(ResolvePluginDirectories(configuration, workspaceRoot)));
-        services.AddSingleton<PluginLoader>();
+        // Built by hand because the loader takes an optional shadow-copy root that the
+        // container would otherwise try to satisfy as a service.
+        services.AddSingleton(_ => new PluginLoader());
         services.AddSingleton<IPluginMetadataProvider, PluginMetadataProvider>();
         services.AddSingleton<IComparisonPlanFactory>(serviceProvider => new PluginComparisonPlanFactory(
             serviceProvider.GetRequiredService<PluginCatalog>(),
@@ -147,7 +152,8 @@ public static class WorkspaceServiceCollectionExtensions
                 serviceProvider.GetRequiredService<IComparisonPlanFactory>(),
                 serviceProvider.GetRequiredService<IObservabilityRecorder>(),
                 serviceProvider.GetRequiredService<IRunCleanupStage>(),
-                serviceProvider.GetRequiredService<IContractPayloadSerializer>());
+                serviceProvider.GetRequiredService<IContractPayloadSerializer>(),
+                serviceProvider.GetRequiredService<IBaselineStore>());
         });
 
         services.AddSingleton<IComparisonRunUseCases, ComparisonRunService>();

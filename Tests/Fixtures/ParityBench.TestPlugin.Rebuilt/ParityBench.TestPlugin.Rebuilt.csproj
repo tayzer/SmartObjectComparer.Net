@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    A second build of the fixture plugin from the same source, producing an assembly
+    with the same file name, plugin id and comparison id but different bytes and one
+    different display name. That is what a client rebuilding their plugin in place
+    looks like, and it is the only way to test that the loader notices.
+  -->
+  <PropertyGroup>
+    <AssemblyName>ParityBench.TestPlugin</AssemblyName>
+    <RootNamespace>ParityBench.TestPlugin</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <DefineConstants>$(DefineConstants);PLUGIN_REBUILD</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\ParityBench.TestPlugin\TestPlugin.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Source\ParityBench.PluginSdk\ParityBench.PluginSdk.csproj">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </ProjectReference>
+  </ItemGroup>
+
+</Project>

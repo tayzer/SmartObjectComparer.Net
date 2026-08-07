@@ -1,0 +1,238 @@
+@using ParityBench.NET.Application.Baselines
+@using ParityBench.NET.Domain.Baselines
+
+@inject IBaselineLibraryUseCases BaselineLibrary
+@inject ISnackbar Snackbar
+
+@* Captured baselines: browse provenance, move packages between machines, delete.
+   Packages are only ever written by a capture run, so there is nothing to edit here. *@
+
+<MudGrid Spacing="3">
+    <MudItem xs="12" md="5">
+        <MudPaper Elevation="0" Outlined="true" Class="pa-4">
+            <MudStack Spacing="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.h6">Baselines</MudText>
+                    <MudIconButton Icon="@Icons.Material.Filled.Refresh"
+                                   Size="Size.Small"
+                                   AriaLabel="Refresh baselines"
+                                   OnClick="ReloadAsync" />
+                </MudStack>
+
+                @if (baselines.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        No baselines captured yet. Run a comparison in "Capture baseline" mode, or import a package below.
+                    </MudText>
+                }
+
+                <MudList T="string" SelectedValue="@selectedKey" Dense="true">
+                    @foreach (BaselineSummary baseline in baselines)
+                    {
+                        <MudListItem T="string" Value="@ToKey(baseline)" OnClick="@(() => SelectAsync(baseline))">
+                            <MudStack Spacing="0">
+                                <MudText Typo="Typo.body2">@baseline.Name @baseline.DisplayVersion</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    @baseline.ScenarioCount scenario@(baseline.ScenarioCount == 1 ? string.Empty : "s") · captured @baseline.CapturedAt.ToString("yyyy-MM-dd HH:mm")
+                                </MudText>
+                            </MudStack>
+                        </MudListItem>
+                    }
+                </MudList>
+
+                <MudDivider />
+                <MudText Typo="Typo.subtitle2">Import</MudText>
+                <MudTextField T="string" Label="Package file (.pbbaseline)" @bind-Value="importPath" Variant="Variant.Outlined" />
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.FileUpload"
+                           Disabled="@(isBusy || string.IsNullOrWhiteSpace(importPath))"
+                           OnClick="ImportAsync">
+                    Import package
+                </MudButton>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    An import is always added as a new version, so it can never replace a package already here.
+                </MudText>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="7">
+        @if (selected is null)
+        {
+            <MudPaper Elevation="0" Outlined="true" Class="pa-4">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Select a baseline to see where it came from.</MudText>
+            </MudPaper>
+        }
+        else
+        {
+            <MudPaper Elevation="0" Outlined="true" Class="pa-4">
+                <MudStack Spacing="3">
+                    <MudText Typo="Typo.h6">@selected.Name @selected.DisplayVersion</MudText>
+
+                    <MudSimpleTable Dense="true" Hover="false" Striped="false" Elevation="0">
+                        <tbody>
+                            <tr><td>Captured</td><td>@selected.CapturedAt.ToString("yyyy-MM-dd HH:mm:ss zzz")</td></tr>
+                            <tr><td>From endpoint</td><td>@selected.CaptureEndpoint</td></tr>
+                            <tr><td>Comparison</td><td>@selected.PluginId / @selected.ComparisonId</td></tr>
+                            <tr><td>Plugin version</td><td>@(selected.PluginVersion ?? "not pinned")</td></tr>
+                            <tr><td>Environment</td><td>@(selected.EnvironmentName ?? "not recorded")</td></tr>
+                            <tr><td>Captured by run</td><td>@selected.CapturedFromRunId</td></tr>
+                            <tr><td>Tool version</td><td>@(selected.ToolVersion ?? "unknown")</td></tr>
+                            <tr><td>Captured on</td><td>@(selected.CapturedOnMachine ?? "unknown")@(string.IsNullOrWhiteSpace(selected.CapturedBy) ? string.Empty : $" by {selected.CapturedBy}")</td></tr>
+                            <tr><td>Scenarios</td><td>@selected.Scenarios.Count</td></tr>
+                        </tbody>
+                    </MudSimpleTable>
+
+                    <MudStack Spacing="2">
+                        <MudText Typo="Typo.subtitle2">Export</MudText>
+                        <MudTextField T="string" Label="Export to file (.pbbaseline)" @bind-Value="exportPath" Variant="Variant.Outlined" />
+                        <MudStack Row="true" Spacing="2" Class="flex-wrap">
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.FileDownload"
+                                       Disabled="@(isBusy || string.IsNullOrWhiteSpace(exportPath))"
+                                       OnClick="ExportAsync">
+                                Export package
+                            </MudButton>
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Error"
+                                       StartIcon="@Icons.Material.Filled.Delete"
+                                       Disabled="@isBusy"
+                                       OnClick="DeleteAsync">
+                                Delete this version
+                            </MudButton>
+                        </MudStack>
+                    </MudStack>
+
+                    <MudExpansionPanels Elevation="0">
+                        <MudExpansionPanel Text="@($"Captured scenarios ({selected.Scenarios.Count})")">
+                            <MudSimpleTable Dense="true" Hover="true" Elevation="0">
+                                <thead>
+                                    <tr><th>Request</th><th>Status</th><th>Model bytes</th></tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (BaselineScenarioEntry scenario in selected.Scenarios)
+                                    {
+                                        <tr>
+                                            <td>@scenario.RelativePath</td>
+                                            <td>@scenario.StatusCode</td>
+                                            <td>@scenario.CanonicalContentLength</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudExpansionPanel>
+                    </MudExpansionPanels>
+                </MudStack>
+            </MudPaper>
+        }
+    </MudItem>
+</MudGrid>
+
+@code {
+    private IReadOnlyList<BaselineSummary> baselines = Array.Empty<BaselineSummary>();
+    private BaselinePackageManifest? selected;
+    private string selectedKey = string.Empty;
+    private string importPath = string.Empty;
+    private string exportPath = string.Empty;
+    private bool isBusy;
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    private static string ToKey(BaselineSummary baseline) => $"{baseline.Id.Value}@{baseline.Version}";
+
+    private async Task ReloadAsync()
+    {
+        try
+        {
+            baselines = await BaselineLibrary.ListAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task SelectAsync(BaselineSummary baseline)
+    {
+        selectedKey = ToKey(baseline);
+        try
+        {
+            selected = await BaselineLibrary.GetAsync(baseline.Id, baseline.Version);
+            exportPath = $"{baseline.Id.Value}-v{baseline.Version}.pbbaseline";
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task ExportAsync()
+    {
+        if (selected is null)
+        {
+            return;
+        }
+
+        try
+        {
+            isBusy = true;
+            await BaselineLibrary.ExportAsync(selected.Id, selected.Version, exportPath);
+            Snackbar.Add($"Exported to {exportPath}.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task ImportAsync()
+    {
+        try
+        {
+            isBusy = true;
+            BaselinePackageManifest imported = await BaselineLibrary.ImportAsync(importPath);
+            await ReloadAsync();
+            Snackbar.Add($"Imported '{imported.Name}' as {imported.DisplayVersion}.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (selected is null)
+        {
+            return;
+        }
+
+        try
+        {
+            isBusy = true;
+            await BaselineLibrary.DeleteAsync(selected.Id, selected.Version);
+            selected = null;
+            selectedKey = string.Empty;
+            await ReloadAsync();
+            Snackbar.Add("Baseline version deleted.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+}

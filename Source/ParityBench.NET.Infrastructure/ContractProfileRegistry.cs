@@ -124,11 +124,6 @@ public sealed class ContractProfileRegistry : IContractProfileRegistry
             throw new InvalidOperationException($"Contract profile '{profile.ProfileId}' must support at least one endpoint A request format.");
         }
 
-        if (string.IsNullOrWhiteSpace(profile.EndpointB.RequestContentType))
-        {
-            throw new InvalidOperationException($"Contract profile '{profile.ProfileId}' must specify an endpoint B request content type.");
-        }
-
         if (string.IsNullOrWhiteSpace(profile.CanonicalResponseContentType))
         {
             throw new InvalidOperationException($"Contract profile '{profile.ProfileId}' must specify a canonical comparison response content type.");

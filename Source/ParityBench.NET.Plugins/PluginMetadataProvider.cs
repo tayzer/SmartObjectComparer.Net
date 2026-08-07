@@ -29,42 +29,26 @@ public sealed class PluginMetadataProvider : IPluginMetadataProvider
         this.loader = loader;
     }
 
-    public Task<PluginCatalogView> GetCatalogAsync(CancellationToken cancellationToken = default)
-    {
-        List<InstalledPluginMetadata> plugins = new List<InstalledPluginMetadata>();
-        List<PluginInstallationFailure> failures = catalog.Failures
-            .Select(failure => new PluginInstallationFailure(failure.DirectoryPath, failure.Reason))
-            .ToList();
+    public Task<PluginCatalogView> GetCatalogAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(BuildCatalogView(catalog.Current, cancellationToken));
 
-        foreach (PluginPackage package in catalog.Packages)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            try
-            {
-                plugins.Add(ReadMetadata(package));
-            }
-            catch (Exception exception) when (exception is not OperationCanceledException)
-            {
-                failures.Add(new PluginInstallationFailure(package.DirectoryPath, exception.Message));
-            }
-        }
-
-        return Task.FromResult(new PluginCatalogView(plugins, failures));
-    }
+    public Task<PluginCatalogView> RefreshCatalogAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(BuildCatalogView(catalog.Rescan(), cancellationToken));
 
     public Task<InstalledPluginMetadata?> GetPluginAsync(string pluginId, string? version = null, CancellationToken cancellationToken = default)
     {
-        if (!catalog.TryGet(pluginId, version, out PluginPackage? package))
+        PluginCatalogSnapshot snapshot = catalog.Current;
+        if (!snapshot.TryGet(pluginId, version, out PluginPackage? package))
         {
             return Task.FromResult<InstalledPluginMetadata?>(null);
         }
 
-        return Task.FromResult<InstalledPluginMetadata?>(ReadMetadata(package!));
+        return Task.FromResult<InstalledPluginMetadata?>(ReadMetadata(package!, snapshot));
     }
 
     public Task<PluginComparisonDefinitionInfo?> ResolveComparisonDefinitionAsync(string pluginId, string comparisonId, string? version = null, CancellationToken cancellationToken = default)
     {
-        if (!catalog.TryGet(pluginId, version, out PluginPackage? package))
+        if (!catalog.Current.TryGet(pluginId, version, out PluginPackage? package))
         {
             return Task.FromResult<PluginComparisonDefinitionInfo?>(null);
         }
@@ -78,7 +62,32 @@ public sealed class PluginMetadataProvider : IPluginMetadataProvider
             : new PluginComparisonDefinitionInfo(definition.ComparisonType, definition.DefaultComparisonRules));
     }
 
-    private InstalledPluginMetadata ReadMetadata(PluginPackage package)
+    // Everything comes from one snapshot, so the packages and the failures listed
+    // together always describe the same moment on disk.
+    private PluginCatalogView BuildCatalogView(PluginCatalogSnapshot snapshot, CancellationToken cancellationToken)
+    {
+        List<InstalledPluginMetadata> plugins = new List<InstalledPluginMetadata>();
+        List<PluginInstallationFailure> failures = snapshot.Failures
+            .Select(failure => new PluginInstallationFailure(failure.DirectoryPath, failure.Reason))
+            .ToList();
+
+        foreach (PluginPackage package in snapshot.Packages)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                plugins.Add(ReadMetadata(package, snapshot));
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                failures.Add(new PluginInstallationFailure(package.DirectoryPath, exception.Message));
+            }
+        }
+
+        return new PluginCatalogView(plugins, failures);
+    }
+
+    private InstalledPluginMetadata ReadMetadata(PluginPackage package, PluginCatalogSnapshot snapshot)
     {
         LoadedPlugin loaded = loader.Load(package);
         PluginBuilder registrations = loaded.Registrations;
@@ -101,6 +110,8 @@ public sealed class PluginMetadataProvider : IPluginMetadataProvider
             registrations.ConfigurationSchemas,
             registrations.Environments,
             registrations.ProfileTemplates,
-            package.DirectoryPath);
+            package.DirectoryPath,
+            package.Manifest.SdkVersion,
+            snapshot.IsActive(package));
     }
 }

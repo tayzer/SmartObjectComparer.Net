@@ -43,13 +43,48 @@ public sealed class HttpClientEndpointRequestSenderTests
         Assert.AreEqual("hello", body);
     }
 
-    private static EndpointRequest CreateRequest(IReadOnlyDictionary<string, string>? headers = null) =>
+    [TestMethod]
+    public async Task SendAsync_WhenAContentTypeHeaderIsSupplied_ItReplacesThePayloadContentType()
+    {
+        CapturingHandler handler = new CapturingHandler();
+        HttpClientEndpointRequestSender sender = new HttpClientEndpointRequestSender(new HttpClient(handler));
+
+        await using EndpointResponse response = await sender.SendAsync(
+            CreateRequest(new Dictionary<string, string> { ["Content-Type"] = "text/xml" }));
+
+        CollectionAssert.AreEqual(
+            new[] { "text/xml" },
+            handler.CapturedRequest!.Content!.Headers.GetValues("Content-Type").ToArray());
+    }
+
+    [TestMethod]
+    public async Task SendAsync_WhenBothContentTypesAreUnparseable_StillSendsExactlyOne()
+    {
+        CapturingHandler handler = new CapturingHandler();
+        HttpClientEndpointRequestSender sender = new HttpClientEndpointRequestSender(new HttpClient(handler));
+
+        // Neither value parses as a media type, so both take the add-without-validation
+        // path. That path appends, so without clearing first the request would carry
+        // two Content-Type headers.
+        await using EndpointResponse response = await sender.SendAsync(
+            CreateRequest(
+                new Dictionary<string, string> { ["Content-Type"] = "also not a media type" },
+                contentType: "not a media type"));
+
+        CollectionAssert.AreEqual(
+            new[] { "also not a media type" },
+            handler.CapturedRequest!.Content!.Headers.GetValues("Content-Type").ToArray());
+    }
+
+    private static EndpointRequest CreateRequest(
+        IReadOnlyDictionary<string, string>? headers = null,
+        string contentType = "application/json") =>
         new EndpointRequest(
             EndpointSlot.A,
             new EndpointDefinition(new Uri("https://service.example.test/compare")),
             new RequestItem("one.json", "application/json", 8),
             new MemoryStream(Encoding.UTF8.GetBytes("{\"id\":1}")),
-            "application/json",
+            contentType,
             TimeSpan.FromSeconds(30),
             headers ?? new Dictionary<string, string>());
 

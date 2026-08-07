@@ -40,4 +40,6 @@ internal sealed class RunOptionsDto
     public RetentionMode? RunRetentionModeOverride { get; init; }
 
     public string? ComparisonRulesSnapshotHash { get; init; }
+
+    public BaselineBindingDto? Baseline { get; init; }
 }

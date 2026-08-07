@@ -51,7 +51,14 @@ public sealed class TestComparisonDefinition : IComparisonDefinition<TestCompari
 
     public string ComparisonId => Id;
 
+    // ParityBench.TestPlugin.Rebuilt compiles this same file with PLUGIN_REBUILD
+    // defined, giving the reload tests a second build that is observably different
+    // while keeping every id identical.
+#if PLUGIN_REBUILD
+    public string DisplayName => "Test comparison (rebuilt)";
+#else
     public string DisplayName => "Test comparison";
+#endif
 
     public Type ComparisonType => typeof(TestComparison);
 

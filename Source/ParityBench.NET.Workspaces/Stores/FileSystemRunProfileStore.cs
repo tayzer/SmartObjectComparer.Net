@@ -246,7 +246,7 @@ public sealed class FileSystemRunProfileStore : IRunProfileStore
             ComparisonId,
             new Uri(Endpoints.A, UriKind.Absolute),
             new Uri(Endpoints.B, UriKind.Absolute),
-            Plugin.Version,
+            MigratePluginVersion(),
             Environment,
             EnabledSteps,
             StepConfiguration.ToDictionary(
@@ -255,11 +255,22 @@ public sealed class FileSystemRunProfileStore : IRunProfileStore
                 StringComparer.OrdinalIgnoreCase),
             Comparison?.ToOptions(),
             Input?.RequestDirectory,
-            SchemaVersion,
+            RunProfile.CurrentSchemaVersion,
             Report is null ? null : new LargeRunOptions(Report.ChunkSize, Report.DetailPageSize),
             Report?.RetentionMode,
             EndpointAHeaders,
             EndpointBHeaders);
+
+        /// <summary>
+        /// Schema 1 wrote the installed plugin version into every profile it seeded,
+        /// so upgrading a plugin left the profile naming a version that was no longer
+        /// installed and the run failed with "version X is not installed". Those
+        /// pins were never chosen by an operator — there was no way to set one — so a
+        /// schema 1 file is read as unpinned and follows the highest installed
+        /// version. A pin set from the profile editor is written as schema 2 and kept.
+        /// </summary>
+        private string? MigratePluginVersion() =>
+            SchemaVersion >= 2 ? Plugin.Version : null;
     }
 
     private sealed class PluginSelectionDto

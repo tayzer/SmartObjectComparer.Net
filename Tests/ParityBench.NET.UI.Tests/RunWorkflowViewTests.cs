@@ -13,6 +13,7 @@ using ParityBench.NET.Application.Workflow;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
+using ParityBench.NET.Domain.Runs.Retention;
 using ParityBench.NET.UI.Workflow;
 using ParityBench.NET.UI.Theming;
 
@@ -343,6 +344,80 @@ public sealed class RunWorkflowViewTests
     }
 
     [TestMethod]
+    public void RunWorkflow_WhenTheProfileSetsRetention_TheRunCarriesIt()
+    {
+        dataSource.RunProfilesToReturn = new[]
+        {
+            new RunProfileSummary("client-customer-lookup-local", "Client Customer Lookup — Local"),
+        };
+        dataSource.ResolvedProfile = CreateResolvedProfile(RetentionMode.None);
+
+        IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();
+        SelectFirstDropdown(component, "client-customer-lookup-local");
+        StartComparison(component);
+
+        component.WaitForAssertion(() => Assert.IsNotNull(dataSource.LastRequest));
+        // Without this the profile's retention mode is inert and every run falls back
+        // to the app-wide setting.
+        Assert.AreEqual(RetentionMode.None, dataSource.LastRequest!.RunRetentionModeOverride);
+    }
+
+    [TestMethod]
+    public void RunWorkflow_WhenThePickerChangesRetention_ItBeatsTheProfile()
+    {
+        dataSource.RunProfilesToReturn = new[]
+        {
+            new RunProfileSummary("client-customer-lookup-local", "Client Customer Lookup — Local"),
+        };
+        dataSource.ResolvedProfile = CreateResolvedProfile(RetentionMode.None);
+
+        IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();
+        SelectFirstDropdown(component, "client-customer-lookup-local");
+        SelectByLabel(component, "Response retention", nameof(RetentionMode.TrimmedEquals));
+        StartComparison(component);
+
+        component.WaitForAssertion(() => Assert.IsNotNull(dataSource.LastRequest));
+        Assert.AreEqual(RetentionMode.TrimmedEquals, dataSource.LastRequest!.RunRetentionModeOverride);
+    }
+
+    [TestMethod]
+    public void RunWorkflow_WhenRetentionIsLeftAtTheDefault_TheRunNamesNoOverride()
+    {
+        dataSource.RunProfilesToReturn = new[]
+        {
+            new RunProfileSummary("client-customer-lookup-local", "Client Customer Lookup — Local"),
+        };
+        dataSource.ResolvedProfile = CreateResolvedProfile(retentionModeOverride: null);
+
+        IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();
+        SelectFirstDropdown(component, "client-customer-lookup-local");
+        StartComparison(component);
+
+        component.WaitForAssertion(() => Assert.IsNotNull(dataSource.LastRequest));
+        // Null, not a mode: the run must defer to ParityBench:Retention:Mode rather
+        // than freezing whatever the default happened to be when it was created.
+        Assert.IsNull(dataSource.LastRequest!.RunRetentionModeOverride);
+    }
+
+    private static ResolvedRunProfileView CreateResolvedProfile(RetentionMode? retentionModeOverride) =>
+        new ResolvedRunProfileView(
+            new Uri("https://qa.example.test/soap"),
+            new Uri("https://qa.example.test/json"),
+            new ComparisonOptions(ignoreXmlNamespaces: true),
+            "C:/runs/client",
+            new PluginComparisonSelection("client.customer-lookup", "client.customer-lookup.soap-vs-json"),
+            typeof(PluginComparisonFixture),
+            null,
+            new Dictionary<string, string>(),
+            new Dictionary<string, string>(),
+            retentionModeOverride);
+
+    private static void StartComparison(IRenderedComponent<RunWorkflow> component) =>
+        component.FindAll("button")
+            .Single(button => button.TextContent.Contains("Start Comparison", StringComparison.Ordinal))
+            .Click();
+
+    [TestMethod]
     public void RunWorkflow_WhenRunProfileIsSelected_IgnoreRulesStudioBrowsesThePluginComparisonType()
     {
         dataSource.RunProfilesToReturn = new[]
@@ -536,6 +611,13 @@ public sealed class RunWorkflowViewTests
     private static void SelectFirstDropdown(IRenderedComponent<RunWorkflow> component, string value)
     {
         IRenderedComponent<MudSelect<string>> select = component.FindComponent<MudSelect<string>>();
+        component.InvokeAsync(() => select.Instance.ValueChanged.InvokeAsync(value)).GetAwaiter().GetResult();
+    }
+
+    private static void SelectByLabel(IRenderedComponent<RunWorkflow> component, string label, string value)
+    {
+        IRenderedComponent<MudSelect<string>> select = component.FindComponents<MudSelect<string>>()
+            .Single(candidate => string.Equals(candidate.Instance.Label, label, StringComparison.Ordinal));
         component.InvokeAsync(() => select.Instance.ValueChanged.InvokeAsync(value)).GetAwaiter().GetResult();
     }
 

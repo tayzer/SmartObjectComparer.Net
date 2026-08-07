@@ -3,6 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ParityBench.NET.Application.Profiles;
 using ParityBench.NET.Application.Secrets;
 using ParityBench.NET.Domain.Comparison;
+using ParityBench.NET.Domain.Runs.Retention;
 using ParityBench.NET.Workspaces;
 
 namespace ParityBench.NET.Workspaces.Tests;
@@ -32,6 +33,7 @@ public sealed class FileSystemRunProfileStoreTests
         CollectionAssert.AreEqual(profile.EnabledStepIds.ToArray(), loaded.EnabledStepIds.ToArray());
         Assert.AreEqual("secret://acme/qa-key", loaded.StepConfiguration["acme.token"]["apiKey"]);
         Assert.AreEqual(profile.RequestDirectory, loaded.RequestDirectory);
+        Assert.AreEqual(profile.RetentionModeOverride, loaded.RetentionModeOverride);
         Assert.IsTrue(loaded.Comparison.IgnoreCollectionOrder);
         Assert.AreEqual("trace.id", loaded.Comparison.IgnoreRules.Single().PropertyPath);
     }
@@ -65,6 +67,50 @@ public sealed class FileSystemRunProfileStoreTests
 
         Assert.AreEqual(1, profiles.Count);
         Assert.AreEqual("client-lookup-qa", profiles[0].Id);
+    }
+
+    [TestMethod]
+    public async Task GetAsync_WhenProfileIsSchema1_DropsTheAutomaticVersionPin()
+    {
+        using TempWorkspace workspace = TempWorkspace.Create();
+        FileSystemRunProfileStore store = new FileSystemRunProfileStore(workspace.Path);
+        string profilesDirectory = Path.Combine(workspace.Path, "config", "profiles");
+        Directory.CreateDirectory(profilesDirectory);
+
+        // A profile written before the pin became a choice: seeding stamped the
+        // installed version into it, which broke the profile once that version was
+        // replaced by a newer package.
+        await File.WriteAllTextAsync(
+            Path.Combine(profilesDirectory, "legacy.json"),
+            """
+            {
+              "schemaVersion": 1,
+              "id": "legacy",
+              "displayName": "Legacy",
+              "plugin": { "id": "compare-a-b", "version": "1.0.0" },
+              "comparisonId": "compare-a-b.default",
+              "endpoints": { "a": "https://qa.example.test/a", "b": "https://qa.example.test/b" }
+            }
+            """);
+
+        RunProfile? loaded = await store.GetAsync("legacy");
+
+        Assert.IsNotNull(loaded);
+        Assert.IsNull(loaded.PluginVersion);
+        Assert.AreEqual(RunProfile.CurrentSchemaVersion, loaded.SchemaVersion);
+    }
+
+    [TestMethod]
+    public async Task GetAsync_WhenProfileIsSchema2_KeepsAnExplicitVersionPin()
+    {
+        using TempWorkspace workspace = TempWorkspace.Create();
+        FileSystemRunProfileStore store = new FileSystemRunProfileStore(workspace.Path);
+
+        await store.SaveAsync(CreateProfile());
+        RunProfile? loaded = await store.GetAsync("client-lookup-qa");
+
+        Assert.IsNotNull(loaded);
+        Assert.AreEqual("1.2.0", loaded.PluginVersion);
     }
 
     [TestMethod]
@@ -137,7 +183,8 @@ public sealed class FileSystemRunProfileStoreTests
             comparison: new ComparisonOptions(
                 ignoreCollectionOrder: true,
                 ignoreRules: new[] { new IgnoreRuleDefinition("trace.id") }),
-            requestDirectory: @"C:\runs\client-lookup");
+            requestDirectory: @"C:\runs\client-lookup",
+            retentionModeOverride: RetentionMode.None);
 
     private sealed class TempWorkspace : IDisposable
     {

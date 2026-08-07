@@ -8,11 +8,18 @@ namespace ParityBench.NET.Plugins;
 /// different versions of the same library without either winning.
 /// </summary>
 /// <remarks>
+/// <para>
 /// The SDK is deliberately <em>not</em> loaded into the plugin's context: types
 /// like <c>IComparisonMiddleware</c> must unify with the host's, or a plugin's
 /// middleware would not be assignable to the interface the pipeline expects. Every
 /// other dependency resolves from the package's own <c>.deps.json</c> first, and
 /// only falls back to the default context when the package does not carry it.
+/// </para>
+/// <para>
+/// The path handed in is a private copy of the package made by the loader, never the
+/// installed package itself, so loading a plugin does not lock the files a client
+/// needs to overwrite when they rebuild it.
+/// </para>
 /// </remarks>
 public sealed class PluginLoadContext : AssemblyLoadContext
 {

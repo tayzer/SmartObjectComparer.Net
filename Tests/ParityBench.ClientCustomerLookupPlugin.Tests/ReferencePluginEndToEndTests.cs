@@ -6,10 +6,12 @@ using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
+using ParityBench.NET.Application.Baselines;
 using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.Application.Plugins;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Runs;
+using ParityBench.NET.Domain.Baselines;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Results;
 using ParityBench.NET.Domain.Runs;
@@ -17,6 +19,7 @@ using ParityBench.NET.Engine;
 using ParityBench.NET.Engine.Comparers;
 using ParityBench.NET.Infrastructure;
 using ParityBench.NET.Plugins;
+using ParityBench.NET.Workspaces;
 
 namespace ParityBench.ClientCustomerLookupPlugin.Tests;
 
@@ -75,8 +78,10 @@ public sealed class ReferencePluginEndToEndTests
         Assert.AreEqual($"Bearer {FinalToken}", endpointB.Headers["Authorization"]);
         Assert.AreEqual(EndpointBSubscriptionKey, endpointB.Headers[SubscriptionKeyHeader]);
 
-        // Endpoint A kept the source SOAP and gained its SOAPAction header.
+        // Endpoint A kept the source SOAP and picked up the content type and
+        // SOAPAction header the comparison declares — neither is set by a step.
         CapturedRequest endpointA = sender.Captured.Single(request => request.Endpoint == EndpointSlot.A);
+        Assert.AreEqual("text/xml", endpointA.ContentType, "The comparison's declared content type should beat the staged guess.");
         Assert.AreEqual("urn:ClientCustomerLookup", endpointA.Headers["SOAPAction"]);
 
         // Both sides persisted a canonical projection, which is what got compared.
@@ -100,11 +105,56 @@ public sealed class ReferencePluginEndToEndTests
         Assert.AreEqual(1, summary.ErrorPairs);
     }
 
+    [TestMethod]
+    public async Task Run_WhenReplayingABaselineCapturedFromEndpointA_NeverCallsTheCapturedEndpoint()
+    {
+        using TempPluginRoot pluginRoot = TempPluginRoot.InstallReferencePackage();
+        using TempWorkspace workspace = TempWorkspace.Create();
+        FileSystemBaselineStore baselineStore = new FileSystemBaselineStore(workspace.Path);
+
+        CapturingEndpointRequestSender captureSender = new CapturingEndpointRequestSender();
+        ComparisonRunExecutor captureExecutor = BuildExecutor(
+            pluginRoot,
+            new InMemoryArtifactStore(),
+            captureSender,
+            new TokenEndpointHandler(),
+            baselineStore);
+
+        await captureExecutor.ExecuteAsync(
+            CreateRun(baseline: BaselineBinding.ForCapture("Legacy SOAP")),
+            new NoOpProgressReporter());
+
+        BaselineSummary captured = (await baselineStore.ListAsync()).Single();
+        Assert.AreEqual(1, captured.ScenarioCount);
+        Assert.IsTrue(captureSender.Captured.All(request => request.Endpoint == EndpointSlot.A));
+
+        CapturingEndpointRequestSender replaySender = new CapturingEndpointRequestSender();
+        TokenEndpointHandler replayTokens = new TokenEndpointHandler();
+        ComparisonRunExecutor replayExecutor = BuildExecutor(
+            pluginRoot,
+            new InMemoryArtifactStore(),
+            replaySender,
+            replayTokens,
+            baselineStore);
+
+        RunResultSummary summary = await replayExecutor.ExecuteAsync(
+            CreateRun(baseline: BaselineBinding.ForReplay(captured.Id, captured.Version), runId: "run-2"),
+            new NoOpProgressReporter());
+
+        // The captured version is assumed gone by replay time: not one request may
+        // reach it, while the live side still runs the plugin's full request pipeline.
+        Assert.AreEqual(EndpointSlot.B, replaySender.Captured.Single().Endpoint);
+        Assert.AreEqual($"Bearer {FinalToken}", replaySender.Captured.Single().Headers["Authorization"]);
+        Assert.AreEqual(1, summary.TotalPairs);
+        Assert.AreEqual(0, summary.ErrorPairs);
+    }
+
     private static ComparisonRunExecutor BuildExecutor(
         TempPluginRoot pluginRoot,
         InMemoryArtifactStore artifactStore,
         CapturingEndpointRequestSender sender,
-        TokenEndpointHandler tokenHandler)
+        TokenEndpointHandler tokenHandler,
+        IBaselineStore? baselineStore = null)
     {
         PluginCatalog catalog = new PluginCatalog(new[] { pluginRoot.Path });
         Assert.AreEqual(1, catalog.Packages.Count, "The reference package should be discovered from its manifest.");
@@ -128,10 +178,14 @@ public sealed class ReferencePluginEndToEndTests
             new FakeRunDetailStore(),
             new HashOnlyResponseComparer(),
             planFactory,
-            contractPayloadSerializer: serializer);
+            contractPayloadSerializer: serializer,
+            baselineStore: baselineStore);
     }
 
-    private static ComparisonRun CreateRun(string primaryTokenSubscriptionKey = PrimaryTokenSubscriptionKey)
+    private static ComparisonRun CreateRun(
+        string primaryTokenSubscriptionKey = PrimaryTokenSubscriptionKey,
+        BaselineBinding? baseline = null,
+        string runId = "run-1")
     {
         Dictionary<string, IReadOnlyDictionary<string, string>> stepConfiguration =
             new Dictionary<string, IReadOnlyDictionary<string, string>>
@@ -156,9 +210,10 @@ public sealed class ReferencePluginEndToEndTests
             pluginComparison: new PluginComparisonSelection(
                 PluginId,
                 ComparisonId,
-                stepConfiguration: stepConfiguration));
+                stepConfiguration: stepConfiguration),
+            baseline: baseline);
 
-        return ComparisonRun.Create(new RunId("run-1"), options).Start();
+        return ComparisonRun.Create(new RunId(runId), options).Start();
     }
 
     private const string SoapRequestBody =
@@ -266,7 +321,10 @@ public sealed class ReferencePluginEndToEndTests
             this.body = body;
             manifest = new RequestBatchManifest(
                 new RequestBatchReference("batch-1"),
-                new[] { new RequestItem("one.xml", "text/xml", body.Length) });
+                // What real staging produces for a .xml file — an extension-derived
+                // guess. The SOAP endpoint needs text/xml, which the comparison
+                // declares, so the two must differ here for that to mean anything.
+                new[] { new RequestItem("one.xml", "application/xml", body.Length) });
         }
 
         public Task<RequestBatchManifest> StageDirectoryAsync(string sourceDirectory, RequestBatchReference batchReference, CancellationToken cancellationToken = default) =>
@@ -349,6 +407,34 @@ public sealed class ReferencePluginEndToEndTests
     private sealed class NoOpProgressReporter : IRunProgressReporter
     {
         public Task ReportAsync(RunStatus status, RunProgress progress, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    private sealed class TempWorkspace : IDisposable
+    {
+        private TempWorkspace(string path) => Path = path;
+
+        public string Path { get; }
+
+        public static TempWorkspace Create()
+        {
+            string path = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "paritybench-ref-plugin-workspace",
+                Guid.NewGuid().ToString("n"));
+            Directory.CreateDirectory(path);
+            return new TempWorkspace(path);
+        }
+
+        public void Dispose()
+        {
+            try
+            {
+                Directory.Delete(Path, recursive: true);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
     }
 
     private sealed class TempPluginRoot : IDisposable

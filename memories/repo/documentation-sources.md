@@ -1,8 +1,10 @@
-- `README.md` owns product context, core capability framing, and the high-level architecture overview.
+- `README.md` owns product framing, the feature list, quick start, the CLI synopsis, and repository layout.
+- `Docs/README.md` is the documentation index — every live doc is listed there; anything not listed is archived.
+- `Docs/Architecture/high-level-design.md` owns the component map, the system flow diagram, comparison modes, and the memory model.
+- `Docs/Architecture/ADRs/` owns approved architecture decision records; `Docs/Architecture/ADRs/README.md` owns the ADR process.
+- `Docs/Guides/` owns task-oriented documentation, one file per feature area: getting started, comparison rules, reports and results, retention and workspace, baseline vs live, building a plugin.
 - `CODING_STANDARD.md` owns coding, naming, async, logging, and testing conventions.
-- `Docs/Archive/request-comparison-flow-overview.md` owns the request-comparison execution flow and key performance measures.
-- `Docs/Archive/request-comparison-progress-plan.md`, `Docs/Archive/RequestComparisonPlan.md`, and `Docs/Archive/blazor-report-implementation.md` own active planning context for major features and migrations.
-- `Docs/Architecture/copilot-agent-system.md` owns the Copilot agent model, routing rules, memory model, and example workflows.
-- `Docs/Architecture/adr/` owns approved architecture decision records.
-- `Docs/Design/` owns approved reusable UI/UX guidance.
+- `CONTRIBUTING.md` owns build, test, layout, and pull-request process.
+- Each project under `Source/` and `Tests/` owns its own `README.md`: what it owns, its reference boundaries, and how to run it.
+- `Docs/Archive/` is frozen historical material (V1/V2 migration plans, superseded feature specs). Never cite it as current behaviour.
 - Update the canonical doc first, then the matching summary in `memories/repo/`.

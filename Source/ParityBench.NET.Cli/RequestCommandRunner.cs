@@ -1,4 +1,6 @@
+using ParityBench.NET.Domain.Baselines;
 using ParityBench.NET.Domain.ContractProfiles;
+using ParityBench.NET.Application.Baselines;
 using ParityBench.NET.Application.Profiles;
 using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Workflow;
@@ -83,7 +85,8 @@ public sealed class RequestCommandRunner
             string.IsNullOrWhiteSpace(contractProfileId) ? null : new ContractProfileSelection(contractProfileId),
             commonHeaders: ParseHeaders(options.CommonHeaders),
             endpointAHeaders: MergeHeaders(preset?.EndpointAHeaders, ParseHeaders(options.EndpointAHeaders)),
-            endpointBHeaders: MergeHeaders(preset?.EndpointBHeaders, ParseHeaders(options.EndpointBHeaders)));
+            endpointBHeaders: MergeHeaders(preset?.EndpointBHeaders, ParseHeaders(options.EndpointBHeaders)),
+            runRetentionModeOverride: options.RetentionModeOverride);
 
         return await SubmitAndReportAsync(request, options, output, error, cancellationToken).ConfigureAwait(false);
     }
@@ -107,21 +110,29 @@ public sealed class RequestCommandRunner
             return 2;
         }
 
-        string? requestDirectory = options.RequestDirectory ?? resolved.Profile.RequestDirectory;
-        if (string.IsNullOrWhiteSpace(requestDirectory))
-        {
-            await error.WriteLineAsync("The run profile does not set a request directory; pass one on the command line.").ConfigureAwait(false);
-            return 2;
-        }
+        BaselineRunSelection? baselineSelection = BuildBaselineSelection(options);
+        bool replaysBaseline = baselineSelection?.Mode == BaselineRunMode.BaselineVsLive;
 
-        if (!Directory.Exists(requestDirectory))
+        // A replay takes its requests from the package, so a directory is neither
+        // needed nor used.
+        string? requestDirectory = options.RequestDirectory ?? resolved.Profile.RequestDirectory;
+        if (!replaysBaseline)
         {
-            await error.WriteLineAsync($"Request directory was not found: {Path.GetFullPath(requestDirectory)}").ConfigureAwait(false);
-            return 2;
+            if (string.IsNullOrWhiteSpace(requestDirectory))
+            {
+                await error.WriteLineAsync("The run profile does not set a request directory; pass one on the command line.").ConfigureAwait(false);
+                return 2;
+            }
+
+            if (!Directory.Exists(requestDirectory))
+            {
+                await error.WriteLineAsync($"Request directory was not found: {Path.GetFullPath(requestDirectory)}").ConfigureAwait(false);
+                return 2;
+            }
         }
 
         RequestComparisonRunRequest request = new RequestComparisonRunRequest(
-            requestDirectory,
+            replaysBaseline ? string.Empty : requestDirectory!,
             options.EndpointA ?? resolved.EndpointA.Uri,
             options.EndpointB ?? resolved.EndpointB.Uri,
             options.Timeout,
@@ -131,9 +142,25 @@ public sealed class RequestCommandRunner
             commonHeaders: ParseHeaders(options.CommonHeaders),
             endpointAHeaders: MergeHeaders(resolved.EndpointA.Headers, ParseHeaders(options.EndpointAHeaders)),
             endpointBHeaders: MergeHeaders(resolved.EndpointB.Headers, ParseHeaders(options.EndpointBHeaders)),
-            pluginComparison: resolved.Selection);
+            // --retention beats the profile's own retention mode, which beats the
+            // configured default; the profile is not rewritten either way.
+            runRetentionModeOverride: options.RetentionModeOverride ?? resolved.Profile.RetentionModeOverride,
+            pluginComparison: resolved.Selection,
+            baseline: baselineSelection);
 
         return await SubmitAndReportAsync(request, options, output, error, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static BaselineRunSelection? BuildBaselineSelection(RequestCommandOptions options)
+    {
+        if (!string.IsNullOrWhiteSpace(options.CaptureBaselineName))
+        {
+            return BaselineRunSelection.Capture(options.CaptureBaselineName);
+        }
+
+        return string.IsNullOrWhiteSpace(options.BaselineReference)
+            ? null
+            : BaselineRunSelection.ParseReplay(options.BaselineReference);
     }
 
     private async Task<int> SubmitAndReportAsync(

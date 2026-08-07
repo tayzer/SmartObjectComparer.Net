@@ -1,7 +1,9 @@
 using ParityBench.NET.Application.Reports;
 using ParityBench.NET.Application.Workflow;
+using ParityBench.NET.Domain.Baselines;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Runs;
+using ParityBench.NET.Domain.Runs.Retention;
 
 namespace ParityBench.NET.UI.Workflow;
 
@@ -29,7 +31,11 @@ public sealed record ResolvedRunProfileView(
     // ComparisonType when unresolved.
     ComparisonRuleDefaults? PluginDefaultComparisonRules,
     IReadOnlyDictionary<string, string> EndpointAHeaders,
-    IReadOnlyDictionary<string, string> EndpointBHeaders);
+    IReadOnlyDictionary<string, string> EndpointBHeaders,
+    // The retention mode the profile asks for, or null to use the configured
+    // default. It seeds the workflow's retention picker, which is what actually
+    // travels with the run.
+    RetentionMode? RetentionModeOverride = null);
 
 /// <summary>
 /// Supplies create/run/cancel/report actions to shared V2 workflow components without binding them to a host.
@@ -50,6 +56,22 @@ public interface IRunWorkflowViewDataSource
     /// </summary>
     Task<ResolvedRunProfileView> ResolveRunProfileAsync(string profileId, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException("Run profiles are not available in this context.");
+
+    /// <summary>
+    /// Lists captured baselines for the baseline picker, newest first. Defaults to
+    /// none where the baseline library is unavailable.
+    /// </summary>
+    Task<IReadOnlyList<BaselineSummary>> ListBaselinesAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<BaselineSummary>>(Array.Empty<BaselineSummary>());
+
+    /// <summary>
+    /// Loads a captured baseline's full provenance for the workflow's baseline panel.
+    /// </summary>
+    Task<BaselinePackageManifest?> ResolveBaselineAsync(
+        BaselineId id,
+        int? version = null,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<BaselinePackageManifest?>(null);
 
     Type? ResolveResponseModelType(string modelName);
 
