@@ -1,7 +1,7 @@
 using System.Diagnostics;
-using System.Text;
 using System.Text.Json;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using ParityBench.NET.Application.Observability;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
@@ -18,6 +18,10 @@ namespace ParityBench.NET.Engine.Tests;
 public sealed class LargeRunPerformanceBenchmarkTests
 {
     private const string EnableVariable = "PB_RUN_PERFORMANCE_BENCHMARKS";
+    private const string CountsVariable = "PB_PERFORMANCE_COUNTS";
+    private const string IterationsVariable = "PB_PERFORMANCE_ITERATIONS";
+    private const string ComparisonConcurrencyVariable = "PB_PERFORMANCE_COMPARISON_CONCURRENCY";
+    private const string DifferentResponsesVariable = "PB_PERFORMANCE_DIFFERENT_RESPONSES";
     private const int PayloadBytes = 192 * 1024;
 
     [TestMethod]
@@ -32,13 +36,15 @@ public sealed class LargeRunPerformanceBenchmarkTests
         Directory.CreateDirectory(root);
         try
         {
-            await RunOnceAsync(root, 250, "warmup");
+            int[] counts = ParseCounts();
+            int iterations = ParsePositiveInt(IterationsVariable, 3);
+            await RunOnceAsync(root, Math.Min(250, counts[0]), "warmup");
             List<BenchmarkMeasurement> small = new();
             List<BenchmarkMeasurement> large = new();
-            for (int iteration = 1; iteration <= 3; iteration++)
+            for (int iteration = 1; iteration <= iterations; iteration++)
             {
-                small.Add(await RunOnceAsync(root, 2500, $"small-{iteration}"));
-                large.Add(await RunOnceAsync(root, 8000, $"large-{iteration}"));
+                small.Add(await RunOnceAsync(root, counts[0], $"small-{iteration}"));
+                large.Add(await RunOnceAsync(root, counts[1], $"large-{iteration}"));
             }
 
             double smallMedian = Median(small.Select(item => item.PairsPerSecond));
@@ -84,12 +90,15 @@ public sealed class LargeRunPerformanceBenchmarkTests
         FileSystemRunDetailStore detailStore = new(workspace);
         ResponseModelRegistry registry = new();
         registry.Register<PayloadEnvelope>("PayloadEnvelope");
+        BenchmarkObservabilityRecorder observabilityRecorder = new();
         ComparisonRunExecutor executor = new(
             batchStore,
             new PayloadSender(),
             artifactStore,
             detailStore,
-            new CompareNetObjectsResponseComparer(artifactStore, new JsonXmlResponseBodyDeserializer(registry)));
+            new CompareNetObjectsResponseComparer(artifactStore, new JsonXmlResponseBodyDeserializer(registry)),
+            null,
+            observabilityRecorder);
         ComparisonRun run = ComparisonRun.Create(
             new RunId($"run-{name}"),
             new RunOptions(
@@ -100,15 +109,30 @@ public sealed class LargeRunPerformanceBenchmarkTests
                 maxConcurrency: 16,
                 responseModelName: "PayloadEnvelope",
                 comparisonOptions: new ComparisonOptions(ignoreStringCase: true),
-                largeRunOptions: new LargeRunOptions(comparisonConcurrency: Math.Min(8, Environment.ProcessorCount))))
+                largeRunOptions: new LargeRunOptions(comparisonConcurrency: ParseComparisonConcurrency())))
             .Start();
 
+        long allocatedBefore = GC.GetTotalAllocatedBytes(precise: false);
         Stopwatch stopwatch = Stopwatch.StartNew();
         RunResultSummary summary = await executor.ExecuteAsync(run, NoOpProgressReporter.Instance);
         stopwatch.Stop();
-        return new BenchmarkMeasurement(name, count, stopwatch.Elapsed.TotalMilliseconds,
-            count / stopwatch.Elapsed.TotalSeconds, summary.ExecutionMetrics!.ResponseBytesWritten,
-            summary.ExecutionMetrics.ComparisonConcurrency);
+        RunExecutionMetrics metrics = summary.ExecutionMetrics!;
+        return new BenchmarkMeasurement(
+            name,
+            count,
+            stopwatch.Elapsed.TotalMilliseconds,
+            count / stopwatch.Elapsed.TotalSeconds,
+            metrics.RequestExecutionDuration.TotalMilliseconds,
+            metrics.ComparisonDuration.TotalMilliseconds,
+            metrics.FinalizationDuration.TotalMilliseconds,
+            metrics.CompareSubPhases?.NormalizeDuration.TotalMilliseconds ?? 0,
+            metrics.CompareSubPhases?.PersistCanonicalDuration.TotalMilliseconds ?? 0,
+            metrics.CompareSubPhases?.DiffDuration.TotalMilliseconds ?? 0,
+            metrics.CompareSubPhases?.FocusedContentDuration.TotalMilliseconds ?? 0,
+            metrics.ResponseBytesWritten,
+            metrics.ComparisonConcurrency,
+            GC.GetTotalAllocatedBytes(precise: false) - allocatedBefore,
+            Process.GetCurrentProcess().WorkingSet64);
     }
 
     private static double Median(IEnumerable<double> values)
@@ -117,20 +141,140 @@ public sealed class LargeRunPerformanceBenchmarkTests
         return ordered[ordered.Length / 2];
     }
 
-    private sealed class PayloadSender : IEndpointRequestSender
+    private static int[] ParseCounts()
     {
-        private static readonly byte[] Body = Encoding.UTF8.GetBytes("{\"id\":1,\"payload\":\"" + new string('x', PayloadBytes - 32) + "\"}");
-        public Task<EndpointResponse> SendAsync(EndpointRequest request, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new EndpointResponse(200, "application/json", new MemoryStream(Body, writable: false)));
+        string? value = Environment.GetEnvironmentVariable(CountsVariable);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return [2500, 8000];
+        }
+
+        int[] counts = value
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select((item, index) =>
+            {
+                if (!int.TryParse(item, out int count) || count <= 0)
+                {
+                    throw new InvalidOperationException($"{CountsVariable} item {index + 1} must be a positive integer.");
+                }
+
+                return count;
+            })
+            .ToArray();
+        if (counts.Length != 2 || counts[1] < counts[0])
+        {
+            throw new InvalidOperationException($"{CountsVariable} must contain two ascending counts, for example '2500,8000'.");
+        }
+
+        return counts;
     }
 
-    public sealed class PayloadEnvelope { public int Id { get; set; } public string? Payload { get; set; } }
+    private static int ParseComparisonConcurrency() =>
+        ParsePositiveInt(ComparisonConcurrencyVariable, Math.Min(8, Environment.ProcessorCount));
+
+    private static int ParsePositiveInt(string variable, int fallback)
+    {
+        string? value = Environment.GetEnvironmentVariable(variable);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return fallback;
+        }
+
+        if (!int.TryParse(value, out int parsed) || parsed <= 0)
+        {
+            throw new InvalidOperationException($"{variable} must be a positive integer.");
+        }
+
+        return parsed;
+    }
+
+    private sealed class PayloadSender : IEndpointRequestSender
+    {
+        private static readonly byte[] EqualBody = BuildBody(different: false);
+        private static readonly byte[] DifferentBody = BuildBody(different: true);
+
+        public Task<EndpointResponse> SendAsync(EndpointRequest request, CancellationToken cancellationToken = default)
+        {
+            bool produceDifferences = string.Equals(
+                Environment.GetEnvironmentVariable(DifferentResponsesVariable),
+                "1",
+                StringComparison.Ordinal);
+            byte[] body = produceDifferences && request.Endpoint == EndpointSlot.B ? DifferentBody : EqualBody;
+            return Task.FromResult(new EndpointResponse(200, "application/json", new MemoryStream(body, writable: false)));
+        }
+
+        private static byte[] BuildBody(bool different) => JsonSerializer.SerializeToUtf8Bytes(new PayloadEnvelope
+        {
+            Id = 1,
+            Payload = "stable",
+            Items = Enumerable.Range(0, 256)
+                .Select(index => new PayloadRecord
+                {
+                    Index = index,
+                    Code = $"record-{index % 32:D2}",
+                    Amount = index * 1.25m + (different ? 1 : 0),
+                    Description = new string((char)('a' + (different ? (index + 1) : index) % 26), 600),
+                    Tags = [$"tag-{index % 8}", $"group-{index % 16}"],
+                    Attributes = new Dictionary<string, string>
+                    {
+                        ["source"] = "performance",
+                        ["partition"] = (index % 4).ToString(),
+                    },
+                })
+                .ToArray(),
+        });
+    }
+
+    public sealed class PayloadEnvelope
+    {
+        public int Id { get; set; }
+        public string? Payload { get; set; }
+        public PayloadRecord[]? Items { get; set; }
+    }
+
+    public sealed class PayloadRecord
+    {
+        public int Index { get; set; }
+        public string? Code { get; set; }
+        public decimal Amount { get; set; }
+        public string? Description { get; set; }
+        public string[]? Tags { get; set; }
+        public Dictionary<string, string>? Attributes { get; set; }
+    }
     private sealed class NoOpProgressReporter : ParityBench.NET.Application.Runs.IRunProgressReporter
     {
         public static readonly NoOpProgressReporter Instance = new();
         public Task ReportAsync(RunStatus status, RunProgress progress, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
-    private sealed record BenchmarkMeasurement(string Name, int RequestCount, double WallClockMilliseconds, double PairsPerSecond, long ResponseBytesWritten, int ComparisonWorkers);
+    private sealed class BenchmarkObservabilityRecorder : IObservabilityRecorder
+    {
+        public bool IsDurationLoggingEnabled => false;
+        public bool IsExceptionLoggingEnabled => false;
+        public bool IsDiagnosticsPersistenceEnabled => false;
+        public bool IsDetailedCompareTimingEnabled => true;
+        public TimeSpan SlowPathThreshold => TimeSpan.MaxValue;
+        public void RecordRunPhase(RunId runId, string phaseName, TimeSpan duration) { }
+        public void RecordRequestPath(RunId runId, string relativePath, TimeSpan duration) { }
+        public void RecordException(RunId runId, string stage, Exception exception, string? relativePath = null, EndpointSlot? endpoint = null) { }
+        public RunDiagnosticsSnapshot? CreateSnapshot(RunId runId) => null;
+    }
+
+    private sealed record BenchmarkMeasurement(
+        string Name,
+        int RequestCount,
+        double WallClockMilliseconds,
+        double PairsPerSecond,
+        double RequestExecutionMilliseconds,
+        double ComparisonMilliseconds,
+        double FinalizationMilliseconds,
+        double CompareNormalizeMilliseconds,
+        double ComparePersistCanonicalMilliseconds,
+        double CompareDiffMilliseconds,
+        double CompareFocusedContentMilliseconds,
+        long ResponseBytesWritten,
+        int ComparisonWorkers,
+        long TotalAllocatedBytes,
+        long WorkingSetBytes);
     private sealed record BenchmarkReport(DateTimeOffset CreatedAt, string Machine, int LogicalProcessors, int PayloadBytes, IReadOnlyList<BenchmarkMeasurement> SmallRuns, IReadOnlyList<BenchmarkMeasurement> LargeRuns, double SmallMedianPairsPerSecond, double LargeMedianPairsPerSecond, double ThroughputRatio);
 }

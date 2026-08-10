@@ -23,6 +23,10 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
     private static readonly ConcurrentDictionary<string, Regex> WildcardRulePatternCache = new(StringComparer.Ordinal);
     private readonly IRunArtifactStore artifactStore;
     private readonly IResponseBodyDeserializer deserializer;
+    // CompareLogic owns reflection/type metadata caches. Keep one instance per
+    // worker thread for the current options reference; constructing it per pair
+    // defeats Caching=true and adds avoidable high-volume allocation.
+    private readonly ThreadLocal<CompareLogicState?> compareLogicCache = new();
 
     public CompareNetObjectsResponseComparer(
         IRunArtifactStore artifactStore,
@@ -66,7 +70,11 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
                 .DeserializeAsync(options.ResponseModelName, bodyB, responseB.ContentType, options.Comparison, cancellationToken)
                 .ConfigureAwait(false);
 
-            IReadOnlyList<ComparisonDifference> differences = CompareModels(modelA, modelB, options.Comparison);
+            IReadOnlyList<ComparisonDifference> differences = CompareModels(
+                modelA,
+                modelB,
+                options.Comparison,
+                GetCompareLogic(options.Comparison));
 
             return RequestPairResult.FromComparison(
                 request,
@@ -119,6 +127,40 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
             .Select(ToDomainDifference)
             .ToList();
     }
+
+    private IReadOnlyList<ComparisonDifference> CompareModels(
+        object modelA,
+        object modelB,
+        ComparisonOptions options,
+        CompareLogic compareLogic)
+    {
+        object comparisonModelA = ComparisonModelNormalizer.Normalize(modelA, options);
+        object comparisonModelB = ComparisonModelNormalizer.Normalize(modelB, options);
+        ComparisonResult comparisonResult = compareLogic.Compare(comparisonModelA, comparisonModelB);
+        List<Difference> filteredDifferences = comparisonResult
+            .Differences
+            .Where(difference => !ShouldFilterDifference(difference, options))
+            .ToList();
+
+        return DeduplicateDifferences(filteredDifferences)
+            .Take(options.MaxDifferences)
+            .Select(ToDomainDifference)
+            .ToList();
+    }
+
+    private CompareLogic GetCompareLogic(ComparisonOptions options)
+    {
+        CompareLogicState? state = compareLogicCache.Value;
+        if (state is null || !ReferenceEquals(state.Options, options))
+        {
+            state = new CompareLogicState(options, CreateCompareLogic(options));
+            compareLogicCache.Value = state;
+        }
+
+        return state.CompareLogic;
+    }
+
+    private sealed record CompareLogicState(ComparisonOptions Options, CompareLogic CompareLogic);
 
     private static CompareLogic CreateCompareLogic(ComparisonOptions options)
     {
