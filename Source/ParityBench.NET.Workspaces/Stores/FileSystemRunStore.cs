@@ -230,6 +230,7 @@ public sealed class FileSystemRunStore : IRunStore
             TreatNullAndEmptyCollectionsAsEqual = options.TreatNullAndEmptyCollectionsAsEqual,
             IgnoreXmlNamespaces = options.IgnoreXmlNamespaces,
             MaxDifferences = options.MaxDifferences,
+            IncludeAllDifferences = options.IncludeAllDifferences,
             IgnoreRules = options.IgnoreRules.Select(ToDto).ToList(),
             SmartIgnoreRules = options.SmartIgnoreRules.Select(ToDto).ToList(),
             MaskRules = options.MaskRules.Select(ToDto).ToList(),
@@ -422,7 +423,8 @@ public sealed class FileSystemRunStore : IRunStore
             dto.MaxDifferences,
             dto.IgnoreRules.Select(FromDto),
             dto.SmartIgnoreRules.Select(FromDto),
-            dto.MaskRules.Select(FromDto));
+            dto.MaskRules.Select(FromDto),
+            dto.IncludeAllDifferences);
 
     private RequestExecutionOptions FromDto(RequestExecutionOptionsDto dto) =>
         new RequestExecutionOptions(dto.ContentTypeOverride);

@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
@@ -21,6 +22,7 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
     private static readonly ConcurrentDictionary<string, Regex> PathRulePatternCache = new(StringComparer.Ordinal);
     private static readonly ConcurrentDictionary<string, Regex> NameRulePatternCache = new(StringComparer.Ordinal);
     private static readonly ConcurrentDictionary<string, Regex> WildcardRulePatternCache = new(StringComparer.Ordinal);
+    private static readonly ConditionalWeakTable<ComparisonOptions, ThreadLocal<CompareLogic>> CompareLogicCaches = new();
     private readonly IRunArtifactStore artifactStore;
     private readonly IResponseBodyDeserializer deserializer;
     // CompareLogic owns reflection/type metadata caches. Keep one instance per
@@ -115,17 +117,9 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
         object comparisonModelA = ComparisonModelNormalizer.Normalize(modelA, options);
         object comparisonModelB = ComparisonModelNormalizer.Normalize(modelB, options);
 
-        CompareLogic compareLogic = CreateCompareLogic(options);
+        CompareLogic compareLogic = GetSharedCompareLogic(options);
         ComparisonResult comparisonResult = compareLogic.Compare(comparisonModelA, comparisonModelB);
-        List<Difference> filteredDifferences = comparisonResult
-            .Differences
-            .Where(difference => !ShouldFilterDifference(difference, options))
-            .ToList();
-
-        return DeduplicateDifferences(filteredDifferences)
-            .Take(options.MaxDifferences)
-            .Select(ToDomainDifference)
-            .ToList();
+        return MaterializeDifferences(comparisonResult.Differences, options);
     }
 
     private IReadOnlyList<ComparisonDifference> CompareModels(
@@ -137,15 +131,7 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
         object comparisonModelA = ComparisonModelNormalizer.Normalize(modelA, options);
         object comparisonModelB = ComparisonModelNormalizer.Normalize(modelB, options);
         ComparisonResult comparisonResult = compareLogic.Compare(comparisonModelA, comparisonModelB);
-        List<Difference> filteredDifferences = comparisonResult
-            .Differences
-            .Where(difference => !ShouldFilterDifference(difference, options))
-            .ToList();
-
-        return DeduplicateDifferences(filteredDifferences)
-            .Take(options.MaxDifferences)
-            .Select(ToDomainDifference)
-            .ToList();
+        return MaterializeDifferences(comparisonResult.Differences, options);
     }
 
     private CompareLogic GetCompareLogic(ComparisonOptions options)
@@ -162,10 +148,15 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
 
     private sealed record CompareLogicState(ComparisonOptions Options, CompareLogic CompareLogic);
 
+    private static CompareLogic GetSharedCompareLogic(ComparisonOptions options) =>
+        CompareLogicCaches.GetValue(
+            options,
+            static value => new ThreadLocal<CompareLogic>(() => CreateCompareLogic(value))).Value!;
+
     private static CompareLogic CreateCompareLogic(ComparisonOptions options)
     {
         CompareLogic compareLogic = new CompareLogic();
-        compareLogic.Config.MaxDifferences = CalculateInternalMaxDifferences(options);
+        compareLogic.Config.MaxDifferences = options.IncludeAllDifferences ? int.MaxValue : CalculateInternalMaxDifferences(options);
         compareLogic.Config.IgnoreObjectTypes = false;
         compareLogic.Config.ComparePrivateFields = false;
         compareLogic.Config.ComparePrivateProperties = true;
@@ -393,6 +384,39 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
         string cleanedPath = Regex.Replace(NormalizeComparisonPath(propertyPath), "\\[\\d+\\]", string.Empty, RegexOptions.None, RegexTimeout);
         int separatorIndex = cleanedPath.LastIndexOf('.');
         return separatorIndex < 0 ? cleanedPath : cleanedPath[(separatorIndex + 1)..];
+    }
+
+    private static IReadOnlyList<ComparisonDifference> MaterializeDifferences(
+        IEnumerable<Difference> differences,
+        ComparisonOptions options)
+    {
+        HashSet<(string Path, string? ValueA, string? ValueB)> seen = new();
+        List<ComparisonDifference> materialized = new();
+        int limit = options.IncludeAllDifferences ? int.MaxValue : options.MaxDifferences;
+
+        foreach (Difference difference in differences)
+        {
+            if (ShouldFilterDifference(difference, options))
+            {
+                continue;
+            }
+
+            string path = GetDomainDifferencePropertyPath(difference);
+            string? valueA = difference.Object1Value?.ToString();
+            string? valueB = difference.Object2Value?.ToString();
+            if (!seen.Add((path.ToUpperInvariant(), valueA, valueB)))
+            {
+                continue;
+            }
+
+            materialized.Add(new ComparisonDifference(path, valueA, valueB, difference.ToString()));
+            if (materialized.Count == limit)
+            {
+                break;
+            }
+        }
+
+        return materialized;
     }
 
     private static List<Difference> DeduplicateDifferences(IEnumerable<Difference> differences)

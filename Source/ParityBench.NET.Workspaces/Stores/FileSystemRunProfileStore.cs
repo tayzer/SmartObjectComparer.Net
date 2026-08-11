@@ -315,6 +315,8 @@ public sealed class FileSystemRunProfileStore : IRunProfileStore
 
         public int MaxDifferences { get; set; } = 100;
 
+        public bool IncludeAllDifferences { get; set; }
+
         public List<IgnoreRuleDefinition> IgnoreRules { get; set; } = new List<IgnoreRuleDefinition>();
 
         public List<SmartIgnoreRuleDefinition> SmartIgnoreRules { get; set; } = new List<SmartIgnoreRuleDefinition>();
@@ -329,6 +331,7 @@ public sealed class FileSystemRunProfileStore : IRunProfileStore
             TreatNullAndEmptyCollectionsAsEqual = options.TreatNullAndEmptyCollectionsAsEqual,
             IgnoreXmlNamespaces = options.IgnoreXmlNamespaces,
             MaxDifferences = options.MaxDifferences,
+            IncludeAllDifferences = options.IncludeAllDifferences,
             IgnoreRules = options.IgnoreRules.ToList(),
             SmartIgnoreRules = options.SmartIgnoreRules.ToList(),
             MaskRules = options.MaskRules.ToList(),
@@ -343,6 +346,7 @@ public sealed class FileSystemRunProfileStore : IRunProfileStore
             MaxDifferences,
             IgnoreRules,
             SmartIgnoreRules,
-            MaskRules);
+            MaskRules,
+            IncludeAllDifferences);
     }
 }

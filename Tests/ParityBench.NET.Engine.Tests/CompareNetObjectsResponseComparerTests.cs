@@ -54,6 +54,23 @@ public sealed class CompareNetObjectsResponseComparerTests
     }
 
     [TestMethod]
+    public async Task CompareAsync_WhenIncludeAllDifferencesEnabled_DoesNotApplyConfiguredLimit()
+    {
+        CompareNetObjectsResponseComparer comparer = CreateComparer(
+            ("a", () => new SampleResponse { Id = 1, Name = "Alpha", Description = "One" }),
+            ("b", () => new SampleResponse { Id = 2, Name = "Beta", Description = "Two" }));
+
+        RequestPairResult result = await comparer.CompareAsync(
+            CreateRequest(),
+            CreateOptions(comparisonOptions: new ComparisonOptions(maxDifferences: 1, includeAllDifferences: true)),
+            CreateResponse(EndpointSlot.A, "a"),
+            CreateResponse(EndpointSlot.B, "b"),
+            null);
+
+        Assert.IsTrue(result.DifferenceCount >= 3);
+    }
+
+    [TestMethod]
     public async Task CompareAsync_WhenIgnoreCompleteRuleMatchesDifference_ReturnsEqual()
     {
         CompareNetObjectsResponseComparer comparer = CreateComparer(

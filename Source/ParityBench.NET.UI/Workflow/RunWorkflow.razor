@@ -311,7 +311,10 @@
                                            IgnoreXmlNamespaces="ignoreXmlNamespaces"
                                            IgnoreXmlNamespacesChanged="HandleIgnoreXmlNamespacesChanged"
                                            MaxDifferences="@MaxDifferencesValue"
-                                           MaxDifferencesChanged="HandleMaxDifferencesImported" />
+                                           MaxDifferencesChanged="HandleMaxDifferencesImported"
+                                           IncludeAllDifferences="includeAllDifferences"
+                                           IncludeAllDifferencesChanged="HandleIncludeAllDifferencesChanged" />
+                        <MudSwitch @bind-Value="includeAllDifferences" Color="Color.Warning">Include all differences (can use substantial memory and disk)</MudSwitch>
                         <MudTextField T="string" Label="Smart Ignores" Lines="4" @bind-Value="smartIgnoreRules" Variant="Variant.Outlined" />
                     </MudStack>
                 </MudExpansionPanel>
@@ -555,6 +558,7 @@
     private bool ignoreTrailingWhitespace;
     private bool treatNullAndEmptyCollectionsEqual;
     private bool ignoreXmlNamespaces = true;
+    private bool includeAllDifferences;
     private Type? selectedModelType;
     private string profileDefaultIgnoreRuleSearchTerm = string.Empty;
     private bool showProfileDefaultIgnoreRules;
@@ -1011,7 +1015,8 @@
             maxDifferenceCount,
             ignoreRuleDefinitions,
             RunWorkflowRuleParser.ParseSmartIgnoreRules(smartIgnoreRules),
-            maskRuleDefinitions);
+            maskRuleDefinitions,
+            includeAllDifferences);
         RequestExecutionOptions executionOptions = new RequestExecutionOptions(contentTypeOverride);
 
         // modelName mirrors the plugin's canonical type only for the Ignore/Mask Rules
@@ -1081,6 +1086,7 @@
         treatNullAndEmptyCollectionsEqual = options.TreatNullAndEmptyCollectionsAsEqual;
         ignoreXmlNamespaces = options.IgnoreXmlNamespaces;
         maxDifferences = options.MaxDifferences.ToString();
+        includeAllDifferences = options.IncludeAllDifferences;
         ignoreRuleDefinitions = options.IgnoreRules.ToList();
         smartIgnoreRules = FormatSmartIgnoreRules(options.SmartIgnoreRules);
         maskRuleDefinitions = options.MaskRules.ToList();
@@ -1133,6 +1139,12 @@
     private Task HandleMaxDifferencesImported(int value)
     {
         maxDifferences = Math.Max(1, value).ToString();
+        return Task.CompletedTask;
+    }
+
+    private Task HandleIncludeAllDifferencesChanged(bool value)
+    {
+        includeAllDifferences = value;
         return Task.CompletedTask;
     }
 

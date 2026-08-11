@@ -23,6 +23,8 @@ internal sealed class ComparisonOptionsDto
 
     public int MaxDifferences { get; init; } = 100;
 
+    public bool IncludeAllDifferences { get; init; }
+
     public List<IgnoreRuleDefinitionDto> IgnoreRules { get; init; } = new List<IgnoreRuleDefinitionDto>();
 
     public List<SmartIgnoreRuleDefinitionDto> SmartIgnoreRules { get; init; } = new List<SmartIgnoreRuleDefinitionDto>();

@@ -356,7 +356,7 @@ else if (run is not null)
                         <AcceptedDifferenceProfilesPanel OnProfilesChanged="ReloadAcceptedMatchesAsync" />
                         <MudDivider Class="my-3" />
                         <MudStack Row="true" Spacing="1" Class="flex-wrap">
-                            <MudChip T="string" Size="Size.Small">Max differences @run.Options.Comparison.MaxDifferences</MudChip>
+                            <MudChip T="string" Size="Size.Small">@(run.Options.Comparison.IncludeAllDifferences ? "All differences" : $"Max differences {run.Options.Comparison.MaxDifferences}")</MudChip>
                             <MudChip T="string" Size="Size.Small">Ignore namespaces @FormatBool(run.Options.Comparison.IgnoreXmlNamespaces)</MudChip>
                             <MudChip T="string" Size="Size.Small">Ignore order @FormatBool(run.Options.Comparison.IgnoreCollectionOrder)</MudChip>
                             <MudChip T="string" Size="Size.Small">Ignore case @FormatBool(run.Options.Comparison.IgnoreStringCase)</MudChip>
