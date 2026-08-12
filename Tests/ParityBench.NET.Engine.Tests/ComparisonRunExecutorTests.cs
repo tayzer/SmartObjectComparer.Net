@@ -84,6 +84,48 @@ public sealed class ComparisonRunExecutorTests
     }
 
     [TestMethod]
+    public async Task ExecuteAsync_WhenComparisonConcurrencyIsNull_UsesAtMostEightWorkers()
+    {
+        RequestItem[] requests = Enumerable.Range(1, 20)
+            .Select(index => new RequestItem($"request-{index}.json", "application/json", 2))
+            .ToArray();
+        ComparisonRunExecutor executor = CreateExecutor(CreateBatch(requests), FakeEndpointRequestSender.ForBody("same"));
+
+        RunResultSummary summary = await executor.ExecuteAsync(
+            CreateRun(largeRunOptions: new LargeRunOptions(comparisonConcurrency: null)),
+            new CapturingProgressReporter());
+
+        Assert.AreEqual(Math.Min(8, Environment.ProcessorCount), summary.ExecutionMetrics!.ComparisonConcurrency);
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_WhenCompareChannelFills_RecordsQueueWaitAndExecutionBackpressureWithoutReordering()
+    {
+        RequestItem[] requests = Enumerable.Range(1, 20)
+            .Select(index => new RequestItem($"request-{index:D2}.json", "application/json", 2))
+            .ToArray();
+        FakeRunDetailStore detailStore = new();
+        CapturingObservabilityRecorder recorder = new(TimeSpan.MaxValue) { IsDetailedCompareTimingEnabled = true };
+        ComparisonRunExecutor executor = CreateExecutor(
+            CreateBatch(requests),
+            FakeEndpointRequestSender.ForBody("same"),
+            responseComparer: new DelayedResponseComparer(TimeSpan.FromMilliseconds(10)),
+            detailStore: detailStore,
+            observabilityRecorder: recorder);
+
+        RunResultSummary summary = await executor.ExecuteAsync(
+            CreateRun(
+                maxConcurrency: 20,
+                largeRunOptions: new LargeRunOptions(chunkSize: 10_000, comparisonConcurrency: 1)),
+            new CapturingProgressReporter());
+
+        DetailedCompareMetrics metrics = summary.ExecutionMetrics!.DetailedCompareMetrics!;
+        Assert.IsTrue(metrics.CompareQueueWaitDuration > TimeSpan.Zero);
+        Assert.IsTrue(metrics.ExecutionWorkerBackpressureDuration > TimeSpan.Zero);
+        CollectionAssert.AreEqual(requests.Select(request => request.RelativePath).ToArray(), detailStore.SavedResults.Select(result => result.RelativePath).ToArray());
+    }
+
+    [TestMethod]
     public async Task ExecuteAsync_WhenRequestPathExceedsThreshold_RecordsSlowPath()
     {
         RequestItem request = new RequestItem("one.json", "application/json", 2);
@@ -326,6 +368,26 @@ public sealed class ComparisonRunExecutorTests
         Assert.IsTrue(focusedB.Contains("Alicia", StringComparison.Ordinal));
         Assert.IsFalse(focusedA.Contains("secret", StringComparison.Ordinal));
         Assert.IsFalse(focusedB.Contains("other", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_WhenIgnoreRulePrunesNothing_DoesNotWriteFocusedArtifacts()
+    {
+        RequestItem request = new("one.json", "application/json", 2);
+        FakeRunArtifactStore artifactStore = new();
+        FakeRunDetailStore detailStore = new();
+        ComparisonRunExecutor executor = CreateExecutor(
+            CreateBatch([request]),
+            FakeEndpointRequestSender.ForBody(@"{""name"":""Alice""}"),
+            artifactStore,
+            detailStore: detailStore);
+
+        await executor.ExecuteAsync(
+            CreateRun(comparisonOptions: new ComparisonOptions(ignoreRules: [new IgnoreRuleDefinition("missing")])),
+            new CapturingProgressReporter());
+
+        Assert.IsFalse(detailStore.SavedResults.Single().HasFocusedRawContent);
+        Assert.AreEqual(2, artifactStore.SavedBodies.Count);
     }
 
     [TestMethod]
@@ -625,6 +687,21 @@ public sealed class ComparisonRunExecutorTests
         public override void SetLength(long value) => throw new NotSupportedException();
 
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
+    private sealed class DelayedResponseComparer(TimeSpan delay) : IResponseComparer
+    {
+        public async Task<RequestPairResult> CompareAsync(
+            RequestItem request,
+            RunOptions options,
+            ResponseArtifactMetadata? responseA,
+            ResponseArtifactMetadata? responseB,
+            string? errorMessage,
+            CancellationToken cancellationToken = default)
+        {
+            await Task.Delay(delay, cancellationToken);
+            return RequestPairResult.Classify(request, responseA, responseB, errorMessage);
+        }
     }
     private sealed class CapturingObservabilityRecorder : IObservabilityRecorder
     {

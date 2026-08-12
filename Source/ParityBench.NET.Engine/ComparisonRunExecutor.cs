@@ -129,8 +129,8 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
             .ConfigureAwait(false);
 
         // Two decoupled worker pools connected by a bounded channel: execute (network I/O,
-        // sized to MaxConcurrency) and compare (CPU-bound diffing/normalization, sized to
-        // the processor count) run continuously and independently instead of the whole
+        // sized to MaxConcurrency) and compare (CPU-bound diffing/normalization, bounded
+        // to eight workers by default) run continuously and independently instead of the whole
         // batch executing, then the whole batch comparing. A record can be comparing while
         // later records are still executing. Results land on disk in original request
         // order via a small reorder buffer, since compare workers finish out of order but
@@ -486,10 +486,16 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         }
 
         int executeConcurrency = Math.Max(1, comparisonOptions.MaxConcurrency);
+        int fallbackCompareConcurrency = Math.Min(8, Environment.ProcessorCount);
         int compareConcurrency = Math.Min(
             totalRequests,
-            Math.Max(1, comparisonOptions.LargeRun.ComparisonConcurrency ?? Environment.ProcessorCount));
-        int channelCapacity = Math.Max(1, comparisonOptions.LargeRun.ChunkSize);
+            Math.Max(1, comparisonOptions.LargeRun.ComparisonConcurrency ?? fallbackCompareConcurrency));
+        int minimumChannelCapacity = Math.Min(totalRequests, compareConcurrency);
+        int maximumChannelCapacity = Math.Min(totalRequests, compareConcurrency * 2);
+        int channelCapacity = Math.Clamp(
+            Math.Max(1, comparisonOptions.LargeRun.ChunkSize),
+            minimumChannelCapacity,
+            maximumChannelCapacity);
         int flushBatchSize = Math.Max(1, comparisonOptions.LargeRun.DetailPageSize);
 
         Channel<QueuedExecutionRecord> executedChannel = Channel.CreateBounded<QueuedExecutionRecord>(

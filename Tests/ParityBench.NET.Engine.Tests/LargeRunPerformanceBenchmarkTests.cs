@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ParityBench.NET.Application.Observability;
@@ -22,6 +24,7 @@ public sealed class LargeRunPerformanceBenchmarkTests
     private const string IterationsVariable = "PB_PERFORMANCE_ITERATIONS";
     private const string ComparisonConcurrencyVariable = "PB_PERFORMANCE_COMPARISON_CONCURRENCY";
     private const string DifferentResponsesVariable = "PB_PERFORMANCE_DIFFERENT_RESPONSES";
+    private const string MatrixConcurrenciesVariable = "PB_PERFORMANCE_CONCURRENCIES";
     private const int PayloadBytes = 192 * 1024;
 
     [TestMethod]
@@ -74,7 +77,97 @@ public sealed class LargeRunPerformanceBenchmarkTests
         }
     }
 
-    private static async Task<BenchmarkMeasurement> RunOnceAsync(string root, int count, string name)
+    [TestMethod]
+    public async Task ExecuteAsync_1kClientShape_ReportsLegacyAndOptimizedConcurrencyMatrix()
+    {
+        if (!string.Equals(Environment.GetEnvironmentVariable(EnableVariable), "1", StringComparison.Ordinal))
+        {
+            Assert.Inconclusive($"Set {EnableVariable}=1 to run this performance benchmark.");
+        }
+
+        string root = Path.Combine(Path.GetTempPath(), "ParityBenchNET.Performance", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            int count = ParsePositiveInt("PB_PERFORMANCE_MATRIX_COUNT", 1000);
+            int iterations = ParsePositiveInt(IterationsVariable, 3);
+            int[] concurrencies = ParseConcurrencies();
+            await RunOnceAsync(root, Math.Min(50, count), "matrix-warmup-legacy", concurrencies[0], useLegacyNormalizer: true);
+            await RunOnceAsync(root, Math.Min(50, count), "matrix-warmup-optimized", concurrencies[0], useLegacyNormalizer: false);
+
+            List<ComparisonBenchmarkMeasurement> matrix = new();
+            foreach (int concurrency in concurrencies)
+            {
+                List<BenchmarkMeasurement> legacy = new();
+                List<BenchmarkMeasurement> optimized = new();
+                for (int iteration = 1; iteration <= iterations; iteration++)
+                {
+                    legacy.Add(await RunOnceAsync(root, count, $"matrix-c{concurrency}-legacy-{iteration}", concurrency, useLegacyNormalizer: true));
+                    optimized.Add(await RunOnceAsync(root, count, $"matrix-c{concurrency}-optimized-{iteration}", concurrency, useLegacyNormalizer: false));
+                }
+
+                matrix.Add(new ComparisonBenchmarkMeasurement(concurrency, legacy, optimized));
+            }
+
+            List<BenchmarkMeasurement> noRulesLegacy = new();
+            List<BenchmarkMeasurement> noRulesOptimized = new();
+            await RunOnceAsync(root, Math.Min(50, count), "no-rules-warmup-legacy", concurrencies[0], useLegacyNormalizer: true, useComparisonRules: false, produceDifferences: false);
+            await RunOnceAsync(root, Math.Min(50, count), "no-rules-warmup-optimized", concurrencies[0], useLegacyNormalizer: false, useComparisonRules: false, produceDifferences: false);
+            for (int iteration = 1; iteration <= iterations; iteration++)
+            {
+                noRulesLegacy.Add(await RunOnceAsync(root, count, $"no-rules-legacy-{iteration}", concurrencies[0], useLegacyNormalizer: true, useComparisonRules: false, produceDifferences: false));
+                noRulesOptimized.Add(await RunOnceAsync(root, count, $"no-rules-optimized-{iteration}", concurrencies[0], useLegacyNormalizer: false, useComparisonRules: false, produceDifferences: false));
+            }
+
+            string outputDirectory = Environment.GetEnvironmentVariable("PB_PERFORMANCE_OUTPUT")
+                ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ParityBench.NET", "Performance");
+            Directory.CreateDirectory(outputDirectory);
+            string outputPath = Path.Combine(outputDirectory, $"compare-hot-path-{DateTimeOffset.UtcNow:yyyyMMdd-HHmmss}.json");
+            HotPathBenchmarkReport report = new(matrix, noRulesLegacy, noRulesOptimized);
+            await File.WriteAllTextAsync(outputPath, JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
+
+            foreach (ComparisonBenchmarkMeasurement measurement in matrix)
+            {
+                CollectionAssert.AreEqual(
+                    measurement.Legacy.Select(run => run.OutputSha256).ToArray(),
+                    measurement.Optimized.Select(run => run.OutputSha256).ToArray(),
+                    $"Ordered comparison output changed at concurrency {measurement.ComparisonConcurrency}. Report: {outputPath}");
+            }
+
+            ComparisonBenchmarkMeasurement best = matrix.OrderByDescending(item => Median(item.Optimized.Select(run => run.PairsPerSecond))).First();
+            double legacyThroughput = Median(best.Legacy.Select(run => run.PairsPerSecond));
+            double optimizedThroughput = Median(best.Optimized.Select(run => run.PairsPerSecond));
+            double legacyNormalization = Median(best.Legacy.Select(run => run.ComparisonModelNormalizationMilliseconds));
+            double optimizedNormalization = Median(best.Optimized.Select(run => run.ComparisonModelNormalizationMilliseconds));
+            double legacyAllocated = Median(best.Legacy.Select(run => (double)run.ManagedAllocatedBytes));
+            double optimizedAllocated = Median(best.Optimized.Select(run => (double)run.ManagedAllocatedBytes));
+
+            Assert.IsTrue(optimizedThroughput >= legacyThroughput * 2d, $"Optimized throughput must be at least 2x legacy. Report: {outputPath}");
+            Assert.IsTrue(optimizedNormalization <= legacyNormalization * .25d, $"Normalization must fall by at least 75%. Report: {outputPath}");
+            Assert.IsTrue(optimizedAllocated <= legacyAllocated * .30d, $"Managed allocations must fall by at least 70%. Report: {outputPath}");
+            double noRulesLegacyThroughput = Median(noRulesLegacy.Select(run => run.PairsPerSecond));
+            double noRulesOptimizedThroughput = Median(noRulesOptimized.Select(run => run.PairsPerSecond));
+            Assert.IsTrue(noRulesOptimizedThroughput >= noRulesLegacyThroughput * .95d,
+                $"No-rules hash fast path regressed by more than 5%. Report: {outputPath}");
+            CollectionAssert.AreEqual(
+                noRulesLegacy.Select(run => run.OutputSha256).ToArray(),
+                noRulesOptimized.Select(run => run.OutputSha256).ToArray(),
+                $"No-rules output changed. Report: {outputPath}");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static async Task<BenchmarkMeasurement> RunOnceAsync(
+        string root,
+        int count,
+        string name,
+        int? comparisonConcurrency = null,
+        bool useLegacyNormalizer = false,
+        bool useComparisonRules = true,
+        bool? produceDifferences = null)
     {
         string workspace = Path.Combine(root, name, "workspace");
         string source = Path.Combine(root, name, "source");
@@ -93,10 +186,10 @@ public sealed class LargeRunPerformanceBenchmarkTests
         BenchmarkObservabilityRecorder observabilityRecorder = new();
         ComparisonRunExecutor executor = new(
             batchStore,
-            new PayloadSender(),
+            new PayloadSender(produceDifferences),
             artifactStore,
             detailStore,
-            new CompareNetObjectsResponseComparer(artifactStore, new JsonXmlResponseBodyDeserializer(registry)),
+            new CompareNetObjectsResponseComparer(artifactStore, new JsonXmlResponseBodyDeserializer(registry), useLegacyNormalizer),
             null,
             observabilityRecorder);
         ComparisonRun run = ComparisonRun.Create(
@@ -108,8 +201,15 @@ public sealed class LargeRunPerformanceBenchmarkTests
                 TimeSpan.FromSeconds(30),
                 maxConcurrency: 16,
                 responseModelName: "PayloadEnvelope",
-                comparisonOptions: new ComparisonOptions(ignoreStringCase: true),
-                largeRunOptions: new LargeRunOptions(comparisonConcurrency: ParseComparisonConcurrency())))
+                comparisonOptions: useComparisonRules
+                    ? new ComparisonOptions(
+                        ignoreCollectionOrder: true,
+                        ignoreStringCase: true,
+                        maxDifferences: 25,
+                        ignoreRules: [new IgnoreRuleDefinition("Items[*].Amount")],
+                        smartIgnoreRules: [new SmartIgnoreRuleDefinition(SmartIgnoreRuleKind.PropertyName, "Description")])
+                    : new ComparisonOptions(),
+                largeRunOptions: new LargeRunOptions(comparisonConcurrency: comparisonConcurrency ?? ParseComparisonConcurrency())))
             .Start();
 
         long allocatedBefore = GC.GetTotalAllocatedBytes(precise: false);
@@ -117,6 +217,8 @@ public sealed class LargeRunPerformanceBenchmarkTests
         RunResultSummary summary = await executor.ExecuteAsync(run, NoOpProgressReporter.Instance);
         stopwatch.Stop();
         RunExecutionMetrics metrics = summary.ExecutionMetrics!;
+        IReadOnlyList<RequestPairResult> details = await detailStore.LoadDetailsAsync(summary.DetailIndexReference!);
+        string outputSha256 = ComputeOutputSha256(details);
         return new BenchmarkMeasurement(
             name,
             count,
@@ -152,7 +254,28 @@ public sealed class LargeRunPerformanceBenchmarkTests
             metrics.ResponseBytesWritten,
             metrics.ComparisonConcurrency,
             GC.GetTotalAllocatedBytes(precise: false) - allocatedBefore,
-            Process.GetCurrentProcess().WorkingSet64);
+            Process.GetCurrentProcess().WorkingSet64,
+            details.Count(detail => detail.Outcome == RequestPairOutcome.Different),
+            details.Sum(detail => detail.Differences.Count),
+            outputSha256);
+    }
+
+    private static string ComputeOutputSha256(IEnumerable<RequestPairResult> details)
+    {
+        StringBuilder canonical = new();
+        foreach (RequestPairResult detail in details)
+        {
+            canonical.Append(detail.RelativePath).Append('\u001f').Append((int)detail.Outcome).Append('\u001e');
+            foreach (ComparisonDifference difference in detail.Differences)
+            {
+                canonical.Append(difference.PropertyPath).Append('\u001f')
+                    .Append(difference.ValueA).Append('\u001f')
+                    .Append(difference.ValueB).Append('\u001f')
+                    .Append(difference.Message).Append('\u001e');
+            }
+        }
+
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical.ToString()))).ToLowerInvariant();
     }
 
     private static double Median(IEnumerable<double> values)
@@ -192,6 +315,17 @@ public sealed class LargeRunPerformanceBenchmarkTests
     private static int ParseComparisonConcurrency() =>
         ParsePositiveInt(ComparisonConcurrencyVariable, Math.Min(8, Environment.ProcessorCount));
 
+    private static int[] ParseConcurrencies()
+    {
+        string? configured = Environment.GetEnvironmentVariable(MatrixConcurrenciesVariable);
+        return string.IsNullOrWhiteSpace(configured)
+            ? [4, 8, 12, 20]
+            : configured.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Select(value => int.TryParse(value, out int parsed) && parsed > 0 ? parsed : throw new InvalidOperationException($"{MatrixConcurrenciesVariable} values must be positive integers."))
+                .Distinct()
+                .ToArray();
+    }
+
     private static int ParsePositiveInt(string variable, int fallback)
     {
         string? value = Environment.GetEnvironmentVariable(variable);
@@ -208,32 +342,34 @@ public sealed class LargeRunPerformanceBenchmarkTests
         return parsed;
     }
 
-    private sealed class PayloadSender : IEndpointRequestSender
+    private sealed class PayloadSender(bool? produceDifferencesOverride = null) : IEndpointRequestSender
     {
         private static readonly byte[] EqualBody = BuildBody(different: false);
         private static readonly byte[] DifferentBody = BuildBody(different: true);
 
         public Task<EndpointResponse> SendAsync(EndpointRequest request, CancellationToken cancellationToken = default)
         {
-            bool produceDifferences = string.Equals(
-                Environment.GetEnvironmentVariable(DifferentResponsesVariable),
-                "1",
-                StringComparison.Ordinal);
+            bool produceDifferences = produceDifferencesOverride ?? string.Equals(
+                Environment.GetEnvironmentVariable(DifferentResponsesVariable), "1", StringComparison.Ordinal);
             byte[] body = produceDifferences && request.Endpoint == EndpointSlot.B ? DifferentBody : EqualBody;
             return Task.FromResult(new EndpointResponse(200, "application/json", new MemoryStream(body, writable: false)));
         }
 
-        private static byte[] BuildBody(bool different) => JsonSerializer.SerializeToUtf8Bytes(new PayloadEnvelope
+        private static byte[] BuildBody(bool different)
         {
-            Id = 1,
-            Payload = "stable",
-            Items = Enumerable.Range(0, 256)
+            PayloadEnvelope payload = new()
+            {
+                Id = 1,
+                Payload = different ? "changed" : "stable",
+                Items = (different ? Enumerable.Range(0, 1024).Reverse() : Enumerable.Range(0, 1024))
                 .Select(index => new PayloadRecord
                 {
                     Index = index,
-                    Code = $"record-{index % 32:D2}",
+                    Code = different && index < 512
+                        ? $"changed-{index:D4}"
+                        : $"record-{index % 32:D2}",
                     Amount = index * 1.25m + (different ? 1 : 0),
-                    Description = new string((char)('a' + (different ? (index + 1) : index) % 26), 600),
+                    Description = new string((char)('a' + (different ? (index + 1) : index) % 26), 32),
                     Tags = [$"tag-{index % 8}", $"group-{index % 16}"],
                     Attributes = new Dictionary<string, string>
                     {
@@ -242,7 +378,23 @@ public sealed class LargeRunPerformanceBenchmarkTests
                     },
                 })
                 .ToArray(),
-        });
+            };
+            byte[] unpadded = JsonSerializer.SerializeToUtf8Bytes(payload);
+            int paddingLength = PayloadBytes - unpadded.Length;
+            if (paddingLength < 0)
+            {
+                throw new InvalidOperationException($"Client-shaped payload is {unpadded.Length} bytes, exceeding {PayloadBytes} byte target.");
+            }
+
+            payload.Padding = new string('x', paddingLength);
+            byte[] padded = JsonSerializer.SerializeToUtf8Bytes(payload);
+            if (padded.Length != PayloadBytes)
+            {
+                throw new InvalidOperationException($"Client-shaped payload must be exactly {PayloadBytes} bytes; produced {padded.Length}.");
+            }
+
+            return padded;
+        }
     }
 
     public sealed class PayloadEnvelope
@@ -250,6 +402,7 @@ public sealed class LargeRunPerformanceBenchmarkTests
         public int Id { get; set; }
         public string? Payload { get; set; }
         public PayloadRecord[]? Items { get; set; }
+        public string? Padding { get; set; } = string.Empty;
     }
 
     public sealed class PayloadRecord
@@ -315,6 +468,14 @@ public sealed class LargeRunPerformanceBenchmarkTests
         long ResponseBytesWritten,
         int ComparisonWorkers,
         long TotalAllocatedBytes,
-        long WorkingSetBytes);
+        long WorkingSetBytes,
+        int DifferentPairCount,
+        int DifferenceCount,
+        string OutputSha256);
     private sealed record BenchmarkReport(DateTimeOffset CreatedAt, string Machine, int LogicalProcessors, int PayloadBytes, IReadOnlyList<BenchmarkMeasurement> SmallRuns, IReadOnlyList<BenchmarkMeasurement> LargeRuns, double SmallMedianPairsPerSecond, double LargeMedianPairsPerSecond, double ThroughputRatio);
+    private sealed record ComparisonBenchmarkMeasurement(int ComparisonConcurrency, IReadOnlyList<BenchmarkMeasurement> Legacy, IReadOnlyList<BenchmarkMeasurement> Optimized);
+    private sealed record HotPathBenchmarkReport(
+        IReadOnlyList<ComparisonBenchmarkMeasurement> Matrix,
+        IReadOnlyList<BenchmarkMeasurement> NoRulesLegacy,
+        IReadOnlyList<BenchmarkMeasurement> NoRulesOptimized);
 }

@@ -5,6 +5,7 @@ using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
 using ParityBench.NET.Engine.Pipeline;
+using ParityBench.NET.Engine.Pipeline.BuiltIn;
 using ParityBench.PluginSdk.Pipeline;
 
 namespace ParityBench.NET.Engine.Tests;
@@ -126,6 +127,43 @@ public sealed class ComparisonPipelineTests
         CollectionAssert.AreEqual(new[] { "compare", "post" }, executed);
     }
 
+    [TestMethod]
+    public async Task ExecutePairAsync_AfterBuiltInComparison_DownstreamStepObservesOriginalModels()
+    {
+        MutableComparisonModel leftModel = new() { Ignored = "left", Values = [2, 1] };
+        MutableComparisonModel rightModel = new() { Ignored = "right", Values = [1, 2] };
+        EndpointPipelineContext endpointA = CreateEndpointContext(EndpointSlot.A);
+        EndpointPipelineContext endpointB = CreateEndpointContext(EndpointSlot.B);
+        endpointA.ComparisonInstance = leftModel;
+        endpointB.ComparisonInstance = rightModel;
+        bool observedOriginal = false;
+        ComparisonPipeline pipeline = new ComparisonPipelineBuilder()
+            .Add(new CompareNetObjectsMiddleware())
+            .Add(new ObservingPairStep(context =>
+            {
+                MutableComparisonModel observedLeft = (MutableComparisonModel)context.ComparisonA!;
+                MutableComparisonModel observedRight = (MutableComparisonModel)context.ComparisonB!;
+                observedOriginal = observedLeft.Ignored == "left"
+                    && observedRight.Ignored == "right"
+                    && observedLeft.Values!.SequenceEqual([2, 1])
+                    && observedRight.Values!.SequenceEqual([1, 2]);
+            }))
+            .Build();
+        PairPipelineContext context = new(
+            "run-1",
+            endpointA.Request,
+            endpointA,
+            endpointB,
+            new ComparisonOptions(ignoreCollectionOrder: true, ignoreRules: [new IgnoreRuleDefinition("Ignored")]),
+            EmptyServiceProvider.Instance,
+            new PipelineConfiguration());
+
+        await pipeline.ExecutePairAsync(context);
+
+        Assert.IsTrue(observedOriginal);
+        Assert.IsTrue(context.Result.AreEqual);
+    }
+
     private static EndpointPipelineContext CreateEndpointContext(EndpointSlot endpoint = EndpointSlot.A) =>
         new EndpointPipelineContext(
             "run-1",
@@ -236,6 +274,25 @@ public sealed class ComparisonPipelineTests
             executed.Add(StepId);
             return next(cancellationToken);
         }
+    }
+
+    private sealed class ObservingPairStep(Action<IPairPipelineContext> observe) : IPairComparisonMiddleware
+    {
+        public string StepId => "observe-original-models";
+        public PipelinePhase Phase => PipelinePhase.ResultProcessing;
+        public int Order => 0;
+
+        public ValueTask InvokeAsync(IPairPipelineContext context, PipelineDelegate next, CancellationToken cancellationToken)
+        {
+            observe(context);
+            return next(cancellationToken);
+        }
+    }
+
+    private sealed class MutableComparisonModel
+    {
+        public string? Ignored { get; set; }
+        public int[]? Values { get; set; }
     }
 
     private sealed class EmptyServiceProvider : IServiceProvider

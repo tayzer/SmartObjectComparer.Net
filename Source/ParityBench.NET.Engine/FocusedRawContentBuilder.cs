@@ -1,8 +1,9 @@
 using System.Collections.Concurrent;
+using System.Buffers;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
@@ -19,6 +20,7 @@ internal static class FocusedRawContentBuilder
 {
     internal static readonly TimeSpan MatchRegexTimeout = TimeSpan.FromSeconds(1);
     private static readonly UTF8Encoding Utf8WithoutBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    private static ReadOnlySpan<byte> Utf8Bom => [0xEF, 0xBB, 0xBF];
 
     // The ignore-rule set is fixed for the whole run, but TryPrune used to rebuild an
     // IgnorePathMatcher (and recompile every RegexOptions.Compiled pattern in it) on every
@@ -55,6 +57,9 @@ internal static class FocusedRawContentBuilder
         {
             return result;
         }
+
+        focusedA = EnsureFormatted(focusedA);
+        focusedB = EnsureFormatted(focusedB);
 
         ResponseArtifactMetadata focusedResponseA = await SaveFocusedResponseAsync(runId, result.RelativePath, result.ResponseA, focusedA.Content, artifactStore, cancellationToken).ConfigureAwait(false);
         ResponseArtifactMetadata focusedResponseB = await SaveFocusedResponseAsync(runId, result.RelativePath, result.ResponseB, focusedB.Content, artifactStore, cancellationToken).ConfigureAwait(false);
@@ -97,36 +102,40 @@ internal static class FocusedRawContentBuilder
     {
         Stream opened = await artifactStore.OpenReadAsync(response.Artifact, cancellationToken).ConfigureAwait(false);
         await using Stream stream = timing is null ? opened : new CountingReadStream(opened, timing.AddArtifactBytesRead);
-        using MemoryStream buffer = new MemoryStream();
+        using MemoryStream buffer = response.ContentLength is > 0 and <= int.MaxValue
+            ? new MemoryStream((int)response.ContentLength)
+            : new MemoryStream();
         await stream.CopyToAsync(buffer, cancellationToken).ConfigureAwait(false);
-        string text = Encoding.UTF8.GetString(buffer.ToArray());
-        if (text.Length > 0 && text[0] == '\uFEFF')
-        {
-            text = text[1..];
-        }
-
-        FocusedContent? pruned = TryPrune(text, response.ContentType, response.Artifact.ArtifactId, ignorePaths);
-        if (pruned is null)
+        if (!buffer.TryGetBuffer(out ArraySegment<byte> segment))
         {
             return null;
         }
 
-        return pruned.WasPruned
-            ? pruned
-            : new FocusedContent(FormatForDisplay(text, response.ContentType, response.Artifact.ArtifactId), WasPruned: false);
+        ReadOnlyMemory<byte> content = segment.AsMemory();
+        if (content.Span.StartsWith(Utf8Bom))
+        {
+            content = content[Utf8Bom.Length..];
+        }
+
+        return TryPrune(content, response.ContentType, response.Artifact.ArtifactId, ignorePaths);
     }
 
     private static async Task<ResponseArtifactMetadata> SaveFocusedResponseAsync(
         RunId runId,
         string relativePath,
         ResponseArtifactMetadata sourceResponse,
-        string content,
+        ReadOnlyMemory<byte> content,
         IRunArtifactStore artifactStore,
         CancellationToken cancellationToken)
     {
-        byte[] bytes = Utf8WithoutBom.GetBytes(content);
-        await using MemoryStream stream = new MemoryStream(bytes, writable: false);
-        RequestItem focusedRequest = new RequestItem($"focused/{relativePath}", sourceResponse.ContentType ?? "text/plain", bytes.Length);
+        if (!MemoryMarshal.TryGetArray(content, out ArraySegment<byte> segment) || segment.Array is null)
+        {
+            segment = new ArraySegment<byte>(content.ToArray());
+        }
+
+        byte[] bytes = segment.Array!;
+        await using MemoryStream stream = new MemoryStream(bytes, segment.Offset, segment.Count, writable: false);
+        RequestItem focusedRequest = new RequestItem($"focused/{relativePath}", sourceResponse.ContentType ?? "text/plain", segment.Count);
         return await artifactStore.SaveResponseAsync(
             runId,
             sourceResponse.Endpoint,
@@ -138,42 +147,45 @@ internal static class FocusedRawContentBuilder
     }
 
     private static FocusedContent? TryPrune(
-        string content,
+        ReadOnlyMemory<byte> content,
         string? contentType,
         string? fileName,
         IReadOnlyCollection<string> ignorePaths)
     {
-        if (string.IsNullOrWhiteSpace(content) || ignorePaths.Count == 0)
+        if (content.IsEmpty || ignorePaths.Count == 0)
         {
-            return new FocusedContent(content, WasPruned: false);
+            return new FocusedContent(content, WasPruned: false, StructuredDocumentKind.Unknown, IsFormatted: false);
         }
 
         IgnorePathMatcher matcher = GetOrCreateMatcher(ignorePaths);
         return DetectDocumentKind(contentType, fileName, content) switch
         {
             StructuredDocumentKind.Json => TryPruneJson(content, matcher),
-            StructuredDocumentKind.Xml => TryPruneXml(content, matcher),
+            StructuredDocumentKind.Xml => TryPruneXml(Encoding.UTF8.GetString(content.Span), matcher),
             _ => null,
         };
     }
 
-    private static FocusedContent? TryPruneJson(string content, IgnorePathMatcher matcher)
+    private static FocusedContent? TryPruneJson(ReadOnlyMemory<byte> content, IgnorePathMatcher matcher)
     {
         try
         {
-            JsonNode? root = JsonNode.Parse(content);
-            if (root is null)
+            Utf8JsonReader reader = new Utf8JsonReader(content.Span);
+            if (!reader.Read())
             {
-                return new FocusedContent(content, WasPruned: false);
+                return new FocusedContent(content, WasPruned: false, StructuredDocumentKind.Json, IsFormatted: false);
             }
 
-            int removedCount = PruneJsonNode(root, string.Empty, matcher);
+            ArrayBufferWriter<byte> output = new ArrayBufferWriter<byte>(Math.Min(content.Length, 64 * 1024));
+            using Utf8JsonWriter writer = new Utf8JsonWriter(output, new JsonWriterOptions { Indented = true });
+            int removedCount = WritePrunedJsonValue(ref reader, writer, string.Empty, matcher);
             if (removedCount == 0)
             {
-                return new FocusedContent(FormatForDisplay(content, "application/json", null), WasPruned: false);
+                return new FocusedContent(content, WasPruned: false, StructuredDocumentKind.Json, IsFormatted: false);
             }
 
-            return new FocusedContent(root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }), WasPruned: true);
+            writer.Flush();
+            return new FocusedContent(output.WrittenMemory, WasPruned: true, StructuredDocumentKind.Json, IsFormatted: true);
         }
         catch (JsonException)
         {
@@ -181,40 +193,81 @@ internal static class FocusedRawContentBuilder
         }
     }
 
-    private static int PruneJsonNode(JsonNode node, string path, IgnorePathMatcher matcher)
+    private static int WritePrunedJsonValue(
+        ref Utf8JsonReader reader,
+        Utf8JsonWriter writer,
+        string path,
+        IgnorePathMatcher matcher)
     {
         int removedCount = 0;
-        if (node is JsonObject obj)
+        if (reader.TokenType == JsonTokenType.StartObject)
         {
-            foreach (KeyValuePair<string, JsonNode?> property in obj.ToList())
+            writer.WriteStartObject();
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
             {
-                string propertyPath = AppendPath(path, property.Key);
-                if (ShouldIgnorePath(propertyPath, matcher))
+                string propertyName = reader.GetString() ?? string.Empty;
+                bool ignoreDirectly = matcher.IsDirectChildMatch(path, propertyName);
+                string propertyPath = ignoreDirectly ? string.Empty : AppendPath(path, propertyName);
+                if (!reader.Read())
                 {
-                    obj.Remove(property.Key);
+                    throw new JsonException("JSON property has no value.");
+                }
+
+                if (ignoreDirectly || ShouldIgnorePath(propertyPath, matcher))
+                {
+                    reader.Skip();
                     removedCount++;
                     continue;
                 }
 
-                if (property.Value is not null)
-                {
-                    removedCount += PruneJsonNode(property.Value, propertyPath, matcher);
-                }
+                writer.WritePropertyName(propertyName);
+                removedCount += WritePrunedJsonValue(ref reader, writer, propertyPath, matcher);
             }
+
+            writer.WriteEndObject();
         }
-        else if (node is JsonArray array)
+        else if (reader.TokenType == JsonTokenType.StartArray)
         {
-            for (int index = 0; index < array.Count; index++)
+            writer.WriteStartArray();
+            int index = 0;
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
             {
-                JsonNode? item = array[index];
-                if (item is not null)
-                {
-                    removedCount += PruneJsonNode(item, $"{path}[{index}]", matcher);
-                }
+                removedCount += WritePrunedJsonValue(ref reader, writer, $"{path}[{index}]", matcher);
+                index++;
             }
+
+            writer.WriteEndArray();
+        }
+        else
+        {
+            WriteJsonScalar(ref reader, writer);
         }
 
         return removedCount;
+    }
+
+    private static void WriteJsonScalar(ref Utf8JsonReader reader, Utf8JsonWriter writer)
+    {
+        switch (reader.TokenType)
+        {
+            case JsonTokenType.String:
+                writer.WriteStringValue(reader.GetString());
+                break;
+            case JsonTokenType.Number:
+                writer.WriteRawValue(reader.HasValueSequence ? reader.ValueSequence.ToArray() : reader.ValueSpan, skipInputValidation: true);
+                break;
+            case JsonTokenType.True:
+                writer.WriteBooleanValue(true);
+                break;
+            case JsonTokenType.False:
+                writer.WriteBooleanValue(false);
+                break;
+            case JsonTokenType.Null:
+                writer.WriteNullValue();
+                break;
+            default:
+                throw new JsonException($"Unexpected JSON token {reader.TokenType}.");
+        }
     }
 
     private static FocusedContent? TryPruneXml(string content, IgnorePathMatcher matcher)
@@ -224,13 +277,13 @@ internal static class FocusedRawContentBuilder
             XDocument document = XDocument.Parse(content, LoadOptions.PreserveWhitespace);
             if (document.Root is null)
             {
-                return new FocusedContent(content, WasPruned: false);
+                return new FocusedContent(Utf8WithoutBom.GetBytes(content), WasPruned: false, StructuredDocumentKind.Xml, IsFormatted: false);
             }
 
             int removedCount = PruneXmlChildren(document.Root, new[] { document.Root.Name.LocalName }, matcher);
             if (removedCount == 0)
             {
-                return new FocusedContent(FormatForDisplay(content, "application/xml", null), WasPruned: false);
+                return new FocusedContent(Utf8WithoutBom.GetBytes(content), WasPruned: false, StructuredDocumentKind.Xml, IsFormatted: false);
             }
 
             XmlWriterSettings settings = new XmlWriterSettings
@@ -247,12 +300,75 @@ internal static class FocusedRawContentBuilder
             using XmlWriter writer = XmlWriter.Create(stringWriter, settings);
             document.Save(writer);
             writer.Flush();
-            return new FocusedContent(builder.ToString(), WasPruned: true);
+            return new FocusedContent(Utf8WithoutBom.GetBytes(builder.ToString()), WasPruned: true, StructuredDocumentKind.Xml, IsFormatted: true);
         }
         catch (Exception ex) when (ex is XmlException or InvalidOperationException)
         {
             return null;
         }
+    }
+
+    private static FocusedContent EnsureFormatted(FocusedContent content)
+    {
+        if (content.IsFormatted)
+        {
+            return content;
+        }
+
+        ReadOnlyMemory<byte> formatted = content.Kind switch
+        {
+            StructuredDocumentKind.Json => FormatJson(content.Content),
+            StructuredDocumentKind.Xml => Utf8WithoutBom.GetBytes(TryFormatXml(Encoding.UTF8.GetString(content.Content.Span))),
+            _ => content.Content,
+        };
+        return content with { Content = formatted, IsFormatted = true };
+    }
+
+    private static ReadOnlyMemory<byte> FormatJson(ReadOnlyMemory<byte> content)
+    {
+        try
+        {
+            Utf8JsonReader reader = new(content.Span);
+            if (!reader.Read()) { return content; }
+            ArrayBufferWriter<byte> output = new(Math.Min(content.Length, 64 * 1024));
+            using Utf8JsonWriter writer = new(output, new JsonWriterOptions { Indented = true });
+            CopyJsonValue(ref reader, writer);
+            writer.Flush();
+            return output.WrittenMemory;
+        }
+        catch (JsonException)
+        {
+            return content;
+        }
+    }
+
+    private static void CopyJsonValue(ref Utf8JsonReader reader, Utf8JsonWriter writer)
+    {
+        if (reader.TokenType == JsonTokenType.StartObject)
+        {
+            writer.WriteStartObject();
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+            {
+                writer.WritePropertyName(reader.GetString() ?? string.Empty);
+                if (!reader.Read()) { throw new JsonException("JSON property has no value."); }
+                CopyJsonValue(ref reader, writer);
+            }
+            writer.WriteEndObject();
+            return;
+        }
+
+        if (reader.TokenType == JsonTokenType.StartArray)
+        {
+            writer.WriteStartArray();
+            while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+            {
+                CopyJsonValue(ref reader, writer);
+            }
+            writer.WriteEndArray();
+            return;
+        }
+
+        WriteJsonScalar(ref reader, writer);
     }
 
     private static int PruneXmlChildren(XElement parent, IReadOnlyCollection<string> parentPaths, IgnorePathMatcher matcher)
@@ -288,27 +404,6 @@ internal static class FocusedRawContentBuilder
         }
 
         return removedCount;
-    }
-
-    private static string FormatForDisplay(string text, string? contentType, string? fileName) =>
-        DetectDocumentKind(contentType, fileName, text) switch
-        {
-            StructuredDocumentKind.Json => TryFormatJson(text),
-            StructuredDocumentKind.Xml => TryFormatXml(text),
-            _ => text,
-        };
-
-    private static string TryFormatJson(string text)
-    {
-        try
-        {
-            using JsonDocument document = JsonDocument.Parse(text);
-            return JsonSerializer.Serialize(document.RootElement, new JsonSerializerOptions { WriteIndented = true });
-        }
-        catch (JsonException)
-        {
-            return text;
-        }
     }
 
     private static string TryFormatXml(string text)
@@ -373,41 +468,25 @@ internal static class FocusedRawContentBuilder
     private static string AppendPath(string parent, string child) =>
         string.IsNullOrWhiteSpace(parent) ? child : $"{parent}.{child}";
 
-    private static StructuredDocumentKind DetectDocumentKind(string? contentType, string? fileName, string text)
+    private static StructuredDocumentKind DetectDocumentKind(string? contentType, string? fileName, ReadOnlyMemory<byte> content)
     {
-        if (contentType?.Contains("json", StringComparison.OrdinalIgnoreCase) == true)
-        {
-            return StructuredDocumentKind.Json;
-        }
-
-        if (contentType?.Contains("xml", StringComparison.OrdinalIgnoreCase) == true)
-        {
-            return StructuredDocumentKind.Xml;
-        }
-
+        if (contentType?.Contains("json", StringComparison.OrdinalIgnoreCase) == true) { return StructuredDocumentKind.Json; }
+        if (contentType?.Contains("xml", StringComparison.OrdinalIgnoreCase) == true) { return StructuredDocumentKind.Xml; }
         string extension = Path.GetExtension(fileName ?? string.Empty);
-        if (string.Equals(extension, ".json", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(extension, ".json", StringComparison.OrdinalIgnoreCase)) { return StructuredDocumentKind.Json; }
+        if (string.Equals(extension, ".xml", StringComparison.OrdinalIgnoreCase)) { return StructuredDocumentKind.Xml; }
+        foreach (byte value in content.Span)
         {
-            return StructuredDocumentKind.Json;
+            if (value is (byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n') { continue; }
+            return value switch
+            {
+                (byte)'{' or (byte)'[' => StructuredDocumentKind.Json,
+                (byte)'<' => StructuredDocumentKind.Xml,
+                _ => StructuredDocumentKind.Unknown,
+            };
         }
 
-        if (string.Equals(extension, ".xml", StringComparison.OrdinalIgnoreCase))
-        {
-            return StructuredDocumentKind.Xml;
-        }
-
-        ReadOnlySpan<char> firstNonWhitespace = text.AsSpan().TrimStart();
-        if (firstNonWhitespace.Length == 0)
-        {
-            return StructuredDocumentKind.Unknown;
-        }
-
-        return firstNonWhitespace[0] switch
-        {
-            '{' or '[' => StructuredDocumentKind.Json,
-            '<' => StructuredDocumentKind.Xml,
-            _ => StructuredDocumentKind.Unknown,
-        };
+        return StructuredDocumentKind.Unknown;
     }
 
     private enum StructuredDocumentKind
@@ -417,5 +496,9 @@ internal static class FocusedRawContentBuilder
         Xml,
     }
 
-    private sealed record FocusedContent(string Content, bool WasPruned);
+    private sealed record FocusedContent(
+        ReadOnlyMemory<byte> Content,
+        bool WasPruned,
+        StructuredDocumentKind Kind,
+        bool IsFormatted);
 }
