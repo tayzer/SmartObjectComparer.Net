@@ -202,6 +202,31 @@ public sealed class RunResultsViewTests
         StringAssert.Contains(component.Markup, "CSV");
     }
 
+    [TestMethod]
+    public void RunResult_WhenDetailedTimingExists_RendersTerminalStagesAndResources()
+    {
+        RunId runId = new RunId("run-1");
+        RunExecutionMetrics metrics = new(
+            TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(12), TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(1),
+            2, 2, 4096, comparisonConcurrency: 2,
+            detailedCompareMetrics: new DetailedCompareMetrics(
+                TimeSpan.FromMilliseconds(2), 8192, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(1),
+                TimeSpan.FromSeconds(8), TimeSpan.FromSeconds(2), TimeSpan.Zero, TimeSpan.Zero,
+                TimeSpan.FromSeconds(1), TimeSpan.Zero, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(1)),
+            processResourceMetrics: new RunProcessResourceMetrics(
+                TimeSpan.FromSeconds(4), 40, 10, 20 * 1024 * 1024, 30 * 1024 * 1024,
+                40 * 1024 * 1024, 1, 2, 3, 4));
+        dataSource.Run = CreateCompletedRun(runId, metrics);
+        dataSource.Summary = dataSource.Run.Summary;
+
+        IRenderedComponent<RunResult> component = testContext.Render<RunResult>(parameters => parameters.Add(result => result.RunId, runId));
+
+        component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "CNO graph traversal (aggregate):"));
+        StringAssert.Contains(component.Markup, "Compare queue wait (aggregate):");
+        StringAssert.Contains(component.Markup, "Application Resources");
+        StringAssert.Contains(component.Markup, "Process CPU:");
+    }
+
 
     [TestMethod]
     public void RunResult_WhenDetailsArePaged_RendersCurrentPageOnly()
@@ -575,14 +600,15 @@ public sealed class RunResultsViewTests
         component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "Result data source failed."));
     }
 
-    private static ComparisonRun CreateCompletedRun(RunId runId)
+    private static ComparisonRun CreateCompletedRun(RunId runId, RunExecutionMetrics? metrics = null)
     {
         RunResultSummary summary = new RunResultSummary(
             totalPairs: 1,
             equalPairs: 1,
             differentPairs: 0,
             errorPairs: 0,
-            detailIndexReference: new RunDetailReference("runs/run-1/details/index.json"));
+            detailIndexReference: new RunDetailReference("runs/run-1/details/index.json"),
+            executionMetrics: metrics);
 
         return ComparisonRun.Create(runId, CreateOptions()).Start().Complete(summary);
     }

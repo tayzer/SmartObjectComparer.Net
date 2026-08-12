@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -10,6 +11,7 @@ using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
+using ParityBench.NET.Engine;
 
 namespace ParityBench.NET.Engine.Comparers;
 
@@ -45,6 +47,16 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
         ResponseArtifactMetadata? responseB,
         string? errorMessage,
         CancellationToken cancellationToken = default)
+        => await CompareAsync(request, options, responseA, responseB, errorMessage, null, cancellationToken).ConfigureAwait(false);
+
+    internal async Task<RequestPairResult> CompareAsync(
+        RequestItem request,
+        RunOptions options,
+        ResponseArtifactMetadata? responseA,
+        ResponseArtifactMetadata? responseB,
+        string? errorMessage,
+        DetailedCompareMetricsCollector? timing,
+        CancellationToken cancellationToken = default)
     {
         if (!CanModelCompare(responseA, responseB, errorMessage))
         {
@@ -58,30 +70,27 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
 
         try
         {
-            await using Stream bodyA = await artifactStore
-                .OpenReadAsync(responseA!.Artifact, cancellationToken)
-                .ConfigureAwait(false);
-            await using Stream bodyB = await artifactStore
-                .OpenReadAsync(responseB!.Artifact, cancellationToken)
-                .ConfigureAwait(false);
+            ResponseArtifactMetadata leftResponse = responseA!;
+            ResponseArtifactMetadata rightResponse = responseB!;
+            Stream openedA = await TimeAsync(timing, static (c, e) => c.AddArtifactOpen(e), () => artifactStore.OpenReadAsync(leftResponse.Artifact, cancellationToken)).ConfigureAwait(false);
+            await using Stream bodyA = timing is null ? openedA : new CountingReadStream(openedA, timing.AddArtifactBytesRead);
+            Stream openedB = await TimeAsync(timing, static (c, e) => c.AddArtifactOpen(e), () => artifactStore.OpenReadAsync(rightResponse.Artifact, cancellationToken)).ConfigureAwait(false);
+            await using Stream bodyB = timing is null ? openedB : new CountingReadStream(openedB, timing.AddArtifactBytesRead);
 
-            object modelA = await deserializer
-                .DeserializeAsync(options.ResponseModelName, bodyA, responseA.ContentType, options.Comparison, cancellationToken)
-                .ConfigureAwait(false);
-            object modelB = await deserializer
-                .DeserializeAsync(options.ResponseModelName, bodyB, responseB.ContentType, options.Comparison, cancellationToken)
-                .ConfigureAwait(false);
+            object modelA = await TimeAsync(timing, static (c, e) => c.AddDeserialization(e), () => deserializer.DeserializeAsync(options.ResponseModelName, bodyA, leftResponse.ContentType, options.Comparison, cancellationToken)).ConfigureAwait(false);
+            object modelB = await TimeAsync(timing, static (c, e) => c.AddDeserialization(e), () => deserializer.DeserializeAsync(options.ResponseModelName, bodyB, rightResponse.ContentType, options.Comparison, cancellationToken)).ConfigureAwait(false);
 
             IReadOnlyList<ComparisonDifference> differences = CompareModels(
                 modelA,
                 modelB,
                 options.Comparison,
-                GetCompareLogic(options.Comparison));
+                GetCompareLogic(options.Comparison),
+                timing);
 
             return RequestPairResult.FromComparison(
                 request,
-                responseA,
-                responseB,
+                leftResponse,
+                rightResponse,
                 differences,
                 differences.Count == 0 ? "Responses are equal after configured comparison rules." : null);
         }
@@ -114,24 +123,51 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
         ArgumentNullException.ThrowIfNull(modelB);
         ArgumentNullException.ThrowIfNull(options);
 
-        object comparisonModelA = ComparisonModelNormalizer.Normalize(modelA, options);
-        object comparisonModelB = ComparisonModelNormalizer.Normalize(modelB, options);
-
-        CompareLogic compareLogic = GetSharedCompareLogic(options);
-        ComparisonResult comparisonResult = compareLogic.Compare(comparisonModelA, comparisonModelB);
-        return MaterializeDifferences(comparisonResult.Differences, options);
+        return CompareModels(modelA, modelB, options, GetSharedCompareLogic(options), null);
     }
 
-    private IReadOnlyList<ComparisonDifference> CompareModels(
+    internal static IReadOnlyList<ComparisonDifference> CompareModels(
         object modelA,
         object modelB,
         ComparisonOptions options,
-        CompareLogic compareLogic)
+        DetailedCompareMetricsCollector? timing)
     {
-        object comparisonModelA = ComparisonModelNormalizer.Normalize(modelA, options);
-        object comparisonModelB = ComparisonModelNormalizer.Normalize(modelB, options);
-        ComparisonResult comparisonResult = compareLogic.Compare(comparisonModelA, comparisonModelB);
-        return MaterializeDifferences(comparisonResult.Differences, options);
+        ArgumentNullException.ThrowIfNull(modelA);
+        ArgumentNullException.ThrowIfNull(modelB);
+        ArgumentNullException.ThrowIfNull(options);
+        return CompareModels(modelA, modelB, options, GetSharedCompareLogic(options), timing);
+    }
+
+    private static IReadOnlyList<ComparisonDifference> CompareModels(
+        object modelA,
+        object modelB,
+        ComparisonOptions options,
+        CompareLogic compareLogic,
+        DetailedCompareMetricsCollector? timing)
+    {
+        (object comparisonModelA, object comparisonModelB) normalized = Time(timing, static (c, e) => c.AddNormalization(e), () => (ComparisonModelNormalizer.Normalize(modelA, options), ComparisonModelNormalizer.Normalize(modelB, options)));
+        ComparisonResult comparisonResult = Time(timing, static (c, e) => c.AddCompareNetObjects(e), () => compareLogic.Compare(normalized.comparisonModelA, normalized.comparisonModelB));
+        return Time(timing, static (c, e) => c.AddMaterialization(e), () => MaterializeDifferences(comparisonResult.Differences, options));
+    }
+
+    private static T Time<T>(DetailedCompareMetricsCollector? timing, Action<DetailedCompareMetricsCollector, TimeSpan> record, Func<T> action)
+    {
+        if (timing is null) { return action(); }
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        T result = action();
+        stopwatch.Stop();
+        record(timing, stopwatch.Elapsed);
+        return result;
+    }
+
+    private static async Task<T> TimeAsync<T>(DetailedCompareMetricsCollector? timing, Action<DetailedCompareMetricsCollector, TimeSpan> record, Func<Task<T>> action)
+    {
+        if (timing is null) { return await action().ConfigureAwait(false); }
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        T result = await action().ConfigureAwait(false);
+        stopwatch.Stop();
+        record(timing, stopwatch.Elapsed);
+        return result;
     }
 
     private CompareLogic GetCompareLogic(ComparisonOptions options)

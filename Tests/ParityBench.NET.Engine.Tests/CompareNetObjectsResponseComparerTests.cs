@@ -17,6 +17,28 @@ namespace ParityBench.NET.Engine.Tests;
 public sealed class CompareNetObjectsResponseComparerTests
 {
     [TestMethod]
+    public async Task CompareAsync_WithDetailedTiming_RecordsConsumedBytesAndKeepsDifferences()
+    {
+        CompareNetObjectsResponseComparer comparer = CreateComparer(
+            ("a", () => new SampleResponse { Id = 1, Name = "Alpha" }),
+            ("b", () => new SampleResponse { Id = 1, Name = "Beta" }));
+        DetailedCompareMetricsCollector collector = new();
+
+        RequestPairResult result = await comparer.CompareAsync(
+            CreateRequest(), CreateOptions(), CreateResponse(EndpointSlot.A, "a"), CreateResponse(EndpointSlot.B, "b"), null, collector);
+        DetailedCompareMetrics metrics = collector.ToMetrics(TimeSpan.FromSeconds(1));
+
+        Assert.AreEqual(RequestPairOutcome.Different, result.Outcome);
+        Assert.IsTrue(result.Differences.Any(difference => difference.PropertyPath.Contains("Name", StringComparison.Ordinal)));
+        Assert.AreEqual(2, metrics.ArtifactBytesRead);
+        Assert.IsTrue(metrics.ArtifactOpenDuration >= TimeSpan.Zero);
+        Assert.IsTrue(metrics.ResponseDeserializationDuration >= TimeSpan.Zero);
+        Assert.IsTrue(metrics.ComparisonModelNormalizationDuration >= TimeSpan.Zero);
+        Assert.IsTrue(metrics.CompareNetObjectsTraversalDuration >= TimeSpan.Zero);
+        Assert.IsTrue(metrics.DifferenceMaterializationDuration >= TimeSpan.Zero);
+    }
+
+    [TestMethod]
     public async Task CompareAsync_WhenObjectsAreEqualButRawHashesDiffer_ReturnsEqual()
     {
         CompareNetObjectsResponseComparer comparer = CreateComparer(

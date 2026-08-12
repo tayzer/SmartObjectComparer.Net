@@ -187,9 +187,29 @@ else if (run is not null)
                     <MudChip T="string" Size="Size.Small">@FormatRate(metadata.ExecutionMetrics.RequestCount, metadata.ExecutionMetrics.TotalDuration) requests/s</MudChip>
                     <MudChip T="string" Size="Size.Small">@FormatRate(metadata.ExecutionMetrics.RequestCount, metadata.ExecutionMetrics.ComparisonDuration) compare pairs/worker-s</MudChip>
                     <MudChip T="string" Size="Size.Small">@FormatMiBRate(metadata.ExecutionMetrics.ResponseBytesWritten, metadata.ExecutionMetrics.TotalDuration) MiB/s written</MudChip>
-                    @if (metadata.ExecutionMetrics.CompareSubPhases is { } phases)
+                    @if (metadata.ExecutionMetrics.DetailedCompareMetrics is { } detailed)
                     {
-                        <MudText Typo="Typo.caption">Compare breakdown below is aggregate worker time, not elapsed wall time.</MudText>
+                        <MudText Typo="Typo.caption">Terminal compare stages below are aggregate worker time, not elapsed wall time.</MudText>
+                        @foreach (TimingBreakdownEntry entry in GetDetailedComparisonTimingBreakdown(detailed))
+                        {
+                            @if (entry.IsResidual)
+                            {
+                                <MudTooltip Text="Measured compare-worker time not yet classified into a terminal stage.">
+                                    <MudChip T="string" Size="Size.Small">@entry.Label (aggregate): @FormatDuration(entry.Duration)</MudChip>
+                                </MudTooltip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Size="Size.Small">@entry.Label (aggregate): @FormatDuration(entry.Duration)</MudChip>
+                            }
+                        }
+                        <MudChip T="string" Size="Size.Small">Artifact bytes read: @FormatBytes(detailed.ArtifactBytesRead)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Compare queue wait (aggregate): @FormatDuration(detailed.CompareQueueWaitDuration)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Execution backpressure (aggregate): @FormatDuration(detailed.ExecutionWorkerBackpressureDuration)</MudChip>
+                    }
+                    else if (metadata.ExecutionMetrics.CompareSubPhases is not null)
+                    {
+                        <MudText Typo="Typo.caption">Finer breakdown unavailable. Legacy compare stages below are aggregate worker time.</MudText>
                         @foreach (TimingBreakdownEntry entry in GetComparisonTimingBreakdown(metadata.ExecutionMetrics))
                         {
                             <MudChip T="string" Size="Size.Small">@entry.Label (aggregate): @FormatDuration(entry.Duration)</MudChip>
@@ -197,6 +217,21 @@ else if (run is not null)
                     }
                 </MudStack>
             </MudPaper>
+
+            @if (metadata.ExecutionMetrics.ProcessResourceMetrics is { } resources)
+            {
+                <MudPaper Outlined="true" Class="pa-3 mt-2">
+                    <MudStack Row="true" Spacing="1" Class="flex-wrap" AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.subtitle2">Application Resources</MudText>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary">Process CPU: @resources.ProcessCpuDuration.TotalSeconds.ToString("F2", CultureInfo.InvariantCulture) core-s / @resources.AverageMachineCpuUtilizationPercent.ToString("F2", CultureInfo.InvariantCulture)% of machine</MudChip>
+                        <MudChip T="string" Size="Size.Small">Peak working set: @FormatBytes(resources.PeakWorkingSetBytes)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Peak private: @FormatBytes(resources.PeakPrivateBytes)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Managed allocated: @FormatBytes(resources.ManagedAllocatedBytes)</MudChip>
+                        <MudChip T="string" Size="Size.Small">GC: Gen0 @resources.Gen0CollectionCount, Gen1 @resources.Gen1CollectionCount, Gen2 @resources.Gen2CollectionCount</MudChip>
+                        <MudChip T="string" Size="Size.Small">Logical processors: @resources.LogicalProcessorCount</MudChip>
+                    </MudStack>
+                </MudPaper>
+            }
         }
 
         @if (analysis is not null)
@@ -1512,9 +1547,31 @@ else if (run is not null)
 
         return entries.OrderByDescending(entry => entry.Duration).ToList();
     }
-    private sealed record TimingBreakdownEntry(string Label, TimeSpan Duration);
+    private static IReadOnlyList<TimingBreakdownEntry> GetDetailedComparisonTimingBreakdown(DetailedCompareMetrics metrics)
+    {
+        List<TimingBreakdownEntry> entries = new()
+        {
+            new("CNO graph traversal", metrics.CompareNetObjectsTraversalDuration),
+            new("Response deserialization", metrics.ResponseDeserializationDuration),
+            new("Difference filter/deduplicate/materialize", metrics.DifferenceMaterializationDuration),
+            new("Comparison-model normalization", metrics.ComparisonModelNormalizationDuration),
+            new("Canonical mapping", metrics.CanonicalMappingDuration),
+            new("Plugin mapping", metrics.PluginMappingDuration),
+            new("Plugin pair processing", metrics.PluginPairProcessingDuration),
+            new("Artifact open", metrics.ArtifactOpenDuration),
+            new("Focused content", metrics.FocusedContentDuration),
+        };
+        if (metrics.OtherCompareWorkerDuration > TimeSpan.Zero)
+        {
+            entries.Add(new("Other compare worker work", metrics.OtherCompareWorkerDuration, true));
+        }
+
+        return entries.Where(entry => entry.Duration > TimeSpan.Zero).OrderByDescending(entry => entry.Duration).ToList();
+    }
+    private sealed record TimingBreakdownEntry(string Label, TimeSpan Duration, bool IsResidual = false);
     private static string FormatRate(long count, TimeSpan duration) => duration <= TimeSpan.Zero ? "0.00" : (count / duration.TotalSeconds).ToString("F2", CultureInfo.InvariantCulture);
     private static string FormatMiBRate(long bytes, TimeSpan duration) => duration <= TimeSpan.Zero ? "0.00" : (bytes / 1024d / 1024d / duration.TotalSeconds).ToString("F2", CultureInfo.InvariantCulture);
+    private static string FormatBytes(long bytes) => bytes < 1024 * 1024 ? $"{bytes / 1024d:F1} KiB" : $"{bytes / 1024d / 1024d:F2} MiB";
     private static string FormatBool(bool value) => value ? "on" : "off";
     private static string FormatRawLine(StaticReportRawTextDifference difference) => difference.LineNumberA.HasValue && difference.LineNumberB.HasValue ? $"{difference.LineNumberA}/{difference.LineNumberB}" : difference.LineNumberA?.ToString(CultureInfo.InvariantCulture) ?? difference.LineNumberB?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
     private string GetPairRowClass(RequestPairResult pair, int index) => selectedPair is not null && string.Equals(selectedPair.RelativePath, pair.RelativePath, StringComparison.OrdinalIgnoreCase) ? "v1-selected-pair" : string.Empty;

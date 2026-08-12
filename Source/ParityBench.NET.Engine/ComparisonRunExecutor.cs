@@ -144,7 +144,8 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
                 endpointRequestSender,
                 runArtifactStore,
                 contractPayloadSerializer,
-                counters);
+                counters,
+                compareSubPhaseCounters?.Detailed);
 
         BaselineRunSessions baselineSessions = await OpenBaselineSessionsAsync(
             run,
@@ -199,20 +200,31 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         Stopwatch totalStopwatch,
         CancellationToken cancellationToken)
     {
-        RunPipelineResult pipelineResult = await RunPipelineAsync(
-            run,
-            comparisonOptions,
-            pipelineExecution,
-            baselineSessions,
-            plannedRequests,
-            counters,
-            summaryAccumulator,
-            persistedRecords,
-            detailWriter,
-            progressReporter,
-            totalRequests,
-            compareSubPhaseCounters,
-            cancellationToken).ConfigureAwait(false);
+        RunPipelineResult pipelineResult;
+        RunProcessResourceMetrics? processResourceMetrics = null;
+        if (compareSubPhaseCounters is null)
+        {
+            pipelineResult = await RunPipelineAsync(
+                run, comparisonOptions, pipelineExecution, baselineSessions, plannedRequests, counters,
+                summaryAccumulator, persistedRecords, detailWriter, progressReporter, totalRequests,
+                compareSubPhaseCounters, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            await using RunProcessResourceSampler sampler = new();
+            sampler.Start();
+            try
+            {
+                pipelineResult = await RunPipelineAsync(
+                    run, comparisonOptions, pipelineExecution, baselineSessions, plannedRequests, counters,
+                    summaryAccumulator, persistedRecords, detailWriter, progressReporter, totalRequests,
+                    compareSubPhaseCounters, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                processResourceMetrics = await sampler.StopAsync().ConfigureAwait(false);
+            }
+        }
 
         TimeSpan executionDuration = pipelineResult.ExecutionDuration;
         TimeSpan comparisonDuration = pipelineResult.ComparisonDuration;
@@ -260,7 +272,9 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
             cleanupResult.TrimmedByPolicyArtifactCount,
             cleanupResult.MissingUnexpectedlyArtifactCount,
             compareSubPhaseCounters?.ToMetrics(),
-            pipelineResult.ComparisonConcurrency);
+            pipelineResult.ComparisonConcurrency,
+            compareSubPhaseCounters?.Detailed.ToMetrics(comparisonDuration),
+            processResourceMetrics);
 
         // Sealed last: a package only becomes usable once the run that produced it
         // finished, so a run that failed while finalizing leaves nothing behind.
@@ -478,7 +492,7 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         int channelCapacity = Math.Max(1, comparisonOptions.LargeRun.ChunkSize);
         int flushBatchSize = Math.Max(1, comparisonOptions.LargeRun.DetailPageSize);
 
-        Channel<ExecutionRecord> executedChannel = Channel.CreateBounded<ExecutionRecord>(
+        Channel<QueuedExecutionRecord> executedChannel = Channel.CreateBounded<QueuedExecutionRecord>(
             new BoundedChannelOptions(channelCapacity)
             {
                 SingleWriter = false,
@@ -515,7 +529,7 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
                         Interlocked.Add(ref executionTicks, executionStopwatch.ElapsedTicks);
                         observabilityRecorder.RecordRequestPath(run.Id, plannedRequest.Request.RelativePath, executionStopwatch.Elapsed);
 
-                        await executedChannel.Writer.WriteAsync(executionRecord, cancellationToken).ConfigureAwait(false);
+                        await WriteExecutedRecordAsync(executedChannel.Writer, executionRecord, compareSubPhaseCounters?.Detailed, cancellationToken).ConfigureAwait(false);
                     }
                 },
                 cancellationToken))
@@ -527,8 +541,10 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
             .Select(_ => Task.Run(
                 async () =>
                 {
-                    await foreach (ExecutionRecord executionRecord in executedChannel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+                    await foreach (QueuedExecutionRecord queuedRecord in executedChannel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
                     {
+                        compareSubPhaseCounters?.Detailed.AddCompareQueueWait(Stopwatch.GetElapsedTime(queuedRecord.EnqueuedTimestamp));
+                        ExecutionRecord executionRecord = queuedRecord.Record;
                         Stopwatch compareStopwatch = Stopwatch.StartNew();
                         ComparedExecutionRecord comparedRecord = await CompareRecordAsync(run, comparisonOptions, pipelineExecution, baselineSessions, executionRecord, counters, compareSubPhaseCounters, cancellationToken).ConfigureAwait(false);
                         compareStopwatch.Stop();
@@ -564,7 +580,7 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
             compareConcurrency);
     }
 
-    private static async Task RunWorkerStageAsync(Task[] workers, ChannelWriter<ExecutionRecord> writer)
+    private static async Task RunWorkerStageAsync(Task[] workers, ChannelWriter<QueuedExecutionRecord> writer)
     {
         try
         {
@@ -575,6 +591,42 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         {
             writer.TryComplete(ex);
             throw;
+        }
+    }
+
+    private static async Task WriteExecutedRecordAsync(
+        ChannelWriter<QueuedExecutionRecord> writer,
+        ExecutionRecord record,
+        DetailedCompareMetricsCollector? timing,
+        CancellationToken cancellationToken)
+    {
+        if (timing is null)
+        {
+            while (!writer.TryWrite(new QueuedExecutionRecord(record, Stopwatch.GetTimestamp())))
+            {
+                if (!await writer.WaitToWriteAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    throw new ChannelClosedException();
+                }
+            }
+
+            return;
+        }
+
+        Stopwatch? stopwatch = null;
+        while (!writer.TryWrite(new QueuedExecutionRecord(record, Stopwatch.GetTimestamp())))
+        {
+            stopwatch ??= Stopwatch.StartNew();
+            if (!await writer.WaitToWriteAsync(cancellationToken).ConfigureAwait(false))
+            {
+                throw new ChannelClosedException();
+            }
+        }
+
+        if (stopwatch is not null)
+        {
+            stopwatch.Stop();
+            timing.AddExecutionBackpressure(stopwatch.Elapsed);
         }
     }
 
@@ -725,8 +777,8 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
 
         return await TimeSubPhaseAsync(
             subPhaseCounters,
-            static (c, e) => c.AddFocusedContent(e),
-            () => AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, cancellationToken)).ConfigureAwait(false);
+            static (c, e) => { c.AddFocusedContent(e); c.Detailed.AddFocusedContent(e); },
+            () => AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, subPhaseCounters?.Detailed, cancellationToken)).ConfigureAwait(false);
     }
 
     // No-op pass-through when subPhaseCounters is null, so the toggle being off costs
@@ -759,18 +811,14 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         RequestPairResult pairResult = await TimeSubPhaseAsync(
             subPhaseCounters,
             static (c, e) => c.AddDiff(e),
-            () => responseComparer.CompareAsync(
-                executionRecord.Request,
-                comparisonOptions,
-                executionRecord.EndpointA.Metadata,
-                executionRecord.EndpointB.Metadata,
-                errorMessage,
-                cancellationToken)).ConfigureAwait(false);
+            () => CompareResponseAsync(
+                executionRecord.Request, comparisonOptions, executionRecord.EndpointA.Metadata,
+                executionRecord.EndpointB.Metadata, errorMessage, subPhaseCounters?.Detailed, cancellationToken)).ConfigureAwait(false);
 
         return await TimeSubPhaseAsync(
             subPhaseCounters,
-            static (c, e) => c.AddFocusedContent(e),
-            () => AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, cancellationToken)).ConfigureAwait(false);
+            static (c, e) => { c.AddFocusedContent(e); c.Detailed.AddFocusedContent(e); },
+            () => AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, subPhaseCounters?.Detailed, cancellationToken)).ConfigureAwait(false);
     }
 
     private async Task<EndpointExecutionRecord> ExecuteEndpointAsync(
@@ -987,8 +1035,8 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
 
             return await TimeSubPhaseAsync(
                 subPhaseCounters,
-                static (c, e) => c.AddFocusedContent(e),
-                () => AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, cancellationToken)).ConfigureAwait(false);
+                static (c, e) => { c.AddFocusedContent(e); c.Detailed.AddFocusedContent(e); },
+                () => AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, subPhaseCounters?.Detailed, cancellationToken)).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -1017,13 +1065,27 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         RequestPairResult pairResult = await TimeSubPhaseAsync(
             subPhaseCounters,
             static (c, e) => c.AddDiff(e),
-            () => responseComparer.CompareAsync(request, comparisonOptions, responseA, responseB, errorMessage, cancellationToken)).ConfigureAwait(false);
+            () => CompareResponseAsync(request, comparisonOptions, responseA, responseB, errorMessage, subPhaseCounters?.Detailed, cancellationToken)).ConfigureAwait(false);
 
         return await TimeSubPhaseAsync(
             subPhaseCounters,
-            static (c, e) => c.AddFocusedContent(e),
-            () => AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, cancellationToken)).ConfigureAwait(false);
+            static (c, e) => { c.AddFocusedContent(e); c.Detailed.AddFocusedContent(e); },
+            () => AttachFocusedRawContentAsync(pairResult, run.Id, comparisonOptions, subPhaseCounters?.Detailed, cancellationToken)).ConfigureAwait(false);
     }
+
+    private Task<RequestPairResult> CompareResponseAsync(
+        RequestItem request,
+        RunOptions options,
+        ResponseArtifactMetadata? responseA,
+        ResponseArtifactMetadata? responseB,
+        string? errorMessage,
+        DetailedCompareMetricsCollector? timing,
+        CancellationToken cancellationToken) =>
+        responseComparer is RawTextResponseComparer rawTextComparer
+            ? rawTextComparer.CompareAsync(request, options, responseA, responseB, errorMessage, timing, cancellationToken)
+            : responseComparer is CompareNetObjectsResponseComparer structuredComparer
+                ? structuredComparer.CompareAsync(request, options, responseA, responseB, errorMessage, timing, cancellationToken)
+                : responseComparer.CompareAsync(request, options, responseA, responseB, errorMessage, cancellationToken);
 
     private static IEndpointPipelineContext RequirePipelineContext(EndpointExecutionRecord record) =>
         record.PipelineContext
@@ -1054,12 +1116,14 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         RequestPairResult result,
         RunId runId,
         RunOptions comparisonOptions,
+        DetailedCompareMetricsCollector? timing,
         CancellationToken cancellationToken) =>
         FocusedRawContentBuilder.TryAttachFocusedRawContentAsync(
             result,
             runId,
             comparisonOptions.Comparison,
             runArtifactStore,
+            timing,
             cancellationToken);
 
     private async Task<PreparedRequest> PrepareRegularRequestAsync(
@@ -1153,6 +1217,7 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         int RetainedArtifactCount,
         int TrimmedByPolicyArtifactCount,
         int MissingUnexpectedlyArtifactCount);
+    private sealed record QueuedExecutionRecord(ExecutionRecord Record, long EnqueuedTimestamp);
     // Only instantiated when ObservabilityOptions.EnableDetailedCompareTiming is on -
     // otherwise CompareRecordAsync's TimeSubPhaseAsync helper never touches this and no
     // Stopwatch is created, so the toggle being off has no measurable cost.

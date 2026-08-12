@@ -1,4 +1,7 @@
+using System.Diagnostics;
 using ParityBench.PluginSdk.Pipeline;
+using ParityBench.NET.Engine;
+using ParityBench.NET.Engine.Pipeline.BuiltIn;
 
 namespace ParityBench.NET.Engine.Pipeline;
 
@@ -11,13 +14,16 @@ public sealed class ComparisonPipeline
 {
     private readonly IReadOnlyList<IEndpointComparisonMiddleware> endpointSteps;
     private readonly IReadOnlyList<IPairComparisonMiddleware> pairSteps;
+    private readonly DetailedCompareMetricsCollector? timing;
 
     internal ComparisonPipeline(
         IReadOnlyList<IEndpointComparisonMiddleware> endpointSteps,
-        IReadOnlyList<IPairComparisonMiddleware> pairSteps)
+        IReadOnlyList<IPairComparisonMiddleware> pairSteps,
+        DetailedCompareMetricsCollector? timing = null)
     {
         this.endpointSteps = endpointSteps;
         this.pairSteps = pairSteps;
+        this.timing = timing;
     }
 
     public IReadOnlyList<IComparisonMiddleware> EndpointSteps => (IReadOnlyList<IComparisonMiddleware>)endpointSteps;
@@ -57,7 +63,7 @@ public sealed class ComparisonPipeline
     // The chain is built back to front so each step closes over the tail after it.
     // Every link re-checks IsFailed, so a step that fails without short-circuiting
     // still stops the pipeline instead of letting later steps run on broken state.
-    private static ValueTask InvokeAsync<TStep>(
+    private ValueTask InvokeAsync<TStep>(
         IReadOnlyList<TStep> steps,
         IPipelineContext context,
         Func<TStep, IPipelineContext, PipelineDelegate, CancellationToken, ValueTask> invoke,
@@ -78,10 +84,54 @@ public sealed class ComparisonPipeline
                 }
 
                 token.ThrowIfCancellationRequested();
-                return invoke(step, context, tail, token);
+                return InvokeTimedAsync(step, context, tail, invoke, token);
             };
         }
 
         return next(cancellationToken);
+    }
+
+    private async ValueTask InvokeTimedAsync<TStep>(
+        TStep step,
+        IPipelineContext context,
+        PipelineDelegate tail,
+        Func<TStep, IPipelineContext, PipelineDelegate, CancellationToken, ValueTask> invoke,
+        CancellationToken cancellationToken)
+        where TStep : IComparisonMiddleware
+    {
+        Action<DetailedCompareMetricsCollector, TimeSpan>? record = GetPluginTimingRecorder(step);
+        if (record is null)
+        {
+            await invoke(step, context, tail, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        PipelineDelegate timedTail = async token =>
+        {
+            stopwatch.Stop();
+            try { await tail(token).ConfigureAwait(false); }
+            finally { stopwatch.Start(); }
+        };
+
+        await invoke(step, context, timedTail, cancellationToken).ConfigureAwait(false);
+        stopwatch.Stop();
+        record(timing!, stopwatch.Elapsed);
+    }
+
+    private Action<DetailedCompareMetricsCollector, TimeSpan>? GetPluginTimingRecorder(IComparisonMiddleware step)
+    {
+        if (timing is null
+            || string.Equals(step.StepId, BuiltInStepIds.CanonicalMapping, StringComparison.Ordinal)
+            || string.Equals(step.StepId, BuiltInStepIds.CompareNetObjects, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return step.Phase == PipelinePhase.Mapping
+            ? static (collector, elapsed) => collector.AddPluginMapping(elapsed)
+            : step.Phase == PipelinePhase.Comparison
+                ? static (collector, elapsed) => collector.AddPluginPairProcessing(elapsed)
+                : null;
     }
 }

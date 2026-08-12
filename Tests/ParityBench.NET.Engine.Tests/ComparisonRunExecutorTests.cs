@@ -52,6 +52,23 @@ public sealed class ComparisonRunExecutorTests
     }
 
     [TestMethod]
+    public async Task ExecuteAsync_WhenDetailedTimingIsEnabled_IncludesDetailedAndProcessMetrics()
+    {
+        CapturingObservabilityRecorder recorder = new(TimeSpan.Zero) { IsDetailedCompareTimingEnabled = true };
+        ComparisonRunExecutor executor = CreateExecutor(
+            CreateBatch(new[] { new RequestItem("one.json", "application/json", 2) }),
+            FakeEndpointRequestSender.ForBody("same"),
+            observabilityRecorder: recorder);
+
+        RunResultSummary summary = await executor.ExecuteAsync(CreateRun(), new CapturingProgressReporter());
+
+        Assert.IsNotNull(summary.ExecutionMetrics?.DetailedCompareMetrics);
+        Assert.IsNotNull(summary.ExecutionMetrics?.ProcessResourceMetrics);
+        Assert.IsTrue(summary.ExecutionMetrics!.DetailedCompareMetrics!.ExecutionWorkerBackpressureDuration >= TimeSpan.Zero);
+        Assert.IsTrue(summary.ExecutionMetrics.ProcessResourceMetrics!.LogicalProcessorCount > 0);
+    }
+
+    [TestMethod]
     public async Task ExecuteAsync_WhenComparisonConcurrencyIsConfigured_UsesConfiguredWorkerCount()
     {
         RequestItem[] requests = Enumerable.Range(1, 5)

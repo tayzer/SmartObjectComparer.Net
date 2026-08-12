@@ -263,7 +263,14 @@ public sealed class FileSystemWorkspaceTests
                 TimeSpan.FromMilliseconds(3),
                 requestCount: 1,
                 maxConcurrency: 2,
-                responseBytesWritten: 4));
+                responseBytesWritten: 4,
+                detailedCompareMetrics: new DetailedCompareMetrics(
+                    TimeSpan.FromMilliseconds(1), 42, TimeSpan.FromMilliseconds(2), TimeSpan.FromMilliseconds(3),
+                    TimeSpan.FromMilliseconds(4), TimeSpan.FromMilliseconds(5), TimeSpan.FromMilliseconds(6),
+                    TimeSpan.FromMilliseconds(7), TimeSpan.FromMilliseconds(8), TimeSpan.FromMilliseconds(9),
+                    TimeSpan.FromMilliseconds(10), TimeSpan.FromMilliseconds(11), TimeSpan.FromMilliseconds(12)),
+                processResourceMetrics: new RunProcessResourceMetrics(
+                    TimeSpan.FromMilliseconds(13), 14, 15, 16, 17, 18, 19, 20, 21, 22)));
         ComparisonRun run = ComparisonRun
             .Create(new RunId("run-1"), CreateOptions())
             .Start()
@@ -280,6 +287,9 @@ public sealed class FileSystemWorkspaceTests
         Assert.AreEqual("runs/run-1/details/index.json", loadedSummary.DetailIndexReference?.DetailId);
         Assert.AreEqual(1, loadedSummary.ExecutionMetrics?.RequestCount);
         Assert.AreEqual(4, loadedSummary.ExecutionMetrics?.ResponseBytesWritten);
+        Assert.AreEqual(42, loadedSummary.ExecutionMetrics?.DetailedCompareMetrics?.ArtifactBytesRead);
+        Assert.AreEqual(TimeSpan.FromMilliseconds(4), loadedSummary.ExecutionMetrics?.DetailedCompareMetrics?.CompareNetObjectsTraversalDuration);
+        Assert.AreEqual(22, loadedSummary.ExecutionMetrics?.ProcessResourceMetrics?.LogicalProcessorCount);
     }
 
     [TestMethod]

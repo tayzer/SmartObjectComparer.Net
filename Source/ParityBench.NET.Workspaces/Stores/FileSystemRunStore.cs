@@ -479,7 +479,40 @@ public sealed class FileSystemRunStore : IRunStore
             ComparePersistCanonicalDurationMilliseconds = metrics.CompareSubPhases?.PersistCanonicalDuration.TotalMilliseconds,
             CompareDiffDurationMilliseconds = metrics.CompareSubPhases?.DiffDuration.TotalMilliseconds,
             CompareFocusedContentDurationMilliseconds = metrics.CompareSubPhases?.FocusedContentDuration.TotalMilliseconds,
+            DetailedCompareMetrics = metrics.DetailedCompareMetrics is null ? null : ToDto(metrics.DetailedCompareMetrics),
+            ProcessResourceMetrics = metrics.ProcessResourceMetrics is null ? null : ToDto(metrics.ProcessResourceMetrics),
         };
+
+    private static DetailedCompareMetricsDto ToDto(DetailedCompareMetrics metrics) => new()
+    {
+        ArtifactOpenDurationMilliseconds = metrics.ArtifactOpenDuration.TotalMilliseconds,
+        ArtifactBytesRead = metrics.ArtifactBytesRead,
+        ResponseDeserializationDurationMilliseconds = metrics.ResponseDeserializationDuration.TotalMilliseconds,
+        ComparisonModelNormalizationDurationMilliseconds = metrics.ComparisonModelNormalizationDuration.TotalMilliseconds,
+        CompareNetObjectsTraversalDurationMilliseconds = metrics.CompareNetObjectsTraversalDuration.TotalMilliseconds,
+        DifferenceMaterializationDurationMilliseconds = metrics.DifferenceMaterializationDuration.TotalMilliseconds,
+        CanonicalMappingDurationMilliseconds = metrics.CanonicalMappingDuration.TotalMilliseconds,
+        PluginMappingDurationMilliseconds = metrics.PluginMappingDuration.TotalMilliseconds,
+        PluginPairProcessingDurationMilliseconds = metrics.PluginPairProcessingDuration.TotalMilliseconds,
+        FocusedContentDurationMilliseconds = metrics.FocusedContentDuration.TotalMilliseconds,
+        OtherCompareWorkerDurationMilliseconds = metrics.OtherCompareWorkerDuration.TotalMilliseconds,
+        CompareQueueWaitDurationMilliseconds = metrics.CompareQueueWaitDuration.TotalMilliseconds,
+        ExecutionWorkerBackpressureDurationMilliseconds = metrics.ExecutionWorkerBackpressureDuration.TotalMilliseconds,
+    };
+
+    private static RunProcessResourceMetricsDto ToDto(RunProcessResourceMetrics metrics) => new()
+    {
+        ProcessCpuDurationMilliseconds = metrics.ProcessCpuDuration.TotalMilliseconds,
+        AverageProcessCoreUtilizationPercent = metrics.AverageProcessCoreUtilizationPercent,
+        AverageMachineCpuUtilizationPercent = metrics.AverageMachineCpuUtilizationPercent,
+        PeakWorkingSetBytes = metrics.PeakWorkingSetBytes,
+        PeakPrivateBytes = metrics.PeakPrivateBytes,
+        ManagedAllocatedBytes = metrics.ManagedAllocatedBytes,
+        Gen0CollectionCount = metrics.Gen0CollectionCount,
+        Gen1CollectionCount = metrics.Gen1CollectionCount,
+        Gen2CollectionCount = metrics.Gen2CollectionCount,
+        LogicalProcessorCount = metrics.LogicalProcessorCount,
+    };
 
     private RunDetailReferenceDto ToDto(RunDetailReference reference) =>
         new RunDetailReferenceDto
@@ -647,7 +680,36 @@ public sealed class FileSystemRunStore : IRunStore
                     TimeSpan.FromMilliseconds(dto.ComparePersistCanonicalDurationMilliseconds ?? 0),
                     TimeSpan.FromMilliseconds(dto.CompareDiffDurationMilliseconds ?? 0),
                     TimeSpan.FromMilliseconds(dto.CompareFocusedContentDurationMilliseconds ?? 0)),
-            dto.ComparisonConcurrency);
+            dto.ComparisonConcurrency,
+            dto.DetailedCompareMetrics is null ? null : FromDto(dto.DetailedCompareMetrics),
+            dto.ProcessResourceMetrics is null ? null : FromDto(dto.ProcessResourceMetrics));
+
+    private static DetailedCompareMetrics FromDto(DetailedCompareMetricsDto dto) => new(
+        TimeSpan.FromMilliseconds(dto.ArtifactOpenDurationMilliseconds),
+        Math.Max(0, dto.ArtifactBytesRead),
+        TimeSpan.FromMilliseconds(dto.ResponseDeserializationDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.ComparisonModelNormalizationDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.CompareNetObjectsTraversalDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.DifferenceMaterializationDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.CanonicalMappingDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.PluginMappingDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.PluginPairProcessingDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.FocusedContentDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.OtherCompareWorkerDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.CompareQueueWaitDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.ExecutionWorkerBackpressureDurationMilliseconds));
+
+    private static RunProcessResourceMetrics FromDto(RunProcessResourceMetricsDto dto) => new(
+        TimeSpan.FromMilliseconds(dto.ProcessCpuDurationMilliseconds),
+        dto.AverageProcessCoreUtilizationPercent,
+        dto.AverageMachineCpuUtilizationPercent,
+        Math.Max(0, dto.PeakWorkingSetBytes),
+        Math.Max(0, dto.PeakPrivateBytes),
+        Math.Max(0, dto.ManagedAllocatedBytes),
+        Math.Max(0, dto.Gen0CollectionCount),
+        Math.Max(0, dto.Gen1CollectionCount),
+        Math.Max(0, dto.Gen2CollectionCount),
+        Math.Max(0, dto.LogicalProcessorCount));
 
     private RunDetailReference FromDto(RunDetailReferenceDto dto) =>
         new RunDetailReference(

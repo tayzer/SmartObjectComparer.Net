@@ -40,4 +40,39 @@ internal sealed class RunExecutionMetricsDto
     public double? CompareDiffDurationMilliseconds { get; init; }
 
     public double? CompareFocusedContentDurationMilliseconds { get; init; }
+
+    public DetailedCompareMetricsDto? DetailedCompareMetrics { get; init; }
+
+    public RunProcessResourceMetricsDto? ProcessResourceMetrics { get; init; }
+}
+
+internal sealed class DetailedCompareMetricsDto
+{
+    public double ArtifactOpenDurationMilliseconds { get; init; }
+    public long ArtifactBytesRead { get; init; }
+    public double ResponseDeserializationDurationMilliseconds { get; init; }
+    public double ComparisonModelNormalizationDurationMilliseconds { get; init; }
+    public double CompareNetObjectsTraversalDurationMilliseconds { get; init; }
+    public double DifferenceMaterializationDurationMilliseconds { get; init; }
+    public double CanonicalMappingDurationMilliseconds { get; init; }
+    public double PluginMappingDurationMilliseconds { get; init; }
+    public double PluginPairProcessingDurationMilliseconds { get; init; }
+    public double FocusedContentDurationMilliseconds { get; init; }
+    public double OtherCompareWorkerDurationMilliseconds { get; init; }
+    public double CompareQueueWaitDurationMilliseconds { get; init; }
+    public double ExecutionWorkerBackpressureDurationMilliseconds { get; init; }
+}
+
+internal sealed class RunProcessResourceMetricsDto
+{
+    public double ProcessCpuDurationMilliseconds { get; init; }
+    public double AverageProcessCoreUtilizationPercent { get; init; }
+    public double AverageMachineCpuUtilizationPercent { get; init; }
+    public long PeakWorkingSetBytes { get; init; }
+    public long PeakPrivateBytes { get; init; }
+    public long ManagedAllocatedBytes { get; init; }
+    public int Gen0CollectionCount { get; init; }
+    public int Gen1CollectionCount { get; init; }
+    public int Gen2CollectionCount { get; init; }
+    public int LogicalProcessorCount { get; init; }
 }

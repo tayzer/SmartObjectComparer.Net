@@ -17,6 +17,7 @@ namespace ParityBench.NET.Engine;
 
 internal sealed class CompareSubPhaseCounters
 {
+    public DetailedCompareMetricsCollector Detailed { get; } = new();
     private long normalizeTicks;
     private long persistCanonicalTicks;
     private long diffTicks;

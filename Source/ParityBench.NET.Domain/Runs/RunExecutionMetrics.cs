@@ -10,6 +10,39 @@ public sealed record CompareSubPhaseMetrics(
     TimeSpan DiffDuration,
     TimeSpan FocusedContentDuration);
 
+/// <summary>
+/// Non-overlapping, aggregate-worker timings collected only when detailed compare
+/// timing is enabled. A null value means the run predates this instrumentation or
+/// it was intentionally disabled; it never means zero work occurred.
+/// </summary>
+public sealed record DetailedCompareMetrics(
+    TimeSpan ArtifactOpenDuration,
+    long ArtifactBytesRead,
+    TimeSpan ResponseDeserializationDuration,
+    TimeSpan ComparisonModelNormalizationDuration,
+    TimeSpan CompareNetObjectsTraversalDuration,
+    TimeSpan DifferenceMaterializationDuration,
+    TimeSpan CanonicalMappingDuration,
+    TimeSpan PluginMappingDuration,
+    TimeSpan PluginPairProcessingDuration,
+    TimeSpan FocusedContentDuration,
+    TimeSpan OtherCompareWorkerDuration,
+    TimeSpan CompareQueueWaitDuration,
+    TimeSpan ExecutionWorkerBackpressureDuration);
+
+/// <summary>Process-scoped resource evidence sampled while one run executes.</summary>
+public sealed record RunProcessResourceMetrics(
+    TimeSpan ProcessCpuDuration,
+    double AverageProcessCoreUtilizationPercent,
+    double AverageMachineCpuUtilizationPercent,
+    long PeakWorkingSetBytes,
+    long PeakPrivateBytes,
+    long ManagedAllocatedBytes,
+    int Gen0CollectionCount,
+    int Gen1CollectionCount,
+    int Gen2CollectionCount,
+    int LogicalProcessorCount);
+
 public sealed record RunExecutionMetrics
 {
     public RunExecutionMetrics(
@@ -24,7 +57,9 @@ public sealed record RunExecutionMetrics
         int trimmedByPolicyArtifactCount = 0,
         int missingUnexpectedlyArtifactCount = 0,
         CompareSubPhaseMetrics? compareSubPhases = null,
-        int comparisonConcurrency = 0)
+        int comparisonConcurrency = 0,
+        DetailedCompareMetrics? detailedCompareMetrics = null,
+        RunProcessResourceMetrics? processResourceMetrics = null)
     {
         EnsureNonNegative(totalDuration, nameof(totalDuration));
         EnsureNonNegative(requestExecutionDuration, nameof(requestExecutionDuration));
@@ -50,6 +85,8 @@ public sealed record RunExecutionMetrics
         TrimmedByPolicyArtifactCount = trimmedByPolicyArtifactCount;
         MissingUnexpectedlyArtifactCount = missingUnexpectedlyArtifactCount;
         CompareSubPhases = compareSubPhases;
+        DetailedCompareMetrics = detailedCompareMetrics;
+        ProcessResourceMetrics = processResourceMetrics;
     }
 
     public TimeSpan TotalDuration { get; }
@@ -76,6 +113,10 @@ public sealed record RunExecutionMetrics
     public int MissingUnexpectedlyArtifactCount { get; }
 
     public CompareSubPhaseMetrics? CompareSubPhases { get; }
+
+    public DetailedCompareMetrics? DetailedCompareMetrics { get; }
+
+    public RunProcessResourceMetrics? ProcessResourceMetrics { get; }
 
     private static void EnsureNonNegative(TimeSpan value, string parameterName)
     {

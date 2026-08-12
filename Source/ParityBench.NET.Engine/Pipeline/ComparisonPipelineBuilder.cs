@@ -60,7 +60,7 @@ public sealed class ComparisonPipelineBuilder
         return this;
     }
 
-    public ComparisonPipeline Build()
+    public ComparisonPipeline Build(DetailedCompareMetricsCollector? timing = null)
     {
         Registration[] ordered = registrations
             .OrderBy(registration => (int)registration.Middleware.Phase)
@@ -70,7 +70,8 @@ public sealed class ComparisonPipelineBuilder
 
         return new ComparisonPipeline(
             ordered.Select(registration => registration.Middleware).OfType<IEndpointComparisonMiddleware>().ToArray(),
-            ordered.Select(registration => registration.Middleware).OfType<IPairComparisonMiddleware>().ToArray());
+            ordered.Select(registration => registration.Middleware).OfType<IPairComparisonMiddleware>().ToArray(),
+            timing);
     }
 
     // Registration order is the final tie-break so steps that share a phase and an

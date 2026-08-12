@@ -3,6 +3,7 @@ using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
+using ParityBench.NET.Engine;
 
 namespace ParityBench.NET.Engine.Comparers;
 
@@ -27,21 +28,27 @@ public sealed class RawTextResponseComparer : IResponseComparer
         ResponseArtifactMetadata? responseB,
         string? errorMessage,
         CancellationToken cancellationToken = default)
+        => await CompareAsync(request, options, responseA, responseB, errorMessage, null, cancellationToken).ConfigureAwait(false);
+
+    internal async Task<RequestPairResult> CompareAsync(
+        RequestItem request,
+        RunOptions options,
+        ResponseArtifactMetadata? responseA,
+        ResponseArtifactMetadata? responseB,
+        string? errorMessage,
+        DetailedCompareMetricsCollector? timing,
+        CancellationToken cancellationToken = default)
     {
         if (!CanRawTextCompare(responseA, responseB, errorMessage))
         {
-            return await innerComparer
-                .CompareAsync(request, options, responseA, responseB, errorMessage, cancellationToken)
-                .ConfigureAwait(false);
+            return await CompareInnerAsync(request, options, responseA, responseB, errorMessage, timing, cancellationToken).ConfigureAwait(false);
         }
 
         ResponseArtifactMetadata leftResponse = responseA!;
         ResponseArtifactMetadata rightResponse = responseB!;
         if (IsSuccessStatusCode(leftResponse.StatusCode) && IsSuccessStatusCode(rightResponse.StatusCode))
         {
-            return await innerComparer
-                .CompareAsync(request, options, leftResponse, rightResponse, errorMessage, cancellationToken)
-                .ConfigureAwait(false);
+            return await CompareInnerAsync(request, options, leftResponse, rightResponse, errorMessage, timing, cancellationToken).ConfigureAwait(false);
         }
 
         try
@@ -98,6 +105,18 @@ public sealed class RawTextResponseComparer : IResponseComparer
 
         return new RawPreview(NormalizeLineEndings(text), isTruncated);
     }
+
+    private Task<RequestPairResult> CompareInnerAsync(
+        RequestItem request,
+        RunOptions options,
+        ResponseArtifactMetadata? responseA,
+        ResponseArtifactMetadata? responseB,
+        string? errorMessage,
+        DetailedCompareMetricsCollector? timing,
+        CancellationToken cancellationToken) =>
+        innerComparer is CompareNetObjectsResponseComparer structured
+            ? structured.CompareAsync(request, options, responseA, responseB, errorMessage, timing, cancellationToken)
+            : innerComparer.CompareAsync(request, options, responseA, responseB, errorMessage, cancellationToken);
 
     private static IReadOnlyList<ComparisonDifference> BuildDifferences(
         ResponseArtifactMetadata responseA,
