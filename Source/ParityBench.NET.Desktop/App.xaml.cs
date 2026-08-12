@@ -44,12 +44,13 @@ public partial class App : System.Windows.Application
             .Build();
 
         await host.StartAsync();
-        await CancelInterruptedRunsAsync(InterruptedRunRecoveryService.StartupCancellationMessage);
+        InterruptedRunRecoveryResult startupRecovery = await RecoverInterruptedRunsAsync(InterruptedRunRecoveryService.StartupCancellationMessage);
         SystemEvents.PowerModeChanged += HandlePowerModeChanged;
 
         MainWindow mainWindow = new MainWindow(host.Services);
         MainWindow = mainWindow;
         mainWindow.Show();
+        ShowRecoveryWarning(mainWindow, startupRecovery);
     }
 
     protected override async void OnExit(ExitEventArgs e)
@@ -57,7 +58,7 @@ public partial class App : System.Windows.Application
         SystemEvents.PowerModeChanged -= HandlePowerModeChanged;
         if (host is not null)
         {
-            await CancelInterruptedRunsAsync(InterruptedRunRecoveryService.ShutdownCancellationMessage);
+            await RecoverInterruptedRunsAsync(InterruptedRunRecoveryService.ShutdownCancellationMessage);
             await host.StopAsync();
             host.Dispose();
         }
@@ -74,7 +75,7 @@ public partial class App : System.Windows.Application
 
         try
         {
-            CancelInterruptedRunsAsync(InterruptedRunRecoveryService.SuspendCancellationMessage)
+            RecoverInterruptedRunsAsync(InterruptedRunRecoveryService.SuspendCancellationMessage)
                 .GetAwaiter()
                 .GetResult();
         }
@@ -85,16 +86,68 @@ public partial class App : System.Windows.Application
         }
     }
 
-    private async Task CancelInterruptedRunsAsync(string cancellationMessage)
+    private async Task<InterruptedRunRecoveryResult> RecoverInterruptedRunsAsync(string cancellationMessage)
     {
         if (host is null)
+        {
+            return new InterruptedRunRecoveryResult(0, Array.Empty<RunSnapshotRecoveryWarning>(), Array.Empty<string>());
+        }
+
+        try
+        {
+            InterruptedRunRecoveryService recoveryService = new InterruptedRunRecoveryService(
+                host.Services.GetRequiredService<IComparisonRunUseCases>());
+            return await recoveryService.RecoverAsync(cancellationMessage).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            return new InterruptedRunRecoveryResult(
+                0,
+                Array.Empty<RunSnapshotRecoveryWarning>(),
+                new[] { $"Interrupted-run recovery could not finish: {ex.Message}" });
+        }
+    }
+
+    private static void ShowRecoveryWarning(Window owner, InterruptedRunRecoveryResult result)
+    {
+        if (!result.HasWarnings)
         {
             return;
         }
 
-        InterruptedRunRecoveryService recoveryService = new InterruptedRunRecoveryService(
-            host.Services.GetRequiredService<IComparisonRunUseCases>());
-        await recoveryService.CancelNonTerminalRunsAsync(cancellationMessage).ConfigureAwait(false);
+        List<string> lines = new List<string>
+        {
+            "ParityBench recovered from an interrupted or malformed saved run.",
+            "The desktop app started normally. Snapshot evidence was preserved.",
+        };
+
+        foreach (RunSnapshotRecoveryWarning warning in result.SnapshotWarnings)
+        {
+            lines.Add($"Original: {warning.SnapshotPath}");
+            lines.Add(warning.QuarantinedPath is null
+                ? $"Could not quarantine: {warning.Message}"
+                : $"Quarantined: {warning.QuarantinedPath}");
+        }
+
+        lines.AddRange(result.Errors);
+        Window warningWindow = new Window
+        {
+            Owner = owner,
+            Title = "ParityBench run recovery",
+            Width = 760,
+            Height = 320,
+            MinWidth = 520,
+            MinHeight = 220,
+            Content = new System.Windows.Controls.TextBox
+            {
+                Text = string.Join(Environment.NewLine, lines),
+                IsReadOnly = true,
+                TextWrapping = TextWrapping.Wrap,
+                VerticalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto,
+                Margin = new Thickness(16),
+            },
+        };
+        warningWindow.Show();
     }
 
     private static string FindManualRunRoot()

@@ -51,6 +51,24 @@ public sealed class InterruptedRunRecoveryServiceTests
         Assert.AreEqual(1, runUseCases.CancelledRuns.Count);
     }
 
+    [TestMethod]
+    public async Task RecoverAsync_WhenSnapshotWarningsExist_ReturnsWarningsWithoutStoppingCancellation()
+    {
+        FakeRunUseCases runUseCases = new FakeRunUseCases(new[] { RunStatus.Executing });
+        runUseCases.RecoveryWarnings.Add(new RunSnapshotRecoveryWarning(
+            "C:/workspace/runs/bad/run.json",
+            "C:/workspace/runs/bad/run.json.20260812.corrupt",
+            "Malformed snapshot was quarantined."));
+        InterruptedRunRecoveryService service = new InterruptedRunRecoveryService(runUseCases);
+
+        InterruptedRunRecoveryResult result = await service.RecoverAsync(InterruptedRunRecoveryService.StartupCancellationMessage);
+
+        Assert.AreEqual(1, result.CancelledRunCount);
+        Assert.AreEqual(1, result.SnapshotWarnings.Count);
+        Assert.IsTrue(result.HasWarnings);
+        Assert.AreEqual(0, (await runUseCases.DrainRecoveryWarningsAsync()).Count);
+    }
+
     private sealed class FakeRunUseCases : IComparisonRunUseCases
     {
         public FakeRunUseCases(IEnumerable<RunStatus> statuses)
@@ -61,6 +79,8 @@ public sealed class InterruptedRunRecoveryServiceTests
         public List<RecordedRun> Runs { get; }
 
         public List<CancelledRun> CancelledRuns { get; } = new List<CancelledRun>();
+
+        public List<RunSnapshotRecoveryWarning> RecoveryWarnings { get; } = new List<RunSnapshotRecoveryWarning>();
 
         public Task<ComparisonRun> CreateRunAsync(RunOptions options, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
@@ -90,6 +110,14 @@ public sealed class InterruptedRunRecoveryServiceTests
                 DateTimeOffset.UtcNow,
                 DateTimeOffset.UtcNow,
                 new RunProgress(0, run.Status.ToString()))).ToList());
+
+        public Task<IReadOnlyList<RunSnapshotRecoveryWarning>> DrainRecoveryWarningsAsync(
+            CancellationToken cancellationToken = default)
+        {
+            IReadOnlyList<RunSnapshotRecoveryWarning> warnings = RecoveryWarnings.ToList();
+            RecoveryWarnings.Clear();
+            return Task.FromResult(warnings);
+        }
 
         public Task<RunResultSummary?> LoadRunSummaryAsync(RunId runId, CancellationToken cancellationToken = default) =>
             Task.FromResult<RunResultSummary?>(null);

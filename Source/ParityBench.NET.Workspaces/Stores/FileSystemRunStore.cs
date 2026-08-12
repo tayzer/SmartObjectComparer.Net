@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ParityBench.NET.Application.Runs;
@@ -24,6 +25,8 @@ public sealed class FileSystemRunStore : IRunStore
     };
 
     private readonly string workspaceRoot;
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> snapshotGates = new ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentQueue<RunSnapshotRecoveryWarning> recoveryWarnings = new ConcurrentQueue<RunSnapshotRecoveryWarning>();
 
     public FileSystemRunStore(string workspaceRoot)
     {
@@ -37,14 +40,13 @@ public sealed class FileSystemRunStore : IRunStore
         string runPath = GetRunPath(run.Id);
         Directory.CreateDirectory(Path.GetDirectoryName(runPath) ?? workspaceRoot);
 
-        await ExecuteFileOperationWithRetryAsync(
+        await WithSnapshotGateAsync(
+            runPath,
             async () =>
             {
-                await using FileStream stream = OpenSnapshotForWrite(runPath);
-                await JsonSerializer
-                    .SerializeAsync(stream, ToDto(run), jsonOptions, cancellationToken)
-                    .ConfigureAwait(false);
-                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+                await ExecuteFileOperationWithRetryAsync(
+                    async () => await WriteSnapshotAtomicallyAsync(runPath, run, cancellationToken).ConfigureAwait(false),
+                    cancellationToken).ConfigureAwait(false);
             },
             cancellationToken).ConfigureAwait(false);
     }
@@ -54,20 +56,7 @@ public sealed class FileSystemRunStore : IRunStore
         CancellationToken cancellationToken = default)
     {
         string runPath = GetRunPath(runId);
-        if (!File.Exists(runPath))
-        {
-            return null;
-        }
-
-        RunSnapshotDto? dto = await ExecuteFileOperationWithRetryAsync(
-            async () =>
-            {
-                await using FileStream stream = OpenSnapshotForRead(runPath);
-                return await JsonSerializer
-                    .DeserializeAsync<RunSnapshotDto>(stream, jsonOptions, cancellationToken)
-                    .ConfigureAwait(false);
-            },
-            cancellationToken).ConfigureAwait(false);
+        RunSnapshotDto? dto = await ReadSnapshotOrQuarantineAsync(runPath, cancellationToken).ConfigureAwait(false);
 
         return dto is null ? null : FromDto(dto);
     }
@@ -85,15 +74,7 @@ public sealed class FileSystemRunStore : IRunStore
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            RunSnapshotDto? dto = await ExecuteFileOperationWithRetryAsync(
-                async () =>
-                {
-                    await using FileStream stream = OpenSnapshotForRead(runPath);
-                    return await JsonSerializer
-                        .DeserializeAsync<RunSnapshotDto>(stream, jsonOptions, cancellationToken)
-                        .ConfigureAwait(false);
-                },
-                cancellationToken).ConfigureAwait(false);
+            RunSnapshotDto? dto = await ReadSnapshotOrQuarantineAsync(runPath, cancellationToken).ConfigureAwait(false);
 
             if (dto is not null)
             {
@@ -105,6 +86,19 @@ public sealed class FileSystemRunStore : IRunStore
             .OrderByDescending(run => run.UpdatedAt)
             .ThenBy(run => run.Id.Value, StringComparer.Ordinal)
             .ToList();
+    }
+
+    public Task<IReadOnlyList<RunSnapshotRecoveryWarning>> DrainRecoveryWarningsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        List<RunSnapshotRecoveryWarning> warnings = new List<RunSnapshotRecoveryWarning>();
+        while (recoveryWarnings.TryDequeue(out RunSnapshotRecoveryWarning? warning))
+        {
+            warnings.Add(warning);
+        }
+
+        return Task.FromResult<IReadOnlyList<RunSnapshotRecoveryWarning>>(warnings);
     }
 
     public async Task<RunResultSummary?> LoadSummaryAsync(
@@ -120,12 +114,109 @@ public sealed class FileSystemRunStore : IRunStore
             workspaceRoot,
             FileSystemWorkspacePaths.ToLogicalPath("runs", runId.Value, "run.json"));
 
-    private static FileStream OpenSnapshotForWrite(string path) =>
+    private async Task WriteSnapshotAtomicallyAsync(
+        string runPath,
+        ComparisonRun run,
+        CancellationToken cancellationToken)
+    {
+        string temporaryPath = $"{runPath}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            await using (FileStream stream = OpenTemporarySnapshotForWrite(temporaryPath))
+            {
+                await JsonSerializer
+                    .SerializeAsync(stream, ToDto(run), jsonOptions, cancellationToken)
+                    .ConfigureAwait(false);
+                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+                stream.Flush(flushToDisk: true);
+            }
+
+            if (File.Exists(runPath))
+            {
+                File.Replace(temporaryPath, runPath, destinationBackupFileName: null);
+            }
+            else
+            {
+                File.Move(temporaryPath, runPath);
+            }
+        }
+        finally
+        {
+            TryDeleteFile(temporaryPath);
+        }
+    }
+
+    private async Task<RunSnapshotDto?> ReadSnapshotOrQuarantineAsync(string runPath, CancellationToken cancellationToken) =>
+        await WithSnapshotGateAsync(
+            runPath,
+            async () =>
+            {
+                if (!File.Exists(runPath))
+                {
+                    return null;
+                }
+
+                try
+                {
+                    return await ReadSnapshotWithRetryAsync(runPath, cancellationToken).ConfigureAwait(false);
+                }
+                catch (JsonException firstException)
+                {
+                    // The retry window may have observed another writer. Confirm the
+                    // malformed content while this store's same-run gate is held
+                    // before preserving it as evidence.
+                    try
+                    {
+                        return await ReadSnapshotAsync(runPath, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (JsonException)
+                    {
+                        QuarantineMalformedSnapshot(runPath, firstException);
+                        return null;
+                    }
+                }
+            },
+            cancellationToken).ConfigureAwait(false);
+
+    private async Task<RunSnapshotDto?> ReadSnapshotWithRetryAsync(string runPath, CancellationToken cancellationToken) =>
+        await ExecuteFileOperationWithRetryAsync(
+            () => ReadSnapshotAsync(runPath, cancellationToken),
+            cancellationToken).ConfigureAwait(false);
+
+    private async Task<RunSnapshotDto?> ReadSnapshotAsync(string runPath, CancellationToken cancellationToken)
+    {
+        await using FileStream stream = OpenSnapshotForRead(runPath);
+        return await JsonSerializer
+            .DeserializeAsync<RunSnapshotDto>(stream, jsonOptions, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private void QuarantineMalformedSnapshot(string runPath, JsonException exception)
+    {
+        string quarantinedPath = $"{runPath}.{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}.{Guid.NewGuid():N}.corrupt";
+        try
+        {
+            File.Move(runPath, quarantinedPath);
+            recoveryWarnings.Enqueue(new RunSnapshotRecoveryWarning(
+                runPath,
+                quarantinedPath,
+                $"Malformed run snapshot was quarantined: {exception.Message}"));
+        }
+        catch (Exception quarantineException) when (quarantineException is IOException or UnauthorizedAccessException)
+        {
+            recoveryWarnings.Enqueue(new RunSnapshotRecoveryWarning(
+                runPath,
+                null,
+                $"Malformed run snapshot could not be quarantined: {quarantineException.Message}"));
+        }
+    }
+
+    private static FileStream OpenTemporarySnapshotForWrite(string path) =>
         new FileStream(
             path,
-            FileMode.Create,
+            FileMode.CreateNew,
             FileAccess.Write,
-            FileShare.ReadWrite | FileShare.Delete,
+            FileShare.None,
             SnapshotBufferSize,
             useAsync: true);
 
@@ -137,6 +228,51 @@ public sealed class FileSystemRunStore : IRunStore
             FileShare.ReadWrite | FileShare.Delete,
             SnapshotBufferSize,
             useAsync: true);
+
+    private async Task<T> WithSnapshotGateAsync<T>(
+        string path,
+        Func<Task<T>> action,
+        CancellationToken cancellationToken)
+    {
+        SemaphoreSlim gate = snapshotGates.GetOrAdd(path, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await action().ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private async Task WithSnapshotGateAsync(
+        string path,
+        Func<Task> action,
+        CancellationToken cancellationToken) =>
+        await WithSnapshotGateAsync(
+            path,
+            async () =>
+            {
+                await action().ConfigureAwait(false);
+                return true;
+            },
+            cancellationToken).ConfigureAwait(false);
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // A later startup can safely ignore a never-promoted unique temp file.
+        }
+    }
 
     private static async Task<T> ExecuteFileOperationWithRetryAsync<T>(
         Func<Task<T>> operation,

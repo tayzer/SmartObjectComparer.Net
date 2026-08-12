@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -30,6 +31,51 @@ public sealed class FileSystemResultBrowsingTests
         IReadOnlyList<RunListItem> runs = await runStore.ListAsync();
 
         CollectionAssert.AreEqual(new[] { "a-tied", "z-tied", "oldest" }, runs.Select(run => run.Id.Value).ToArray());
+    }
+
+    [TestMethod]
+    public async Task SaveRun_WritesAtomicallyWithoutLeavingTemporarySnapshot()
+    {
+        string workspaceRoot = CreateTempDirectory();
+        FileSystemRunStore runStore = new FileSystemRunStore(workspaceRoot);
+        RunId runId = new RunId("run-1");
+        ComparisonRun startedRun = ComparisonRun.Create(runId, CreateOptions()).Start();
+
+        await runStore.SaveAsync(startedRun);
+        await runStore.SaveAsync(startedRun.Advance(RunStatus.Comparing, new RunProgress(50, "Comparing.")));
+
+        string runDirectory = Path.Combine(workspaceRoot, "runs", runId.Value);
+        string snapshotPath = Path.Combine(runDirectory, "run.json");
+        using JsonDocument document = JsonDocument.Parse(await File.ReadAllTextAsync(snapshotPath));
+
+        Assert.AreEqual("Comparing", document.RootElement.GetProperty("Status").GetString());
+        Assert.AreEqual(0, Directory.EnumerateFiles(runDirectory, "*.tmp", SearchOption.TopDirectoryOnly).Count());
+    }
+
+    [TestMethod]
+    public async Task ListRuns_WhenSnapshotContainsConcatenatedJson_QuarantinesItAndListsHealthyRuns()
+    {
+        string workspaceRoot = CreateTempDirectory();
+        FileSystemRunStore runStore = new FileSystemRunStore(workspaceRoot);
+        await runStore.SaveAsync(ComparisonRun.Create(new RunId("healthy"), CreateOptions()));
+
+        string badDirectory = Path.Combine(workspaceRoot, "runs", "bad");
+        Directory.CreateDirectory(badDirectory);
+        string badSnapshotPath = Path.Combine(badDirectory, "run.json");
+        await File.WriteAllTextAsync(badSnapshotPath, "{}{}");
+
+        IReadOnlyList<RunListItem> runs = await runStore.ListAsync();
+        IReadOnlyList<ParityBench.NET.Application.Runs.RunSnapshotRecoveryWarning> warnings = await runStore.DrainRecoveryWarningsAsync();
+
+        CollectionAssert.AreEqual(new[] { "healthy" }, runs.Select(run => run.Id.Value).ToArray());
+        Assert.AreEqual(1, warnings.Count);
+        Assert.AreEqual(badSnapshotPath, warnings[0].SnapshotPath);
+        Assert.IsNotNull(warnings[0].QuarantinedPath);
+        Assert.IsTrue(File.Exists(warnings[0].QuarantinedPath));
+        Assert.IsFalse(File.Exists(badSnapshotPath));
+
+        await runStore.ListAsync();
+        Assert.AreEqual(0, (await runStore.DrainRecoveryWarningsAsync()).Count);
     }
 
     [TestMethod]

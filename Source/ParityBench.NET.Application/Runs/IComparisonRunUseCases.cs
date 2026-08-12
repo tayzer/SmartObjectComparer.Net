@@ -42,6 +42,11 @@ public interface IComparisonRunUseCases
     /// </summary>
     Task<IReadOnlyList<RunListItem>> ListRunsAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>Returns and clears non-fatal persisted-snapshot recovery warnings.</summary>
+    Task<IReadOnlyList<RunSnapshotRecoveryWarning>> DrainRecoveryWarningsAsync(
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<RunSnapshotRecoveryWarning>>(Array.Empty<RunSnapshotRecoveryWarning>());
+
     /// <summary>
     /// Loads a count-only run result summary when one exists.
     /// </summary>

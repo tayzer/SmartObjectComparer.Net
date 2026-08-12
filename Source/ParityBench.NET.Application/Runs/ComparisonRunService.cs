@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 using Microsoft.Extensions.Options;
 
 using ParityBench.NET.Application.Observability;
@@ -15,6 +17,7 @@ public sealed class ComparisonRunService : IComparisonRunUseCases
     private readonly IRunCancellationRegistry runCancellationRegistry;
     private readonly IObservabilityRecorder observabilityRecorder;
     private readonly RetentionConfiguration retentionConfiguration;
+    private readonly ConcurrentDictionary<RunId, SemaphoreSlim> runTransitionGates = new ConcurrentDictionary<RunId, SemaphoreSlim>();
 
     public ComparisonRunService(
         IRunStore runStore,
@@ -54,15 +57,25 @@ public sealed class ComparisonRunService : IComparisonRunUseCases
         RunId runId,
         CancellationToken cancellationToken = default)
     {
-        ComparisonRun currentRun = await LoadRequiredRunAsync(runId, cancellationToken).ConfigureAwait(false);
-        currentRun = currentRun.Start();
-        await SaveAndPublishAsync(currentRun, cancellationToken).ConfigureAwait(false);
+        ComparisonRun currentRun = await TransitionRunAsync(runId, run => run.Start(), allowTerminal: false, cancellationToken).ConfigureAwait(false);
 
         CancellationToken executionToken = runCancellationRegistry.CreateLinkedToken(runId, cancellationToken);
+        currentRun = await LoadRequiredRunAsync(runId, cancellationToken).ConfigureAwait(false);
+        if (currentRun.IsTerminal)
+        {
+            // Cancellation may land after Start() persisted but before the
+            // in-memory token was registered. Do not launch the executor then.
+            runCancellationRegistry.Complete(runId);
+            return currentRun;
+        }
+
         RunProgressReporter reporter = new RunProgressReporter(currentRun.Options.LargeRun, async (status, progress, token) =>
         {
-            currentRun = currentRun.Advance(status, progress);
-            await SaveAndPublishAsync(currentRun, token).ConfigureAwait(false);
+            currentRun = await TransitionRunAsync(
+                runId,
+                run => run.Advance(status, progress),
+                allowTerminal: true,
+                token).ConfigureAwait(false);
         });
 
         try
@@ -72,28 +85,36 @@ public sealed class ComparisonRunService : IComparisonRunUseCases
                 .ConfigureAwait(false);
             executionToken.ThrowIfCancellationRequested();
 
-            currentRun = currentRun.Complete(summary, diagnostics: observabilityRecorder.CreateSnapshot(runId));
-            await SaveAndPublishAsync(currentRun, cancellationToken).ConfigureAwait(false);
+            currentRun = await TransitionRunAsync(
+                runId,
+                run => run.Complete(summary, diagnostics: observabilityRecorder.CreateSnapshot(runId)),
+                allowTerminal: true,
+                cancellationToken).ConfigureAwait(false);
             return currentRun;
         }
         catch (OperationCanceledException)
         {
-            currentRun = currentRun.Cancel();
-            await SaveAndPublishAsync(currentRun, CancellationToken.None).ConfigureAwait(false);
+            currentRun = await TransitionRunAsync(runId, run => run.Cancel(), allowTerminal: true, CancellationToken.None).ConfigureAwait(false);
             return currentRun;
         }
         catch (Exception ex) when (runCancellationRegistry.IsCancellationRequested(runId))
         {
             observabilityRecorder.RecordException(runId, "RunCancellation", ex);
-            currentRun = currentRun.Cancel($"Run was cancelled after executor error: {ex.Message}");
-            await SaveAndPublishAsync(currentRun, CancellationToken.None).ConfigureAwait(false);
+            currentRun = await TransitionRunAsync(
+                runId,
+                run => run.Cancel($"Run was cancelled after executor error: {ex.Message}"),
+                allowTerminal: true,
+                CancellationToken.None).ConfigureAwait(false);
             return currentRun;
         }
         catch (Exception ex)
         {
             observabilityRecorder.RecordException(runId, "RunExecution", ex);
-            currentRun = currentRun.Fail(ex.Message, diagnostics: observabilityRecorder.CreateSnapshot(runId));
-            await SaveAndPublishAsync(currentRun, CancellationToken.None).ConfigureAwait(false);
+            currentRun = await TransitionRunAsync(
+                runId,
+                run => run.Fail(ex.Message, diagnostics: observabilityRecorder.CreateSnapshot(runId)),
+                allowTerminal: true,
+                CancellationToken.None).ConfigureAwait(false);
             return currentRun;
         }
         finally
@@ -112,16 +133,16 @@ public sealed class ComparisonRunService : IComparisonRunUseCases
         string? cancellationMessage,
         CancellationToken cancellationToken = default)
     {
-        ComparisonRun run = await LoadRequiredRunAsync(runId, cancellationToken).ConfigureAwait(false);
         runCancellationRegistry.RequestCancellation(runId);
-        ComparisonRun cancelledRun = run.Cancel(cancellationMessage);
-
-        await SaveAndPublishAsync(cancelledRun, cancellationToken).ConfigureAwait(false);
-        return cancelledRun;
+        return await TransitionRunAsync(runId, run => run.Cancel(cancellationMessage), allowTerminal: false, cancellationToken).ConfigureAwait(false);
     }
 
     public Task<IReadOnlyList<RunListItem>> ListRunsAsync(CancellationToken cancellationToken = default) =>
         runStore.ListAsync(cancellationToken);
+
+    public Task<IReadOnlyList<RunSnapshotRecoveryWarning>> DrainRecoveryWarningsAsync(
+        CancellationToken cancellationToken = default) =>
+        runStore.DrainRecoveryWarningsAsync(cancellationToken);
 
     public Task<RunResultSummary?> LoadRunSummaryAsync(
         RunId runId,
@@ -134,6 +155,32 @@ public sealed class ComparisonRunService : IComparisonRunUseCases
     {
         ComparisonRun? run = await runStore.LoadAsync(runId, cancellationToken).ConfigureAwait(false);
         return run ?? throw new RunNotFoundException(runId);
+    }
+
+    private async Task<ComparisonRun> TransitionRunAsync(
+        RunId runId,
+        Func<ComparisonRun, ComparisonRun> transition,
+        bool allowTerminal,
+        CancellationToken cancellationToken)
+    {
+        SemaphoreSlim gate = runTransitionGates.GetOrAdd(runId, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ComparisonRun currentRun = await LoadRequiredRunAsync(runId, cancellationToken).ConfigureAwait(false);
+            if (currentRun.IsTerminal && allowTerminal)
+            {
+                return currentRun;
+            }
+
+            ComparisonRun updatedRun = transition(currentRun);
+            await SaveAndPublishAsync(updatedRun, cancellationToken).ConfigureAwait(false);
+            return updatedRun;
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     private async Task SaveAndPublishAsync(
