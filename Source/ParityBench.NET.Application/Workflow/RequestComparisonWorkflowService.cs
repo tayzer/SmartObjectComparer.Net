@@ -248,6 +248,12 @@ public sealed class RequestComparisonWorkflowService : IRequestComparisonWorkflo
         CancellationToken cancellationToken = default) =>
         runUseCases.CancelRunAsync(runId, cancellationToken);
 
+    public Task<ComparisonRun> CancelRunAsync(
+        RunId runId,
+        string? cancellationMessage,
+        CancellationToken cancellationToken = default) =>
+        runUseCases.CancelRunAsync(runId, cancellationMessage, cancellationToken);
+
     public async Task<StaticReportBundleWriteResult> GenerateReportAsync(
         RunId runId,
         string outputDirectory,

@@ -1,10 +1,12 @@
 using System.IO;
 using System.Windows;
+using Microsoft.Win32;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using MudBlazor.Services;
 using ParityBench.NET.Application.Requests;
+using ParityBench.NET.Application.Runs;
 using ParityBench.NET.Composition;
 using ParityBench.NET.Desktop.Services;
 using ParityBench.NET.Infrastructure;
@@ -42,6 +44,8 @@ public partial class App : System.Windows.Application
             .Build();
 
         await host.StartAsync();
+        await CancelInterruptedRunsAsync(InterruptedRunRecoveryService.StartupCancellationMessage);
+        SystemEvents.PowerModeChanged += HandlePowerModeChanged;
 
         MainWindow mainWindow = new MainWindow(host.Services);
         MainWindow = mainWindow;
@@ -50,13 +54,47 @@ public partial class App : System.Windows.Application
 
     protected override async void OnExit(ExitEventArgs e)
     {
+        SystemEvents.PowerModeChanged -= HandlePowerModeChanged;
         if (host is not null)
         {
+            await CancelInterruptedRunsAsync(InterruptedRunRecoveryService.ShutdownCancellationMessage);
             await host.StopAsync();
             host.Dispose();
         }
 
         base.OnExit(e);
+    }
+
+    private void HandlePowerModeChanged(object? sender, PowerModeChangedEventArgs e)
+    {
+        if (e.Mode != PowerModes.Suspend)
+        {
+            return;
+        }
+
+        try
+        {
+            CancelInterruptedRunsAsync(InterruptedRunRecoveryService.SuspendCancellationMessage)
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch
+        {
+            // Do not crash from a Windows lifecycle callback. Startup recovery will
+            // still cancel any snapshot this best-effort write could not update.
+        }
+    }
+
+    private async Task CancelInterruptedRunsAsync(string cancellationMessage)
+    {
+        if (host is null)
+        {
+            return;
+        }
+
+        InterruptedRunRecoveryService recoveryService = new InterruptedRunRecoveryService(
+            host.Services.GetRequiredService<IComparisonRunUseCases>());
+        await recoveryService.CancelNonTerminalRunsAsync(cancellationMessage).ConfigureAwait(false);
     }
 
     private static string FindManualRunRoot()

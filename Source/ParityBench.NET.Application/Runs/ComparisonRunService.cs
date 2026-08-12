@@ -105,10 +105,16 @@ public sealed class ComparisonRunService : IComparisonRunUseCases
     public async Task<ComparisonRun> CancelRunAsync(
         RunId runId,
         CancellationToken cancellationToken = default)
+        => await CancelRunAsync(runId, cancellationMessage: null, cancellationToken).ConfigureAwait(false);
+
+    public async Task<ComparisonRun> CancelRunAsync(
+        RunId runId,
+        string? cancellationMessage,
+        CancellationToken cancellationToken = default)
     {
         ComparisonRun run = await LoadRequiredRunAsync(runId, cancellationToken).ConfigureAwait(false);
         runCancellationRegistry.RequestCancellation(runId);
-        ComparisonRun cancelledRun = run.Cancel();
+        ComparisonRun cancelledRun = run.Cancel(cancellationMessage);
 
         await SaveAndPublishAsync(cancelledRun, cancellationToken).ConfigureAwait(false);
         return cancelledRun;

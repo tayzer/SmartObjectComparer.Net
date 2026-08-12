@@ -119,6 +119,12 @@ public sealed class ApplicationRunWorkflowViewDataSource : IRunWorkflowViewDataS
         CancellationToken cancellationToken = default) =>
         jobUseCases.CancelRunAsync(runId, cancellationToken);
 
+    public Task<ComparisonRun> CancelRunAsync(
+        RunId runId,
+        string? cancellationMessage,
+        CancellationToken cancellationToken = default) =>
+        jobUseCases.CancelRunAsync(runId, cancellationMessage, cancellationToken);
+
     public Task<ComparisonRun> LoadRunAsync(
         RunId runId,
         CancellationToken cancellationToken = default) =>

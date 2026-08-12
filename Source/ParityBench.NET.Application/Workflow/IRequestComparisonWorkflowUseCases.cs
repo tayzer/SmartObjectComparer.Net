@@ -29,6 +29,13 @@ public interface IRequestComparisonWorkflowUseCases
         RunId runId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Cancels a non-terminal run with a supplied lifecycle message.</summary>
+    Task<ComparisonRun> CancelRunAsync(
+        RunId runId,
+        string? cancellationMessage,
+        CancellationToken cancellationToken = default) =>
+        CancelRunAsync(runId, cancellationToken);
+
     /// <summary>
     /// Generates a static bundled report for a run.
     /// </summary>

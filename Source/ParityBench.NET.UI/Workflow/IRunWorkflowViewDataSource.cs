@@ -87,6 +87,13 @@ public interface IRunWorkflowViewDataSource
         RunId runId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Cancels a run with a supplied lifecycle message.</summary>
+    Task<ComparisonRun> CancelRunAsync(
+        RunId runId,
+        string? cancellationMessage,
+        CancellationToken cancellationToken = default) =>
+        CancelRunAsync(runId, cancellationToken);
+
     Task<ComparisonRun> LoadRunAsync(
         RunId runId,
         CancellationToken cancellationToken = default);

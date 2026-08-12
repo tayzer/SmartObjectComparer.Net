@@ -282,6 +282,22 @@ public sealed class ComparisonRunServiceTests
     }
 
     [TestMethod]
+    public async Task CancelRun_WhenCancellationMessageIsSupplied_PersistsAndPublishesMessage()
+    {
+        FakeRunStore store = new FakeRunStore();
+        FakeRunEventPublisher eventPublisher = new FakeRunEventPublisher();
+        ComparisonRunService service = CreateService(store, eventPublisher: eventPublisher);
+        ComparisonRun run = ComparisonRun.Create(new RunId("run-1"), CreateOptions()).Start();
+        await store.SaveAsync(run);
+
+        ComparisonRun cancelledRun = await service.CancelRunAsync(run.Id, "Desktop app was interrupted.");
+
+        Assert.AreEqual("Desktop app was interrupted.", cancelledRun.Progress.Message);
+        Assert.AreEqual("Desktop app was interrupted.", store.SavedRuns.Last().Progress.Message);
+        Assert.AreEqual("Desktop app was interrupted.", eventPublisher.PublishedEvents.Last().Progress.Message);
+    }
+
+    [TestMethod]
     public async Task CancelRun_WhenRunIsCompleted_ThrowsInvalidRunStateException()
     {
         FakeRunStore store = new FakeRunStore();

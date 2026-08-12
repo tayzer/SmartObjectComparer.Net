@@ -102,7 +102,7 @@ public sealed class FileSystemRunStore : IRunStore
         }
 
         return runs
-            .OrderBy(run => run.CreatedAt)
+            .OrderByDescending(run => run.UpdatedAt)
             .ThenBy(run => run.Id.Value, StringComparer.Ordinal)
             .ToList();
     }

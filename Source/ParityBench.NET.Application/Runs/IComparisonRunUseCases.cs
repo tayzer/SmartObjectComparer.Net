@@ -29,6 +29,15 @@ public interface IComparisonRunUseCases
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Cancels a non-terminal run and records an operator- or host-supplied reason.
+    /// </summary>
+    Task<ComparisonRun> CancelRunAsync(
+        RunId runId,
+        string? cancellationMessage,
+        CancellationToken cancellationToken = default) =>
+        CancelRunAsync(runId, cancellationToken);
+
+    /// <summary>
     /// Lists cheap run snapshots without loading raw response details.
     /// </summary>
     Task<IReadOnlyList<RunListItem>> ListRunsAsync(CancellationToken cancellationToken = default);

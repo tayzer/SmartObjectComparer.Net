@@ -16,6 +16,23 @@ namespace ParityBench.NET.Workspaces.Tests;
 public sealed class FileSystemResultBrowsingTests
 {
     [TestMethod]
+    public async Task ListRuns_WhenRunsHaveDifferentUpdateTimes_ReturnsNewestFirstWithStableIdTies()
+    {
+        string workspaceRoot = CreateTempDirectory();
+        FileSystemRunStore runStore = new FileSystemRunStore(workspaceRoot);
+        DateTimeOffset createdAt = DateTimeOffset.Parse("2026-01-01T00:00:00Z");
+        DateTimeOffset newest = createdAt.AddHours(2);
+
+        await runStore.SaveAsync(CreateRun("oldest", createdAt, createdAt.AddHours(1)));
+        await runStore.SaveAsync(CreateRun("z-tied", createdAt, newest));
+        await runStore.SaveAsync(CreateRun("a-tied", createdAt, newest));
+
+        IReadOnlyList<RunListItem> runs = await runStore.ListAsync();
+
+        CollectionAssert.AreEqual(new[] { "a-tied", "z-tied", "oldest" }, runs.Select(run => run.Id.Value).ToArray());
+    }
+
+    [TestMethod]
     public async Task LoadDetailsPage_WhenIndexHasManyItems_ReturnsOnlyRequestedPage()
     {
         string workspaceRoot = CreateTempDirectory();
@@ -246,4 +263,17 @@ public sealed class FileSystemResultBrowsingTests
             new EndpointDefinition(new Uri("https://service-b.example.test")),
             TimeSpan.FromSeconds(30),
             2);
+
+    private static ComparisonRun CreateRun(string id, DateTimeOffset createdAt, DateTimeOffset updatedAt) =>
+        ComparisonRun.Rehydrate(
+            new RunId(id),
+            CreateOptions(),
+            RunStatus.Created,
+            new RunProgress(0, "Run created."),
+            createdAt,
+            updatedAt,
+            startedAt: null,
+            completedAt: null,
+            summary: null,
+            errorMessage: null);
 }

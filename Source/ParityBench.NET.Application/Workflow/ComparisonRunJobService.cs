@@ -43,5 +43,11 @@ public sealed class ComparisonRunJobService : IComparisonRunJobUseCases
         CancellationToken cancellationToken = default) =>
         workflowUseCases.CancelRunAsync(runId, cancellationToken);
 
+    public Task<ComparisonRun> CancelRunAsync(
+        RunId runId,
+        string? cancellationMessage,
+        CancellationToken cancellationToken = default) =>
+        workflowUseCases.CancelRunAsync(runId, cancellationMessage, cancellationToken);
+
     public bool IsRunning(RunId runId) => runningRuns.ContainsKey(runId);
 }
