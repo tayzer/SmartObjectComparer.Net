@@ -189,16 +189,41 @@ internal static class PropertyPathExplorer
         };
     }
 
-    private static bool HasXmlMetadata(MemberInfo member) =>
-        member.GetCustomAttribute<XmlRootAttribute>() is not null
-        || member.GetCustomAttribute<XmlElementAttribute>() is not null
-        || member.GetCustomAttribute<XmlArrayAttribute>() is not null
-        || member.GetCustomAttribute<XmlArrayItemAttribute>() is not null
-        || member.GetCustomAttribute<XmlAttributeAttribute>() is not null;
+    private static bool HasXmlMetadata(MemberInfo member)
+    {
+        try
+        {
+            return member.GetCustomAttribute<XmlRootAttribute>() is not null
+                   || member.GetCustomAttribute<XmlElementAttribute>() is not null
+                   || member.GetCustomAttribute<XmlArrayAttribute>() is not null
+                   || member.GetCustomAttribute<XmlArrayItemAttribute>() is not null
+                   || member.GetCustomAttribute<XmlAttributeAttribute>() is not null;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
-    private static bool ShouldIgnore(PropertyInfo property) =>
-        property.GetCustomAttribute<JsonIgnoreAttribute>() is not null
-        || property.GetCustomAttribute<XmlIgnoreAttribute>() is not null;
+    private static bool ShouldIgnore(PropertyInfo property)
+    {
+        try
+        {
+            return property.GetCustomAttribute<JsonIgnoreAttribute>() is not null
+                   || property.GetCustomAttribute<XmlIgnoreAttribute>() is not null;
+        }
+        catch
+        {
+            try
+            {
+                return property.CustomAttributes.Any(attr => attr.AttributeType.Name == nameof(JsonIgnoreAttribute) || attr.AttributeType.Name == nameof(XmlIgnoreAttribute));
+            }
+            catch
+            {
+                return false;
+            }
+        }
+    }
 
     private static string GetRootPathPrefix(Type type, bool preferXmlNames)
     {
@@ -207,45 +232,66 @@ internal static class PropertyPathExplorer
             return string.Empty;
         }
 
-        XmlRootAttribute? rootAttribute = type.GetCustomAttribute<XmlRootAttribute>();
-        return string.IsNullOrWhiteSpace(rootAttribute?.ElementName) ? type.Name : rootAttribute.ElementName;
+        try
+        {
+            XmlRootAttribute? rootAttribute = type.GetCustomAttribute<XmlRootAttribute>();
+            return string.IsNullOrWhiteSpace(rootAttribute?.ElementName) ? type.Name : rootAttribute.ElementName;
+        }
+        catch
+        {
+            return type.Name;
+        }
     }
 
     private static string GetSerializedPropertyName(PropertyInfo property, bool preferXmlNames)
     {
-        if (preferXmlNames)
+        try
         {
-            if (property.GetCustomAttribute<XmlAttributeAttribute>() is not null)
+            if (preferXmlNames)
             {
-                return string.Empty;
+                if (property.GetCustomAttribute<XmlAttributeAttribute>() is not null)
+                {
+                    return string.Empty;
+                }
+
+                XmlArrayAttribute? xmlArray = property.GetCustomAttribute<XmlArrayAttribute>();
+                if (!string.IsNullOrWhiteSpace(xmlArray?.ElementName))
+                {
+                    return xmlArray.ElementName;
+                }
+
+                XmlElementAttribute? xmlElement = property.GetCustomAttribute<XmlElementAttribute>();
+                if (!string.IsNullOrWhiteSpace(xmlElement?.ElementName))
+                {
+                    return xmlElement.ElementName;
+                }
             }
 
-            XmlArrayAttribute? xmlArray = property.GetCustomAttribute<XmlArrayAttribute>();
-            if (!string.IsNullOrWhiteSpace(xmlArray?.ElementName))
-            {
-                return xmlArray.ElementName;
-            }
-
-            XmlElementAttribute? xmlElement = property.GetCustomAttribute<XmlElementAttribute>();
-            if (!string.IsNullOrWhiteSpace(xmlElement?.ElementName))
-            {
-                return xmlElement.ElementName;
-            }
+            string? jsonName = property.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name;
+            return string.IsNullOrWhiteSpace(jsonName) ? property.Name : jsonName;
         }
-
-        string? jsonName = property.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name;
-        return string.IsNullOrWhiteSpace(jsonName) ? property.Name : jsonName;
+        catch
+        {
+            return property.Name;
+        }
     }
 
     private static string GetCollectionItemPath(string path, PropertyInfo property, bool preferXmlNames)
     {
-        if (preferXmlNames)
+        try
         {
-            XmlArrayItemAttribute? xmlItem = property.GetCustomAttribute<XmlArrayItemAttribute>();
-            if (!string.IsNullOrWhiteSpace(xmlItem?.ElementName))
+            if (preferXmlNames)
             {
-                return $"{path}.{xmlItem.ElementName}[*]";
+                XmlArrayItemAttribute? xmlItem = property.GetCustomAttribute<XmlArrayItemAttribute>();
+                if (!string.IsNullOrWhiteSpace(xmlItem?.ElementName))
+                {
+                    return $"{path}.{xmlItem.ElementName}[*]";
+                }
             }
+        }
+        catch
+        {
+            // Ignore exceptions and fall back to default behavior
         }
 
         return $"{path}[*]";
