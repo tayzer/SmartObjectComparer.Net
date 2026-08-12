@@ -4,6 +4,7 @@
 @using System.Xml.Linq
 @using ParityBench.NET.Domain.Baselines
 @using ParityBench.NET.Domain.Reports
+@using ParityBench.NET.Domain.Runs
 @using Microsoft.AspNetCore.Components
 @using Microsoft.JSInterop
 @inject IRunResultsViewDataSource DataSource
@@ -188,10 +189,11 @@ else if (run is not null)
                     <MudChip T="string" Size="Size.Small">@FormatMiBRate(metadata.ExecutionMetrics.ResponseBytesWritten, metadata.ExecutionMetrics.TotalDuration) MiB/s written</MudChip>
                     @if (metadata.ExecutionMetrics.CompareSubPhases is { } phases)
                     {
-                        <MudChip T="string" Size="Size.Small">Normalize: @FormatDuration(phases.NormalizeDuration)</MudChip>
-                        <MudChip T="string" Size="Size.Small">Canonical persistence: @FormatDuration(phases.PersistCanonicalDuration)</MudChip>
-                        <MudChip T="string" Size="Size.Small">Diff/body read: @FormatDuration(phases.DiffDuration)</MudChip>
-                        <MudChip T="string" Size="Size.Small">Focused content: @FormatDuration(phases.FocusedContentDuration)</MudChip>
+                        <MudText Typo="Typo.caption">Compare breakdown below is aggregate worker time, not elapsed wall time.</MudText>
+                        @foreach (TimingBreakdownEntry entry in GetComparisonTimingBreakdown(metadata.ExecutionMetrics))
+                        {
+                            <MudChip T="string" Size="Size.Small">@entry.Label (aggregate): @FormatDuration(entry.Duration)</MudChip>
+                        }
                     }
                 </MudStack>
             </MudPaper>
@@ -1488,6 +1490,29 @@ else if (run is not null)
     private static bool HasArtifactContent(RequestPairResult pair) => pair.ResponseA?.Artifact is not null || pair.ResponseB?.Artifact is not null;
     private static string FormatDate(DateTimeOffset value) => value.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
     private static string FormatDuration(TimeSpan value) => value.TotalMinutes >= 1 ? $"{(int)value.TotalMinutes}m {value.Seconds:D2}s" : value.TotalSeconds >= 1 ? $"{value.TotalSeconds:F2}s" : $"{value.TotalMilliseconds:F0} ms";
+    private static IReadOnlyList<TimingBreakdownEntry> GetComparisonTimingBreakdown(RunExecutionMetrics metrics)
+    {
+        CompareSubPhaseMetrics phases = metrics.CompareSubPhases!;
+        TimeSpan attributed = phases.NormalizeDuration
+            + phases.PersistCanonicalDuration
+            + phases.DiffDuration
+            + phases.FocusedContentDuration;
+        TimeSpan unattributed = metrics.ComparisonDuration - attributed;
+        List<TimingBreakdownEntry> entries = new()
+        {
+            new("Diff/body read", phases.DiffDuration),
+            new("Focused content", phases.FocusedContentDuration),
+            new("Normalize", phases.NormalizeDuration),
+            new("Canonical persistence", phases.PersistCanonicalDuration),
+        };
+        if (unattributed > TimeSpan.Zero)
+        {
+            entries.Add(new("Other compare work", unattributed));
+        }
+
+        return entries.OrderByDescending(entry => entry.Duration).ToList();
+    }
+    private sealed record TimingBreakdownEntry(string Label, TimeSpan Duration);
     private static string FormatRate(long count, TimeSpan duration) => duration <= TimeSpan.Zero ? "0.00" : (count / duration.TotalSeconds).ToString("F2", CultureInfo.InvariantCulture);
     private static string FormatMiBRate(long bytes, TimeSpan duration) => duration <= TimeSpan.Zero ? "0.00" : (bytes / 1024d / 1024d / duration.TotalSeconds).ToString("F2", CultureInfo.InvariantCulture);
     private static string FormatBool(bool value) => value ? "on" : "off";
