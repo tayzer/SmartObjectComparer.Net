@@ -1,6 +1,7 @@
 @using ParityBench.NET.Application.Plugins
 @using ParityBench.NET.Application.Profiles
 @using ParityBench.NET.Application.Secrets
+@using ParityBench.NET.Domain.Runs
 @using ParityBench.NET.Domain.Runs.Retention
 @using ParityBench.PluginSdk.Configuration
 @using ParityBench.PluginSdk.Profiles
@@ -81,6 +82,10 @@
                     <MudTextField T="string" Label="Endpoint A URL" @bind-Value="editEndpointA" />
                     <MudTextField T="string" Label="Endpoint B URL" @bind-Value="editEndpointB" />
                     <MudTextField T="string" Label="Request directory" @bind-Value="editRequestDirectory" />
+                    <MudTextField T="string" Label="Compare workers"
+                                  @bind-Value="editComparisonConcurrency"
+                                  Immediate="true"
+                                  HelperText="Blank uses uncalibrated Auto. Enter the worker count recommended by the local performance matrix." />
                     <MudSelect T="string" Label="Response retention"
                                Value="@editRetentionMode"
                                ValueChanged="@(value => editRetentionMode = value ?? string.Empty)"
@@ -123,6 +128,7 @@
     private string editEndpointA = string.Empty;
     private string editEndpointB = string.Empty;
     private string editRequestDirectory = string.Empty;
+    private string editComparisonConcurrency = string.Empty;
 
     /// <summary>
     /// The version the profile pins, or empty for "highest installed". Empty is the
@@ -233,6 +239,7 @@
         editEndpointA = profile.EndpointA.ToString();
         editEndpointB = profile.EndpointB.ToString();
         editRequestDirectory = profile.RequestDirectory ?? string.Empty;
+        editComparisonConcurrency = profile.LargeRun.ComparisonConcurrency?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
         editPluginVersion = profile.PluginVersion ?? string.Empty;
         editRetentionMode = profile.RetentionModeOverride?.ToString() ?? string.Empty;
         editStepConfiguration = profile.StepConfiguration.ToDictionary(
@@ -330,6 +337,19 @@
             return;
         }
 
+        int? comparisonConcurrency = null;
+        if (!string.IsNullOrWhiteSpace(editComparisonConcurrency))
+        {
+            if (!int.TryParse(editComparisonConcurrency, out int parsedComparisonConcurrency)
+                || parsedComparisonConcurrency <= 0)
+            {
+                Snackbar.Add("Compare workers must be a positive whole number or blank for Auto.", Severity.Error);
+                return;
+            }
+
+            comparisonConcurrency = parsedComparisonConcurrency;
+        }
+
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> persistedConfiguration =
             await PersistSecretsAsync(editing, editSchemas, editStepConfiguration).ConfigureAwait(true);
 
@@ -346,7 +366,13 @@
             stepConfiguration: persistedConfiguration,
             comparison: editing.Comparison,
             requestDirectory: string.IsNullOrWhiteSpace(editRequestDirectory) ? null : editRequestDirectory,
-            largeRun: editing.LargeRun,
+            largeRun: new LargeRunOptions(
+                largeRunThreshold: editing.LargeRun.LargeRunThreshold,
+                chunkSize: editing.LargeRun.ChunkSize,
+                detailPageSize: editing.LargeRun.DetailPageSize,
+                comparisonConcurrency: comparisonConcurrency,
+                progressUpdateItemInterval: editing.LargeRun.ProgressUpdateItemInterval,
+                progressUpdateMillisecondsInterval: editing.LargeRun.ProgressUpdateMillisecondsInterval),
             retentionModeOverride: RetentionModePresentation.Parse(editRetentionMode),
             endpointAHeaders: editing.EndpointAHeaders,
             endpointBHeaders: editing.EndpointBHeaders);
@@ -410,6 +436,7 @@
         editPluginVersion = string.Empty;
         editPluginVersions.Clear();
         editRetentionMode = string.Empty;
+        editComparisonConcurrency = string.Empty;
         Snackbar.Add("Profile deleted.", Severity.Info);
     }
 

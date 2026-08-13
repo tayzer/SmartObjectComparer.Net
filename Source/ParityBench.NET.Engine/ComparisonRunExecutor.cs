@@ -486,7 +486,7 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         }
 
         int executeConcurrency = Math.Max(1, comparisonOptions.MaxConcurrency);
-        int fallbackCompareConcurrency = Math.Min(8, Environment.ProcessorCount);
+        int fallbackCompareConcurrency = Math.Min(20, Environment.ProcessorCount);
         int compareConcurrency = Math.Min(
             totalRequests,
             Math.Max(1, comparisonOptions.LargeRun.ComparisonConcurrency ?? fallbackCompareConcurrency));

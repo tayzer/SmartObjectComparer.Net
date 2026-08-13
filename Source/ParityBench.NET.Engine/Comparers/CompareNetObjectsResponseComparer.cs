@@ -30,6 +30,7 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
     private static readonly ConditionalWeakTable<ComparisonOptions, ThreadLocal<CompareLogic>> CompareLogicCaches = new();
     private static readonly ConditionalWeakTable<ComparisonOptions, PreparedComparisonRules> PreparedRuleCaches = new();
     private static readonly ConcurrentDictionary<Type, bool> AcyclicSortTypeCache = new();
+    private static readonly BoundedByteArrayPool SortBufferPool = new();
     private readonly IRunArtifactStore artifactStore;
     private readonly IResponseBodyDeserializer deserializer;
     private readonly bool useLegacyNormalizer;
@@ -158,12 +159,19 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
         DetailedCompareMetricsCollector? timing)
     {
         PreparedComparisonRules rules = GetPreparedRules(options);
-        using ComparisonModelPreparation prepared = Time(
+        ComparisonModelPreparation prepared = Time(
             timing,
             static (c, e) => c.AddNormalization(e),
             () => ComparisonModelPreparation.Create(modelA, modelB, options, rules));
-        ComparisonResult comparisonResult = Time(timing, static (c, e) => c.AddCompareNetObjects(e), () => compareLogic.Compare(prepared.ModelA, prepared.ModelB));
-        return Time(timing, static (c, e) => c.AddMaterialization(e), () => MaterializeDifferences(comparisonResult.Differences, options));
+        try
+        {
+            ComparisonResult comparisonResult = Time(timing, static (c, e) => c.AddCompareNetObjects(e), () => compareLogic.Compare(prepared.ModelA, prepared.ModelB));
+            return Time(timing, static (c, e) => c.AddMaterialization(e), () => MaterializeDifferences(comparisonResult.Differences, options));
+        }
+        finally
+        {
+            Time(timing, static (c, e) => c.AddNormalization(e), prepared.Dispose);
+        }
     }
 
     private static IReadOnlyList<ComparisonDifference> CompareModelsLegacy(
@@ -188,20 +196,50 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
     {
         if (timing is null) { return action(); }
         Stopwatch stopwatch = Stopwatch.StartNew();
-        T result = action();
-        stopwatch.Stop();
-        record(timing, stopwatch.Elapsed);
-        return result;
+        try
+        {
+            return action();
+        }
+        finally
+        {
+            stopwatch.Stop();
+            record(timing, stopwatch.Elapsed);
+        }
+    }
+
+    private static void Time(DetailedCompareMetricsCollector? timing, Action<DetailedCompareMetricsCollector, TimeSpan> record, Action action)
+    {
+        if (timing is null)
+        {
+            action();
+            return;
+        }
+
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        try
+        {
+            action();
+        }
+        finally
+        {
+            stopwatch.Stop();
+            record(timing, stopwatch.Elapsed);
+        }
     }
 
     private static async Task<T> TimeAsync<T>(DetailedCompareMetricsCollector? timing, Action<DetailedCompareMetricsCollector, TimeSpan> record, Func<Task<T>> action)
     {
         if (timing is null) { return await action().ConfigureAwait(false); }
         Stopwatch stopwatch = Stopwatch.StartNew();
-        T result = await action().ConfigureAwait(false);
-        stopwatch.Stop();
-        record(timing, stopwatch.Elapsed);
-        return result;
+        try
+        {
+            return await action().ConfigureAwait(false);
+        }
+        finally
+        {
+            stopwatch.Stop();
+            record(timing, stopwatch.Elapsed);
+        }
     }
 
     private CompareLogic GetCompareLogic(ComparisonOptions options)
@@ -1052,6 +1090,7 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
 
     private sealed class PooledSortKeyBatch : IDisposable
     {
+        private const int MaximumInitialBufferLength = 64 * 1024;
         private readonly PooledByteBufferWriter output;
         private readonly BatchedSortEntry[] entries;
 
@@ -1063,7 +1102,12 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
 
         public static PooledSortKeyBatch Create(object?[] values)
         {
-            PooledByteBufferWriter output = new(Math.Max(256, checked(values.Length * 256)));
+            int initialCapacity = Math.Min(
+                MaximumInitialBufferLength,
+                Math.Max(256, values.Length > MaximumInitialBufferLength / 256
+                    ? MaximumInitialBufferLength
+                    : values.Length * 256));
+            PooledByteBufferWriter output = new(initialCapacity);
             try
             {
                 BatchedSortEntry[] entries = new BatchedSortEntry[values.Length];
@@ -1291,12 +1335,14 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
     private sealed class PooledSortKey : IDisposable
     {
         private byte[] buffer;
+        private readonly bool isPooled;
 
-        private PooledSortKey(byte[] buffer, int length, bool isAscii)
+        private PooledSortKey(byte[] buffer, int length, bool isAscii, bool isPooled)
         {
             this.buffer = buffer;
             Length = length;
             IsAscii = isAscii;
+            this.isPooled = isPooled;
         }
 
         public int Length { get; }
@@ -1317,21 +1363,21 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
             {
                 output.Dispose();
                 byte[] fallback = Encoding.UTF8.GetBytes(value?.ToString() ?? string.Empty);
-                byte[] rented = ArrayPool<byte>.Shared.Rent(Math.Max(1, fallback.Length));
-                fallback.CopyTo(rented, 0);
-                return new PooledSortKey(rented, fallback.Length, fallback.All(item => item < 128));
+                ByteArrayRental rental = SortBufferPool.Rent(Math.Max(1, fallback.Length));
+                fallback.CopyTo(rental.Buffer, 0);
+                return new PooledSortKey(rental.Buffer, fallback.Length, fallback.All(item => item < 128), rental.IsPooled);
             }
         }
 
         public void Dispose()
         {
             byte[] returned = Interlocked.Exchange(ref buffer, Array.Empty<byte>());
-            if (returned.Length > 0) { ArrayPool<byte>.Shared.Return(returned); }
+            if (returned.Length > 0) { SortBufferPool.Return(new ByteArrayRental(returned, isPooled)); }
         }
 
         public string Decode() => Encoding.UTF8.GetString(Bytes);
 
-        public static PooledSortKey FromDetached(byte[] buffer, int length, bool ascii) => new(buffer, length, ascii);
+        public static PooledSortKey FromDetached(byte[] buffer, int length, bool ascii, bool isPooled) => new(buffer, length, ascii, isPooled);
     }
 
     private static readonly ConcurrentDictionary<Type, SortPropertyPlan[]> SortPropertyPlans = new();
@@ -1456,10 +1502,15 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
     private sealed class PooledByteBufferWriter : IBufferWriter<byte>, IDisposable
     {
         private byte[] buffer;
+        private bool isPooled;
         private int written;
 
-        public PooledByteBufferWriter(int initialCapacity = 256) =>
-            buffer = ArrayPool<byte>.Shared.Rent(Math.Max(1, initialCapacity));
+        public PooledByteBufferWriter(int initialCapacity = 256)
+        {
+            ByteArrayRental rental = SortBufferPool.Rent(Math.Max(1, initialCapacity));
+            buffer = rental.Buffer;
+            isPooled = rental.IsPooled;
+        }
 
         public void Advance(int count) => written += count;
         public Memory<byte> GetMemory(int sizeHint = 0) { Ensure(sizeHint); return buffer.AsMemory(written); }
@@ -1470,27 +1521,32 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
         public PooledSortKey Detach()
         {
             byte[] detached = buffer;
+            bool detachedIsPooled = isPooled;
             int length = written;
             bool ascii = detached.AsSpan(0, length).IndexOfAnyExceptInRange((byte)0, (byte)127) < 0;
             buffer = Array.Empty<byte>();
+            isPooled = false;
             written = 0;
-            return PooledSortKey.FromDetached(detached, length, ascii);
+            return PooledSortKey.FromDetached(detached, length, ascii, detachedIsPooled);
         }
 
         public void Dispose()
         {
-            if (buffer.Length > 0) { ArrayPool<byte>.Shared.Return(buffer); }
+            if (buffer.Length > 0) { SortBufferPool.Return(new ByteArrayRental(buffer, isPooled)); }
             buffer = Array.Empty<byte>();
+            isPooled = false;
         }
 
         private void Ensure(int sizeHint)
         {
             int required = written + Math.Max(1, sizeHint);
             if (required <= buffer.Length) { return; }
-            byte[] replacement = ArrayPool<byte>.Shared.Rent(Math.Max(required, buffer.Length * 2));
-            buffer.AsSpan(0, written).CopyTo(replacement);
-            ArrayPool<byte>.Shared.Return(buffer);
-            buffer = replacement;
+            int growth = buffer.Length > int.MaxValue / 2 ? int.MaxValue : buffer.Length * 2;
+            ByteArrayRental replacement = SortBufferPool.Rent(Math.Max(required, growth));
+            buffer.AsSpan(0, written).CopyTo(replacement.Buffer);
+            SortBufferPool.Return(new ByteArrayRental(buffer, isPooled));
+            buffer = replacement.Buffer;
+            isPooled = replacement.IsPooled;
         }
     }
 

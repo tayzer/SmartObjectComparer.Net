@@ -233,8 +233,12 @@ public sealed class FileSystemRunProfileStore : IRunProfileStore
             Input = new InputDto { RequestDirectory = profile.RequestDirectory },
             Report = new ReportDto
             {
+                LargeRunThreshold = profile.LargeRun.LargeRunThreshold,
                 ChunkSize = profile.LargeRun.ChunkSize,
                 DetailPageSize = profile.LargeRun.DetailPageSize,
+                ComparisonConcurrency = profile.LargeRun.ComparisonConcurrency,
+                ProgressUpdateItemInterval = profile.LargeRun.ProgressUpdateItemInterval,
+                ProgressUpdateMillisecondsInterval = profile.LargeRun.ProgressUpdateMillisecondsInterval,
                 RetentionMode = profile.RetentionModeOverride,
             },
         };
@@ -256,7 +260,15 @@ public sealed class FileSystemRunProfileStore : IRunProfileStore
             Comparison?.ToOptions(),
             Input?.RequestDirectory,
             RunProfile.CurrentSchemaVersion,
-            Report is null ? null : new LargeRunOptions(Report.ChunkSize, Report.DetailPageSize),
+            Report is null
+                ? null
+                : new LargeRunOptions(
+                    largeRunThreshold: Report.LargeRunThreshold,
+                    chunkSize: Report.ChunkSize,
+                    detailPageSize: Report.DetailPageSize,
+                    comparisonConcurrency: Report.ComparisonConcurrency,
+                    progressUpdateItemInterval: Report.ProgressUpdateItemInterval,
+                    progressUpdateMillisecondsInterval: Report.ProgressUpdateMillisecondsInterval),
             Report?.RetentionMode,
             EndpointAHeaders,
             EndpointBHeaders);
@@ -294,9 +306,17 @@ public sealed class FileSystemRunProfileStore : IRunProfileStore
 
     private sealed class ReportDto
     {
+        public int LargeRunThreshold { get; set; } = new LargeRunOptions().LargeRunThreshold;
+
         public int ChunkSize { get; set; } = new LargeRunOptions().ChunkSize;
 
         public int DetailPageSize { get; set; } = new LargeRunOptions().DetailPageSize;
+
+        public int? ComparisonConcurrency { get; set; }
+
+        public int ProgressUpdateItemInterval { get; set; } = new LargeRunOptions().ProgressUpdateItemInterval;
+
+        public int ProgressUpdateMillisecondsInterval { get; set; } = new LargeRunOptions().ProgressUpdateMillisecondsInterval;
 
         public RetentionMode? RetentionMode { get; set; }
     }

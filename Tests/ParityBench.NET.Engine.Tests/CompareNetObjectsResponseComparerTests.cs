@@ -161,6 +161,30 @@ public sealed class CompareNetObjectsResponseComparerTests
     }
 
     [TestMethod]
+    public async Task CompareAsync_WithOversizedUnicodeSortKeys_MatchesLegacyOutput()
+    {
+        string first = string.Concat(Enumerable.Repeat("alpha-Ω", 100_000));
+        string second = string.Concat(Enumerable.Repeat("beta-é", 100_000));
+        (string ArtifactId, Func<object> Factory)[] models =
+        [
+            ("a", () => new EdgeCaseShape { Values = [first, second] }),
+            ("b", () => new EdgeCaseShape { Values = [second, first] }),
+        ];
+        ComparisonOptions comparison = new(ignoreCollectionOrder: true, includeAllDifferences: true);
+
+        RequestPairResult optimized = await CreateComparer(models).CompareAsync(
+            CreateRequest(), CreateOptions(comparison), CreateResponse(EndpointSlot.A, "a"), CreateResponse(EndpointSlot.B, "b"), null);
+        RequestPairResult legacy = await CreateLegacyComparer(models).CompareAsync(
+            CreateRequest(), CreateOptions(comparison), CreateResponse(EndpointSlot.A, "a"), CreateResponse(EndpointSlot.B, "b"), null);
+
+        Assert.AreEqual(RequestPairOutcome.Equal, optimized.Outcome);
+        Assert.AreEqual(legacy.Outcome, optimized.Outcome);
+        CollectionAssert.AreEqual(
+            legacy.Differences.Select(difference => (difference.PropertyPath, difference.ValueA, difference.ValueB, difference.Message)).ToArray(),
+            optimized.Differences.Select(difference => (difference.PropertyPath, difference.ValueA, difference.ValueB, difference.Message)).ToArray());
+    }
+
+    [TestMethod]
     public async Task CompareAsync_WhenPreparationThrows_RestoresEarlierMutations()
     {
         ThrowingModel left = new() { Ignored = "left" };
@@ -227,6 +251,28 @@ public sealed class CompareNetObjectsResponseComparerTests
         Assert.IsTrue(metrics.ComparisonModelNormalizationDuration >= TimeSpan.Zero);
         Assert.IsTrue(metrics.CompareNetObjectsTraversalDuration >= TimeSpan.Zero);
         Assert.IsTrue(metrics.DifferenceMaterializationDuration >= TimeSpan.Zero);
+    }
+
+    [TestMethod]
+    public async Task CompareAsync_WithDetailedTiming_IncludesModelRestorationInNormalization()
+    {
+        CompareNetObjectsResponseComparer comparer = CreateComparer(
+            ("a", () => new SlowRestoringResponse("left")),
+            ("b", () => new SlowRestoringResponse("right")));
+        DetailedCompareMetricsCollector collector = new();
+
+        RequestPairResult result = await comparer.CompareAsync(
+            CreateRequest(),
+            CreateOptions(new ComparisonOptions(ignoreRules: [new IgnoreRuleDefinition("Ignored")])),
+            CreateResponse(EndpointSlot.A, "a"),
+            CreateResponse(EndpointSlot.B, "b"),
+            null,
+            collector);
+        DetailedCompareMetrics metrics = collector.ToMetrics(TimeSpan.FromSeconds(1));
+
+        Assert.AreEqual(RequestPairOutcome.Equal, result.Outcome);
+        Assert.IsTrue(metrics.ComparisonModelNormalizationDuration >= TimeSpan.FromMilliseconds(40),
+            $"Expected restoration delay in normalization, measured {metrics.ComparisonModelNormalizationDuration.TotalMilliseconds:F1} ms.");
     }
 
     [TestMethod]
@@ -1022,6 +1068,27 @@ public sealed class CompareNetObjectsResponseComparerTests
         public string? Line1 { get; set; }
 
         public string? Postcode { get; set; }
+    }
+
+    private sealed class SlowRestoringResponse
+    {
+        private string? ignored;
+
+        public SlowRestoringResponse(string ignored) => this.ignored = ignored;
+
+        public string? Ignored
+        {
+            get => ignored;
+            set
+            {
+                if (ignored is null && value is not null)
+                {
+                    Thread.Sleep(25);
+                }
+
+                ignored = value;
+            }
+        }
     }
 
     public sealed class SampleResponse

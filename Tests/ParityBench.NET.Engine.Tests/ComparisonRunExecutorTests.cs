@@ -84,7 +84,22 @@ public sealed class ComparisonRunExecutorTests
     }
 
     [TestMethod]
-    public async Task ExecuteAsync_WhenComparisonConcurrencyIsNull_UsesAtMostEightWorkers()
+    public async Task ExecuteAsync_WhenComparisonConcurrencyExceedsRequestCount_ClampsWorkerCount()
+    {
+        RequestItem[] requests = Enumerable.Range(1, 3)
+            .Select(index => new RequestItem($"request-{index}.json", "application/json", 2))
+            .ToArray();
+        ComparisonRunExecutor executor = CreateExecutor(CreateBatch(requests), FakeEndpointRequestSender.ForBody("same"));
+
+        RunResultSummary summary = await executor.ExecuteAsync(
+            CreateRun(largeRunOptions: new LargeRunOptions(comparisonConcurrency: 20)),
+            new CapturingProgressReporter());
+
+        Assert.AreEqual(3, summary.ExecutionMetrics!.ComparisonConcurrency);
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_WhenComparisonConcurrencyIsNull_UsesAtMostTwentyWorkers()
     {
         RequestItem[] requests = Enumerable.Range(1, 20)
             .Select(index => new RequestItem($"request-{index}.json", "application/json", 2))
@@ -95,7 +110,7 @@ public sealed class ComparisonRunExecutorTests
             CreateRun(largeRunOptions: new LargeRunOptions(comparisonConcurrency: null)),
             new CapturingProgressReporter());
 
-        Assert.AreEqual(Math.Min(8, Environment.ProcessorCount), summary.ExecutionMetrics!.ComparisonConcurrency);
+        Assert.AreEqual(Math.Min(20, Environment.ProcessorCount), summary.ExecutionMetrics!.ComparisonConcurrency);
     }
 
     [TestMethod]
