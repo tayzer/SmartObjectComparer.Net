@@ -35,7 +35,10 @@ public sealed record ResolvedRunProfileView(
     // The retention mode the profile asks for, or null to use the configured
     // default. It seeds the workflow's retention picker, which is what actually
     // travels with the run.
-    RetentionMode? RetentionModeOverride = null);
+    RetentionMode? RetentionModeOverride = null,
+    // Large-run execution settings belong to the saved profile. They must flow
+    // with the launch request rather than silently falling back inside the engine.
+    LargeRunOptions? LargeRun = null);
 
 /// <summary>
 /// Supplies create/run/cancel/report actions to shared V2 workflow components without binding them to a host.

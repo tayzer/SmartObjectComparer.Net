@@ -28,7 +28,8 @@ public sealed record RequestComparisonRunRequest
         IReadOnlyList<string>? sourceFiles = null,
         RetentionMode? runRetentionModeOverride = null,
         PluginComparisonSelection? pluginComparison = null,
-        BaselineRunSelection? baseline = null)
+        BaselineRunSelection? baseline = null,
+        LargeRunOptions? largeRunOptions = null)
     {
         // A replay run takes its requests from the baseline package, so it is the one
         // case where a host has no source directory to offer.
@@ -68,6 +69,7 @@ public sealed record RequestComparisonRunRequest
         RunRetentionModeOverride = runRetentionModeOverride;
         PluginComparison = pluginComparison;
         Baseline = baseline;
+        LargeRunOptions = largeRunOptions ?? new LargeRunOptions();
     }
 
     public string SourceDirectory { get; }
@@ -113,6 +115,11 @@ public sealed record RequestComparisonRunRequest
     /// one as the expected side, or neither.
     /// </summary>
     public BaselineRunSelection? Baseline { get; }
+
+    /// <summary>
+    /// Gets large-run execution settings resolved from the selected saved profile.
+    /// </summary>
+    public LargeRunOptions LargeRunOptions { get; }
 
     private static IReadOnlyDictionary<string, string> CopyHeaders(IReadOnlyDictionary<string, string>? headers)
     {

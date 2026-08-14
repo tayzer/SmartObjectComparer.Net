@@ -72,6 +72,7 @@ public sealed class RequestComparisonWorkflowService : IRequestComparisonWorkflo
             request.ComparisonOptions,
             request.RequestExecutionOptions,
             request.ContractProfileSelection,
+            largeRunOptions: request.LargeRunOptions,
             runRetentionModeOverride: request.RunRetentionModeOverride,
             comparisonRulesSnapshotHash: ComputeComparisonRulesSnapshotHash(request.ComparisonOptions, request.ContractProfileSelection),
             pluginComparison: request.PluginComparison,

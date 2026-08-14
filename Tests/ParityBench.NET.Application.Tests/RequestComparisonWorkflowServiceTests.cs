@@ -62,6 +62,26 @@ public sealed class RequestComparisonWorkflowServiceTests
     }
 
     [TestMethod]
+    public async Task CreateRunFromDirectory_WhenLargeRunOptionsAreProvided_PersistsComparisonConcurrency()
+    {
+        FakeRunUseCases runUseCases = new();
+        RequestComparisonWorkflowService service = CreateService(runUseCases: runUseCases);
+        RequestComparisonRunRequest request = new(
+            "requests",
+            new Uri("https://a.example.test"),
+            new Uri("https://b.example.test"),
+            TimeSpan.FromSeconds(30),
+            3,
+            largeRunOptions: new LargeRunOptions(comparisonConcurrency: 8));
+
+        ComparisonRun run = await service.CreateRunFromDirectoryAsync(request).ConfigureAwait(false);
+
+        Assert.AreEqual(8, request.LargeRunOptions.ComparisonConcurrency);
+        Assert.AreEqual(8, run.Options.LargeRun.ComparisonConcurrency);
+        Assert.AreEqual(8, runUseCases.CreatedOptions?.LargeRun.ComparisonConcurrency);
+    }
+
+    [TestMethod]
     public async Task CreateRunFromDirectory_WhenSourceFilesAreProvided_StagesExplicitFiles()
     {
         FakeRequestBatchStore batchStore = new FakeRequestBatchStore();

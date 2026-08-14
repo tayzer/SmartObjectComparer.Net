@@ -521,6 +521,7 @@
     private IReadOnlyList<RunProfileSummary> runProfiles = Array.Empty<RunProfileSummary>();
     private string selectedRunProfileId = string.Empty;
     private PluginComparisonSelection? selectedPluginComparison;
+    private LargeRunOptions? selectedLargeRunOptions;
     private ComparisonRuleDefaults? pluginDefaultComparisonRules;
     private BaselineRunMode baselineMode = BaselineRunMode.LiveVsLive;
     private IReadOnlyList<BaselineSummary> baselines = Array.Empty<BaselineSummary>();
@@ -709,6 +710,7 @@
             // Cleared: drop the plugin selection so a subsequent run is a plain
             // endpoint-to-endpoint comparison again.
             selectedPluginComparison = null;
+            selectedLargeRunOptions = null;
             pluginDefaultComparisonRules = null;
             requestSourceDescription = string.Empty;
             retentionModeOverride = string.Empty;
@@ -723,6 +725,7 @@
             selectedPresetId = string.Empty;
             contractProfileId = string.Empty;
             selectedPluginComparison = resolved.Selection;
+            selectedLargeRunOptions = resolved.LargeRun;
             endpointA = resolved.EndpointA.ToString();
             endpointB = resolved.EndpointB.ToString();
             endpointAHeaders = FormatHeaders(resolved.EndpointAHeaders);
@@ -771,6 +774,7 @@
             errorMessage = ex.Message;
             selectedRunProfileId = string.Empty;
             selectedPluginComparison = null;
+            selectedLargeRunOptions = null;
         }
     }
 
@@ -778,6 +782,7 @@
     {
         selectedRunProfileId = string.Empty;
         selectedPluginComparison = null;
+        selectedLargeRunOptions = null;
         pluginDefaultComparisonRules = null;
         selectedPresetId = value ?? string.Empty;
         RequestComparisonPresetOption? preset = defaults.Presets.FirstOrDefault(candidate =>
@@ -1044,7 +1049,8 @@
             sourceFiles: sourceFiles.Count == 0 ? null : sourceFiles,
             pluginComparison: selectedPluginComparison,
             baseline: baselineSelection,
-            runRetentionModeOverride: SelectedRetentionMode);
+            runRetentionModeOverride: SelectedRetentionMode,
+            largeRunOptions: selectedLargeRunOptions);
     }
 
     private BaselineRunSelection? BuildBaselineSelection()
