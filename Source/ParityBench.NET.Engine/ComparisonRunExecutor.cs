@@ -383,7 +383,8 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
             current.MaxDifferences,
             defaults.IgnoreRules.Concat(current.IgnoreRules),
             defaults.SmartIgnoreRules.Concat(current.SmartIgnoreRules),
-            defaults.MaskRules.Concat(current.MaskRules));
+            defaults.MaskRules.Concat(current.MaskRules),
+            current.IncludeAllDifferences);
 
         return new RunOptions(
             options.RequestBatch,

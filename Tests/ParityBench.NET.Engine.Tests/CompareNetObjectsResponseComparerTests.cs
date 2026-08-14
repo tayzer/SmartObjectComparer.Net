@@ -161,6 +161,33 @@ public sealed class CompareNetObjectsResponseComparerTests
     }
 
     [TestMethod]
+    public async Task CompareAsync_WithGetterOnlyJsonIgnoredProperty_MatchesLegacyOutput()
+    {
+        Func<bool, GetterOnlyIgnoredShape> create = reverse => new GetterOnlyIgnoredShape
+        {
+            Applicants = (reverse
+                ? new[] { new Applicant { Id = "2", Name = "changed" }, new Applicant { Id = "1", Name = "one" } }
+                : new[] { new Applicant { Id = "1", Name = "one" }, new Applicant { Id = "2", Name = "two" } }),
+        };
+        (string ArtifactId, Func<object> Factory)[] models =
+        [
+            ("a", () => create(false)),
+            ("b", () => create(true)),
+        ];
+        ComparisonOptions comparison = new(ignoreCollectionOrder: true, includeAllDifferences: true);
+
+        RequestPairResult optimized = await CreateComparer(models).CompareAsync(
+            CreateRequest(), CreateOptions(comparison), CreateResponse(EndpointSlot.A, "a"), CreateResponse(EndpointSlot.B, "b"), null);
+        RequestPairResult legacy = await CreateLegacyComparer(models).CompareAsync(
+            CreateRequest(), CreateOptions(comparison), CreateResponse(EndpointSlot.A, "a"), CreateResponse(EndpointSlot.B, "b"), null);
+
+        Assert.AreEqual(RequestPairOutcome.Different, optimized.Outcome);
+        CollectionAssert.AreEqual(
+            legacy.Differences.Select(difference => (difference.PropertyPath, difference.ValueA, difference.ValueB, difference.Message)).ToArray(),
+            optimized.Differences.Select(difference => (difference.PropertyPath, difference.ValueA, difference.ValueB, difference.Message)).ToArray());
+    }
+
+    [TestMethod]
     public async Task CompareAsync_WithOversizedUnicodeSortKeys_MatchesLegacyOutput()
     {
         string first = string.Concat(Enumerable.Repeat("alpha-Ω", 100_000));
@@ -1125,6 +1152,14 @@ public sealed class CompareNetObjectsResponseComparerTests
         public List<string?>? Values { get; set; }
         public IReadOnlyList<Applicant>? ReadOnlyApplicants { get; set; }
         public Dictionary<string, List<int>>? Lookup { get; set; }
+    }
+
+    public sealed class GetterOnlyIgnoredShape
+    {
+        public Applicant[] Applicants { get; set; } = [];
+
+        [JsonIgnore]
+        public int ApplicantCount => Applicants.Length;
     }
 
     public sealed class ThrowingModel

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ParityBench.NET.Application.Observability;
 using ParityBench.NET.Application.Requests;
@@ -82,7 +83,7 @@ public sealed class LargeRunPerformanceBenchmarkTests
     }
 
     [TestMethod]
-    public async Task ExecuteAsync_1kClientShape_ReportsLegacyAndOptimizedConcurrencyMatrix()
+    public async Task ExecuteAsync_1kSyntheticShape_ReportsLegacyAndOptimizedConcurrencyMatrix()
     {
         if (!string.Equals(Environment.GetEnvironmentVariable(EnableVariable), "1", StringComparison.Ordinal))
         {
@@ -165,7 +166,7 @@ public sealed class LargeRunPerformanceBenchmarkTests
     }
 
     [TestMethod]
-    public async Task ExecuteAsync_1kClientShape_CalibratesComparisonConcurrencyInIsolatedProcesses()
+    public async Task ExecuteAsync_1kSyntheticShape_CalibratesComparisonConcurrencyInIsolatedProcesses()
     {
         if (!string.Equals(Environment.GetEnvironmentVariable(EnableVariable), "1", StringComparison.Ordinal))
         {
@@ -312,9 +313,11 @@ public sealed class LargeRunPerformanceBenchmarkTests
         startInfo.ArgumentList.Add("test");
         startInfo.ArgumentList.Add("--project");
         startInfo.ArgumentList.Add(project);
+        startInfo.ArgumentList.Add("--configuration");
+        startInfo.ArgumentList.Add(CurrentBuildConfiguration());
         startInfo.ArgumentList.Add("--no-build");
         startInfo.ArgumentList.Add("--filter");
-        startInfo.ArgumentList.Add("FullyQualifiedName~ExecuteAsync_1kClientShape_CalibratesComparisonConcurrencyInIsolatedProcesses");
+        startInfo.ArgumentList.Add("FullyQualifiedName~ExecuteAsync_1kSyntheticShape_CalibratesComparisonConcurrencyInIsolatedProcesses");
         startInfo.Environment[EnableVariable] = "1";
         startInfo.Environment[CalibrationChildVariable] = "1";
         startInfo.Environment[CalibrationConcurrencyVariable] = concurrency.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -540,6 +543,9 @@ public sealed class LargeRunPerformanceBenchmarkTests
         Environment.GetEnvironmentVariable("PB_PERFORMANCE_OUTPUT")
         ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ParityBench.NET", "Performance");
 
+    private static string CurrentBuildConfiguration() =>
+        Path.GetFileName(Path.GetDirectoryName(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar)))!;
+
     private static CalibrationCandidate SummarizeCandidate(CalibrationChildReport child, long totalAvailableMemoryBytes)
     {
         long medianPeakPrivateBytes = MedianLong(child.Runs.Select(run => run.PeakPrivateBytes));
@@ -676,14 +682,14 @@ public sealed class LargeRunPerformanceBenchmarkTests
             int paddingLength = PayloadBytes - unpadded.Length;
             if (paddingLength < 0)
             {
-                throw new InvalidOperationException($"Client-shaped payload is {unpadded.Length} bytes, exceeding {PayloadBytes} byte target.");
+                throw new InvalidOperationException($"Synthetic payload is {unpadded.Length} bytes, exceeding {PayloadBytes} byte target.");
             }
 
             payload.Padding = new string('x', paddingLength);
             byte[] padded = JsonSerializer.SerializeToUtf8Bytes(payload);
             if (padded.Length != PayloadBytes)
             {
-                throw new InvalidOperationException($"Client-shaped payload must be exactly {PayloadBytes} bytes; produced {padded.Length}.");
+                throw new InvalidOperationException($"Synthetic payload must be exactly {PayloadBytes} bytes; produced {padded.Length}.");
             }
 
             return padded;
@@ -696,6 +702,9 @@ public sealed class LargeRunPerformanceBenchmarkTests
         public string? Payload { get; set; }
         public PayloadRecord[]? Items { get; set; }
         public string? Padding { get; set; } = string.Empty;
+
+        [JsonIgnore]
+        public int ItemCount => Items?.Length ?? 0;
     }
 
     public sealed class PayloadRecord

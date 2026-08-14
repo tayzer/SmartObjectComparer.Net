@@ -580,15 +580,47 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
 
         public bool RequiresPreparation { get; }
 
-        public bool ShouldIgnorePath(string path) => ignoredPaths.Any(matcher => matcher.IsMatch(path));
+        public bool ShouldIgnorePath(string path)
+        {
+            foreach (PreparedPathMatcher matcher in ignoredPaths)
+            {
+                if (matcher.IsMatch(path)) return true;
+            }
 
-        public bool ShouldIgnoreChild(string parentPath, string propertyName) => ignoredPaths.Any(matcher => matcher.IsDirectChildMatch(parentPath, propertyName));
+            return false;
+        }
+
+        public bool ShouldIgnoreChild(string parentPath, string propertyName)
+        {
+            foreach (PreparedPathMatcher matcher in ignoredPaths)
+            {
+                if (matcher.IsDirectChildMatch(parentPath, propertyName)) return true;
+            }
+
+            return false;
+        }
 
         public bool ShouldIgnoreSmartPropertyName(string propertyName) => smartPropertyNames.Contains(propertyName);
 
-        public bool ShouldTreatNullAndEmptyAsEqual(string path) => nullEmptyPaths.Any(matcher => matcher.IsMatch(path));
+        public bool ShouldTreatNullAndEmptyAsEqual(string path)
+        {
+            foreach (PreparedPathMatcher matcher in nullEmptyPaths)
+            {
+                if (matcher.IsMatch(path)) return true;
+            }
 
-        public bool ShouldIgnoreCollectionElement(string parentPath, int index) => ignoredPaths.Any(matcher => matcher.IsCollectionElementMatch(parentPath, index));
+            return false;
+        }
+
+        public bool ShouldIgnoreCollectionElement(string parentPath, int index)
+        {
+            foreach (PreparedPathMatcher matcher in ignoredPaths)
+            {
+                if (matcher.IsCollectionElementMatch(parentPath, index)) return true;
+            }
+
+            return false;
+        }
 
         public bool ShouldIgnoreSmartPath(string path)
         {
@@ -681,10 +713,14 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
                 return MatchesCollectionWildcard(path, candidate);
             }
 
-            return string.Equals(path, candidate, StringComparison.OrdinalIgnoreCase)
-                || candidate.StartsWith(path + ".", StringComparison.OrdinalIgnoreCase)
-                || candidate.StartsWith(path + "[", StringComparison.OrdinalIgnoreCase)
-                || wildcard?.IsMatch(candidate) == true;
+            if (candidate.StartsWith(path, StringComparison.OrdinalIgnoreCase)
+                && (candidate.Length == path.Length
+                    || candidate.Length > path.Length && candidate[path.Length] is '.' or '['))
+            {
+                return true;
+            }
+
+            return wildcard?.IsMatch(candidate) == true;
         }
 
         public bool IsDirectChildMatch(string parentPath, string propertyName)
@@ -1034,7 +1070,7 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
                 || LegacyComparisonModelNormalizer.IsSimpleValue(itemType)
                 || typeof(IEnumerable).IsAssignableFrom(itemType)
                 || !AcyclicSortTypeCache.GetOrAdd(itemType, static type => IsStaticallyAcyclic(type, new HashSet<Type>(), new HashSet<Type>()))
-                || items.Any(item => item?.GetType() != itemType))
+                || ContainsDifferentRuntimeType(items, itemType))
             {
                 return null;
             }
@@ -1052,6 +1088,16 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
             }
 
             return primaryValues;
+        }
+
+        private static bool ContainsDifferentRuntimeType(object?[] items, Type itemType)
+        {
+            for (int index = 0; index < items.Length; index++)
+            {
+                if (items[index]?.GetType() != itemType) return true;
+            }
+
+            return false;
         }
 
         private static bool IsStaticallyAcyclic(Type type, HashSet<Type> visiting, HashSet<Type> visited)
@@ -1232,7 +1278,11 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
             PropertyInfo[] readable = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
                 .Where(property => property.GetIndexParameters().Length == 0 && property.CanRead)
                 .ToArray();
-            bool canMutate = readable.All(property => property.CanWrite);
+            // A getter-only diagnostic property that comparison already ignores must
+            // not force the entire object graph through the allocation-heavy legacy
+            // clone path. This is common on generated/client response contracts.
+            bool canMutate = readable.All(property =>
+                property.CanWrite || LegacyComparisonModelNormalizer.HasJsonIgnoreAttribute(property));
             return new TypePreparationPlan(
                 canMutate,
                 readable.Where(property => property.CanWrite)
