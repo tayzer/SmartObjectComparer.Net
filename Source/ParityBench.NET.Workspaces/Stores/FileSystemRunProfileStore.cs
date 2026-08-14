@@ -237,6 +237,11 @@ public sealed class FileSystemRunProfileStore : IRunProfileStore
                 ChunkSize = profile.LargeRun.ChunkSize,
                 DetailPageSize = profile.LargeRun.DetailPageSize,
                 ComparisonConcurrency = profile.LargeRun.ComparisonConcurrency,
+                MappingConcurrency = profile.LargeRun.MappingConcurrency,
+                FocusedContentConcurrency = profile.LargeRun.FocusedContentConcurrency,
+                WorkerGcMode = profile.LargeRun.WorkerGcMode,
+                ServerGcHeapCount = profile.LargeRun.ServerGcHeapCount,
+                PerformanceCalibrationMachineFingerprint = profile.LargeRun.PerformanceCalibrationMachineFingerprint,
                 ProgressUpdateItemInterval = profile.LargeRun.ProgressUpdateItemInterval,
                 ProgressUpdateMillisecondsInterval = profile.LargeRun.ProgressUpdateMillisecondsInterval,
                 RetentionMode = profile.RetentionModeOverride,
@@ -268,7 +273,12 @@ public sealed class FileSystemRunProfileStore : IRunProfileStore
                     detailPageSize: Report.DetailPageSize,
                     comparisonConcurrency: Report.ComparisonConcurrency,
                     progressUpdateItemInterval: Report.ProgressUpdateItemInterval,
-                    progressUpdateMillisecondsInterval: Report.ProgressUpdateMillisecondsInterval),
+                    progressUpdateMillisecondsInterval: Report.ProgressUpdateMillisecondsInterval,
+                    mappingConcurrency: Report.MappingConcurrency,
+                    focusedContentConcurrency: Report.FocusedContentConcurrency,
+                    workerGcMode: Report.WorkerGcMode,
+                    serverGcHeapCount: Report.ServerGcHeapCount,
+                    performanceCalibrationMachineFingerprint: Report.PerformanceCalibrationMachineFingerprint),
             Report?.RetentionMode,
             EndpointAHeaders,
             EndpointBHeaders);
@@ -313,6 +323,16 @@ public sealed class FileSystemRunProfileStore : IRunProfileStore
         public int DetailPageSize { get; set; } = new LargeRunOptions().DetailPageSize;
 
         public int? ComparisonConcurrency { get; set; }
+
+        public int? MappingConcurrency { get; set; }
+
+        public int? FocusedContentConcurrency { get; set; }
+
+        public WorkerGcMode WorkerGcMode { get; set; }
+
+        public int? ServerGcHeapCount { get; set; }
+
+        public string? PerformanceCalibrationMachineFingerprint { get; set; }
 
         public int ProgressUpdateItemInterval { get; set; } = new LargeRunOptions().ProgressUpdateItemInterval;
 

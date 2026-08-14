@@ -215,7 +215,16 @@ public sealed class RunResultsViewTests
                 TimeSpan.FromSeconds(1), TimeSpan.Zero, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(1)),
             processResourceMetrics: new RunProcessResourceMetrics(
                 TimeSpan.FromSeconds(4), 40, 10, 20 * 1024 * 1024, 30 * 1024 * 1024,
-                40 * 1024 * 1024, 1, 2, 3, 4));
+                40 * 1024 * 1024, 1, 2, 3, 4),
+            pipelineStageMetrics: new PipelineStageMetrics(
+                3, 2, 1, 6, 2, 1,
+                TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(1),
+                TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(6), TimeSpan.FromSeconds(7),
+                TimeSpan.FromSeconds(8), TimeSpan.FromSeconds(9), TimeSpan.FromSeconds(10), 6, 2, 1),
+            normalizationWorkMetrics: new NormalizationWorkMetrics(
+                TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(3), TimeSpan.Zero,
+                TimeSpan.FromSeconds(4), 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16),
+            runtimeMetrics: new RunRuntimeMetrics(true, 4, true, 32L * 1024 * 1024 * 1024, 16L * 1024 * 1024 * 1024));
         dataSource.Run = CreateCompletedRun(runId, metrics);
         dataSource.Summary = dataSource.Run.Summary;
 
@@ -225,6 +234,11 @@ public sealed class RunResultsViewTests
         StringAssert.Contains(component.Markup, "Compare queue wait (aggregate):");
         StringAssert.Contains(component.Markup, "Application Resources");
         StringAssert.Contains(component.Markup, "Process CPU:");
+        StringAssert.Contains(component.Markup, "Bounded Pipeline");
+        StringAssert.Contains(component.Markup, "Workers: map 3, compare 2, focused 1");
+        StringAssert.Contains(component.Markup, "Normalization Work");
+        StringAssert.Contains(component.Markup, "Restoration (aggregate):");
+        StringAssert.Contains(component.Markup, "GC mode: Server");
     }
 
 

@@ -238,7 +238,12 @@ public sealed class PluginPanelsTests
             detailPageSize: 200,
             comparisonConcurrency: 12,
             progressUpdateItemInterval: 50,
-            progressUpdateMillisecondsInterval: 250);
+            progressUpdateMillisecondsInterval: 250,
+            mappingConcurrency: 6,
+            focusedContentConcurrency: 4,
+            workerGcMode: WorkerGcMode.ServerFixed,
+            serverGcHeapCount: 3,
+            performanceCalibrationMachineFingerprint: "old-machine");
         await profileStore.SaveAsync(new RunProfile(
             "acme-qa",
             "Acme QA",
@@ -258,6 +263,12 @@ public sealed class PluginPanelsTests
         RunProfile? saved = await profileStore.GetAsync("acme-qa");
         Assert.IsNotNull(saved);
         Assert.AreEqual(16, saved.LargeRun.ComparisonConcurrency);
+        Assert.AreEqual(6, saved.LargeRun.MappingConcurrency);
+        Assert.AreEqual(4, saved.LargeRun.FocusedContentConcurrency);
+        Assert.AreEqual(WorkerGcMode.ServerFixed, saved.LargeRun.WorkerGcMode);
+        Assert.AreEqual(3, saved.LargeRun.ServerGcHeapCount);
+        Assert.IsFalse(string.IsNullOrWhiteSpace(saved.LargeRun.PerformanceCalibrationMachineFingerprint));
+        Assert.AreNotEqual("old-machine", saved.LargeRun.PerformanceCalibrationMachineFingerprint);
         Assert.AreEqual(original.LargeRunThreshold, saved.LargeRun.LargeRunThreshold);
         Assert.AreEqual(original.ChunkSize, saved.LargeRun.ChunkSize);
         Assert.AreEqual(original.DetailPageSize, saved.LargeRun.DetailPageSize);

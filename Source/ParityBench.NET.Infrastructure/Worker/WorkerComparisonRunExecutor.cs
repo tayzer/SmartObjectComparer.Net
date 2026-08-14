@@ -2,6 +2,7 @@ using System.Diagnostics;
 
 using Microsoft.Extensions.Options;
 
+using ParityBench.NET.Application.Observability;
 using ParityBench.NET.Application.Runs;
 using ParityBench.NET.Application.Runs.Worker;
 using ParityBench.NET.Domain.Runs;
@@ -21,11 +22,21 @@ namespace ParityBench.NET.Infrastructure.Worker;
 public sealed class WorkerComparisonRunExecutor : IComparisonRunExecutor
 {
     private readonly WorkerExecutionOptions options;
+    private readonly ObservabilityOptions observabilityOptions;
 
     public WorkerComparisonRunExecutor(IOptions<WorkerExecutionOptions> options)
+        : this(options, Options.Create(new ObservabilityOptions()))
+    {
+    }
+
+    public WorkerComparisonRunExecutor(
+        IOptions<WorkerExecutionOptions> options,
+        IOptions<ObservabilityOptions> observabilityOptions)
     {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(observabilityOptions);
         this.options = options.Value;
+        this.observabilityOptions = observabilityOptions.Value;
     }
 
     public async Task<RunResultSummary> ExecuteAsync(
@@ -40,7 +51,7 @@ public sealed class WorkerComparisonRunExecutor : IComparisonRunExecutor
 
         await using System.IO.Pipes.NamedPipeServerStream pipeServer = WorkerChannel.CreateServerPipe(pipeName);
 
-        using Process process = StartWorkerProcess(run.Id, pipeName);
+        using Process process = StartWorkerProcess(run.Id, pipeName, run.Options.LargeRun);
         StderrCollector stderr = new StderrCollector(process);
 
         try
@@ -151,7 +162,7 @@ public sealed class WorkerComparisonRunExecutor : IComparisonRunExecutor
         }
     }
 
-    private Process StartWorkerProcess(RunId runId, string pipeName)
+    private Process StartWorkerProcess(RunId runId, string pipeName, LargeRunOptions largeRun)
     {
         string workerPath = options.ResolveWorkerExecutablePath();
         ProcessStartInfo startInfo = new ProcessStartInfo
@@ -172,6 +183,9 @@ public sealed class WorkerComparisonRunExecutor : IComparisonRunExecutor
             startInfo.FileName = workerPath;
         }
 
+        ApplyGcConfiguration(startInfo, largeRun);
+        ApplyObservabilityConfiguration(startInfo, observabilityOptions);
+
         startInfo.ArgumentList.Add("--workspace");
         startInfo.ArgumentList.Add(options.WorkspaceRoot);
         startInfo.ArgumentList.Add("--run");
@@ -188,6 +202,66 @@ public sealed class WorkerComparisonRunExecutor : IComparisonRunExecutor
         }
 
         return process;
+    }
+
+    private static void ApplyGcConfiguration(ProcessStartInfo startInfo, LargeRunOptions options)
+    {
+        switch (options.WorkerGcMode)
+        {
+            case WorkerGcMode.Auto:
+                return;
+            case WorkerGcMode.Workstation:
+                startInfo.Environment["DOTNET_gcServer"] = "0";
+                startInfo.Environment.Remove("DOTNET_GCDynamicAdaptationMode");
+                startInfo.Environment.Remove("DOTNET_GCHeapCount");
+                return;
+            case WorkerGcMode.ServerAdaptive:
+                startInfo.Environment["DOTNET_gcServer"] = "1";
+                startInfo.Environment["DOTNET_GCDynamicAdaptationMode"] = "1";
+                startInfo.Environment.Remove("DOTNET_GCHeapCount");
+                return;
+            case WorkerGcMode.ServerFixed:
+                startInfo.Environment["DOTNET_gcServer"] = "1";
+                startInfo.Environment["DOTNET_GCDynamicAdaptationMode"] = "0";
+                startInfo.Environment["DOTNET_GCHeapCount"] = options.ServerGcHeapCount!.Value.ToString("x", System.Globalization.CultureInfo.InvariantCulture);
+                return;
+            default:
+                throw new InvalidOperationException($"Unsupported worker GC mode '{options.WorkerGcMode}'.");
+        }
+    }
+
+    private static void ApplyObservabilityConfiguration(
+        ProcessStartInfo startInfo,
+        ObservabilityOptions options)
+    {
+        const string prefix = "ParityBench__Observability__";
+        startInfo.Environment[$"{prefix}LogDurations"] = options.LogDurations.ToString();
+        startInfo.Environment[$"{prefix}LogExceptions"] = options.LogExceptions.ToString();
+        startInfo.Environment[$"{prefix}PersistDiagnostics"] = options.PersistDiagnostics.ToString();
+        startInfo.Environment[$"{prefix}SlowPathThresholdMs"] = options.SlowPathThresholdMs.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        startInfo.Environment[$"{prefix}MaxSlowPathEntries"] = options.MaxSlowPathEntries.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        startInfo.Environment[$"{prefix}MaxExceptionEntries"] = options.MaxExceptionEntries.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        startInfo.Environment[$"{prefix}EnableDetailedCompareTiming"] = options.EnableDetailedCompareTiming.ToString();
+        startInfo.Environment[$"{prefix}EnableStructuralFingerprintExport"] = options.EnableStructuralFingerprintExport.ToString();
+        startInfo.Environment[$"{prefix}CaptureNextRunForCalibration"] = options.CaptureNextRunForCalibration.ToString();
+
+        if (!string.IsNullOrWhiteSpace(options.StructuralFingerprintOutputDirectory))
+        {
+            startInfo.Environment[$"{prefix}StructuralFingerprintOutputDirectory"] = options.StructuralFingerprintOutputDirectory;
+        }
+        else
+        {
+            startInfo.Environment.Remove($"{prefix}StructuralFingerprintOutputDirectory");
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.CalibrationCaptureOutputDirectory))
+        {
+            startInfo.Environment[$"{prefix}CalibrationCaptureOutputDirectory"] = options.CalibrationCaptureOutputDirectory;
+        }
+        else
+        {
+            startInfo.Environment.Remove($"{prefix}CalibrationCaptureOutputDirectory");
+        }
     }
 
     private async Task TerminateAsync(Process process)

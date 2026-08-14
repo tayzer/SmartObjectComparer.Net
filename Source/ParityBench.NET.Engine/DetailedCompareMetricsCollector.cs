@@ -5,6 +5,7 @@ namespace ParityBench.NET.Engine;
 /// <summary>Thread-safe per-run counter. Created only when detailed timing is enabled.</summary>
 public sealed class DetailedCompareMetricsCollector
 {
+    private readonly StructuralFingerprintCollector? structuralFingerprint;
     private long artifactOpenTicks;
     private long artifactBytesRead;
     private long deserializationTicks;
@@ -17,6 +18,30 @@ public sealed class DetailedCompareMetricsCollector
     private long focusedContentTicks;
     private long compareQueueWaitTicks;
     private long executionBackpressureTicks;
+    private long normalizationTraversalTicks;
+    private long normalizationSortKeyTicks;
+    private long normalizationSortTicks;
+    private long normalizationFallbackTicks;
+    private long normalizationRestorationTicks;
+    private long objectNodes;
+    private long propertyNodes;
+    private long collectionNodes;
+    private long collectionItems;
+    private long scalarNodes;
+    private long scalarUtf8Bytes;
+    private long ignoredNodes;
+    private long sortKeyBytes;
+    private long maximumSortKeyBytes;
+    private long sortCollisionGroups;
+    private long mutableBranches;
+    private long legacyFallbackBranches;
+
+    public DetailedCompareMetricsCollector(bool collectStructuralFingerprint = false)
+    {
+        structuralFingerprint = collectStructuralFingerprint ? new StructuralFingerprintCollector() : null;
+    }
+
+    internal StructuralFingerprintCollector? StructuralFingerprint => structuralFingerprint;
 
     public void AddArtifactOpen(TimeSpan elapsed) => Add(ref artifactOpenTicks, elapsed);
     public void AddArtifactBytesRead(long bytes) => Interlocked.Add(ref artifactBytesRead, bytes);
@@ -30,6 +55,39 @@ public sealed class DetailedCompareMetricsCollector
     public void AddFocusedContent(TimeSpan elapsed) => Add(ref focusedContentTicks, elapsed);
     public void AddCompareQueueWait(TimeSpan elapsed) => Add(ref compareQueueWaitTicks, elapsed);
     public void AddExecutionBackpressure(TimeSpan elapsed) => Add(ref executionBackpressureTicks, elapsed);
+    public void AddNormalizationTraversal(TimeSpan elapsed) => Add(ref normalizationTraversalTicks, elapsed);
+    public void AddNormalizationSortKey(TimeSpan elapsed) => Add(ref normalizationSortKeyTicks, elapsed);
+    public void AddNormalizationSort(TimeSpan elapsed) => Add(ref normalizationSortTicks, elapsed);
+    public void AddNormalizationFallback(TimeSpan elapsed) => Add(ref normalizationFallbackTicks, elapsed);
+    public void AddNormalizationRestoration(TimeSpan elapsed) => Add(ref normalizationRestorationTicks, elapsed);
+    public void AddObjectNode(long count = 1) => Interlocked.Add(ref objectNodes, count);
+    public void AddPropertyNode(long count = 1) => Interlocked.Add(ref propertyNodes, count);
+    public void AddCollectionNode(long itemCount)
+    {
+        Interlocked.Increment(ref collectionNodes);
+        Interlocked.Add(ref collectionItems, itemCount);
+    }
+    public void AddScalarNode(long utf8Bytes)
+    {
+        Interlocked.Increment(ref scalarNodes);
+        Interlocked.Add(ref scalarUtf8Bytes, utf8Bytes);
+    }
+    public void AddIgnoredNode(long count = 1) => Interlocked.Add(ref ignoredNodes, count);
+    public void AddSortKeyBytes(long bytes)
+    {
+        Interlocked.Add(ref sortKeyBytes, bytes);
+        InterlockedExtensions.Max(ref maximumSortKeyBytes, bytes);
+    }
+    public void AddSortCollisionGroup(long count = 1) => Interlocked.Add(ref sortCollisionGroups, count);
+    public void AddMutableBranch(long count = 1) => Interlocked.Add(ref mutableBranches, count);
+    public void AddLegacyFallbackBranch(long count = 1) => Interlocked.Add(ref legacyFallbackBranches, count);
+
+    public void RecordStructureNode(ReadOnlySpan<char> path, Type type, int depth) =>
+        structuralFingerprint?.RecordNode(path, type, depth);
+
+    public void RecordCollectionLength(int count) => structuralFingerprint?.RecordCollection(count);
+    public void RecordScalarByteLength(int bytes) => structuralFingerprint?.RecordScalar(bytes);
+    public void RecordSortKeyByteLength(int bytes) => structuralFingerprint?.RecordSortKey(bytes);
 
     public DetailedCompareMetrics ToMetrics(TimeSpan comparisonDuration) 
     {
@@ -60,6 +118,25 @@ public sealed class DetailedCompareMetricsCollector
             Read(compareQueueWaitTicks),
             Read(executionBackpressureTicks));
     }
+
+    public NormalizationWorkMetrics ToNormalizationMetrics() => new(
+        Read(normalizationTraversalTicks),
+        Read(normalizationSortKeyTicks),
+        Read(normalizationSortTicks),
+        Read(normalizationFallbackTicks),
+        Read(normalizationRestorationTicks),
+        Interlocked.Read(ref objectNodes),
+        Interlocked.Read(ref propertyNodes),
+        Interlocked.Read(ref collectionNodes),
+        Interlocked.Read(ref collectionItems),
+        Interlocked.Read(ref scalarNodes),
+        Interlocked.Read(ref scalarUtf8Bytes),
+        Interlocked.Read(ref ignoredNodes),
+        Interlocked.Read(ref sortKeyBytes),
+        Interlocked.Read(ref maximumSortKeyBytes),
+        Interlocked.Read(ref sortCollisionGroups),
+        Interlocked.Read(ref mutableBranches),
+        Interlocked.Read(ref legacyFallbackBranches));
 
     private static void Add(ref long target, TimeSpan elapsed) => Interlocked.Add(ref target, elapsed.Ticks);
     private static TimeSpan Read(long ticks) => TimeSpan.FromTicks(Interlocked.Read(ref ticks));

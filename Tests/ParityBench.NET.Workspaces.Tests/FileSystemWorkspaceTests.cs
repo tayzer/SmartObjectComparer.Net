@@ -270,7 +270,18 @@ public sealed class FileSystemWorkspaceTests
                     TimeSpan.FromMilliseconds(7), TimeSpan.FromMilliseconds(8), TimeSpan.FromMilliseconds(9),
                     TimeSpan.FromMilliseconds(10), TimeSpan.FromMilliseconds(11), TimeSpan.FromMilliseconds(12)),
                 processResourceMetrics: new RunProcessResourceMetrics(
-                    TimeSpan.FromMilliseconds(13), 14, 15, 16, 17, 18, 19, 20, 21, 22)));
+                    TimeSpan.FromMilliseconds(13), 14, 15, 16, 17, 18, 19, 20, 21, 22),
+                pipelineStageMetrics: new PipelineStageMetrics(
+                    3, 4, 5, 6, 7, 8,
+                    TimeSpan.FromMilliseconds(9), TimeSpan.FromMilliseconds(10), TimeSpan.FromMilliseconds(11), TimeSpan.FromMilliseconds(12),
+                    TimeSpan.FromMilliseconds(13), TimeSpan.FromMilliseconds(14), TimeSpan.FromMilliseconds(15),
+                    TimeSpan.FromMilliseconds(16), TimeSpan.FromMilliseconds(17), TimeSpan.FromMilliseconds(18),
+                    19, 20, 21),
+                normalizationWorkMetrics: new NormalizationWorkMetrics(
+                    TimeSpan.FromMilliseconds(22), TimeSpan.FromMilliseconds(23), TimeSpan.FromMilliseconds(24),
+                    TimeSpan.FromMilliseconds(25), TimeSpan.FromMilliseconds(26),
+                    27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38),
+                runtimeMetrics: new RunRuntimeMetrics(true, 8, false, 39, 40)));
         ComparisonRun run = ComparisonRun
             .Create(new RunId("run-1"), CreateOptions())
             .Start()
@@ -290,6 +301,9 @@ public sealed class FileSystemWorkspaceTests
         Assert.AreEqual(42, loadedSummary.ExecutionMetrics?.DetailedCompareMetrics?.ArtifactBytesRead);
         Assert.AreEqual(TimeSpan.FromMilliseconds(4), loadedSummary.ExecutionMetrics?.DetailedCompareMetrics?.CompareNetObjectsTraversalDuration);
         Assert.AreEqual(22, loadedSummary.ExecutionMetrics?.ProcessResourceMetrics?.LogicalProcessorCount);
+        Assert.AreEqual(3, loadedSummary.ExecutionMetrics?.PipelineStageMetrics?.MappingConcurrency);
+        Assert.AreEqual(30, loadedSummary.ExecutionMetrics?.NormalizationWorkMetrics?.CollectionItemCount);
+        Assert.AreEqual(8, loadedSummary.ExecutionMetrics?.RuntimeMetrics?.ConfiguredServerGcHeapCount);
     }
 
     [TestMethod]

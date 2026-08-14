@@ -50,21 +50,37 @@ internal static class FocusedRawContentBuilder
             return result;
         }
 
-        FocusedContent? focusedA = await TryBuildFocusedContentAsync(result.ResponseA, ignorePaths, artifactStore, timing, cancellationToken).ConfigureAwait(false);
-        FocusedContent? focusedB = await TryBuildFocusedContentAsync(result.ResponseB, ignorePaths, artifactStore, timing, cancellationToken).ConfigureAwait(false);
-
-        if (focusedA is null || focusedB is null || (!focusedA.WasPruned && !focusedB.WasPruned))
+        Task<FocusedContent?> focusedATask = TryBuildFocusedContentAsync(result.ResponseA, ignorePaths, artifactStore, timing, cancellationToken);
+        Task<FocusedContent?> focusedBTask = TryBuildFocusedContentAsync(result.ResponseB, ignorePaths, artifactStore, timing, cancellationToken);
+        FocusedContent? focusedA = null;
+        FocusedContent? focusedB = null;
+        try
         {
-            return result;
+            await Task.WhenAll(focusedATask, focusedBTask).ConfigureAwait(false);
+            focusedA = await focusedATask.ConfigureAwait(false);
+            focusedB = await focusedBTask.ConfigureAwait(false);
+
+            if (focusedA is null || focusedB is null || (!focusedA.WasPruned && !focusedB.WasPruned))
+            {
+                return result;
+            }
+
+            focusedA = EnsureFormatted(focusedA);
+            focusedB = EnsureFormatted(focusedB);
+
+            Task<ResponseArtifactMetadata> responseATask = SaveFocusedResponseAsync(runId, result.RelativePath, result.ResponseA, focusedA.Content, artifactStore, cancellationToken);
+            Task<ResponseArtifactMetadata> responseBTask = SaveFocusedResponseAsync(runId, result.RelativePath, result.ResponseB, focusedB.Content, artifactStore, cancellationToken);
+            await Task.WhenAll(responseATask, responseBTask).ConfigureAwait(false);
+            ResponseArtifactMetadata focusedResponseA = await responseATask.ConfigureAwait(false);
+            ResponseArtifactMetadata focusedResponseB = await responseBTask.ConfigureAwait(false);
+
+            return result.WithFocusedRawContent(focusedResponseA, focusedResponseB, ignorePaths.Select(ToDisplayIgnorePath));
         }
-
-        focusedA = EnsureFormatted(focusedA);
-        focusedB = EnsureFormatted(focusedB);
-
-        ResponseArtifactMetadata focusedResponseA = await SaveFocusedResponseAsync(runId, result.RelativePath, result.ResponseA, focusedA.Content, artifactStore, cancellationToken).ConfigureAwait(false);
-        ResponseArtifactMetadata focusedResponseB = await SaveFocusedResponseAsync(runId, result.RelativePath, result.ResponseB, focusedB.Content, artifactStore, cancellationToken).ConfigureAwait(false);
-
-        return result.WithFocusedRawContent(focusedResponseA, focusedResponseB, ignorePaths.Select(ToDisplayIgnorePath));
+        finally
+        {
+            (focusedA ?? (focusedATask.Status == TaskStatus.RanToCompletion ? focusedATask.Result : null))?.Dispose();
+            (focusedB ?? (focusedBTask.Status == TaskStatus.RanToCompletion ? focusedBTask.Result : null))?.Dispose();
+        }
     }
 
 
@@ -102,6 +118,39 @@ internal static class FocusedRawContentBuilder
     {
         Stream opened = await artifactStore.OpenReadAsync(response.Artifact, cancellationToken).ConfigureAwait(false);
         await using Stream stream = timing is null ? opened : new CountingReadStream(opened, timing.AddArtifactBytesRead);
+        if (response.ContentLength is > 0 and <= 1024 * 1024)
+        {
+            int length = checked((int)response.ContentLength);
+            byte[] rented = ArrayPool<byte>.Shared.Rent(length);
+            PooledBufferOwner owner = new(rented);
+            try
+            {
+                int read = 0;
+                while (read < length)
+                {
+                    int count = await stream.ReadAsync(rented.AsMemory(read, length - read), cancellationToken).ConfigureAwait(false);
+                    if (count == 0) break;
+                    read += count;
+                }
+
+                ReadOnlyMemory<byte> pooledContent = rented.AsMemory(0, read);
+                if (pooledContent.Span.StartsWith(Utf8Bom)) pooledContent = pooledContent[Utf8Bom.Length..];
+                FocusedContent? pooledResult = TryPrune(pooledContent, response.ContentType, response.Artifact.ArtifactId, ignorePaths);
+                if (pooledResult is null)
+                {
+                    owner.Dispose();
+                    return null;
+                }
+
+                return pooledResult with { Owner = CombineOwners(pooledResult.Owner, owner) };
+            }
+            catch
+            {
+                owner.Dispose();
+                throw;
+            }
+        }
+
         using MemoryStream buffer = response.ContentLength is > 0 and <= int.MaxValue
             ? new MemoryStream((int)response.ContentLength)
             : new MemoryStream();
@@ -176,7 +225,7 @@ internal static class FocusedRawContentBuilder
                 return new FocusedContent(content, WasPruned: false, StructuredDocumentKind.Json, IsFormatted: false);
             }
 
-            ArrayBufferWriter<byte> output = new ArrayBufferWriter<byte>(Math.Min(content.Length, 64 * 1024));
+            using PooledOutputWriter output = new(Math.Min(content.Length, 64 * 1024));
             using Utf8JsonWriter writer = new Utf8JsonWriter(output, new JsonWriterOptions { Indented = true });
             int removedCount = WritePrunedJsonValue(ref reader, writer, string.Empty, matcher);
             if (removedCount == 0)
@@ -185,7 +234,8 @@ internal static class FocusedRawContentBuilder
             }
 
             writer.Flush();
-            return new FocusedContent(output.WrittenMemory, WasPruned: true, StructuredDocumentKind.Json, IsFormatted: true);
+            (ReadOnlyMemory<byte> written, IDisposable owner) = output.Detach();
+            return new FocusedContent(written, WasPruned: true, StructuredDocumentKind.Json, IsFormatted: true, owner);
         }
         catch (JsonException)
         {
@@ -500,5 +550,99 @@ internal static class FocusedRawContentBuilder
         ReadOnlyMemory<byte> Content,
         bool WasPruned,
         StructuredDocumentKind Kind,
-        bool IsFormatted);
+        bool IsFormatted,
+        IDisposable? Owner = null) : IDisposable
+    {
+        public void Dispose() => Owner?.Dispose();
+    }
+
+    private static IDisposable CombineOwners(IDisposable? first, IDisposable second) =>
+        first is null ? second : new CompositeOwner(first, second);
+
+    private sealed class PooledBufferOwner(byte[] buffer) : IDisposable
+    {
+        private byte[] ownedBuffer = buffer;
+
+        public void Dispose()
+        {
+            byte[] returned = Interlocked.Exchange(ref ownedBuffer, Array.Empty<byte>());
+            if (returned.Length > 0) ArrayPool<byte>.Shared.Return(returned, clearArray: true);
+        }
+    }
+
+    private sealed class CompositeOwner(IDisposable first, IDisposable second) : IDisposable
+    {
+        private IDisposable? firstOwner = first;
+        private IDisposable? secondOwner = second;
+
+        public void Dispose()
+        {
+            Interlocked.Exchange(ref firstOwner, null)?.Dispose();
+            Interlocked.Exchange(ref secondOwner, null)?.Dispose();
+        }
+    }
+
+    private sealed class PooledOutputWriter : IBufferWriter<byte>, IDisposable
+    {
+        private const int MaximumPooledLength = 1024 * 1024;
+        private byte[] buffer;
+        private bool pooled;
+        private int written;
+
+        public PooledOutputWriter(int initialCapacity)
+        {
+            pooled = initialCapacity <= MaximumPooledLength;
+            buffer = pooled
+                ? ArrayPool<byte>.Shared.Rent(Math.Max(256, initialCapacity))
+                : GC.AllocateUninitializedArray<byte>(initialCapacity);
+        }
+
+        public void Advance(int count) => written = checked(written + count);
+        public Memory<byte> GetMemory(int sizeHint = 0) { Ensure(sizeHint); return buffer.AsMemory(written); }
+        public Span<byte> GetSpan(int sizeHint = 0) { Ensure(sizeHint); return buffer.AsSpan(written); }
+
+        public (ReadOnlyMemory<byte> Content, IDisposable Owner) Detach()
+        {
+            byte[] detached = buffer;
+            int length = written;
+            bool detachedPooled = pooled;
+            buffer = Array.Empty<byte>();
+            written = 0;
+            pooled = false;
+            return (detached.AsMemory(0, length), new OutputBufferOwner(detached, detachedPooled));
+        }
+
+        public void Dispose()
+        {
+            byte[] returned = Interlocked.Exchange(ref buffer, Array.Empty<byte>());
+            if (pooled && returned.Length > 0) ArrayPool<byte>.Shared.Return(returned, clearArray: true);
+            pooled = false;
+            written = 0;
+        }
+
+        private void Ensure(int sizeHint)
+        {
+            int required = checked(written + Math.Max(1, sizeHint));
+            if (required <= buffer.Length) return;
+            int growth = Math.Max(required, buffer.Length <= int.MaxValue / 2 ? buffer.Length * 2 : int.MaxValue);
+            bool nextPooled = growth <= MaximumPooledLength;
+            byte[] replacement = nextPooled
+                ? ArrayPool<byte>.Shared.Rent(growth)
+                : GC.AllocateUninitializedArray<byte>(growth);
+            buffer.AsSpan(0, written).CopyTo(replacement);
+            if (pooled) ArrayPool<byte>.Shared.Return(buffer, clearArray: true);
+            buffer = replacement;
+            pooled = nextPooled;
+        }
+    }
+
+    private sealed class OutputBufferOwner(byte[] buffer, bool pooled) : IDisposable
+    {
+        private byte[] ownedBuffer = buffer;
+        public void Dispose()
+        {
+            byte[] returned = Interlocked.Exchange(ref ownedBuffer, Array.Empty<byte>());
+            if (pooled && returned.Length > 0) ArrayPool<byte>.Shared.Return(returned, clearArray: true);
+        }
+    }
 }

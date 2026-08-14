@@ -481,6 +481,9 @@ public sealed class FileSystemRunStore : IRunStore
             CompareFocusedContentDurationMilliseconds = metrics.CompareSubPhases?.FocusedContentDuration.TotalMilliseconds,
             DetailedCompareMetrics = metrics.DetailedCompareMetrics is null ? null : ToDto(metrics.DetailedCompareMetrics),
             ProcessResourceMetrics = metrics.ProcessResourceMetrics is null ? null : ToDto(metrics.ProcessResourceMetrics),
+            PipelineStageMetrics = metrics.PipelineStageMetrics is null ? null : ToDto(metrics.PipelineStageMetrics),
+            NormalizationWorkMetrics = metrics.NormalizationWorkMetrics is null ? null : ToDto(metrics.NormalizationWorkMetrics),
+            RuntimeMetrics = metrics.RuntimeMetrics is null ? null : ToDto(metrics.RuntimeMetrics),
         };
 
     private static DetailedCompareMetricsDto ToDto(DetailedCompareMetrics metrics) => new()
@@ -512,6 +515,59 @@ public sealed class FileSystemRunStore : IRunStore
         Gen1CollectionCount = metrics.Gen1CollectionCount,
         Gen2CollectionCount = metrics.Gen2CollectionCount,
         LogicalProcessorCount = metrics.LogicalProcessorCount,
+    };
+
+    private static PipelineStageMetricsDto ToDto(PipelineStageMetrics metrics) => new()
+    {
+        MappingConcurrency = metrics.MappingConcurrency,
+        ComparisonConcurrency = metrics.ComparisonConcurrency,
+        FocusedContentConcurrency = metrics.FocusedContentConcurrency,
+        ExecuteToMappingCapacity = metrics.ExecuteToMappingCapacity,
+        MappingToComparisonCapacity = metrics.MappingToComparisonCapacity,
+        ComparisonToFocusedCapacity = metrics.ComparisonToFocusedCapacity,
+        MappingWorkerDurationMilliseconds = metrics.MappingWorkerDuration.TotalMilliseconds,
+        ComparisonWorkerDurationMilliseconds = metrics.ComparisonWorkerDuration.TotalMilliseconds,
+        FocusedContentWorkerDurationMilliseconds = metrics.FocusedContentWorkerDuration.TotalMilliseconds,
+        DetailPersistenceDurationMilliseconds = metrics.DetailPersistenceDuration.TotalMilliseconds,
+        ExecuteToMappingQueueWaitDurationMilliseconds = metrics.ExecuteToMappingQueueWaitDuration.TotalMilliseconds,
+        MappingToComparisonQueueWaitDurationMilliseconds = metrics.MappingToComparisonQueueWaitDuration.TotalMilliseconds,
+        ComparisonToFocusedQueueWaitDurationMilliseconds = metrics.ComparisonToFocusedQueueWaitDuration.TotalMilliseconds,
+        ExecutionBackpressureDurationMilliseconds = metrics.ExecutionBackpressureDuration.TotalMilliseconds,
+        MappingBackpressureDurationMilliseconds = metrics.MappingBackpressureDuration.TotalMilliseconds,
+        ComparisonBackpressureDurationMilliseconds = metrics.ComparisonBackpressureDuration.TotalMilliseconds,
+        MaximumExecuteToMappingDepth = metrics.MaximumExecuteToMappingDepth,
+        MaximumMappingToComparisonDepth = metrics.MaximumMappingToComparisonDepth,
+        MaximumComparisonToFocusedDepth = metrics.MaximumComparisonToFocusedDepth,
+    };
+
+    private static NormalizationWorkMetricsDto ToDto(NormalizationWorkMetrics metrics) => new()
+    {
+        GraphTraversalDurationMilliseconds = metrics.GraphTraversalDuration.TotalMilliseconds,
+        SortKeyConstructionDurationMilliseconds = metrics.SortKeyConstructionDuration.TotalMilliseconds,
+        CollectionSortDurationMilliseconds = metrics.CollectionSortDuration.TotalMilliseconds,
+        LegacyFallbackDurationMilliseconds = metrics.LegacyFallbackDuration.TotalMilliseconds,
+        RestorationDurationMilliseconds = metrics.RestorationDuration.TotalMilliseconds,
+        ObjectNodeCount = metrics.ObjectNodeCount,
+        PropertyNodeCount = metrics.PropertyNodeCount,
+        CollectionNodeCount = metrics.CollectionNodeCount,
+        CollectionItemCount = metrics.CollectionItemCount,
+        ScalarNodeCount = metrics.ScalarNodeCount,
+        ScalarUtf8Bytes = metrics.ScalarUtf8Bytes,
+        IgnoredNodeCount = metrics.IgnoredNodeCount,
+        SortKeyBytes = metrics.SortKeyBytes,
+        MaximumSortKeyBytes = metrics.MaximumSortKeyBytes,
+        SortCollisionGroupCount = metrics.SortCollisionGroupCount,
+        MutableBranchCount = metrics.MutableBranchCount,
+        LegacyFallbackBranchCount = metrics.LegacyFallbackBranchCount,
+    };
+
+    private static RunRuntimeMetricsDto ToDto(RunRuntimeMetrics metrics) => new()
+    {
+        IsServerGc = metrics.IsServerGc,
+        ConfiguredServerGcHeapCount = metrics.ConfiguredServerGcHeapCount,
+        DynamicAdaptationEnabled = metrics.DynamicAdaptationEnabled,
+        TotalAvailableMemoryBytes = metrics.TotalAvailableMemoryBytes,
+        MemoryBudgetBytes = metrics.MemoryBudgetBytes,
     };
 
     private RunDetailReferenceDto ToDto(RunDetailReference reference) =>
@@ -605,6 +661,11 @@ public sealed class FileSystemRunStore : IRunStore
             ChunkSize = options.ChunkSize,
             DetailPageSize = options.DetailPageSize,
             ComparisonConcurrency = options.ComparisonConcurrency,
+            MappingConcurrency = options.MappingConcurrency,
+            FocusedContentConcurrency = options.FocusedContentConcurrency,
+            WorkerGcMode = options.WorkerGcMode,
+            ServerGcHeapCount = options.ServerGcHeapCount,
+            PerformanceCalibrationMachineFingerprint = options.PerformanceCalibrationMachineFingerprint,
             ProgressUpdateItemInterval = options.ProgressUpdateItemInterval,
             ProgressUpdateMillisecondsInterval = options.ProgressUpdateMillisecondsInterval,
         };
@@ -616,7 +677,12 @@ public sealed class FileSystemRunStore : IRunStore
             dto.DetailPageSize <= 0 ? 250 : dto.DetailPageSize,
             dto.ComparisonConcurrency,
             dto.ProgressUpdateItemInterval <= 0 ? 100 : dto.ProgressUpdateItemInterval,
-            dto.ProgressUpdateMillisecondsInterval <= 0 ? 500 : dto.ProgressUpdateMillisecondsInterval);
+            dto.ProgressUpdateMillisecondsInterval <= 0 ? 500 : dto.ProgressUpdateMillisecondsInterval,
+            dto.MappingConcurrency,
+            dto.FocusedContentConcurrency,
+            dto.WorkerGcMode,
+            dto.ServerGcHeapCount,
+            dto.PerformanceCalibrationMachineFingerprint);
     private ContractProfileSelection FromDto(ContractProfileSelectionDto dto) =>
         new ContractProfileSelection(dto.ProfileId, dto.ProfileVersion, dto.Options);
 
@@ -682,7 +748,10 @@ public sealed class FileSystemRunStore : IRunStore
                     TimeSpan.FromMilliseconds(dto.CompareFocusedContentDurationMilliseconds ?? 0)),
             dto.ComparisonConcurrency,
             dto.DetailedCompareMetrics is null ? null : FromDto(dto.DetailedCompareMetrics),
-            dto.ProcessResourceMetrics is null ? null : FromDto(dto.ProcessResourceMetrics));
+            dto.ProcessResourceMetrics is null ? null : FromDto(dto.ProcessResourceMetrics),
+            dto.PipelineStageMetrics is null ? null : FromDto(dto.PipelineStageMetrics),
+            dto.NormalizationWorkMetrics is null ? null : FromDto(dto.NormalizationWorkMetrics),
+            dto.RuntimeMetrics is null ? null : FromDto(dto.RuntimeMetrics));
 
     private static DetailedCompareMetrics FromDto(DetailedCompareMetricsDto dto) => new(
         TimeSpan.FromMilliseconds(dto.ArtifactOpenDurationMilliseconds),
@@ -710,6 +779,53 @@ public sealed class FileSystemRunStore : IRunStore
         Math.Max(0, dto.Gen1CollectionCount),
         Math.Max(0, dto.Gen2CollectionCount),
         Math.Max(0, dto.LogicalProcessorCount));
+
+    private static PipelineStageMetrics FromDto(PipelineStageMetricsDto dto) => new(
+        Math.Max(0, dto.MappingConcurrency),
+        Math.Max(0, dto.ComparisonConcurrency),
+        Math.Max(0, dto.FocusedContentConcurrency),
+        Math.Max(0, dto.ExecuteToMappingCapacity),
+        Math.Max(0, dto.MappingToComparisonCapacity),
+        Math.Max(0, dto.ComparisonToFocusedCapacity),
+        TimeSpan.FromMilliseconds(dto.MappingWorkerDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.ComparisonWorkerDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.FocusedContentWorkerDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.DetailPersistenceDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.ExecuteToMappingQueueWaitDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.MappingToComparisonQueueWaitDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.ComparisonToFocusedQueueWaitDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.ExecutionBackpressureDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.MappingBackpressureDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.ComparisonBackpressureDurationMilliseconds),
+        Math.Max(0, dto.MaximumExecuteToMappingDepth),
+        Math.Max(0, dto.MaximumMappingToComparisonDepth),
+        Math.Max(0, dto.MaximumComparisonToFocusedDepth));
+
+    private static NormalizationWorkMetrics FromDto(NormalizationWorkMetricsDto dto) => new(
+        TimeSpan.FromMilliseconds(dto.GraphTraversalDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.SortKeyConstructionDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.CollectionSortDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.LegacyFallbackDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.RestorationDurationMilliseconds),
+        Math.Max(0, dto.ObjectNodeCount),
+        Math.Max(0, dto.PropertyNodeCount),
+        Math.Max(0, dto.CollectionNodeCount),
+        Math.Max(0, dto.CollectionItemCount),
+        Math.Max(0, dto.ScalarNodeCount),
+        Math.Max(0, dto.ScalarUtf8Bytes),
+        Math.Max(0, dto.IgnoredNodeCount),
+        Math.Max(0, dto.SortKeyBytes),
+        Math.Max(0, dto.MaximumSortKeyBytes),
+        Math.Max(0, dto.SortCollisionGroupCount),
+        Math.Max(0, dto.MutableBranchCount),
+        Math.Max(0, dto.LegacyFallbackBranchCount));
+
+    private static RunRuntimeMetrics FromDto(RunRuntimeMetricsDto dto) => new(
+        dto.IsServerGc,
+        dto.ConfiguredServerGcHeapCount,
+        dto.DynamicAdaptationEnabled,
+        Math.Max(0, dto.TotalAvailableMemoryBytes),
+        Math.Max(0, dto.MemoryBudgetBytes));
 
     private RunDetailReference FromDto(RunDetailReferenceDto dto) =>
         new RunDetailReference(

@@ -2,9 +2,11 @@ using System.Collections;
 using System.Collections.Concurrent;
 using System.Buffers;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -162,7 +164,7 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
         ComparisonModelPreparation prepared = Time(
             timing,
             static (c, e) => c.AddNormalization(e),
-            () => ComparisonModelPreparation.Create(modelA, modelB, options, rules));
+            () => ComparisonModelPreparation.Create(modelA, modelB, options, rules, timing));
         try
         {
             ComparisonResult comparisonResult = Time(timing, static (c, e) => c.AddCompareNetObjects(e), () => compareLogic.Compare(prepared.ModelA, prepared.ModelB));
@@ -580,7 +582,7 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
 
         public bool RequiresPreparation { get; }
 
-        public bool ShouldIgnorePath(string path)
+        public bool ShouldIgnorePath(ReadOnlySpan<char> path)
         {
             foreach (PreparedPathMatcher matcher in ignoredPaths)
             {
@@ -590,7 +592,7 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
             return false;
         }
 
-        public bool ShouldIgnoreChild(string parentPath, string propertyName)
+        public bool ShouldIgnoreChild(ReadOnlySpan<char> parentPath, string propertyName)
         {
             foreach (PreparedPathMatcher matcher in ignoredPaths)
             {
@@ -612,7 +614,7 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
             return false;
         }
 
-        public bool ShouldIgnoreCollectionElement(string parentPath, int index)
+        public bool ShouldIgnoreCollectionElement(ReadOnlySpan<char> parentPath, int index)
         {
             foreach (PreparedPathMatcher matcher in ignoredPaths)
             {
@@ -622,9 +624,9 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
             return false;
         }
 
-        public bool ShouldIgnoreSmartPath(string path)
+        public bool ShouldIgnoreSmartPath(ReadOnlySpan<char> path)
         {
-            if (string.IsNullOrWhiteSpace(path))
+            if (path.IsEmpty || path.IsWhiteSpace())
             {
                 return false;
             }
@@ -641,7 +643,7 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
 
             foreach (Regex pattern in smartNamePatterns)
             {
-                if (pattern.IsMatch(path))
+                if (pattern.IsMatch(path.ToString()))
                 {
                     return true;
                 }
@@ -650,9 +652,9 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
             return false;
         }
 
-        private static ReadOnlySpan<char> GetPreparedLeafPropertyName(string path)
+        private static ReadOnlySpan<char> GetPreparedLeafPropertyName(ReadOnlySpan<char> path)
         {
-            ReadOnlySpan<char> leaf = path.AsSpan(path.LastIndexOf('.') + 1);
+            ReadOnlySpan<char> leaf = path[(path.LastIndexOf('.') + 1)..];
             int collectionIndex = leaf.IndexOf('[');
             return collectionIndex < 0 ? leaf : leaf[..collectionIndex];
         }
@@ -706,7 +708,7 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
             }
         }
 
-        public bool IsMatch(string candidate)
+        public bool IsMatch(ReadOnlySpan<char> candidate)
         {
             if (hasCollectionWildcard)
             {
@@ -720,10 +722,10 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
                 return true;
             }
 
-            return wildcard?.IsMatch(candidate) == true;
+            return wildcard?.IsMatch(candidate.ToString()) == true;
         }
 
-        public bool IsDirectChildMatch(string parentPath, string propertyName)
+        public bool IsDirectChildMatch(ReadOnlySpan<char> parentPath, string propertyName)
         {
             int separatorIndex = path.LastIndexOf('.');
             if (separatorIndex < 0
@@ -738,7 +740,7 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
                 : parentPattern.Equals(parentPath, StringComparison.OrdinalIgnoreCase);
         }
 
-        public bool IsCollectionElementMatch(string parentPath, int index)
+        public bool IsCollectionElementMatch(ReadOnlySpan<char> parentPath, int index)
         {
             if (!hasCollectionWildcard || !path.EndsWith("[*]", StringComparison.Ordinal))
             {
@@ -799,10 +801,15 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
     private sealed class ComparisonModelPreparation : IDisposable
     {
         private static readonly ConcurrentDictionary<Type, TypePreparationPlan> TypePlans = new();
-        private readonly List<ModelMutation> mutations = new();
+        private readonly SegmentedMutationLog mutations = new();
+        private readonly DetailedCompareMetricsCollector? timing;
+        private readonly PreparationWorkTiming? workTiming;
+        private bool disposed;
 
-        private ComparisonModelPreparation()
+        private ComparisonModelPreparation(DetailedCompareMetricsCollector? timing)
         {
+            this.timing = timing;
+            workTiming = timing is null ? null : new PreparationWorkTiming();
             ModelA = null!;
             ModelB = null!;
         }
@@ -816,19 +823,52 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
                 return;
             }
 
-            Dictionary<object, object> visitedA = new(ReferenceEqualityComparer.Instance);
-            Dictionary<object, object> visitedB = new(ReferenceEqualityComparer.Instance);
-            ModelA = PrepareValue(modelA, string.Empty, options, rules, visitedA) ?? modelA;
-            ModelB = PrepareValue(modelB, string.Empty, options, rules, visitedB) ?? modelB;
+            Stopwatch? stopwatch = timing is null ? null : Stopwatch.StartNew();
+            try
+            {
+                Dictionary<object, object> visitedA = ObjectMapPool.Rent();
+                Dictionary<object, object> visitedB = ObjectMapPool.Rent();
+                try
+                {
+                    using PathCursor path = new();
+                    ModelA = PrepareValue(modelA, path, options, rules, visitedA) ?? modelA;
+                    ModelB = PrepareValue(modelB, path, options, rules, visitedB) ?? modelB;
+                }
+                finally
+                {
+                    ObjectMapPool.Return(visitedA);
+                    ObjectMapPool.Return(visitedB);
+                }
+            }
+            finally
+            {
+                if (stopwatch is not null)
+                {
+                    stopwatch.Stop();
+                    TimeSpan classified = workTiming!.SortKeyDuration
+                        + workTiming.SortDuration
+                        + workTiming.FallbackDuration;
+                    timing!.AddNormalizationTraversal(stopwatch.Elapsed > classified ? stopwatch.Elapsed - classified : TimeSpan.Zero);
+                    timing.AddNormalizationSortKey(workTiming.SortKeyDuration);
+                    timing.AddNormalizationSort(workTiming.SortDuration);
+                    timing.AddNormalizationFallback(workTiming.FallbackDuration);
+                }
+            }
         }
 
         public object ModelA { get; private set; }
 
         public object ModelB { get; private set; }
 
-        public static ComparisonModelPreparation Create(object modelA, object modelB, ComparisonOptions options, PreparedComparisonRules rules)
+
+        public static ComparisonModelPreparation Create(
+            object modelA,
+            object modelB,
+            ComparisonOptions options,
+            PreparedComparisonRules rules,
+            DetailedCompareMetricsCollector? timing)
         {
-            ComparisonModelPreparation preparation = new();
+            ComparisonModelPreparation preparation = new(timing);
             try
             {
                 preparation.Initialize(modelA, modelB, options, rules);
@@ -843,17 +883,26 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
 
         public void Dispose()
         {
-            for (int index = mutations.Count - 1; index >= 0; index--)
+            if (disposed) return;
+            disposed = true;
+            Stopwatch? stopwatch = timing is null ? null : Stopwatch.StartNew();
+            try
             {
-                mutations[index].Restore();
+                mutations.RestoreAndReturn();
             }
-
-            mutations.Clear();
+            finally
+            {
+                if (stopwatch is not null)
+                {
+                    stopwatch.Stop();
+                    timing!.AddNormalizationRestoration(stopwatch.Elapsed);
+                }
+            }
         }
 
         private object? PrepareValue(
             object? value,
-            string path,
+            PathCursor path,
             ComparisonOptions options,
             PreparedComparisonRules rules,
             Dictionary<object, object> visited)
@@ -863,13 +912,19 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
                 return value;
             }
 
-            if (rules.ShouldIgnorePath(path) || rules.ShouldIgnoreSmartPath(path))
+            timing?.RecordStructureNode(path.Value, value.GetType(), path.Depth);
+
+            if (rules.ShouldIgnorePath(path.Value) || rules.ShouldIgnoreSmartPath(path.Value))
             {
+                timing?.AddIgnoredNode();
                 return LegacyComparisonModelNormalizer.GetDefaultValue(value.GetType());
             }
 
             if (LegacyComparisonModelNormalizer.IsSimpleValue(value.GetType()))
             {
+                int scalarBytes = GetScalarUtf8Length(value);
+                timing?.AddScalarNode(scalarBytes);
+                timing?.RecordScalarByteLength(scalarBytes);
                 return value;
             }
 
@@ -896,7 +951,8 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
 
             if (value is IEnumerable && value is not string)
             {
-                object clone = LegacyComparisonModelNormalizer.NormalizeBranch(value, path, options);
+                timing?.AddLegacyFallbackBranch();
+                object clone = NormalizeFallback(value, path, options);
                 visited[value] = clone;
                 return clone;
             }
@@ -904,25 +960,31 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
             TypePreparationPlan typePlan = TypePlans.GetOrAdd(type, static candidate => TypePreparationPlan.Create(candidate));
             if (!typePlan.CanMutateInPlace)
             {
-                object clone = LegacyComparisonModelNormalizer.NormalizeBranch(value, path, options);
+                timing?.AddLegacyFallbackBranch();
+                object clone = NormalizeFallback(value, path, options);
                 visited[value] = clone;
                 return clone;
             }
 
             visited[value] = value;
+            timing?.AddObjectNode();
+            timing?.AddMutableBranch();
             foreach (PreparedProperty property in typePlan.Properties)
             {
+                timing?.AddPropertyNode();
                 object? original = property.Get(value);
                 object? prepared = property.IsJsonIgnored
                     || rules.ShouldIgnoreSmartPropertyName(property.Name)
-                    || rules.ShouldIgnoreChild(path, property.Name)
+                    || rules.ShouldIgnoreChild(path.Value, property.Name)
                     ? LegacyComparisonModelNormalizer.GetDefaultValue(property.PropertyType)
-                    : PrepareValue(
-                        original,
-                        string.IsNullOrWhiteSpace(path) ? property.Name : $"{path}.{property.Name}",
-                        options,
-                        rules,
-                        visited);
+                    : PrepareChildProperty(original, property.Name, path, options, rules, visited);
+
+                if (property.IsJsonIgnored
+                    || rules.ShouldIgnoreSmartPropertyName(property.Name)
+                    || rules.ShouldIgnoreChild(path.Value, property.Name))
+                {
+                    timing?.AddIgnoredNode();
+                }
 
                 if (!ReferenceEquals(original, prepared) && !Equals(original, prepared))
                 {
@@ -934,57 +996,81 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
             return value;
         }
 
-        private object PrepareArray(Array array, string path, ComparisonOptions options, PreparedComparisonRules rules, Dictionary<object, object> visited)
+        private object? PrepareChildProperty(
+            object? value,
+            string propertyName,
+            PathCursor path,
+            ComparisonOptions options,
+            PreparedComparisonRules rules,
+            Dictionary<object, object> visited)
         {
-            object?[] snapshot = array.Cast<object?>().ToArray();
+            int restoreLength = path.PushProperty(propertyName);
+            try
+            {
+                return PrepareValue(value, path, options, rules, visited);
+            }
+            finally
+            {
+                path.Restore(restoreLength);
+            }
+        }
+
+        private object NormalizeFallback(object value, PathCursor path, ComparisonOptions options)
+        {
+            if (workTiming is null) return LegacyComparisonModelNormalizer.NormalizeBranch(value, path.ToString(), options);
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            try
+            {
+                return LegacyComparisonModelNormalizer.NormalizeBranch(value, path.ToString(), options);
+            }
+            finally
+            {
+                stopwatch.Stop();
+                workTiming.AddFallback(stopwatch.Elapsed);
+            }
+        }
+
+        private object PrepareArray(Array array, PathCursor path, ComparisonOptions options, PreparedComparisonRules rules, Dictionary<object, object> visited)
+        {
+            PooledSnapshot<object?> snapshot = PooledSnapshot<object?>.Rent(array.Length);
+            for (int index = 0; index < array.Length; index++) snapshot.Buffer[index] = array.GetValue(index);
             mutations.Add(ModelMutation.ForArray(array, snapshot));
             visited[array] = array;
-            object?[] prepared = new object?[snapshot.Length];
-            for (int index = 0; index < snapshot.Length; index++)
-            {
-                prepared[index] = PrepareCollectionItem(snapshot[index], path, index, options, rules, visited);
-            }
+            timing?.AddCollectionNode(snapshot.Count);
+            timing?.RecordCollectionLength(snapshot.Count);
+            using PooledSnapshot<object?> prepared = PooledSnapshot<object?>.Rent(snapshot.Count);
+            for (int index = 0; index < snapshot.Count; index++)
+                prepared.Buffer[index] = PrepareCollectionItem(snapshot.Buffer[index], path, index, options, rules, visited);
 
-            if (rules.IgnoreCollectionOrder)
-            {
-                SortPreparedItems(prepared);
-            }
+            if (rules.IgnoreCollectionOrder) SortPreparedItems(prepared.Buffer, prepared.Count);
 
-            for (int index = 0; index < prepared.Length; index++)
-            {
-                array.SetValue(prepared[index], index);
-            }
+            for (int index = 0; index < prepared.Count; index++) array.SetValue(prepared.Buffer[index], index);
 
             return array;
         }
 
-        private object PrepareList(IList list, string path, ComparisonOptions options, PreparedComparisonRules rules, Dictionary<object, object> visited)
+        private object PrepareList(IList list, PathCursor path, ComparisonOptions options, PreparedComparisonRules rules, Dictionary<object, object> visited)
         {
-            object?[] snapshot = list.Cast<object?>().ToArray();
+            PooledSnapshot<object?> snapshot = PooledSnapshot<object?>.Rent(list.Count);
+            for (int index = 0; index < list.Count; index++) snapshot.Buffer[index] = list[index];
             mutations.Add(ModelMutation.ForList(list, snapshot));
             visited[list] = list;
-            object?[] prepared = new object?[snapshot.Length];
-            for (int index = 0; index < snapshot.Length; index++)
-            {
-                prepared[index] = PrepareCollectionItem(snapshot[index], path, index, options, rules, visited);
-            }
+            timing?.AddCollectionNode(snapshot.Count);
+            timing?.RecordCollectionLength(snapshot.Count);
+            using PooledSnapshot<object?> prepared = PooledSnapshot<object?>.Rent(snapshot.Count);
+            for (int index = 0; index < snapshot.Count; index++)
+                prepared.Buffer[index] = PrepareCollectionItem(snapshot.Buffer[index], path, index, options, rules, visited);
 
-            if (rules.IgnoreCollectionOrder)
-            {
-                SortPreparedItems(prepared);
-            }
+            if (rules.IgnoreCollectionOrder) SortPreparedItems(prepared.Buffer, prepared.Count);
 
-            for (int index = 0; index < prepared.Length; index++)
-            {
-                list[index] = prepared[index];
-            }
+            for (int index = 0; index < prepared.Count; index++) list[index] = prepared.Buffer[index];
 
             return list;
         }
 
         private object? PrepareCollectionItem(
             object? item,
-            string parentPath,
+            PathCursor path,
             int index,
             ComparisonOptions options,
             PreparedComparisonRules rules,
@@ -998,79 +1084,137 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
             Type itemType = item.GetType();
             if (LegacyComparisonModelNormalizer.IsSimpleValue(itemType))
             {
-                return rules.ShouldIgnoreCollectionElement(parentPath, index)
-                    ? LegacyComparisonModelNormalizer.GetDefaultValue(itemType)
-                    : item;
+                if (rules.ShouldIgnoreCollectionElement(path.Value, index))
+                {
+                    timing?.AddIgnoredNode();
+                    return LegacyComparisonModelNormalizer.GetDefaultValue(itemType);
+                }
+
+                int scalarBytes = GetScalarUtf8Length(item);
+                timing?.AddScalarNode(scalarBytes);
+                timing?.RecordScalarByteLength(scalarBytes);
+                return item;
             }
 
-            return PrepareValue(item, $"{parentPath}[{index}]", options, rules, visited);
+            int restoreLength = path.PushIndex(index);
+            try
+            {
+                return PrepareValue(item, path, options, rules, visited);
+            }
+            finally
+            {
+                path.Restore(restoreLength);
+            }
         }
 
-        private object PrepareDictionary(IDictionary dictionary, string path, ComparisonOptions options, PreparedComparisonRules rules, Dictionary<object, object> visited)
+        private object PrepareDictionary(IDictionary dictionary, PathCursor path, ComparisonOptions options, PreparedComparisonRules rules, Dictionary<object, object> visited)
         {
-            List<DictionaryEntry> entries = new(dictionary.Count);
+            PooledSnapshot<DictionaryEntry> snapshot = PooledSnapshot<DictionaryEntry>.Rent(dictionary.Count);
+            int entryIndex = 0;
             foreach (DictionaryEntry entry in dictionary)
             {
-                entries.Add(entry);
+                snapshot.Buffer[entryIndex++] = entry;
             }
 
-            DictionaryEntry[] snapshot = entries.ToArray();
             mutations.Add(ModelMutation.ForDictionary(dictionary, snapshot));
             visited[dictionary] = dictionary;
-            foreach (DictionaryEntry entry in snapshot)
+            timing?.AddCollectionNode(snapshot.Count);
+            timing?.RecordCollectionLength(snapshot.Count);
+            for (int index = 0; index < snapshot.Count; index++)
             {
+                DictionaryEntry entry = snapshot.Buffer[index];
                 string childName = Convert.ToString(entry.Key) ?? string.Empty;
                 object? entryValue = entry.Value;
                 if (entryValue is not null
                     && LegacyComparisonModelNormalizer.IsSimpleValue(entryValue.GetType())
-                    && !rules.ShouldIgnoreChild(path, childName)
+                    && !rules.ShouldIgnoreChild(path.Value, childName)
                     && !rules.ShouldIgnoreSmartPropertyName(childName))
                 {
+                    int scalarBytes = GetScalarUtf8Length(entryValue);
+                    timing?.AddScalarNode(scalarBytes);
+                    timing?.RecordScalarByteLength(scalarBytes);
                     continue;
                 }
 
-                string childPath = string.IsNullOrWhiteSpace(path) ? childName : $"{path}.{childName}";
-                dictionary[entry.Key] = PrepareValue(entryValue, childPath, options, rules, visited);
+                int restoreLength = path.PushProperty(childName);
+                try
+                {
+                    dictionary[entry.Key] = PrepareValue(entryValue, path, options, rules, visited);
+                }
+                finally
+                {
+                    path.Restore(restoreLength);
+                }
             }
 
             return dictionary;
         }
 
-        private static void SortPreparedItems(object?[] items)
+        private void SortPreparedItems(object?[] items, int count)
         {
-            if (items.Length < 2)
+            if (count < 2)
             {
                 return;
             }
 
             try
             {
-                object?[]? primaryValues = TryGetPrimarySortValues(items);
-                using PooledSortKeyBatch keys = PooledSortKeyBatch.Create(primaryValues ?? items);
-                keys.SortInto(items, resolveCollisionsWith: primaryValues is null ? null : (object?[])items.Clone());
+                using PooledSnapshot<object?>? primaryValues = TryGetPrimarySortValues(items, count);
+                using PooledSortKeyBatch keys = PooledSortKeyBatch.Create(primaryValues?.Buffer ?? items, count, timing, workTiming);
+                long sortKeyTicksBefore = workTiming?.SortKeyTicks ?? 0;
+                Stopwatch? sortStopwatch = workTiming is null ? null : Stopwatch.StartNew();
+                PooledSnapshot<object?>? originals = primaryValues is null ? null : PooledSnapshot<object?>.Copy(items, count);
+                try
+                {
+                    keys.SortInto(items, resolveCollisionsWith: originals?.Buffer);
+                }
+                finally
+                {
+                    originals?.Dispose();
+                }
+                if (sortStopwatch is not null)
+                {
+                    sortStopwatch.Stop();
+                    long nestedSortKeyTicks = workTiming!.SortKeyTicks - sortKeyTicksBefore;
+                    workTiming.AddSort(TimeSpan.FromTicks(Math.Max(0, sortStopwatch.ElapsedTicks - nestedSortKeyTicks)));
+                }
             }
             catch (Exception ex) when (ex is NotSupportedException or JsonException or InvalidOperationException)
             {
-                using PooledSortKeySet keys = new(items);
-                object?[] original = (object?[])items.Clone();
-                int[] order = Enumerable.Range(0, items.Length).ToArray();
-                Array.Sort(order, (left, right) =>
+                Stopwatch? fallbackStopwatch = workTiming is null ? null : Stopwatch.StartNew();
+                using PooledSortKeySet keys = new(items, count);
+                using PooledSnapshot<object?> original = PooledSnapshot<object?>.Copy(items, count);
+                int[] order = ArrayPool<int>.Shared.Rent(count);
+                try
                 {
-                    int comparison = PooledSortKeyComparer.Instance.Compare(keys.Items[left], keys.Items[right]);
-                    return comparison != 0 ? comparison : left.CompareTo(right);
-                });
-                for (int index = 0; index < order.Length; index++) { items[index] = original[order[index]]; }
+                    for (int index = 0; index < count; index++) order[index] = index;
+                    Array.Sort(order, 0, count, Comparer<int>.Create((left, right) =>
+                    {
+                        int comparison = PooledSortKeyComparer.Instance.Compare(keys.Items[left], keys.Items[right]);
+                        return comparison != 0 ? comparison : left.CompareTo(right);
+                    }));
+                    for (int index = 0; index < count; index++) items[index] = original.Buffer[order[index]];
+                }
+                finally
+                {
+                    ArrayPool<int>.Shared.Return(order, clearArray: true);
+                }
+                if (fallbackStopwatch is not null)
+                {
+                    fallbackStopwatch.Stop();
+                    workTiming!.AddFallback(fallbackStopwatch.Elapsed);
+                }
             }
         }
 
-        private static object?[]? TryGetPrimarySortValues(object?[] items)
+        private static PooledSnapshot<object?>? TryGetPrimarySortValues(object?[] items, int count)
         {
             Type? itemType = items[0]?.GetType();
             if (itemType is null
                 || LegacyComparisonModelNormalizer.IsSimpleValue(itemType)
                 || typeof(IEnumerable).IsAssignableFrom(itemType)
                 || !AcyclicSortTypeCache.GetOrAdd(itemType, static type => IsStaticallyAcyclic(type, new HashSet<Type>(), new HashSet<Type>()))
-                || ContainsDifferentRuntimeType(items, itemType))
+                || ContainsDifferentRuntimeType(items, count, itemType))
             {
                 return null;
             }
@@ -1081,18 +1225,18 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
                 return null;
             }
 
-            object?[] primaryValues = new object?[items.Length];
-            for (int index = 0; index < items.Length; index++)
+            PooledSnapshot<object?> primaryValues = PooledSnapshot<object?>.Rent(count);
+            for (int index = 0; index < count; index++)
             {
-                primaryValues[index] = properties[0].Get(items[index]!);
+                primaryValues.Buffer[index] = properties[0].Get(items[index]!);
             }
 
             return primaryValues;
         }
 
-        private static bool ContainsDifferentRuntimeType(object?[] items, Type itemType)
+        private static bool ContainsDifferentRuntimeType(object?[] items, int count, Type itemType)
         {
-            for (int index = 0; index < items.Length; index++)
+            for (int index = 0; index < count; index++)
             {
                 if (items[index]?.GetType() != itemType) return true;
             }
@@ -1132,87 +1276,215 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
                 visiting.Remove(type);
             }
         }
+
+        private static int GetScalarUtf8Length(object value)
+        {
+            if (value is string text) return Encoding.UTF8.GetByteCount(text);
+            if (value is byte[] bytes) return bytes.Length;
+            if (value is char character)
+            {
+                Span<char> characterBuffer = stackalloc char[1];
+                characterBuffer[0] = character;
+                return Encoding.UTF8.GetByteCount(characterBuffer);
+            }
+            if (value is Uri uri) return Encoding.UTF8.GetByteCount(uri.OriginalString);
+            if (value is IUtf8SpanFormattable formattable)
+            {
+                Span<byte> buffer = stackalloc byte[128];
+                if (formattable.TryFormat(buffer, out int written, default, CultureInfo.InvariantCulture)) return written;
+            }
+
+            return 0;
+        }
+    }
+
+    private sealed class PreparationWorkTiming
+    {
+        public long SortKeyTicks { get; private set; }
+        public long SortTicks { get; private set; }
+        public long FallbackTicks { get; private set; }
+        public TimeSpan SortKeyDuration => TimeSpan.FromTicks(SortKeyTicks);
+        public TimeSpan SortDuration => TimeSpan.FromTicks(SortTicks);
+        public TimeSpan FallbackDuration => TimeSpan.FromTicks(FallbackTicks);
+
+        public void AddSortKey(TimeSpan elapsed) => SortKeyTicks += elapsed.Ticks;
+        public void AddSort(TimeSpan elapsed) => SortTicks += elapsed.Ticks;
+        public void AddFallback(TimeSpan elapsed) => FallbackTicks += elapsed.Ticks;
+    }
+
+    private sealed class PathCursor : IDisposable
+    {
+        private const int MaximumPooledLength = 16 * 1024;
+        private char[] buffer = ArrayPool<char>.Shared.Rent(256);
+        private bool pooled = true;
+        private int length;
+        private int depth;
+
+        public ReadOnlySpan<char> Value => buffer.AsSpan(0, length);
+        public int Depth => depth;
+
+        public int PushProperty(string propertyName)
+        {
+            int restoreLength = length;
+            int separatorLength = length == 0 ? 0 : 1;
+            Ensure(separatorLength + propertyName.Length);
+            if (separatorLength != 0) buffer[length++] = '.';
+            propertyName.AsSpan().CopyTo(buffer.AsSpan(length));
+            length += propertyName.Length;
+            depth++;
+            return restoreLength;
+        }
+
+        public int PushIndex(int index)
+        {
+            int restoreLength = length;
+            Ensure(13);
+            buffer[length++] = '[';
+            index.TryFormat(buffer.AsSpan(length), out int written, provider: CultureInfo.InvariantCulture);
+            length += written;
+            buffer[length++] = ']';
+            depth++;
+            return restoreLength;
+        }
+
+        public void Restore(int restoreLength)
+        {
+            length = restoreLength;
+            depth--;
+        }
+
+        public override string ToString() => new(Value);
+
+        public void Dispose()
+        {
+            char[] returned = Interlocked.Exchange(ref buffer, Array.Empty<char>());
+            if (pooled && returned.Length > 0) ArrayPool<char>.Shared.Return(returned, clearArray: true);
+            length = 0;
+            depth = 0;
+            pooled = false;
+        }
+
+        private void Ensure(int additionalLength)
+        {
+            int required = checked(length + additionalLength);
+            if (required <= buffer.Length) return;
+
+            int doubled = buffer.Length <= MaximumPooledLength / 2 ? buffer.Length * 2 : MaximumPooledLength;
+            int nextLength = Math.Max(required, doubled);
+            bool nextPooled = nextLength <= MaximumPooledLength;
+            char[] replacement = nextPooled ? ArrayPool<char>.Shared.Rent(nextLength) : new char[nextLength];
+            buffer.AsSpan(0, length).CopyTo(replacement);
+            if (pooled) ArrayPool<char>.Shared.Return(buffer, clearArray: true);
+            buffer = replacement;
+            pooled = nextPooled;
+        }
     }
 
     private sealed class PooledSortKeyBatch : IDisposable
     {
         private const int MaximumInitialBufferLength = 64 * 1024;
-        private readonly PooledByteBufferWriter output;
-        private readonly BatchedSortEntry[] entries;
+        private readonly SegmentedByteBufferWriter output;
+        private readonly PooledSnapshot<BatchedSortEntry> entries;
+        private readonly DetailedCompareMetricsCollector? timing;
+        private readonly PreparationWorkTiming? workTiming;
 
-        private PooledSortKeyBatch(PooledByteBufferWriter output, BatchedSortEntry[] entries)
+        private PooledSortKeyBatch(
+            SegmentedByteBufferWriter output,
+            PooledSnapshot<BatchedSortEntry> entries,
+            DetailedCompareMetricsCollector? timing,
+            PreparationWorkTiming? workTiming)
         {
             this.output = output;
             this.entries = entries;
+            this.timing = timing;
+            this.workTiming = workTiming;
         }
 
-        public static PooledSortKeyBatch Create(object?[] values)
+        public static PooledSortKeyBatch Create(
+            object?[] values,
+            int count,
+            DetailedCompareMetricsCollector? timing = null,
+            PreparationWorkTiming? workTiming = null)
         {
+            Stopwatch? stopwatch = workTiming is null ? null : Stopwatch.StartNew();
             int initialCapacity = Math.Min(
                 MaximumInitialBufferLength,
-                Math.Max(256, values.Length > MaximumInitialBufferLength / 256
+                Math.Max(256, count > MaximumInitialBufferLength / 256
                     ? MaximumInitialBufferLength
-                    : values.Length * 256));
-            PooledByteBufferWriter output = new(initialCapacity);
+                    : count * 256));
+            SegmentedByteBufferWriter output = new(initialCapacity);
+            PooledSnapshot<BatchedSortEntry> entries = PooledSnapshot<BatchedSortEntry>.Rent(count);
             try
             {
-                BatchedSortEntry[] entries = new BatchedSortEntry[values.Length];
-                HashSet<object> visited = new(ReferenceEqualityComparer.Instance);
-                using Utf8JsonWriter writer = new(output);
-                for (int index = 0; index < values.Length; index++)
+                HashSet<object> visited = ObjectSetPool.Rent();
+                try
                 {
-                    int offset = output.WrittenCount;
-                    visited.Clear();
-                    WriteSortValue(writer, values[index], visited);
-                    writer.Flush();
-
-                    ReadOnlySpan<byte> bytes = output.WrittenSpan[offset..];
-                    bool isAscii = bytes.IndexOfAnyExceptInRange((byte)0, (byte)127) < 0;
-                    entries[index] = new BatchedSortEntry(
-                        values[index],
-                        offset,
-                        bytes.Length,
-                        isAscii ? null : Encoding.UTF8.GetString(bytes),
-                        index);
-                    if (index + 1 < values.Length)
+                    using Utf8JsonWriter writer = new(output);
+                    for (int index = 0; index < count; index++)
                     {
-                        writer.Reset(output);
+                        int offset = output.WrittenCount;
+                        visited.Clear();
+                        WriteSortValue(writer, values[index], visited);
+                        writer.Flush();
+
+                        int keyLength = output.WrittenCount - offset;
+                        bool isAscii = output.IsAscii(offset, keyLength);
+                        entries.Buffer[index] = new BatchedSortEntry(
+                            values[index],
+                            offset,
+                            keyLength,
+                            isAscii ? null : output.Decode(offset, keyLength),
+                            index);
+                        timing?.AddSortKeyBytes(keyLength);
+                        timing?.RecordSortKeyByteLength(keyLength);
+                        if (index + 1 < count) writer.Reset(output);
                     }
                 }
+                finally { ObjectSetPool.Return(visited); }
 
-                return new PooledSortKeyBatch(output, entries);
+                return new PooledSortKeyBatch(output, entries, timing, workTiming);
             }
             catch
             {
+                entries.Dispose();
                 output.Dispose();
                 throw;
+            }
+            finally
+            {
+                if (stopwatch is not null)
+                {
+                    stopwatch.Stop();
+                    workTiming!.AddSortKey(stopwatch.Elapsed);
+                }
             }
         }
 
         public void SortInto(object?[] destination, object?[]? resolveCollisionsWith = null)
         {
             BatchedSortEntryComparer comparer = new(output);
-            Array.Sort(entries, comparer);
+            Array.Sort(entries.Buffer, 0, entries.Count, comparer);
             if (resolveCollisionsWith is not null)
             {
                 int start = 0;
-                while (start < entries.Length)
+                while (start < entries.Count)
                 {
                     int end = start + 1;
-                    while (end < entries.Length && comparer.CompareKey(entries[start], entries[end]) == 0) { end++; }
+                    while (end < entries.Count && comparer.CompareKey(entries.Buffer[start], entries.Buffer[end]) == 0) { end++; }
                     if (end - start > 1)
                     {
-                        object?[] collisionValues = new object?[end - start];
+                        timing?.AddSortCollisionGroup();
+                        using PooledSnapshot<object?> collisionValues = PooledSnapshot<object?>.Rent(end - start);
                         for (int index = start; index < end; index++)
                         {
-                            collisionValues[index - start] = resolveCollisionsWith[entries[index].OriginalIndex];
+                            collisionValues.Buffer[index - start] = resolveCollisionsWith[entries.Buffer[index].OriginalIndex];
                         }
 
-                        using PooledSortKeyBatch fullKeys = Create(collisionValues);
-                        fullKeys.SortInto(collisionValues);
+                        using PooledSortKeyBatch fullKeys = Create(collisionValues.Buffer, collisionValues.Count, timing, workTiming);
+                        fullKeys.SortInto(collisionValues.Buffer);
                         for (int index = start; index < end; index++)
                         {
-                            entries[index] = entries[index] with { Value = collisionValues[index - start] };
+                            entries.Buffer[index] = entries.Buffer[index] with { Value = collisionValues.Buffer[index - start] };
                         }
                     }
 
@@ -1220,31 +1492,35 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
                 }
             }
 
-            for (int index = 0; index < entries.Length; index++)
+            for (int index = 0; index < entries.Count; index++)
             {
                 destination[index] = resolveCollisionsWith is null
-                    ? entries[index].Value
-                    : resolveCollisionsWith[entries[index].OriginalIndex];
+                    ? entries.Buffer[index].Value
+                    : resolveCollisionsWith[entries.Buffer[index].OriginalIndex];
             }
 
             if (resolveCollisionsWith is not null)
             {
                 // Collision groups already carry fully sorted original values.
                 int start = 0;
-                while (start < entries.Length)
+                while (start < entries.Count)
                 {
                     int end = start + 1;
-                    while (end < entries.Length && comparer.CompareKey(entries[start], entries[end]) == 0) { end++; }
+                    while (end < entries.Count && comparer.CompareKey(entries.Buffer[start], entries.Buffer[end]) == 0) { end++; }
                     if (end - start > 1)
                     {
-                        for (int index = start; index < end; index++) { destination[index] = entries[index].Value; }
+                        for (int index = start; index < end; index++) destination[index] = entries.Buffer[index].Value;
                     }
                     start = end;
                 }
             }
         }
 
-        public void Dispose() => output.Dispose();
+        public void Dispose()
+        {
+            entries.Dispose();
+            output.Dispose();
+        }
     }
 
     private readonly record struct BatchedSortEntry(
@@ -1254,7 +1530,7 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
         string? DecodedKey,
         int OriginalIndex);
 
-    private sealed class BatchedSortEntryComparer(PooledByteBufferWriter output) : IComparer<BatchedSortEntry>
+    private sealed class BatchedSortEntryComparer(SegmentedByteBufferWriter output) : IComparer<BatchedSortEntry>
     {
         public int Compare(BatchedSortEntry x, BatchedSortEntry y)
         {
@@ -1264,11 +1540,10 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
 
         public int CompareKey(BatchedSortEntry x, BatchedSortEntry y) =>
             x.DecodedKey is null && y.DecodedKey is null
-                ? output.WrittenSpan.Slice(x.Offset, x.Length)
-                    .SequenceCompareTo(output.WrittenSpan.Slice(y.Offset, y.Length))
+                ? output.Compare(x.Offset, x.Length, y.Offset, y.Length)
                 : string.CompareOrdinal(
-                    x.DecodedKey ?? Encoding.UTF8.GetString(output.WrittenSpan.Slice(x.Offset, x.Length)),
-                    y.DecodedKey ?? Encoding.UTF8.GetString(output.WrittenSpan.Slice(y.Offset, y.Length)));
+                    x.DecodedKey ?? output.Decode(x.Offset, x.Length),
+                    y.DecodedKey ?? output.Decode(y.Offset, y.Length));
     }
 
     private sealed record TypePreparationPlan(bool CanMutateInPlace, PreparedProperty[] Properties)
@@ -1344,9 +1619,9 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
         }
 
         public static ModelMutation ForProperty(object target, PreparedProperty property, object? original) => new(target, property, original);
-        public static ModelMutation ForArray(Array target, object?[] original) => new(target, null, original);
-        public static ModelMutation ForList(IList target, object?[] original) => new(target, null, original);
-        public static ModelMutation ForDictionary(IDictionary target, DictionaryEntry[] original) => new(target, null, original);
+        public static ModelMutation ForArray(Array target, PooledSnapshot<object?> original) => new(target, null, original);
+        public static ModelMutation ForList(IList target, PooledSnapshot<object?> original) => new(target, null, original);
+        public static ModelMutation ForDictionary(IDictionary target, PooledSnapshot<DictionaryEntry> original) => new(target, null, original);
 
         public void Restore()
         {
@@ -1356,25 +1631,186 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
                 return;
             }
 
-            if (target is Array array && original is object?[] arrayItems)
+            if (target is Array array && original is PooledSnapshot<object?> arrayItems)
             {
-                for (int index = 0; index < arrayItems.Length; index++) { array.SetValue(arrayItems[index], index); }
+                try
+                {
+                    for (int index = 0; index < arrayItems.Count; index++) array.SetValue(arrayItems.Buffer[index], index);
+                }
+                finally { arrayItems.Dispose(); }
             }
-            else if (target is IList list && original is object?[] listItems)
+            else if (target is IList list && original is PooledSnapshot<object?> listItems)
             {
-                for (int index = 0; index < listItems.Length; index++) { list[index] = listItems[index]; }
+                try
+                {
+                    for (int index = 0; index < listItems.Count; index++) list[index] = listItems.Buffer[index];
+                }
+                finally { listItems.Dispose(); }
             }
-            else if (target is IDictionary dictionary && original is DictionaryEntry[] entries)
+            else if (target is IDictionary dictionary && original is PooledSnapshot<DictionaryEntry> entries)
             {
-                dictionary.Clear();
-                foreach (DictionaryEntry entry in entries) { dictionary[entry.Key] = entry.Value; }
+                try
+                {
+                    dictionary.Clear();
+                    for (int index = 0; index < entries.Count; index++)
+                    {
+                        DictionaryEntry entry = entries.Buffer[index];
+                        dictionary[entry.Key] = entry.Value;
+                    }
+                }
+                finally { entries.Dispose(); }
             }
+        }
+    }
+
+    private sealed class SegmentedMutationLog
+    {
+        private const int SegmentLength = 1024;
+        private readonly List<ModelMutation[]> segments = new();
+        private int count;
+
+        public void Add(ModelMutation mutation)
+        {
+            int segmentIndex = count / SegmentLength;
+            if (segmentIndex == segments.Count)
+            {
+                segments.Add(ArrayPool<ModelMutation>.Shared.Rent(SegmentLength));
+            }
+
+            segments[segmentIndex][count % SegmentLength] = mutation;
+            count++;
+        }
+
+        public void RestoreAndReturn()
+        {
+            ExceptionDispatchInfo? firstFailure = null;
+            try
+            {
+                for (int index = count - 1; index >= 0; index--)
+                {
+                    try
+                    {
+                        segments[index / SegmentLength][index % SegmentLength].Restore();
+                    }
+                    catch (Exception ex)
+                    {
+                        firstFailure ??= ExceptionDispatchInfo.Capture(ex);
+                    }
+                }
+            }
+            finally
+            {
+                foreach (ModelMutation[] segment in segments)
+                {
+                    Array.Clear(segment);
+                    ArrayPool<ModelMutation>.Shared.Return(segment);
+                }
+                segments.Clear();
+                count = 0;
+            }
+
+            firstFailure?.Throw();
+        }
+    }
+
+    private static class ObjectMapPool
+    {
+        private const int MaximumRetainedMaps = 16;
+        private static readonly ConcurrentBag<Dictionary<object, object>> Maps = new();
+        private static int retainedCount;
+
+        public static Dictionary<object, object> Rent()
+        {
+            if (!Maps.TryTake(out Dictionary<object, object>? map))
+            {
+                return new Dictionary<object, object>(ReferenceEqualityComparer.Instance);
+            }
+
+            Interlocked.Decrement(ref retainedCount);
+            return map;
+        }
+
+        public static void Return(Dictionary<object, object> map)
+        {
+            map.Clear();
+            int retained = Interlocked.Increment(ref retainedCount);
+            if (retained <= MaximumRetainedMaps)
+            {
+                Maps.Add(map);
+                return;
+            }
+
+            Interlocked.Decrement(ref retainedCount);
+        }
+    }
+
+    private static class ObjectSetPool
+    {
+        private const int MaximumRetainedSets = 16;
+        private static readonly ConcurrentBag<HashSet<object>> Sets = new();
+        private static int retainedCount;
+
+        public static HashSet<object> Rent()
+        {
+            if (!Sets.TryTake(out HashSet<object>? set))
+                return new HashSet<object>(ReferenceEqualityComparer.Instance);
+            Interlocked.Decrement(ref retainedCount);
+            return set;
+        }
+
+        public static void Return(HashSet<object> set)
+        {
+            set.Clear();
+            int retained = Interlocked.Increment(ref retainedCount);
+            if (retained <= MaximumRetainedSets) Sets.Add(set);
+            else Interlocked.Decrement(ref retainedCount);
+        }
+    }
+
+    private sealed class PooledSnapshot<T> : IDisposable
+    {
+        private const int MaximumPooledLength = 8 * 1024;
+        private T[] buffer;
+        private readonly bool pooled;
+
+        private PooledSnapshot(T[] buffer, int count, bool pooled)
+        {
+            this.buffer = buffer;
+            Count = count;
+            this.pooled = pooled;
+        }
+
+        public T[] Buffer => buffer;
+        public int Count { get; }
+
+        public static PooledSnapshot<T> Rent(int count)
+        {
+            bool usePool = count <= MaximumPooledLength;
+            T[] rented = usePool ? ArrayPool<T>.Shared.Rent(Math.Max(1, count)) : new T[count];
+            return new PooledSnapshot<T>(rented, count, usePool);
+        }
+
+        public static PooledSnapshot<T> Copy(T[] source, int count)
+        {
+            PooledSnapshot<T> snapshot = Rent(count);
+            source.AsSpan(0, count).CopyTo(snapshot.buffer);
+            return snapshot;
+        }
+
+        public void Dispose()
+        {
+            T[] returned = Interlocked.Exchange(ref buffer, Array.Empty<T>());
+            if (pooled && returned.Length > 0) ArrayPool<T>.Shared.Return(returned, clearArray: true);
         }
     }
 
     private sealed class PooledSortKeySet : IDisposable
     {
-        public PooledSortKeySet(object?[] values) => Items = values.Select(PooledSortKey.Create).ToArray();
+        public PooledSortKeySet(object?[] values, int count)
+        {
+            Items = new PooledSortKey[count];
+            for (int index = 0; index < count; index++) Items[index] = PooledSortKey.Create(values[index]);
+        }
         public PooledSortKey[] Items { get; }
         public void Dispose()
         {
@@ -1402,10 +1838,11 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
         public static PooledSortKey Create(object? value)
         {
             PooledByteBufferWriter output = new();
+            HashSet<object> visited = ObjectSetPool.Rent();
             try
             {
                 using Utf8JsonWriter writer = new(output);
-                WriteSortValue(writer, value, new HashSet<object>(ReferenceEqualityComparer.Instance));
+                WriteSortValue(writer, value, visited);
                 writer.Flush();
                 return output.Detach();
             }
@@ -1417,6 +1854,7 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
                 fallback.CopyTo(rental.Buffer, 0);
                 return new PooledSortKey(rental.Buffer, fallback.Length, fallback.All(item => item < 128), rental.IsPooled);
             }
+            finally { ObjectSetPool.Return(visited); }
         }
 
         public void Dispose()
@@ -1546,6 +1984,184 @@ public sealed class CompareNetObjectsResponseComparer : IResponseComparer
             return x.IsAscii && y.IsAscii
                 ? x.Bytes.SequenceCompareTo(y.Bytes)
                 : string.CompareOrdinal(x.Decode(), y.Decode());
+        }
+    }
+
+    /// <summary>
+    /// Append-only writer built from bounded 64 KiB rentals. Large sort-key batches
+    /// never grow or copy one contiguous LOH-sized array.
+    /// </summary>
+    private sealed class SegmentedByteBufferWriter : IBufferWriter<byte>, IDisposable
+    {
+        private const int SegmentLength = 64 * 1024;
+        private readonly List<Segment> segments = new();
+        private Segment? current;
+        private int written;
+        private bool disposed;
+
+        public SegmentedByteBufferWriter(int initialCapacity) => AllocateSegment(Math.Min(SegmentLength, Math.Max(256, initialCapacity)));
+
+        public int WrittenCount => written;
+
+        public void Advance(int count)
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            if (current is null || count < 0 || count > current.Rental.Buffer.Length - current.Written)
+            {
+                throw new ArgumentOutOfRangeException(nameof(count));
+            }
+
+            current.Written += count;
+            written += count;
+        }
+
+        public Memory<byte> GetMemory(int sizeHint = 0)
+        {
+            Ensure(sizeHint);
+            return current!.Rental.Buffer.AsMemory(current.Written);
+        }
+
+        public Span<byte> GetSpan(int sizeHint = 0)
+        {
+            Ensure(sizeHint);
+            return current!.Rental.Buffer.AsSpan(current.Written);
+        }
+
+        public bool IsAscii(int offset, int length)
+        {
+            ValidateSlice(offset, length);
+            int remaining = length;
+            int position = offset;
+            while (remaining > 0)
+            {
+                (Segment segment, int localOffset) = Locate(position);
+                int count = Math.Min(remaining, segment.Written - localOffset);
+                if (segment.Rental.Buffer.AsSpan(localOffset, count).IndexOfAnyExceptInRange((byte)0, (byte)127) >= 0) return false;
+                position += count;
+                remaining -= count;
+            }
+
+            return true;
+        }
+
+        public int Compare(int leftOffset, int leftLength, int rightOffset, int rightLength)
+        {
+            ValidateSlice(leftOffset, leftLength);
+            ValidateSlice(rightOffset, rightLength);
+            int leftPosition = leftOffset;
+            int rightPosition = rightOffset;
+            int leftRemaining = leftLength;
+            int rightRemaining = rightLength;
+            while (leftRemaining > 0 && rightRemaining > 0)
+            {
+                (Segment left, int leftLocal) = Locate(leftPosition);
+                (Segment right, int rightLocal) = Locate(rightPosition);
+                int count = Math.Min(
+                    Math.Min(leftRemaining, left.Written - leftLocal),
+                    Math.Min(rightRemaining, right.Written - rightLocal));
+                int comparison = left.Rental.Buffer.AsSpan(leftLocal, count)
+                    .SequenceCompareTo(right.Rental.Buffer.AsSpan(rightLocal, count));
+                if (comparison != 0) return comparison;
+                leftPosition += count;
+                rightPosition += count;
+                leftRemaining -= count;
+                rightRemaining -= count;
+            }
+
+            return leftLength.CompareTo(rightLength);
+        }
+
+        public string Decode(int offset, int length)
+        {
+            ValidateSlice(offset, length);
+            Decoder counter = Encoding.UTF8.GetDecoder();
+            int characterCount = 0;
+            int remaining = length;
+            int position = offset;
+            while (remaining > 0)
+            {
+                (Segment segment, int localOffset) = Locate(position);
+                int count = Math.Min(remaining, segment.Written - localOffset);
+                remaining -= count;
+                characterCount += counter.GetCharCount(
+                    segment.Rental.Buffer.AsSpan(localOffset, count),
+                    flush: remaining == 0);
+                position += count;
+            }
+            return string.Create(
+                characterCount,
+                (Writer: this, Offset: offset, Length: length),
+                static (destination, state) => state.Writer.DecodeInto(state.Offset, state.Length, destination));
+        }
+
+        public void Dispose()
+        {
+            if (disposed) return;
+            disposed = true;
+            foreach (Segment segment in segments) SortBufferPool.Return(segment.Rental);
+            segments.Clear();
+            current = null;
+            written = 0;
+        }
+
+        private void DecodeInto(int offset, int length, Span<char> destination)
+        {
+            Decoder decoder = Encoding.UTF8.GetDecoder();
+            int destinationOffset = 0;
+            int remaining = length;
+            int position = offset;
+            while (remaining > 0)
+            {
+                (Segment segment, int localOffset) = Locate(position);
+                int count = Math.Min(remaining, segment.Written - localOffset);
+                remaining -= count;
+                destinationOffset += decoder.GetChars(
+                    segment.Rental.Buffer.AsSpan(localOffset, count),
+                    destination[destinationOffset..],
+                    flush: remaining == 0);
+                position += count;
+            }
+        }
+
+        private (Segment Segment, int LocalOffset) Locate(int offset)
+        {
+            for (int index = segments.Count - 1; index >= 0; index--)
+            {
+                Segment segment = segments[index];
+                if (offset >= segment.Start) return (segment, offset - segment.Start);
+            }
+
+            throw new ArgumentOutOfRangeException(nameof(offset));
+        }
+
+        private void Ensure(int sizeHint)
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            int required = Math.Max(1, sizeHint);
+            if (current is null || current.Rental.Buffer.Length - current.Written < required)
+            {
+                AllocateSegment(Math.Max(SegmentLength, required));
+            }
+        }
+
+        private void AllocateSegment(int minimumLength)
+        {
+            ByteArrayRental rental = SortBufferPool.Rent(minimumLength);
+            current = new Segment(written, rental);
+            segments.Add(current);
+        }
+
+        private void ValidateSlice(int offset, int length)
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            if (offset < 0 || length < 0 || offset > written - length) throw new ArgumentOutOfRangeException(nameof(offset));
+        }
+
+        private sealed class Segment(int start, ByteArrayRental rental)
+        {
+            public int Start { get; } = start;
+            public ByteArrayRental Rental { get; } = rental;
+            public int Written { get; set; }
         }
     }
 

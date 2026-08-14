@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Security.Cryptography;
 using System.Threading;
 
@@ -40,40 +41,47 @@ public sealed class FileSystemRunArtifactStore : IRunArtifactStore
         Directory.CreateDirectory(Path.GetDirectoryName(artifactPath) ?? workspaceRoot);
 
         long contentLength = 0;
-        byte[] buffer = new byte[81920];
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(81920);
 
-        using IncrementalHash hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        await using (FileStream output = new FileStream(
-            artifactPath,
-            FileMode.Create,
-            FileAccess.Write,
-            FileShare.None,
-            buffer.Length,
-            FileOptions.Asynchronous | FileOptions.SequentialScan))
+        try
         {
-            while (true)
+            using IncrementalHash hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            await using (FileStream output = new FileStream(
+                artifactPath,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None,
+                81920,
+                FileOptions.Asynchronous | FileOptions.SequentialScan))
             {
-                int bytesRead = await body.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
-                if (bytesRead == 0)
+                while (true)
                 {
-                    break;
+                    int bytesRead = await body.ReadAsync(buffer.AsMemory(0, 81920), cancellationToken).ConfigureAwait(false);
+                    if (bytesRead == 0)
+                    {
+                        break;
+                    }
+
+                    await output.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken).ConfigureAwait(false);
+                    hash.AppendData(buffer.AsSpan(0, bytesRead));
+                    contentLength += bytesRead;
                 }
-
-                await output.WriteAsync(buffer.AsMemory(0, bytesRead), cancellationToken).ConfigureAwait(false);
-                hash.AppendData(buffer.AsSpan(0, bytesRead));
-                contentLength += bytesRead;
             }
-        }
 
-        string sha256 = Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
-        usageTracker.RecordDelta(contentLength);
-        return new ResponseArtifactMetadata(
-            endpoint,
-            new ArtifactReference(artifactId, contentType),
-            statusCode,
-            contentType,
-            contentLength,
-            sha256);
+            string sha256 = Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+            usageTracker.RecordDelta(contentLength);
+            return new ResponseArtifactMetadata(
+                endpoint,
+                new ArtifactReference(artifactId, contentType),
+                statusCode,
+                contentType,
+                contentLength,
+                sha256);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer, clearArray: true);
+        }
     }
 
     public Task<Stream> OpenReadAsync(

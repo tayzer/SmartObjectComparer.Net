@@ -30,6 +30,14 @@ public sealed class ObservabilityRecorder : IObservabilityRecorder
 
     public bool IsDetailedCompareTimingEnabled => options.EnableDetailedCompareTiming;
 
+    public bool IsStructuralFingerprintExportEnabled => options.EnableStructuralFingerprintExport;
+
+    public string? StructuralFingerprintOutputDirectory => options.StructuralFingerprintOutputDirectory;
+
+    public bool IsCalibrationCaptureEnabled => options.CaptureNextRunForCalibration;
+
+    public string? CalibrationCaptureOutputDirectory => options.CalibrationCaptureOutputDirectory;
+
     public TimeSpan SlowPathThreshold => TimeSpan.FromMilliseconds(Math.Max(0, options.SlowPathThresholdMs));
 
     public void RecordRunPhase(RunId runId, string phaseName, TimeSpan duration)

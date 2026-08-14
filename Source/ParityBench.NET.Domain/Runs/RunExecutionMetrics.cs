@@ -30,6 +30,56 @@ public sealed record DetailedCompareMetrics(
     TimeSpan CompareQueueWaitDuration,
     TimeSpan ExecutionWorkerBackpressureDuration);
 
+/// <summary>Allocation-sensitive work performed while preparing comparison models.</summary>
+public sealed record NormalizationWorkMetrics(
+    TimeSpan GraphTraversalDuration,
+    TimeSpan SortKeyConstructionDuration,
+    TimeSpan CollectionSortDuration,
+    TimeSpan LegacyFallbackDuration,
+    TimeSpan RestorationDuration,
+    long ObjectNodeCount,
+    long PropertyNodeCount,
+    long CollectionNodeCount,
+    long CollectionItemCount,
+    long ScalarNodeCount,
+    long ScalarUtf8Bytes,
+    long IgnoredNodeCount,
+    long SortKeyBytes,
+    long MaximumSortKeyBytes,
+    long SortCollisionGroupCount,
+    long MutableBranchCount,
+    long LegacyFallbackBranchCount);
+
+/// <summary>Non-overlapping bounded-pipeline worker and queue evidence.</summary>
+public sealed record PipelineStageMetrics(
+    int MappingConcurrency,
+    int ComparisonConcurrency,
+    int FocusedContentConcurrency,
+    int ExecuteToMappingCapacity,
+    int MappingToComparisonCapacity,
+    int ComparisonToFocusedCapacity,
+    TimeSpan MappingWorkerDuration,
+    TimeSpan ComparisonWorkerDuration,
+    TimeSpan FocusedContentWorkerDuration,
+    TimeSpan DetailPersistenceDuration,
+    TimeSpan ExecuteToMappingQueueWaitDuration,
+    TimeSpan MappingToComparisonQueueWaitDuration,
+    TimeSpan ComparisonToFocusedQueueWaitDuration,
+    TimeSpan ExecutionBackpressureDuration,
+    TimeSpan MappingBackpressureDuration,
+    TimeSpan ComparisonBackpressureDuration,
+    int MaximumExecuteToMappingDepth,
+    int MaximumMappingToComparisonDepth,
+    int MaximumComparisonToFocusedDepth);
+
+/// <summary>Actual per-process runtime settings used by an isolated run worker.</summary>
+public sealed record RunRuntimeMetrics(
+    bool IsServerGc,
+    int? ConfiguredServerGcHeapCount,
+    bool? DynamicAdaptationEnabled,
+    long TotalAvailableMemoryBytes,
+    long MemoryBudgetBytes);
+
 /// <summary>Process-scoped resource evidence sampled while one run executes.</summary>
 public sealed record RunProcessResourceMetrics(
     TimeSpan ProcessCpuDuration,
@@ -59,7 +109,10 @@ public sealed record RunExecutionMetrics
         CompareSubPhaseMetrics? compareSubPhases = null,
         int comparisonConcurrency = 0,
         DetailedCompareMetrics? detailedCompareMetrics = null,
-        RunProcessResourceMetrics? processResourceMetrics = null)
+        RunProcessResourceMetrics? processResourceMetrics = null,
+        PipelineStageMetrics? pipelineStageMetrics = null,
+        NormalizationWorkMetrics? normalizationWorkMetrics = null,
+        RunRuntimeMetrics? runtimeMetrics = null)
     {
         EnsureNonNegative(totalDuration, nameof(totalDuration));
         EnsureNonNegative(requestExecutionDuration, nameof(requestExecutionDuration));
@@ -87,6 +140,9 @@ public sealed record RunExecutionMetrics
         CompareSubPhases = compareSubPhases;
         DetailedCompareMetrics = detailedCompareMetrics;
         ProcessResourceMetrics = processResourceMetrics;
+        PipelineStageMetrics = pipelineStageMetrics;
+        NormalizationWorkMetrics = normalizationWorkMetrics;
+        RuntimeMetrics = runtimeMetrics;
     }
 
     public TimeSpan TotalDuration { get; }
@@ -117,6 +173,12 @@ public sealed record RunExecutionMetrics
     public DetailedCompareMetrics? DetailedCompareMetrics { get; }
 
     public RunProcessResourceMetrics? ProcessResourceMetrics { get; }
+
+    public PipelineStageMetrics? PipelineStageMetrics { get; }
+
+    public NormalizationWorkMetrics? NormalizationWorkMetrics { get; }
+
+    public RunRuntimeMetrics? RuntimeMetrics { get; }
 
     private static void EnsureNonNegative(TimeSpan value, string parameterName)
     {

@@ -11,6 +11,11 @@ public sealed record ComparedExecutionRecord(
     int ManifestOrdinal,
     RequestPairResult Result);
 
+public sealed record MappedExecutionRecord(
+    ExecutionRecord Execution,
+    RequestPairResult? TerminalResult = null,
+    long ExecutedEnqueuedTimestamp = 0);
+
 public sealed record CleanupStageContext(
     RunOptions ComparisonOptions,
     RunDetailReference DetailReference,

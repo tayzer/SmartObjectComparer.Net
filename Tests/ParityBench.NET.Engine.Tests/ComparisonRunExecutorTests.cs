@@ -99,7 +99,7 @@ public sealed class ComparisonRunExecutorTests
     }
 
     [TestMethod]
-    public async Task ExecuteAsync_WhenComparisonConcurrencyIsNull_UsesAtMostTwentyWorkers()
+    public async Task ExecuteAsync_WhenComparisonConcurrencyIsNull_UsesSafeAutoWorkerLimit()
     {
         RequestItem[] requests = Enumerable.Range(1, 20)
             .Select(index => new RequestItem($"request-{index}.json", "application/json", 2))
@@ -110,7 +110,7 @@ public sealed class ComparisonRunExecutorTests
             CreateRun(largeRunOptions: new LargeRunOptions(comparisonConcurrency: null)),
             new CapturingProgressReporter());
 
-        Assert.AreEqual(Math.Min(20, Environment.ProcessorCount), summary.ExecutionMetrics!.ComparisonConcurrency);
+        Assert.AreEqual(Math.Min(8, Environment.ProcessorCount), summary.ExecutionMetrics!.ComparisonConcurrency);
     }
 
     [TestMethod]
@@ -135,9 +135,40 @@ public sealed class ComparisonRunExecutorTests
             new CapturingProgressReporter());
 
         DetailedCompareMetrics metrics = summary.ExecutionMetrics!.DetailedCompareMetrics!;
+        PipelineStageMetrics pipeline = summary.ExecutionMetrics.PipelineStageMetrics!;
         Assert.IsTrue(metrics.CompareQueueWaitDuration > TimeSpan.Zero);
         Assert.IsTrue(metrics.ExecutionWorkerBackpressureDuration > TimeSpan.Zero);
+        Assert.AreEqual(1, pipeline.ComparisonConcurrency);
+        Assert.AreEqual(1, pipeline.MappingToComparisonCapacity);
+        Assert.IsTrue(pipeline.MaximumExecuteToMappingDepth <= pipeline.ExecuteToMappingCapacity);
+        Assert.IsTrue(pipeline.MaximumMappingToComparisonDepth <= pipeline.MappingToComparisonCapacity);
+        Assert.IsTrue(pipeline.MaximumComparisonToFocusedDepth <= pipeline.ComparisonToFocusedCapacity);
+        Assert.IsTrue(pipeline.MappingBackpressureDuration > TimeSpan.Zero);
         CollectionAssert.AreEqual(requests.Select(request => request.RelativePath).ToArray(), detailStore.SavedResults.Select(result => result.RelativePath).ToArray());
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_WhenPostHttpWorkersAreExplicit_HonorsAndClampsEveryStage()
+    {
+        RequestItem[] requests = Enumerable.Range(1, 3)
+            .Select(index => new RequestItem($"request-{index}.json", "application/json", 2))
+            .ToArray();
+        ComparisonRunExecutor executor = CreateExecutor(CreateBatch(requests), FakeEndpointRequestSender.ForBody("same"));
+
+        RunResultSummary summary = await executor.ExecuteAsync(
+            CreateRun(largeRunOptions: new LargeRunOptions(
+                mappingConcurrency: 20,
+                comparisonConcurrency: 2,
+                focusedContentConcurrency: 1)),
+            new CapturingProgressReporter());
+
+        PipelineStageMetrics metrics = summary.ExecutionMetrics!.PipelineStageMetrics!;
+        Assert.AreEqual(3, metrics.MappingConcurrency);
+        Assert.AreEqual(2, metrics.ComparisonConcurrency);
+        Assert.AreEqual(1, metrics.FocusedContentConcurrency);
+        Assert.AreEqual(6, metrics.ExecuteToMappingCapacity);
+        Assert.AreEqual(2, metrics.MappingToComparisonCapacity);
+        Assert.AreEqual(1, metrics.ComparisonToFocusedCapacity);
     }
 
     [TestMethod]

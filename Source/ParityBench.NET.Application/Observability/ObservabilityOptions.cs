@@ -19,4 +19,18 @@ public sealed class ObservabilityOptions
     // comparisons. Adds a few Stopwatch calls per request; switch off once the cause
     // of a slowdown is found and the run is healthy again.
     public bool EnableDetailedCompareTiming { get; set; }
+
+    // Opt-in and privacy-safe: exports only salted identifier hashes and aggregate
+    // structural distributions. No request or response content is written.
+    public bool EnableStructuralFingerprintExport { get; set; }
+
+    // Defaults to the operating-system temporary directory when blank.
+    public string? StructuralFingerprintOutputDirectory { get; set; }
+
+    // Explicit private-data opt-in. The next run's first 1,000 raw response pairs
+    // are copied before retention so the client machine can perform offline replay.
+    public bool CaptureNextRunForCalibration { get; set; }
+
+    // Defaults to the current user's local application-data calibration directory.
+    public string? CalibrationCaptureOutputDirectory { get; set; }
 }

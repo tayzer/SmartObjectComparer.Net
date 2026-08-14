@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Runtime;
+using System.Runtime.ExceptionServices;
 using System.Threading.Channels;
 using ParityBench.NET.Application.Baselines;
 using ParityBench.NET.Application.ContractProfiles;
@@ -120,21 +122,19 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         RunExecutionCounters counters = new RunExecutionCounters();
         RunSummaryAccumulator summaryAccumulator = new RunSummaryAccumulator();
         List<ComparedExecutionRecord> persistedRecords = new List<ComparedExecutionRecord>(totalRequests);
-        CompareSubPhaseCounters? compareSubPhaseCounters = observabilityRecorder.IsDetailedCompareTimingEnabled
-            ? new CompareSubPhaseCounters()
+        bool exportStructuralFingerprint = observabilityRecorder.IsStructuralFingerprintExportEnabled;
+        CompareSubPhaseCounters? compareSubPhaseCounters = observabilityRecorder.IsDetailedCompareTimingEnabled || exportStructuralFingerprint
+            ? new CompareSubPhaseCounters(exportStructuralFingerprint)
             : null;
 
         await using IRunDetailWriter detailWriter = await runDetailStore
             .CreateWriterAsync(run.Id, comparisonOptions.LargeRun.DetailPageSize, cancellationToken)
             .ConfigureAwait(false);
 
-        // Two decoupled worker pools connected by a bounded channel: execute (network I/O,
-        // sized to MaxConcurrency) and compare (CPU-bound diffing/normalization, bounded
-        // to eight workers by default) run continuously and independently instead of the whole
-        // batch executing, then the whole batch comparing. A record can be comparing while
-        // later records are still executing. Results land on disk in original request
-        // order via a small reorder buffer, since compare workers finish out of order but
-        // the paginated detail writer requires append order.
+        // Independently bounded execute, mapping, comparison, focused-content, and persistence
+        // stages run continuously. FullMode.Wait applies lossless backpressure at every boundary.
+        // Results land on disk in original request order via a small reorder buffer because the
+        // paginated detail writer requires append order.
         RunPipelineExecution? pipelineExecution = plan is null
             ? null
             : RunPipelineExecution.Create(
@@ -241,6 +241,23 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         RunDetailReference detailReference = await detailWriter.CompleteAsync(cancellationToken).ConfigureAwait(false);
         finalizeStopwatch.Stop();
         persistenceDuration += finalizeStopwatch.Elapsed;
+
+        if (observabilityRecorder.IsCalibrationCaptureEnabled)
+        {
+            await progressReporter
+                .ReportAsync(RunStatus.Finalizing, new RunProgress(96, "Capturing private calibration sample.", totalRequests, totalRequests), cancellationToken, force: true)
+                .ConfigureAwait(false);
+            Stopwatch captureStopwatch = Stopwatch.StartNew();
+            _ = await CalibrationSampleCapture.CaptureAsync(
+                run,
+                persistedRecords,
+                runArtifactStore,
+                observabilityRecorder.CalibrationCaptureOutputDirectory,
+                cancellationToken).ConfigureAwait(false);
+            captureStopwatch.Stop();
+            persistenceDuration += captureStopwatch.Elapsed;
+        }
+
         observabilityRecorder.RecordRunPhase(run.Id, "Persistence", persistenceDuration);
 
         await progressReporter
@@ -274,7 +291,10 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
             compareSubPhaseCounters?.ToMetrics(),
             pipelineResult.ComparisonConcurrency,
             compareSubPhaseCounters?.Detailed.ToMetrics(comparisonDuration),
-            processResourceMetrics);
+            processResourceMetrics,
+            pipelineResult.StageMetrics,
+            compareSubPhaseCounters?.Detailed.ToNormalizationMetrics(),
+            CreateRuntimeMetrics(comparisonOptions.LargeRun));
 
         // Sealed last: a package only becomes usable once the run that produced it
         // finished, so a run that failed while finalizing leaves nothing behind.
@@ -283,7 +303,52 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
             await baselineSessions.Capture.CompleteAsync(cancellationToken).ConfigureAwait(false);
         }
 
+        if (observabilityRecorder.IsStructuralFingerprintExportEnabled
+            && compareSubPhaseCounters?.Detailed.StructuralFingerprint is { } fingerprintCollector
+            && executionMetrics.NormalizationWorkMetrics is { } normalizationMetrics)
+        {
+            await StructuralFingerprintExporter.ExportAsync(
+                observabilityRecorder.StructuralFingerprintOutputDirectory,
+                run.Id,
+                fingerprintCollector.Snapshot(normalizationMetrics),
+                executionMetrics,
+                cancellationToken).ConfigureAwait(false);
+        }
+
         return summaryAccumulator.ToSummary(detailReference, executionMetrics);
+    }
+
+    private static RunRuntimeMetrics CreateRuntimeMetrics(LargeRunOptions options)
+    {
+        long totalAvailable = Math.Max(0, GC.GetGCMemoryInfo().TotalAvailableMemoryBytes);
+        long reserveBound = Math.Max(0, totalAvailable - (4L * 1024 * 1024 * 1024));
+        long percentageBound = (long)(totalAvailable * .60d);
+        bool? dynamicAdaptation = GCSettings.IsServerGC ? ReadDynamicAdaptationState() : null;
+        return new RunRuntimeMetrics(
+            GCSettings.IsServerGC,
+            options.WorkerGcMode == WorkerGcMode.ServerFixed ? options.ServerGcHeapCount : null,
+            dynamicAdaptation,
+            totalAvailable,
+            Math.Min(percentageBound, reserveBound));
+    }
+
+    private static bool? ReadDynamicAdaptationState()
+    {
+        foreach (KeyValuePair<string, object> setting in GC.GetConfigurationVariables())
+        {
+            if (!setting.Key.Contains("DynamicAdaptation", StringComparison.OrdinalIgnoreCase)) continue;
+            return setting.Value switch
+            {
+                bool enabled => enabled,
+                int value => value != 0,
+                long value => value != 0,
+                string value when bool.TryParse(value, out bool enabled) => enabled,
+                string value when long.TryParse(value, out long enabled) => enabled != 0,
+                _ => null,
+            };
+        }
+
+        return null;
     }
 
     private static ArtifactRetentionCounters SummarizeArtifactRetention(IReadOnlyList<RequestPairResult> results)
@@ -407,7 +472,8 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         TimeSpan ExecutionDuration,
         TimeSpan ComparisonDuration,
         TimeSpan PersistenceDuration,
-        int ComparisonConcurrency);
+        int ComparisonConcurrency,
+        PipelineStageMetrics? StageMetrics);
 
     /// <summary>
     /// The baseline work a run has attached to it. Both are null for the ordinary
@@ -483,24 +549,42 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
     {
         if (totalRequests == 0)
         {
-            return new RunPipelineResult(TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, 0);
+            return new RunPipelineResult(TimeSpan.Zero, TimeSpan.Zero, TimeSpan.Zero, 0, null);
         }
 
         int executeConcurrency = Math.Max(1, comparisonOptions.MaxConcurrency);
-        int fallbackCompareConcurrency = Math.Min(20, Environment.ProcessorCount);
+        int autoStageConcurrency = Math.Min(8, Environment.ProcessorCount);
+        int mappingConcurrency = Math.Min(
+            totalRequests,
+            Math.Max(1, comparisonOptions.LargeRun.MappingConcurrency ?? autoStageConcurrency));
         int compareConcurrency = Math.Min(
             totalRequests,
-            Math.Max(1, comparisonOptions.LargeRun.ComparisonConcurrency ?? fallbackCompareConcurrency));
-        int minimumChannelCapacity = Math.Min(totalRequests, compareConcurrency);
-        int maximumChannelCapacity = Math.Min(totalRequests, compareConcurrency * 2);
-        int channelCapacity = Math.Clamp(
-            Math.Max(1, comparisonOptions.LargeRun.ChunkSize),
-            minimumChannelCapacity,
-            maximumChannelCapacity);
+            Math.Max(1, comparisonOptions.LargeRun.ComparisonConcurrency ?? autoStageConcurrency));
+        int focusedContentConcurrency = Math.Min(
+            totalRequests,
+            Math.Max(1, comparisonOptions.LargeRun.FocusedContentConcurrency ?? autoStageConcurrency));
+        int executeToMappingCapacity = checked(mappingConcurrency * 2);
+        int mappingToComparisonCapacity = compareConcurrency;
+        int comparisonToFocusedCapacity = focusedContentConcurrency;
         int flushBatchSize = Math.Max(1, comparisonOptions.LargeRun.DetailPageSize);
+        PipelineStageMetricsCollector stageMetrics = new();
 
-        Channel<QueuedExecutionRecord> executedChannel = Channel.CreateBounded<QueuedExecutionRecord>(
-            new BoundedChannelOptions(channelCapacity)
+        Channel<QueuedStageRecord<ExecutionRecord>> executedChannel = Channel.CreateBounded<QueuedStageRecord<ExecutionRecord>>(
+            new BoundedChannelOptions(executeToMappingCapacity)
+            {
+                SingleWriter = false,
+                SingleReader = false,
+                FullMode = BoundedChannelFullMode.Wait,
+            });
+        Channel<QueuedStageRecord<MappedExecutionRecord>> mappedChannel = Channel.CreateBounded<QueuedStageRecord<MappedExecutionRecord>>(
+            new BoundedChannelOptions(mappingToComparisonCapacity)
+            {
+                SingleWriter = false,
+                SingleReader = false,
+                FullMode = BoundedChannelFullMode.Wait,
+            });
+        Channel<QueuedStageRecord<ComparedExecutionRecord>> comparedChannel = Channel.CreateBounded<QueuedStageRecord<ComparedExecutionRecord>>(
+            new BoundedChannelOptions(comparisonToFocusedCapacity)
             {
                 SingleWriter = false,
                 SingleReader = false,
@@ -520,6 +604,9 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
             flushBatchSize,
             elapsed => Interlocked.Add(ref persistenceTicks, elapsed.Ticks));
 
+        using CancellationTokenSource pipelineCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        CancellationToken pipelineToken = pipelineCancellation.Token;
+
         Task[] executeWorkers = Enumerable.Range(0, executeConcurrency)
             .Select(_ => Task.Run(
                 async () =>
@@ -527,67 +614,174 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
                     int index;
                     while ((index = Interlocked.Increment(ref nextRequestIndex)) < plannedRequests.Count)
                     {
-                        cancellationToken.ThrowIfCancellationRequested();
+                        pipelineToken.ThrowIfCancellationRequested();
                         PlannedRequest plannedRequest = plannedRequests[index];
 
                         Stopwatch executionStopwatch = Stopwatch.StartNew();
-                        ExecutionRecord executionRecord = await ExecutePairAsync(run, comparisonOptions, plannedRequest, pipelineExecution, baselineSessions, counters, cancellationToken).ConfigureAwait(false);
+                        ExecutionRecord executionRecord = await ExecutePairAsync(run, comparisonOptions, plannedRequest, pipelineExecution, baselineSessions, counters, pipelineToken).ConfigureAwait(false);
                         executionStopwatch.Stop();
                         Interlocked.Add(ref executionTicks, executionStopwatch.ElapsedTicks);
                         observabilityRecorder.RecordRequestPath(run.Id, plannedRequest.Request.RelativePath, executionStopwatch.Elapsed);
 
-                        await WriteExecutedRecordAsync(executedChannel.Writer, executionRecord, compareSubPhaseCounters?.Detailed, cancellationToken).ConfigureAwait(false);
+                        await WriteStageRecordAsync(
+                            executedChannel.Writer,
+                            executionRecord,
+                            stageMetrics.ExecuteToMapping,
+                            compareSubPhaseCounters is null
+                                ? null
+                                : elapsed => compareSubPhaseCounters.Detailed.AddExecutionBackpressure(elapsed),
+                            pipelineToken).ConfigureAwait(false);
                     }
                 },
-                cancellationToken))
+                pipelineToken))
             .ToArray();
 
         Task executeStageTask = RunWorkerStageAsync(executeWorkers, executedChannel.Writer);
+
+        Task[] mappingWorkers = Enumerable.Range(0, mappingConcurrency)
+            .Select(_ => Task.Run(
+                async () =>
+                {
+                    await foreach (QueuedStageRecord<ExecutionRecord> queuedRecord in executedChannel.Reader.ReadAllAsync(pipelineToken).ConfigureAwait(false))
+                    {
+                        stageMetrics.ExecuteToMapping.Dequeued(queuedRecord.EnqueuedTimestamp);
+                        Stopwatch stopwatch = Stopwatch.StartNew();
+                        MappedExecutionRecord mapped = await MapRecordAsync(
+                            run, comparisonOptions, pipelineExecution, baselineSessions,
+                            queuedRecord.Record, compareSubPhaseCounters, pipelineToken).ConfigureAwait(false);
+                        stopwatch.Stop();
+                        stageMetrics.AddMappingWorker(stopwatch.Elapsed);
+                        Interlocked.Add(ref comparisonTicks, stopwatch.ElapsedTicks);
+                        mapped = mapped with { ExecutedEnqueuedTimestamp = queuedRecord.EnqueuedTimestamp };
+                        await WriteStageRecordAsync(
+                            mappedChannel.Writer,
+                            mapped,
+                            stageMetrics.MappingToComparison,
+                            compareSubPhaseCounters is null
+                                ? null
+                                : elapsed => compareSubPhaseCounters.Detailed.AddExecutionBackpressure(elapsed),
+                            pipelineToken).ConfigureAwait(false);
+                    }
+                },
+                pipelineToken))
+            .ToArray();
+        Task mappingStageTask = RunWorkerStageAsync(mappingWorkers, mappedChannel.Writer);
 
         Task[] compareWorkers = Enumerable.Range(0, compareConcurrency)
             .Select(_ => Task.Run(
                 async () =>
                 {
-                    await foreach (QueuedExecutionRecord queuedRecord in executedChannel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+                    await foreach (QueuedStageRecord<MappedExecutionRecord> queuedRecord in mappedChannel.Reader.ReadAllAsync(pipelineToken).ConfigureAwait(false))
                     {
-                        compareSubPhaseCounters?.Detailed.AddCompareQueueWait(Stopwatch.GetElapsedTime(queuedRecord.EnqueuedTimestamp));
-                        ExecutionRecord executionRecord = queuedRecord.Record;
-                        Stopwatch compareStopwatch = Stopwatch.StartNew();
-                        ComparedExecutionRecord comparedRecord = await CompareRecordAsync(run, comparisonOptions, pipelineExecution, baselineSessions, executionRecord, counters, compareSubPhaseCounters, cancellationToken).ConfigureAwait(false);
-                        compareStopwatch.Stop();
-                        Interlocked.Add(ref comparisonTicks, compareStopwatch.ElapsedTicks);
-
-                        int completed = Interlocked.Increment(ref completedCount);
-                        await progressReporter
-                            .ReportAsync(
-                                RunStatus.Executing,
-                                new RunProgress(
-                                    CalculateExecutionPercent(completed, totalRequests),
-                                    $"Processed {completed} of {totalRequests} requests.",
-                                    completed,
-                                    totalRequests),
-                                cancellationToken)
-                            .ConfigureAwait(false);
-
-                        await sequencer.SubmitAsync(comparedRecord, cancellationToken).ConfigureAwait(false);
+                        stageMetrics.MappingToComparison.Dequeued(queuedRecord.EnqueuedTimestamp);
+                        compareSubPhaseCounters?.Detailed.AddCompareQueueWait(
+                            Stopwatch.GetElapsedTime(queuedRecord.Record.ExecutedEnqueuedTimestamp));
+                        Stopwatch stopwatch = Stopwatch.StartNew();
+                        ComparedExecutionRecord compared = await CompareMappedRecordAsync(
+                            run, comparisonOptions, pipelineExecution, baselineSessions,
+                            queuedRecord.Record, compareSubPhaseCounters, pipelineToken).ConfigureAwait(false);
+                        stopwatch.Stop();
+                        stageMetrics.AddComparisonWorker(stopwatch.Elapsed);
+                        Interlocked.Add(ref comparisonTicks, stopwatch.ElapsedTicks);
+                        await WriteStageRecordAsync(
+                            comparedChannel.Writer,
+                            compared,
+                            stageMetrics.ComparisonToFocused,
+                            compareSubPhaseCounters is null
+                                ? null
+                                : elapsed => compareSubPhaseCounters.Detailed.AddExecutionBackpressure(elapsed),
+                            pipelineToken).ConfigureAwait(false);
                     }
                 },
-                cancellationToken))
+                pipelineToken))
             .ToArray();
+        Task compareStageTask = RunWorkerStageAsync(compareWorkers, comparedChannel.Writer);
 
-        Task compareStageTask = Task.WhenAll(compareWorkers);
+        Task[] focusedWorkers = Enumerable.Range(0, focusedContentConcurrency)
+            .Select(_ => Task.Run(
+                async () =>
+                {
+                    await foreach (QueuedStageRecord<ComparedExecutionRecord> queuedRecord in comparedChannel.Reader.ReadAllAsync(pipelineToken).ConfigureAwait(false))
+                    {
+                        stageMetrics.ComparisonToFocused.Dequeued(queuedRecord.EnqueuedTimestamp);
+                        Stopwatch stopwatch = Stopwatch.StartNew();
+                        ComparedExecutionRecord focused = await AttachFocusedRecordAsync(
+                            run, comparisonOptions, queuedRecord.Record, compareSubPhaseCounters, pipelineToken).ConfigureAwait(false);
+                        stopwatch.Stop();
+                        stageMetrics.AddFocusedWorker(stopwatch.Elapsed);
+                        Interlocked.Add(ref comparisonTicks, stopwatch.ElapsedTicks);
 
-        await Task.WhenAll(executeStageTask, compareStageTask).ConfigureAwait(false);
+                        int completed = Interlocked.Increment(ref completedCount);
+                        await progressReporter.ReportAsync(
+                            RunStatus.Executing,
+                            new RunProgress(
+                                CalculateExecutionPercent(completed, totalRequests),
+                                $"Processed {completed} of {totalRequests} requests.",
+                                completed,
+                                totalRequests),
+                            pipelineToken).ConfigureAwait(false);
+                        await sequencer.SubmitAsync(focused, pipelineToken).ConfigureAwait(false);
+                    }
+                },
+                pipelineToken))
+            .ToArray();
+        Task focusedStageTask = Task.WhenAll(focusedWorkers);
+
+        Task[] stages = [executeStageTask, mappingStageTask, compareStageTask, focusedStageTask];
+        ExceptionDispatchInfo? firstFailure = null;
+        foreach (Task stage in stages)
+        {
+            _ = stage.ContinueWith(
+                failedStage =>
+                {
+                    Exception failure = failedStage.Exception?.Flatten().InnerExceptions.FirstOrDefault()
+                        ?? new InvalidOperationException("A pipeline stage failed without an exception.");
+                    Interlocked.CompareExchange(ref firstFailure, ExceptionDispatchInfo.Capture(failure), null);
+                    pipelineCancellation.Cancel();
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
+
+        try
+        {
+            await Task.WhenAll(stages).ConfigureAwait(false);
+        }
+        catch when (firstFailure is not null)
+        {
+            firstFailure.Throw();
+            throw;
+        }
+        finally
+        {
+            if (pipelineCancellation.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+            {
+                executedChannel.Writer.TryComplete();
+                mappedChannel.Writer.TryComplete();
+                comparedChannel.Writer.TryComplete();
+            }
+        }
         await sequencer.FlushRemainingAsync(cancellationToken).ConfigureAwait(false);
+
+        TimeSpan persistence = TimeSpan.FromTicks(persistenceTicks);
 
         return new RunPipelineResult(
             TimeSpan.FromTicks(executionTicks),
             TimeSpan.FromTicks(comparisonTicks),
-            TimeSpan.FromTicks(persistenceTicks),
-            compareConcurrency);
+            persistence,
+            compareConcurrency,
+            stageMetrics.Snapshot(
+                mappingConcurrency,
+                compareConcurrency,
+                focusedContentConcurrency,
+                executeToMappingCapacity,
+                mappingToComparisonCapacity,
+                comparisonToFocusedCapacity,
+                persistence));
     }
 
-    private static async Task RunWorkerStageAsync(Task[] workers, ChannelWriter<QueuedExecutionRecord> writer)
+    private static async Task RunWorkerStageAsync<T>(Task[] workers, ChannelWriter<QueuedStageRecord<T>> writer)
     {
         try
         {
@@ -601,28 +795,24 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         }
     }
 
-    private static async Task WriteExecutedRecordAsync(
-        ChannelWriter<QueuedExecutionRecord> writer,
-        ExecutionRecord record,
-        DetailedCompareMetricsCollector? timing,
+    private static async Task WriteStageRecordAsync<T>(
+        ChannelWriter<QueuedStageRecord<T>> writer,
+        T record,
+        StageQueueCounter counter,
+        Action<TimeSpan>? additionalBackpressure,
         CancellationToken cancellationToken)
     {
-        if (timing is null)
+        Stopwatch? stopwatch = null;
+        while (true)
         {
-            while (!writer.TryWrite(new QueuedExecutionRecord(record, Stopwatch.GetTimestamp())))
+            QueuedStageRecord<T> queued = new(record, Stopwatch.GetTimestamp());
+            counter.Enqueued();
+            if (writer.TryWrite(queued))
             {
-                if (!await writer.WaitToWriteAsync(cancellationToken).ConfigureAwait(false))
-                {
-                    throw new ChannelClosedException();
-                }
+                break;
             }
 
-            return;
-        }
-
-        Stopwatch? stopwatch = null;
-        while (!writer.TryWrite(new QueuedExecutionRecord(record, Stopwatch.GetTimestamp())))
-        {
+            counter.EnqueueRejected();
             stopwatch ??= Stopwatch.StartNew();
             if (!await writer.WaitToWriteAsync(cancellationToken).ConfigureAwait(false))
             {
@@ -633,7 +823,8 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         if (stopwatch is not null)
         {
             stopwatch.Stop();
-            timing.AddExecutionBackpressure(stopwatch.Elapsed);
+            counter.AddBackpressure(stopwatch.Elapsed);
+            additionalBackpressure?.Invoke(stopwatch.Elapsed);
         }
     }
 
@@ -716,6 +907,251 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         }
 
         return new ComparedExecutionRecord(executionRecord.ManifestOrdinal, pairResult);
+    }
+
+    private async Task<MappedExecutionRecord> MapRecordAsync(
+        ComparisonRun run,
+        RunOptions comparisonOptions,
+        RunPipelineExecution? pipelineExecution,
+        BaselineRunSessions baselineSessions,
+        ExecutionRecord executionRecord,
+        CompareSubPhaseCounters? subPhaseCounters,
+        CancellationToken cancellationToken)
+    {
+        if (pipelineExecution is null)
+        {
+            return new MappedExecutionRecord(executionRecord);
+        }
+
+        RequestItem request = executionRecord.Request;
+        if (baselineSessions.Capture is { } captureSession)
+        {
+            EndpointExecutionRecord endpoint = executionRecord.EndpointA;
+            if (!string.IsNullOrWhiteSpace(endpoint.ErrorMessage) || !endpoint.IsSuccessStatusCode)
+            {
+                return new MappedExecutionRecord(executionRecord);
+            }
+
+            IEndpointPipelineContext context = RequirePipelineContext(endpoint);
+            await TimeSubPhaseAsync(
+                subPhaseCounters,
+                static (c, e) => c.AddNormalize(e),
+                async () =>
+                {
+                    await pipelineExecution.Pipeline
+                        .ExecuteEndpointAsync(context, PipelinePhase.Mapping, PipelinePhase.Mapping, cancellationToken)
+                        .ConfigureAwait(false);
+                    return true;
+                }).ConfigureAwait(false);
+
+            if (context.IsFailed)
+            {
+                return new MappedExecutionRecord(
+                    executionRecord,
+                    new RequestPairResult(
+                        request.RelativePath,
+                        RequestPairOutcome.ExecutionFailed,
+                        context.ResponseArtifact,
+                        context.ResponseArtifact,
+                        context.FailureReason));
+            }
+
+            await captureSession.CaptureAsync(request, context, cancellationToken).ConfigureAwait(false);
+            return new MappedExecutionRecord(executionRecord);
+        }
+
+        EndpointExecutionRecord endpointA = executionRecord.EndpointA;
+        EndpointExecutionRecord endpointB = executionRecord.EndpointB;
+        string? errorMessage = BuildErrorMessage(endpointA, endpointB);
+        if (!string.IsNullOrWhiteSpace(errorMessage) || !endpointA.IsSuccessStatusCode || !endpointB.IsSuccessStatusCode)
+        {
+            return new MappedExecutionRecord(executionRecord);
+        }
+
+        try
+        {
+            IEndpointPipelineContext contextA = RequirePipelineContext(endpointA);
+            IEndpointPipelineContext contextB = RequirePipelineContext(endpointB);
+            await TimeSubPhaseAsync(
+                subPhaseCounters,
+                static (c, e) => c.AddNormalize(e),
+                async () =>
+                {
+                    if (!endpointA.IsBaselineReplay)
+                    {
+                        await pipelineExecution.Pipeline
+                            .ExecuteEndpointAsync(contextA, PipelinePhase.Mapping, PipelinePhase.Mapping, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+
+                    if (!endpointB.IsBaselineReplay)
+                    {
+                        await pipelineExecution.Pipeline
+                            .ExecuteEndpointAsync(contextB, PipelinePhase.Mapping, PipelinePhase.Mapping, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+
+                    return true;
+                }).ConfigureAwait(false);
+
+            return contextA.IsFailed || contextB.IsFailed
+                ? new MappedExecutionRecord(
+                    executionRecord,
+                    new RequestPairResult(
+                        request.RelativePath,
+                        RequestPairOutcome.ExecutionFailed,
+                        contextA.ResponseArtifact,
+                        contextB.ResponseArtifact,
+                        contextA.FailureReason ?? contextB.FailureReason))
+                : new MappedExecutionRecord(executionRecord);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            observabilityRecorder.RecordException(run.Id, "PipelineMapping", ex, request.RelativePath);
+            return new MappedExecutionRecord(
+                executionRecord,
+                new RequestPairResult(request.RelativePath, RequestPairOutcome.ExecutionFailed, errorMessage: ex.Message));
+        }
+    }
+
+    private async Task<ComparedExecutionRecord> CompareMappedRecordAsync(
+        ComparisonRun run,
+        RunOptions comparisonOptions,
+        RunPipelineExecution? pipelineExecution,
+        BaselineRunSessions baselineSessions,
+        MappedExecutionRecord mappedRecord,
+        CompareSubPhaseCounters? subPhaseCounters,
+        CancellationToken cancellationToken)
+    {
+        ExecutionRecord executionRecord = mappedRecord.Execution;
+        RequestItem request = executionRecord.Request;
+        if (mappedRecord.TerminalResult is not null)
+        {
+            return new ComparedExecutionRecord(executionRecord.ManifestOrdinal, mappedRecord.TerminalResult);
+        }
+
+        if (baselineSessions.Capture is { } captureSession)
+        {
+            EndpointExecutionRecord endpoint = executionRecord.EndpointA;
+            RequestPairResult captureResult = !string.IsNullOrWhiteSpace(endpoint.ErrorMessage) || !endpoint.IsSuccessStatusCode
+                ? await CompareRawOnlyAsync(
+                    comparisonOptions,
+                    request,
+                    endpoint.Metadata,
+                    endpoint.Metadata,
+                    endpoint.ErrorMessage,
+                    subPhaseCounters,
+                    cancellationToken).ConfigureAwait(false)
+                : RequestPairResult.FromComparison(
+                    request,
+                    RequirePipelineContext(endpoint).ResponseArtifact!,
+                    RequirePipelineContext(endpoint).ResponseArtifact!,
+                    Array.Empty<ComparisonDifference>(),
+                    $"Captured into baseline '{captureSession.Manifest.Name}' {captureSession.Manifest.DisplayVersion}.");
+            return new ComparedExecutionRecord(executionRecord.ManifestOrdinal, captureResult);
+        }
+
+        if (pipelineExecution is null)
+        {
+            RequestPairResult regular = await CompareRawOnlyAsync(
+                comparisonOptions,
+                request,
+                executionRecord.EndpointA.Metadata,
+                executionRecord.EndpointB.Metadata,
+                BuildErrorMessage(executionRecord.EndpointA, executionRecord.EndpointB),
+                subPhaseCounters,
+                cancellationToken).ConfigureAwait(false);
+            return new ComparedExecutionRecord(executionRecord.ManifestOrdinal, regular);
+        }
+
+        EndpointExecutionRecord endpointA = executionRecord.EndpointA;
+        EndpointExecutionRecord endpointB = executionRecord.EndpointB;
+        string? errorMessage = BuildErrorMessage(endpointA, endpointB);
+        if (!string.IsNullOrWhiteSpace(errorMessage) || !endpointA.IsSuccessStatusCode || !endpointB.IsSuccessStatusCode)
+        {
+            RequestPairResult raw = await CompareRawOnlyAsync(
+                comparisonOptions,
+                request,
+                endpointA.Metadata,
+                endpointB.Metadata,
+                errorMessage,
+                subPhaseCounters,
+                cancellationToken).ConfigureAwait(false);
+            return new ComparedExecutionRecord(executionRecord.ManifestOrdinal, raw);
+        }
+
+        try
+        {
+            PairPipelineContext pairContext = pipelineExecution.CreatePairContext(
+                run,
+                request,
+                RequirePipelineContext(endpointA),
+                RequirePipelineContext(endpointB),
+                comparisonOptions.Comparison);
+            await TimeSubPhaseAsync(
+                subPhaseCounters,
+                static (c, e) => c.AddDiff(e),
+                async () =>
+                {
+                    await pipelineExecution.Pipeline.ExecutePairAsync(pairContext, cancellationToken).ConfigureAwait(false);
+                    return true;
+                }).ConfigureAwait(false);
+            return new ComparedExecutionRecord(executionRecord.ManifestOrdinal, ToPairResult(request, pairContext));
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            observabilityRecorder.RecordException(run.Id, "PipelineComparison", ex, request.RelativePath);
+            return new ComparedExecutionRecord(
+                executionRecord.ManifestOrdinal,
+                new RequestPairResult(request.RelativePath, RequestPairOutcome.ExecutionFailed, errorMessage: ex.Message));
+        }
+    }
+
+    private async Task<RequestPairResult> CompareRawOnlyAsync(
+        RunOptions comparisonOptions,
+        RequestItem request,
+        ResponseArtifactMetadata? responseA,
+        ResponseArtifactMetadata? responseB,
+        string? errorMessage,
+        CompareSubPhaseCounters? subPhaseCounters,
+        CancellationToken cancellationToken) =>
+        await TimeSubPhaseAsync(
+            subPhaseCounters,
+            static (c, e) => c.AddDiff(e),
+            () => CompareResponseAsync(
+                request,
+                comparisonOptions,
+                responseA,
+                responseB,
+                errorMessage,
+                subPhaseCounters?.Detailed,
+                cancellationToken)).ConfigureAwait(false);
+
+    private async Task<ComparedExecutionRecord> AttachFocusedRecordAsync(
+        ComparisonRun run,
+        RunOptions comparisonOptions,
+        ComparedExecutionRecord comparedRecord,
+        CompareSubPhaseCounters? subPhaseCounters,
+        CancellationToken cancellationToken)
+    {
+        RequestPairResult focused = await TimeSubPhaseAsync(
+            subPhaseCounters,
+            static (c, e) => { c.AddFocusedContent(e); c.Detailed.AddFocusedContent(e); },
+            () => AttachFocusedRawContentAsync(
+                comparedRecord.Result,
+                run.Id,
+                comparisonOptions,
+                subPhaseCounters?.Detailed,
+                cancellationToken)).ConfigureAwait(false);
+        return comparedRecord with { Result = focused };
     }
 
     /// <summary>
@@ -1113,8 +1549,8 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
 
         return RequestPairResult.FromComparison(
             request,
-            context.ResponseArtifactA,
-            context.ResponseArtifactB,
+            context.ResponseArtifactA!,
+            context.ResponseArtifactB!,
             result.Differences,
             result.OutcomeMessage);
     }
@@ -1224,7 +1660,6 @@ public sealed partial class ComparisonRunExecutor : IComparisonRunExecutor
         int RetainedArtifactCount,
         int TrimmedByPolicyArtifactCount,
         int MissingUnexpectedlyArtifactCount);
-    private sealed record QueuedExecutionRecord(ExecutionRecord Record, long EnqueuedTimestamp);
     // Only instantiated when ObservabilityOptions.EnableDetailedCompareTiming is on -
     // otherwise CompareRecordAsync's TimeSubPhaseAsync helper never touches this and no
     // Stopwatch is created, so the toggle being off has no measurable cost.

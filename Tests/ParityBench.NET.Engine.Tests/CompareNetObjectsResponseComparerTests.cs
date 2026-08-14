@@ -296,10 +296,16 @@ public sealed class CompareNetObjectsResponseComparerTests
             null,
             collector);
         DetailedCompareMetrics metrics = collector.ToMetrics(TimeSpan.FromSeconds(1));
+        NormalizationWorkMetrics work = collector.ToNormalizationMetrics();
 
         Assert.AreEqual(RequestPairOutcome.Equal, result.Outcome);
         Assert.IsTrue(metrics.ComparisonModelNormalizationDuration >= TimeSpan.FromMilliseconds(40),
             $"Expected restoration delay in normalization, measured {metrics.ComparisonModelNormalizationDuration.TotalMilliseconds:F1} ms.");
+        Assert.IsTrue(work.RestorationDuration >= TimeSpan.FromMilliseconds(40),
+            $"Expected restoration to be reported independently, measured {work.RestorationDuration.TotalMilliseconds:F1} ms.");
+        TimeSpan classified = work.GraphTraversalDuration + work.SortKeyConstructionDuration
+            + work.CollectionSortDuration + work.LegacyFallbackDuration + work.RestorationDuration;
+        Assert.IsTrue(classified <= metrics.ComparisonModelNormalizationDuration + TimeSpan.FromMilliseconds(5));
     }
 
     [TestMethod]

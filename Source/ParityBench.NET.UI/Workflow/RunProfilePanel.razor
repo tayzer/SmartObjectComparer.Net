@@ -82,10 +82,46 @@
                     <MudTextField T="string" Label="Endpoint A URL" @bind-Value="editEndpointA" />
                     <MudTextField T="string" Label="Endpoint B URL" @bind-Value="editEndpointB" />
                     <MudTextField T="string" Label="Request directory" @bind-Value="editRequestDirectory" />
-                    <MudTextField T="string" Label="Compare workers"
-                                  @bind-Value="editComparisonConcurrency"
-                                  Immediate="true"
-                                  HelperText="Blank uses uncalibrated Auto. Enter the worker count recommended by the local performance matrix." />
+                    <MudExpansionPanels>
+                        <MudExpansionPanel Text="Performance calibration">
+                            <MudStack Spacing="2" Class="pt-2">
+                                <MudTextField T="string" Label="Mapping workers"
+                                              @bind-Value="editMappingConcurrency"
+                                              Immediate="true"
+                                              HelperText="Blank uses Auto. Mapping reads artifacts and creates comparison models." />
+                                <MudTextField T="string" Label="Compare workers"
+                                              @bind-Value="editComparisonConcurrency"
+                                              Immediate="true"
+                                              HelperText="Blank uses Auto. Comparison workers run model preparation and pair comparison." />
+                                <MudTextField T="string" Label="Focused-content workers"
+                                              @bind-Value="editFocusedContentConcurrency"
+                                              Immediate="true"
+                                              HelperText="Blank uses Auto. Focused workers read, prune, and persist focused artifacts." />
+                                <MudSelect T="WorkerGcMode" Label="Worker GC mode" @bind-Value="editWorkerGcMode">
+                                    @foreach (WorkerGcMode mode in Enum.GetValues<WorkerGcMode>())
+                                    {
+                                        <MudSelectItem T="WorkerGcMode" Value="@mode">@GcModeLabel(mode)</MudSelectItem>
+                                    }
+                                </MudSelect>
+                                @if (editWorkerGcMode == WorkerGcMode.ServerFixed)
+                                {
+                                    <MudTextField T="string" Label="Server GC heaps"
+                                                  @bind-Value="editServerGcHeapCount"
+                                                  Immediate="true"
+                                                  HelperText="Positive heap count selected by machine calibration." />
+                                }
+                                @if (HasCalibrationMachineMismatch)
+                                {
+                                    <MudAlert Severity="Severity.Warning" Dense="true">
+                                        This profile was calibrated on different hardware. Explicit settings remain unchanged; rerun local calibration before trusting the old recommendation.
+                                    </MudAlert>
+                                }
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    Auto uses at most eight workers per post-HTTP stage. Results record actual workers and GC mode.
+                                </MudText>
+                            </MudStack>
+                        </MudExpansionPanel>
+                    </MudExpansionPanels>
                     <MudSelect T="string" Label="Response retention"
                                Value="@editRetentionMode"
                                ValueChanged="@(value => editRetentionMode = value ?? string.Empty)"
@@ -129,6 +165,11 @@
     private string editEndpointB = string.Empty;
     private string editRequestDirectory = string.Empty;
     private string editComparisonConcurrency = string.Empty;
+    private string editMappingConcurrency = string.Empty;
+    private string editFocusedContentConcurrency = string.Empty;
+    private WorkerGcMode editWorkerGcMode;
+    private string editServerGcHeapCount = string.Empty;
+    private string? editCalibrationMachineFingerprint;
 
     /// <summary>
     /// The version the profile pins, or empty for "highest installed". Empty is the
@@ -240,6 +281,11 @@
         editEndpointB = profile.EndpointB.ToString();
         editRequestDirectory = profile.RequestDirectory ?? string.Empty;
         editComparisonConcurrency = profile.LargeRun.ComparisonConcurrency?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
+        editMappingConcurrency = profile.LargeRun.MappingConcurrency?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
+        editFocusedContentConcurrency = profile.LargeRun.FocusedContentConcurrency?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
+        editWorkerGcMode = profile.LargeRun.WorkerGcMode;
+        editServerGcHeapCount = profile.LargeRun.ServerGcHeapCount?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty;
+        editCalibrationMachineFingerprint = profile.LargeRun.PerformanceCalibrationMachineFingerprint;
         editPluginVersion = profile.PluginVersion ?? string.Empty;
         editRetentionMode = profile.RetentionModeOverride?.ToString() ?? string.Empty;
         editStepConfiguration = profile.StepConfiguration.ToDictionary(
@@ -337,17 +383,18 @@
             return;
         }
 
-        int? comparisonConcurrency = null;
-        if (!string.IsNullOrWhiteSpace(editComparisonConcurrency))
+        if (!TryParseOptionalWorkers(editMappingConcurrency, "Mapping workers", out int? mappingConcurrency)
+            || !TryParseOptionalWorkers(editComparisonConcurrency, "Compare workers", out int? comparisonConcurrency)
+            || !TryParseOptionalWorkers(editFocusedContentConcurrency, "Focused-content workers", out int? focusedContentConcurrency))
         {
-            if (!int.TryParse(editComparisonConcurrency, out int parsedComparisonConcurrency)
-                || parsedComparisonConcurrency <= 0)
-            {
-                Snackbar.Add("Compare workers must be a positive whole number or blank for Auto.", Severity.Error);
-                return;
-            }
+            return;
+        }
 
-            comparisonConcurrency = parsedComparisonConcurrency;
+        int? serverGcHeapCount = null;
+        if (editWorkerGcMode == WorkerGcMode.ServerFixed
+            && !TryParseRequiredWorkers(editServerGcHeapCount, "Server GC heaps", out serverGcHeapCount))
+        {
+            return;
         }
 
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> persistedConfiguration =
@@ -372,7 +419,18 @@
                 detailPageSize: editing.LargeRun.DetailPageSize,
                 comparisonConcurrency: comparisonConcurrency,
                 progressUpdateItemInterval: editing.LargeRun.ProgressUpdateItemInterval,
-                progressUpdateMillisecondsInterval: editing.LargeRun.ProgressUpdateMillisecondsInterval),
+                progressUpdateMillisecondsInterval: editing.LargeRun.ProgressUpdateMillisecondsInterval,
+                mappingConcurrency: mappingConcurrency,
+                focusedContentConcurrency: focusedContentConcurrency,
+                workerGcMode: editWorkerGcMode,
+                serverGcHeapCount: serverGcHeapCount,
+                performanceCalibrationMachineFingerprint: HasExplicitPerformanceCalibration(
+                    mappingConcurrency,
+                    comparisonConcurrency,
+                    focusedContentConcurrency,
+                    editWorkerGcMode)
+                    ? CurrentMachineFingerprint()
+                    : null),
             retentionModeOverride: RetentionModePresentation.Parse(editRetentionMode),
             endpointAHeaders: editing.EndpointAHeaders,
             endpointBHeaders: editing.EndpointBHeaders);
@@ -437,7 +495,35 @@
         editPluginVersions.Clear();
         editRetentionMode = string.Empty;
         editComparisonConcurrency = string.Empty;
+        editMappingConcurrency = string.Empty;
+        editFocusedContentConcurrency = string.Empty;
+        editWorkerGcMode = WorkerGcMode.Auto;
+        editServerGcHeapCount = string.Empty;
+        editCalibrationMachineFingerprint = null;
         Snackbar.Add("Profile deleted.", Severity.Info);
+    }
+
+    private bool HasCalibrationMachineMismatch =>
+        !string.IsNullOrWhiteSpace(editCalibrationMachineFingerprint)
+        && !string.Equals(editCalibrationMachineFingerprint, CurrentMachineFingerprint(), StringComparison.Ordinal);
+
+    private static bool HasExplicitPerformanceCalibration(
+        int? mappingConcurrency,
+        int? comparisonConcurrency,
+        int? focusedContentConcurrency,
+        WorkerGcMode gcMode) =>
+        mappingConcurrency is not null
+        || comparisonConcurrency is not null
+        || focusedContentConcurrency is not null
+        || gcMode != WorkerGcMode.Auto;
+
+    private static string CurrentMachineFingerprint()
+    {
+        long availableMemory = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
+        long memoryGiB = (long)Math.Round(availableMemory / 1024d / 1024d / 1024d, MidpointRounding.AwayFromZero);
+        string identity = $"{System.Runtime.InteropServices.RuntimeInformation.OSArchitecture}|{Environment.ProcessorCount}|{memoryGiB}";
+        byte[] digest = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(identity));
+        return Convert.ToHexString(digest.AsSpan(0, 12)).ToLowerInvariant();
     }
 
     private string UniqueProfileId(string templateId)
@@ -456,4 +542,37 @@
     private sealed record TemplateOption(InstalledPluginMetadata Plugin, PluginProfileTemplate Template, string Label);
 
     private sealed record VersionOption(string Version, string Label);
+
+    private bool TryParseOptionalWorkers(string value, string label, out int? parsed)
+    {
+        parsed = null;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        return TryParseRequiredWorkers(value, label, out parsed);
+    }
+
+    private bool TryParseRequiredWorkers(string value, string label, out int? parsed)
+    {
+        parsed = null;
+        if (!int.TryParse(value, out int count) || count <= 0)
+        {
+            Snackbar.Add($"{label} must be a positive whole number.", Severity.Error);
+            return false;
+        }
+
+        parsed = count;
+        return true;
+    }
+
+    private static string GcModeLabel(WorkerGcMode mode) => mode switch
+    {
+        WorkerGcMode.Auto => "Auto",
+        WorkerGcMode.Workstation => "Workstation",
+        WorkerGcMode.ServerAdaptive => "Server adaptive (DATAS)",
+        WorkerGcMode.ServerFixed => "Server fixed heaps",
+        _ => mode.ToString(),
+    };
 }

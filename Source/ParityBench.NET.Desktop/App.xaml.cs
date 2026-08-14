@@ -179,8 +179,8 @@ public partial class App : System.Windows.Application
             configuration,
             workspaceRoot,
             fixtureBaseUrl);
-        // Opt-in via Worker:Enabled=true: execute runs out of process so a plugin
-        // failure cannot take the desktop app down.
+        // Desktop defaults to an isolated per-run worker so GC mode can be selected
+        // before process startup and plugin failures cannot take the UI process down.
         if (configuration.GetValue("Worker:Enabled", false))
         {
             services.UseWorkerProcessExecution(configuration, workspaceRoot, fixtureBaseUrl);

@@ -13,6 +13,14 @@ public interface IObservabilityRecorder
 
     bool IsDetailedCompareTimingEnabled { get; }
 
+    bool IsStructuralFingerprintExportEnabled => false;
+
+    string? StructuralFingerprintOutputDirectory => null;
+
+    bool IsCalibrationCaptureEnabled => false;
+
+    string? CalibrationCaptureOutputDirectory => null;
+
     TimeSpan SlowPathThreshold { get; }
 
     void RecordRunPhase(RunId runId, string phaseName, TimeSpan duration);
