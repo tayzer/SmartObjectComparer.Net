@@ -1,4 +1,4 @@
-name: Build & Format & Test
+name: Build & Test
 
 on:
   push:
@@ -8,11 +8,14 @@ on:
 
 jobs:
   validate:
+    name: Build & Test
     runs-on: windows-latest
+
     permissions:
       actions: read
       contents: read
       security-events: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,13 +33,10 @@ jobs:
       - name: Restore
         run: dotnet restore ComparisonTool.sln
 
-      # - name: Format (whitespace only, verify no changes)
-      #   run: dotnet format whitespace ComparisonTool.sln --verify-no-changes --verbosity minimal --exclude "ComparisonTool.Tests"
-
       - name: Build
         run: dotnet build ComparisonTool.sln --configuration Release --no-restore
 
-      - name: Run CodeQL analysis
+      - name: Run CodeQL Analysis
         uses: github/codeql-action/analyze@v3
 
       - name: Test
@@ -66,8 +66,8 @@ jobs:
           path: artifacts/ci/retention-matrix/**
 
       - name: Upload Test Results
-        uses: actions/upload-artifact@v4
         if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: test-results
           path: |
