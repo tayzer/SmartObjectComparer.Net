@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using ParityBench.NET.Application.Plugins;
 
 using ParityBench.PluginSdk.Profiles;
@@ -10,9 +12,10 @@ namespace ParityBench.NET.Application.Profiles;
 /// of the box.
 /// </summary>
 /// <remarks>
-/// A template is materialised only when no profile with its id already exists, so a
-/// profile the operator has edited is never overwritten — the template seeds the
-/// profile once and the saved profile owns it thereafter.
+/// A template is materialised only when no profile with its id already exists. When
+/// a higher plugin version is installed alongside its predecessor, an unchanged
+/// profile is refreshed from the higher version's template; an operator-edited
+/// profile is never overwritten.
 /// </remarks>
 public sealed class PluginProfileBootstrapper
 {
@@ -30,38 +33,77 @@ public sealed class PluginProfileBootstrapper
 
     /// <summary>
     /// Ensures every installed plugin's profile templates exist as saved profiles.
-    /// Returns the ids of the profiles it created.
+    /// Returns the ids of profiles it created or refreshed.
     /// </summary>
     public async Task<IReadOnlyList<string>> EnsureTemplateProfilesAsync(CancellationToken cancellationToken = default)
     {
         PluginCatalogView catalog = await pluginMetadata.GetCatalogAsync(cancellationToken).ConfigureAwait(false);
 
         IReadOnlyList<RunProfile> existing = await profileStore.ListAsync(cancellationToken).ConfigureAwait(false);
-        HashSet<string> existingIds = existing.Select(profile => profile.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, RunProfile> existingById = existing.ToDictionary(profile => profile.Id, StringComparer.OrdinalIgnoreCase);
 
-        List<string> created = new List<string>();
-        foreach (InstalledPluginMetadata plugin in catalog.Plugins)
+        List<string> materialised = new List<string>();
+        foreach (InstalledPluginMetadata plugin in catalog.Plugins.Where(plugin => plugin.IsActive))
         {
             foreach (PluginProfileTemplate template in plugin.ProfileTemplates)
             {
-                if (!existingIds.Add(template.TemplateId))
-                {
-                    continue;
-                }
-
                 RunProfile? profile = TryMaterialise(plugin, template);
                 if (profile is null)
                 {
                     continue;
                 }
 
+                if (existingById.TryGetValue(template.TemplateId, out RunProfile? existingProfile))
+                {
+                    if (!WasMaterialisedBySupersededVersion(existingProfile, plugin, template, catalog.Plugins))
+                    {
+                        continue;
+                    }
+                }
+
                 await profileStore.SaveAsync(profile, cancellationToken).ConfigureAwait(false);
-                created.Add(profile.Id);
+                existingById[profile.Id] = profile;
+                materialised.Add(profile.Id);
             }
         }
 
-        return created;
+        return materialised;
     }
+
+    private static bool WasMaterialisedBySupersededVersion(
+        RunProfile existingProfile,
+        InstalledPluginMetadata activePlugin,
+        PluginProfileTemplate activeTemplate,
+        IReadOnlyList<InstalledPluginMetadata> installedPlugins)
+    {
+        // No refresh when current template already describes saved profile. This also
+        // makes repeated bootstrapping idempotent.
+        RunProfile? activeProfile = TryMaterialise(activePlugin, activeTemplate);
+        if (activeProfile is not null && ProfilesMatch(existingProfile, activeProfile))
+        {
+            return false;
+        }
+
+        // A match with a lower installed version is reliable provenance: profile was
+        // seeded, then left untouched. Do not infer this from shared ids alone.
+        return installedPlugins
+            .Where(candidate =>
+                !candidate.IsActive
+                && string.Equals(candidate.PluginId, activePlugin.PluginId, StringComparison.OrdinalIgnoreCase))
+            .SelectMany(candidate => candidate.ProfileTemplates.Select(template => (Plugin: candidate, Template: template)))
+            .Where(candidate => string.Equals(candidate.Template.TemplateId, activeTemplate.TemplateId, StringComparison.OrdinalIgnoreCase))
+            .Select(candidate => TryMaterialise(candidate.Plugin, candidate.Template))
+            .Where(candidate => candidate is not null)
+            .Any(candidate => ProfilesMatch(existingProfile, candidate!));
+    }
+
+    // RunProfile contains dictionaries and lists, whose record equality is reference
+    // based. JSON gives this comparison value semantics over every persisted field.
+    private static bool ProfilesMatch(RunProfile left, RunProfile right) =>
+        string.Equals(
+            JsonSerializer.Serialize(left),
+            JsonSerializer.Serialize(right),
+            StringComparison.Ordinal);
 
     private static RunProfile? TryMaterialise(InstalledPluginMetadata plugin, PluginProfileTemplate template)
     {

@@ -61,11 +61,16 @@ public sealed class PluginProfileBootstrapperTests
 
     private sealed class StubPluginMetadataProvider : IPluginMetadataProvider
     {
-        private readonly InstalledPluginMetadata plugin;
+        private IReadOnlyList<InstalledPluginMetadata> plugins;
+
+        public StubPluginMetadataProvider(params InstalledPluginMetadata[] plugins)
+        {
+            this.plugins = plugins;
+        }
 
         public StubPluginMetadataProvider(string packageDirectory, string templateRequestDirectory)
         {
-            plugin = new InstalledPluginMetadata(
+            plugins = new[] { new InstalledPluginMetadata(
                 "acme.lookup",
                 "1.0.0",
                 "Acme",
@@ -75,17 +80,19 @@ public sealed class PluginProfileBootstrapperTests
                 Array.Empty<PluginSdk.Configuration.PluginConfigurationSchema>(),
                 new[] { new PluginSdk.Profiles.PluginEnvironment("QA", new Uri("https://qa/a"), new Uri("https://qa/b")) },
                 new[] { new PluginSdk.Profiles.PluginProfileTemplate("acme-qa", "Acme QA", "acme.cmp", environmentName: "QA", requestDirectory: templateRequestDirectory) },
-                packageDirectory);
+                packageDirectory) };
         }
 
+        public void SetCatalog(params InstalledPluginMetadata[] plugins) => this.plugins = plugins;
+
         public Task<PluginCatalogView> GetCatalogAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(new PluginCatalogView(new[] { plugin }, Array.Empty<PluginInstallationFailure>()));
+            Task.FromResult(new PluginCatalogView(plugins, Array.Empty<PluginInstallationFailure>()));
 
         public Task<PluginCatalogView> RefreshCatalogAsync(CancellationToken cancellationToken = default) =>
             GetCatalogAsync(cancellationToken);
 
         public Task<InstalledPluginMetadata?> GetPluginAsync(string pluginId, string? version = null, CancellationToken cancellationToken = default) =>
-            Task.FromResult<InstalledPluginMetadata?>(plugin);
+            Task.FromResult<InstalledPluginMetadata?>(plugins.FirstOrDefault());
 
         public Task<PluginComparisonDefinitionInfo?> ResolveComparisonDefinitionAsync(string pluginId, string comparisonId, string? version = null, CancellationToken cancellationToken = default) =>
             Task.FromResult<PluginComparisonDefinitionInfo?>(null);
@@ -114,6 +121,67 @@ public sealed class PluginProfileBootstrapperTests
         Assert.AreEqual(0, created.Count);
         Assert.AreEqual(new Uri("https://edited/a"), (await store.GetAsync("test-template"))!.EndpointA);
     }
+
+    [TestMethod]
+    public async Task EnsureTemplateProfilesAsync_RefreshesAnUneditedProfileWhenAHigherPluginVersionIsInstalled()
+    {
+        InstalledPluginMetadata versionOne = CreatePluginMetadata("1.0.0", "https://v1/a", isActive: true);
+        StubPluginMetadataProvider metadata = new StubPluginMetadataProvider(versionOne);
+        InMemoryRunProfileStore store = new InMemoryRunProfileStore();
+        PluginProfileBootstrapper bootstrapper = new PluginProfileBootstrapper(metadata, store);
+
+        await bootstrapper.EnsureTemplateProfilesAsync();
+
+        metadata.SetCatalog(
+            versionOne with { IsActive = false },
+            CreatePluginMetadata("2.0.0", "https://v2/a", isActive: true));
+
+        IReadOnlyList<string> materialised = await bootstrapper.EnsureTemplateProfilesAsync();
+
+        CollectionAssert.AreEqual(new[] { "acme-qa" }, materialised.ToArray());
+        Assert.AreEqual(new Uri("https://v2/a"), (await store.GetAsync("acme-qa"))!.EndpointA);
+    }
+
+    [TestMethod]
+    public async Task EnsureTemplateProfilesAsync_DoesNotRefreshAProfileEditedAfterItsTemplateWasMaterialised()
+    {
+        InstalledPluginMetadata versionOne = CreatePluginMetadata("1.0.0", "https://v1/a", isActive: true);
+        StubPluginMetadataProvider metadata = new StubPluginMetadataProvider(versionOne);
+        InMemoryRunProfileStore store = new InMemoryRunProfileStore();
+        PluginProfileBootstrapper bootstrapper = new PluginProfileBootstrapper(metadata, store);
+
+        await bootstrapper.EnsureTemplateProfilesAsync();
+        await store.SaveAsync(new RunProfile(
+            "acme-qa",
+            "Acme QA",
+            "acme.lookup",
+            "acme.cmp",
+            new Uri("https://operator/a"),
+            new Uri("https://service/b"),
+            environmentName: "QA"));
+
+        metadata.SetCatalog(
+            versionOne with { IsActive = false },
+            CreatePluginMetadata("2.0.0", "https://v2/a", isActive: true));
+
+        IReadOnlyList<string> materialised = await bootstrapper.EnsureTemplateProfilesAsync();
+
+        Assert.AreEqual(0, materialised.Count);
+        Assert.AreEqual(new Uri("https://operator/a"), (await store.GetAsync("acme-qa"))!.EndpointA);
+    }
+
+    private static InstalledPluginMetadata CreatePluginMetadata(string version, string endpointA, bool isActive) =>
+        new(
+            "acme.lookup",
+            version,
+            "Acme",
+            null,
+            null,
+            new[] { new PluginComparisonMetadata("acme.cmp", "Acme", Array.Empty<string>(), Array.Empty<string>()) },
+            Array.Empty<PluginSdk.Configuration.PluginConfigurationSchema>(),
+            new[] { new PluginSdk.Profiles.PluginEnvironment("QA", new Uri(endpointA), new Uri("https://service/b")) },
+            new[] { new PluginSdk.Profiles.PluginProfileTemplate("acme-qa", "Acme QA", "acme.cmp", environmentName: "QA") },
+            IsActive: isActive);
 
     private sealed class InMemoryRunProfileStore : IRunProfileStore
     {

@@ -1,38 +1,40 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-  </PropertyGroup>
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+    </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Console" />
-  </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+    </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\ParityBench.NET.Application\ParityBench.NET.Application.csproj" />
-    <ProjectReference Include="..\ParityBench.NET.ClientCustomerLookupExample\ParityBench.NET.ClientCustomerLookupExample.csproj" />
-    <ProjectReference Include="..\ParityBench.NET.Composition\ParityBench.NET.Composition.csproj" />
-    <ProjectReference Include="..\ParityBench.NET.Domain\ParityBench.NET.Domain.csproj" />
-  </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ParityBench.NET.Application\ParityBench.NET.Application.csproj" />
+        <ProjectReference Include="..\ParityBench.NET.ClientCustomerLookupExample\ParityBench.NET.ClientCustomerLookupExample.csproj" />
+        <ProjectReference Include="..\ParityBench.NET.Composition\ParityBench.NET.Composition.csproj" />
+        <ProjectReference Include="..\ParityBench.NET.Domain\ParityBench.NET.Domain.csproj" />
+    </ItemGroup>
 
-  <Target Name="PublishParityBenchReportAssets" AfterTargets="Publish" Condition="'$(PublishParityBenchReportAssets)' != 'false'">
-    <MSBuild Projects="..\ParityBench.NET.Report\ParityBench.NET.Report.csproj"
-             Targets="Publish"
-             Properties="Configuration=$(Configuration);PublishDir=$(PublishDir)BlazorReportAssets\;PublishParityBenchReportAssets=false"
-             RemoveProperties="RuntimeIdentifier;SelfContained;PublishSingleFile;PublishReadyToRun;IncludeNativeLibrariesForSelfExtract;IncludeAllContentForSelfExtract;UseAppHost" />
-  </Target>
+    <Target Name="PublishParityBenchReportAssets" AfterTargets="Publish" Condition="'$(PublishParityBenchReportAssets)' != 'false'">
+        <MSBuild Projects="..\ParityBench.NET.Report\ParityBench.NET.Report.csproj"
+                 Targets="Publish"
+                 Properties="Configuration=$(Configuration);PublishDir=$(PublishDir)BlazorReportAssets\;PublishParityBenchReportAssets=false"
+                 RemoveProperties="RuntimeIdentifier;SelfContained;PublishSingleFile;PublishReadyToRun;IncludeNativeLibrariesForSelfExtract;IncludeAllContentForSelfExtract;UseAppHost" />
+    </Target>
 
-  <ItemGroup>
-    <Content Include="appsettings.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="appsettings.*.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <DependentUpon>appsettings.json</DependentUpon>
-    </Content>
-  </ItemGroup>
+    <ItemGroup>
+        <Content Include="appsettings.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <Content Include="appsettings.*.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <DependentUpon>appsettings.json</DependentUpon>
+        </Content>
+    </ItemGroup>
+
+    <Import Project="..\build\ParityBench.BundledPlugins.targets"/>
 
 </Project>

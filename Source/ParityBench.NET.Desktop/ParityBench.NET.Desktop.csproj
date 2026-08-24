@@ -59,7 +59,7 @@
 
   <Target Name="PublishParityBenchWorker" AfterTargets="Publish" Condition="'$(PublishParityBenchWorker)' != 'false'">
     <MSBuild Projects="..\ParityBench.NET.Worker\ParityBench.NET.Worker.csproj"
-             Targets="Publish"
+             Targets="Restore;Publish"
              Properties="Configuration=$(Configuration);PublishDir=$(PublishDir)worker\;RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(SelfContained);PublishSingleFile=false;PublishParityBenchWorker=false;PublishParityBenchReportAssets=false" />
   </Target>
 
