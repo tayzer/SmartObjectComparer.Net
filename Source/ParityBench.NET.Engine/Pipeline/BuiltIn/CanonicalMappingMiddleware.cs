@@ -1,9 +1,11 @@
+using System.Diagnostics;
 using ParityBench.NET.Application.ContractProfiles;
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.ContractProfiles;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Domain.Runs;
+using ParityBench.NET.Engine;
 
 using ParityBench.PluginSdk.Comparisons;
 using ParityBench.PluginSdk.Pipeline;
@@ -31,6 +33,7 @@ public sealed class CanonicalMappingMiddleware : IEndpointComparisonMiddleware
     private readonly RunId runId;
     private readonly IReadOnlyList<MaskRuleDefinition> maskRules;
     private readonly RunExecutionCounters counters;
+    private readonly DetailedCompareMetricsCollector? timing;
 
     public CanonicalMappingMiddleware(
         IComparisonDefinition definition,
@@ -38,7 +41,8 @@ public sealed class CanonicalMappingMiddleware : IEndpointComparisonMiddleware
         IRunArtifactStore runArtifactStore,
         RunId runId,
         IReadOnlyList<MaskRuleDefinition> maskRules,
-        RunExecutionCounters counters)
+        RunExecutionCounters counters,
+        DetailedCompareMetricsCollector? timing = null)
     {
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(serializer);
@@ -52,6 +56,7 @@ public sealed class CanonicalMappingMiddleware : IEndpointComparisonMiddleware
         this.runId = runId;
         this.maskRules = maskRules;
         this.counters = counters;
+        this.timing = timing;
     }
 
     public string StepId => BuiltInStepIds.CanonicalMapping;
@@ -62,6 +67,23 @@ public sealed class CanonicalMappingMiddleware : IEndpointComparisonMiddleware
     public int Order => 1000;
 
     public async ValueTask InvokeAsync(
+        IEndpointPipelineContext context,
+        PipelineDelegate next,
+        CancellationToken cancellationToken)
+    {
+        if (timing is null)
+        {
+            await InvokeCoreAsync(context, next, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        await InvokeCoreAsync(context, next, cancellationToken).ConfigureAwait(false);
+        stopwatch.Stop();
+        timing.AddCanonicalMapping(stopwatch.Elapsed);
+    }
+
+    private async ValueTask InvokeCoreAsync(
         IEndpointPipelineContext context,
         PipelineDelegate next,
         CancellationToken cancellationToken)

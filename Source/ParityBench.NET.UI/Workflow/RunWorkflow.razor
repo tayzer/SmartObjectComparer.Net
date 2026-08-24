@@ -311,7 +311,10 @@
                                            IgnoreXmlNamespaces="ignoreXmlNamespaces"
                                            IgnoreXmlNamespacesChanged="HandleIgnoreXmlNamespacesChanged"
                                            MaxDifferences="@MaxDifferencesValue"
-                                           MaxDifferencesChanged="HandleMaxDifferencesImported" />
+                                           MaxDifferencesChanged="HandleMaxDifferencesImported"
+                                           IncludeAllDifferences="includeAllDifferences"
+                                           IncludeAllDifferencesChanged="HandleIncludeAllDifferencesChanged" />
+                        <MudSwitch @bind-Value="includeAllDifferences" Color="Color.Warning">Include all differences (can use substantial memory and disk)</MudSwitch>
                         <MudTextField T="string" Label="Smart Ignores" Lines="4" @bind-Value="smartIgnoreRules" Variant="Variant.Outlined" />
                     </MudStack>
                 </MudExpansionPanel>
@@ -518,6 +521,7 @@
     private IReadOnlyList<RunProfileSummary> runProfiles = Array.Empty<RunProfileSummary>();
     private string selectedRunProfileId = string.Empty;
     private PluginComparisonSelection? selectedPluginComparison;
+    private LargeRunOptions? selectedLargeRunOptions;
     private ComparisonRuleDefaults? pluginDefaultComparisonRules;
     private BaselineRunMode baselineMode = BaselineRunMode.LiveVsLive;
     private IReadOnlyList<BaselineSummary> baselines = Array.Empty<BaselineSummary>();
@@ -555,6 +559,7 @@
     private bool ignoreTrailingWhitespace;
     private bool treatNullAndEmptyCollectionsEqual;
     private bool ignoreXmlNamespaces = true;
+    private bool includeAllDifferences;
     private Type? selectedModelType;
     private string profileDefaultIgnoreRuleSearchTerm = string.Empty;
     private bool showProfileDefaultIgnoreRules;
@@ -705,6 +710,7 @@
             // Cleared: drop the plugin selection so a subsequent run is a plain
             // endpoint-to-endpoint comparison again.
             selectedPluginComparison = null;
+            selectedLargeRunOptions = null;
             pluginDefaultComparisonRules = null;
             requestSourceDescription = string.Empty;
             retentionModeOverride = string.Empty;
@@ -719,6 +725,7 @@
             selectedPresetId = string.Empty;
             contractProfileId = string.Empty;
             selectedPluginComparison = resolved.Selection;
+            selectedLargeRunOptions = resolved.LargeRun;
             endpointA = resolved.EndpointA.ToString();
             endpointB = resolved.EndpointB.ToString();
             endpointAHeaders = FormatHeaders(resolved.EndpointAHeaders);
@@ -767,6 +774,7 @@
             errorMessage = ex.Message;
             selectedRunProfileId = string.Empty;
             selectedPluginComparison = null;
+            selectedLargeRunOptions = null;
         }
     }
 
@@ -774,6 +782,7 @@
     {
         selectedRunProfileId = string.Empty;
         selectedPluginComparison = null;
+        selectedLargeRunOptions = null;
         pluginDefaultComparisonRules = null;
         selectedPresetId = value ?? string.Empty;
         RequestComparisonPresetOption? preset = defaults.Presets.FirstOrDefault(candidate =>
@@ -1011,7 +1020,8 @@
             maxDifferenceCount,
             ignoreRuleDefinitions,
             RunWorkflowRuleParser.ParseSmartIgnoreRules(smartIgnoreRules),
-            maskRuleDefinitions);
+            maskRuleDefinitions,
+            includeAllDifferences);
         RequestExecutionOptions executionOptions = new RequestExecutionOptions(contentTypeOverride);
 
         // modelName mirrors the plugin's canonical type only for the Ignore/Mask Rules
@@ -1039,7 +1049,8 @@
             sourceFiles: sourceFiles.Count == 0 ? null : sourceFiles,
             pluginComparison: selectedPluginComparison,
             baseline: baselineSelection,
-            runRetentionModeOverride: SelectedRetentionMode);
+            runRetentionModeOverride: SelectedRetentionMode,
+            largeRunOptions: selectedLargeRunOptions);
     }
 
     private BaselineRunSelection? BuildBaselineSelection()
@@ -1081,6 +1092,7 @@
         treatNullAndEmptyCollectionsEqual = options.TreatNullAndEmptyCollectionsAsEqual;
         ignoreXmlNamespaces = options.IgnoreXmlNamespaces;
         maxDifferences = options.MaxDifferences.ToString();
+        includeAllDifferences = options.IncludeAllDifferences;
         ignoreRuleDefinitions = options.IgnoreRules.ToList();
         smartIgnoreRules = FormatSmartIgnoreRules(options.SmartIgnoreRules);
         maskRuleDefinitions = options.MaskRules.ToList();
@@ -1133,6 +1145,12 @@
     private Task HandleMaxDifferencesImported(int value)
     {
         maxDifferences = Math.Max(1, value).ToString();
+        return Task.CompletedTask;
+    }
+
+    private Task HandleIncludeAllDifferencesChanged(bool value)
+    {
+        includeAllDifferences = value;
         return Task.CompletedTask;
     }
 

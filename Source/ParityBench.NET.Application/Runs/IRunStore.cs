@@ -23,6 +23,14 @@ public interface IRunStore
     Task<IReadOnlyList<RunListItem>> ListAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Returns and clears non-fatal snapshot recovery warnings raised while
+    /// loading runs. Implementations without filesystem recovery return none.
+    /// </summary>
+    Task<IReadOnlyList<RunSnapshotRecoveryWarning>> DrainRecoveryWarningsAsync(
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<RunSnapshotRecoveryWarning>>(Array.Empty<RunSnapshotRecoveryWarning>());
+
+    /// <summary>
     /// Loads the count-only result summary for a run when available.
     /// </summary>
     Task<RunResultSummary?> LoadSummaryAsync(RunId runId, CancellationToken cancellationToken = default);

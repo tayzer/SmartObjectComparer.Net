@@ -113,7 +113,7 @@ public static class StaticReportDifferenceIndexBuilder
         return "Value Differences";
     }
 
-    private static bool IsStructuredDomainDifference(ComparisonDifference difference)
+    internal static bool IsStructuredDomainDifference(ComparisonDifference difference)
     {
         string path = difference.PropertyPath ?? string.Empty;
         return !string.Equals(path, "HttpStatus", StringComparison.OrdinalIgnoreCase)
@@ -121,7 +121,7 @@ public static class StaticReportDifferenceIndexBuilder
             && !string.Equals(path, "BodyPreview", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static StaticReportAffectedPairDifference MergePairRows(IEnumerable<StaticReportAffectedPairDifference> rows)
+    internal static StaticReportAffectedPairDifference MergePairRows(IEnumerable<StaticReportAffectedPairDifference> rows)
     {
         List<StaticReportAffectedPairDifference> orderedRows = rows
             .OrderBy(row => row.PropertyPath, StringComparer.OrdinalIgnoreCase)
@@ -146,5 +146,44 @@ public static class StaticReportDifferenceIndexBuilder
             representative.Message);
     }
 
-    private static bool HasValue(string? value) => !string.IsNullOrEmpty(value);
+    internal static bool HasValue(string? value) => !string.IsNullOrEmpty(value);
+}
+
+/// <summary>Incrementally builds the persisted difference index while detail pages stream.</summary>
+public sealed class StaticReportDifferenceIndexAccumulator
+{
+    private readonly List<StaticReportAffectedPairDifference> rows = new();
+
+    public void Add(RequestPairResult item)
+    {
+        foreach (ComparisonDifference difference in item.Differences)
+        {
+            if (!StaticReportDifferenceIndexBuilder.IsStructuredDomainDifference(difference)) continue;
+            rows.Add(new StaticReportAffectedPairDifference(
+                item.RelativePath, difference.PropertyPath,
+                StaticReportDifferenceIndexBuilder.NormalizePropertyPath(difference.PropertyPath),
+                StaticReportDifferenceIndexBuilder.CategorizeDifference(difference), 1, item.Outcome,
+                item.ResponseA?.StatusCode, item.ResponseB?.StatusCode,
+                difference.ValueA, difference.ValueB, difference.Message));
+        }
+    }
+
+    public StaticReportDifferenceIndex Build()
+    {
+        IReadOnlyList<StaticReportPropertyDifferenceSummary> properties = rows
+            .GroupBy(row => row.NormalizedPath, StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                List<StaticReportAffectedPairDifference> affectedPairs = group.GroupBy(row => row.RelativePath, StringComparer.OrdinalIgnoreCase)
+                    .Select(StaticReportDifferenceIndexBuilder.MergePairRows)
+                    .OrderBy(row => row.RelativePath, StringComparer.OrdinalIgnoreCase).ToList();
+                StaticReportAffectedPairDifference first = group.First();
+                string category = group.Select(row => row.Category).GroupBy(value => value, StringComparer.OrdinalIgnoreCase)
+                    .OrderByDescending(value => value.Count()).ThenBy(value => value.Key, StringComparer.OrdinalIgnoreCase).First().Key;
+                return new StaticReportPropertyDifferenceSummary(first.PropertyPath, group.Key, category, group.Sum(row => row.OccurrenceCount), affectedPairs.Count, affectedPairs);
+            })
+            .OrderByDescending(property => property.OccurrenceCount)
+            .ThenBy(property => property.NormalizedPath, StringComparer.OrdinalIgnoreCase).ToList();
+        return new StaticReportDifferenceIndex(rows.Sum(row => row.OccurrenceCount), rows.Select(row => row.RelativePath).Distinct(StringComparer.OrdinalIgnoreCase).Count(), properties);
+    }
 }

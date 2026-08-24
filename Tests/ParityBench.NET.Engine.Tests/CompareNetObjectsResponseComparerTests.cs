@@ -17,6 +17,298 @@ namespace ParityBench.NET.Engine.Tests;
 public sealed class CompareNetObjectsResponseComparerTests
 {
     [TestMethod]
+    public async Task CompareAsync_AfterReversiblePreparation_RestoresOriginalModels()
+    {
+        ReportResponseModel left = new()
+        {
+            Details = new ReportDetails { ReportId = "left" },
+            Applicants =
+            [
+                new Applicant { Id = "2", Name = "Bob", Score = 20 },
+                new Applicant { Id = "1", Name = "Alice", Score = 10 },
+            ],
+        };
+        ReportResponseModel right = new()
+        {
+            Details = new ReportDetails { ReportId = "right" },
+            Applicants =
+            [
+                new Applicant { Id = "1", Name = "Alice", Score = 10 },
+                new Applicant { Id = "2", Name = "Bob", Score = 20 },
+            ],
+        };
+        CompareNetObjectsResponseComparer comparer = CreateComparer(("a", () => left), ("b", () => right));
+
+        RequestPairResult result = await comparer.CompareAsync(
+            CreateRequest(),
+            CreateOptions(comparisonOptions: new ComparisonOptions(
+                ignoreCollectionOrder: true,
+                ignoreRules: [new IgnoreRuleDefinition("Details.ReportId")])),
+            CreateResponse(EndpointSlot.A, "a"),
+            CreateResponse(EndpointSlot.B, "b"),
+            null);
+
+        Assert.AreEqual(RequestPairOutcome.Equal, result.Outcome);
+        Assert.AreEqual("left", left.Details!.ReportId);
+        Assert.AreEqual("right", right.Details!.ReportId);
+        CollectionAssert.AreEqual(new[] { "2", "1" }, left.Applicants!.Select(item => item.Id).ToArray());
+        CollectionAssert.AreEqual(new[] { "1", "2" }, right.Applicants!.Select(item => item.Id).ToArray());
+    }
+
+    [TestMethod]
+    public async Task CompareAsync_OptimizedPreparation_MatchesLegacyOrderedDifferences()
+    {
+        Random random = new(1977);
+        for (int iteration = 0; iteration < 25; iteration++)
+        {
+            Applicant[] leftApplicants = Enumerable.Range(0, 12)
+                .Select(index => new Applicant { Id = index.ToString(), Name = $"name-{index}", Score = random.Next(100), Address = new ApplicantAddress { Line1 = $"ignored-{random.Next()}", Postcode = $"P{index}" } })
+                .ToArray();
+            Applicant[] rightApplicants = leftApplicants
+                .Select(item => new Applicant { Id = item.Id, Name = item.Name, Score = item.Score, Address = new ApplicantAddress { Line1 = $"ignored-{random.Next()}", Postcode = item.Address?.Postcode } })
+                .OrderBy(_ => random.Next())
+                .ToArray();
+            rightApplicants[iteration % rightApplicants.Length].Name += "-changed";
+
+            Func<object> leftFactory = () => new ReportResponseModel { Details = new ReportDetails { ReportId = "left" }, Applicants = CloneApplicants(leftApplicants) };
+            Func<object> rightFactory = () => new ReportResponseModel { Details = new ReportDetails { ReportId = "right" }, Applicants = CloneApplicants(rightApplicants) };
+            (string ArtifactId, Func<object> Factory)[] models = [("a", leftFactory), ("b", rightFactory)];
+            ComparisonOptions comparison = new(
+                ignoreCollectionOrder: true,
+                maxDifferences: 100,
+                ignoreRules: [new IgnoreRuleDefinition("Details.ReportId"), new IgnoreRuleDefinition("Applicants[*].Address.Line1")]);
+
+            RequestPairResult optimized = await CreateComparer(models).CompareAsync(CreateRequest(), CreateOptions(comparison), CreateResponse(EndpointSlot.A, "a"), CreateResponse(EndpointSlot.B, "b"), null);
+            RequestPairResult legacy = await CreateLegacyComparer(models).CompareAsync(CreateRequest(), CreateOptions(comparison), CreateResponse(EndpointSlot.A, "a"), CreateResponse(EndpointSlot.B, "b"), null);
+
+            Assert.AreEqual(legacy.Outcome, optimized.Outcome, $"iteration {iteration}");
+            CollectionAssert.AreEqual(
+                legacy.Differences.Select(difference => (difference.PropertyPath, difference.ValueA, difference.ValueB, difference.Message)).ToArray(),
+                optimized.Differences.Select(difference => (difference.PropertyPath, difference.ValueA, difference.ValueB, difference.Message)).ToArray(),
+                $"iteration {iteration}");
+        }
+    }
+
+    [TestMethod]
+    public async Task CompareAsync_WithNestedArraysAndDictionaries_DoesNotFailPreparation()
+    {
+        BenchmarkShape left = CreateBenchmarkShape(reverse: false);
+        BenchmarkShape right = CreateBenchmarkShape(reverse: true);
+        CompareNetObjectsResponseComparer comparer = CreateComparer(("a", () => left), ("b", () => right));
+
+        RequestPairResult result = await comparer.CompareAsync(
+            CreateRequest(),
+            CreateOptions(new ComparisonOptions(
+                ignoreCollectionOrder: true,
+                ignoreRules: [new IgnoreRuleDefinition("Items[*].Amount")],
+                smartIgnoreRules: [new SmartIgnoreRuleDefinition(SmartIgnoreRuleKind.PropertyName, "Description")])),
+            CreateResponse(EndpointSlot.A, "a"),
+            CreateResponse(EndpointSlot.B, "b"),
+            null);
+
+        CompareNetObjectsResponseComparer legacyComparer = CreateLegacyComparer(
+            ("a", () => CreateBenchmarkShape(reverse: false)),
+            ("b", () => CreateBenchmarkShape(reverse: true)));
+        RequestPairResult legacy = await legacyComparer.CompareAsync(
+            CreateRequest(),
+            CreateOptions(new ComparisonOptions(
+                ignoreCollectionOrder: true,
+                ignoreRules: [new IgnoreRuleDefinition("Items[*].Amount")],
+                smartIgnoreRules: [new SmartIgnoreRuleDefinition(SmartIgnoreRuleKind.PropertyName, "Description")])),
+            CreateResponse(EndpointSlot.A, "a"),
+            CreateResponse(EndpointSlot.B, "b"),
+            null);
+
+        Assert.AreEqual(RequestPairOutcome.Different, result.Outcome, result.ErrorMessage);
+        Assert.IsTrue(result.Differences.Any(difference => difference.PropertyPath.Contains("Payload", StringComparison.Ordinal)));
+        CollectionAssert.AreEqual(
+            legacy.Differences.Select(difference => (difference.PropertyPath, difference.ValueA, difference.ValueB, difference.Message)).ToArray(),
+            result.Differences.Select(difference => (difference.PropertyPath, difference.ValueA, difference.ValueB, difference.Message)).ToArray());
+    }
+
+    [TestMethod]
+    public async Task CompareAsync_WithUnicodeDuplicatesNullsAndReadOnlyCollections_MatchesLegacyOutput()
+    {
+        Func<bool, EdgeCaseShape> create = reverse => new EdgeCaseShape
+        {
+            Values = reverse
+                ? new List<string?> { "Ω", null, "same", "é", "same" }
+                : new List<string?> { "same", "é", "same", null, "Ω" },
+            ReadOnlyApplicants = Array.AsReadOnly((reverse
+                ? new[] { new Applicant { Id = "2", Name = "二" }, new Applicant { Id = "1", Name = "é" } }
+                : new[] { new Applicant { Id = "1", Name = "é" }, new Applicant { Id = "2", Name = "二" } })),
+            Lookup = new Dictionary<string, List<int>>
+            {
+                ["numbers"] = reverse ? new List<int> { 3, 2, 1 } : new List<int> { 1, 2, 3 },
+            },
+        };
+        (string ArtifactId, Func<object> Factory)[] models =
+        [
+            ("a", () => create(false)),
+            ("b", () => create(true)),
+        ];
+        ComparisonOptions comparison = new(ignoreCollectionOrder: true, includeAllDifferences: true);
+
+        RequestPairResult optimized = await CreateComparer(models).CompareAsync(
+            CreateRequest(), CreateOptions(comparison), CreateResponse(EndpointSlot.A, "a"), CreateResponse(EndpointSlot.B, "b"), null);
+        RequestPairResult legacy = await CreateLegacyComparer(models).CompareAsync(
+            CreateRequest(), CreateOptions(comparison), CreateResponse(EndpointSlot.A, "a"), CreateResponse(EndpointSlot.B, "b"), null);
+
+        Assert.AreEqual(legacy.Outcome, optimized.Outcome);
+        CollectionAssert.AreEqual(
+            legacy.Differences.Select(difference => (difference.PropertyPath, difference.ValueA, difference.ValueB, difference.Message)).ToArray(),
+            optimized.Differences.Select(difference => (difference.PropertyPath, difference.ValueA, difference.ValueB, difference.Message)).ToArray());
+    }
+
+    [TestMethod]
+    public async Task CompareAsync_WithGetterOnlyJsonIgnoredProperty_MatchesLegacyOutput()
+    {
+        Func<bool, GetterOnlyIgnoredShape> create = reverse => new GetterOnlyIgnoredShape
+        {
+            Applicants = (reverse
+                ? new[] { new Applicant { Id = "2", Name = "changed" }, new Applicant { Id = "1", Name = "one" } }
+                : new[] { new Applicant { Id = "1", Name = "one" }, new Applicant { Id = "2", Name = "two" } }),
+        };
+        (string ArtifactId, Func<object> Factory)[] models =
+        [
+            ("a", () => create(false)),
+            ("b", () => create(true)),
+        ];
+        ComparisonOptions comparison = new(ignoreCollectionOrder: true, includeAllDifferences: true);
+
+        RequestPairResult optimized = await CreateComparer(models).CompareAsync(
+            CreateRequest(), CreateOptions(comparison), CreateResponse(EndpointSlot.A, "a"), CreateResponse(EndpointSlot.B, "b"), null);
+        RequestPairResult legacy = await CreateLegacyComparer(models).CompareAsync(
+            CreateRequest(), CreateOptions(comparison), CreateResponse(EndpointSlot.A, "a"), CreateResponse(EndpointSlot.B, "b"), null);
+
+        Assert.AreEqual(RequestPairOutcome.Different, optimized.Outcome);
+        CollectionAssert.AreEqual(
+            legacy.Differences.Select(difference => (difference.PropertyPath, difference.ValueA, difference.ValueB, difference.Message)).ToArray(),
+            optimized.Differences.Select(difference => (difference.PropertyPath, difference.ValueA, difference.ValueB, difference.Message)).ToArray());
+    }
+
+    [TestMethod]
+    public async Task CompareAsync_WithOversizedUnicodeSortKeys_MatchesLegacyOutput()
+    {
+        string first = string.Concat(Enumerable.Repeat("alpha-Ω", 100_000));
+        string second = string.Concat(Enumerable.Repeat("beta-é", 100_000));
+        (string ArtifactId, Func<object> Factory)[] models =
+        [
+            ("a", () => new EdgeCaseShape { Values = [first, second] }),
+            ("b", () => new EdgeCaseShape { Values = [second, first] }),
+        ];
+        ComparisonOptions comparison = new(ignoreCollectionOrder: true, includeAllDifferences: true);
+
+        RequestPairResult optimized = await CreateComparer(models).CompareAsync(
+            CreateRequest(), CreateOptions(comparison), CreateResponse(EndpointSlot.A, "a"), CreateResponse(EndpointSlot.B, "b"), null);
+        RequestPairResult legacy = await CreateLegacyComparer(models).CompareAsync(
+            CreateRequest(), CreateOptions(comparison), CreateResponse(EndpointSlot.A, "a"), CreateResponse(EndpointSlot.B, "b"), null);
+
+        Assert.AreEqual(RequestPairOutcome.Equal, optimized.Outcome);
+        Assert.AreEqual(legacy.Outcome, optimized.Outcome);
+        CollectionAssert.AreEqual(
+            legacy.Differences.Select(difference => (difference.PropertyPath, difference.ValueA, difference.ValueB, difference.Message)).ToArray(),
+            optimized.Differences.Select(difference => (difference.PropertyPath, difference.ValueA, difference.ValueB, difference.Message)).ToArray());
+    }
+
+    [TestMethod]
+    public async Task CompareAsync_WhenPreparationThrows_RestoresEarlierMutations()
+    {
+        ThrowingModel left = new() { Ignored = "left" };
+        ThrowingModel right = new() { Ignored = "right" };
+        CompareNetObjectsResponseComparer comparer = CreateComparer(("a", () => left), ("b", () => right));
+
+        RequestPairResult result = await comparer.CompareAsync(
+            CreateRequest(),
+            CreateOptions(new ComparisonOptions(ignoreRules: [new IgnoreRuleDefinition("Ignored")])),
+            CreateResponse(EndpointSlot.A, "a"),
+            CreateResponse(EndpointSlot.B, "b"),
+            null);
+
+        Assert.AreEqual(RequestPairOutcome.ExecutionFailed, result.Outcome);
+        Assert.AreEqual("left", left.Ignored);
+        Assert.AreEqual("right", right.Ignored);
+    }
+
+    [TestMethod]
+    public async Task CompareAsync_WithCyclesAndDuplicateFallbackKeys_MatchesLegacyAndRestoresModels()
+    {
+        CycleNode leftFirst = new() { Id = "2" };
+        CycleNode leftSecond = new() { Id = "1" };
+        leftFirst.Parent = leftFirst;
+        leftSecond.Parent = leftSecond;
+        CycleNode rightFirst = new() { Id = "1" };
+        CycleNode rightSecond = new() { Id = "2" };
+        rightFirst.Parent = rightFirst;
+        rightSecond.Parent = rightSecond;
+        CycleShape left = new() { Nodes = [leftFirst, leftSecond] };
+        CycleShape right = new() { Nodes = [rightFirst, rightSecond] };
+        ComparisonOptions comparison = new(ignoreCollectionOrder: true, includeAllDifferences: true);
+
+        RequestPairResult optimized = await CreateComparer(("a", () => left), ("b", () => right)).CompareAsync(
+            CreateRequest(), CreateOptions(comparison), CreateResponse(EndpointSlot.A, "a"), CreateResponse(EndpointSlot.B, "b"), null);
+        RequestPairResult legacy = await CreateLegacyComparer(("a", () => left), ("b", () => right)).CompareAsync(
+            CreateRequest(), CreateOptions(comparison), CreateResponse(EndpointSlot.A, "a"), CreateResponse(EndpointSlot.B, "b"), null);
+
+        Assert.AreEqual(legacy.Outcome, optimized.Outcome);
+        CollectionAssert.AreEqual(
+            legacy.Differences.Select(difference => (difference.PropertyPath, difference.ValueA, difference.ValueB, difference.Message)).ToArray(),
+            optimized.Differences.Select(difference => (difference.PropertyPath, difference.ValueA, difference.ValueB, difference.Message)).ToArray());
+        CollectionAssert.AreEqual(new[] { "2", "1" }, left.Nodes!.Select(node => node.Id).ToArray());
+        Assert.AreSame(leftFirst, leftFirst.Parent);
+    }
+
+    [TestMethod]
+    public async Task CompareAsync_WithDetailedTiming_RecordsConsumedBytesAndKeepsDifferences()
+    {
+        CompareNetObjectsResponseComparer comparer = CreateComparer(
+            ("a", () => new SampleResponse { Id = 1, Name = "Alpha" }),
+            ("b", () => new SampleResponse { Id = 1, Name = "Beta" }));
+        DetailedCompareMetricsCollector collector = new();
+
+        RequestPairResult result = await comparer.CompareAsync(
+            CreateRequest(), CreateOptions(), CreateResponse(EndpointSlot.A, "a"), CreateResponse(EndpointSlot.B, "b"), null, collector);
+        DetailedCompareMetrics metrics = collector.ToMetrics(TimeSpan.FromSeconds(1));
+
+        Assert.AreEqual(RequestPairOutcome.Different, result.Outcome);
+        Assert.IsTrue(result.Differences.Any(difference => difference.PropertyPath.Contains("Name", StringComparison.Ordinal)));
+        Assert.AreEqual(2, metrics.ArtifactBytesRead);
+        Assert.IsTrue(metrics.ArtifactOpenDuration >= TimeSpan.Zero);
+        Assert.IsTrue(metrics.ResponseDeserializationDuration >= TimeSpan.Zero);
+        Assert.IsTrue(metrics.ComparisonModelNormalizationDuration >= TimeSpan.Zero);
+        Assert.IsTrue(metrics.CompareNetObjectsTraversalDuration >= TimeSpan.Zero);
+        Assert.IsTrue(metrics.DifferenceMaterializationDuration >= TimeSpan.Zero);
+    }
+
+    [TestMethod]
+    public async Task CompareAsync_WithDetailedTiming_IncludesModelRestorationInNormalization()
+    {
+        CompareNetObjectsResponseComparer comparer = CreateComparer(
+            ("a", () => new SlowRestoringResponse("left")),
+            ("b", () => new SlowRestoringResponse("right")));
+        DetailedCompareMetricsCollector collector = new();
+
+        RequestPairResult result = await comparer.CompareAsync(
+            CreateRequest(),
+            CreateOptions(new ComparisonOptions(ignoreRules: [new IgnoreRuleDefinition("Ignored")])),
+            CreateResponse(EndpointSlot.A, "a"),
+            CreateResponse(EndpointSlot.B, "b"),
+            null,
+            collector);
+        DetailedCompareMetrics metrics = collector.ToMetrics(TimeSpan.FromSeconds(1));
+        NormalizationWorkMetrics work = collector.ToNormalizationMetrics();
+
+        Assert.AreEqual(RequestPairOutcome.Equal, result.Outcome);
+        Assert.IsTrue(metrics.ComparisonModelNormalizationDuration >= TimeSpan.FromMilliseconds(40),
+            $"Expected restoration delay in normalization, measured {metrics.ComparisonModelNormalizationDuration.TotalMilliseconds:F1} ms.");
+        Assert.IsTrue(work.RestorationDuration >= TimeSpan.FromMilliseconds(40),
+            $"Expected restoration to be reported independently, measured {work.RestorationDuration.TotalMilliseconds:F1} ms.");
+        TimeSpan classified = work.GraphTraversalDuration + work.SortKeyConstructionDuration
+            + work.CollectionSortDuration + work.LegacyFallbackDuration + work.RestorationDuration;
+        Assert.IsTrue(classified <= metrics.ComparisonModelNormalizationDuration + TimeSpan.FromMilliseconds(5));
+    }
+
+    [TestMethod]
     public async Task CompareAsync_WhenObjectsAreEqualButRawHashesDiffer_ReturnsEqual()
     {
         CompareNetObjectsResponseComparer comparer = CreateComparer(
@@ -51,6 +343,23 @@ public sealed class CompareNetObjectsResponseComparerTests
         Assert.AreEqual(RequestPairOutcome.Different, result.Outcome);
         Assert.IsTrue(result.DifferenceCount > 0);
         Assert.IsTrue(result.Differences.Any(difference => difference.PropertyPath.Contains("Name", StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
+    public async Task CompareAsync_WhenIncludeAllDifferencesEnabled_DoesNotApplyConfiguredLimit()
+    {
+        CompareNetObjectsResponseComparer comparer = CreateComparer(
+            ("a", () => new SampleResponse { Id = 1, Name = "Alpha", Description = "One" }),
+            ("b", () => new SampleResponse { Id = 2, Name = "Beta", Description = "Two" }));
+
+        RequestPairResult result = await comparer.CompareAsync(
+            CreateRequest(),
+            CreateOptions(comparisonOptions: new ComparisonOptions(maxDifferences: 1, includeAllDifferences: true)),
+            CreateResponse(EndpointSlot.A, "a"),
+            CreateResponse(EndpointSlot.B, "b"),
+            null);
+
+        Assert.IsTrue(result.DifferenceCount >= 3);
     }
 
     [TestMethod]
@@ -648,6 +957,42 @@ public sealed class CompareNetObjectsResponseComparerTests
         return new CompareNetObjectsResponseComparer(artifactStore, deserializer);
     }
 
+    private static CompareNetObjectsResponseComparer CreateLegacyComparer(
+        params (string ArtifactId, Func<object> Factory)[] models)
+    {
+        InMemoryArtifactStore artifactStore = new(models.Select(model => model.ArtifactId));
+        FakeResponseBodyDeserializer deserializer = new(models);
+        return new CompareNetObjectsResponseComparer(artifactStore, deserializer, useLegacyNormalizer: true);
+    }
+
+    private static Applicant[] CloneApplicants(IEnumerable<Applicant> applicants) => applicants
+        .Select(item => new Applicant
+        {
+            Id = item.Id,
+            Name = item.Name,
+            Score = item.Score,
+            Address = item.Address is null ? null : new ApplicantAddress { Line1 = item.Address.Line1, Postcode = item.Address.Postcode },
+        })
+        .ToArray();
+
+    private static BenchmarkShape CreateBenchmarkShape(bool reverse)
+    {
+        IEnumerable<int> indexes = reverse ? Enumerable.Range(0, 1024).Reverse() : Enumerable.Range(0, 1024);
+        return new BenchmarkShape
+        {
+            Payload = reverse ? "changed" : "stable",
+            Padding = new string('x', reverse ? 4095 : 4096),
+            Items = indexes.Select(index => new BenchmarkItem
+            {
+                Id = index,
+                Amount = reverse ? index + 1 : index,
+                Description = reverse ? "ignored-right" : "ignored-left",
+                Tags = ["a", "b"],
+                Attributes = new Dictionary<string, string> { ["source"] = "test", ["partition"] = (index % 2).ToString() },
+            }).ToArray(),
+        };
+    }
+
     private static RequestItem CreateRequest() => new RequestItem("one.json", "application/json", 2);
 
     private static RunOptions CreateOptions(ComparisonOptions? comparisonOptions = null) =>
@@ -758,6 +1103,27 @@ public sealed class CompareNetObjectsResponseComparerTests
         public string? Postcode { get; set; }
     }
 
+    private sealed class SlowRestoringResponse
+    {
+        private string? ignored;
+
+        public SlowRestoringResponse(string ignored) => this.ignored = ignored;
+
+        public string? Ignored
+        {
+            get => ignored;
+            set
+            {
+                if (ignored is null && value is not null)
+                {
+                    Thread.Sleep(25);
+                }
+
+                ignored = value;
+            }
+        }
+    }
+
     public sealed class SampleResponse
     {
         public int Id { get; init; }
@@ -769,6 +1135,59 @@ public sealed class CompareNetObjectsResponseComparerTests
         public string? CorrelationId { get; init; }
 
         public List<int>? Values { get; init; }
+    }
+
+    public sealed class BenchmarkShape
+    {
+        public string? Payload { get; set; }
+        public BenchmarkItem[]? Items { get; set; }
+        public string? Padding { get; set; }
+    }
+
+    public sealed class BenchmarkItem
+    {
+        public int Id { get; set; }
+        public decimal Amount { get; set; }
+        public string? Description { get; set; }
+        public string[]? Tags { get; set; }
+        public Dictionary<string, string>? Attributes { get; set; }
+    }
+
+    public sealed class EdgeCaseShape
+    {
+        public List<string?>? Values { get; set; }
+        public IReadOnlyList<Applicant>? ReadOnlyApplicants { get; set; }
+        public Dictionary<string, List<int>>? Lookup { get; set; }
+    }
+
+    public sealed class GetterOnlyIgnoredShape
+    {
+        public Applicant[] Applicants { get; set; } = [];
+
+        [JsonIgnore]
+        public int ApplicantCount => Applicants.Length;
+    }
+
+    public sealed class ThrowingModel
+    {
+        private string? throwingValue;
+        public string? Ignored { get; set; }
+        public string? Throws
+        {
+            get => throw new InvalidOperationException("preparation failure");
+            set => throwingValue = value;
+        }
+    }
+
+    public sealed class CycleShape
+    {
+        public CycleNode[]? Nodes { get; set; }
+    }
+
+    public sealed class CycleNode
+    {
+        public string? Id { get; set; }
+        public CycleNode? Parent { get; set; }
     }
 
     public sealed class MixedCollectionResponse

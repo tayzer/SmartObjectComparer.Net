@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -15,6 +16,68 @@ namespace ParityBench.NET.Workspaces.Tests;
 [TestClass]
 public sealed class FileSystemResultBrowsingTests
 {
+    [TestMethod]
+    public async Task ListRuns_WhenRunsHaveDifferentUpdateTimes_ReturnsNewestFirstWithStableIdTies()
+    {
+        string workspaceRoot = CreateTempDirectory();
+        FileSystemRunStore runStore = new FileSystemRunStore(workspaceRoot);
+        DateTimeOffset createdAt = DateTimeOffset.Parse("2026-01-01T00:00:00Z");
+        DateTimeOffset newest = createdAt.AddHours(2);
+
+        await runStore.SaveAsync(CreateRun("oldest", createdAt, createdAt.AddHours(1)));
+        await runStore.SaveAsync(CreateRun("z-tied", createdAt, newest));
+        await runStore.SaveAsync(CreateRun("a-tied", createdAt, newest));
+
+        IReadOnlyList<RunListItem> runs = await runStore.ListAsync();
+
+        CollectionAssert.AreEqual(new[] { "a-tied", "z-tied", "oldest" }, runs.Select(run => run.Id.Value).ToArray());
+    }
+
+    [TestMethod]
+    public async Task SaveRun_WritesAtomicallyWithoutLeavingTemporarySnapshot()
+    {
+        string workspaceRoot = CreateTempDirectory();
+        FileSystemRunStore runStore = new FileSystemRunStore(workspaceRoot);
+        RunId runId = new RunId("run-1");
+        ComparisonRun startedRun = ComparisonRun.Create(runId, CreateOptions()).Start();
+
+        await runStore.SaveAsync(startedRun);
+        await runStore.SaveAsync(startedRun.Advance(RunStatus.Comparing, new RunProgress(50, "Comparing.")));
+
+        string runDirectory = Path.Combine(workspaceRoot, "runs", runId.Value);
+        string snapshotPath = Path.Combine(runDirectory, "run.json");
+        using JsonDocument document = JsonDocument.Parse(await File.ReadAllTextAsync(snapshotPath));
+
+        Assert.AreEqual("Comparing", document.RootElement.GetProperty("Status").GetString());
+        Assert.AreEqual(0, Directory.EnumerateFiles(runDirectory, "*.tmp", SearchOption.TopDirectoryOnly).Count());
+    }
+
+    [TestMethod]
+    public async Task ListRuns_WhenSnapshotContainsConcatenatedJson_QuarantinesItAndListsHealthyRuns()
+    {
+        string workspaceRoot = CreateTempDirectory();
+        FileSystemRunStore runStore = new FileSystemRunStore(workspaceRoot);
+        await runStore.SaveAsync(ComparisonRun.Create(new RunId("healthy"), CreateOptions()));
+
+        string badDirectory = Path.Combine(workspaceRoot, "runs", "bad");
+        Directory.CreateDirectory(badDirectory);
+        string badSnapshotPath = Path.Combine(badDirectory, "run.json");
+        await File.WriteAllTextAsync(badSnapshotPath, "{}{}");
+
+        IReadOnlyList<RunListItem> runs = await runStore.ListAsync();
+        IReadOnlyList<ParityBench.NET.Application.Runs.RunSnapshotRecoveryWarning> warnings = await runStore.DrainRecoveryWarningsAsync();
+
+        CollectionAssert.AreEqual(new[] { "healthy" }, runs.Select(run => run.Id.Value).ToArray());
+        Assert.AreEqual(1, warnings.Count);
+        Assert.AreEqual(badSnapshotPath, warnings[0].SnapshotPath);
+        Assert.IsNotNull(warnings[0].QuarantinedPath);
+        Assert.IsTrue(File.Exists(warnings[0].QuarantinedPath));
+        Assert.IsFalse(File.Exists(badSnapshotPath));
+
+        await runStore.ListAsync();
+        Assert.AreEqual(0, (await runStore.DrainRecoveryWarningsAsync()).Count);
+    }
+
     [TestMethod]
     public async Task LoadDetailsPage_WhenIndexHasManyItems_ReturnsOnlyRequestedPage()
     {
@@ -246,4 +309,17 @@ public sealed class FileSystemResultBrowsingTests
             new EndpointDefinition(new Uri("https://service-b.example.test")),
             TimeSpan.FromSeconds(30),
             2);
+
+    private static ComparisonRun CreateRun(string id, DateTimeOffset createdAt, DateTimeOffset updatedAt) =>
+        ComparisonRun.Rehydrate(
+            new RunId(id),
+            CreateOptions(),
+            RunStatus.Created,
+            new RunProgress(0, "Run created."),
+            createdAt,
+            updatedAt,
+            startedAt: null,
+            completedAt: null,
+            summary: null,
+            errorMessage: null);
 }

@@ -229,6 +229,7 @@ public sealed class FileSystemRunDetailStore : IRunDetailStore
         return (dtos ?? new List<RequestPairResultDto>()).Select(FromDto).ToList();
     }
 
+
     private async Task<T?> ReadJsonArtifactAsync<T>(
         string artifactId,
         CancellationToken cancellationToken)

@@ -11,6 +11,16 @@ public interface IRunResultsViewDataSource
 {
     Task<IReadOnlyList<RunListItem>> ListRunsAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Cancels a non-terminal run. Static reports remain read-only and use the
+    /// default implementation.
+    /// </summary>
+    Task<ComparisonRun> CancelRunAsync(
+        RunId runId,
+        string? cancellationMessage = null,
+        CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("Run cancellation is not available from this result data source.");
+
     Task<ComparisonRun> LoadRunAsync(RunId runId, CancellationToken cancellationToken = default);
 
     Task<RunResultSummary?> LoadRunSummaryAsync(RunId runId, CancellationToken cancellationToken = default);

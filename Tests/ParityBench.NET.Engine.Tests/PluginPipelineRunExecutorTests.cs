@@ -135,6 +135,30 @@ public sealed class PluginPipelineRunExecutorTests
     }
 
     [TestMethod]
+    public async Task ExecuteAsync_WhenPluginDefaultsAreMerged_PreservesIncludeAllDifferences()
+    {
+        FakeRunDetailStore detailStore = new FakeRunDetailStore();
+        CapturingEndpointRequestSender sender = new CapturingEndpointRequestSender(endpointRequest =>
+            endpointRequest.Endpoint == EndpointSlot.A
+                ? "{\"status\":\"A\",\"items\":[\"one\",\"two\"]}"
+                : "{\"status\":\"B\",\"items\":[\"three\",\"four\"]}");
+        ComparisonRunExecutor executor = CreateExecutor(
+            CreateManifest(new RequestItem("one.json", "application/json", 10)),
+            sender,
+            new InMemoryArtifactStore(),
+            pluginStep: null,
+            defaults: new ComparisonRuleDefaults(ignoreStringCase: true),
+            detailStore: detailStore);
+
+        RunResultSummary summary = await executor.ExecuteAsync(
+            CreateRun(comparisonOptions: new ComparisonOptions(maxDifferences: 1, includeAllDifferences: true)),
+            new CapturingProgressReporter());
+
+        Assert.AreEqual(1, summary.DifferentPairs);
+        Assert.IsTrue(detailStore.SavedResults.Single().Differences.Count > 1, "Plugin-default merging must not restore the configured difference cap.");
+    }
+
+    [TestMethod]
     public async Task ExecuteAsync_WhenEndpointReturnsNonSuccess_ComparesRawResponsesInsteadOfMapping()
     {
         InMemoryArtifactStore artifactStore = new InMemoryArtifactStore();
@@ -285,12 +309,13 @@ public sealed class PluginPipelineRunExecutorTests
         InMemoryArtifactStore artifactStore,
         IComparisonMiddleware? pluginStep,
         ComparisonRuleDefaults? defaults = null,
-        IComparisonDefinition? definition = null) =>
+        IComparisonDefinition? definition = null,
+        IRunDetailStore? detailStore = null) =>
         new ComparisonRunExecutor(
             new FakeRequestBatchStore(manifest, "{\"source\":true}"),
             sender,
             artifactStore,
-            new FakeRunDetailStore(),
+            detailStore ?? new FakeRunDetailStore(),
             new HashOnlyResponseComparer(),
             new StubComparisonPlanFactory(
                 definition ?? new StubComparisonDefinition(defaults ?? new ComparisonRuleDefaults()),
@@ -302,7 +327,8 @@ public sealed class PluginPipelineRunExecutorTests
 
     private static ComparisonRun CreateRun(
         string? contentTypeOverride = null,
-        IReadOnlyDictionary<string, string>? endpointAHeaders = null) =>
+        IReadOnlyDictionary<string, string>? endpointAHeaders = null,
+        ComparisonOptions? comparisonOptions = null) =>
         ComparisonRun.Create(
             new RunId("run-1"),
             new RunOptions(
@@ -311,6 +337,7 @@ public sealed class PluginPipelineRunExecutorTests
                 new EndpointDefinition(new Uri("https://service-b.example.test")),
                 TimeSpan.FromSeconds(30),
                 2,
+                comparisonOptions: comparisonOptions,
                 pluginComparison: new PluginComparisonSelection("test.plugin", "test.plugin.comparison"),
                 requestExecutionOptions: new RequestExecutionOptions(contentTypeOverride)))
             .Start();
@@ -627,11 +654,16 @@ public sealed class PluginPipelineRunExecutorTests
 
     private sealed class FakeRunDetailStore : IRunDetailStore
     {
+        public IReadOnlyList<RequestPairResult> SavedResults { get; private set; } = Array.Empty<RequestPairResult>();
+
         public Task<RunDetailReference> SaveDetailsAsync(
             RunId runId,
             IReadOnlyList<RequestPairResult> results,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new RunDetailReference($"runs/{runId.Value}/details/index.json"));
+            CancellationToken cancellationToken = default)
+        {
+            SavedResults = results.ToArray();
+            return Task.FromResult(new RunDetailReference($"runs/{runId.Value}/details/index.json"));
+        }
 
         public Task<IReadOnlyList<RequestPairResult>> LoadDetailsAsync(
             RunDetailReference detailReference,

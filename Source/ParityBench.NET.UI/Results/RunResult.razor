@@ -4,6 +4,7 @@
 @using System.Xml.Linq
 @using ParityBench.NET.Domain.Baselines
 @using ParityBench.NET.Domain.Reports
+@using ParityBench.NET.Domain.Runs
 @using Microsoft.AspNetCore.Components
 @using Microsoft.JSInterop
 @inject IRunResultsViewDataSource DataSource
@@ -176,14 +177,103 @@ else if (run is not null)
             <MudPaper Outlined="true" Class="pa-3">
                 <MudStack Row="true" Spacing="1" Class="flex-wrap" AlignItems="AlignItems.Center">
                     <MudText Typo="Typo.subtitle2">Request Comparison Timings</MudText>
-                    <MudChip T="string" Size="Size.Small" Color="Color.Primary">Total: @FormatDuration(metadata.ExecutionMetrics.TotalDuration)</MudChip>
-                    <MudChip T="string" Size="Size.Small" Color="Color.Info">Execution: @FormatDuration(metadata.ExecutionMetrics.RequestExecutionDuration)</MudChip>
-                    <MudChip T="string" Size="Size.Small" Color="Color.Info">Comparison: @FormatDuration(metadata.ExecutionMetrics.ComparisonDuration)</MudChip>
-                    <MudChip T="string" Size="Size.Small" Color="Color.Info">Finalization: @FormatDuration(metadata.ExecutionMetrics.FinalizationDuration)</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary">Wall clock: @FormatDuration(metadata.ExecutionMetrics.TotalDuration)</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info">Request worker time (aggregate): @FormatDuration(metadata.ExecutionMetrics.RequestExecutionDuration)</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info">Compare worker time (aggregate): @FormatDuration(metadata.ExecutionMetrics.ComparisonDuration)</MudChip>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info">Finalization wall time: @FormatDuration(metadata.ExecutionMetrics.FinalizationDuration)</MudChip>
                     <MudChip T="string" Size="Size.Small">Requests: @metadata.ExecutionMetrics.RequestCount</MudChip>
-                    <MudChip T="string" Size="Size.Small">Concurrency: @metadata.ExecutionMetrics.MaxConcurrency</MudChip>
+                    <MudChip T="string" Size="Size.Small">HTTP workers: @metadata.ExecutionMetrics.MaxConcurrency</MudChip>
+                    <MudChip T="string" Size="Size.Small">Compare workers: @metadata.ExecutionMetrics.ComparisonConcurrency</MudChip>
+                    <MudChip T="string" Size="Size.Small">@FormatRate(metadata.ExecutionMetrics.RequestCount, metadata.ExecutionMetrics.TotalDuration) requests/s</MudChip>
+                    <MudChip T="string" Size="Size.Small">@FormatRate(metadata.ExecutionMetrics.RequestCount, metadata.ExecutionMetrics.ComparisonDuration) compare pairs/worker-s</MudChip>
+                    <MudChip T="string" Size="Size.Small">@FormatMiBRate(metadata.ExecutionMetrics.ResponseBytesWritten, metadata.ExecutionMetrics.TotalDuration) MiB/s written</MudChip>
+                    @if (metadata.ExecutionMetrics.DetailedCompareMetrics is { } detailed)
+                    {
+                        <MudText Typo="Typo.caption">Terminal compare stages below are aggregate worker time, not elapsed wall time.</MudText>
+                        @foreach (TimingBreakdownEntry entry in GetDetailedComparisonTimingBreakdown(detailed))
+                        {
+                            @if (entry.IsResidual)
+                            {
+                                <MudTooltip Text="Measured compare-worker time not yet classified into a terminal stage.">
+                                    <MudChip T="string" Size="Size.Small">@entry.Label (aggregate): @FormatDuration(entry.Duration)</MudChip>
+                                </MudTooltip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Size="Size.Small">@entry.Label (aggregate): @FormatDuration(entry.Duration)</MudChip>
+                            }
+                        }
+                        <MudChip T="string" Size="Size.Small">Artifact bytes read: @FormatBytes(detailed.ArtifactBytesRead)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Compare queue wait (aggregate): @FormatDuration(detailed.CompareQueueWaitDuration)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Execution backpressure (aggregate): @FormatDuration(detailed.ExecutionWorkerBackpressureDuration)</MudChip>
+                    }
+                    else if (metadata.ExecutionMetrics.CompareSubPhases is not null)
+                    {
+                        <MudText Typo="Typo.caption">Finer breakdown unavailable. Legacy compare stages below are aggregate worker time.</MudText>
+                        @foreach (TimingBreakdownEntry entry in GetComparisonTimingBreakdown(metadata.ExecutionMetrics))
+                        {
+                            <MudChip T="string" Size="Size.Small">@entry.Label (aggregate): @FormatDuration(entry.Duration)</MudChip>
+                        }
+                    }
                 </MudStack>
+                @if (metadata.ExecutionMetrics.PipelineStageMetrics is { } pipeline)
+                {
+                    <MudDivider Class="my-2" />
+                    <MudStack Row="true" Spacing="1" Class="flex-wrap" AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.subtitle2">Bounded Pipeline</MudText>
+                        <MudChip T="string" Size="Size.Small">Workers: map @pipeline.MappingConcurrency, compare @pipeline.ComparisonConcurrency, focused @pipeline.FocusedContentConcurrency</MudChip>
+                        <MudChip T="string" Size="Size.Small">Capacities: @pipeline.ExecuteToMappingCapacity / @pipeline.MappingToComparisonCapacity / @pipeline.ComparisonToFocusedCapacity</MudChip>
+                        <MudChip T="string" Size="Size.Small">Mapping work (aggregate): @FormatDuration(pipeline.MappingWorkerDuration)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Comparison work (aggregate): @FormatDuration(pipeline.ComparisonWorkerDuration)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Focused work (aggregate): @FormatDuration(pipeline.FocusedContentWorkerDuration)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Detail persistence (aggregate): @FormatDuration(pipeline.DetailPersistenceDuration)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Queue wait execute/map: @FormatDuration(pipeline.ExecuteToMappingQueueWaitDuration)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Queue wait map/compare: @FormatDuration(pipeline.MappingToComparisonQueueWaitDuration)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Queue wait compare/focused: @FormatDuration(pipeline.ComparisonToFocusedQueueWaitDuration)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Backpressure execute/map: @FormatDuration(pipeline.ExecutionBackpressureDuration)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Backpressure map/compare: @FormatDuration(pipeline.MappingBackpressureDuration)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Backpressure compare/focused: @FormatDuration(pipeline.ComparisonBackpressureDuration)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Max queue depth: @pipeline.MaximumExecuteToMappingDepth / @pipeline.MaximumMappingToComparisonDepth / @pipeline.MaximumComparisonToFocusedDepth</MudChip>
+                    </MudStack>
+                }
+                @if (metadata.ExecutionMetrics.NormalizationWorkMetrics is { } normalization)
+                {
+                    <MudDivider Class="my-2" />
+                    <MudStack Row="true" Spacing="1" Class="flex-wrap" AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.subtitle2">Normalization Work</MudText>
+                        <MudChip T="string" Size="Size.Small">Traversal/masking (aggregate): @FormatDuration(normalization.GraphTraversalDuration)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Sort-key construction (aggregate): @FormatDuration(normalization.SortKeyConstructionDuration)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Collection sorting (aggregate): @FormatDuration(normalization.CollectionSortDuration)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Legacy fallback (aggregate): @FormatDuration(normalization.LegacyFallbackDuration)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Restoration (aggregate): @FormatDuration(normalization.RestorationDuration)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Nodes: @normalization.ObjectNodeCount objects, @normalization.PropertyNodeCount properties, @normalization.CollectionItemCount items</MudChip>
+                        <MudChip T="string" Size="Size.Small">Sort keys: @FormatBytes(normalization.SortKeyBytes), max @FormatBytes(normalization.MaximumSortKeyBytes), @normalization.SortCollisionGroupCount collisions</MudChip>
+                        <MudChip T="string" Size="Size.Small">Fallback branches: @normalization.LegacyFallbackBranchCount</MudChip>
+                    </MudStack>
+                }
             </MudPaper>
+
+            @if (metadata.ExecutionMetrics.ProcessResourceMetrics is { } resources)
+            {
+                <MudPaper Outlined="true" Class="pa-3 mt-2">
+                    <MudStack Row="true" Spacing="1" Class="flex-wrap" AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.subtitle2">Application Resources</MudText>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary">Process CPU: @resources.ProcessCpuDuration.TotalSeconds.ToString("F2", CultureInfo.InvariantCulture) core-s / @resources.AverageMachineCpuUtilizationPercent.ToString("F2", CultureInfo.InvariantCulture)% of machine</MudChip>
+                        <MudChip T="string" Size="Size.Small">Peak working set: @FormatBytes(resources.PeakWorkingSetBytes)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Peak private: @FormatBytes(resources.PeakPrivateBytes)</MudChip>
+                        <MudChip T="string" Size="Size.Small">Managed allocated: @FormatBytes(resources.ManagedAllocatedBytes)</MudChip>
+                        <MudChip T="string" Size="Size.Small">GC: Gen0 @resources.Gen0CollectionCount, Gen1 @resources.Gen1CollectionCount, Gen2 @resources.Gen2CollectionCount</MudChip>
+                        <MudChip T="string" Size="Size.Small">Logical processors: @resources.LogicalProcessorCount</MudChip>
+                        @if (metadata.ExecutionMetrics.RuntimeMetrics is { } runtime)
+                        {
+                            <MudChip T="string" Size="Size.Small">GC mode: @(runtime.IsServerGc ? "Server" : "Workstation")</MudChip>
+                            <MudChip T="string" Size="Size.Small">Configured server heaps: @(runtime.ConfiguredServerGcHeapCount?.ToString(CultureInfo.InvariantCulture) ?? "Auto")</MudChip>
+                            <MudChip T="string" Size="Size.Small">DATAS: @(runtime.DynamicAdaptationEnabled is null ? "runtime default" : FormatBool(runtime.DynamicAdaptationEnabled.Value))</MudChip>
+                            <MudChip T="string" Size="Size.Small">Run memory budget: @FormatBytes(runtime.MemoryBudgetBytes) / @FormatBytes(runtime.TotalAvailableMemoryBytes) available</MudChip>
+                        }
+                    </MudStack>
+                </MudPaper>
+            }
         }
 
         @if (analysis is not null)
@@ -345,7 +435,7 @@ else if (run is not null)
                         <AcceptedDifferenceProfilesPanel OnProfilesChanged="ReloadAcceptedMatchesAsync" />
                         <MudDivider Class="my-3" />
                         <MudStack Row="true" Spacing="1" Class="flex-wrap">
-                            <MudChip T="string" Size="Size.Small">Max differences @run.Options.Comparison.MaxDifferences</MudChip>
+                            <MudChip T="string" Size="Size.Small">@(run.Options.Comparison.IncludeAllDifferences ? "All differences" : $"Max differences {run.Options.Comparison.MaxDifferences}")</MudChip>
                             <MudChip T="string" Size="Size.Small">Ignore namespaces @FormatBool(run.Options.Comparison.IgnoreXmlNamespaces)</MudChip>
                             <MudChip T="string" Size="Size.Small">Ignore order @FormatBool(run.Options.Comparison.IgnoreCollectionOrder)</MudChip>
                             <MudChip T="string" Size="Size.Small">Ignore case @FormatBool(run.Options.Comparison.IgnoreStringCase)</MudChip>
@@ -1477,6 +1567,53 @@ else if (run is not null)
     private static bool HasArtifactContent(RequestPairResult pair) => pair.ResponseA?.Artifact is not null || pair.ResponseB?.Artifact is not null;
     private static string FormatDate(DateTimeOffset value) => value.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
     private static string FormatDuration(TimeSpan value) => value.TotalMinutes >= 1 ? $"{(int)value.TotalMinutes}m {value.Seconds:D2}s" : value.TotalSeconds >= 1 ? $"{value.TotalSeconds:F2}s" : $"{value.TotalMilliseconds:F0} ms";
+    private static IReadOnlyList<TimingBreakdownEntry> GetComparisonTimingBreakdown(RunExecutionMetrics metrics)
+    {
+        CompareSubPhaseMetrics phases = metrics.CompareSubPhases!;
+        TimeSpan attributed = phases.NormalizeDuration
+            + phases.PersistCanonicalDuration
+            + phases.DiffDuration
+            + phases.FocusedContentDuration;
+        TimeSpan unattributed = metrics.ComparisonDuration - attributed;
+        List<TimingBreakdownEntry> entries = new()
+        {
+            new("Diff/body read", phases.DiffDuration),
+            new("Focused content", phases.FocusedContentDuration),
+            new("Normalize", phases.NormalizeDuration),
+            new("Canonical persistence", phases.PersistCanonicalDuration),
+        };
+        if (unattributed > TimeSpan.Zero)
+        {
+            entries.Add(new("Other compare work", unattributed));
+        }
+
+        return entries.OrderByDescending(entry => entry.Duration).ToList();
+    }
+    private static IReadOnlyList<TimingBreakdownEntry> GetDetailedComparisonTimingBreakdown(DetailedCompareMetrics metrics)
+    {
+        List<TimingBreakdownEntry> entries = new()
+        {
+            new("CNO graph traversal", metrics.CompareNetObjectsTraversalDuration),
+            new("Response deserialization", metrics.ResponseDeserializationDuration),
+            new("Difference filter/deduplicate/materialize", metrics.DifferenceMaterializationDuration),
+            new("Comparison-model normalization", metrics.ComparisonModelNormalizationDuration),
+            new("Canonical mapping", metrics.CanonicalMappingDuration),
+            new("Plugin mapping", metrics.PluginMappingDuration),
+            new("Plugin pair processing", metrics.PluginPairProcessingDuration),
+            new("Artifact open", metrics.ArtifactOpenDuration),
+            new("Focused content", metrics.FocusedContentDuration),
+        };
+        if (metrics.OtherCompareWorkerDuration > TimeSpan.Zero)
+        {
+            entries.Add(new("Other compare worker work", metrics.OtherCompareWorkerDuration, true));
+        }
+
+        return entries.Where(entry => entry.Duration > TimeSpan.Zero).OrderByDescending(entry => entry.Duration).ToList();
+    }
+    private sealed record TimingBreakdownEntry(string Label, TimeSpan Duration, bool IsResidual = false);
+    private static string FormatRate(long count, TimeSpan duration) => duration <= TimeSpan.Zero ? "0.00" : (count / duration.TotalSeconds).ToString("F2", CultureInfo.InvariantCulture);
+    private static string FormatMiBRate(long bytes, TimeSpan duration) => duration <= TimeSpan.Zero ? "0.00" : (bytes / 1024d / 1024d / duration.TotalSeconds).ToString("F2", CultureInfo.InvariantCulture);
+    private static string FormatBytes(long bytes) => bytes < 1024 * 1024 ? $"{bytes / 1024d:F1} KiB" : $"{bytes / 1024d / 1024d:F2} MiB";
     private static string FormatBool(bool value) => value ? "on" : "off";
     private static string FormatRawLine(StaticReportRawTextDifference difference) => difference.LineNumberA.HasValue && difference.LineNumberB.HasValue ? $"{difference.LineNumberA}/{difference.LineNumberB}" : difference.LineNumberA?.ToString(CultureInfo.InvariantCulture) ?? difference.LineNumberB?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
     private string GetPairRowClass(RequestPairResult pair, int index) => selectedPair is not null && string.Equals(selectedPair.RelativePath, pair.RelativePath, StringComparison.OrdinalIgnoreCase) ? "v1-selected-pair" : string.Empty;

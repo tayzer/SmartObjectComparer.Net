@@ -19,6 +19,16 @@ internal sealed class LargeRunOptionsDto
 
     public int? ComparisonConcurrency { get; init; }
 
+    public int? MappingConcurrency { get; init; }
+
+    public int? FocusedContentConcurrency { get; init; }
+
+    public WorkerGcMode WorkerGcMode { get; init; }
+
+    public int? ServerGcHeapCount { get; init; }
+
+    public string? PerformanceCalibrationMachineFingerprint { get; init; }
+
     public int ProgressUpdateItemInterval { get; init; } = 100;
 
     public int ProgressUpdateMillisecondsInterval { get; init; } = 500;

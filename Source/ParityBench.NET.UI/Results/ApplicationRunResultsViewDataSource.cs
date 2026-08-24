@@ -3,6 +3,7 @@ using System.Text.Json;
 
 using ParityBench.NET.Application.Baselines;
 using ParityBench.NET.Application.Results;
+using ParityBench.NET.Application.Runs;
 using ParityBench.NET.Domain.Reports;
 using ParityBench.NET.Domain.Results;
 using ParityBench.NET.Domain.Runs;
@@ -12,18 +13,27 @@ namespace ParityBench.NET.UI.Results;
 public sealed class ApplicationRunResultsViewDataSource : IRunResultsViewDataSource
 {
     private readonly IComparisonRunResultUseCases resultUseCases;
+    private readonly IComparisonRunUseCases runUseCases;
     private readonly IBaselineStore? baselineStore;
 
     public ApplicationRunResultsViewDataSource(
         IComparisonRunResultUseCases resultUseCases,
+        IComparisonRunUseCases runUseCases,
         IBaselineStore? baselineStore = null)
     {
         this.resultUseCases = resultUseCases;
+        this.runUseCases = runUseCases;
         this.baselineStore = baselineStore;
     }
 
     public Task<IReadOnlyList<RunListItem>> ListRunsAsync(CancellationToken cancellationToken = default) =>
         resultUseCases.ListRunsAsync(cancellationToken);
+
+    public Task<ComparisonRun> CancelRunAsync(
+        RunId runId,
+        string? cancellationMessage = null,
+        CancellationToken cancellationToken = default) =>
+        runUseCases.CancelRunAsync(runId, cancellationMessage, cancellationToken);
 
     public Task<ComparisonRun> LoadRunAsync(RunId runId, CancellationToken cancellationToken = default) =>
         resultUseCases.LoadRunAsync(runId, cancellationToken);

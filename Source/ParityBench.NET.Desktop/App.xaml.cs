@@ -1,10 +1,12 @@
 using System.IO;
 using System.Windows;
+using Microsoft.Win32;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using MudBlazor.Services;
 using ParityBench.NET.Application.Requests;
+using ParityBench.NET.Application.Runs;
 using ParityBench.NET.Composition;
 using ParityBench.NET.Desktop.Services;
 using ParityBench.NET.Infrastructure;
@@ -42,21 +44,110 @@ public partial class App : System.Windows.Application
             .Build();
 
         await host.StartAsync();
+        InterruptedRunRecoveryResult startupRecovery = await RecoverInterruptedRunsAsync(InterruptedRunRecoveryService.StartupCancellationMessage);
+        SystemEvents.PowerModeChanged += HandlePowerModeChanged;
 
         MainWindow mainWindow = new MainWindow(host.Services);
         MainWindow = mainWindow;
         mainWindow.Show();
+        ShowRecoveryWarning(mainWindow, startupRecovery);
     }
 
     protected override async void OnExit(ExitEventArgs e)
     {
+        SystemEvents.PowerModeChanged -= HandlePowerModeChanged;
         if (host is not null)
         {
+            await RecoverInterruptedRunsAsync(InterruptedRunRecoveryService.ShutdownCancellationMessage);
             await host.StopAsync();
             host.Dispose();
         }
 
         base.OnExit(e);
+    }
+
+    private void HandlePowerModeChanged(object? sender, PowerModeChangedEventArgs e)
+    {
+        if (e.Mode != PowerModes.Suspend)
+        {
+            return;
+        }
+
+        try
+        {
+            RecoverInterruptedRunsAsync(InterruptedRunRecoveryService.SuspendCancellationMessage)
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch
+        {
+            // Do not crash from a Windows lifecycle callback. Startup recovery will
+            // still cancel any snapshot this best-effort write could not update.
+        }
+    }
+
+    private async Task<InterruptedRunRecoveryResult> RecoverInterruptedRunsAsync(string cancellationMessage)
+    {
+        if (host is null)
+        {
+            return new InterruptedRunRecoveryResult(0, Array.Empty<RunSnapshotRecoveryWarning>(), Array.Empty<string>());
+        }
+
+        try
+        {
+            InterruptedRunRecoveryService recoveryService = new InterruptedRunRecoveryService(
+                host.Services.GetRequiredService<IComparisonRunUseCases>());
+            return await recoveryService.RecoverAsync(cancellationMessage).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            return new InterruptedRunRecoveryResult(
+                0,
+                Array.Empty<RunSnapshotRecoveryWarning>(),
+                new[] { $"Interrupted-run recovery could not finish: {ex.Message}" });
+        }
+    }
+
+    private static void ShowRecoveryWarning(Window owner, InterruptedRunRecoveryResult result)
+    {
+        if (!result.HasWarnings)
+        {
+            return;
+        }
+
+        List<string> lines = new List<string>
+        {
+            "ParityBench recovered from an interrupted or malformed saved run.",
+            "The desktop app started normally. Snapshot evidence was preserved.",
+        };
+
+        foreach (RunSnapshotRecoveryWarning warning in result.SnapshotWarnings)
+        {
+            lines.Add($"Original: {warning.SnapshotPath}");
+            lines.Add(warning.QuarantinedPath is null
+                ? $"Could not quarantine: {warning.Message}"
+                : $"Quarantined: {warning.QuarantinedPath}");
+        }
+
+        lines.AddRange(result.Errors);
+        Window warningWindow = new Window
+        {
+            Owner = owner,
+            Title = "ParityBench run recovery",
+            Width = 760,
+            Height = 320,
+            MinWidth = 520,
+            MinHeight = 220,
+            Content = new System.Windows.Controls.TextBox
+            {
+                Text = string.Join(Environment.NewLine, lines),
+                IsReadOnly = true,
+                TextWrapping = TextWrapping.Wrap,
+                VerticalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto,
+                Margin = new Thickness(16),
+            },
+        };
+        warningWindow.Show();
     }
 
     private static string FindManualRunRoot()
@@ -88,8 +179,8 @@ public partial class App : System.Windows.Application
             configuration,
             workspaceRoot,
             fixtureBaseUrl);
-        // Opt-in via Worker:Enabled=true: execute runs out of process so a plugin
-        // failure cannot take the desktop app down.
+        // Desktop defaults to an isolated per-run worker so GC mode can be selected
+        // before process startup and plugin failures cannot take the UI process down.
         if (configuration.GetValue("Worker:Enabled", false))
         {
             services.UseWorkerProcessExecution(configuration, workspaceRoot, fixtureBaseUrl);

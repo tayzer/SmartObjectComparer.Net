@@ -2,11 +2,14 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Diagnostics;
+using System.Reflection;
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 using ParityBench.NET.Application.Requests;
 using ParityBench.NET.Application.Runs;
+using ParityBench.NET.Application.Observability;
 using ParityBench.NET.Composition;
 using ParityBench.NET.Domain.Runs;
 using ParityBench.NET.Infrastructure.Worker;
@@ -21,6 +24,65 @@ namespace ParityBench.NET.Worker.Tests;
 [TestClass]
 public sealed class WorkerComparisonRunExecutorTests
 {
+    [TestMethod]
+    public void WorkerGcConfiguration_MapsEveryExplicitModeToProcessStartupVariables()
+    {
+        AssertGcEnvironment(new LargeRunOptions(workerGcMode: WorkerGcMode.Workstation), "0", null, null);
+        AssertGcEnvironment(new LargeRunOptions(workerGcMode: WorkerGcMode.ServerAdaptive), "1", "1", null);
+        AssertGcEnvironment(new LargeRunOptions(workerGcMode: WorkerGcMode.ServerFixed, serverGcHeapCount: 12), "1", "0", "c");
+    }
+
+    [TestMethod]
+    public void WorkerObservabilityConfiguration_ForwardsHostSettingsToWorkerEnvironment()
+    {
+        ProcessStartInfo startInfo = new();
+        ObservabilityOptions options = new()
+        {
+            LogDurations = true,
+            LogExceptions = false,
+            PersistDiagnostics = true,
+            SlowPathThresholdMs = 123,
+            MaxSlowPathEntries = 17,
+            MaxExceptionEntries = 19,
+            EnableDetailedCompareTiming = true,
+            EnableStructuralFingerprintExport = true,
+            StructuralFingerprintOutputDirectory = @"C:\calibration",
+            CaptureNextRunForCalibration = true,
+            CalibrationCaptureOutputDirectory = @"C:\private-sample",
+        };
+        MethodInfo method = typeof(WorkerComparisonRunExecutor).GetMethod(
+            "ApplyObservabilityConfiguration",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+
+        method.Invoke(null, [startInfo, options]);
+
+        Assert.AreEqual("True", startInfo.Environment["ParityBench__Observability__LogDurations"]);
+        Assert.AreEqual("False", startInfo.Environment["ParityBench__Observability__LogExceptions"]);
+        Assert.AreEqual("True", startInfo.Environment["ParityBench__Observability__EnableDetailedCompareTiming"]);
+        Assert.AreEqual("True", startInfo.Environment["ParityBench__Observability__EnableStructuralFingerprintExport"]);
+        Assert.AreEqual(@"C:\calibration", startInfo.Environment["ParityBench__Observability__StructuralFingerprintOutputDirectory"]);
+        Assert.AreEqual("True", startInfo.Environment["ParityBench__Observability__CaptureNextRunForCalibration"]);
+        Assert.AreEqual(@"C:\private-sample", startInfo.Environment["ParityBench__Observability__CalibrationCaptureOutputDirectory"]);
+    }
+
+    private static void AssertGcEnvironment(
+        LargeRunOptions options,
+        string expectedServer,
+        string? expectedDatas,
+        string? expectedHeapCount)
+    {
+        ProcessStartInfo startInfo = new();
+        MethodInfo method = typeof(WorkerComparisonRunExecutor).GetMethod(
+            "ApplyGcConfiguration",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+        method.Invoke(null, [startInfo, options]);
+
+        Assert.AreEqual(expectedServer, startInfo.Environment["DOTNET_gcServer"]);
+        startInfo.Environment.TryGetValue("DOTNET_GCDynamicAdaptationMode", out string? actualDatas);
+        startInfo.Environment.TryGetValue("DOTNET_GCHeapCount", out string? actualHeapCount);
+        Assert.AreEqual(expectedDatas, actualDatas);
+        Assert.AreEqual(expectedHeapCount, actualHeapCount);
+    }
     private static readonly string WorkerExecutablePath = ResolveWorkerExecutablePath();
 
     [TestMethod]

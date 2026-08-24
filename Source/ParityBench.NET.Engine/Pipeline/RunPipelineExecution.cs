@@ -39,7 +39,8 @@ public sealed class RunPipelineExecution
         IEndpointRequestSender endpointRequestSender,
         IRunArtifactStore runArtifactStore,
         IContractPayloadSerializer? contractPayloadSerializer,
-        RunExecutionCounters counters)
+        RunExecutionCounters counters,
+        DetailedCompareMetricsCollector? timing = null)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(run);
@@ -55,10 +56,10 @@ public sealed class RunPipelineExecution
             .Add(new HeaderMergeMiddleware(plan.Definition))
             .Add(new HttpTransportMiddleware(endpointRequestSender, comparisonOptions.Timeout))
             .Add(new ResponsePersistenceMiddleware(runArtifactStore, run.Id, maskRules, counters))
-            .Add(new CanonicalMappingMiddleware(plan.Definition, serializer, runArtifactStore, run.Id, maskRules, counters))
-            .Add(new CompareNetObjectsMiddleware())
+            .Add(new CanonicalMappingMiddleware(plan.Definition, serializer, runArtifactStore, run.Id, maskRules, counters, timing))
+            .Add(new CompareNetObjectsMiddleware(timing))
             .AddRange(plan.PluginSteps)
-            .Build();
+            .Build(timing);
 
         return new RunPipelineExecution(plan, comparisonOptions, pipeline);
     }

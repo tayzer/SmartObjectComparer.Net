@@ -52,6 +52,126 @@ public sealed class ComparisonRunExecutorTests
     }
 
     [TestMethod]
+    public async Task ExecuteAsync_WhenDetailedTimingIsEnabled_IncludesDetailedAndProcessMetrics()
+    {
+        CapturingObservabilityRecorder recorder = new(TimeSpan.Zero) { IsDetailedCompareTimingEnabled = true };
+        ComparisonRunExecutor executor = CreateExecutor(
+            CreateBatch(new[] { new RequestItem("one.json", "application/json", 2) }),
+            FakeEndpointRequestSender.ForBody("same"),
+            observabilityRecorder: recorder);
+
+        RunResultSummary summary = await executor.ExecuteAsync(CreateRun(), new CapturingProgressReporter());
+
+        Assert.IsNotNull(summary.ExecutionMetrics?.DetailedCompareMetrics);
+        Assert.IsNotNull(summary.ExecutionMetrics?.ProcessResourceMetrics);
+        Assert.IsTrue(summary.ExecutionMetrics!.DetailedCompareMetrics!.ExecutionWorkerBackpressureDuration >= TimeSpan.Zero);
+        Assert.IsTrue(summary.ExecutionMetrics.ProcessResourceMetrics!.LogicalProcessorCount > 0);
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_WhenComparisonConcurrencyIsConfigured_UsesConfiguredWorkerCount()
+    {
+        RequestItem[] requests = Enumerable.Range(1, 5)
+            .Select(index => new RequestItem($"request-{index}.json", "application/json", 2))
+            .ToArray();
+        ComparisonRunExecutor executor = CreateExecutor(CreateBatch(requests), FakeEndpointRequestSender.ForBody("same"));
+
+        RunResultSummary summary = await executor.ExecuteAsync(
+            CreateRun(largeRunOptions: new LargeRunOptions(comparisonConcurrency: 2)),
+            new CapturingProgressReporter());
+
+        Assert.AreEqual(2, summary.ExecutionMetrics!.ComparisonConcurrency);
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_WhenComparisonConcurrencyExceedsRequestCount_ClampsWorkerCount()
+    {
+        RequestItem[] requests = Enumerable.Range(1, 3)
+            .Select(index => new RequestItem($"request-{index}.json", "application/json", 2))
+            .ToArray();
+        ComparisonRunExecutor executor = CreateExecutor(CreateBatch(requests), FakeEndpointRequestSender.ForBody("same"));
+
+        RunResultSummary summary = await executor.ExecuteAsync(
+            CreateRun(largeRunOptions: new LargeRunOptions(comparisonConcurrency: 20)),
+            new CapturingProgressReporter());
+
+        Assert.AreEqual(3, summary.ExecutionMetrics!.ComparisonConcurrency);
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_WhenComparisonConcurrencyIsNull_UsesSafeAutoWorkerLimit()
+    {
+        RequestItem[] requests = Enumerable.Range(1, 20)
+            .Select(index => new RequestItem($"request-{index}.json", "application/json", 2))
+            .ToArray();
+        ComparisonRunExecutor executor = CreateExecutor(CreateBatch(requests), FakeEndpointRequestSender.ForBody("same"));
+
+        RunResultSummary summary = await executor.ExecuteAsync(
+            CreateRun(largeRunOptions: new LargeRunOptions(comparisonConcurrency: null)),
+            new CapturingProgressReporter());
+
+        Assert.AreEqual(Math.Min(8, Environment.ProcessorCount), summary.ExecutionMetrics!.ComparisonConcurrency);
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_WhenCompareChannelFills_RecordsQueueWaitAndExecutionBackpressureWithoutReordering()
+    {
+        RequestItem[] requests = Enumerable.Range(1, 20)
+            .Select(index => new RequestItem($"request-{index:D2}.json", "application/json", 2))
+            .ToArray();
+        FakeRunDetailStore detailStore = new();
+        CapturingObservabilityRecorder recorder = new(TimeSpan.MaxValue) { IsDetailedCompareTimingEnabled = true };
+        ComparisonRunExecutor executor = CreateExecutor(
+            CreateBatch(requests),
+            FakeEndpointRequestSender.ForBody("same"),
+            responseComparer: new DelayedResponseComparer(TimeSpan.FromMilliseconds(10)),
+            detailStore: detailStore,
+            observabilityRecorder: recorder);
+
+        RunResultSummary summary = await executor.ExecuteAsync(
+            CreateRun(
+                maxConcurrency: 20,
+                largeRunOptions: new LargeRunOptions(chunkSize: 10_000, comparisonConcurrency: 1)),
+            new CapturingProgressReporter());
+
+        DetailedCompareMetrics metrics = summary.ExecutionMetrics!.DetailedCompareMetrics!;
+        PipelineStageMetrics pipeline = summary.ExecutionMetrics.PipelineStageMetrics!;
+        Assert.IsTrue(metrics.CompareQueueWaitDuration > TimeSpan.Zero);
+        Assert.IsTrue(metrics.ExecutionWorkerBackpressureDuration > TimeSpan.Zero);
+        Assert.AreEqual(1, pipeline.ComparisonConcurrency);
+        Assert.AreEqual(1, pipeline.MappingToComparisonCapacity);
+        Assert.IsTrue(pipeline.MaximumExecuteToMappingDepth <= pipeline.ExecuteToMappingCapacity);
+        Assert.IsTrue(pipeline.MaximumMappingToComparisonDepth <= pipeline.MappingToComparisonCapacity);
+        Assert.IsTrue(pipeline.MaximumComparisonToFocusedDepth <= pipeline.ComparisonToFocusedCapacity);
+        Assert.IsTrue(pipeline.MappingBackpressureDuration > TimeSpan.Zero);
+        CollectionAssert.AreEqual(requests.Select(request => request.RelativePath).ToArray(), detailStore.SavedResults.Select(result => result.RelativePath).ToArray());
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_WhenPostHttpWorkersAreExplicit_HonorsAndClampsEveryStage()
+    {
+        RequestItem[] requests = Enumerable.Range(1, 3)
+            .Select(index => new RequestItem($"request-{index}.json", "application/json", 2))
+            .ToArray();
+        ComparisonRunExecutor executor = CreateExecutor(CreateBatch(requests), FakeEndpointRequestSender.ForBody("same"));
+
+        RunResultSummary summary = await executor.ExecuteAsync(
+            CreateRun(largeRunOptions: new LargeRunOptions(
+                mappingConcurrency: 20,
+                comparisonConcurrency: 2,
+                focusedContentConcurrency: 1)),
+            new CapturingProgressReporter());
+
+        PipelineStageMetrics metrics = summary.ExecutionMetrics!.PipelineStageMetrics!;
+        Assert.AreEqual(3, metrics.MappingConcurrency);
+        Assert.AreEqual(2, metrics.ComparisonConcurrency);
+        Assert.AreEqual(1, metrics.FocusedContentConcurrency);
+        Assert.AreEqual(6, metrics.ExecuteToMappingCapacity);
+        Assert.AreEqual(2, metrics.MappingToComparisonCapacity);
+        Assert.AreEqual(1, metrics.ComparisonToFocusedCapacity);
+    }
+
+    [TestMethod]
     public async Task ExecuteAsync_WhenRequestPathExceedsThreshold_RecordsSlowPath()
     {
         RequestItem request = new RequestItem("one.json", "application/json", 2);
@@ -297,6 +417,26 @@ public sealed class ComparisonRunExecutorTests
     }
 
     [TestMethod]
+    public async Task ExecuteAsync_WhenIgnoreRulePrunesNothing_DoesNotWriteFocusedArtifacts()
+    {
+        RequestItem request = new("one.json", "application/json", 2);
+        FakeRunArtifactStore artifactStore = new();
+        FakeRunDetailStore detailStore = new();
+        ComparisonRunExecutor executor = CreateExecutor(
+            CreateBatch([request]),
+            FakeEndpointRequestSender.ForBody(@"{""name"":""Alice""}"),
+            artifactStore,
+            detailStore: detailStore);
+
+        await executor.ExecuteAsync(
+            CreateRun(comparisonOptions: new ComparisonOptions(ignoreRules: [new IgnoreRuleDefinition("missing")])),
+            new CapturingProgressReporter());
+
+        Assert.IsFalse(detailStore.SavedResults.Single().HasFocusedRawContent);
+        Assert.AreEqual(2, artifactStore.SavedBodies.Count);
+    }
+
+    [TestMethod]
     public async Task ExecuteAsync_WhenSmartPropertyIgnorePrunesJson_AttachesFocusedRawContent()
     {
         RequestItem request = new RequestItem("one.json", "application/json", 2);
@@ -512,7 +652,8 @@ public sealed class ComparisonRunExecutorTests
         int maxConcurrency = 4,
         IReadOnlyDictionary<string, string>? endpointAHeaders = null,
         ComparisonOptions? comparisonOptions = null,
-        RequestExecutionOptions? requestExecutionOptions = null) =>
+        RequestExecutionOptions? requestExecutionOptions = null,
+        LargeRunOptions? largeRunOptions = null) =>
         ComparisonRun
             .Create(
                 new RunId("run-1"),
@@ -523,7 +664,8 @@ public sealed class ComparisonRunExecutorTests
                     TimeSpan.FromSeconds(30),
                     maxConcurrency,
                     comparisonOptions: comparisonOptions,
-                    requestExecutionOptions: requestExecutionOptions))
+                    requestExecutionOptions: requestExecutionOptions,
+                    largeRunOptions: largeRunOptions))
             .Start();
 
     private static MemoryStream CreateStream(string value) =>
@@ -591,6 +733,21 @@ public sealed class ComparisonRunExecutorTests
         public override void SetLength(long value) => throw new NotSupportedException();
 
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
+    private sealed class DelayedResponseComparer(TimeSpan delay) : IResponseComparer
+    {
+        public async Task<RequestPairResult> CompareAsync(
+            RequestItem request,
+            RunOptions options,
+            ResponseArtifactMetadata? responseA,
+            ResponseArtifactMetadata? responseB,
+            string? errorMessage,
+            CancellationToken cancellationToken = default)
+        {
+            await Task.Delay(delay, cancellationToken);
+            return RequestPairResult.Classify(request, responseA, responseB, errorMessage);
+        }
     }
     private sealed class CapturingObservabilityRecorder : IObservabilityRecorder
     {
@@ -761,11 +918,14 @@ public sealed class ComparisonRunExecutorTests
             this.cleanup = cleanup;
         }
 
-        public Task CleanupAsync(
+        public async Task<CleanupStageResult> CleanupAsync(
             ComparisonRun run,
             CleanupStageContext context,
-            CancellationToken cancellationToken = default) =>
-            cleanup(run, context, cancellationToken);
+            CancellationToken cancellationToken = default)
+        {
+            await cleanup(run, context, cancellationToken);
+            return CleanupStageResult.Empty;
+        }
     }
 
     private sealed class FakeRunArtifactStore : IRunArtifactStore

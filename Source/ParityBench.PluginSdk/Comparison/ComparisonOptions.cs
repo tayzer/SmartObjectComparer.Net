@@ -11,7 +11,8 @@ public sealed record ComparisonOptions
         int maxDifferences = 100,
         IEnumerable<IgnoreRuleDefinition>? ignoreRules = null,
         IEnumerable<SmartIgnoreRuleDefinition>? smartIgnoreRules = null,
-        IEnumerable<MaskRuleDefinition>? maskRules = null)
+        IEnumerable<MaskRuleDefinition>? maskRules = null,
+        bool includeAllDifferences = false)
     {
         if (maxDifferences <= 0)
         {
@@ -27,6 +28,7 @@ public sealed record ComparisonOptions
         IgnoreRules = (ignoreRules ?? Array.Empty<IgnoreRuleDefinition>()).ToList();
         SmartIgnoreRules = (smartIgnoreRules ?? Array.Empty<SmartIgnoreRuleDefinition>()).ToList();
         MaskRules = (maskRules ?? Array.Empty<MaskRuleDefinition>()).ToList();
+        IncludeAllDifferences = includeAllDifferences;
     }
 
     public bool IgnoreCollectionOrder { get; }
@@ -46,6 +48,8 @@ public sealed record ComparisonOptions
     public IReadOnlyList<SmartIgnoreRuleDefinition> SmartIgnoreRules { get; }
 
     public IReadOnlyList<MaskRuleDefinition> MaskRules { get; }
+
+    public bool IncludeAllDifferences { get; }
 
     public bool HasComparisonAffectingOptions =>
         IgnoreCollectionOrder ||

@@ -24,8 +24,21 @@ public sealed class WorkerExecutionOptions
     /// </summary>
     public TimeSpan CancellationGracePeriod { get; set; } = TimeSpan.FromSeconds(10);
 
-    public string ResolveWorkerExecutablePath() =>
-        string.IsNullOrWhiteSpace(WorkerExecutablePath)
-            ? Path.Combine(AppContext.BaseDirectory, "ParityBench.NET.Worker.dll")
-            : WorkerExecutablePath;
+    public string ResolveWorkerExecutablePath()
+    {
+        if (!string.IsNullOrWhiteSpace(WorkerExecutablePath))
+        {
+            return Path.IsPathFullyQualified(WorkerExecutablePath)
+                ? WorkerExecutablePath
+                : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, WorkerExecutablePath));
+        }
+
+        string workerRoot = Path.Combine(AppContext.BaseDirectory, "worker");
+        string executable = Path.Combine(workerRoot, OperatingSystem.IsWindows()
+            ? "ParityBench.NET.Worker.exe"
+            : "ParityBench.NET.Worker");
+        return File.Exists(executable)
+            ? executable
+            : Path.Combine(workerRoot, "ParityBench.NET.Worker.dll");
+    }
 }

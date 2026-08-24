@@ -282,6 +282,57 @@ public sealed class ComparisonRunServiceTests
     }
 
     [TestMethod]
+    public async Task CancelRun_WhenCancellationMessageIsSupplied_PersistsAndPublishesMessage()
+    {
+        FakeRunStore store = new FakeRunStore();
+        FakeRunEventPublisher eventPublisher = new FakeRunEventPublisher();
+        ComparisonRunService service = CreateService(store, eventPublisher: eventPublisher);
+        ComparisonRun run = ComparisonRun.Create(new RunId("run-1"), CreateOptions()).Start();
+        await store.SaveAsync(run);
+
+        ComparisonRun cancelledRun = await service.CancelRunAsync(run.Id, "Desktop app was interrupted.");
+
+        Assert.AreEqual("Desktop app was interrupted.", cancelledRun.Progress.Message);
+        Assert.AreEqual("Desktop app was interrupted.", store.SavedRuns.Last().Progress.Message);
+        Assert.AreEqual("Desktop app was interrupted.", eventPublisher.PublishedEvents.Last().Progress.Message);
+    }
+
+    [TestMethod]
+    public async Task StartRun_WhenCancellationWinsBeforeLateProgress_DoesNotRestoreActiveStatus()
+    {
+        FakeRunStore store = new FakeRunStore();
+        TaskCompletionSource executorStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource releaseExecutor = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        FakeComparisonRunExecutor executor = new FakeComparisonRunExecutor
+        {
+            ExecuteAsyncCore = async (_, progressReporter, _) =>
+            {
+                executorStarted.SetResult();
+                await releaseExecutor.Task.ConfigureAwait(false);
+                await progressReporter.ReportAsync(
+                    RunStatus.Comparing,
+                    new RunProgress(50, "Late progress.", 1, 2),
+                    CancellationToken.None).ConfigureAwait(false);
+                return CreateSummary();
+            },
+        };
+        ComparisonRunService service = CreateService(store, executor);
+        ComparisonRun run = ComparisonRun.Create(new RunId("run-1"), CreateOptions());
+        await store.SaveAsync(run);
+
+        Task<ComparisonRun> startTask = service.StartRunAsync(run.Id);
+        await executorStarted.Task.ConfigureAwait(false);
+        ComparisonRun cancelledRun = await service.CancelRunAsync(run.Id, "Desktop suspended.");
+        releaseExecutor.SetResult();
+        ComparisonRun finalRun = await startTask.ConfigureAwait(false);
+
+        Assert.AreEqual(RunStatus.Cancelled, cancelledRun.Status);
+        Assert.AreEqual(RunStatus.Cancelled, finalRun.Status);
+        Assert.AreEqual(RunStatus.Cancelled, (await store.LoadAsync(run.Id))?.Status);
+        Assert.AreEqual("Desktop suspended.", (await store.LoadAsync(run.Id))?.Progress.Message);
+    }
+
+    [TestMethod]
     public async Task CancelRun_WhenRunIsCompleted_ThrowsInvalidRunStateException()
     {
         FakeRunStore store = new FakeRunStore();

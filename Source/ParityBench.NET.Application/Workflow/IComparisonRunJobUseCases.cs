@@ -21,6 +21,13 @@ public interface IComparisonRunJobUseCases
         RunId runId,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Requests cancellation with a supplied lifecycle message.</summary>
+    Task<ComparisonRun> CancelRunAsync(
+        RunId runId,
+        string? cancellationMessage,
+        CancellationToken cancellationToken = default) =>
+        CancelRunAsync(runId, cancellationToken);
+
     /// <summary>
     /// Returns true when a run is currently active in this job tracker.
     /// </summary>

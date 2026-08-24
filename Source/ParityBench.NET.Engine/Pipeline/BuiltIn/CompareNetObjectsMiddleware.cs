@@ -1,6 +1,7 @@
 using ParityBench.NET.Domain.Comparison;
 using ParityBench.NET.Domain.Requests;
 using ParityBench.NET.Engine.Comparers;
+using ParityBench.NET.Engine;
 
 using ParityBench.PluginSdk.Pipeline;
 
@@ -13,6 +14,9 @@ namespace ParityBench.NET.Engine.Pipeline.BuiltIn;
 /// </summary>
 public sealed class CompareNetObjectsMiddleware : IPairComparisonMiddleware
 {
+    private readonly DetailedCompareMetricsCollector? timing;
+
+    public CompareNetObjectsMiddleware(DetailedCompareMetricsCollector? timing = null) => this.timing = timing;
     public string StepId => BuiltInStepIds.CompareNetObjects;
 
     public PipelinePhase Phase => PipelinePhase.Comparison;
@@ -35,7 +39,8 @@ public sealed class CompareNetObjectsMiddleware : IPairComparisonMiddleware
         IReadOnlyList<ComparisonDifference> differences = CompareNetObjectsResponseComparer.CompareModels(
             context.ComparisonA,
             context.ComparisonB,
-            context.ComparisonOptions);
+            context.ComparisonOptions,
+            timing);
 
         context.Result.SetDifferences(differences);
         context.Result.AreEqual = differences.Count == 0;

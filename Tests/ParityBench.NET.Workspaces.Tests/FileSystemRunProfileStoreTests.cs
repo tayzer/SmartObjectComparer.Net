@@ -3,6 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ParityBench.NET.Application.Profiles;
 using ParityBench.NET.Application.Secrets;
 using ParityBench.NET.Domain.Comparison;
+using ParityBench.NET.Domain.Runs;
 using ParityBench.NET.Domain.Runs.Retention;
 using ParityBench.NET.Workspaces;
 
@@ -33,6 +34,17 @@ public sealed class FileSystemRunProfileStoreTests
         CollectionAssert.AreEqual(profile.EnabledStepIds.ToArray(), loaded.EnabledStepIds.ToArray());
         Assert.AreEqual("secret://acme/qa-key", loaded.StepConfiguration["acme.token"]["apiKey"]);
         Assert.AreEqual(profile.RequestDirectory, loaded.RequestDirectory);
+        Assert.AreEqual(profile.LargeRun.LargeRunThreshold, loaded.LargeRun.LargeRunThreshold);
+        Assert.AreEqual(profile.LargeRun.ChunkSize, loaded.LargeRun.ChunkSize);
+        Assert.AreEqual(profile.LargeRun.DetailPageSize, loaded.LargeRun.DetailPageSize);
+        Assert.AreEqual(profile.LargeRun.ComparisonConcurrency, loaded.LargeRun.ComparisonConcurrency);
+        Assert.AreEqual(profile.LargeRun.MappingConcurrency, loaded.LargeRun.MappingConcurrency);
+        Assert.AreEqual(profile.LargeRun.FocusedContentConcurrency, loaded.LargeRun.FocusedContentConcurrency);
+        Assert.AreEqual(profile.LargeRun.WorkerGcMode, loaded.LargeRun.WorkerGcMode);
+        Assert.AreEqual(profile.LargeRun.ServerGcHeapCount, loaded.LargeRun.ServerGcHeapCount);
+        Assert.AreEqual(profile.LargeRun.PerformanceCalibrationMachineFingerprint, loaded.LargeRun.PerformanceCalibrationMachineFingerprint);
+        Assert.AreEqual(profile.LargeRun.ProgressUpdateItemInterval, loaded.LargeRun.ProgressUpdateItemInterval);
+        Assert.AreEqual(profile.LargeRun.ProgressUpdateMillisecondsInterval, loaded.LargeRun.ProgressUpdateMillisecondsInterval);
         Assert.AreEqual(profile.RetentionModeOverride, loaded.RetentionModeOverride);
         Assert.IsTrue(loaded.Comparison.IgnoreCollectionOrder);
         Assert.AreEqual("trace.id", loaded.Comparison.IgnoreRules.Single().PropertyPath);
@@ -114,6 +126,37 @@ public sealed class FileSystemRunProfileStoreTests
     }
 
     [TestMethod]
+    public async Task GetAsync_WhenReportOmitsComparisonConcurrency_LoadsAutoAsNull()
+    {
+        using TempWorkspace workspace = TempWorkspace.Create();
+        FileSystemRunProfileStore store = new(workspace.Path);
+        string profilesDirectory = Path.Combine(workspace.Path, "config", "profiles");
+        Directory.CreateDirectory(profilesDirectory);
+        await File.WriteAllTextAsync(
+            Path.Combine(profilesDirectory, "legacy-auto.json"),
+            """
+            {
+              "schemaVersion": 2,
+              "id": "legacy-auto",
+              "displayName": "Legacy Auto",
+              "plugin": { "id": "compare-a-b" },
+              "comparisonId": "compare-a-b.default",
+              "endpoints": { "a": "https://qa.example.test/a", "b": "https://qa.example.test/b" },
+              "report": { "chunkSize": 500, "detailPageSize": 250 }
+            }
+            """);
+
+        RunProfile? loaded = await store.GetAsync("legacy-auto");
+
+        Assert.IsNotNull(loaded);
+        Assert.IsNull(loaded.LargeRun.ComparisonConcurrency);
+        Assert.IsNull(loaded.LargeRun.MappingConcurrency);
+        Assert.IsNull(loaded.LargeRun.FocusedContentConcurrency);
+        Assert.AreEqual(WorkerGcMode.Auto, loaded.LargeRun.WorkerGcMode);
+        Assert.IsNull(loaded.LargeRun.PerformanceCalibrationMachineFingerprint);
+    }
+
+    [TestMethod]
     public async Task DeleteAsync_WhenProfileExists_RemovesIt()
     {
         using TempWorkspace workspace = TempWorkspace.Create();
@@ -184,6 +227,18 @@ public sealed class FileSystemRunProfileStoreTests
                 ignoreCollectionOrder: true,
                 ignoreRules: new[] { new IgnoreRuleDefinition("trace.id") }),
             requestDirectory: @"C:\runs\client-lookup",
+            largeRun: new LargeRunOptions(
+                largeRunThreshold: 1500,
+                chunkSize: 400,
+                detailPageSize: 200,
+                comparisonConcurrency: 8,
+                progressUpdateItemInterval: 50,
+                progressUpdateMillisecondsInterval: 250,
+                mappingConcurrency: 12,
+                focusedContentConcurrency: 4,
+                workerGcMode: WorkerGcMode.ServerFixed,
+                serverGcHeapCount: 8,
+                performanceCalibrationMachineFingerprint: "machine-fingerprint"),
             retentionModeOverride: RetentionMode.None);
 
     private sealed class TempWorkspace : IDisposable

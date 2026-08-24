@@ -320,7 +320,8 @@ public sealed class RunWorkflowViewTests
             typeof(PluginComparisonFixture),
             null,
             new Dictionary<string, string>(),
-            new Dictionary<string, string>());
+            new Dictionary<string, string>(),
+            LargeRun: new LargeRunOptions(comparisonConcurrency: 8));
 
         IRenderedComponent<RunWorkflow> component = testContext.Render<RunWorkflow>();
 
@@ -337,6 +338,7 @@ public sealed class RunWorkflowViewTests
         Assert.AreEqual("client.customer-lookup.soap-vs-json", dataSource.LastRequest.PluginComparison.ComparisonId);
         Assert.AreEqual("https://qa.example.test/soap", dataSource.LastRequest.EndpointA.ToString().TrimEnd('/'));
         Assert.AreEqual("C:/runs/client", dataSource.LastRequest.SourceDirectory);
+        Assert.AreEqual(8, dataSource.LastRequest.LargeRunOptions.ComparisonConcurrency);
         // A plugin run must never carry its canonical type name as the wire-level
         // ResponseModelName: a raw-comparison fallback (transport error, non-2xx
         // status) resolves that name against the legacy response-model registry,

@@ -72,6 +72,7 @@ public sealed class RequestComparisonWorkflowService : IRequestComparisonWorkflo
             request.ComparisonOptions,
             request.RequestExecutionOptions,
             request.ContractProfileSelection,
+            largeRunOptions: request.LargeRunOptions,
             runRetentionModeOverride: request.RunRetentionModeOverride,
             comparisonRulesSnapshotHash: ComputeComparisonRulesSnapshotHash(request.ComparisonOptions, request.ContractProfileSelection),
             pluginComparison: request.PluginComparison,
@@ -247,6 +248,12 @@ public sealed class RequestComparisonWorkflowService : IRequestComparisonWorkflo
         RunId runId,
         CancellationToken cancellationToken = default) =>
         runUseCases.CancelRunAsync(runId, cancellationToken);
+
+    public Task<ComparisonRun> CancelRunAsync(
+        RunId runId,
+        string? cancellationMessage,
+        CancellationToken cancellationToken = default) =>
+        runUseCases.CancelRunAsync(runId, cancellationMessage, cancellationToken);
 
     public async Task<StaticReportBundleWriteResult> GenerateReportAsync(
         RunId runId,

@@ -29,9 +29,23 @@ public interface IComparisonRunUseCases
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Cancels a non-terminal run and records an operator- or host-supplied reason.
+    /// </summary>
+    Task<ComparisonRun> CancelRunAsync(
+        RunId runId,
+        string? cancellationMessage,
+        CancellationToken cancellationToken = default) =>
+        CancelRunAsync(runId, cancellationToken);
+
+    /// <summary>
     /// Lists cheap run snapshots without loading raw response details.
     /// </summary>
     Task<IReadOnlyList<RunListItem>> ListRunsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Returns and clears non-fatal persisted-snapshot recovery warnings.</summary>
+    Task<IReadOnlyList<RunSnapshotRecoveryWarning>> DrainRecoveryWarningsAsync(
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<RunSnapshotRecoveryWarning>>(Array.Empty<RunSnapshotRecoveryWarning>());
 
     /// <summary>
     /// Loads a count-only run result summary when one exists.

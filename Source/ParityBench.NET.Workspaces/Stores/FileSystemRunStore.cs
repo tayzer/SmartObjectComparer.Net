@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ParityBench.NET.Application.Runs;
@@ -24,6 +25,8 @@ public sealed class FileSystemRunStore : IRunStore
     };
 
     private readonly string workspaceRoot;
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> snapshotGates = new ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentQueue<RunSnapshotRecoveryWarning> recoveryWarnings = new ConcurrentQueue<RunSnapshotRecoveryWarning>();
 
     public FileSystemRunStore(string workspaceRoot)
     {
@@ -37,14 +40,13 @@ public sealed class FileSystemRunStore : IRunStore
         string runPath = GetRunPath(run.Id);
         Directory.CreateDirectory(Path.GetDirectoryName(runPath) ?? workspaceRoot);
 
-        await ExecuteFileOperationWithRetryAsync(
+        await WithSnapshotGateAsync(
+            runPath,
             async () =>
             {
-                await using FileStream stream = OpenSnapshotForWrite(runPath);
-                await JsonSerializer
-                    .SerializeAsync(stream, ToDto(run), jsonOptions, cancellationToken)
-                    .ConfigureAwait(false);
-                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+                await ExecuteFileOperationWithRetryAsync(
+                    async () => await WriteSnapshotAtomicallyAsync(runPath, run, cancellationToken).ConfigureAwait(false),
+                    cancellationToken).ConfigureAwait(false);
             },
             cancellationToken).ConfigureAwait(false);
     }
@@ -54,20 +56,7 @@ public sealed class FileSystemRunStore : IRunStore
         CancellationToken cancellationToken = default)
     {
         string runPath = GetRunPath(runId);
-        if (!File.Exists(runPath))
-        {
-            return null;
-        }
-
-        RunSnapshotDto? dto = await ExecuteFileOperationWithRetryAsync(
-            async () =>
-            {
-                await using FileStream stream = OpenSnapshotForRead(runPath);
-                return await JsonSerializer
-                    .DeserializeAsync<RunSnapshotDto>(stream, jsonOptions, cancellationToken)
-                    .ConfigureAwait(false);
-            },
-            cancellationToken).ConfigureAwait(false);
+        RunSnapshotDto? dto = await ReadSnapshotOrQuarantineAsync(runPath, cancellationToken).ConfigureAwait(false);
 
         return dto is null ? null : FromDto(dto);
     }
@@ -85,15 +74,7 @@ public sealed class FileSystemRunStore : IRunStore
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            RunSnapshotDto? dto = await ExecuteFileOperationWithRetryAsync(
-                async () =>
-                {
-                    await using FileStream stream = OpenSnapshotForRead(runPath);
-                    return await JsonSerializer
-                        .DeserializeAsync<RunSnapshotDto>(stream, jsonOptions, cancellationToken)
-                        .ConfigureAwait(false);
-                },
-                cancellationToken).ConfigureAwait(false);
+            RunSnapshotDto? dto = await ReadSnapshotOrQuarantineAsync(runPath, cancellationToken).ConfigureAwait(false);
 
             if (dto is not null)
             {
@@ -102,9 +83,22 @@ public sealed class FileSystemRunStore : IRunStore
         }
 
         return runs
-            .OrderBy(run => run.CreatedAt)
+            .OrderByDescending(run => run.UpdatedAt)
             .ThenBy(run => run.Id.Value, StringComparer.Ordinal)
             .ToList();
+    }
+
+    public Task<IReadOnlyList<RunSnapshotRecoveryWarning>> DrainRecoveryWarningsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        List<RunSnapshotRecoveryWarning> warnings = new List<RunSnapshotRecoveryWarning>();
+        while (recoveryWarnings.TryDequeue(out RunSnapshotRecoveryWarning? warning))
+        {
+            warnings.Add(warning);
+        }
+
+        return Task.FromResult<IReadOnlyList<RunSnapshotRecoveryWarning>>(warnings);
     }
 
     public async Task<RunResultSummary?> LoadSummaryAsync(
@@ -120,12 +114,109 @@ public sealed class FileSystemRunStore : IRunStore
             workspaceRoot,
             FileSystemWorkspacePaths.ToLogicalPath("runs", runId.Value, "run.json"));
 
-    private static FileStream OpenSnapshotForWrite(string path) =>
+    private async Task WriteSnapshotAtomicallyAsync(
+        string runPath,
+        ComparisonRun run,
+        CancellationToken cancellationToken)
+    {
+        string temporaryPath = $"{runPath}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            await using (FileStream stream = OpenTemporarySnapshotForWrite(temporaryPath))
+            {
+                await JsonSerializer
+                    .SerializeAsync(stream, ToDto(run), jsonOptions, cancellationToken)
+                    .ConfigureAwait(false);
+                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+                stream.Flush(flushToDisk: true);
+            }
+
+            if (File.Exists(runPath))
+            {
+                File.Replace(temporaryPath, runPath, destinationBackupFileName: null);
+            }
+            else
+            {
+                File.Move(temporaryPath, runPath);
+            }
+        }
+        finally
+        {
+            TryDeleteFile(temporaryPath);
+        }
+    }
+
+    private async Task<RunSnapshotDto?> ReadSnapshotOrQuarantineAsync(string runPath, CancellationToken cancellationToken) =>
+        await WithSnapshotGateAsync(
+            runPath,
+            async () =>
+            {
+                if (!File.Exists(runPath))
+                {
+                    return null;
+                }
+
+                try
+                {
+                    return await ReadSnapshotWithRetryAsync(runPath, cancellationToken).ConfigureAwait(false);
+                }
+                catch (JsonException firstException)
+                {
+                    // The retry window may have observed another writer. Confirm the
+                    // malformed content while this store's same-run gate is held
+                    // before preserving it as evidence.
+                    try
+                    {
+                        return await ReadSnapshotAsync(runPath, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (JsonException)
+                    {
+                        QuarantineMalformedSnapshot(runPath, firstException);
+                        return null;
+                    }
+                }
+            },
+            cancellationToken).ConfigureAwait(false);
+
+    private async Task<RunSnapshotDto?> ReadSnapshotWithRetryAsync(string runPath, CancellationToken cancellationToken) =>
+        await ExecuteFileOperationWithRetryAsync(
+            () => ReadSnapshotAsync(runPath, cancellationToken),
+            cancellationToken).ConfigureAwait(false);
+
+    private async Task<RunSnapshotDto?> ReadSnapshotAsync(string runPath, CancellationToken cancellationToken)
+    {
+        await using FileStream stream = OpenSnapshotForRead(runPath);
+        return await JsonSerializer
+            .DeserializeAsync<RunSnapshotDto>(stream, jsonOptions, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private void QuarantineMalformedSnapshot(string runPath, JsonException exception)
+    {
+        string quarantinedPath = $"{runPath}.{DateTimeOffset.UtcNow:yyyyMMddHHmmssfff}.{Guid.NewGuid():N}.corrupt";
+        try
+        {
+            File.Move(runPath, quarantinedPath);
+            recoveryWarnings.Enqueue(new RunSnapshotRecoveryWarning(
+                runPath,
+                quarantinedPath,
+                $"Malformed run snapshot was quarantined: {exception.Message}"));
+        }
+        catch (Exception quarantineException) when (quarantineException is IOException or UnauthorizedAccessException)
+        {
+            recoveryWarnings.Enqueue(new RunSnapshotRecoveryWarning(
+                runPath,
+                null,
+                $"Malformed run snapshot could not be quarantined: {quarantineException.Message}"));
+        }
+    }
+
+    private static FileStream OpenTemporarySnapshotForWrite(string path) =>
         new FileStream(
             path,
-            FileMode.Create,
+            FileMode.CreateNew,
             FileAccess.Write,
-            FileShare.ReadWrite | FileShare.Delete,
+            FileShare.None,
             SnapshotBufferSize,
             useAsync: true);
 
@@ -137,6 +228,51 @@ public sealed class FileSystemRunStore : IRunStore
             FileShare.ReadWrite | FileShare.Delete,
             SnapshotBufferSize,
             useAsync: true);
+
+    private async Task<T> WithSnapshotGateAsync<T>(
+        string path,
+        Func<Task<T>> action,
+        CancellationToken cancellationToken)
+    {
+        SemaphoreSlim gate = snapshotGates.GetOrAdd(path, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await action().ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private async Task WithSnapshotGateAsync(
+        string path,
+        Func<Task> action,
+        CancellationToken cancellationToken) =>
+        await WithSnapshotGateAsync(
+            path,
+            async () =>
+            {
+                await action().ConfigureAwait(false);
+                return true;
+            },
+            cancellationToken).ConfigureAwait(false);
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // A later startup can safely ignore a never-promoted unique temp file.
+        }
+    }
 
     private static async Task<T> ExecuteFileOperationWithRetryAsync<T>(
         Func<Task<T>> operation,
@@ -230,6 +366,7 @@ public sealed class FileSystemRunStore : IRunStore
             TreatNullAndEmptyCollectionsAsEqual = options.TreatNullAndEmptyCollectionsAsEqual,
             IgnoreXmlNamespaces = options.IgnoreXmlNamespaces,
             MaxDifferences = options.MaxDifferences,
+            IncludeAllDifferences = options.IncludeAllDifferences,
             IgnoreRules = options.IgnoreRules.Select(ToDto).ToList(),
             SmartIgnoreRules = options.SmartIgnoreRules.Select(ToDto).ToList(),
             MaskRules = options.MaskRules.Select(ToDto).ToList(),
@@ -334,6 +471,7 @@ public sealed class FileSystemRunStore : IRunStore
             RequestCount = metrics.RequestCount,
             MaxConcurrency = metrics.MaxConcurrency,
             ResponseBytesWritten = metrics.ResponseBytesWritten,
+            ComparisonConcurrency = metrics.ComparisonConcurrency,
             RetainedArtifactCount = metrics.RetainedArtifactCount,
             TrimmedByPolicyArtifactCount = metrics.TrimmedByPolicyArtifactCount,
             MissingUnexpectedlyArtifactCount = metrics.MissingUnexpectedlyArtifactCount,
@@ -341,7 +479,96 @@ public sealed class FileSystemRunStore : IRunStore
             ComparePersistCanonicalDurationMilliseconds = metrics.CompareSubPhases?.PersistCanonicalDuration.TotalMilliseconds,
             CompareDiffDurationMilliseconds = metrics.CompareSubPhases?.DiffDuration.TotalMilliseconds,
             CompareFocusedContentDurationMilliseconds = metrics.CompareSubPhases?.FocusedContentDuration.TotalMilliseconds,
+            DetailedCompareMetrics = metrics.DetailedCompareMetrics is null ? null : ToDto(metrics.DetailedCompareMetrics),
+            ProcessResourceMetrics = metrics.ProcessResourceMetrics is null ? null : ToDto(metrics.ProcessResourceMetrics),
+            PipelineStageMetrics = metrics.PipelineStageMetrics is null ? null : ToDto(metrics.PipelineStageMetrics),
+            NormalizationWorkMetrics = metrics.NormalizationWorkMetrics is null ? null : ToDto(metrics.NormalizationWorkMetrics),
+            RuntimeMetrics = metrics.RuntimeMetrics is null ? null : ToDto(metrics.RuntimeMetrics),
         };
+
+    private static DetailedCompareMetricsDto ToDto(DetailedCompareMetrics metrics) => new()
+    {
+        ArtifactOpenDurationMilliseconds = metrics.ArtifactOpenDuration.TotalMilliseconds,
+        ArtifactBytesRead = metrics.ArtifactBytesRead,
+        ResponseDeserializationDurationMilliseconds = metrics.ResponseDeserializationDuration.TotalMilliseconds,
+        ComparisonModelNormalizationDurationMilliseconds = metrics.ComparisonModelNormalizationDuration.TotalMilliseconds,
+        CompareNetObjectsTraversalDurationMilliseconds = metrics.CompareNetObjectsTraversalDuration.TotalMilliseconds,
+        DifferenceMaterializationDurationMilliseconds = metrics.DifferenceMaterializationDuration.TotalMilliseconds,
+        CanonicalMappingDurationMilliseconds = metrics.CanonicalMappingDuration.TotalMilliseconds,
+        PluginMappingDurationMilliseconds = metrics.PluginMappingDuration.TotalMilliseconds,
+        PluginPairProcessingDurationMilliseconds = metrics.PluginPairProcessingDuration.TotalMilliseconds,
+        FocusedContentDurationMilliseconds = metrics.FocusedContentDuration.TotalMilliseconds,
+        OtherCompareWorkerDurationMilliseconds = metrics.OtherCompareWorkerDuration.TotalMilliseconds,
+        CompareQueueWaitDurationMilliseconds = metrics.CompareQueueWaitDuration.TotalMilliseconds,
+        ExecutionWorkerBackpressureDurationMilliseconds = metrics.ExecutionWorkerBackpressureDuration.TotalMilliseconds,
+    };
+
+    private static RunProcessResourceMetricsDto ToDto(RunProcessResourceMetrics metrics) => new()
+    {
+        ProcessCpuDurationMilliseconds = metrics.ProcessCpuDuration.TotalMilliseconds,
+        AverageProcessCoreUtilizationPercent = metrics.AverageProcessCoreUtilizationPercent,
+        AverageMachineCpuUtilizationPercent = metrics.AverageMachineCpuUtilizationPercent,
+        PeakWorkingSetBytes = metrics.PeakWorkingSetBytes,
+        PeakPrivateBytes = metrics.PeakPrivateBytes,
+        ManagedAllocatedBytes = metrics.ManagedAllocatedBytes,
+        Gen0CollectionCount = metrics.Gen0CollectionCount,
+        Gen1CollectionCount = metrics.Gen1CollectionCount,
+        Gen2CollectionCount = metrics.Gen2CollectionCount,
+        LogicalProcessorCount = metrics.LogicalProcessorCount,
+    };
+
+    private static PipelineStageMetricsDto ToDto(PipelineStageMetrics metrics) => new()
+    {
+        MappingConcurrency = metrics.MappingConcurrency,
+        ComparisonConcurrency = metrics.ComparisonConcurrency,
+        FocusedContentConcurrency = metrics.FocusedContentConcurrency,
+        ExecuteToMappingCapacity = metrics.ExecuteToMappingCapacity,
+        MappingToComparisonCapacity = metrics.MappingToComparisonCapacity,
+        ComparisonToFocusedCapacity = metrics.ComparisonToFocusedCapacity,
+        MappingWorkerDurationMilliseconds = metrics.MappingWorkerDuration.TotalMilliseconds,
+        ComparisonWorkerDurationMilliseconds = metrics.ComparisonWorkerDuration.TotalMilliseconds,
+        FocusedContentWorkerDurationMilliseconds = metrics.FocusedContentWorkerDuration.TotalMilliseconds,
+        DetailPersistenceDurationMilliseconds = metrics.DetailPersistenceDuration.TotalMilliseconds,
+        ExecuteToMappingQueueWaitDurationMilliseconds = metrics.ExecuteToMappingQueueWaitDuration.TotalMilliseconds,
+        MappingToComparisonQueueWaitDurationMilliseconds = metrics.MappingToComparisonQueueWaitDuration.TotalMilliseconds,
+        ComparisonToFocusedQueueWaitDurationMilliseconds = metrics.ComparisonToFocusedQueueWaitDuration.TotalMilliseconds,
+        ExecutionBackpressureDurationMilliseconds = metrics.ExecutionBackpressureDuration.TotalMilliseconds,
+        MappingBackpressureDurationMilliseconds = metrics.MappingBackpressureDuration.TotalMilliseconds,
+        ComparisonBackpressureDurationMilliseconds = metrics.ComparisonBackpressureDuration.TotalMilliseconds,
+        MaximumExecuteToMappingDepth = metrics.MaximumExecuteToMappingDepth,
+        MaximumMappingToComparisonDepth = metrics.MaximumMappingToComparisonDepth,
+        MaximumComparisonToFocusedDepth = metrics.MaximumComparisonToFocusedDepth,
+    };
+
+    private static NormalizationWorkMetricsDto ToDto(NormalizationWorkMetrics metrics) => new()
+    {
+        GraphTraversalDurationMilliseconds = metrics.GraphTraversalDuration.TotalMilliseconds,
+        SortKeyConstructionDurationMilliseconds = metrics.SortKeyConstructionDuration.TotalMilliseconds,
+        CollectionSortDurationMilliseconds = metrics.CollectionSortDuration.TotalMilliseconds,
+        LegacyFallbackDurationMilliseconds = metrics.LegacyFallbackDuration.TotalMilliseconds,
+        RestorationDurationMilliseconds = metrics.RestorationDuration.TotalMilliseconds,
+        ObjectNodeCount = metrics.ObjectNodeCount,
+        PropertyNodeCount = metrics.PropertyNodeCount,
+        CollectionNodeCount = metrics.CollectionNodeCount,
+        CollectionItemCount = metrics.CollectionItemCount,
+        ScalarNodeCount = metrics.ScalarNodeCount,
+        ScalarUtf8Bytes = metrics.ScalarUtf8Bytes,
+        IgnoredNodeCount = metrics.IgnoredNodeCount,
+        SortKeyBytes = metrics.SortKeyBytes,
+        MaximumSortKeyBytes = metrics.MaximumSortKeyBytes,
+        SortCollisionGroupCount = metrics.SortCollisionGroupCount,
+        MutableBranchCount = metrics.MutableBranchCount,
+        LegacyFallbackBranchCount = metrics.LegacyFallbackBranchCount,
+    };
+
+    private static RunRuntimeMetricsDto ToDto(RunRuntimeMetrics metrics) => new()
+    {
+        IsServerGc = metrics.IsServerGc,
+        ConfiguredServerGcHeapCount = metrics.ConfiguredServerGcHeapCount,
+        DynamicAdaptationEnabled = metrics.DynamicAdaptationEnabled,
+        TotalAvailableMemoryBytes = metrics.TotalAvailableMemoryBytes,
+        MemoryBudgetBytes = metrics.MemoryBudgetBytes,
+    };
 
     private RunDetailReferenceDto ToDto(RunDetailReference reference) =>
         new RunDetailReferenceDto
@@ -421,7 +648,8 @@ public sealed class FileSystemRunStore : IRunStore
             dto.MaxDifferences,
             dto.IgnoreRules.Select(FromDto),
             dto.SmartIgnoreRules.Select(FromDto),
-            dto.MaskRules.Select(FromDto));
+            dto.MaskRules.Select(FromDto),
+            dto.IncludeAllDifferences);
 
     private RequestExecutionOptions FromDto(RequestExecutionOptionsDto dto) =>
         new RequestExecutionOptions(dto.ContentTypeOverride);
@@ -433,6 +661,11 @@ public sealed class FileSystemRunStore : IRunStore
             ChunkSize = options.ChunkSize,
             DetailPageSize = options.DetailPageSize,
             ComparisonConcurrency = options.ComparisonConcurrency,
+            MappingConcurrency = options.MappingConcurrency,
+            FocusedContentConcurrency = options.FocusedContentConcurrency,
+            WorkerGcMode = options.WorkerGcMode,
+            ServerGcHeapCount = options.ServerGcHeapCount,
+            PerformanceCalibrationMachineFingerprint = options.PerformanceCalibrationMachineFingerprint,
             ProgressUpdateItemInterval = options.ProgressUpdateItemInterval,
             ProgressUpdateMillisecondsInterval = options.ProgressUpdateMillisecondsInterval,
         };
@@ -444,7 +677,12 @@ public sealed class FileSystemRunStore : IRunStore
             dto.DetailPageSize <= 0 ? 250 : dto.DetailPageSize,
             dto.ComparisonConcurrency,
             dto.ProgressUpdateItemInterval <= 0 ? 100 : dto.ProgressUpdateItemInterval,
-            dto.ProgressUpdateMillisecondsInterval <= 0 ? 500 : dto.ProgressUpdateMillisecondsInterval);
+            dto.ProgressUpdateMillisecondsInterval <= 0 ? 500 : dto.ProgressUpdateMillisecondsInterval,
+            dto.MappingConcurrency,
+            dto.FocusedContentConcurrency,
+            dto.WorkerGcMode,
+            dto.ServerGcHeapCount,
+            dto.PerformanceCalibrationMachineFingerprint);
     private ContractProfileSelection FromDto(ContractProfileSelectionDto dto) =>
         new ContractProfileSelection(dto.ProfileId, dto.ProfileVersion, dto.Options);
 
@@ -507,7 +745,87 @@ public sealed class FileSystemRunStore : IRunStore
                     TimeSpan.FromMilliseconds(dto.CompareNormalizeDurationMilliseconds.Value),
                     TimeSpan.FromMilliseconds(dto.ComparePersistCanonicalDurationMilliseconds ?? 0),
                     TimeSpan.FromMilliseconds(dto.CompareDiffDurationMilliseconds ?? 0),
-                    TimeSpan.FromMilliseconds(dto.CompareFocusedContentDurationMilliseconds ?? 0)));
+                    TimeSpan.FromMilliseconds(dto.CompareFocusedContentDurationMilliseconds ?? 0)),
+            dto.ComparisonConcurrency,
+            dto.DetailedCompareMetrics is null ? null : FromDto(dto.DetailedCompareMetrics),
+            dto.ProcessResourceMetrics is null ? null : FromDto(dto.ProcessResourceMetrics),
+            dto.PipelineStageMetrics is null ? null : FromDto(dto.PipelineStageMetrics),
+            dto.NormalizationWorkMetrics is null ? null : FromDto(dto.NormalizationWorkMetrics),
+            dto.RuntimeMetrics is null ? null : FromDto(dto.RuntimeMetrics));
+
+    private static DetailedCompareMetrics FromDto(DetailedCompareMetricsDto dto) => new(
+        TimeSpan.FromMilliseconds(dto.ArtifactOpenDurationMilliseconds),
+        Math.Max(0, dto.ArtifactBytesRead),
+        TimeSpan.FromMilliseconds(dto.ResponseDeserializationDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.ComparisonModelNormalizationDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.CompareNetObjectsTraversalDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.DifferenceMaterializationDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.CanonicalMappingDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.PluginMappingDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.PluginPairProcessingDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.FocusedContentDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.OtherCompareWorkerDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.CompareQueueWaitDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.ExecutionWorkerBackpressureDurationMilliseconds));
+
+    private static RunProcessResourceMetrics FromDto(RunProcessResourceMetricsDto dto) => new(
+        TimeSpan.FromMilliseconds(dto.ProcessCpuDurationMilliseconds),
+        dto.AverageProcessCoreUtilizationPercent,
+        dto.AverageMachineCpuUtilizationPercent,
+        Math.Max(0, dto.PeakWorkingSetBytes),
+        Math.Max(0, dto.PeakPrivateBytes),
+        Math.Max(0, dto.ManagedAllocatedBytes),
+        Math.Max(0, dto.Gen0CollectionCount),
+        Math.Max(0, dto.Gen1CollectionCount),
+        Math.Max(0, dto.Gen2CollectionCount),
+        Math.Max(0, dto.LogicalProcessorCount));
+
+    private static PipelineStageMetrics FromDto(PipelineStageMetricsDto dto) => new(
+        Math.Max(0, dto.MappingConcurrency),
+        Math.Max(0, dto.ComparisonConcurrency),
+        Math.Max(0, dto.FocusedContentConcurrency),
+        Math.Max(0, dto.ExecuteToMappingCapacity),
+        Math.Max(0, dto.MappingToComparisonCapacity),
+        Math.Max(0, dto.ComparisonToFocusedCapacity),
+        TimeSpan.FromMilliseconds(dto.MappingWorkerDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.ComparisonWorkerDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.FocusedContentWorkerDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.DetailPersistenceDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.ExecuteToMappingQueueWaitDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.MappingToComparisonQueueWaitDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.ComparisonToFocusedQueueWaitDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.ExecutionBackpressureDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.MappingBackpressureDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.ComparisonBackpressureDurationMilliseconds),
+        Math.Max(0, dto.MaximumExecuteToMappingDepth),
+        Math.Max(0, dto.MaximumMappingToComparisonDepth),
+        Math.Max(0, dto.MaximumComparisonToFocusedDepth));
+
+    private static NormalizationWorkMetrics FromDto(NormalizationWorkMetricsDto dto) => new(
+        TimeSpan.FromMilliseconds(dto.GraphTraversalDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.SortKeyConstructionDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.CollectionSortDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.LegacyFallbackDurationMilliseconds),
+        TimeSpan.FromMilliseconds(dto.RestorationDurationMilliseconds),
+        Math.Max(0, dto.ObjectNodeCount),
+        Math.Max(0, dto.PropertyNodeCount),
+        Math.Max(0, dto.CollectionNodeCount),
+        Math.Max(0, dto.CollectionItemCount),
+        Math.Max(0, dto.ScalarNodeCount),
+        Math.Max(0, dto.ScalarUtf8Bytes),
+        Math.Max(0, dto.IgnoredNodeCount),
+        Math.Max(0, dto.SortKeyBytes),
+        Math.Max(0, dto.MaximumSortKeyBytes),
+        Math.Max(0, dto.SortCollisionGroupCount),
+        Math.Max(0, dto.MutableBranchCount),
+        Math.Max(0, dto.LegacyFallbackBranchCount));
+
+    private static RunRuntimeMetrics FromDto(RunRuntimeMetricsDto dto) => new(
+        dto.IsServerGc,
+        dto.ConfiguredServerGcHeapCount,
+        dto.DynamicAdaptationEnabled,
+        Math.Max(0, dto.TotalAvailableMemoryBytes),
+        Math.Max(0, dto.MemoryBudgetBytes));
 
     private RunDetailReference FromDto(RunDetailReferenceDto dto) =>
         new RunDetailReference(

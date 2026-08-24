@@ -193,6 +193,8 @@
     [Parameter] public EventCallback<bool> IgnoreXmlNamespacesChanged { get; set; }
     [Parameter] public int MaxDifferences { get; set; } = 100;
     [Parameter] public EventCallback<int> MaxDifferencesChanged { get; set; }
+    [Parameter] public bool IncludeAllDifferences { get; set; }
+    [Parameter] public EventCallback<bool> IncludeAllDifferencesChanged { get; set; }
 
     private const int CurrentRulePreviewLimit = 25;
     private readonly string importInputId = $"ignore-config-import-{Guid.NewGuid():N}";
@@ -408,7 +410,8 @@
                     TreatNullAndEmptyCollectionsAsEqual,
                     IgnoreXmlNamespaces),
                 Math.Max(1, MaxDifferences),
-                Rules.OrderBy(rule => rule.PropertyPath, StringComparer.OrdinalIgnoreCase).ToList());
+                Rules.OrderBy(rule => rule.PropertyPath, StringComparer.OrdinalIgnoreCase).ToList(),
+                IncludeAllDifferences);
 
             string json = ComparisonConfigurationFileSerializer.Serialize(export);
             await JS.InvokeVoidAsync("parityBenchDownloadText", $"comparison-config-{DateTime.Now:yyyyMMdd-HHmmss}.json", "application/json", json);
@@ -437,6 +440,7 @@
             await TreatNullAndEmptyCollectionsAsEqualChanged.InvokeAsync(configuration.GlobalSettings.TreatNullAndEmptyCollectionsAsEqual);
             await IgnoreXmlNamespacesChanged.InvokeAsync(configuration.GlobalSettings.IgnoreXmlNamespaces);
             await MaxDifferencesChanged.InvokeAsync(configuration.MaxDifferences);
+            await IncludeAllDifferencesChanged.InvokeAsync(configuration.IncludeAllDifferences);
             SetStatus($"Imported {Rules.Count} ignore rule(s) and comparison settings.", false);
         }
         catch (Exception ex)

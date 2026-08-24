@@ -233,8 +233,17 @@ public sealed class FileSystemRunProfileStore : IRunProfileStore
             Input = new InputDto { RequestDirectory = profile.RequestDirectory },
             Report = new ReportDto
             {
+                LargeRunThreshold = profile.LargeRun.LargeRunThreshold,
                 ChunkSize = profile.LargeRun.ChunkSize,
                 DetailPageSize = profile.LargeRun.DetailPageSize,
+                ComparisonConcurrency = profile.LargeRun.ComparisonConcurrency,
+                MappingConcurrency = profile.LargeRun.MappingConcurrency,
+                FocusedContentConcurrency = profile.LargeRun.FocusedContentConcurrency,
+                WorkerGcMode = profile.LargeRun.WorkerGcMode,
+                ServerGcHeapCount = profile.LargeRun.ServerGcHeapCount,
+                PerformanceCalibrationMachineFingerprint = profile.LargeRun.PerformanceCalibrationMachineFingerprint,
+                ProgressUpdateItemInterval = profile.LargeRun.ProgressUpdateItemInterval,
+                ProgressUpdateMillisecondsInterval = profile.LargeRun.ProgressUpdateMillisecondsInterval,
                 RetentionMode = profile.RetentionModeOverride,
             },
         };
@@ -256,7 +265,20 @@ public sealed class FileSystemRunProfileStore : IRunProfileStore
             Comparison?.ToOptions(),
             Input?.RequestDirectory,
             RunProfile.CurrentSchemaVersion,
-            Report is null ? null : new LargeRunOptions(Report.ChunkSize, Report.DetailPageSize),
+            Report is null
+                ? null
+                : new LargeRunOptions(
+                    largeRunThreshold: Report.LargeRunThreshold,
+                    chunkSize: Report.ChunkSize,
+                    detailPageSize: Report.DetailPageSize,
+                    comparisonConcurrency: Report.ComparisonConcurrency,
+                    progressUpdateItemInterval: Report.ProgressUpdateItemInterval,
+                    progressUpdateMillisecondsInterval: Report.ProgressUpdateMillisecondsInterval,
+                    mappingConcurrency: Report.MappingConcurrency,
+                    focusedContentConcurrency: Report.FocusedContentConcurrency,
+                    workerGcMode: Report.WorkerGcMode,
+                    serverGcHeapCount: Report.ServerGcHeapCount,
+                    performanceCalibrationMachineFingerprint: Report.PerformanceCalibrationMachineFingerprint),
             Report?.RetentionMode,
             EndpointAHeaders,
             EndpointBHeaders);
@@ -294,9 +316,27 @@ public sealed class FileSystemRunProfileStore : IRunProfileStore
 
     private sealed class ReportDto
     {
+        public int LargeRunThreshold { get; set; } = new LargeRunOptions().LargeRunThreshold;
+
         public int ChunkSize { get; set; } = new LargeRunOptions().ChunkSize;
 
         public int DetailPageSize { get; set; } = new LargeRunOptions().DetailPageSize;
+
+        public int? ComparisonConcurrency { get; set; }
+
+        public int? MappingConcurrency { get; set; }
+
+        public int? FocusedContentConcurrency { get; set; }
+
+        public WorkerGcMode WorkerGcMode { get; set; }
+
+        public int? ServerGcHeapCount { get; set; }
+
+        public string? PerformanceCalibrationMachineFingerprint { get; set; }
+
+        public int ProgressUpdateItemInterval { get; set; } = new LargeRunOptions().ProgressUpdateItemInterval;
+
+        public int ProgressUpdateMillisecondsInterval { get; set; } = new LargeRunOptions().ProgressUpdateMillisecondsInterval;
 
         public RetentionMode? RetentionMode { get; set; }
     }
@@ -315,6 +355,8 @@ public sealed class FileSystemRunProfileStore : IRunProfileStore
 
         public int MaxDifferences { get; set; } = 100;
 
+        public bool IncludeAllDifferences { get; set; }
+
         public List<IgnoreRuleDefinition> IgnoreRules { get; set; } = new List<IgnoreRuleDefinition>();
 
         public List<SmartIgnoreRuleDefinition> SmartIgnoreRules { get; set; } = new List<SmartIgnoreRuleDefinition>();
@@ -329,6 +371,7 @@ public sealed class FileSystemRunProfileStore : IRunProfileStore
             TreatNullAndEmptyCollectionsAsEqual = options.TreatNullAndEmptyCollectionsAsEqual,
             IgnoreXmlNamespaces = options.IgnoreXmlNamespaces,
             MaxDifferences = options.MaxDifferences,
+            IncludeAllDifferences = options.IncludeAllDifferences,
             IgnoreRules = options.IgnoreRules.ToList(),
             SmartIgnoreRules = options.SmartIgnoreRules.ToList(),
             MaskRules = options.MaskRules.ToList(),
@@ -343,6 +386,7 @@ public sealed class FileSystemRunProfileStore : IRunProfileStore
             MaxDifferences,
             IgnoreRules,
             SmartIgnoreRules,
-            MaskRules);
+            MaskRules,
+            IncludeAllDifferences);
     }
 }

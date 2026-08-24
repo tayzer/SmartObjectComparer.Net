@@ -8,6 +8,7 @@ using MudBlazor.Services;
 using ParityBench.NET.Application.Plugins;
 using ParityBench.NET.Application.Profiles;
 using ParityBench.NET.Application.Secrets;
+using ParityBench.NET.Domain.Runs;
 using ParityBench.NET.Domain.Runs.Retention;
 using ParityBench.NET.UI.Plugins;
 using ParityBench.NET.UI.Workflow;
@@ -226,6 +227,77 @@ public sealed class PluginPanelsTests
         Assert.IsNotNull(saved);
         // Editing anything else must not silently drop the retention choice.
         Assert.AreEqual(RetentionMode.None, saved.RetentionModeOverride);
+    }
+
+    [TestMethod]
+    public async Task RunProfilePanel_WhenSavingCompareWorkers_PersistsExplicitValueAndOtherLargeRunOptions()
+    {
+        LargeRunOptions original = new(
+            largeRunThreshold: 1500,
+            chunkSize: 400,
+            detailPageSize: 200,
+            comparisonConcurrency: 12,
+            progressUpdateItemInterval: 50,
+            progressUpdateMillisecondsInterval: 250,
+            mappingConcurrency: 6,
+            focusedContentConcurrency: 4,
+            workerGcMode: WorkerGcMode.ServerFixed,
+            serverGcHeapCount: 3,
+            performanceCalibrationMachineFingerprint: "old-machine");
+        await profileStore.SaveAsync(new RunProfile(
+            "acme-qa",
+            "Acme QA",
+            "acme.lookup",
+            "acme.lookup.soap-vs-json",
+            new Uri("https://qa/soap"),
+            new Uri("https://qa/json"),
+            largeRun: original));
+
+        IRenderedComponent<RunProfilePanel> component = testContext.Render<RunProfilePanel>();
+        component.Find("div.mud-list-item").Click();
+        var input = component.FindAll("input").Single(element => element.GetAttribute("value") == "12");
+        input.Input("16");
+
+        await component.InvokeAsync(() => component.Find("button.mud-button-filled").Click());
+
+        RunProfile? saved = await profileStore.GetAsync("acme-qa");
+        Assert.IsNotNull(saved);
+        Assert.AreEqual(16, saved.LargeRun.ComparisonConcurrency);
+        Assert.AreEqual(6, saved.LargeRun.MappingConcurrency);
+        Assert.AreEqual(4, saved.LargeRun.FocusedContentConcurrency);
+        Assert.AreEqual(WorkerGcMode.ServerFixed, saved.LargeRun.WorkerGcMode);
+        Assert.AreEqual(3, saved.LargeRun.ServerGcHeapCount);
+        Assert.IsFalse(string.IsNullOrWhiteSpace(saved.LargeRun.PerformanceCalibrationMachineFingerprint));
+        Assert.AreNotEqual("old-machine", saved.LargeRun.PerformanceCalibrationMachineFingerprint);
+        Assert.AreEqual(original.LargeRunThreshold, saved.LargeRun.LargeRunThreshold);
+        Assert.AreEqual(original.ChunkSize, saved.LargeRun.ChunkSize);
+        Assert.AreEqual(original.DetailPageSize, saved.LargeRun.DetailPageSize);
+        Assert.AreEqual(original.ProgressUpdateItemInterval, saved.LargeRun.ProgressUpdateItemInterval);
+        Assert.AreEqual(original.ProgressUpdateMillisecondsInterval, saved.LargeRun.ProgressUpdateMillisecondsInterval);
+    }
+
+    [TestMethod]
+    public async Task RunProfilePanel_WhenCompareWorkersIsBlank_SavesAutoAsNull()
+    {
+        await profileStore.SaveAsync(new RunProfile(
+            "acme-qa",
+            "Acme QA",
+            "acme.lookup",
+            "acme.lookup.soap-vs-json",
+            new Uri("https://qa/soap"),
+            new Uri("https://qa/json"),
+            largeRun: new LargeRunOptions(comparisonConcurrency: 12)));
+
+        IRenderedComponent<RunProfilePanel> component = testContext.Render<RunProfilePanel>();
+        component.Find("div.mud-list-item").Click();
+        var input = component.FindAll("input").Single(element => element.GetAttribute("value") == "12");
+        input.Input(string.Empty);
+
+        await component.InvokeAsync(() => component.Find("button.mud-button-filled").Click());
+
+        RunProfile? saved = await profileStore.GetAsync("acme-qa");
+        Assert.IsNotNull(saved);
+        Assert.IsNull(saved.LargeRun.ComparisonConcurrency);
     }
 
     [TestMethod]

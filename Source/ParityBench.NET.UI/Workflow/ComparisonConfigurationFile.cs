@@ -8,7 +8,8 @@ public sealed record ComparisonConfigurationFile(
     int SchemaVersion,
     ComparisonConfigurationGlobalSettings GlobalSettings,
     int MaxDifferences,
-    IReadOnlyList<IgnoreRuleDefinition> IgnoreRules);
+    IReadOnlyList<IgnoreRuleDefinition> IgnoreRules,
+    bool IncludeAllDifferences = false);
 
 public sealed record ComparisonConfigurationGlobalSettings(
     bool IgnoreCollectionOrder,
@@ -65,7 +66,8 @@ public static class ComparisonConfigurationFileSerializer
                 v1.GlobalSettings.TreatNullAndEmptyCollectionsAsEqual,
                 v1.GlobalSettings.IgnoreXmlNamespaces),
             100,
-            NormalizeIgnoreRules(v1.IgnoreRules ?? Array.Empty<IgnoreRuleDefinition>()));
+            NormalizeIgnoreRules(v1.IgnoreRules ?? Array.Empty<IgnoreRuleDefinition>()),
+            false);
     }
 
     private static IReadOnlyList<IgnoreRuleDefinition> NormalizeIgnoreRules(IEnumerable<IgnoreRuleDefinition> rules) =>

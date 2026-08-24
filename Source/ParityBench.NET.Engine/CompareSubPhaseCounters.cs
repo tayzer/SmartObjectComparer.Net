@@ -17,6 +17,12 @@ namespace ParityBench.NET.Engine;
 
 internal sealed class CompareSubPhaseCounters
 {
+    public CompareSubPhaseCounters(bool collectStructuralFingerprint = false)
+    {
+        Detailed = new DetailedCompareMetricsCollector(collectStructuralFingerprint);
+    }
+
+    public DetailedCompareMetricsCollector Detailed { get; }
     private long normalizeTicks;
     private long persistCanonicalTicks;
     private long diffTicks;

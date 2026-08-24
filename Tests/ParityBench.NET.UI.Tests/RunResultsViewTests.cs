@@ -1,8 +1,10 @@
 using Bunit;
 
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
+using MudBlazor;
 using MudBlazor.Services;
 
 using ParityBench.NET.Application.AcceptedDifferences;
@@ -66,6 +68,71 @@ public sealed class RunResultsViewTests
 
         component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "Equal 2"));
         StringAssert.Contains(component.Markup, "Different 1");
+    }
+
+    [TestMethod]
+    public void RunHistory_DefaultsToNewestUpdatedRunAndCanShowOldestFirst()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        dataSource.Runs = new[]
+        {
+            CreateRunListItem("oldest", RunStatus.Completed, now.AddMinutes(-20)),
+            CreateRunListItem("newest", RunStatus.Completed, now.AddMinutes(-1)),
+        };
+
+        IRenderedComponent<RunHistory> component = testContext.Render<RunHistory>();
+
+        component.WaitForAssertion(() =>
+            CollectionAssert.AreEqual(new[] { "newest", "oldest" }, component.FindAll(".pb-run-id").Select(element => element.TextContent).ToArray()));
+
+        IRenderedComponent<MudSelect<string>> orderSelect = component.FindComponents<MudSelect<string>>().Single(select => select.Instance.Label == "Updated");
+        component.InvokeAsync(() => orderSelect.Instance.ValueChanged.InvokeAsync("Oldest")).GetAwaiter().GetResult();
+
+        component.WaitForAssertion(() =>
+            CollectionAssert.AreEqual(new[] { "oldest", "newest" }, component.FindAll(".pb-run-id").Select(element => element.TextContent).ToArray()));
+    }
+
+    [TestMethod]
+    public void RunHistory_WhenStatusIsFiltered_ShowsOnlyMatchingRuns()
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        dataSource.Runs = new[]
+        {
+            CreateRunListItem("completed", RunStatus.Completed, now),
+            CreateRunListItem("executing", RunStatus.Executing, now.AddMinutes(-1)),
+        };
+
+        IRenderedComponent<RunHistory> component = testContext.Render<RunHistory>();
+        IRenderedComponent<MudSelect<string>> statusSelect = component.FindComponents<MudSelect<string>>().Single(select => select.Instance.Label == "Status");
+
+        component.InvokeAsync(() => statusSelect.Instance.ValueChanged.InvokeAsync("Executing")).GetAwaiter().GetResult();
+
+        component.WaitForAssertion(() =>
+        {
+            CollectionAssert.AreEqual(new[] { "executing" }, component.FindAll(".pb-run-id").Select(element => element.TextContent).ToArray());
+            Assert.IsTrue(component.Markup.Contains("Cancel run", StringComparison.Ordinal));
+        });
+    }
+
+    [TestMethod]
+    public void RunHistory_WhenNonTerminalRunIsCancelled_RefreshesAndNotifiesHost()
+    {
+        RunId runId = new RunId("executing");
+        dataSource.Runs = new[] { CreateRunListItem(runId.Value, RunStatus.Executing, DateTimeOffset.UtcNow) };
+        ComparisonRun? changedRun = null;
+        IRenderedComponent<RunHistory> component = testContext.Render<RunHistory>(parameters => parameters
+            .Add(history => history.RunChanged, EventCallback.Factory.Create<ComparisonRun>(this, run => changedRun = run)));
+
+        component.Find("button[aria-label='Cancel run']").Click();
+
+        component.WaitForAssertion(() =>
+        {
+            Assert.AreEqual(runId, dataSource.CancelledRunId);
+            Assert.IsNotNull(changedRun);
+            Assert.AreEqual(RunStatus.Cancelled, changedRun.Status);
+            StringAssert.Contains(component.Markup, "Cancelled");
+            Assert.IsFalse(component.Markup.Contains("aria-label=\"Cancel run\"", StringComparison.Ordinal));
+        });
     }
 
 
@@ -133,6 +200,45 @@ public sealed class RunResultsViewTests
         StringAssert.Contains(component.Markup, "Top Affected Objects");
         StringAssert.Contains(component.Markup, "JSON");
         StringAssert.Contains(component.Markup, "CSV");
+    }
+
+    [TestMethod]
+    public void RunResult_WhenDetailedTimingExists_RendersTerminalStagesAndResources()
+    {
+        RunId runId = new RunId("run-1");
+        RunExecutionMetrics metrics = new(
+            TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(12), TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(1),
+            2, 2, 4096, comparisonConcurrency: 2,
+            detailedCompareMetrics: new DetailedCompareMetrics(
+                TimeSpan.FromMilliseconds(2), 8192, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(1),
+                TimeSpan.FromSeconds(8), TimeSpan.FromSeconds(2), TimeSpan.Zero, TimeSpan.Zero,
+                TimeSpan.FromSeconds(1), TimeSpan.Zero, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(1)),
+            processResourceMetrics: new RunProcessResourceMetrics(
+                TimeSpan.FromSeconds(4), 40, 10, 20 * 1024 * 1024, 30 * 1024 * 1024,
+                40 * 1024 * 1024, 1, 2, 3, 4),
+            pipelineStageMetrics: new PipelineStageMetrics(
+                3, 2, 1, 6, 2, 1,
+                TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(1),
+                TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(6), TimeSpan.FromSeconds(7),
+                TimeSpan.FromSeconds(8), TimeSpan.FromSeconds(9), TimeSpan.FromSeconds(10), 6, 2, 1),
+            normalizationWorkMetrics: new NormalizationWorkMetrics(
+                TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(3), TimeSpan.Zero,
+                TimeSpan.FromSeconds(4), 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16),
+            runtimeMetrics: new RunRuntimeMetrics(true, 4, true, 32L * 1024 * 1024 * 1024, 16L * 1024 * 1024 * 1024));
+        dataSource.Run = CreateCompletedRun(runId, metrics);
+        dataSource.Summary = dataSource.Run.Summary;
+
+        IRenderedComponent<RunResult> component = testContext.Render<RunResult>(parameters => parameters.Add(result => result.RunId, runId));
+
+        component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "CNO graph traversal (aggregate):"));
+        StringAssert.Contains(component.Markup, "Compare queue wait (aggregate):");
+        StringAssert.Contains(component.Markup, "Application Resources");
+        StringAssert.Contains(component.Markup, "Process CPU:");
+        StringAssert.Contains(component.Markup, "Bounded Pipeline");
+        StringAssert.Contains(component.Markup, "Workers: map 3, compare 2, focused 1");
+        StringAssert.Contains(component.Markup, "Normalization Work");
+        StringAssert.Contains(component.Markup, "Restoration (aggregate):");
+        StringAssert.Contains(component.Markup, "GC mode: Server");
     }
 
 
@@ -508,14 +614,15 @@ public sealed class RunResultsViewTests
         component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "Result data source failed."));
     }
 
-    private static ComparisonRun CreateCompletedRun(RunId runId)
+    private static ComparisonRun CreateCompletedRun(RunId runId, RunExecutionMetrics? metrics = null)
     {
         RunResultSummary summary = new RunResultSummary(
             totalPairs: 1,
             equalPairs: 1,
             differentPairs: 0,
             errorPairs: 0,
-            detailIndexReference: new RunDetailReference("runs/run-1/details/index.json"));
+            detailIndexReference: new RunDetailReference("runs/run-1/details/index.json"),
+            executionMetrics: metrics);
 
         return ComparisonRun.Create(runId, CreateOptions()).Start().Complete(summary);
     }
@@ -527,6 +634,14 @@ public sealed class RunResultsViewTests
             new EndpointDefinition(new Uri("https://service-b.example.test"), "Actual"),
             TimeSpan.FromSeconds(30),
             2);
+
+    private static RunListItem CreateRunListItem(string id, RunStatus status, DateTimeOffset updatedAt) =>
+        new RunListItem(
+            new RunId(id),
+            status,
+            updatedAt.AddMinutes(-1),
+            updatedAt,
+            new RunProgress(status is RunStatus.Completed or RunStatus.Cancelled ? 100 : 25, status.ToString()));
 
     private static RequestPairResult CreatePair(string relativePath) =>
         new RequestPairResult(
@@ -625,10 +740,28 @@ public sealed class RunResultsViewTests
 
         public string? ErrorMessage { get; set; }
 
+        public RunId? CancelledRunId { get; private set; }
+
         public Task<IReadOnlyList<RunListItem>> ListRunsAsync(CancellationToken cancellationToken = default)
         {
             ThrowIfConfigured();
             return Task.FromResult(Runs);
+        }
+
+        public Task<ComparisonRun> CancelRunAsync(
+            RunId runId,
+            string? cancellationMessage = null,
+            CancellationToken cancellationToken = default)
+        {
+            ThrowIfConfigured();
+            CancelledRunId = runId;
+            RunListItem existing = Runs.Single(run => run.Id == runId);
+            ComparisonRun cancelledRun = ComparisonRun
+                .Create(runId, CreateOptions(), existing.CreatedAt)
+                .Start(existing.CreatedAt)
+                .Cancel(cancellationMessage, existing.UpdatedAt);
+            Runs = Runs.Select(run => run.Id == runId ? RunListItem.FromRun(cancelledRun) : run).ToArray();
+            return Task.FromResult(cancelledRun);
         }
 
         public Task<ComparisonRun> LoadRunAsync(RunId runId, CancellationToken cancellationToken = default)

@@ -57,4 +57,21 @@
              RemoveProperties="RuntimeIdentifier;SelfContained;PublishSingleFile;PublishReadyToRun;IncludeNativeLibrariesForSelfExtract;IncludeAllContentForSelfExtract;UseAppHost" />
   </Target>
 
+  <Target Name="PublishParityBenchWorker" AfterTargets="Publish" Condition="'$(PublishParityBenchWorker)' != 'false'">
+    <MSBuild Projects="..\ParityBench.NET.Worker\ParityBench.NET.Worker.csproj"
+             Targets="Publish"
+             Properties="Configuration=$(Configuration);PublishDir=$(PublishDir)worker\;RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(SelfContained);PublishSingleFile=false;PublishParityBenchWorker=false;PublishParityBenchReportAssets=false" />
+  </Target>
+
+  <Target Name="BuildParityBenchWorkerForDesktop"
+          AfterTargets="Build"
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(BuildParityBenchWorker)' != 'false'">
+
+      <MSBuild Projects="..\ParityBench.NET.Worker\ParityBench.NET.Worker.csproj"
+               Targets="Publish"
+               Properties="Configuration=$(Configuration);PublishDir=$(TargetDir)worker\;SelfContained=false;PublishSingleFile=false;PublishParityBenchWorker=false;PublishParityBenchReportAssets=false"
+               RemoveProperties="RuntimeIdentifier" />
+
+  </Target>
+
 </Project>

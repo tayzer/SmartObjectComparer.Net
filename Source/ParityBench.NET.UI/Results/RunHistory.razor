@@ -18,6 +18,20 @@
             </MudTooltip>
         </MudStack>
 
+        <MudStack Row="true" Spacing="2" Class="flex-wrap">
+            <MudSelect T="string" @bind-Value="statusFilter" Label="Status" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 12rem;">
+                <MudSelectItem T="string" Value="@AllStatuses">All statuses</MudSelectItem>
+                @foreach (RunStatus status in Enum.GetValues<RunStatus>())
+                {
+                    <MudSelectItem T="string" Value="@status.ToString()">@status</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect T="string" @bind-Value="updatedOrder" Label="Updated" Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width: 12rem;">
+                <MudSelectItem T="string" Value="@NewestFirst">Newest first</MudSelectItem>
+                <MudSelectItem T="string" Value="@OldestFirst">Oldest first</MudSelectItem>
+            </MudSelect>
+        </MudStack>
+
         @if (errorMessage is not null)
         {
             <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">@errorMessage</MudAlert>
@@ -29,13 +43,13 @@
                 <MudText Typo="Typo.body2" Color="Color.Secondary">Loading runs...</MudText>
             </MudStack>
         }
-        else if (runs.Count == 0)
+        else if (FilteredRuns.Count == 0)
         {
-            <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true">No runs found</MudAlert>
+            <MudAlert Severity="Severity.Info" Variant="Variant.Text" Dense="true">No runs match current filters</MudAlert>
         }
         else
         {
-            <MudTable T="RunListItem" Items="runs" Dense="true" Hover="true" Elevation="0">
+            <MudTable T="RunListItem" Items="FilteredRuns" Dense="true" Hover="true" Elevation="0">
                 <HeaderContent>
                     <MudTh>Run</MudTh>
                     <MudTh>Status</MudTh>
@@ -54,9 +68,17 @@
                     </MudTd>
                     <MudTd DataLabel="Summary"><RunSummaryCounts Summary="context.Summary" /></MudTd>
                     <MudTd DataLabel="Open">
-                        <MudTooltip Text="Open run">
-                            <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Variant="Variant.Text" Size="Size.Small" OnClick="@(() => SelectRunAsync(context.Id))" aria-label="Open run" />
-                        </MudTooltip>
+                        <MudStack Row="true" Spacing="0">
+                            <MudTooltip Text="Open run">
+                                <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Variant="Variant.Text" Size="Size.Small" OnClick="@(() => SelectRunAsync(context.Id))" aria-label="Open run" />
+                            </MudTooltip>
+                            @if (!IsTerminal(context.Status))
+                            {
+                                <MudTooltip Text="Cancel run">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Cancel" Color="Color.Warning" Variant="Variant.Text" Size="Size.Small" Disabled="@(cancellingRunId == context.Id)" OnClick="@(() => CancelRunAsync(context))" aria-label="Cancel run" />
+                                </MudTooltip>
+                            }
+                        </MudStack>
                     </MudTd>
                 </RowTemplate>
             </MudTable>
@@ -67,9 +89,31 @@
 @code {
     private IReadOnlyList<RunListItem>? runs;
     private string? errorMessage;
+    private RunId? cancellingRunId;
+    private const string AllStatuses = "All";
+    private const string NewestFirst = "Newest";
+    private const string OldestFirst = "Oldest";
+    private string statusFilter = AllStatuses;
+    private string updatedOrder = NewestFirst;
 
     [Parameter]
     public EventCallback<RunId> RunSelected { get; set; }
+
+    [Parameter]
+    public EventCallback<ComparisonRun> RunChanged { get; set; }
+
+    private IReadOnlyList<RunListItem> FilteredRuns
+    {
+        get
+        {
+            IEnumerable<RunListItem> filteredRuns = (runs ?? Array.Empty<RunListItem>())
+                .Where(run => statusFilter == AllStatuses || string.Equals(run.Status.ToString(), statusFilter, StringComparison.Ordinal));
+
+            return updatedOrder == OldestFirst
+                ? filteredRuns.OrderBy(run => run.UpdatedAt).ThenBy(run => run.Id.Value, StringComparer.Ordinal).ToList()
+                : filteredRuns.OrderByDescending(run => run.UpdatedAt).ThenBy(run => run.Id.Value, StringComparer.Ordinal).ToList();
+        }
+    }
 
     protected override Task OnInitializedAsync() => LoadRunsAsync();
 
@@ -88,6 +132,29 @@
     }
 
     private Task SelectRunAsync(RunId runId) => RunSelected.InvokeAsync(runId);
+
+    private async Task CancelRunAsync(RunListItem run)
+    {
+        try
+        {
+            errorMessage = null;
+            cancellingRunId = run.Id;
+            ComparisonRun cancelledRun = await DataSource.CancelRunAsync(run.Id);
+            await RunChanged.InvokeAsync(cancelledRun);
+            await LoadRunsAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            cancellingRunId = null;
+        }
+    }
+
+    private static bool IsTerminal(RunStatus status) =>
+        status is RunStatus.Completed or RunStatus.Failed or RunStatus.Cancelled;
 
     private static Color GetStatusColor(RunStatus status) => status switch
     {
