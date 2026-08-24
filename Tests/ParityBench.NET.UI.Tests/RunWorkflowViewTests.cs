@@ -84,7 +84,7 @@ public sealed class RunWorkflowViewTests
     }
 
     [TestMethod]
-    public void StartWorkflow_WhenFilesWerePicked_PassesSelectedFilesToWorkflowDataSource()
+    public async Task StartWorkflow_WhenFilesWerePicked_PassesSelectedFilesToWorkflowDataSource()
     {
         string sourceDirectory = Path.Combine(Path.GetTempPath(), "request-fixtures");
         sourcePicker.FilesToReturn = new[]
@@ -100,9 +100,10 @@ public sealed class RunWorkflowViewTests
         component.WaitForAssertion(() => StringAssert.Contains(component.Markup, "Selected 2 request files"));
         ChangeTextField(component, "Endpoint A", "https://a.example.test");
         ChangeTextField(component, "Endpoint B", "https://b.example.test");
-        component.FindAll("button")
-            .Single(button => button.TextContent.Contains("Start Comparison", StringComparison.Ordinal))
-            .Click();
+        await component.InvokeAsync(() =>
+            component.FindAll("button")
+                .Single(button => button.TextContent.Contains("Start Comparison", StringComparison.Ordinal))
+                .Click());
 
         component.WaitForAssertion(() => Assert.IsNotNull(dataSource.LastRequest));
         Assert.AreEqual(sourceDirectory, dataSource.LastRequest!.SourceDirectory);
