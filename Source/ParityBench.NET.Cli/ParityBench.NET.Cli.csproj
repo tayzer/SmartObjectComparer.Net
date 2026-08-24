@@ -35,6 +35,6 @@
         </Content>
     </ItemGroup>
 
-    <Import Project="..\build\ParityBench.BundledPlugins.targets"/>
+    <Import Project="..\..\build\ParityBench.BundledPlugins.targets"/>
 
 </Project>
